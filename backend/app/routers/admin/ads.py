@@ -1,0 +1,118 @@
+"""B 端广告路由。"""
+from datetime import date
+
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.auth import AdminPayload, get_current_admin
+from app.core.response import success
+from app.database import get_db
+from app.services.ad_service import AdService
+
+router = APIRouter(prefix="/admin/api/v1/ads", tags=["B端-广告"])
+
+
+class MaterialCreateRequest(BaseModel):
+    """素材创建请求体。简化版：直接传 file_url 与 duration，跳过上传流程。"""
+    name: str
+    description: str
+    file_url: str
+    duration: int
+
+
+class PlacementCreateRequest(BaseModel):
+    """投放创建请求体。start/end_date 由 Pydantic 自动解析 ISO 日期字符串。"""
+    material_id: int
+    position: str
+    start_date: date
+    end_date: date
+
+
+@router.get("/materials")
+async def list_materials(
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(get_current_admin),
+):
+    svc = AdService(db)
+    data = await svc.list_materials(page=page, size=size)
+    return success(data=data)
+
+
+@router.post("/materials")
+async def create_material(
+    req: MaterialCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(get_current_admin),
+):
+    svc = AdService(db)
+    material_id = await svc.create_material(
+        name=req.name,
+        description=req.description,
+        file_url=req.file_url,
+        duration=req.duration,
+    )
+    return success(data={"id": material_id})
+
+
+@router.delete("/materials/{material_id}")
+async def delete_material(
+    material_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(get_current_admin),
+):
+    svc = AdService(db)
+    await svc.delete_material(material_id)
+    return success(data={"success": True})
+
+
+@router.get("/placements")
+async def list_placements(
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(get_current_admin),
+):
+    svc = AdService(db)
+    data = await svc.list_placements(page=page, size=size)
+    return success(data=data)
+
+
+@router.post("/placements")
+async def create_placement(
+    req: PlacementCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(get_current_admin),
+):
+    svc = AdService(db)
+    placement_id = await svc.create_placement(
+        material_id=req.material_id,
+        position=req.position,
+        start_date=req.start_date,
+        end_date=req.end_date,
+    )
+    return success(data={"id": placement_id})
+
+
+@router.delete("/placements/{placement_id}")
+async def delete_placement(
+    placement_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(get_current_admin),
+):
+    svc = AdService(db)
+    await svc.delete_placement(placement_id)
+    return success(data={"success": True})
+
+
+@router.get("/schedule")
+async def get_schedule(
+    month: str = Query(..., description="月份，格式 YYYY-MM"),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(get_current_admin),
+):
+    svc = AdService(db)
+    data = await svc.get_schedule(month=month)
+    return success(data=data)

@@ -1,0 +1,25 @@
+# 阿里云 TTS 音色配置
+# voice_id: 阿里云内置音色 ID
+# sample_rate: 采样率（统一 44100，避免拼接爆音）
+# format: 输出格式（统一 mp3 128kbps）
+
+default_voice: xiaoyun
+
+voices:
+  xiaoyun:
+    name: 小芸
+    description: 标准女声，适合新闻播报
+    gender: female
+    language: zh-CN
+
+postprocess:
+  loudness_target_lufs: -16
+  loudness_tolerance: 1.0
+  silence_threshold_db: -40
+  silence_min_duration_ms: 500
+
+output:
+  format: mp3
+  sample_rate: 44100
+  bit_rate: 128k
+  channels: 1

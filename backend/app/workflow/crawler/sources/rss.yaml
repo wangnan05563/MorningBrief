@@ -1,0 +1,55 @@
+# RSS 数据源配置
+# 新增源只需追加条目，无需改代码
+# authority: 源权威度（0.0-1.0），用于热度公式计算（权重 0.3）
+# category_hint: RSS channel 标签缺失时的默认品类
+# qps: 单源 QPS 限制（默认 1，遵守 robots.txt）
+
+sources:
+  - name: 人民网-国内
+    url: http://www.people.com.cn/rss/politics.xml
+    authority: 0.95
+    category_hint: 时政
+    qps: 1
+
+  - name: 人民网-国际
+    url: http://www.people.com.cn/rss/world.xml
+    authority: 0.95
+    category_hint: 国际
+    qps: 1
+
+  - name: 新华网-财经
+    url: http://www.news.cn/rss/finance.xml
+    authority: 0.93
+    category_hint: 财经
+    qps: 1
+
+  - name: 新华网-科技
+    url: http://www.news.cn/rss/tech.xml
+    authority: 0.90
+    category_hint: 科技
+    qps: 1
+
+  - name: 中国新闻网
+    url: https://www.chinanews.com.cn/rss/scroll-news.xml
+    authority: 0.92
+    category_hint: 综合
+    qps: 1
+
+  - name: 36氪
+    url: https://36kr.com/feed
+    authority: 0.85
+    category_hint: 科技
+    qps: 1
+
+  - name: 虎嗅
+    url: https://rsshub.app/huxiu/article
+    authority: 0.82
+    category_hint: 科技
+    qps: 1
+
+# 全局配置
+global:
+  timeout_sec: 30            # 单源请求超时
+  retry: 2                   # 单源失败重试次数
+  user_agent: "20NewsBot/1.0 (+https://github.com/xxx/20_News)"
+  respect_robots_txt: true   # 遵守 robots.txt

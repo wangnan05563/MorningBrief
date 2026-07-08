@@ -1,0 +1,56 @@
+# 列表页爬取规则
+# 适用于无 RSS 的站点，通过 CSS 选择器解析列表页
+# render_js: 是否需要 Playwright 渲染 JS（动态加载内容）
+
+sources:
+  - name: 央视网-新闻
+    url: https://news.cctv.com/
+    authority: 0.95
+    render_js: false
+    list_selector: "div.news_box a"
+    title_selector: "a::text"
+    url_selector: "a::attr(href)"
+    date_selector: "span.date::text"
+    date_format: "%Y-%m-%d"
+    category_hint: 时政
+    qps: 1
+
+  - name: 环球网-国际
+    url: https://world.huanqiu.com/
+    authority: 0.88
+    render_js: true
+    list_selector: "div.news-list a.title"
+    title_selector: "a::text"
+    url_selector: "a::attr(href)"
+    date_selector: "span.time::text"
+    date_format: "%Y-%m-%d %H:%M"
+    category_hint: 国际
+    qps: 1
+
+  - name: 第一财经
+    url: https://www.yicai.com/news/
+    authority: 0.87
+    render_js: false
+    list_selector: "ul.news-list li a"
+    title_selector: "a::text"
+    url_selector: "a::attr(href)"
+    date_selector: "span.date::text"
+    date_format: "%Y-%m-%d"
+    category_hint: 财经
+    qps: 1
+
+# 详情页正文提取（newspaper3k 通用提取失败时回退到规则）
+article_parser:
+  default_engine: newspaper3k
+  fallback_selectors:
+    "news.cctv.com":
+      content: "div.content_area"
+      publish_time: "span.info"
+    "yicai.com":
+      content: "div.article-content"
+      publish_time: "div.date"
+
+global:
+  timeout_sec: 30
+  retry: 2
+  playwright_wait_sec: 5

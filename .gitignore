@@ -1,0 +1,44 @@
+# Python 缓存与字节码
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 虚拟环境
+.venv/
+venv/
+env/
+ENV/
+
+# 环境变量与密钥（仅保留 .env.example 模板）
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# 日志与运行时数据
+*.log
+logs/
+*.pid
+*.seed
+
+# IDE 与编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 构建产物
+dist/
+build/
+*.egg-info/
+
+# 数据库与缓存数据
+*.db
+*.sqlite
+*.rdb
