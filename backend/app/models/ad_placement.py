@@ -3,7 +3,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Enum as SAEnum, Index
+from sqlalchemy import Integer, String, Date, DateTime, ForeignKey, Index, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -21,14 +21,15 @@ class AdPlacement(Base):
     __table_args__ = (
         Index("idx_date_range", "start_date", "end_date"),
         Index("idx_position", "position"),
+        CheckConstraint("position IN ('head', 'mid', 'tail')", name="ck_ad_placement_position"),
         {"comment": "广告投放规则表"},
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     material_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("ad_material.id"), nullable=False
+        Integer, ForeignKey("ad_material.id"), nullable=False
     )
-    position: Mapped[AdPosition] = mapped_column(SAEnum(AdPosition), nullable=False)
+    position: Mapped[str] = mapped_column(String(16), nullable=False)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, server_default=func.now())

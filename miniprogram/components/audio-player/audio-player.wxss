@@ -1,0 +1,46 @@
+/* 紧凑布局：用于页面内嵌的播放器 */
+.audio-player {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+/* 圆形播放按钮：薄荷青，触感友好尺寸 */
+.play-btn {
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4rpx 12rpx rgba(126, 206, 193, 0.4);
+}
+
+.play-icon {
+  color: #FFFFFF;
+  font-size: 40rpx;
+  line-height: 1;
+}
+
+.player-info {
+  flex: 1;
+  margin-left: 24rpx;
+  min-width: 0;
+}
+
+.progress {
+  margin: 0;
+}
+
+.time-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8rpx;
+}
+
+.time {
+  font-size: 24rpx;
+  color: #A0AEC0;
+}

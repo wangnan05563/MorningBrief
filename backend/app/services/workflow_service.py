@@ -10,13 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BizError, NotFoundError
 from app.models import Workflow, WorkflowStep
-from app.redis_client import redis_client
 
 
 class WorkflowService:
-    def __init__(self, db: AsyncSession, redis=None):
+    def __init__(self, db: AsyncSession):
         self.db = db
-        self.redis = redis or redis_client
 
     async def get_today_workflow(self) -> dict | None:
         """获取今日工作流状态（含步骤明细）。"""
@@ -54,8 +52,8 @@ class WorkflowService:
                 {
                     "id": wf.id,
                     "episode_date": wf.episode_date.isoformat() if wf.episode_date else None,
-                    "source": wf.source,
-                    "status": wf.status.value if wf.status else None,
+                    "source": wf.source if wf.source else None,
+                    "status": wf.status if wf.status else None,
                     "started_at": wf.started_at.isoformat() if wf.started_at else None,
                     "finished_at": wf.finished_at.isoformat() if wf.finished_at else None,
                 }
@@ -87,15 +85,15 @@ class WorkflowService:
         return {
             "workflow_id": workflow.id,
             "episode_date": workflow.episode_date.isoformat() if workflow.episode_date else None,
-            "source": workflow.source,
-            "status": workflow.status.value if workflow.status else None,
+            "source": workflow.source if workflow.source else None,
+            "status": workflow.status if workflow.status else None,
             "started_at": workflow.started_at.isoformat() if workflow.started_at else None,
             "finished_at": workflow.finished_at.isoformat() if workflow.finished_at else None,
             "error": workflow.error,
             "steps": [
                 {
-                    "name": s.step_name.value if s.step_name else None,
-                    "status": s.status.value if s.status else None,
+                    "name": s.step_name if s.step_name else None,
+                    "status": s.status if s.status else None,
                     "started_at": s.started_at.isoformat() if s.started_at else None,
                     "finished_at": s.finished_at.isoformat() if s.finished_at else None,
                     "retry_count": s.retry_count,

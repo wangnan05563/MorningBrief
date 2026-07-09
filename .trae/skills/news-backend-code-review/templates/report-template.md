@@ -1,0 +1,239 @@
+# 20_News 后端代码审查报告
+
+## 基本信息
+
+- **审查版本**：v1.0.0
+- **审查模式**：[全量审查 / 增量审查 / 指定文件审查 / 片段评审]
+- **审查范围**：`backend/app/**/*.py`
+- **审查文件数**：X 个
+- **审查时间**：YYYY-MM-DD HH:MM:SS
+- **审查人**：news-backend-code-review Skill
+- **上次审查**：[有/无]
+
+## 相对于上次审查的变化
+
+| 状态 | 数量 | 说明 |
+|------|------|------|
+| 🆕 新增 | X | 本次新发现的问题 |
+| ✅ 已修复 | X | 上次存在的问题已修复 |
+| ⚠️ 仍存在 | X | 上次存在的问题仍未修复 |
+
+## 审查结果摘要
+
+- 🔴 阻塞问题：X 个（必须修复）
+- 🟠 严重问题：X 个（强烈建议修复）
+- 🟡 警告问题：X 个（建议修复）
+- 🟢 优化建议：X 个（可选）
+
+### 按 severity 分布
+
+| Severity | 数量 |
+|----------|------|
+| CRITICAL | X |
+| HIGH | X |
+| MEDIUM | X |
+| LOW | X |
+| INFO | X |
+
+### 按 category 分布（15 维度）
+
+| Category | 数量 |
+|----------|------|
+| security | X |
+| error_handling | X |
+| async_concurrency | X |
+| sqlalchemy | X |
+| workflow | X |
+| field_contract | X |
+| fastapi | X |
+| cache | X |
+| config_driven | X |
+| logging | X |
+| performance | X |
+| layering | X |
+| naming | X |
+| type_annotation | X |
+| testability | X |
+
+## 硬约束合规性检查结果
+
+| 硬约束规则 | 状态 | 违规位置 |
+|------------|------|----------|
+| `deprecated_utcnow` | ✅ 通过 / ❌ 违规 | - |
+| `datetime_now_no_tzinfo` | ✅ 通过 / ❌ 违规 | - |
+| `bare_sql_injection` | ✅ 通过 / ❌ 违规 | - |
+| `enum_field_without_value` | ✅ 通过 / ❌ 违规 | - |
+| `create_task_no_reference` | ✅ 通过 / ❌ 违规 | - |
+| `sync_io_in_async` | ✅ 通过 / ❌ 违规 | - |
+| `sync_requests_in_async` | ✅ 通过 / ❌ 违规 | - |
+| `async_def_without_await` | ✅ 通过 / ❌ 违规 | - |
+| `finally_unconditional_release` | ✅ 通过 / ❌ 违规 | - |
+| `redis_non_atomic_lrange_ltrim` | ✅ 通过 / ❌ 违规 | - |
+| `token_compare_with_equals` | ✅ 通过 / ❌ 违规 | - |
+| `hardcoded_credentials` | ✅ 通过 / ❌ 违规 | - |
+| `sensitive_filter_not_initialized` | ✅ 通过 / ❌ 违规 | - |
+| `logout_missing` | ✅ 通过 / ❌ 违规 | - |
+| `builtin_exception_shadowing` | ✅ 通过 / ❌ 违规 | - |
+| `bare_except_pass` | ✅ 通过 / ❌ 违规 | - |
+| `exception_log_warning_fstring` | ✅ 通过 / ❌ 违规 | - |
+| `internal_route_no_auth` | ✅ 通过 / ❌ 违规 | - |
+| `print_statement` | ✅ 通过 / ❌ 违规 | - |
+| `print_traceback_format_exc` | ✅ 通过 / ❌ 违规 | - |
+| `os_getenv_direct` | ✅ 通过 / ❌ 违规 | - |
+
+**合并结论**：[允许合并 / 阻止合并（存在 CRITICAL 违规）]
+
+## 详细问题列表
+
+### 🔴 阻塞问题（必须修复）
+
+1. **问题描述**：[具体问题描述]
+   - **位置**：`backend/app/xxx.py` 第 X 行
+   - **当前代码**：
+     ```python
+     # 问题代码示例
+     ```
+   - **修复建议**：
+     ```python
+     # 修复后的代码示例
+     ```
+   - **参考规范**：[对应 SKILL.md 维度章节]
+   - **配置节点**：[对应 config.yaml 节点]
+
+### 🟠 严重问题（强烈建议修复）
+
+1. **问题描述**：[具体问题描述]
+   - **位置**：`backend/app/xxx.py` 第 X 行
+   - **修复建议**：[具体建议]
+
+### 🟡 警告问题（建议修复）
+
+1. **问题描述**：[具体问题描述]
+   - **位置**：`backend/app/xxx.py` 第 X 行
+   - **修复建议**：[具体建议]
+
+### 🟢 优化建议（可选）
+
+1. **建议描述**：[具体建议]
+   - **位置**：`backend/app/xxx.py` 第 X 行
+   - **优化方案**：[具体方案]
+
+## ✅ 好的实践
+
+- [正面反馈：列出本次审查中发现的好实践]
+  - 例如：`hmac.compare_digest()` 正确使用
+  - 例如：SQLite 引擎正确配置 WAL 模式 + busy_timeout
+  - 例如：WorkflowScheduler 单实例锁防止并发触发
+  - 例如：自定义异常继承 BizError 统一处理
+
+## 测试运行结果
+
+- **测试命令**：`pytest backend/tests/ -x --tb=short`
+- **测试结果**：[通过 / 失败]
+- **测试覆盖**：[覆盖率]
+- **py_compile 验证**：[通过 / 失败]
+
+## 审查结论
+
+- [ ] 通过（无阻塞问题）
+- [ ] 有条件通过（仅警告和提示级别问题）
+- [ ] 不通过（存在阻塞或严重问题）
+
+## 修复验证
+
+修复完成后，请重新运行审查确认问题已解决：
+
+```powershell
+# 1. 重新运行快速自检
+pwsh .trae/skills/news-backend-code-review/scripts/auto-scan.ps1
+
+# 2. 重新运行人工评审
+# 调用 news-backend-code-review 技能
+```
+
+## 报告归档
+
+报告保存路径：`.trae/skills/news-backend-code-review/reports/YYYY-MM-DD_HHmmss_[full|incremental]_report.md`
+
+---
+
+## 四维度复盘
+
+> 基于本次 20_News 后端代码审查完整过程的复盘，沉淀可复用的工作流模板与判断逻辑。
+
+### 维度 1：成功执行任务的完整步骤
+
+- 本次审查在 15 维度下识别 `N` 个问题，其中 `M` 个被成功闭环
+- 关键成功路径（按时间顺序）：
+  1. `Grep 搜索反模式`：按维度 1-15 的判断信号扫描 `backend/app/**/*.py`
+  2. `分类问题`：按 severity 与 category 归类
+  3. `子智能体并行修复`：派发并行子智能体（敏感词初始化 / JWT 黑名单 / Enum .value / finally 锁保护等）
+  4. `py_compile 验证`：`python -m py_compile <file>` 确保语法正确
+  5. `pytest 测试`：`pytest backend/tests/ -x` 确保未破坏现有测试
+- 复用方法/工具：Grep（反模式扫描）、Edit（精确修复）、RunCommand（py_compile + pytest 验证）
+
+### 维度 2：任务执行过程中的不确定性与失败点
+
+| 失败点 | 触发条件 | 影响范围 | 根因 | 修复方式 |
+|--------|----------|----------|------|----------|
+| 敏感词过滤器未初始化 | `sensitive_filter.load_words()` 从未被调用 | LLM 改写结果命中敏感词不拦截 | 启动流程遗漏初始化调用 | 在 main.py lifespan 或 WorkflowScheduler.__init__ 调用 `load_words()` |
+| 登出接口缺失 | 无 `/logout` 路由 | JWT token 无法主动失效 | 黑名单机制未闭环 | 新增登出接口，写黑名单 |
+| workflow source 字段返回 Enum 对象 | `WorkflowSource.CRON` 直接序列化 | API 返回 `<WorkflowSource.CRON: 'cron'>`，前端解析失败 | Enum 未调 `.value` | 序列化时用 `source.value` |
+| finally 误删其他工作流的锁 | `finally: await cache.release("wf_lock")` 无条件执行 | 并发工作流互相误删锁 | `lock_acquired` 标志缺失 | 加 `lock_acquired` 标志 |
+| approve 跨事务 | 审核批准与发布在同一事务 | 发布失败回滚审核状态 | 事务边界设计错误 | 拆分为两步独立事务 |
+| PermissionError 覆盖内置异常 | `class PermissionError(Exception)` | 业务代码无法捕获内置异常 | 命名未加 Biz 前缀 | 改名 `BizPermissionError` |
+| datetime.utcnow() 弃用 | Python 3.12+ 警告 | 升级 Python 后报错 | 沿用旧 API | 改用 `utcnow_naive()` |
+| play_log LRANGE+LTRIM 非原子 | 消费日志时两条命令间并发写入 | 日志丢失或重复消费 | 未用 Lua 脚本 | 用 Lua 脚本封装 |
+| asyncio.create_task 未保留引用 | 裸 `asyncio.create_task(coro)` | 协程被 GC 回收 | 局部变量无生命周期 | 赋值给 `self._running_tasks` |
+| 异步函数中同步 IO 阻塞事件循环 | `async def` 内 `time.sleep` / `requests.get` | 整个事件循环阻塞 | 误用同步库 | 用 `asyncio.to_thread()` 或异步库 |
+
+### 维度 3：可抽象的固定流程与判断逻辑
+
+| 模板 | 核心判断信号 | 落地配置节点 |
+|------|--------------|--------------|
+| 敏感词初始化检查 | Grep `load_words` 在 startup 路径缺失 | `hard_constraints.rules.sensitive_filter_not_initialized` |
+| JWT 黑名单闭环检查 | Grep `/logout` 路由缺失或未写黑名单 | `hard_constraints.rules.logout_missing` |
+| Enum 字段序列化检查 | Grep `WorkflowStatus\.\w+` 后无 `.value` 在序列化路径 | `hard_constraints.rules.enum_field_without_value` |
+| finally 锁保护检查 | Grep `finally` 块内 `release` 无 `lock_acquired` 判断 | `hard_constraints.rules.finally_unconditional_release` |
+| 内置异常覆盖检查 | Grep `class PermissionError` / `class KeyError` 等 | `hard_constraints.rules.builtin_exception_shadowing` |
+| datetime 弃用检查 | Grep `datetime\.utcnow\(\)` / `datetime\.now\(\)` | `hard_constraints.rules.deprecated_utcnow` |
+| Redis 非原子操作检查 | Grep `LRANGE` 后跟 `LTRIM` 无 `eval` / `pipeline` | `hard_constraints.rules.redis_non_atomic_lrange_ltrim` |
+| create_task 引用检查 | Grep `asyncio\.create_task` 未赋值实例属性 | `hard_constraints.rules.create_task_no_reference` |
+| 同步 IO 阻塞检查 | Grep `async def` 内 `time\.sleep` / `requests\.` | `hard_constraints.rules.sync_io_in_async` |
+| 内部接口鉴权检查 | Grep `routers/internal` 路由无 `verify_localhost` | `hard_constraints.rules.internal_route_no_auth` |
+| 裸 SQL 注入检查 | Grep `text\(["'].*\+` 或 `f"SELECT` 字符串拼接 | `hard_constraints.rules.bare_sql_injection` |
+| print 语句检查 | Grep `print\(` 在 .py 文件 | `hard_constraints.rules.print_statement` |
+
+### 维度 4：适用场景与不适用场景
+
+| 模板 | 适用场景 | 不适用场景 |
+|------|----------|------------|
+| 敏感词初始化检查 | 含 LLM 改写/内容审核的 workflow 项目 | 无敏感词过滤的项目 |
+| JWT 黑名单闭环检查 | 需要主动登出/封禁 token 的认证系统 | 无状态 JWT（接受 token 不可主动失效） |
+| Enum .value 检查 | 用 Python Enum 定义状态字段的 ORM | 用字符串常量而非 Enum 的项目 |
+| finally 锁保护检查 | 用 Redis/TTLCache 分布式锁的并发场景 | 单进程无锁场景、`with lock:` 上下文管理器 |
+| 内置异常覆盖检查 | 所有 Python 项目 | 无 |
+| datetime 弃用检查 | Python 3.12+ 项目 | Python 3.8-3.11 兼容场景（仅警告） |
+| Redis 非原子检查 | 用 Redis 多命令原子操作场景 | 单命令操作、Lua 脚本已封装 |
+| create_task 引用检查 | `asyncio.create_task` 长生命周期协程 | `asyncio.gather` 短期并发（自动等待） |
+| 同步 IO 阻塞检查 | FastAPI / asyncio 异步项目 | 同步框架（Flask 默认）、CLI 脚本 |
+| 内部接口鉴权检查 | 暴露内部 API 的项目（`routers/internal/`） | 无内部接口的项目 |
+| 裸 SQL 注入检查 | 用 SQLAlchemy `text()` 的项目 | 纯 ORM 查询、纯参数化查询 |
+| print 语句检查 | 所有生产项目 | 一次性脚本、debug 临时调试 |
+
+## 配置变更点
+
+> 本次审查触发的 `config.yaml` 节点变更建议。所有变更遵循"无硬编码"原则，仅调整阈值/白名单/关键字等参数化配置，不引入新的硬编码业务值。
+
+| 变更类型 | 配置节点 | 当前值 | 建议值 | 变更理由 | 影响范围 |
+|----------|----------|--------|--------|----------|----------|
+| 阈值调整 | `coding_standards.type_annotation.max_any_count` | `3` | `5` | 项目当前 Any 使用较多，逐步收敛 | 维度 3 类型注解 |
+| 白名单新增 | `hard_constraints.rules.print_statement.exclude_files` | `[launcher.py, _verify_init.py]` | 同左 + `[setup.py]` | 新增 setup 脚本豁免 | 维度 13 日志规范 |
+| 关键路径新增 | `coding_standards.error_handling.critical_path_patterns` | `[def _on_startup, ...]` | 同左 + `[def _on_close, def _shutdown]` | 补齐关闭路径 | 维度 9 错误处理 |
+| 字段映射新增 | `field_contract.known_field_mappings` | `[episode, workflow, review]` | 同左 + `[ad_material, ad_placement]` | 新增广告模块字段 | 维度 12 字段契约 |
+
+**变更后自检清单**：
+- [ ] 无硬编码新增（所有数值/列表/关键字均在 config 节点管理）
+- [ ] 通用性未降低（参数化配置可被不同业务场景覆盖）
+- [ ] 现有违规检测不失效（回归测试通过）
+- [ ] SKILL.md 的 15 维度与本变更一致

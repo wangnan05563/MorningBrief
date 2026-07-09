@@ -1,0 +1,79 @@
+{
+  "_meta": {
+    "file": "xianyu.json",
+    "purpose": "Xianyu Hunter 项目特定的硬约束规则（业务级）。与 core.json 配合使用。",
+    "version": "2.0.0",
+    "last_updated": "2026-07-02"
+  },
+  "enabled": true,
+  "block_on_violation": true,
+  "rules": [
+    {
+      "_category": "credentials",
+      "name": "hmac_compare_digest_for_token",
+      "pattern": "==\\s*['\"]?[a-z_]*token",
+      "message": "token 比较应使用 hmac.compare_digest() 防止时序攻击",
+      "severity": "CRITICAL",
+      "applies_to": ["python"]
+    },
+    {
+      "_category": "webview",
+      "name": "webview_no_devnull_redirect",
+      "pattern": "DEVNULL",
+      "message": "WebView2/Playwright 子进程不应重定向 stdout/stderr 到 DEVNULL，保留调试输出",
+      "severity": "MAJOR",
+      "applies_to": ["python"]
+    },
+    {
+      "_category": "webview",
+      "name": "webview_create_new_console",
+      "pattern": "CREATE_NO_WINDOW",
+      "message": "WebView2 子进程必须使用 CREATE_NEW_CONSOLE 而非 CREATE_NO_WINDOW，防止 GUI 窗口闪退",
+      "severity": "MAJOR",
+      "applies_to": ["python"]
+    },
+    {
+      "_category": "webview",
+      "name": "webview_private_mode_false",
+      "pattern": "private_mode\\s*=\\s*True",
+      "message": "WebView2 webview.start() 必须设置 private_mode=False 并指定唯一 storage_path 以持久化 cookies",
+      "severity": "MAJOR",
+      "applies_to": ["python"]
+    },
+    {
+      "_category": "embedding",
+      "name": "hf_endpoint_mirror",
+      "pattern": "from sentence_transformers",
+      "message": "local_embedding.py 必须在模块顶层 os.environ.setdefault('HF_ENDPOINT','https://hf-mirror.com')，否则中国大陆 HuggingFace.co 超时",
+      "severity": "MAJOR",
+      "applies_to": ["python"],
+      "context_check": "需要确认文件顶部存在 HF_ENDPOINT 设置"
+    },
+    {
+      "_category": "auth_frontend",
+      "name": "auth_whitelist_endpoints",
+      "pattern": "",
+      "message": "认证白名单必须包含 /api/auth/cookie、/api/auth/me、/api/auth/import-from-browser、/import-from-browser/status、/api/events/stream、/api/notifications、/api/notifier/、/api/about、/api/about/check-update",
+      "severity": "MAJOR",
+      "applies_to": ["python"],
+      "context_check": "需要在认证中间件中检查白名单完整性"
+    },
+    {
+      "_category": "auth_frontend",
+      "name": "fetch_credentials_include",
+      "pattern": "fetch\\([^)]*\\)",
+      "message": "前端 fetch 请求必须包含 credentials:'include' 以通过认证",
+      "severity": "MAJOR",
+      "applies_to": ["typescript", "javascript"]
+    },
+    {
+      "_category": "embedding",
+      "name": "kbmanager_whitelist_only",
+      "pattern": "",
+      "message": "KBManager._scan_and_chunk 必须使用白名单机制，仅索引 .md/.py/.jsonl/.txt 文件，排除 web/static/、web/templates/、__pycache__/、node_modules/、.git/、dist/、build/",
+      "severity": "MAJOR",
+      "applies_to": ["python"],
+      "context_check": "需要检查 _scan_and_chunk 实现的白名单逻辑"
+    }
+  ]
+}

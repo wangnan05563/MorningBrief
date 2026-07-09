@@ -4,7 +4,7 @@
 
 设计原则：
 - 单源失败隔离：每源 try/except，失败记录日志继续，不影响其他源
-- 阻塞库隔离：feedparser/newspaper3k 用 asyncio.to_thread 包装（HLD 3.1.5）
+- 阻塞库隔离：feedparser 用 asyncio.to_thread 包装（HLD 3.1.5）；httpx 原生异步无需包装
 - QPS 限制：asyncio.Semaphore(1) 每源串行（简化实现，遵守 robots.txt）
 - 去重：URL 精确 + SimHash 近似双维度，避免不同源转发同一新闻重复入库
 """
@@ -18,7 +18,6 @@ from app.core.simhash import compute
 from app.database import AsyncSessionLocal
 from app.models import Material
 from app.models.material import MaterialSourceType, MaterialStatus
-from app.redis_client import redis_client
 from app.workflow.crawler.article_parser import extract as extract_article
 from app.workflow.crawler.dedup import add_to_dedup, is_duplicate
 from app.workflow.crawler.rss_spider import RSSSpider
@@ -38,7 +37,7 @@ async def _process_entry(entry: dict, workflow_id: str, session) -> bool:
     """处理单条素材：去重 → 提取正文 → 入库。
 
     返回 True 表示成功入库（计入计数），False 表示跳过或失败。
-    入库成功后才写入去重集合，保证 DB 与 Redis 状态一致。
+    入库成功后才写入去重表，保证 DB 与去重表状态一致。
     """
     title = entry["title"]
     url = entry["url"]
@@ -46,12 +45,12 @@ async def _process_entry(entry: dict, workflow_id: str, session) -> bool:
     # 标题 SimHash 指纹，用于近似去重
     simhash = compute(title)
 
-    # 去重判断：URL 精确 + SimHash 近似
-    if await is_duplicate(url, title, simhash, redis_client):
+    # 去重判断：URL 精确 + SimHash 近似（V1.2 改为传 session 查 crawler_dedup 表）
+    if await is_duplicate(url, title, simhash, session):
         logger.debug("跳过重复素材: %s", url)
         return False
 
-    # 提取正文（newspaper3k 同步库，内部已 to_thread 包装）
+    # 提取正文（httpx + selectolax 异步提取，失败时上层用 RSS summary 兜底）
     article = await extract_article(url)
     content = article.get("content")
     # 正文提取失败则用 RSS summary 兜底，避免空内容入库违反 NOT NULL 约束
@@ -75,11 +74,11 @@ async def _process_entry(entry: dict, workflow_id: str, session) -> bool:
         workflow_id=workflow_id,
     )
     session.add(material)
-    # flush 让 DB 层 unique 约束（url）作为最后防线，避免 Redis 漏判时脏数据入库
+    # flush 让 DB 层 unique 约束（url）作为最后防线，避免去重表漏判时脏数据入库
     await session.flush()
 
-    # 入库成功后加入去重集合，后续相同/近似素材将被跳过
-    await add_to_dedup(url, simhash, redis_client)
+    # 入库成功后加入去重表，后续相同/近似素材将被跳过
+    await add_to_dedup(url, simhash, session)
     return True
 
 
@@ -128,7 +127,7 @@ async def run(workflow_id: str, date_str: str) -> dict:
     )
 
     # 逐条处理：去重 + 提取正文 + 入库
-    # 串行处理避免并发写库与 Redis 去重集合的竞态（MVP 规模小，串行可接受）
+    # 串行处理避免并发写库与去重表的竞态（MVP 规模小，串行可接受）
     material_count = 0
     async with AsyncSessionLocal() as session:
         async with session.begin():

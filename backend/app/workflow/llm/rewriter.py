@@ -1,7 +1,7 @@
 """LLM 改写模块：选题 → 并发改写 → 敏感词过滤 → 组装稿件（LLD 5.3 / 7.2 / 7.3 / 7.4）。
 
 流程：
-1. 从 MySQL material 表查询当日 pending 素材
+1. 从 SQLite material 表查询当日 pending 素材
 2. 按热度（LLD 7.2）排序选 5-6 条
 3. 并发改写（asyncio.gather），单条调用通义千问 API
 4. 敏感词双层过滤（生成前 prompt 约束 + 生成后扫描，LLD 7.3）
@@ -39,6 +39,9 @@ settings = get_settings()
 # Prompt 模板与敏感词表路径（与模块同级目录）
 PROMPT_TEMPLATE_PATH = Path(__file__).parent / "prompts" / "rewrite.txt"
 SENSITIVE_WORDS_PATH = Path(__file__).parent / "sensitive_words.txt"
+
+# 模块加载时初始化敏感词自动机（避免每次改写重复加载）
+sensitive_filter.load_words(str(SENSITIVE_WORDS_PATH))
 
 # 选题数量：5-6 条新闻，覆盖主要品类又不超出单期时长
 SELECT_TOP_N = 6

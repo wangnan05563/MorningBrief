@@ -1,0 +1,86 @@
+/**
+ * 全局样式：马卡龙配色 + 圆润字体
+ *
+ * 配色：薄荷青主色 + 蜜桃粉辅助 + 暖灰中性
+ * 圆角：全局 16px 大圆角，卡片 24px
+ */
+
+/* === 主题色变量（WXSS 不支持变量，用 class 复用） === */
+page {
+  background-color: #F9FDFB;
+  color: #4A5568;
+  font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif;
+  font-size: 28rpx;
+  line-height: 1.6;
+}
+
+/* === 通用卡片 === */
+.card {
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 32rpx;
+  margin: 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(126, 206, 193, 0.08);
+}
+
+/* === 柔和按钮 === */
+.btn-primary {
+  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  color: #FFFFFF;
+  border-radius: 40rpx;
+  padding: 20rpx 48rpx;
+  font-size: 30rpx;
+  font-weight: 500;
+  border: none;
+}
+
+.btn-secondary {
+  background: #FFD3E0;
+  color: #FF6B8A;
+  border-radius: 40rpx;
+  padding: 20rpx 48rpx;
+  font-size: 30rpx;
+  border: none;
+}
+
+/* === 标签 === */
+.tag {
+  display: inline-block;
+  padding: 4rpx 16rpx;
+  border-radius: 20rpx;
+  font-size: 22rpx;
+}
+
+.tag-mint { background: #B5EAD7; color: #5BA89B; }
+.tag-pink { background: #FFD3E0; color: #FF6B8A; }
+.tag-gray { background: #F0F4F2; color: #A0AEC0; }
+
+/* === 文字辅助类 === */
+.text-primary { color: #5BA89B; }
+.text-secondary { color: #A0AEC0; }
+.text-danger { color: #FF6B8A; }
+.text-large { font-size: 36rpx; font-weight: 600; }
+.text-small { font-size: 24rpx; }
+
+/* === 加载状态 === */
+.loading-mask {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 60rpx 0;
+  color: #A0AEC0;
+}
+
+/* === 空状态 === */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 120rpx 0;
+  color: #A0AEC0;
+}
+
+.empty-state .empty-icon {
+  font-size: 80rpx;
+  margin-bottom: 20rpx;
+}

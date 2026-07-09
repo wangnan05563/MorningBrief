@@ -1,4 +1,9 @@
-"""统计服务：概览指标与趋势。"""
+"""统计服务：概览指标与趋势。
+
+V1.2 改造：Redis Bitmap DAU → SQLite COUNT(DISTINCT user_id) 聚合。
+- get_overview: DAU 与 play_count 等合并为一次查询
+- get_trend: DAU 趋势改为 SQLite GROUP BY func.date 一次聚合
+"""
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select, func
@@ -6,45 +11,42 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BizError
 from app.models import PlayLog
-from app.redis_client import redis_client
 
 
 class StatsService:
-    def __init__(self, db: AsyncSession, redis=None):
+    def __init__(self, db: AsyncSession):
         self.db = db
-        self.redis = redis or redis_client
+        # V1.2 起 Redis 移除，DAU 改为 SQLite COUNT(DISTINCT user_id) 聚合
 
     async def get_overview(self, target_date: date) -> dict:
-        """单日概览：DAU、播放数、完播率、平均收听时长、广告曝光。"""
-        # DAU 从 Redis Bitmap 读取，与 play_service 写入的 key 约定一致
-        yyyymmdd = target_date.strftime("%Y%m%d")
-        dau_key = f"stats:daurset:{yyyymmdd}"
-        dau = await self.redis.bitcount(dau_key)
+        """单日概览：DAU、播放数、完播率、平均收听时长、广告曝光。
 
-        # 当日 [00:00, 次日00:00) 区间聚合，MySQL DateTime 列为 naive
+        V1.2 改造：DAU 改为 SQLite COUNT(DISTINCT user_id)，与 play_count 等指标
+        合并为一次查询，减少数据库往返。
+        """
+        # 当日 [00:00, 次日00:00) 区间聚合，DateTime 列为 naive
         day_start = datetime.combine(target_date, datetime.min.time())
         day_end = datetime.combine(
             target_date + timedelta(days=1), datetime.min.time()
         )
 
-        # 播放数独立查询，保证无播放记录时返回 0 而非 None
-        count_result = await self.db.execute(
-            select(func.count(PlayLog.id)).where(
+        # DAU、播放数、完播率、平均时长合并为一次查询
+        # DAU = COUNT(DISTINCT user_id)，替代原 Redis Bitmap BITCOUNT
+        result = await self.db.execute(
+            select(
+                func.count(func.distinct(PlayLog.user_id)),
+                func.count(PlayLog.id),
+                func.avg(PlayLog.completed),
+                func.avg(PlayLog.duration),
+            ).where(
                 PlayLog.played_at >= day_start,
                 PlayLog.played_at < day_end,
             )
         )
-        play_count = count_result.scalar() or 0
+        dau, play_count, avg_completed, avg_duration = result.one()
 
-        # 完播率与平均时长同表，合并到一次查询减少往返
-        avg_result = await self.db.execute(
-            select(func.avg(PlayLog.completed), func.avg(PlayLog.duration)).where(
-                PlayLog.played_at >= day_start,
-                PlayLog.played_at < day_end,
-            )
-        )
-        avg_completed, avg_duration = avg_result.one()
-
+        dau = dau or 0
+        play_count = play_count or 0
         completion_rate = float(avg_completed) if avg_completed is not None else 0.0
         avg_listen_duration = (
             float(avg_duration) if avg_duration is not None else 0.0
@@ -60,26 +62,20 @@ class StatsService:
         }
 
     async def get_trend(self, metric: str, range_days: int) -> dict:
-        """多日趋势：DAU 取 Redis，其余指标从 MySQL 按日聚合。
+        """多日趋势：所有指标均从 SQLite 按日聚合。
 
+        V1.2 改造：DAU 趋势从原逐日 Redis BITCOUNT 改为 SQLite
+        GROUP BY func.date(played_at) 一次聚合，与其他指标统一。
         返回 dates 与 values 等长对齐，缺数据的日期补 0。
         """
-        # today 用 UTC，与 play_service 写 DAU Bitmap 的时区约定一致
         today = datetime.now(timezone.utc).date()
         dates: list[str] = []
         values: list = []
 
+        # DAU 改为 COUNT(DISTINCT user_id) 按日聚合，与其他指标统一走 SQLite
         if metric == "dau":
-            # DAU 按日逐个 BITCOUNT，Bitmap 不支持跨日聚合
-            for i in range(range_days - 1, -1, -1):
-                d = today - timedelta(days=i)
-                dates.append(d.isoformat())
-                dau_key = f"stats:daurset:{d.strftime('%Y%m%d')}"
-                values.append(await self.redis.bitcount(dau_key))
-            return {"dates": dates, "values": values}
-
-        # 其余指标走 MySQL 按日聚合
-        if metric == "play_count":
+            expr = func.count(func.distinct(PlayLog.user_id))
+        elif metric == "play_count":
             expr = func.count(PlayLog.id)
         elif metric == "completion_rate":
             expr = func.avg(PlayLog.completed)

@@ -1,0 +1,4 @@
+# SCF 云函数依赖（精简版，仅 C 端 5 个接口所需）
+# 与 backend/requirements.txt 解耦，避免 SCF 冷启动加载过多包
+cos-python-sdk-v5>=1.9.30
+PyJWT>=2.8.0

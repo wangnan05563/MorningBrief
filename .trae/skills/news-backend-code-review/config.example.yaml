@@ -1,0 +1,623 @@
+# ===== 20_News 后端代码审查技能配置 v1.0.0（详细注释版）=====
+# 首次使用：复制本文件为 config.yaml 并按项目实际情况修改
+# 所有评审规则、硬约束、阈值、白名单均通过本文件管理，技能本身不含硬编码值
+# 完整审查维度对照见 SKILL.md（15 维度）
+# 当 config.yaml 缺失时，技能会使用本文件兜底
+
+# ============================================================
+# 评审范围
+# ============================================================
+scope:
+  # 评审目标文件 glob（相对项目根）
+  # 默认覆盖 backend/app/ 下所有 Python 文件
+  include:
+    - "backend/app/**/*.py"
+  # 排除的目录/文件
+  # __pycache__、.pyc、tests 目录不参与审查
+  exclude:
+    - "backend/app/**/__pycache__/**"
+    - "backend/app/**/*.pyc"
+    - "backend/tests/**"
+  # 评审根目录（用于计算相对路径，默认当前目录）
+  project_root: "."
+
+# ============================================================
+# 优先级排序
+# ============================================================
+# severity 与 category 的优先级，影响报告展示顺序与修复顺序
+priority:
+  # severity 优先级（从高到低）
+  # CRITICAL 必须修复才能合并，HIGH 强烈建议修复
+  severity_order: [CRITICAL, HIGH, MEDIUM, LOW, INFO]
+  # category 优先级（同 severity 时按此顺序）
+  # 安全 > 错误处理 > 异步并发 > ORM > 工作流 > 字段契约 ...
+  category_order:
+    - security          # 安全（最高优先级）
+    - error_handling    # 错误处理
+    - async_concurrency # 异步并发
+    - sqlalchemy        # ORM 规范
+    - workflow          # 工作流编排
+    - field_contract    # 前后端字段契约
+    - fastapi           # FastAPI 规范
+    - cache             # 缓存规约
+    - config_driven     # 配置驱动
+    - logging           # 日志规范
+    - performance       # 性能
+    - layering          # 分层架构
+    - naming            # 命名规范
+    - type_annotation   # 类型注解
+    - testability       # 可测试性
+
+# ============================================================
+# 硬约束规则（自动扫描）
+# ============================================================
+# 每条规则字段说明：
+# - name: 唯一标识（用于报告引用）
+# - pattern: 正则表达式（PowerShell -match 兼容语法）
+# - message: 违规提示信息
+# - severity: CRITICAL | HIGH | MEDIUM | LOW | INFO
+# - auto_fix: 是否支持自动修复（当前版本均为 false，需人工修复）
+# - category: 对应 checklist 维度
+# 附加字段（按规则类型可选）：
+# - whitelist_decorators: 装饰器白名单（豁免检查）
+# - allow_async_generators: 是否豁免 async generator
+# - placeholder_whitelist: 占位符白名单（不报警）
+# - startup_files: 启动入口文件（必须在这些文件中找到调用）
+# - expected_route_prefixes: 期望的路由前缀
+# - scan_dirs: 仅扫描指定目录
+# - exclude_files: 排除指定文件
+hard_constraints:
+  # 存在 CRITICAL 违规则阻止合并
+  block_on_violation: true
+  rules:
+    # === 维度 5：SQLAlchemy 2.0 规范 ===
+
+    # 规则：datetime.utcnow() 已弃用
+    # 触发：Python 3.12+ 弃用警告，3.14 移除
+    # 修复：改用 utcnow_naive()（core/timeutil.py）
+    - name: "deprecated_utcnow"
+      pattern: 'datetime\.utcnow\(\)'
+      message: "datetime.utcnow() 已在 Python 3.12+ 弃用，应使用 utcnow_naive()（core/timeutil.py）"
+      severity: CRITICAL
+      auto_fix: false
+      category: sqlalchemy
+
+    # 规则：datetime.now() 无 tzinfo
+    # 触发：与 utcnow_naive() 不一致，时区混乱
+    - name: "datetime_now_no_tzinfo"
+      pattern: 'datetime\.now\(\)'
+      message: "禁止 datetime.now() 无 tzinfo，应使用 utcnow_naive() 统一 naive UTC 存储"
+      severity: HIGH
+      auto_fix: false
+      category: sqlalchemy
+
+    # 规则：SQL 注入（f-string 拼接 SQL）
+    # 触发：text(f"SELECT ... WHERE id={x}")
+    # 修复：参数化 text("...WHERE id=:id"), {"id": x}
+    - name: "bare_sql_injection"
+      pattern: 'text\(\s*f["'']'
+      message: "禁止用 f-string 拼接 SQL（SQL 注入风险），应参数化 text(\"...WHERE id=:id\")"
+      severity: CRITICAL
+      auto_fix: false
+      category: sqlalchemy
+
+    # 规则：Enum 字段未 .value
+    # 触发：WorkflowSource.CRON 直接序列化返回 <WorkflowSource.CRON: 'cron'>
+    # 修复：序列化时用 source.value
+    - name: "enum_field_without_value"
+      pattern: 'Workflow(Source|Status|StepName|StepStatus)\.\w+(?!\.value)'
+      message: "Enum 字段序列化必须用 .value，禁止返回枚举对象（前端无法解析 <Enum: 'x'>）"
+      severity: HIGH
+      auto_fix: false
+      category: field_contract
+
+    # === 维度 6：异步并发 ===
+
+    # 规则：asyncio.create_task 未保留引用
+    # 触发：asyncio.create_task(coro) 裸调用，协程被 GC 回收
+    # 修复：赋值给 self._running_tasks
+    - name: "create_task_no_reference"
+      pattern: 'asyncio\.create_task\([^)]+\)\s*(?!.*=\s*self)'
+      message: "asyncio.create_task() 必须保留引用（赋值给 self._running_tasks 等），防止 GC 回收"
+      severity: CRITICAL
+      auto_fix: false
+      category: async_concurrency
+
+    # 规则：async def 中 time.sleep（阻塞事件循环）
+    # 触发：time.sleep() 在 async 函数内
+    # 修复：asyncio.sleep() 或 asyncio.to_thread()
+    - name: "sync_io_in_async"
+      pattern: '(?s)async\s+def\s+\w+.*?time\.sleep\('
+      message: "async def 中禁止 time.sleep()，应改用 asyncio.sleep() 或 asyncio.to_thread()"
+      severity: CRITICAL
+      auto_fix: false
+      category: async_concurrency
+
+    # 规则：async def 中 requests 同步库
+    # 触发：requests.get/post 在 async 函数内
+    # 修复：httpx.AsyncClient
+    - name: "sync_requests_in_async"
+      pattern: '(?s)async\s+def\s+\w+.*?requests\.(get|post|put|delete)\('
+      message: "async def 中禁止 requests 同步库，应改用 httpx.AsyncClient"
+      severity: CRITICAL
+      auto_fix: false
+      category: async_concurrency
+
+    # 规则：async def 内无 await
+    # 触发：async def 方法体内无 await 表达式
+    # 影响：Python 3.14 优化后返回 None，await None 触发 TypeError
+    # 修复：改为同步 def，调用点移除 await
+    - name: "async_def_without_await"
+      pattern: '(?s)async\s+def\s+\w+\([^)]*\)[^:]*:[^}]*?(?!.*await).*?(?:return|$)'
+      message: "async def 方法体内无 await 表达式，应改为同步 def；Python 3.14 优化后 await None 触发 TypeError"
+      severity: HIGH
+      auto_fix: false
+      category: async_concurrency
+      # 白名单装饰器（豁免）
+      # @abstractmethod 接口定义、@contextlib.asynccontextmanager 上下文管理器
+      whitelist_decorators:
+        - "@abstractmethod"
+        - "@contextlib.asynccontextmanager"
+      # async generator（含 yield 的 async def）豁免
+      allow_async_generators: true
+
+    # 规则：finally 块无条件 release 锁
+    # 触发：finally: await cache.release("wf_lock") 无 lock_acquired 判断
+    # 影响：acquire 失败也会 release，误删其他工作流的锁
+    # 修复：加 lock_acquired 标志，仅在自己获取时 release
+    - name: "finally_unconditional_release"
+      pattern: 'finally:\s*\n\s*await\s+\w+\.release\('
+      message: "finally 块禁止无条件 release() 锁，必须用 lock_acquired 标志判断是否自己获取"
+      severity: CRITICAL
+      auto_fix: false
+      category: async_concurrency
+
+    # === 维度 7：Redis 缓存规约 ===
+
+    # 规则：LRANGE + LTRIM 非原子
+    # 触发：消费日志时两条命令间并发写入
+    # 影响：日志丢失或重复消费
+    # 修复：用 Lua 脚本封装 LRANGE+LTRIM
+    - name: "redis_non_atomic_lrange_ltrim"
+      pattern: '(?s)lrange\([^)]+\).*?ltrim\('
+      message: "LRANGE + LTRIM 非原子操作，并发下数据丢失，必须用 Lua 脚本或 pipeline 事务封装"
+      severity: CRITICAL
+      auto_fix: false
+      category: cache
+
+    # === 维度 8：安全 ===
+
+    # 规则：token 用 == 比较（时序攻击）
+    # 触发：if token == "xxx"
+    # 修复：hmac.compare_digest(token, expected)
+    - name: "token_compare_with_equals"
+      pattern: '==\s*["'']?\w*token'
+      message: "JWT token 比较禁止用 ==（时序攻击），必须用 hmac.compare_digest()"
+      severity: CRITICAL
+      auto_fix: false
+      category: security
+
+    # 规则：硬编码凭据
+    # 触发：password = "real_secret" 等明文凭据
+    # 修复：通过 settings 环境变量注入
+    - name: "hardcoded_credentials"
+      pattern: '(password|secret|token|api_key|access_key|webhook_secret)\s*[:=]\s*["''][^"'']{8,}["'']'
+      message: "禁止硬编码凭据（密码/密钥/token），必须通过 settings 环境变量注入"
+      severity: CRITICAL
+      auto_fix: false
+      category: security
+      # 占位符白名单（含这些字符的不报警，如 .env.example 模板值）
+      placeholder_whitelist: ["<", "change-me", "your_", "xxx"]
+
+    # 规则：敏感词过滤器未初始化
+    # 触发：sensitive_filter.load_words() 从未被调用
+    # 影响：contains() 全返回 False，LLM 改写结果命中敏感词不拦截
+    # 修复：在 main.py lifespan 或 WorkflowScheduler.__init__ 调用 load_words()
+    - name: "sensitive_filter_not_initialized"
+      pattern: 'from\s+app\.workflow\.llm\s+import\s+sensitive_filter'
+      message: "敏感词过滤器必须在应用启动时调用 load_words() 初始化，否则 contains() 全返回 False"
+      severity: CRITICAL
+      auto_fix: false
+      category: security
+      # 启动入口文件（必须在这些文件中找到 load_words 调用）
+      startup_files:
+        - "backend/app/main.py"
+        - "backend/app/services/workflow_scheduler.py"
+
+    # 规则：登出接口缺失
+    # 触发：无 /logout 路由
+    # 影响：JWT token 无法主动失效，被盗用风险持续到过期
+    # 修复：新增登出接口，写黑名单（COS 或 SQLite）
+    - name: "logout_missing"
+      pattern: '@router\.(post|get)\(["'']/?(api/)?(logout|signout)["'']'
+      message: "登出接口缺失或未写 JWT 黑名单，token 无法主动失效（被盗用风险持续到过期）"
+      severity: CRITICAL
+      auto_fix: false
+      category: security
+      # 期望的路由前缀（C 端 + B 端均需登出）
+      expected_route_prefixes:
+        - "/api/auth/logout"
+        - "/api/admin/auth/logout"
+
+    # === 维度 9：错误处理 ===
+
+    # 规则：内置异常覆盖
+    # 触发：class PermissionError(Exception) 覆盖内置
+    # 影响：业务代码无法捕获内置 PermissionError
+    # 修复：加业务前缀，如 BizPermissionError
+    - name: "builtin_exception_shadowing"
+      pattern: 'class\s+(PermissionError|KeyError|ValueError|TypeError|FileNotFoundError)\s*\('
+      message: "异常名不得覆盖内置，必须加业务前缀（如 BizPermissionError 而非 PermissionError）"
+      severity: HIGH
+      auto_fix: false
+      category: error_handling
+
+    # 规则：裸 except + pass
+    # 触发：except: pass 吞异常
+    # 修复：捕获具体异常并记录日志
+    - name: "bare_except_pass"
+      pattern: 'except\s*:\s*\n\s*pass'
+      message: "禁止裸 except + pass（吞异常），必须捕获具体异常并记录日志"
+      severity: HIGH
+      auto_fix: false
+      category: error_handling
+
+    # 规则：except 块用 logger.warning 丢 traceback
+    # 触发：except Exception as e: logger.warning(f"...{e}")
+    # 修复：logger.exception("描述")
+    - name: "exception_log_warning_fstring"
+      pattern: 'except\s+Exception\s+as\s+e:\s*\n[^\n]*logger\.warning\(f'
+      message: "except 块内禁止 logger.warning(f\"...{e}\") 丢 traceback，必须用 logger.exception()"
+      severity: HIGH
+      auto_fix: false
+      category: logging
+
+    # === 维度 4：FastAPI 规范 ===
+
+    # 规则：内部接口缺鉴权
+    # 触发：routers/internal/ 路由无 Depends(verify_localhost)
+    # 影响：外网越权触发工作流
+    # 修复：加 _: None = Depends(verify_localhost)
+    - name: "internal_route_no_auth"
+      pattern: '@router\.(get|post|put|delete)\('
+      message: "内部接口（routers/internal/）必须加 Depends(verify_localhost) 鉴权"
+      severity: CRITICAL
+      auto_fix: false
+      category: fastapi
+      # 仅扫描 internal 目录
+      scan_dirs:
+        - "backend/app/routers/internal/"
+
+    # === 维度 13：日志规范 ===
+
+    # 规则：print 语句
+    # 触发：print() 在 .py 文件
+    # 修复：logging.getLogger(__name__)
+    - name: "print_statement"
+      pattern: '^\s*print\('
+      message: "禁止 print()，必须用 logging.getLogger(__name__)"
+      severity: HIGH
+      auto_fix: false
+      category: logging
+      # 豁免文件（脚本可 print）
+      exclude_files:
+        - "backend/launcher.py"
+        - "backend/_verify_init.py"
+
+    # 规则：print(traceback.format_exc())
+    # 触发：用 print 输出 traceback
+    # 修复：logger.exception() 或 logger.error(..., exc_info=True)
+    - name: "print_traceback_format_exc"
+      pattern: 'print\(traceback\.format_exc\(\)\)'
+      message: "禁止 print(traceback.format_exc())，应用 logger.exception() 或 logger.error(..., exc_info=True)"
+      severity: MEDIUM
+      auto_fix: false
+      category: logging
+
+    # === 维度 10：配置驱动 ===
+
+    # 规则：直接 os.getenv
+    # 触发：os.getenv("XXX") 散落调用
+    # 修复：通过 settings 统一管理
+    - name: "os_getenv_direct"
+      pattern: 'os\.getenv\('
+      message: "禁止直接 os.getenv()，必须通过 settings（core/config.py）统一管理"
+      severity: MEDIUM
+      auto_fix: false
+      category: config_driven
+      # 豁免 config.py 自身（它就是配置入口）
+      exclude_files:
+        - "backend/app/config.py"
+
+# ============================================================
+# 15 维度开关
+# ============================================================
+# 每个维度可单独开关，severity 为该维度的默认严重级别
+checklist:
+  layering:           # 维度 1：分层架构
+    enabled: true
+    severity: HIGH
+  naming:             # 维度 2：命名规范
+    enabled: true
+    severity: MEDIUM
+  type_annotation:    # 维度 3：类型注解
+    enabled: true
+    severity: MEDIUM
+  fastapi:            # 维度 4：FastAPI 规范
+    enabled: true
+    severity: HIGH
+  sqlalchemy:         # 维度 5：SQLAlchemy 2.0 规范
+    enabled: true
+    severity: HIGH
+  async_concurrency:  # 维度 6：异步并发
+    enabled: true
+    severity: CRITICAL
+  cache:              # 维度 7：Redis 缓存规约
+    enabled: true
+    severity: HIGH
+  security:           # 维度 8：安全
+    enabled: true
+    severity: CRITICAL
+  error_handling:     # 维度 9：错误处理
+    enabled: true
+    severity: HIGH
+  config_driven:      # 维度 10：配置驱动
+    enabled: true
+    severity: MEDIUM
+  workflow:           # 维度 11：工作流编排
+    enabled: true
+    severity: CRITICAL
+  field_contract:     # 维度 12：前后端字段契约
+    enabled: true
+    severity: HIGH
+  logging:            # 维度 13：日志规范
+    enabled: true
+    severity: MEDIUM
+  performance:        # 维度 14：性能
+    enabled: true
+    severity: MEDIUM
+  testability:        # 维度 15：可测试性
+    enabled: true
+    severity: LOW
+
+# ============================================================
+# 报告生成配置
+# ============================================================
+report:
+  # 报告输出目录（相对技能根目录）
+  output_dir: "reports"
+  # 文件名模板（支持变量：date, time, mode）
+  # mode 取值：full / incremental / file / snippet
+  filename_template: "{date}_{time}_{mode}_report.md"
+  # 日期格式
+  date_format: "YYYY-MM-DD"
+  time_format: "HHmmss"
+  # 报告模板文件
+  template_file: "templates/report-template.md"
+  # 是否包含好的实践（正面反馈）
+  include_good_practices: true
+  # 是否包含四维度复盘
+  include_retrospective: true
+  # 是否包含配置变更点
+  include_config_changes: true
+  # 摘要显示前 N 个问题
+  summary_top_n: 10
+
+# ============================================================
+# 验证配置
+# ============================================================
+# 修复后按顺序执行以下验证步骤
+verify:
+  steps:
+    - name: "py_compile"
+      command: "python -m py_compile {file}"
+      description: "语法检查"
+      blocking: true   # 失败则停止后续验证
+    - name: "pytest"
+      command: "pytest backend/tests/ -x --tb=short"
+      description: "运行测试套件"
+      blocking: true
+    - name: "auto_scan"
+      command: "pwsh .trae/skills/news-backend-code-review/scripts/auto-scan.ps1"
+      description: "重新运行阻塞级扫描"
+      blocking: false  # 非阻塞，仅提示
+  # 测试超时（秒）
+  test_timeout_sec: 300
+  # 最大并行验证文件数
+  max_parallel_files: 5
+
+# ============================================================
+# 项目规范
+# ============================================================
+# 描述项目的技术栈与约定，影响审查规则的判定
+project_conventions:
+  # 技术栈
+  tech_stack:
+    framework: "FastAPI"
+    orm: "SQLAlchemy"
+    orm_version: "2.0"
+    orm_style: "async"           # async | sync
+    # 数据库驱动（按项目实际配置）
+    # aiomysql: MySQL 异步驱动
+    # aiosqlite: SQLite 异步驱动（V1.2 当前使用）
+    db_driver: "aiosqlite"
+    # 缓存类型
+    # Redis: 外部缓存服务（多命令原子性要求）
+    # TTLCache: 进程内缓存（V1.2 当前使用，无原子性要求）
+    cache: "TTLCache"
+    scheduler: "APScheduler"
+    http_client: "httpx"
+    python_version: "3.11+"
+  # ORM 规范
+  orm:
+    base_class: "DeclarativeBase"
+    column_style: "mapped_column"   # mapped_column（2.0）| Column（legacy）
+    session_class: "AsyncSession"
+    time_default_func: "utcnow_naive"  # core/timeutil.py
+  # 缓存规范
+  cache:
+    # 当 cache=Redis 时启用以下规则
+    redis:
+      key_naming_pattern: "域:操作:参数"   # 如 episode:today:list
+      atomic_script_required: true          # LRANGE+LTRIM 等多命令必须 Lua
+      cache_aside_pattern: true             # 先查缓存 → 查 DB → 写缓存
+    # 当 cache=TTLCache 时（进程内缓存，无原子性要求）
+    ttlcache:
+      default_ttl_sec: 300
+      maxsize: 10000
+  # 认证规范
+  auth:
+    jwt_algorithm: "HS256"
+    token_compare_func: "hmac.compare_digest"
+    password_hash: "bcrypt"
+    blacklist_mechanism: true
+  # 路由规范
+  routing:
+    api_prefix: "/api"           # C 端
+    admin_prefix: "/api/admin"   # B 端
+    internal_prefix: "/api/internal"
+    internal_auth: "verify_localhost"
+    response_wrapper: "success/error"  # core/response.py
+
+# ============================================================
+# 工作流编排配置（维度 11）
+# ============================================================
+workflow_orchestration:
+  # 调度器配置
+  scheduler:
+    class_name: "WorkflowScheduler"
+    singleton: true                  # 单实例
+    lock_mechanism: "TTLCache"       # Redis | TTLCache
+    lock_key: "workflow:lock"
+    lock_ttl_sec: 1800
+    # finally 块必须用 lock_acquired 标志
+    require_lock_acquired_flag: true
+  # 步骤状态机
+  step_state_machine:
+    states: [pending, running, success, failed]
+    transitions:
+      - "pending → running"
+      - "running → success"
+      - "running → failed"
+    # 每步独立 session（避免长事务持锁）
+    require_independent_session: true
+  # 失败重试
+  retry:
+    max_attempts: 3
+    backoff: "exponential"
+    # 重试耗尽必须告警
+    require_alert_on_exhausted: true
+    alert_channels:
+      - "wecom_webhook"   # 企业微信
+      - "sms"              # 短信
+  # 备播机制
+  backup_mechanism:
+    enabled: true
+    check_time: "06:30"
+    fallback_strategy: "reuse_previous_day_audio"
+  # 工作流步骤顺序
+  pipeline:
+    - "crawl"      # 爬虫
+    - "rewrite"    # LLM 改写
+    - "tts"        # 语音合成
+    - "stitch"     # 音频拼接
+    - "review"     # 人工审核
+    - "publish"    # 发布
+
+# ============================================================
+# 前后端字段契约（维度 12）
+# ============================================================
+field_contract:
+  # 字段命名规范
+  naming:
+    case_style: "snake_case"
+    # ORM 字段名必须 = API 返回字段名
+    require_orm_api_consistency: true
+  # Enum 序列化
+  enum_serialization:
+    require_value: true       # 必须返回 .value
+    forbidden_object_return: true
+  # datetime 序列化
+  datetime_serialization:
+    format: "iso8601"         # ISO 8601 格式
+    require_isoformat: true
+  # 已知前后端字段映射（用于一致性检查）
+  # key=后端 ORM 模型，value=前端期望字段列表
+  # 审查时核对 API 响应是否包含这些字段且命名一致
+  known_field_mappings:
+    episode:
+      - "id"
+      - "title"
+      - "audio_url"
+      - "duration_sec"
+      - "publish_date"
+      - "status"
+      - "categories"
+      - "source"
+    workflow:
+      - "id"
+      - "episode_date"
+      - "source"
+      - "status"
+      - "current_step"
+      - "started_at"
+      - "finished_at"
+    review:
+      - "id"
+      - "workflow_id"
+      - "status"
+      - "reviewer"
+      - "comment"
+      - "created_at"
+
+# ============================================================
+# 编码规范阈值（维度 3/5/14）
+# ============================================================
+# 各维度的量化阈值，超过阈值触发警告
+coding_standards:
+  # 类型注解阈值（维度 3）
+  type_annotation:
+    # Any 出现次数上限（超过报警）
+    # 防止滥用 Any 掩盖类型不明确
+    max_any_count: 3
+    # 函数返回类型标注覆盖率（< 阈值报警）
+    min_return_annotation_ratio: 0.9
+    # 禁用的旧式 typing 导入（应用现代语法 X | None）
+    forbidden_typing_imports:
+      - "Optional"
+      - "List"
+      - "Dict"
+      - "Tuple"
+      - "Set"
+  # SQLAlchemy 阈值（维度 5）
+  sqlalchemy:
+    # 禁用 legacy Column API
+    forbid_legacy_column: true
+    # 禁用同步 Session
+    forbid_sync_session: true
+    # 时间字段默认函数
+    required_time_default: "utcnow_naive"
+  # 性能阈值（维度 14）
+  performance:
+    # 分页查询必须有 limit
+    require_pagination_limit: true
+    # N+1 查询检测
+    detect_n_plus_one: true
+    # 单次查询返回上限（无 limit 时报警）
+    max_unbounded_query_rows: 100
+    # 批量操作阈值（> N 条用 bulk_insert）
+    bulk_insert_threshold: 50
+  # 错误处理阈值（维度 9）
+  error_handling:
+    # 自定义异常必须继承 BizError
+    require_biz_error_base: true
+    # 内置异常覆盖检查
+    forbid_builtin_shadowing: true
+    # 关键路径必须用 logger.exception
+    # 这些函数模式的 except 块必须用 logger.exception()
+    critical_path_patterns:
+      - "def _on_startup"
+      - "def run_migrations"
+      - "def _init_"
+      - "def trigger_workflow"
+      - "def publish_episode"

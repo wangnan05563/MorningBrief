@@ -1,0 +1,439 @@
+# ===== 20_News 前端代码审查技能配置示例 v1.0.0 =====
+# 本文件为配置模板，复制为 config.yaml 后按项目实际情况修改
+# 所有评审规则、硬约束、项目规范均通过本文件管理，技能本身不含硬编码值
+# 完整审查维度对照见 SKILL.md（15 维度）
+
+# --- 评审范围 ---
+scope:
+  # 包含的路径（支持 glob）
+  # 20_News 项目包含两套前端：运营后台（admin-web）+ 微信小程序（miniprogram）
+  include_paths:
+    - "admin-web/src/**/*.vue"      # Vue 3 组件
+    - "admin-web/src/**/*.js"       # JS 模块（router/api/stores/utils）
+    - "miniprogram/**/*.js"         # 小程序逻辑层（app.js/services/pages/components）
+    - "miniprogram/**/*.wxml"       # 小程序模板
+    - "miniprogram/**/*.wxss"       # 小程序样式
+  # 排除的路径（构建产物、测试报告、配置文件等）
+  exclude_paths:
+    - "**/node_modules/**"          # 依赖目录
+    - "**/dist/**"                  # 构建产物
+    - "**/playwright-report/**"     # Playwright 测试报告
+    - "**/test-results/**"          # 测试结果
+    - "**/.last-run.json"           # 上次运行记录
+    - "miniprogram/project.config.json"  # 小程序项目配置（非业务代码）
+    - "miniprogram/sitemap.json"    # 小程序 sitemap（非业务代码）
+  # 评审的文件扩展名
+  file_extensions:
+    - ".vue"
+    - ".js"
+    - ".wxml"
+    - ".wxss"
+  # 单次评审最大文件数（避免单次评审过多导致超时，建议 20）
+  max_files_per_run: 20
+
+# --- 优先级排序 ---
+priority:
+  # severity 排序（从高到低）
+  # CRITICAL: 阻塞合并，必须修复
+  # HIGH: 强烈建议修复
+  # MEDIUM: 建议修复
+  # LOW: 可选修复
+  # INFO: 仅记录不突出显示
+  severity_order:
+    - CRITICAL
+    - HIGH
+    - MEDIUM
+    - LOW
+    - INFO
+  # category 排序（按 15 维度优先级）
+  # 字段契约 > 小程序生命周期 > 音频播放 > API 层 > ... 
+  # 排序依据：历史问题频率 + 业务影响
+  category_order:
+    - field_contract           # 维度 8：前后端字段契约（最易出错，历史问题最多）
+    - miniprogram_lifecycle    # 维度 9：小程序生命周期（内存泄漏高频）
+    - miniprogram_audio        # 维度 10：音频播放管理（用户体验关键）
+    - miniprogram_api          # 维度 11：小程序 API 层（循环依赖阻塞）
+    - api_call                 # 维度 6：API 调用规范
+    - routing                  # 维度 7：路由设计
+    - vue_component            # 维度 3：Vue 3 组件规范
+    - element_plus             # 维度 4：Element Plus 规范
+    - pinia                    # 维度 5：Pinia 状态管理
+    - error_handling           # 维度 15：错误处理
+    - performance              # 维度 12：性能
+    - code_quality             # 维度 14：代码质量
+    - accessibility            # 维度 13：可访问性
+    - directory_structure      # 维度 1：目录结构
+    - naming                   # 维度 2：命名规范
+  # 报告阈值：低于此 severity 的问题仅记录不突出显示
+  report_threshold: "LOW"
+
+# --- 评审检查清单（15 大类，按需开关）---
+# 与 SKILL.md 的 15 维度一一对应
+# 关闭某维度后，该维度的检查点不会触发
+checklist:
+  directory_structure: true     # 维度 1：目录结构
+  naming: true                  # 维度 2：命名规范
+  vue_component: true           # 维度 3：Vue 3 组件规范
+  element_plus: true            # 维度 4：Element Plus 规范
+  pinia: true                   # 维度 5：Pinia 状态管理
+  api_call: true                # 维度 6：API 调用规范
+  routing: true                 # 维度 7：路由设计
+  field_contract: true          # 维度 8：前后端字段契约
+  miniprogram_lifecycle: true   # 维度 9：小程序生命周期
+  miniprogram_audio: true       # 维度 10：小程序音频播放管理
+  miniprogram_api: true         # 维度 11：小程序 API 层
+  performance: true             # 维度 12：性能
+  accessibility: true           # 维度 13：可访问性
+  code_quality: true            # 维度 14：代码质量
+  error_handling: true          # 维度 15：错误处理
+
+# --- 硬约束检查（可扩展）---
+# 每条规则会在代码库中扫描，违规会写入报告
+# 这些规则来源于 20_News 项目实际前端代码审查复盘
+# 新增规则需包含：name（唯一标识）/pattern（正则）/message（提示）/severity（级别）/auto_fix（是否自动修复）
+hard_constraints:
+  rules:
+    # === 小程序循环依赖类 ===
+    # 复盘来源：api.js 顶部 require('./auth') 导致 getToken 为 undefined
+    - name: "miniprogram_circular_require_top"
+      pattern: "^const\\s+\\{[^}]*\\}\\s*=\\s*require\\(['\"]\\./auth['\"]\\)"
+      message: "miniprogram/services/api.js 顶部 require('./auth') 会导致循环依赖（auth.js 加载时需要 request），应延迟到 request 函数内部 require"
+      severity: CRITICAL
+      auto_fix: false
+
+    # === 小程序 BASE_URL 硬编码类 ===
+    # 复盘来源：生产环境请求 localhost 失败
+    - name: "miniprogram_baseurl_hardcoded"
+      pattern: "BASE_URL\\s*=\\s*['\"]http://localhost"
+      message: "BASE_URL 禁止硬编码 localhost，应按 __wxConfig.envVersion 环境切换"
+      severity: HIGH
+      auto_fix: false
+
+    # === 小程序 player 监听器未 off 类 ===
+    # 复盘来源：多次进出页面后回调累积，UI 串扰
+    - name: "miniprogram_player_no_off"
+      pattern: "player\\.(onPlay|onPause|onTimeUpdate|onEnded)\\("
+      message: "player 监听器必须在 onUnload 中配对 off（offPlay/offPause/offTimeUpdate/offEnded），否则内存泄漏"
+      severity: HIGH
+      auto_fix: false
+
+    # === 小程序 isCurrentEpisode 用 title 判断类 ===
+    # 复盘来源：标题重复时进度串扰
+    - name: "miniprogram_iscurrent_by_title"
+      pattern: "player\\.title\\s*===\\s*ep\\.title|player\\.title\\s*===\\s*episode\\.title"
+      message: "isCurrentEpisode 禁止用 title 判断（标题重复会误判），应用 player.episodeId === ep.id"
+      severity: HIGH
+      auto_fix: false
+
+    # === 小程序 globalData 未声明字段类 ===
+    # 复盘来源：profile 页读取 listenStats 返回 undefined
+    - name: "miniprogram_globaldata_undeclared"
+      pattern: "globalData\\.(listenStats|player|todayEpisode|networkType)"
+      message: "globalData 字段必须在 app.js 显式声明，禁止运行时动态新增"
+      severity: MEDIUM
+      auto_fix: false
+
+    # === 路由缺 404 兜底类 ===
+    # 复盘来源：访问错误路径白屏
+    # 注意：此规则为"反向校验"——未匹配到 pathMatch 视为违规（脚本中实现）
+    - name: "router_missing_404_fallback"
+      pattern: "pathMatch\\(\\.\\*\\)"
+      message: "路由表必须包含 404 兜底 { path: '/:pathMatch(.*)*', redirect: '/xxx' }，避免白屏"
+      severity: HIGH
+      auto_fix: false
+
+    # === admin-web API 路径判断过宽类 ===
+    # 复盘来源：/login-callback 被误判为已在登录页，401 死循环
+    - name: "path_includes_login"
+      pattern: "pathname\\.includes\\(['\"]\\/login['\"]\\)|location\\.pathname\\.includes\\(['\"]\\/login['\"]\\)"
+      message: "路径判断禁止用 includes('/login')（会误匹配 /login-callback），应用 pathname === '/login' 严格相等"
+      severity: HIGH
+      auto_fix: false
+
+    # === 前后端字段名不一致类 ===
+    # 复盘来源：categories vs category 分类筛选失效
+    - name: "field_name_category_mismatch"
+      pattern: "\\.category\\b(?!_)"
+      message: "后端返回 categories（复数），前端禁止用 .category（单数），应统一用 categories"
+      severity: MEDIUM
+      auto_fix: false
+
+    # 复盘来源：script vs content 稿件内容不显示
+    - name: "field_name_content_vs_script"
+      pattern: "res\\.content\\b(?!_)|response\\.content\\b(?!_)|data\\.content\\b(?!_)"
+      message: "稿件字段后端返回 script，前端用 content 会取不到值；历史兼容需 res.script || res.content 并注释"
+      severity: MEDIUM
+      auto_fix: false
+
+    # === Vue 组件缺 script setup 类 ===
+    # 项目规范：新组件统一用 <script setup>
+    - name: "vue_no_script_setup"
+      pattern: "<script>(?!\\s*setup)"
+      message: "Vue 3 组件应用 <script setup> 语法（项目规范），禁止 Options API 用于新组件"
+      severity: MEDIUM
+      auto_fix: false
+
+    # === 完播率单位检查类 ===
+    # 复盘来源：完播率显示 0.85% 而非 85%
+    - name: "completion_rate_unit_mismatch"
+      pattern: "completion_rate\\s*\\*\\s*100|completed_rate\\s*\\*\\s*100"
+      message: "完播率单位需前后端一致（0-1 或 0-100），前端 *100 时必须注释说明后端返回 0-1"
+      severity: MEDIUM
+      auto_fix: false
+
+    # === 代码质量类 ===
+    - name: "no_console_log"
+      pattern: "console\\.log\\("
+      message: "生产代码禁止 console.log，调试用 console.warn/error 且需有明确语义"
+      severity: MEDIUM
+      auto_fix: false
+
+    - name: "no_debugger"
+      pattern: "^\\s*debugger\\s*;?\\s*$"
+      message: "生产代码禁止 debugger 调试器语句"
+      severity: HIGH
+      auto_fix: false
+
+  # 硬约束违规时是否阻止合并
+  block_on_violation: true
+
+# --- 抽象建议阈值（20_News 项目特色）---
+# 当重复代码达到以下阈值时，建议抽取共享组件/常量/纯函数
+abstraction_thresholds:
+  # 重复内联样式达到 N 处时，建议抽取样式常量或共享组件
+  inline_style_repeat: 3
+  # 重复文案达到 N 处时，建议抽取共享文案常量
+  text_literal_repeat: 2
+  # 函数行数超过 N 行时，建议拆分
+  function_max_lines: 50
+  # 组件行数超过 N 行时，建议拆分
+  component_max_lines: 300
+  # 嵌套深度超过 N 层时，建议重构
+  max_nesting_depth: 4
+
+# --- 报告配置 ---
+report:
+  # 报告输出目录（为空则不写文件，仅输出到对话）
+  output_dir: ""
+  # 报告格式（当前仅支持 markdown）
+  format: "markdown"
+  # 是否包含好的实践（正面反馈，鼓励团队保持）
+  include_good_practices: true
+  # 最大建议数（超过则概括，避免报告过长）
+  max_suggestions: 10
+
+# --- 验证配置 ---
+verify:
+  # 评审后是否运行测试
+  run_tests_after_review: false
+  # 测试命令（PowerShell 用 ; 分隔，不支持 &&）
+  test_command: "npm --prefix admin-web run test ; npm --prefix admin-web run build"
+  # 发现 CRITICAL 问题时是否失败
+  fail_on_critical: true
+
+# --- 项目专属规范（供评审参考，非扫描规则）---
+project_conventions:
+  # 技术栈
+  tech_stack:
+    admin_web: "Vue 3 + Element Plus + Vite + Pinia"
+    miniprogram: "原生微信小程序（无框架）"
+    admin_web_versions:
+      vue: "3.x"
+      element_plus: "2.x"
+      vite: "5.x"
+      pinia: "2.x"
+      axios: "1.x"
+
+  # UI 组件库
+  ui_library: "Element Plus"
+
+  # 认证要求
+  auth_requirements:
+    admin_web_token_storage: "localStorage（admin_token）"
+    miniprogram_token_storage: "内存 + wx.setStorageSync 兜底"
+    bearer_token_header: "Authorization: Bearer <token>"
+    auto_refresh_on_401: true
+
+  # 测试框架
+  test_framework: "Playwright"
+  test_file_location: "admin-web/tests/*.spec.js"
+
+  # 路由配置
+  routing:
+    admin_web_library: "vue-router"
+    admin_web_mode: "createWebHistory"
+    admin_web_lazy_loading: true
+    admin_web_404_fallback: "redirect: /review"
+    admin_web_guard: "beforeEach（token + 角色）"
+
+  # 构建命令
+  build_commands:
+    admin_web_dev: "npm --prefix admin-web run dev"
+    admin_web_build: "npm --prefix admin-web run build"
+    miniprogram_build: "微信开发者工具上传"
+
+# --- 前后端字段契约配置（维度 8 核心）---
+# 复盘来源：categories/category、script/content、placements/dates、step_name/name 等字段不一致问题
+field_contract_frontend:
+  # 核心原则：后端返回 snake_case，前端直接用，禁止转 camelCase
+  backend_naming_style: "snake_case"
+  frontend_passthrough: true  # 前端直接透传 snake_case
+  forbid_camelcase_transform: true
+
+  # 已知字段对（前后端字段名易混淆）
+  # 每条记录后端正确字段名 + 前端错误用法 + 说明 + 严重级别
+  known_field_pairs:
+    - backend: "audio_url"
+      frontend_wrong: "audioUrl"
+      description: "音频地址（snake_case 透传）"
+      severity: MEDIUM
+    - backend: "episode_id"
+      frontend_wrong: "episodeId"
+      description: "节目 ID（前端变量可用 camelCase，但取后端字段需用 episode_id）"
+      severity: LOW
+    - backend: "categories"
+      frontend_wrong: "category"
+      description: "分类列表（复数，禁止单数）"
+      severity: MEDIUM
+    - backend: "script"
+      frontend_wrong: "content"
+      description: "稿件内容（历史兼容可 fallback：res.script || res.content）"
+      severity: MEDIUM
+      allow_fallback: true  # 允许 fallback 但需注释说明
+    - backend: "placements"
+      frontend_wrong: "dates"
+      description: "排期投放数组（结构不同，dates 是 map，placements 是数组）"
+      severity: HIGH
+    - backend: "name"
+      frontend_wrong: "step_name"
+      description: "工作流步骤名（统一用 name）"
+      severity: MEDIUM
+
+  # 比率字段单位约定
+  # 复盘来源：完播率单位不一致（0-1 vs 0-100）
+  ratio_fields:
+    - field: "completion_rate"
+      backend_unit: "0-1"
+      frontend_display: "* 100 转 0-100"
+      require_comment: true  # 前端 *100 时必须注释说明后端返回 0-1
+    - field: "progress"
+      backend_unit: "0-1"
+      frontend_display: "* 100 转 0-100"
+      require_comment: true
+
+  # 日期字段处理
+  datetime_fields:
+    backend_format: "ISO 8601（如 2026-07-09T10:00:00Z）"
+    frontend_parse_method: "new Date(isoStr)"
+    forbidden_parse_methods:
+      - "字符串方法（replace/slice/substring）"
+      - "Date.parse() 直接返回数字"
+    display_method: "toLocaleString('zh-CN', { hour12: false })"
+
+# --- 小程序生命周期配置（维度 9 核心）---
+# 复盘来源：player 监听器未 off 导致内存泄漏 + globalData 字段未声明
+miniprogram_lifecycle:
+  # 监听器配对表（onXxx 必须配对 offXxx）
+  # 审查时：在 miniprogram/pages/ 下 grep onXxx，需在 onUnload 中找到对应 offXxx
+  listener_pairs:
+    - on: "onPlay"
+      off: "offPlay"
+      scope: "player"
+    - on: "onPause"
+      off: "offPause"
+      scope: "player"
+    - on: "onTimeUpdate"
+      off: "offTimeUpdate"
+      scope: "player"
+    - on: "onEnded"
+      off: "offEnded"
+      scope: "player"
+    - on: "onCanplay"
+      off: "offCanplay"
+      scope: "player"
+      self_cleanup: true  # 一次性监听，用后即 off（在回调内部 off）
+    - on: "onNetworkStatusChange"
+      off: "offNetworkStatusChange"
+      scope: "wx"
+
+  # globalData 必须显式声明的字段
+  # 审查时：在 app.js globalData 中检查这些字段是否声明
+  globaldata_required_fields:
+    - "userInfo"
+    - "token"
+    - "player"
+    - "todayEpisode"
+    - "networkType"
+    - "listenStats"
+
+  # 生命周期配对要求
+  lifecycle_pairs:
+    - load: "onLoad"
+      unload: "onUnload"
+      require_pair: true  # onLoad 注册的监听器必须在 onUnload 中 off
+    - show: "onShow"
+      hide: "onHide"
+      require_pair: false  # 按需配对（如需暂停音频/停止定时器）
+
+# --- 小程序音频播放管理配置（维度 10 核心）---
+# 复盘来源：isCurrentEpisode 用 title 判断 + onCanplay 累积 + 断点续播
+miniprogram_audio:
+  # 全局单例 player
+  singleton: true
+  singleton_location: "app.globalData.player"
+  init_function: "initPlayer"
+  init_timing: "app.js onLaunch 调用一次"
+
+  # episodeId 判断（禁止用 title）
+  # 复盘来源：标题重复时 isCurrentEpisode 误判
+  episode_id_required: true
+  forbidden_title_judge: true
+  episode_id_field: "episodeId"
+
+  # onCanplay 自清理
+  # 复盘来源：每次 playEpisode 都 onCanplay 未 off，监听器累积
+  oncanplay_self_cleanup: true
+  cleanup_pattern: "audioManager.offCanplay?.(onCanplay)"
+
+  # 断点续播
+  resume_play:
+    enabled: true
+    progress_api: "/playlogs/progress/:episodeId"
+    skip_if_completed: true  # completed === true 时不续播（从头开始）
+
+  # 进度上报
+  progress_report:
+    wifi_interval_ms: 5000       # wifi 环境每 5 秒上报
+    non_wifi_interval_ms: 15000  # 非 wifi 环境每 15 秒上报（弱网降频）
+    report_on_pause: true        # 暂停时立即上报当前位置
+    report_on_ended: true        # 结束时上报 completed: true
+    completed_flag: true
+
+# --- 小程序 API 层配置（维度 11 核心）---
+# 复盘来源：api.js/auth.js 循环依赖 + BASE_URL 硬编码
+miniprogram_api:
+  # 循环依赖处理
+  # 复盘来源：api.js 顶部 require('./auth') 导致 getToken 为 undefined
+  circular_dependency_delayed_require: true
+  delayed_require_pattern: "function request() { const { getToken } = require('./auth'); }"
+
+  # 环境化 BASE_URL
+  # 复盘来源：BASE_URL 硬编码 localhost，生产环境请求失败
+  env_based_base_url: true
+  env_check_pattern: "__wxConfig.envVersion === 'release'"
+  forbidden_hardcoded_localhost: true
+
+  # token 管理
+  token_management:
+    central_location: "services/auth.js"
+    functions: ["getToken", "refreshToken", "setToken"]
+    auto_refresh_on_401: true  # 401 自动 refreshToken 后重试一次
+    retry_once: true
+
+  # 请求封装
+  request_wrapper:
+    unified_header: true
+    content_type: "application/json"
+    auth_header: "Authorization: Bearer <token>"
+    business_error_check: "code !== 0"  # 业务错误判断
+    error_reject_pattern: "reject(new Error(message))"

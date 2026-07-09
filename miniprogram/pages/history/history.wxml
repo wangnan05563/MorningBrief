@@ -1,0 +1,58 @@
+<!-- 历史列表页 -->
+<view class="container">
+  <!-- 空状态 -->
+  <view class="empty-state" wx:if="{{!loading && list.length === 0}}">
+    <text class="empty-icon">📰</text>
+    <text>暂无历史节目</text>
+  </view>
+
+  <!-- 节目列表 -->
+  <block wx:else>
+    <view class="history-list">
+      <view
+        class="card history-item"
+        wx:for="{{list}}"
+        wx:key="id"
+        data-id="{{item.id}}"
+        bindtap="onPlay"
+      >
+        <!-- 顶部：日期 + 分类标签（薄荷青/蜜桃粉交替） -->
+        <view class="item-header">
+          <text class="item-date">{{item.date}}</text>
+          <text class="tag {{index % 2 === 0 ? 'tag-mint' : 'tag-pink'}}">
+            {{item.categories[0]}}
+          </text>
+        </view>
+
+        <!-- 标题 -->
+        <text class="item-title">{{item.title}}</text>
+
+        <!-- 底部：时长 + 播放图标 -->
+        <view class="item-footer">
+          <text class="item-duration">⏱ {{fmt.time(item.duration)}}</text>
+          <view class="play-icon-small">
+            <text class="icon-text">▶</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 底部加载更多提示 -->
+    <view class="load-more" wx:if="{{list.length > 0}}">
+      <text wx:if="{{loading}}">加载中...</text>
+      <text wx:elif="{{!hasMore}}">没有更多了</text>
+    </view>
+  </block>
+</view>
+
+<!-- WXS：时间格式化（mm:ss） -->
+<wxs module="fmt">
+  module.exports = {
+    time: function(s) {
+      s = s || 0;
+      var m = Math.floor(s / 60);
+      var sec = Math.floor(s % 60);
+      return (m < 10 ? '0' + m : m) + ':' + (sec < 10 ? '0' + sec : sec);
+    }
+  };
+</wxs>

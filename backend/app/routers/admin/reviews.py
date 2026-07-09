@@ -67,13 +67,12 @@ async def handle_action(
     )
 
     episode_id = None
-    # approve 通过后触发节目发布；handle_action 仅返回标志位，
-    # workflow_id 需补查详情获取，再交由 ContentService 落库
+    # approve 通过后触发节目发布；workflow_id 由 handle_action 直接返回，
+    # 避免二次查询 get_review_detail（commit 后再查可能引入不一致）
     if result.get("need_publish"):
-        detail = await svc.get_review_detail(review_id)
         content_svc = ContentService(db)
         episode_id = await content_svc.publish_episode(
-            workflow_id=detail["workflow_id"],
+            workflow_id=result["workflow_id"],
             review_id=review_id,
         )
     return success(data={"success": True, "episode_id": episode_id})

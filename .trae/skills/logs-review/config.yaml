@@ -1,0 +1,65 @@
+# ===== Logs Review 技能配置（差异化）=====
+# 本文件仅保留与 config.example.yaml 默认值不同的项
+# 未列出的项自动使用 config.example.yaml 默认值
+# 配置优先级：环境变量 > 本文件 > config.example.yaml 默认值
+
+# --- 日志源配置（项目实际日志路径与格式）---
+logs:
+  # 当前日志文件路径（实际运行的日志文件）
+  current_log: "run.stdout.log"
+  # 基线日志文件路径（首次运行留空，全量模式）
+  baseline_log: ""
+  # severity 识别正则（根据实际日志格式定制）
+  # 格式：2026-07-04 14:06:03.887 | WARNING  | [req=-] | module:function:line - message
+  severity_pattern: "(?P<timestamp>\\d{4}-\\d{2}-\\d{2}.*?\\d{2}:\\d{2}:\\d{2}\\.\\d{3})\\s+\\|\\s+(?P<severity>DEBUG|INFO|WARNING|ERROR|CRITICAL)\\s+\\|\\s+\\[req=(?P<request_id>[^\\]]+)\\]\\s+\\|\\s+(?P<module>[^:]+):(?P<function>[^:]+):(?P<line>\\d+)\\s+-\\s+(?P<message>.*)"
+  # 轮转文件命名模式（用于自动定位最新日志文件）
+  rotate_patterns:
+    - "run.stdout\\.\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}_\\d+\\.log"
+    - "run.stdout\\.log\\.\\d+"
+
+# --- 日志过滤配置（项目特定去重规则）---
+filter:
+  # 动态字段正则列表（去重时替换为 {*} 占位符）
+  # 在默认基础上新增"详情页\s+\d+"和"req-[\d]+-[\da-f]+"覆盖闲鱼日志特征
+  dedup_normalize_patterns:
+    - "详情页\\s+\\d+"
+    - "task[_=]\\s*[\\w-]+"
+    - "\\b\\d{4}-\\d{2}-\\d{2}.*?\\d{2}:\\d{2}:\\d{2}\\b"
+    - "\\b[\\da-f]{8,}\\b"
+    - "req-[\\d]+-[\\da-f]+"
+
+# --- 副作用识别配置（项目特定 harmful 模式）---
+side_effect:
+  harmful_patterns:
+    - pattern: "(?i)(cookie.*失效|session.*失效).*(重定向|首页|返回 None)"
+      message: "Cookie失效导致采集失败"
+      type_hint: "state_check"
+    - pattern: "(?i)(HTTPException).*status=502.*Failed to collect"
+      message: "采集失败导致API异常"
+      type_hint: "state_check"
+    - pattern: "(?i)(timeout|retry_failed).*(abort|give_up|exhausted)"
+      message: "重试耗尽导致放弃"
+      type_hint: "retry_failure"
+    - pattern: "(?i)(data\\s*loss|inconsistent|corrupt)"
+      message: "数据一致性风险"
+      type_hint: "state_check"
+
+# --- 并行修复配置（项目特定依赖组）---
+parallel:
+  # 跨模块依赖组（同组内的文件必须串行处理，避免状态依赖冲突）
+  # 在默认 scheduler_api 基础上调整：collector_search → collector_detail（项目实际路径）
+  dependency_groups:
+    - name: "scheduler_api"
+      files:
+        - "src/xianyu_hunter/modules/scheduler.py"
+        - "src/xianyu_hunter/web/routes/api_tasks.py"
+    - name: "collector_detail"
+      files:
+        - "src/xianyu_hunter/modules/collector/_detail.py"
+        - "src/xianyu_hunter/modules/collector/core.py"
+        - "src/xianyu_hunter/web/routes/api_items.py"
+
+# --- 验证闭环配置（项目特定测试命令）---
+verify:
+  # 测试命令（仅后端测试，前端测试另行执行）
+  test_command: "pytest tests/"

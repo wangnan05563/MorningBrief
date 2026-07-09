@@ -1,0 +1,90 @@
+/**
+ * 全局样式：重置 + 通用工具类
+ */
+@use './variables.scss' as *;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+  background-color: $color-bg;
+  color: $color-text-primary;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* === 通用卡片 === */
+.card-soft {
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  border: 1px solid $color-border;
+}
+
+/* === 磨砂玻璃效果（header/sidebar） === */
+.glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* === 指标卡片 === */
+.metric-card {
+  text-align: center;
+  padding: 20px 16px;
+
+  .metric-label {
+    font-size: 13px;
+    color: $color-text-secondary;
+    margin-bottom: 8px;
+  }
+
+  .metric-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: $color-primary-dark;
+  }
+}
+
+/* === 页面容器 === */
+.page-container {
+  padding: 24px;
+}
+
+/* === Element Plus 组件圆角增强 === */
+.el-card {
+  border-radius: $radius-lg !important;
+  border: 1px solid $color-border !important;
+  box-shadow: $shadow-sm !important;
+}
+
+.el-button {
+  border-radius: $radius-sm !important;
+}
+
+.el-dialog {
+  border-radius: $radius-lg !important;
+}
+
+.el-tabs__item {
+  font-weight: 500;
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: $color-primary-light;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

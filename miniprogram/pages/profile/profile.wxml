@@ -1,0 +1,53 @@
+<!-- 个人中心：用户信息 + 收听统计 + 设置 -->
+<view class="page-profile">
+  <!-- 未登录 -->
+  <view class="login-wrap" wx:if="{{!userInfo}}">
+    <view class="card login-card">
+      <view class="login-icon">🎧</view>
+      <view class="login-tip">登录后查看你的收听记录</view>
+      <view class="btn-primary login-btn" bindtap="onLogin">点击登录</view>
+    </view>
+  </view>
+
+  <!-- 已登录 -->
+  <block wx:else>
+    <!-- 用户信息卡片：薄荷青到蜜桃粉渐变 -->
+    <view class="user-card">
+      <image
+        class="avatar"
+        src="{{userInfo.avatar_url || userInfo.avatar || userInfo.avatarUrl || ''}}"
+        mode="aspectFill"
+      />
+      <view class="nickname">{{userInfo.nickname || userInfo.nickName || '听友'}}</view>
+    </view>
+
+    <!-- 收听统计 -->
+    <view class="card stat-card">
+      <view class="stat-item">
+        <view class="stat-num">{{durationLabel}}</view>
+        <view class="stat-label">累计收听时长</view>
+      </view>
+      <view class="stat-divider"></view>
+      <view class="stat-item">
+        <view class="stat-num">{{totalListenCount}}</view>
+        <view class="stat-label">累计收听期数</view>
+      </view>
+    </view>
+
+    <!-- 设置列表 -->
+    <view class="card list-card">
+      <view class="list-item" bindtap="onTapSetting" data-key="setting">
+        <text class="list-text">播放设置</text>
+        <view class="list-extra">敬请期待</view>
+      </view>
+      <view class="list-item" bindtap="onTapSetting" data-key="about">
+        <text class="list-text">关于我们</text>
+        <view class="list-extra">敬请期待</view>
+      </view>
+      <view class="list-item" bindtap="onTapSetting" data-key="logout">
+        <text class="list-text logout-text">退出登录</text>
+        <text class="list-arrow">›</text>
+      </view>
+    </view>
+  </block>
+</view>

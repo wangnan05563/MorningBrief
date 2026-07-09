@@ -1,0 +1,419 @@
+# ============================================================
+# Workspace Cleanup Skill - 配置文件示例
+# 复制为 cleanup-config.yaml 后按需修改
+#
+# 设计原则：
+#   1. 零硬编码 - 所有路径、模式、命令均通过配置管理
+#   2. 跨平台   - 通过 platform.commands 提供各平台命令变体
+#   3. 可推断   - detection 配置块支持配置缺失时的模式推断
+#   4. 可扩展   - garbage_patterns 支持自定义业务场景
+# ============================================================
+
+# ---------- 工作空间根目录配置 ----------
+workspace:
+  # 工作空间根（相对配置文件所在目录，或绝对路径）
+  root: "."
+  # 脚本集中目录（所有 .py/.ps1/.bat 等可执行脚本的归宿）
+  script_dir: "scripts"
+  # 文档目录（SonarQube 报告、变更记录等归档位置）
+  docs_dir: "docs"
+  # 日志目录（清理备份日志存放位置）
+  logs_dir: "logs"
+  # 前端目录名（用于检测前端调试产物，留空则跳过前端扫描）
+  frontend_dir: "frontend"
+  # 前端源码子目录（不算散落脚本）
+  frontend_src_dir: "src"
+
+# ---------- 根目录允许清单 ----------
+# 只有同时满足"扩展名允许"和"文件名在白名单"两个条件之一，才能保留在根目录
+root_allowlist:
+  extensions:
+    - ".md"           # 元文档
+    - ".txt"          # 纯文本（如 VERSIONING）
+    - ".yaml"
+    - ".yml"
+    - ".toml"         # pyproject.toml 等
+    - ".json"         # package.json 等
+    - ".example"      # .env.example 等
+    - ".properties"   # sonar-project.properties
+    - ".gitignore"
+    - ".env"          # 真实环境变量（不入版本控制）
+
+  files:              # 显式允许的根目录文件
+    - "README.md"
+    - "CHANGELOG.md"
+    - "VERSIONING.md"
+    - "Dockerfile"
+    - "docker-compose.yml"
+    - "pyproject.toml"
+    - "requirements.txt"
+    - "package.json"
+    - "package-lock.json"
+    - ".gitignore"
+    - ".dockerignore"
+    - ".env.example"
+    - ".pre-commit-config.yaml"
+    - "sonar-project.properties"
+
+  # 唯一允许保留在根目录的脚本（通常是快速启动入口）
+  # 留空数组表示不允许任何脚本在根目录
+  allowed_root_scripts:
+    - "静默启动.vbs"   # Windows 快捷启动入口
+
+# ---------- 脚本文件识别规则 ----------
+# 扩展名匹配 + 路径排除（已知代码目录不算"散落脚本"）
+script_extensions:
+  - ".py"
+  - ".ps1"
+  - ".bat"
+  - ".sh"
+  - ".js"
+  - ".vbs"
+
+# 排除目录：这些目录下的脚本文件不动（属于源码而非散落脚本）
+# 路径相对于 workspace.root，以 / 结尾表示目录
+script_exclude_dirs:
+  - "src/"
+  - "frontend/src/"
+  - "frontend/public/"
+  - "tests/"
+  - "scripts/tests/"   # 脚本目录下的测试子目录也保留
+  - "node_modules/"
+  - ".venv/"
+  - "venv/"
+  - "env/"
+
+# ---------- 垃圾文件模式 ----------
+# 支持精确匹配和通配符（* 匹配任意字符，? 匹配单字符）
+# 路径以 / 开头表示相对于 workspace.root
+garbage_patterns:
+  # 误重定向产生的根目录垃圾（PowerShell `command > filename` 错误输入）
+  # 按项目实际项目名调整，以下为常见示例
+  redirect_artifacts:
+    - "/0"
+    - "/<project_name>"
+    - "/<project_name>frontend"
+    - "/_r.json"
+
+  # 异常命名后缀（如 test_result_*.txtcd 是错误输入）
+  tmp_suffixes:
+    - "*.tmp"
+    - "*.bak"
+    - "*.orig"
+    - "*.txtcd"
+    - "*.tmp_diff.txt"
+    - "*.s3358_lines.txt"
+
+  # 测试输出散落根目录
+  test_outputs:
+    - "/pytest_output.txt"
+    - "/pytest_result.txt"
+    - "/test_result.txt"
+    - "/test_debug_output.txt"
+    - "/pytest_output.log"
+    - "/test_result_output.txt"
+
+  # SonarQube 调试 PS1 脚本
+  sonar_debug_scripts:
+    - "/check-scan*.ps1"
+    - "/diagnose-api.ps1"
+    - "/run-scan.ps1"
+    - "/query-*.ps1"
+
+  # SonarQube Python 调试脚本
+  sonar_debug_python:
+    - "/check_sonar.py"
+    - "/query_sonar.py"
+    - "/diag*.py"
+    - "/fetch_issues.py"
+    - "/fetch_status3_tmp.py"
+    - "/filter_issues.py"
+    - "/group_issues.py"
+    - "/check_issue*.py"
+    - "/query_*.py"
+
+  # SonarQube 调试输出文件
+  sonar_debug_outputs:
+    - "/all-issues.json"
+    - "/all-issues.csv"
+    - "/issues-by-file.json"
+    - "/issues-by-file.txt"
+    - "/issues-by-rule.json"
+    - "/my_issues.json"
+    - "/issues_summary.txt"
+    - "/filter_output*.txt"
+    - "/scan-output.txt"
+    - "/scan-output.log"
+    - "/sonar-scan-progress.log"
+    - "/ItemList_issues.*"
+    - "/*_issues.txt"
+    - "/*_issues.json"
+
+  # 缓存目录（直接删除，不入归档）
+  cache_dirs:
+    - ".scannerwork/"
+    - ".pytest_cache/"
+    - "sonar-results/"
+    - ".ruff_cache/"
+    - ".mypy_cache/"
+    - "__pycache__/"
+
+  # 运行时日志（大文件，服务持续写入）
+  runtime_logs:
+    - "/run.stdout.log"
+    - "/run.stderr.log"
+    - "/run.stdout.*.log"
+    - "/run.stderr.*.log"
+    - "/jenkins_build_*.log"
+
+  # skill 集成 / git 提交调试产物
+  skill_debug_artifacts:
+    - "/commit_msg.txt"
+    - "/compare_*.ps1"
+    - "/compare_result.txt"
+    - "/do_commit.js"
+    - "/do_git_commit.ps1"
+    - "/get_git_info.js"
+    - "/git_status.txt"
+    - "/git_commit_result.txt"
+    - "/integrate_*.ps1"
+    - "/diff_*.ps1"
+    - "/diff_skills.ps1"
+
+  # 前端调试产物（frontend/ 根目录，非 src/）
+  frontend_debug:
+    - "/frontend/check_tsc.js"
+    - "/frontend/run_tsc.js"
+    - "/frontend/run-tsc.ps1"
+    - "/frontend/tsc_check.js"
+    - "/frontend/tsc_runner.js"
+    - "/frontend/tsc_simple.js"
+    - "/frontend/vitest_runner.js"
+    - "/frontend/build.log"
+    - "/frontend/test.log"
+    - "/frontend/test2.log"
+    - "/frontend/tsc.log"
+    - "/frontend/vite_stderr.log"
+    - "/frontend/vite_stdout.log"
+    - "/frontend/run.stdout.log"
+    - "/frontend/_ps_test.txt"
+    - "/frontend/ws_test2.txt"
+    - "/frontend/tsconfig.tsbuildinfo"
+
+  # 前端截图（调试用）
+  frontend_screenshots:
+    - "/frontend/spa-*.png"
+    - "/frontend/*_shots/"
+    - "/frontend/screenshots/"
+
+# ---------- 模式推断配置 ----------
+# 当 garbage_patterns 未覆盖某些文件时，基于文件名特征自动推断
+# 用于配置缺失或新型调试产物的场景
+detection:
+  # 是否启用模式推断
+  enabled: true
+  # 触发推断的文件名前缀（这些前缀的文件通常为临时调试产物）
+  prefix_indicators:
+    - "_"           # _ 前缀（如 _debug.py, _test.log）
+    - ".tmp_"       # .tmp_ 前缀（如 .tmp_analyze.py）
+  # 触发推断的文件名关键词（文件名含这些词且不在白名单）
+  name_keywords:
+    - "debug"
+    - "diag"
+    - "investigation"
+    - "trace"
+    - "smoke"
+    - "verify"
+  # 触发推断的文件名模式（通配符）
+  name_patterns:
+    - "test_*.py"        # 临时测试脚本（非 tests/ 目录）
+    - "run_*.py"         # 临时运行脚本
+    - "run_*.js"         # 临时运行 JS
+    - "run_*.ps1"        # 临时运行 PS1
+    - "git_*.py"         # git 调试脚本
+    - "git_*.txt"        # git 调试输出
+    - "verify_*.py"      # 验证脚本
+    - "verify_*.txt"     # 验证输出
+    - "_*.log"           # _ 前缀日志
+    - "_*.txt"           # _ 前缀文本输出
+  # 推断置信度阈值（0-1，低于此值不自动删除，仅标记为"疑似垃圾"）
+  infer_confidence_threshold: 0.7
+  # 推断模式是否自动加入 .gitignore（防止复发）
+  auto_add_inferred_to_gitignore: true
+
+# ---------- 服务状态检测 ----------
+# 用于 Phase 3 影响评估：服务运行中可能持有文件句柄或持续产生日志
+service_indicators:
+  # PID 文件检测（任一存在即视为服务可能运行）
+  pid_files:
+    - "logs/web.pid"
+    - "logs/app.pid"
+  # 端口检测（任一监听即视为服务运行）
+  ports:
+    - 8000
+    - 8080
+    - 5000
+  # 进程名检测（任一存在即视为服务运行）
+  process_names:
+    - "python"
+    - "uvicorn"
+    - "node"
+  # 文件占用探测（这些文件被占用则视为服务运行，作为 PID 文件缺失的兜底）
+  # 用于检测"无 PID 文件但服务实际运行"的场景
+  file_occupancy_probes:
+    - "run.stdout.log"      # 服务持续写入的日志
+    - "run.stderr.log"
+    - "data/xianyu.db"      # SQLite 数据库（服务持有连接）
+  # 进程名匹配模式（支持通配符，用于更精确的进程识别）
+  process_name_patterns:
+    - "python*"
+    - "uvicorn*"
+    - "node*"
+
+# ---------- 稳定性检查配置 ----------
+# Phase 4 执行后，检测是否有后台进程持续创建文件
+stability_check:
+  # 是否启用稳定性检查
+  enabled: true
+  # 删除后等待时间（秒），再复扫检测新文件
+  wait_seconds: 5
+  # 最大允许复发次数（超过则警告用户排查后台进程）
+  max_recurrence: 3
+  # 复发文件的判定模式（这些模式匹配的文件被视为"后台进程重建"）
+  recurrence_patterns:
+    - "ubprocess*"          # PowerShell 误重定向产物
+    - "not enabled*"        # PowerShell 误重定向产物
+    - "run.stdout.log"      # 服务日志
+  # 复发时的处理策略：warn / stop / soft_delete
+  # warn: 仅警告，继续后续阶段
+  # stop: 停止后续阶段，等待用户介入
+  # soft_delete: 重命名复发文件为 .trash 后缀
+  recurrence_action: "warn"
+
+# ---------- 跨平台命令配置 ----------
+# 不同操作系统的命令变体，避免硬编码 PowerShell 语法
+platform:
+  # 当前平台（auto 自动检测，或显式指定 windows/linux/macos）
+  current: "auto"
+
+  # 文件列表命令
+  list_files:
+    windows: 'Get-ChildItem -Path "{path}" -File | Sort-Object Name'
+    linux: "ls -la {path}"
+    macos: "ls -la {path}"
+
+  # 文件 hash 计算命令
+  file_hash:
+    windows: 'Get-FileHash -LiteralPath "{path}" -Algorithm SHA256'
+    linux: "sha256sum {path}"
+    macos: "shasum -a 256 {path}"
+
+  # 端口检测命令
+  port_check:
+    windows: 'netstat -aon | Select-String ":{port}.*LISTENING"'
+    linux: "ss -tlnp | grep :{port}"
+    macos: "lsof -i :{port}"
+
+  # 进程检测命令
+  process_check:
+    windows: 'Get-Process -Name {names} -ErrorAction SilentlyContinue'
+    linux: "ps aux | grep -E '{names}'"
+    macos: "ps aux | grep -E '{names}'"
+
+  # 文件删除命令
+  remove_file:
+    windows: 'Remove-Item -LiteralPath "{path}" -Force'
+    linux: "rm -f {path}"
+    macos: "rm -f {path}"
+
+  # 目录删除命令
+  remove_dir:
+    windows: 'Remove-Item -LiteralPath "{path}" -Recurse -Force'
+    linux: "rm -rf {path}"
+    macos: "rm -rf {path}"
+
+  # 文件占用检测命令（用于检测文件是否被进程持有）
+  file_occupancy_check:
+    windows: |
+      try {
+        $stream = [System.IO.File]::Open("{path}",'Open','Read','None')
+        $stream.Close()
+        "not locked"
+      } catch { "locked" }
+    linux: 'lsof {path} 2>/dev/null || echo "not locked"'
+    macos: 'lsof {path} 2>/dev/null || echo "not locked"'
+
+  # 停止进程命令
+  stop_process:
+    windows: 'Stop-Process -Id {pid} -Force'
+    linux: "kill -9 {pid}"
+    macos: "kill -9 {pid}"
+
+  # venv python 路径
+  venv_python:
+    windows: ".venv/Scripts/python.exe"
+    linux: ".venv/bin/python"
+    macos: ".venv/bin/python"
+
+# ---------- 验证配置 ----------
+# Phase 5 用：清理后必须通过验证才能归档
+verification:
+  # Python 核心模块导入语句
+  python_imports:
+    - "import xianyu_hunter"
+    - "from xianyu_hunter import config, container"
+
+  # 完整验证命令（占位符 {venv_python} 自动替换）
+  command: "{venv_python} -c \"import xianyu_hunter; from xianyu_hunter import config, container\""
+
+  # venv python 路径（按操作系统区分，与 platform.venv_python 一致）
+  venv_python:
+    windows: ".venv/Scripts/python.exe"
+    linux: ".venv/bin/python"
+    macos: ".venv/bin/python"
+
+  # 验证失败时的回滚建议（仅提示，不自动回滚）
+  on_failure:
+    - "检查 logs/cleanup-*.log 中的 hash 记录"
+    - "从 git 历史恢复误删文件：git checkout HEAD -- <file>"
+    - "重新生成缓存目录：pytest --cache-clear / sonar-scanner"
+
+# ---------- 归档配置 ----------
+# Phase 6 用：清理动作记录到文档、规则写入 .gitignore
+archive:
+  changelog_path: "docs/standards/directory-structure.md"   # 变更记录
+  gitignore_path: ".gitignore"                                # 拦截规则
+  precommit_path: ".pre-commit-config.yaml"                   # pre-commit 钩子
+
+  # 是否自动追加到 .gitignore（推荐 true）
+  auto_update_gitignore: true
+  # 是否自动更新 pre-commit 钩子（推荐 true）
+  auto_update_precommit: true
+  # .gitignore 规则分组注释（按类别组织）
+  gitignore_group_comments:
+    - "# ---------- 清理技能自动生成规则 ----------"
+
+# ---------- 安全配置 ----------
+safety:
+  # 是否要求服务必须停止（推荐 true）
+  # false 时进入"软删除模式"（重命名为 .trash 后缀）
+  require_stopped_service: true
+  # 备份日志格式（保存到 logs/）
+  backup_log_format: "cleanup-{YYYYMMDD-HHmmss}.log"
+  # 干跑模式：仅打印计划不实际执行
+  dry_run: false
+  # 删除操作的最小置信度（0-1）
+  # 低于此值的文件仅标记为"疑似垃圾"，需用户确认
+  min_confidence_to_delete: 0.8
+  # 一次清理的最大文件数（超过则分批）
+  max_files_per_batch: 50
+  # 大文件阈值（MB），超过此大小的文件删除前需二次确认
+  large_file_threshold_mb: 5
+  # 异常文件名处理策略
+  # safe: 使用 Get-ChildItem + Where-Object 匹配，避免直接路径字符串问题
+  # direct: 直接使用路径字符串（适用于简单文件名）
+  special_filename_handling: "safe"
+  # 是否在每批删除后验证删除结果
+  verify_after_each_batch: true
+  # 软删除后缀（require_stopped_service=false 时使用）
+  soft_delete_suffix: ".trash"

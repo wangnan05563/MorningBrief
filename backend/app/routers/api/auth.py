@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import UserPayload, get_current_user
 from app.core.exceptions import BizError
 from app.core.response import success
 from app.database import get_db
@@ -27,3 +28,14 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
         raise
     except Exception as e:
         raise BizError(code=1001, message=f"微信登录失败: {e}")
+
+
+@router.post("/logout")
+async def logout(
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user),
+):
+    # 登出仅写黑名单，无需事务；jti+exp 已在鉴权时从 JWT 解析
+    svc = UserService(db)
+    await svc.logout(jti=user.jti, exp=user.exp, user_id=user.user_id)
+    return success(data={"success": True})

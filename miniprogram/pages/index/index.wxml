@@ -1,0 +1,76 @@
+<!-- 首页：今日要闻播放页 -->
+<view class="container">
+  <!-- 加载中状态 -->
+  <view class="loading-mask" wx:if="{{loading}}">
+    <text>正在加载今日要闻...</text>
+  </view>
+
+  <!-- 空状态/错误状态：节目未发布或加载失败 -->
+  <view class="empty-state" wx:elif="{{!episode}}">
+    <text class="empty-icon">🎧</text>
+    <text>{{error || '今日节目暂未上线'}}</text>
+  </view>
+
+  <!-- 正常内容 -->
+  <block wx:else>
+    <!-- 顶部问候语卡片：薄荷青到蜜桃粉极浅渐变 -->
+    <view class="greeting-card">
+      <text class="greeting-title">早安，今日要闻已上线</text>
+      <text class="greeting-subtitle">用心聆听，开启美好一天</text>
+    </view>
+
+    <!-- 节目信息卡片 -->
+    <view class="card episode-card">
+      <view class="episode-meta">
+        <text class="episode-date">{{episode.date}}</text>
+        <text class="tag tag-mint">{{episode.categories[0]}}</text>
+      </view>
+      <text class="episode-title">{{episode.title}}</text>
+      <text class="episode-duration">时长 {{fmt.time(episode.duration)}}</text>
+    </view>
+
+    <!-- 播放控制卡片 -->
+    <view class="card player-card">
+      <!-- 大圆形播放按钮 -->
+      <view class="play-btn" bindtap="onTogglePlay">
+        <text class="play-icon">{{isPlaying ? '⏸' : '▶'}}</text>
+      </view>
+
+      <!-- 进度条 -->
+      <slider
+        class="progress-slider"
+        min="0"
+        max="{{duration}}"
+        value="{{currentTime}}"
+        activeColor="#7ECEC1"
+        backgroundColor="#E8F5F2"
+        block-size="20"
+        block-color="#7ECEC1"
+        bindchange="onSeek"
+      />
+
+      <!-- 时间显示（mm:ss） -->
+      <view class="time-display">
+        <text>{{fmt.time(currentTime)}}</text>
+        <text>{{fmt.time(duration)}}</text>
+      </view>
+    </view>
+
+    <!-- 查看文稿按钮（蜜桃粉） -->
+    <view class="action-area">
+      <button class="btn-secondary" bindtap="onViewScript">查看文稿</button>
+    </view>
+  </block>
+</view>
+
+<!-- WXS：时间格式化工具（mm:ss），供模板调用 -->
+<wxs module="fmt">
+  module.exports = {
+    time: function(s) {
+      s = s || 0;
+      var m = Math.floor(s / 60);
+      var sec = Math.floor(s % 60);
+      return (m < 10 ? '0' + m : m) + ':' + (sec < 10 ? '0' + sec : sec);
+    }
+  };
+</wxs>

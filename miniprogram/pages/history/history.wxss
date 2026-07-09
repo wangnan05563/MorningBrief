@@ -1,0 +1,89 @@
+/* 历史列表样式：马卡龙配色，大圆角，柔和阴影 */
+
+.container {
+  min-height: 100vh;
+  padding: 24rpx 0;
+}
+
+/* === 列表项卡片 === */
+.history-list {
+  padding: 0 24rpx;
+}
+
+/* 覆盖 .card 的 margin，列表项间距统一用 margin-bottom */
+.history-item {
+  margin: 0 0 24rpx 0;
+  padding: 28rpx 32rpx;
+  border-radius: 24rpx;
+  background: #FFFFFF;
+  box-shadow: 0 4rpx 16rpx rgba(126, 206, 193, 0.08);
+  transition: transform 0.15s ease;
+}
+
+.history-item:active {
+  transform: scale(0.98);
+}
+
+/* 顶部：日期 + 标签 */
+.item-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+/* 日期用薄荷青色 */
+.item-date {
+  font-size: 26rpx;
+  color: #7ECEC1;
+  font-weight: 500;
+  margin-right: 16rpx;
+}
+
+/* 标题用暖深灰 */
+.item-title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #2D3748;
+  line-height: 1.5;
+  margin-bottom: 20rpx;
+}
+
+/* 底部：时长 + 播放图标 */
+.item-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.item-duration {
+  font-size: 24rpx;
+  color: #A0AEC0;
+}
+
+/* 播放图标：圆形薄荷青背景 */
+.play-icon-small {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 4rpx 12rpx rgba(126, 206, 193, 0.3);
+}
+
+/* 三角形字符左轻右重，需微调以视觉居中 */
+.icon-text {
+  font-size: 24rpx;
+  color: #FFFFFF;
+  margin-left: 4rpx;
+}
+
+/* === 底部加载更多提示 === */
+.load-more {
+  text-align: center;
+  padding: 32rpx 0;
+  font-size: 26rpx;
+  color: #A0AEC0;
+}

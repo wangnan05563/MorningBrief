@@ -1,0 +1,75 @@
+<!-- 节目详情：信息卡片 + 播放控制 + 稿件懒加载 -->
+<view class="page-detail">
+  <!-- 详情加载中 -->
+  <view class="loading-mask" wx:if="{{loading}}">
+    <text>加载中...</text>
+  </view>
+
+  <!-- 详情加载失败 -->
+  <view class="empty-state" wx:elif="{{error}}">
+    <text class="empty-icon">:(</text>
+    <text>{{error}}</text>
+  </view>
+
+  <block wx:else>
+    <!-- 节目信息卡片 -->
+    <view class="card episode-card">
+      <view class="episode-meta">
+        <text class="episode-date">{{episode.date}}</text>
+        <text class="tag tag-pink" wx:if="{{episode.categories}}">{{episode.categories[0]}}</text>
+      </view>
+      <view class="episode-title">{{episode.title}}</view>
+      <view class="episode-duration">
+        <text class="duration-icon">🎵</text>
+        <text>时长 {{durationLabel}}</text>
+      </view>
+    </view>
+
+    <!-- 播放控制卡片 -->
+    <view class="card play-card">
+      <view class="play-row">
+        <view class="play-btn" bindtap="onTogglePlay">
+          <text class="play-icon">{{isPlaying ? '⏸' : '▶'}}</text>
+        </view>
+        <view class="play-info">
+          <slider
+            class="progress"
+            min="0"
+            max="{{duration || 0}}"
+            value="{{currentTime}}"
+            activeColor="#7ECEC1"
+            backgroundColor="#E6F4F1"
+            block-size="22"
+            block-color="#7ECEC1"
+            bindchange="onSeek"
+          />
+          <view class="time-row">
+            <text class="time">{{currentTimeText}}</text>
+            <text class="time">{{durationText}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 稿件区域：懒加载 -->
+    <view class="card script-card">
+      <view class="script-header">完整文稿</view>
+
+      <!-- 未加载：展示入口按钮 -->
+      <view class="script-entry" wx:if="{{!scriptLoaded}}">
+        <view class="btn-secondary script-btn" bindtap="onLoadScript">
+          {{scriptLoading ? '加载中...' : '查看完整文稿'}}
+        </view>
+      </view>
+
+      <!-- 加载完成：展示全文（pre-wrap 保留换行） -->
+      <view class="script-body" wx:else>{{script}}</view>
+    </view>
+
+    <!-- 底部操作 -->
+    <view class="footer-actions">
+      <button class="btn-primary footer-btn" open-type="share">分享节目</button>
+      <view class="btn-secondary footer-btn" bindtap="onBackHome">返回首页</view>
+    </view>
+  </block>
+</view>

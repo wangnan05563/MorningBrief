@@ -3,7 +3,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import BigInteger, String, Integer, SmallInteger, DateTime, Date, JSON, Enum as SAEnum, ForeignKey, Index
+from sqlalchemy import String, Integer, SmallInteger, DateTime, Date, Text, JSON, ForeignKey, Index, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -21,28 +21,29 @@ class Episode(Base):
     __table_args__ = (
         Index("idx_date", "date"),
         Index("idx_status", "status"),
+        CheckConstraint("status IN ('draft', 'published', 'offline')", name="ck_episode_status"),
         {"comment": "节目表"},
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     date: Mapped[date] = mapped_column(Date, nullable=False, unique=True)
     title: Mapped[str] = mapped_column(String(128), nullable=False)
     duration: Mapped[int] = mapped_column(Integer, nullable=False, comment="时长（秒）")
     audio_url: Mapped[str] = mapped_column(String(512), nullable=False)
     cover_url: Mapped[Optional[str]] = mapped_column(String(512))
     script_id: Mapped[Optional[int]] = mapped_column(
-        BigInteger, ForeignKey("script.id")
+        Integer, ForeignKey("script.id")
     )
-    categories: Mapped[Optional[list]] = mapped_column(JSON)
-    status: Mapped[Optional[EpisodeStatus]] = mapped_column(
-        SAEnum(EpisodeStatus), default=EpisodeStatus.draft
+    categories: Mapped[Optional[list]] = mapped_column(JSON, comment="分类列表 JSON 字符串")
+    status: Mapped[Optional[str]] = mapped_column(
+        String(16), default=EpisodeStatus.draft.value
     )
     is_backup: Mapped[Optional[int]] = mapped_column(
         SmallInteger, default=0, comment="是否备播节目"
     )
     workflow_id: Mapped[Optional[str]] = mapped_column(String(64))
     review_id: Mapped[Optional[int]] = mapped_column(
-        BigInteger, ForeignKey("review.id")
+        Integer, ForeignKey("review.id")
     )
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, server_default=func.now())

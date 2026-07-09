@@ -1,0 +1,311 @@
+# ===== Logs Review 技能配置示例 =====
+# 首次使用：复制本文件为 config.yaml 并按项目实际情况修改
+# 所有业务参数均在此文件管理，技能本身不含硬编码值
+# 配置优先级：环境变量 > config.yaml > 本文件默认值
+
+# --- 日志源配置 ---
+logs:
+  # 当前日志文件路径（必填，按项目实际日志文件名修改）
+  current_log: "logs/app.log"
+  # 基线日志文件路径（用于增量对比，留空则全量模式）
+  baseline_log: "logs/app.baseline.log"
+  # 日志格式：structured（JSON）| plaintext | mixed
+  log_format: "mixed"
+  # 日志文件编码
+  encoding: "utf-8"
+  # 日志轮转策略：用于自动定位最新日志文件
+  # none（无轮转）| size（按大小）| time（按时间）| numbered（编号）
+  rotate_policy: "size"
+  # severity 识别正则（log_format=plaintext/mixed 时使用）
+  # 必须包含命名分组：timestamp, severity, module, message
+  # log_format=structured 时此项忽略（从 JSON 字段 severity_field 读取）
+  severity_pattern: "(?P<timestamp>\\d{4}-\\d{2}-\\d{2}.*?)\\s+(?P<severity>WARNING|ERROR|CRITICAL)\\s+(?P<module>[^:]+):\\s+(?P<message>.*)"
+  # structured 日志的 severity 字段名
+  severity_field: "severity"
+  # 轮转文件命名模式（用于自动定位最新日志文件，按优先级匹配）
+  # 按项目实际轮转规则调整，以下为常见模式示例
+  rotate_patterns:
+    - "app.log.\\d+"        # app.log.1, app.log.2（numbered）
+    - "app.\\d+.log"        # app.1.log, app.2.log（numbered 变体）
+    - "app-\\d{8}.log"      # app-20260703.log（time 按天）
+    - "app.log.\\d{8}"      # app.log.20260703（time 变体）
+  # 编码 fallback 列表（主编码失败时按序尝试）
+  encoding_fallback:
+    - "utf-8"
+    - "gbk"
+    - "latin-1"
+
+# --- 日志过滤配置 ---
+filter:
+  # 关注的 severity 列表（按项目日志格式调整）
+  severities:
+    - WARNING
+    - ERROR
+    - CRITICAL
+  # 忽略的日志 message 正则列表（命中则跳过）
+  ignore_patterns:
+    - "DeprecationWarning"
+    - "PerformanceWarning"
+  # 忽略的模块名列表（按日志中的 module 字段匹配）
+  ignore_modules: []
+  # 是否按 message 模板去重（保留出现次数）
+  # 去重时会将动态字段（task_id、时间戳、数字）替换为占位符后再聚合
+  deduplicate: true
+  # 动态字段正则列表（去重时替换为 {*} 占位符）
+  # 用于把 "task=abc123" 和 "task=def456" 视为同一模板
+  dedup_normalize_patterns:
+    - "task[_=]\\s*[\\w-]+"
+    - "\\b\\d{4}-\\d{2}-\\d{2}.*?\\d{2}:\\d{2}:\\d{2}\\b"
+    - "\\b[\\da-f]{8,}\\b"
+
+# --- 副作用识别配置（区分噪声与真问题）---
+# 通过 message 内容匹配判断日志是否有实际业务副作用
+# 命中 harmful → 真问题（优先级 high）；命中 harmless → 噪声（优先级 low）
+side_effect:
+  # 有副作用的 message 模式（命中则视为真问题而非噪声）
+  harmful_patterns:
+    - pattern: "(?i)(expired|invalid|failed).*(pause|break|stop|abort)"
+      message: "状态失效导致业务中断"
+      type_hint: "state_check"
+    - pattern: "(?i)(timeout|retry_failed).*(abort|give_up|exhausted)"
+      message: "重试耗尽导致放弃"
+      type_hint: "retry_failure"
+    - pattern: "(?i)(data\\s*loss|inconsistent|corrupt)"
+      message: "数据一致性风险"
+      type_hint: "state_check"
+  # 无副作用的 message 模式（视为噪声）
+  harmless_patterns:
+    - pattern: "(?i)(deprecated|warning).*(continue|skip|ignore)"
+      message: "告警但流程继续"
+      type_hint: "warning_noise"
+    - pattern: "(?i)(retrying|retry_attempt).*(succeed|ok)"
+      message: "重试后成功"
+      type_hint: "warning_noise"
+  # 性能问题的 message 模式（需包含数值阈值）
+  performance_patterns:
+    - pattern: "(?i)(slow|elapsed|duration|took).*?(\\d+)\\s*ms"
+      threshold_ms: 1000
+      type_hint: "performance"
+    - pattern: "(?i)(batch|bulk).*(missing|absent|none)"
+      message: "缺少批处理"
+      type_hint: "performance"
+  # 未命中任何模式时的默认优先级（按 severity 映射）
+  default_priority_by_severity:
+    CRITICAL: "high"
+    ERROR: "high"
+    WARNING: "medium"
+
+# --- 分类归因配置 ---
+classify:
+  # 是否按模块分组
+  by_module: true
+  # 是否按 severity 排序
+  by_severity: true
+  # 高频阈值：出现次数超过此值视为高频问题
+  frequency_threshold: 5
+  # 频率统计时间窗口（分钟）
+  time_window_minutes: 30
+  # 高频但无副作用时自动降级为噪声的策略
+  # true: 高频 + 未命中 harmful_patterns → warning_noise
+  # false: 高频仍按原类型处理
+  auto_downgrade_high_freq_noise: true
+
+# --- 修复策略映射（按 4 大问题类型）---
+# 策略可选：
+#   warning_noise:  merge_logs（合并日志）| reduce_frequency（降低频率）| skip
+#   state_check:    add_precondition（增加前置检查）| add_cooldown（增加冷却）| skip
+#   retry_failure:  add_retry（增加重试）| add_backoff（退避重试）| skip
+#   performance:    add_timing（增加计时）| batch_process（批处理）| add_cache（缓存）| skip
+#   custom:         从 custom_prompts 读取指令
+strategies:
+  warning_noise: reduce_frequency
+  state_check: add_precondition
+  retry_failure: add_retry
+  performance: add_timing
+  # 自定义策略指令（当上述策略为 custom 时使用）
+  custom_prompts:
+    - type: "warning_noise"
+      prompt: ""
+    - type: "state_check"
+      prompt: ""
+    - type: "retry_failure"
+      prompt: ""
+    - type: "performance"
+      prompt: ""
+
+# --- 并行修复配置 ---
+parallel:
+  # 是否启用并行子代理
+  enabled: true
+  # 子代理数量（CI 环境建议降低为 2）
+  agents: 4
+  # 每个子代理处理的文件数
+  files_per_agent: 5
+  # 同一文件内多个问题是否串行处理（避免 Edit 冲突）
+  same_file_serial: true
+  # 单次运行最大修复数（避免一次修复太多导致冲突）
+  max_fix_per_run: 30
+  # 串行阈值：问题数 <= 此值时主代理串行处理（避免子代理启动开销）
+  # 历史经验：7 个问题串行处理比 4 个子代理并行更高效
+  serial_threshold: 5
+  # 跨模块依赖组（同组内的文件必须串行处理，避免状态依赖冲突）
+  # 按项目实际依赖关系填写，以下为示例结构
+  dependency_groups:
+    - name: "scheduler_api"
+      files:
+        - "src/<package>/modules/scheduler.py"
+        - "src/<package>/web/routes/api_tasks.py"
+    - name: "collector_search"
+      files:
+        - "src/<package>/modules/collector.py"
+        - "src/<package>/modules/_search.py"
+    - name: "kb_embedding"
+      files:
+        - "src/<package>/modules/chatbot/kb_manager.py"
+        - "src/<package>/modules/local_embedding.py"
+
+# --- 验证闭环配置 ---
+verify:
+  # 修复后是否重新采集日志验证
+  recheck_logs: true
+  # 重新采集前的冷却时间（秒，让服务产生新日志）
+  cooldown_seconds: 300
+  # 修复后是否运行测试
+  run_tests: true
+  # 测试命令（PowerShell 用 ; 分隔，不支持 &&）
+  test_command: "pytest tests/ ; npm --prefix frontend test"
+  # 是否隔离预存测试失败（只关注新增失败）
+  isolate_preexisting_failures: true
+  # 发现新 WARNING 时是否失败
+  fail_on_new_warnings: true
+  # 测试副作用检查：修复是否引入新的测试失败模式
+  # 历史教训：P0-① Cookie 校验导致测试 ResumeBlockedError、FakeDedup async 掩盖 await 同步方法 bug
+  check_test_side_effects: true
+  # 测试副作用模式（命中则报告"修复可能引入测试副作用"）
+  test_side_effect_patterns:
+    - "ResumeBlockedError"
+    - "TypeError.*coroutine.*has no"
+    - "RuntimeError.*loop closed"
+    - "coroutine.*was never awaited"
+    - "unexpected keyword argument"
+  # 测试命令执行超时（秒，超时则报告但不终止）
+  test_timeout_seconds: 600
+  # 代码评审验证：修复后是否触发 backend/frontend code-review 技能
+  # true: 修复后建议用户触发 code-review 技能
+  # false: 仅依赖测试和日志重采集验证
+  trigger_code_review: true
+
+# --- 报告配置 ---
+report:
+  # 报告输出目录
+  output_dir: "docs/logs-reports/"
+  # 是否包含未修复项
+  include_unfixed: true
+  # 报告格式
+  format: "markdown"
+  # 报告详细程度：summary（精简，仅修复清单+验证结果+硬约束）| detailed（完整 7 节报告）
+  # summary 适合常规迭代场景节省 token；detailed 适合发布前质量门禁
+  detail_level: "detailed"
+  # 脱敏字段规则（正则匹配并替换为指定内容）
+  # 报告生成时对日志摘要和修复内容应用这些规则
+  redact_patterns:
+    - pattern: "(?i)(token|password|secret|api_key|send_key)\\s*[:=]\\s*\\S+"
+      replacement: "\\1=***"
+    - pattern: "\\b[\\da-f]{32,}\\b"
+      replacement: "***"
+    - pattern: "SCT-\\w+"
+      replacement: "SCT-***"
+    - pattern: "(?i)bearer\\s+[\\w.]+"
+      replacement: "bearer ***"
+
+# --- 硬约束检查（可扩展）---
+# 每条规则会按 scan_scope 决定的范围扫描，违规会写入报告
+hard_constraints:
+  # 扫描范围：modified_only（仅扫描 Phase 4 修改过的文件，节省 token）| full（扫描整个代码库）
+  # modified_only 适合常规迭代；full 适合发布前全面检查
+  scan_scope: "modified_only"
+  rules:
+    - name: "no_hardcoded_credentials"
+      pattern: "(password|secret|token|api_key|access_key)\\s*[:=]\\s*['\"][^'\"]{8,}['\"]"
+      message: "检测到硬编码凭据，请从环境变量或 .env 文件读取"
+      severity: CRITICAL
+    - name: "no_hardcoded_cooldown"
+      pattern: "(cooldown|sleep|wait)\\s*[:=]\\s*\\d+"
+      message: "冷却时长应从 config 读取，不硬编码"
+      severity: MAJOR
+    - name: "no_hardcoded_retry_count"
+      pattern: "(max_retries|retry_count|retries)\\s*[:=]\\s*\\d+"
+      message: "重试次数应从 config 读取，不硬编码"
+      severity: MAJOR
+    - name: "hmac_compare_digest"
+      pattern: "==\\s*['\"]?[a-z_]*token"
+      message: "token 比较应使用 hmac.compare_digest() 防止时序攻击"
+      severity: CRITICAL
+  # 硬约束违规时是否阻止合并
+  block_on_violation: true
+
+# --- 业务参数（供子代理修复时引用，避免硬编码到代码中）---
+# 这些参数会被注入到子代理的修复 prompt 中
+# 按项目实际业务参数填写，以下为常见示例
+business_params:
+  # 会话过期后的冷却时长（秒）
+  session_cooldown_seconds: 300
+  # 外部资源获取重试次数（如 cookie/token 刷新）
+  fetch_max_retries: 1
+  # 外部资源获取重试间隔（毫秒）
+  fetch_retry_delay_ms: 1000
+  # 业务告警最小间隔（秒）
+  business_alert_min_interval_seconds: 300
+  # 批量 embedding 的批次大小
+  embedding_batch_size: 32
+  # 可重试的 HTTP 状态码
+  retryable_http_statuses:
+    - 410
+    - 441
+    - 502
+  # 不可重试的 HTTP 状态码
+  non_retryable_http_statuses:
+    - 403
+    - 440
+    - 503
+
+# --- 紧急快速修复模式 ---
+# 适用于线上故障/紧急热修复场景，跳过详细分类和方案设计
+# 启用方式：config 中设 enabled=true 或环境变量 LOGS_REVIEW_FAST_MODE=1
+fast_mode:
+  enabled: false
+  # 快速模式跳过的阶段（仅保留 Extract + Fix + Verify）
+  skip_phases:
+    - "classify"  # 跳过详细分类，仅按 severity 排序
+    - "plan"      # 跳过方案设计，直接按 severity 高低修复
+  # 快速模式的最大修复数（避免一次修复太多导致冲突）
+  max_fix: 3
+  # 快速模式是否禁用并行（紧急场景单线程更可控）
+  disable_parallel: true
+
+# --- 基线快照管理 ---
+# 控制基线日志的更新策略，确保增量对比的有效性
+baseline:
+  # 更新策略：manual | post_release | periodic
+  # manual: 用户手动维护（默认）
+  # post_release: 每次发布后自动复制 current_log 为 baseline
+  # periodic: 按 update_interval_hours 定期更新
+  update_policy: "manual"
+  # update_policy=periodic 时的更新间隔（小时）
+  update_interval_hours: 24
+  # 基线快照存放目录（post_release/periodic 模式使用）
+  snapshot_dir: "logs/baselines/"
+  # 快照保留数量（超过则删除最旧的）
+  max_snapshots: 7
+
+# --- 环境变量覆盖规则 ---
+# 所有配置项均可通过环境变量覆盖，规则：LOGS_REVIEW_<SECTION>_<KEY>（全大写）
+# 嵌套字段用双下划线：LOGS_REVIEW_PARALLEL__SERIAL_THRESHOLD
+# 环境变量优先级 > config.yaml > config.example.yaml 默认值
+#
+# 常用环境变量示例：
+# LOGS_REVIEW_LOGS__CURRENT_LOG: 覆盖 logs.current_log
+# LOGS_REVIEW_LOGS__BASELINE_LOG: 覆盖 logs.baseline_log
+# LOGS_REVIEW_VERIFY__COOLDOWN_SECONDS: 覆盖 verify.cooldown_seconds
+# LOGS_REVIEW_FAST_MODE: 1 启用快速模式
+# LOGS_REVIEW_PARALLEL__AGENTS: 覆盖 parallel.agents

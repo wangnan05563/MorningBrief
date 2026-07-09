@@ -1,0 +1,24 @@
+<!-- 可复用播放器：圆形播放按钮 + 进度条 + 时间 -->
+<view class="audio-player">
+  <view class="play-btn" bindtap="onTogglePlay">
+    <text class="play-icon">{{isPlaying ? '⏸' : '▶'}}</text>
+  </view>
+
+  <view class="player-info">
+    <slider
+      class="progress"
+      min="0"
+      max="{{duration || 0}}"
+      value="{{currentTime}}"
+      activeColor="#7ECEC1"
+      backgroundColor="#E6F4F1"
+      block-size="20"
+      block-color="#7ECEC1"
+      bindchange="onSeek"
+    />
+    <view class="time-row">
+      <text class="time">{{currentTimeText}}</text>
+      <text class="time">{{durationText}}</text>
+    </view>
+  </view>
+</view>

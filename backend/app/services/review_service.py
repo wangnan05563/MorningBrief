@@ -1,20 +1,17 @@
 """审核服务：审核列表、详情、审批/打回/替换。"""
-from datetime import datetime
-
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import BizError, NotFoundError
+from app.core.timeutil import utcnow_naive
 from app.models import Review
 from app.models.review import ReviewStatus
-from app.redis_client import redis_client
 
 
 class ReviewService:
-    def __init__(self, db: AsyncSession, redis=None):
+    def __init__(self, db: AsyncSession):
         self.db = db
-        self.redis = redis or redis_client
 
     async def list_reviews(
         self, status: str, page: int, size: int
@@ -47,7 +44,7 @@ class ReviewService:
                 "workflow_id": r.workflow_id,
                 "episode_date": r.episode_date.isoformat() if r.episode_date else None,
                 "script_id": r.script_id,
-                "status": r.status.value if r.status else None,
+                "status": r.status if r.status else None,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
             }
             for r in reviews
@@ -82,7 +79,7 @@ class ReviewService:
             "episode_date": review.episode_date.isoformat() if review.episode_date else None,
             "script": script_data,
             "audio_url": review.audio_url,
-            "status": review.status.value if review.status else None,
+            "status": review.status if review.status else None,
             "created_at": review.created_at.isoformat() if review.created_at else None,
         }
 
@@ -97,7 +94,9 @@ class ReviewService:
     ) -> dict:
         """处理审核动作：approve / reject / replace。
 
-        返回 need_publish 标识，由路由层决定是否触发内容发布。
+        返回 need_publish 标识与 workflow_id，由路由层决定是否触发内容发布。
+        workflow_id 一并返回避免路由层二次查询 get_review_detail（防止 commit 后
+        publish 失败导致的数据不一致与多余查询）。
         """
         result = await self.db.execute(
             select(Review).where(Review.id == review_id)
@@ -110,7 +109,7 @@ class ReviewService:
         if review.status != ReviewStatus.pending:
             raise BizError(code=400, message="该审核记录已处理")
 
-        now = datetime.now()
+        now = utcnow_naive()
 
         if action == "approve":
             review.status = ReviewStatus.approved
@@ -138,4 +137,5 @@ class ReviewService:
 
         await self.db.commit()
 
-        return {"need_publish": need_publish}
+        # workflow_id 随返回值带出，路由层无需再查详情
+        return {"need_publish": need_publish, "workflow_id": review.workflow_id}

@@ -1,15 +1,14 @@
 """广告服务：素材管理、投放规则、排期与生效投放。"""
-import json
 from calendar import monthrange
 from datetime import date, datetime
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cache.manager import cache
 from app.core.exceptions import BizError, NotFoundError
 from app.models import AdMaterial, AdPlacement
 from app.models.ad_placement import AdPosition
-from app.redis_client import redis_client
 
 # 生效投放缓存 TTL 25h：覆盖目标日期全天 + 1h 时区容差
 ACTIVE_PLACEMENT_TTL = 25 * 3600
@@ -19,9 +18,10 @@ VALID_POSITIONS = {p.value for p in AdPosition}
 
 
 class AdService:
-    def __init__(self, db: AsyncSession, redis=None):
+    def __init__(self, db: AsyncSession):
         self.db = db
-        self.redis = redis or redis_client
+        # 进程内 TTLCache，替代原 Redis cache-aside（直接存 dict，无需 json 序列化）
+        self.cache = cache
 
     # ---- 素材管理 ----
 
@@ -116,7 +116,7 @@ class AdService:
                 "id": p.id,
                 "material_id": p.material_id,
                 "material_name": m_name,
-                "position": p.position.value if p.position else None,
+                "position": p.position if p.position else None,
                 "start_date": p.start_date.isoformat() if p.start_date else None,
                 "end_date": p.end_date.isoformat() if p.end_date else None,
             }
@@ -196,7 +196,7 @@ class AdService:
                 "id": p.id,
                 "material_id": p.material_id,
                 "material_name": m_name,
-                "position": p.position.value if p.position else None,
+                "position": p.position if p.position else None,
                 "start_date": p.start_date.isoformat() if p.start_date else None,
                 "end_date": p.end_date.isoformat() if p.end_date else None,
             }
@@ -205,14 +205,15 @@ class AdService:
         return {"placements": placements}
 
     async def get_active_placements(self, target_date: date) -> dict:
-        """查询某天生效的投放，cache-aside 缓存到 Redis。
+        """查询某天生效的投放，cache-aside 缓存到 TTLCache。
 
         C 端每期播放都会读此接口，缓存避免高频查库。
+        V1.2 改造：TTLCache 直接存 dict，无需 json 序列化/反序列化。
         """
         cache_key = f"ad:placement:{target_date.isoformat()}"
-        cached = await self.redis.get(cache_key)
+        cached = await self.cache.get(cache_key)
         if cached:
-            return json.loads(cached)
+            return cached
 
         # join 素材取 file_url 与 duration，C 端拼接音频时直接可用
         result = await self.db.execute(
@@ -226,15 +227,13 @@ class AdService:
         rows = result.all()
 
         # 三段广告位分别填充，缺位为 None
-        data = {pos: None for pos in ("head", "mid", "tail")}
+        data = dict.fromkeys(("head", "mid", "tail"), None)
         for p, file_url, duration in rows:
-            data[p.position.value] = {
+            data[p.position] = {
                 "material_id": p.material_id,
                 "file_url": file_url,
                 "duration": duration,
             }
 
-        await self.redis.set(
-            cache_key, json.dumps(data, default=str), ex=ACTIVE_PLACEMENT_TTL
-        )
+        await self.cache.set(cache_key, data, ttl=ACTIVE_PLACEMENT_TTL)
         return data

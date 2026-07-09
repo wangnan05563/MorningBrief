@@ -1,0 +1,119 @@
+/* 首页样式：马卡龙配色，大圆角，柔和阴影 */
+
+.container {
+  min-height: 100vh;
+  padding-bottom: 40rpx;
+}
+
+/* === 问候语卡片：薄荷青到蜜桃粉极浅渐变 === */
+.greeting-card {
+  margin: 24rpx;
+  padding: 48rpx 32rpx;
+  border-radius: 24rpx;
+  background: linear-gradient(135deg, #E8F5F2 0%, #FFF0F4 100%);
+  box-shadow: 0 4rpx 16rpx rgba(126, 206, 193, 0.12);
+}
+
+.greeting-title {
+  display: block;
+  font-size: 40rpx;
+  font-weight: 600;
+  color: #5BA89B;
+  margin-bottom: 12rpx;
+}
+
+.greeting-subtitle {
+  display: block;
+  font-size: 26rpx;
+  color: #A0AEC0;
+}
+
+/* === 节目信息卡片 === */
+.episode-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.episode-meta {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.episode-date {
+  font-size: 26rpx;
+  color: #7ECEC1;
+  font-weight: 500;
+  margin-right: 16rpx;
+}
+
+.episode-title {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #2D3748;
+  line-height: 1.5;
+  margin-bottom: 16rpx;
+}
+
+.episode-duration {
+  font-size: 24rpx;
+  color: #A0AEC0;
+}
+
+/* === 播放控制卡片 === */
+.player-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 大圆形播放按钮：120rpx，薄荷青渐变 + 柔和阴影 */
+.play-btn {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 8rpx 24rpx rgba(126, 206, 193, 0.4);
+  margin-bottom: 40rpx;
+  transition: transform 0.15s ease;
+}
+
+.play-btn:active {
+  transform: scale(0.95);
+  opacity: 0.9;
+}
+
+/* 三角形字符左轻右重，需微调左偏移以视觉居中 */
+.play-icon {
+  font-size: 48rpx;
+  color: #FFFFFF;
+  margin-left: 6rpx;
+}
+
+/* 进度条 */
+.progress-slider {
+  width: 100%;
+  margin: 0 0 16rpx 0;
+}
+
+/* 时间显示 */
+.time-display {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  font-size: 24rpx;
+  color: #A0AEC0;
+}
+
+/* === 查看文稿按钮区 === */
+.action-area {
+  padding: 0 24rpx;
+  margin-top: 16rpx;
+}
+
+.action-area .btn-secondary {
+  width: 100%;
+}

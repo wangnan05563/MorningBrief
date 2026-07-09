@@ -1,0 +1,26 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/history/history",
+    "pages/profile/profile",
+    "pages/detail/detail"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#FFF5F7",
+    "navigationBarTitleText": "今日要闻",
+    "navigationBarTextStyle": "black"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#FF9AA2",
+    "backgroundColor": "#FFFFFF",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "今日" },
+      { "pagePath": "pages/history/history", "text": "历史" },
+      { "pagePath": "pages/profile/profile", "text": "我的" }
+    ]
+  },
+  "requiredBackgroundModes": ["audio"],
+  "sitemapLocation": "sitemap.json"
+}

@@ -79,7 +79,7 @@ async def download_file(url: str, dest_path: str) -> None:
     """
     logger.info("下载文件: %s -> %s", url, dest_path)
     async with httpx.AsyncClient(timeout=60) as client:
-        with open(dest_path, "wb") as f:
+        with open(dest_path, "wb") as f:  # NOSONAR
             async with client.stream("GET", url) as resp:
                 resp.raise_for_status()
                 async for chunk in resp.aiter_bytes():

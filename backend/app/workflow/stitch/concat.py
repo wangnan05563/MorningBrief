@@ -154,4 +154,5 @@ async def concat(workflow_id: str, episode_date, audio_segments: list) -> dict:
         return {"final_audio_url": final_url, "duration": duration}
     finally:
         # 10. 清理临时目录:无论成功失败都回收磁盘空间
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+        # 用 to_thread 包装避免阻塞事件循环（rmtree 在大目录下耗时）
+        await asyncio.to_thread(shutil.rmtree, tmp_dir, ignore_errors=True)

@@ -1,12 +1,11 @@
 # 列表页爬取规则
 # 适用于无 RSS 的站点，通过 CSS 选择器解析列表页
-# render_js: 是否需要 Playwright 渲染 JS（动态加载内容）
+# V1.2 起爬虫改为 httpx + selectolax，不再支持 JS 渲染
 
 sources:
   - name: 央视网-新闻
     url: https://news.cctv.com/
     authority: 0.95
-    render_js: false
     list_selector: "div.news_box a"
     title_selector: "a::text"
     url_selector: "a::attr(href)"
@@ -18,7 +17,6 @@ sources:
   - name: 环球网-国际
     url: https://world.huanqiu.com/
     authority: 0.88
-    render_js: true
     list_selector: "div.news-list a.title"
     title_selector: "a::text"
     url_selector: "a::attr(href)"
@@ -30,7 +28,6 @@ sources:
   - name: 第一财经
     url: https://www.yicai.com/news/
     authority: 0.87
-    render_js: false
     list_selector: "ul.news-list li a"
     title_selector: "a::text"
     url_selector: "a::attr(href)"
@@ -39,9 +36,9 @@ sources:
     category_hint: 财经
     qps: 1
 
-# 详情页正文提取（newspaper3k 通用提取失败时回退到规则）
+# 详情页正文提取（V1.2：selectolax 启发式提取，失败时回退到 RSS summary）
 article_parser:
-  default_engine: newspaper3k
+  default_engine: selectolax
   fallback_selectors:
     "news.cctv.com":
       content: "div.content_area"
@@ -53,4 +50,3 @@ article_parser:
 global:
   timeout_sec: 30
   retry: 2
-  playwright_wait_sec: 5
