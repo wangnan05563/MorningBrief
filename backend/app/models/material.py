@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import BigInteger, String, Text, DateTime, JSON, Enum as SAEnum, Index
+from sqlalchemy import String, Integer, Text, DateTime, Index, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -28,13 +28,15 @@ class Material(Base):
         Index("idx_workflow", "workflow_id"),
         Index("idx_category", "category"),
         Index("idx_simhash", "simhash"),
+        CheckConstraint("source_type IN ('rss', 'list')", name="ck_material_source_type"),
+        CheckConstraint("status IN ('pending', 'selected', 'skipped')", name="ck_material_status"),
         {"comment": "爬取素材表"},
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     source: Mapped[str] = mapped_column(String(64), nullable=False, comment="来源名称")
-    source_type: Mapped[MaterialSourceType] = mapped_column(
-        SAEnum(MaterialSourceType), nullable=False
+    source_type: Mapped[str] = mapped_column(
+        String(16), nullable=False
     )
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False, comment="正文全文")
@@ -43,8 +45,8 @@ class Material(Base):
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     crawled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, server_default=func.now())
     category: Mapped[Optional[str]] = mapped_column(String(32), comment="品类")
-    status: Mapped[Optional[MaterialStatus]] = mapped_column(
-        SAEnum(MaterialStatus), default=MaterialStatus.pending
+    status: Mapped[Optional[str]] = mapped_column(
+        String(16), default=MaterialStatus.pending.value
     )
     simhash: Mapped[Optional[str]] = mapped_column(String(64), comment="标题指纹（SimHash 去重）")
     workflow_id: Mapped[Optional[str]] = mapped_column(String(64))

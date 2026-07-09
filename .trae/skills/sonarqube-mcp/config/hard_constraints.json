@@ -1,0 +1,6 @@
+{
+  "_deprecated": true,
+  "_deprecated_since": "2026-07-02",
+  "_deprecation_message": "本文件已废弃。请使用新的分层配置：config/hard_constraints/core.json（通用安全规则） + config/hard_constraints/business/xianyu.json（项目特定规则）。",
+  "_migration_guide": "旧规则已迁移：\n- no_hardcoded_credentials → hard_constraints/core.json\n- no_hardcoded_sonar_token → hard_constraints/core.json\n- hmac_compare_digest_for_token → hard_constraints/business/xianyu.json\n- webview_* → hard_constraints/business/xianyu.json\n- hf_endpoint_mirror → hard_constraints/business/xianyu.json\n- auth_whitelist_endpoints → hard_constraints/business/xianyu.json\n- fetch_credentials_include → hard_constraints/business/xianyu.json\n- kbmanager_whitelist_only → hard_constraints/business/xianyu.json"
+}

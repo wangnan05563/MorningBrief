@@ -2,8 +2,14 @@
 FastAPI 应用入口
 
 单体应用架构：业务服务 + APScheduler + AI 工作流模块在同一进程内。
-启动顺序：FastAPI 应用初始化 → 注册异常处理 → 挂载路由 → 启动调度器。
+启动顺序：FastAPI 应用初始化 → 建表（首次启动）→ 注册异常处理 → 挂载路由 → 启动调度器。
+
+V1.2 起：
+- 数据库改为 SQLite（嵌入式，无需外部容器）
+- 缓存改为进程内 TTLCache（无需外部 Redis）
+- 启动时通过 SQLAlchemy Base.metadata.create_all 自动建表（开发态）
 """
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -26,21 +32,44 @@ from app.routers.admin.workflows import router as b_workflows_router
 from app.routers.internal.workflow import router as internal_workflow_router
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+
+async def _init_sqlite_schema() -> None:
+    """首次启动自动建表（开发态/单机 exe 部署用）。
+
+    生产环境如需迁移可改用 Alembic；MVP 阶段直接 create_all 简化运维。
+    所有 ORM 模型须在调用前完成导入，否则 Base.metadata 不知道这些表。
+    """
+    # 触发模型导入（避免循环依赖不在顶部导入）
+    from app import models  # noqa: F401
+    from app.database import Base, engine, normalize_metadata_for_sqlite
+
+    # 规范化索引名以适配 SQLite 全局唯一约束（幂等）
+    normalize_metadata_for_sqlite()
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("[startup] SQLite schema 已就绪")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：启动时初始化资源，关闭时清理。"""
-    # 启动 APScheduler 定时任务（工作流调度 + 播放日志落库 + 备播检查）
+    # 首次启动建表（SQLite 嵌入式，开发与生产共用此路径）
+    await _init_sqlite_schema()
+
+    # 启动 APScheduler 定时任务（工作流调度 + 播放日志落库 + 黑名单清理）
     from app.services.workflow_scheduler import workflow_scheduler
     await workflow_scheduler.start()
 
     yield
 
-    # 关闭阶段：先停调度器（等待运行中任务），再关 Redis 连接池
+    # 关闭阶段：先停调度器（等待运行中任务），再关数据库引擎
     await workflow_scheduler.stop()
-    from app.redis_client import redis_client
-    await redis_client.close()
+    from app.database import engine
+    await engine.dispose()
+    logger.info("[shutdown] SQLite 引擎已释放")
 
 
 def create_app() -> FastAPI:
@@ -54,7 +83,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS：开发环境允许本地调试，生产环境通过 Nginx 同源
+    # CORS：开发环境允许本地调试；生产环境单机 exe + 云函数 SCF 直连
     if settings.is_dev:
         app.add_middleware(
             CORSMiddleware,
@@ -67,7 +96,7 @@ def create_app() -> FastAPI:
     # 注册全局异常处理
     register_exception_handlers(app)
 
-    # 挂载路由
+    # 挂载路由  # NOSONAR
     # 健康检查
     app.include_router(health_router)
     # C 端（小程序）

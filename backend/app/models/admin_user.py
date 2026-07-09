@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import BigInteger, String, SmallInteger, DateTime, Enum as SAEnum
+from sqlalchemy import String, Integer, SmallInteger, DateTime, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -17,13 +17,16 @@ class AdminRole(str, Enum):
 
 class AdminUser(Base):
     __tablename__ = "admin_user"
-    __table_args__ = {"comment": "B 端运营表"}
+    __table_args__ = (
+        CheckConstraint("role IN ('admin', 'operator')", name="ck_admin_user_role"),
+        {"comment": "B 端运营表"},
+    )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String(128), nullable=False, comment="bcrypt 加盐哈希")
-    role: Mapped[AdminRole] = mapped_column(
-        SAEnum(AdminRole), nullable=False, default=AdminRole.operator
+    role: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=AdminRole.operator.value
     )
     nickname: Mapped[Optional[str]] = mapped_column(String(64))
     status: Mapped[Optional[int]] = mapped_column(SmallInteger, default=1, comment="1启用 0禁用")

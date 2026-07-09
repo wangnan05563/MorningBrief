@@ -1,0 +1,126 @@
+{
+  "_meta": {
+    "file": "framework_patterns.json",
+    "purpose": "常见框架的 SonarQube 误报模式库。子代理根据项目启用的框架自动识别误报。",
+    "version": "2.0.0",
+    "last_updated": "2026-07-02"
+  },
+  "frameworks": {
+    "fastapi": {
+      "_description": "FastAPI 框架的装饰器与依赖注入模式",
+      "language": "python",
+      "decorators": [
+        "@app.get", "@app.post", "@app.put", "@app.delete", "@app.patch",
+        "@router.get", "@router.post", "@router.put", "@router.delete", "@router.patch",
+        "@app.websocket", "@app.on_event", "@app.middleware"
+      ],
+      "dependency_injection": ["Depends", "Body", "Query", "Path", "Header", "Cookie", "Form", "File", "Security"],
+      "false_positive_rules": [
+        {
+          "rule": "python:S1481",
+          "context": "FastAPI 路由装饰器导入的符号（路径操作函数、Pydantic 模型）",
+          "rationale": "装饰器模式通过反射调用，静态分析无法检测"
+        },
+        {
+          "rule": "python:S2949",
+          "context": "Depends/Body/Query 等作为参数默认值",
+          "rationale": "这些是依赖注入器，并非真正可变对象"
+        },
+        {
+          "rule": "python:S116",
+          "context": "Pydantic 模型字段命名（需与 API 字段一致）",
+          "rationale": "Pydantic 字段名通常需与 API 契约保持一致，违反 PEP8 是合理设计"
+        }
+      ]
+    },
+    "react": {
+      "_description": "React 框架的 Hook 与组件模式",
+      "language": "typescript",
+      "hooks": [
+        "useState", "useEffect", "useCallback", "useMemo", "useRef", "useContext",
+        "useReducer", "useImperativeHandle", "useLayoutEffect", "useDebugValue", "useTransition"
+      ],
+      "patterns": ["React.memo", "forwardRef", "createContext", "useDeferredValue"],
+      "false_positive_rules": [
+        {
+          "rule": "typescript:S6488",
+          "context": "useEffect/useMemo/useCallback 的依赖数组",
+          "rationale": "依赖管理需结合组件上下文，空依赖 [] 表示仅挂载时执行"
+        },
+        {
+          "rule": "typescript:S6486",
+          "context": "函数组件未显式声明 React.ReactElement 返回类型",
+          "rationale": "TypeScript 可通过 JSX 自动推导返回类型"
+        },
+        {
+          "rule": "typescript:S6759",
+          "context": "React Props 类型字段为 readonly",
+          "rationale": "SonarQube 建议但非强制，需评估是否真有外部修改风险"
+        }
+      ]
+    },
+    "vue": {
+      "_description": "Vue 框架的响应式与组合式 API 模式",
+      "language": "typescript",
+      "patterns": [
+        "ref", "reactive", "computed", "watch", "watchEffect",
+        "onMounted", "onUnmounted", "onUpdated", "defineProps", "defineEmits", "defineExpose"
+      ],
+      "false_positive_rules": [
+        {
+          "rule": "typescript:S6759",
+          "context": "Vue Props 类型字段为 readonly",
+          "rationale": "Vue 3 的 defineProps 已默认 readonly"
+        }
+      ]
+    },
+    "django": {
+      "_description": "Django 框架的 ORM 与视图装饰器",
+      "language": "python",
+      "decorators": [
+        "@login_required", "@permission_required", "@require_http_methods",
+        "@csrf_exempt", "@method_decorator", "@action", "@api_view"
+      ],
+      "orm": ["models.Model", "models.ForeignKey", "models.ManyToManyField"],
+      "false_positive_rules": [
+        {
+          "rule": "python:S1481",
+          "context": "Django URL 路由注册的视图函数",
+          "rationale": "URL 路由通过反射调用，静态分析无法检测"
+        }
+      ]
+    },
+    "spring": {
+      "_description": "Spring 框架的注解与依赖注入",
+      "language": "java",
+      "annotations": [
+        "@Controller", "@RestController", "@Service", "@Repository", "@Component",
+        "@Autowired", "@RequestMapping", "@GetMapping", "@PostMapping", "@Bean"
+      ],
+      "false_positive_rules": [
+        {
+          "rule": "java:S1481",
+          "context": "Spring 注解注册的 Bean",
+          "rationale": "Spring 通过反射管理 Bean 生命周期"
+        }
+      ]
+    },
+    "express": {
+      "_description": "Express.js 框架的中间件与路由",
+      "language": "javascript",
+      "patterns": ["app.use", "app.get", "app.post", "router.get", "router.post", "middleware"],
+      "false_positive_rules": [
+        {
+          "rule": "javascript:S1481",
+          "context": "Express 路由注册的中间件函数",
+          "rationale": "Express 通过回调注册，静态分析无法检测使用"
+        }
+      ]
+    }
+  },
+  "selection_logic": {
+    "description": "子代理根据 project_config.json 的 modules.{backend,frontend}.frameworks 字段加载对应框架模式",
+    "auto_apply_false_positive": true,
+    "log_matched_rules": true
+  }
+}

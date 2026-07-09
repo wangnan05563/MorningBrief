@@ -1,0 +1,569 @@
+{
+  "description": "闲鱼猎人技术栈版本、路径与硬约束配置",
+  "_ref": "所有版本号与路径均从 pyproject.toml、package.json、Dockerfile、docs 实测提取，无硬编码推测",
+  "project": {
+    "name": "XianyuHunter",
+    "chineseName": "闲鱼猎人",
+    "version": "0.3.0",
+    "versioning": "Semantic Versioning 2.0.0",
+    "versionSource": "src/xianyu_hunter/__init__.py::__version__",
+    "versionSync": "scripts/bump_version.py 同步到 pyproject.toml、_build_info.py、CHANGELOG.md"
+  },
+  "paths": {
+    "projectRoot": "d:\\code\\otherProjects\\17_xianyu",
+    "backend": {
+      "source": "src/xianyu_hunter",
+      "entry": "src/xianyu_hunter/__main__.py",
+      "webApp": "src/xianyu_hunter/web/app.py",
+      "container": "src/xianyu_hunter/container.py",
+      "startup": "src/xianyu_hunter/web/startup.py",
+      "domain": "src/xianyu_hunter/domain",
+      "infra": "src/xianyu_hunter/infra",
+      "modules": "src/xianyu_hunter/modules",
+      "webRoutes": "src/xianyu_hunter/web/routes",
+      "webMiddleware": "src/xianyu_hunter/web/middleware",
+      "webServices": "src/xianyu_hunter/web/services",
+      "dbModels": "src/xianyu_hunter/infra/db_models.py",
+      "repositoryBase": "src/xianyu_hunter/infra/repository_base.py",
+      "repositoryFacade": "src/xianyu_hunter/infra/repository.py",
+      "yamlConfig": "src/xianyu_hunter/infra/yaml_config.py",
+      "eventBus": "src/xianyu_hunter/infra/event_bus.py",
+      "logger": "src/xianyu_hunter/infra/logger.py",
+      "secrets": "src/xianyu_hunter/infra/secrets.py",
+      "requestContext": "src/xianyu_hunter/infra/request_context.py"
+    },
+    "frontend": {
+      "source": "frontend/src",
+      "entry": "frontend/src/main.tsx",
+      "app": "frontend/src/App.tsx",
+      "api": "frontend/src/api",
+      "apiClient": "frontend/src/api/client.ts",
+      "apiTypes": "frontend/src/api/types.ts",
+      "apiIndex": "frontend/src/api/index.ts",
+      "components": "frontend/src/components",
+      "sheetWorkspace": "frontend/src/components/SheetWorkspace",
+      "mainLayout": "frontend/src/components/layout/MainLayout.tsx",
+      "sheetRegistry": "frontend/src/components/SheetWorkspace/sheetRegistry.tsx",
+      "hooks": "frontend/src/hooks",
+      "pages": "frontend/src/pages",
+      "stores": "frontend/src/stores",
+      "utils": "frontend/src/utils",
+      "constants": "frontend/src/constants",
+      "contexts": "frontend/src/contexts"
+    },
+    "config": {
+      "env": ".env",
+      "envExample": ".env.example",
+      "main": "config/config.yaml",
+      "mainExample": "config/config.example.yaml",
+      "eval": "config/eval.yaml",
+      "evalExample": "config/eval.example.yaml"
+    },
+    "data": {
+      "root": "data",
+      "logs": "data/logs",
+      "chromadb": "data/chromadb",
+      "cookiesPattern": "data/cookies_{user_id}.json",
+      "sqlite": "data/xianyu.db",
+      "prompts": "data/prompts"
+    },
+    "scripts": {
+      "root": "scripts",
+      "automation": "scripts/automation.ps1",
+      "setupEnv": "scripts/setup-env.ps1",
+      "startService": "scripts/启动服务.bat",
+      "stopService": "scripts/停止服务.bat",
+      "rebuild": "scripts/重新构建.bat",
+      "silentStart": "scripts/静默启动.vbs",
+      "buildInfo": "scripts/build_info.py",
+      "buildKb": "scripts/build_kb.py",
+      "bumpVersion": "scripts/bump_version.py",
+      "sonarFetch": "scripts/sonar_fetch.py",
+      "sonarCritical": "scripts/sonar_critical.py"
+    },
+    "tests": {
+      "backend": "tests",
+      "backendConftest": "tests/conftest.py",
+      "frontendSetup": "frontend/src/test-setup.ts",
+      "vitestConfig": "frontend/vitest.config.ts"
+    },
+    "docs": {
+      "root": "docs",
+      "standards": "docs/standards",
+      "directoryStructure": "docs/standards/directory-structure.md",
+      "deployment": "docs/standards/deployment.md",
+      "michelinDesignSystem": "docs/standards/michelin-design-system.md",
+      "designDoc": "docs/概要设计文档.md"
+    },
+    "deploy": {
+      "dockerfile": "Dockerfile",
+      "dockerCompose": "docker-compose.yml",
+      "sonarProject": "sonar-project.properties",
+      "preCommit": ".pre-commit-config.yaml"
+    }
+  },
+  "backend": {
+    "python": {
+      "requires": ">=3.10",
+      "dockerImage": "python:3.12-slim",
+      "devEnvironment": "3.14",
+      "sonarVersion": "3.10"
+    },
+    "frameworks": {
+      "fastapi": "0.136.3",
+      "uvicorn": "0.48.0",
+      "typer": "0.26.6",
+      "pydantic": "2.13.4",
+      "pydantic-settings": "2.14.1",
+      "sqlalchemy": "2.0.50",
+      "aiosqlite": "0.22.1",
+      "playwright": "1.60.0",
+      "httpx": "0.28.1",
+      "aiohttp": "3.14.0",
+      "apscheduler": "3.11.2",
+      "loguru": "0.7.3",
+      "keyring": "25.7.0",
+      "tenacity": "9.1.4",
+      "cryptography": "49.0.0",
+      "chromadb": ">=1.0.0"
+    },
+    "test": {
+      "pytest": "9.0.3",
+      "pytest-asyncio": "1.4.0",
+      "asyncioMode": "auto",
+      "testpaths": "tests",
+      "pythonpath": "src"
+    },
+    "build": {
+      "buildSystem": "setuptools>=68.0",
+      "buildBackend": "setuptools.build_meta",
+      "packageDiscovery": "src layout (packages.find where=src)",
+      "packageData": "xianyu_hunter = [web/static/**/*]",
+      "scriptEntry": "xianyu-hunter = xianyu_hunter.__main__:app"
+    }
+  },
+  "frontend": {
+    "node": {
+      "dockerImage": "node:20-alpine",
+      "compatibility": ">=18",
+      "devEnvironment": "24"
+    },
+    "frameworks": {
+      "react": "^18.3.1",
+      "react-dom": "^18.3.1",
+      "react-router-dom": "^6.26.0",
+      "antd": "^5.21.0",
+      "@ant-design/icons": "^5.5.0",
+      "zustand": "^4.5.0",
+      "axios": "^1.7.0",
+      "echarts": "^5.5.0",
+      "echarts-for-react": "^3.0.2",
+      "@dnd-kit/core": "^6.1.0",
+      "@dnd-kit/sortable": "^8.0.0",
+      "@dnd-kit/utilities": "^3.0.0",
+      "dayjs": "^1.11.0",
+      "react-markdown": "^9.1.0",
+      "rehype-highlight": "^7.0.2",
+      "remark-gfm": "^4.0.1",
+      "highlight.js": "^11.11.1",
+      "react-flow-renderer": "^10.3.17",
+      "p5": "^2.3.0",
+      "@types/p5": "^1.7.7"
+    },
+    "build": {
+      "vite": "^5.4.0",
+      "@vitejs/plugin-react": "^4.3.0",
+      "typescript": "^5.5.0",
+      "vite-plugin-pwa": "^1.3.0",
+      "base": "/app/",
+      "outDir": "../src/xianyu_hunter/web/static/spa",
+      "devPort": 5173,
+      "devProxy": "/api -> http://127.0.0.1:8000"
+    },
+    "test": {
+      "vitest": "^4.1.9",
+      "@testing-library/react": "^16.3.2",
+      "@testing-library/jest-dom": "^6.9.1",
+      "@testing-library/user-event": "^14.6.1",
+      "jsdom": "^29.1.1",
+      "environment": "jsdom",
+      "globals": true,
+      "setupFiles": "./src/test-setup.ts"
+    },
+    "typescript": {
+      "target": "ES2020",
+      "lib": "ES2021/DOM/DOM.Iterable",
+      "module": "ESNext",
+      "moduleResolution": "bundler",
+      "strict": true,
+      "noUnusedLocals": false,
+      "noUnusedParameters": false,
+      "noFallthroughCasesInSwitch": true,
+      "isolatedModules": true,
+      "moduleDetection": "force",
+      "useDefineForClassFields": true,
+      "skipLibCheck": true,
+      "resolveJsonModule": true,
+      "allowImportingTsExtensions": true,
+      "jsx": "react-jsx",
+      "noEmit": true,
+      "pathAlias": "@/* -> src/*",
+      "baseUrl": "."
+    },
+    "pwa": {
+      "registerType": "prompt",
+      "themeColor": "#FF6200",
+      "backgroundColor": "#FFFFFF",
+      "display": "standalone",
+      "lang": "zh-CN",
+      "startUrl": "/app/",
+      "scope": "/app/",
+      "maximumFileSizeToCacheInBytes": "4MB",
+      "navigateFallback": "index.html",
+      "navigateFallbackDenylist": ["/^\\/api\\//"],
+      "runtimeCacheApiDenylist": ["/api/events/stream", "/api/auth/*", "/api/export/*"]
+    },
+    "manualChunks": {
+      "react-vendor": ["react", "react-dom", "react-router-dom"],
+      "antd-vendor": ["antd", "@ant-design/icons"],
+      "echarts-vendor": ["echarts"],
+      "dnd-vendor": ["@dnd-kit/core", "@dnd-kit/sortable", "@dnd-kit/utilities"]
+    }
+  },
+  "database": {
+    "engine": "SQLite",
+    "journalMode": "WAL",
+    "foreignKeys": "ON",
+    "synchronous": "NORMAL",
+    "busyTimeout": 10000,
+    "cacheSize": -20000,
+    "poolClass": "NullPool",
+    "orm": "SQLAlchemy 2.0 (DeclarativeBase + Mapped + mapped_column)",
+    "vectorDb": "ChromaDB 1.x (data/chromadb/)",
+    "migration": "init_db() 幂等增量迁移（无 Alembic）",
+    "tables": {
+      "main": ["tasks", "items", "sellers", "evaluations", "orders", "events", "error_logs", "task_links", "task_deps", "notifications", "batch_refresh_progress", "batch_refresh_history", "accounts", "proxies"],
+      "chatbot": ["chatbot_sessions", "chatbot_messages", "chatbot_faqs", "chatbot_feedback", "chatbot_kb_versions", "chatbot_config", "chatbot_audit_logs"],
+      "multiUser": ["users", "user_sessions", "user_cookies", "user_menu_configs", "user_preferences", "user_session_events"]
+    }
+  },
+  "docker": {
+    "stages": [
+      {"name": "frontend", "image": "node:20-alpine", "workdir": "/app/frontend"},
+      {"name": "builder", "image": "python:3.12-slim", "install": "pip install --no-cache-dir --user -e ."},
+      {"name": "runtime", "image": "python:3.12-slim", "user": "xhapp"}
+    ],
+    "compose": {
+      "profiles": ["prod", "dev", "split"],
+      "port": "${XH_PORT:-8000}:8000",
+      "volumes": ["./data:/app/data", "./config:/app/config", "./.env:/app/.env:ro"],
+      "shmSize": "1gb",
+      "healthcheck": "curl -fsS http://localhost:8000/healthz"
+    }
+  },
+  "hardConstraints": {
+    "memory": "Web process must use with_browser=False to save 100-200MB memory",
+    "authWhitelist": [
+      "/api/auth/cookie", "/api/auth/me", "/api/auth/import-from-browser",
+      "/import-from-browser/status", "/api/events/stream", "/api/notifications",
+      "/api/notifier/", "/api/about", "/api/about/check-update"
+    ],
+    "frontendCredentials": "fetch/axios must include credentials: 'include'",
+    "htmxAuth": "htmx must use official <meta> config for credentials",
+    "unauthorizedResponse": "401 must return JSON {\"detail\": \"Unauthorized\"}",
+    "tokenComparison": "Must use hmac.compare_digest() to prevent timing attacks",
+    "sensitiveFieldsLogging": "Only record boolean match results, never log token length",
+    "tokenWriteFailure": "Must trigger logging.warning() alert",
+    "missingImports": "re, threading, logging must be added at module level",
+    "dbIndexes": ["task_id", "seller_id", "first_seen", "publish_time", "created_at", "request_id"],
+    "dbCountOptimization": "COUNT queries in _overview() must use CASE WHEN aggregate to reduce DB calls by 67%",
+    "redundantImports": "Move in-function imports to module level",
+    "webViewProcess": "Use CREATE_NEW_CONSOLE flag instead of CREATE_NO_WINDOW to prevent GUI window crash",
+    "webViewStdout": "WebView2 child processes must not redirect stdout/stderr to DEVNULL",
+    "webViewStorage": "webview.start() must set private_mode=False and unique storage_path (webview_data_{pid}_{timestamp})",
+    "kbScanWhitelist": "Exclude web/static/, web/templates/, __pycache__/, node_modules/, .git/, dist/, build/; only index .md/.py/.jsonl/.txt",
+    "embeddingMirror": "local_embedding.py must set os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com') at module top-level",
+    "embeddingBackend": "EmbeddingService uses local sentence-transformers (BAAI/bge-small-zh-v1.5, dim=512) when EMBEDDING_BASE_URL empty or 'local'",
+    "embeddingCompat": "sentence-transformers 5.x renamed get_sentence_embedding_dimension to get_embedding_dimension; use getattr fallback",
+    "cacheInvalidation": {
+      "requireExplicitInvalidate": true,
+      "ttlGraceSeconds": 0,
+      "failLogLevel": "warning",
+      "cacheFieldPatterns": ["_cache", "_cache_time", "_cached_.*"],
+      "crossProcessNotification": "sse_push"
+    },
+    "stateDetectionBootstrap": {
+      "requiredMarker": "timestamp",
+      "signalLayerMapping": {
+        "collector_signal": ["identity", "session", "tracking"],
+        "m5tk_signal": ["session"]
+      },
+      "unknownSignalStrategy": "set"
+    },
+    "migrationTransaction": {
+      "requireSingleTransaction": true,
+      "cleanupResidualTable": true,
+      "recoverFromOld": true,
+      "exceptionLogLevel": "error",
+      "unsafePatterns": [
+        "ALTER TABLE.*MODIFY COLUMN",
+        "ALTER TABLE.*ALTER COLUMN"
+      ]
+    },
+    "stateFunctionalAlign": {
+      "requiredCheckMarker": true,
+      "unknownStatusDisplay": "未检测",
+      "ssePushRequired": true,
+      "ttlGraceSeconds": 0,
+      "staleThresholdSeconds": 3600,
+      "statusFieldMapping": {
+        "cookie_layer": {
+          "required": ["lastCheckedAt", "useCount"],
+          "initialValue": "unknown"
+        },
+        "sse_connection": {
+          "required": ["lastEventAt", "reconnectCount"],
+          "initialValue": "unknown"
+        },
+        "api_health": {
+          "required": ["lastHealthCheckAt", "consecutiveSuccesses"],
+          "initialValue": "unknown"
+        },
+        "collector_running": {
+          "required": ["lastRunAt", "runCount"],
+          "initialValue": "unknown"
+        }
+      },
+      "statusColorMapping": {
+        "valid": "success",
+        "invalid": "error",
+        "unknown": "default",
+        "stale": "warning"
+      }
+    },
+    "antidetect": {
+      "qps": 6,
+      "minDelayMs": 10000,
+      "maxDelayMs": 15000,
+      "failPauseThreshold": 3,
+      "failWindowSec": 3600
+    },
+    "evalWeights": {
+      "professional": 30,
+      "credit": 30,
+      "dispute": 25,
+      "price": 15,
+      "sum": 100,
+      "passScore": 60,
+      "autoBuyScore": 80,
+      "creditScoreMin": 60,
+      "badReviewMax": 3,
+      "registerDaysMin": 30
+    },
+    "notifier": {
+      "channels": ["serverchan", "pushplus", "bark", "telegram", "wecom", "dingtalk", "webhook", "ntfy"],
+      "quietHours": "23:00-07:00",
+      "criticalOnly": true,
+      "subscribedEvents": 12
+    },
+    "sse": {
+      "maxConnections": 10,
+      "reconnectParam": "last_event_id"
+    },
+    "llmCapabilityKeywords": {
+      "visionKeywords": ["vision", "gpt-4o", "gpt-4-vision", "qvq", "qwen-vl", "glm-4v", "claude-3", "opus", "sonnet", "haiku"],
+      "functionCallKeywords": ["gpt-4", "gpt-3.5-turbo-1106", "claude-3", "qwen-max", "qwen-plus", "deepseek-chat", "function-calling"],
+      "jsonModeKeywords": ["gpt-4", "gpt-3.5-turbo-1106", "claude-3", "qwen-max", "qwen-plus", "json-mode"],
+      "caseInsensitive": true,
+      "sharedUtilLocation": "src/xianyu_hunter/web/routes/api_ai.py",
+      "sharedFunctionName": "_is_vision_capable"
+    },
+    "sharedUtilRules": {
+      "minCallSites": 2,
+      "minModuleCount": 2,
+      "pureFunctionRequired": true,
+      "requireTypeAnnotation": true,
+      "requireUnitTest": true,
+      "sharedFunctionDocstringRequired": true
+    },
+    "llmDowngrade": {
+      "optionalCapabilities": ["vision", "function_call", "json_mode"],
+      "downgradeLogLevel": "warning",
+      "downgradeMarkerFormat": "mode=downgrade reason={capability}_missing model={model_name}",
+      "promptTemplates": {
+        "vision_missing": "图片请参考以下文字描述：{image_url}",
+        "function_call_missing": "请以 JSON 格式输出：{tool_schema}",
+        "json_mode_missing": "请以 JSON 格式输出结果。"
+      },
+      "coreCapabilitiesNotDowngradable": ["chat", "text_generation", "embedding"]
+    },
+    "batchCircuitBreaker": {
+      "failureThreshold": 3,
+      "failureWindowSec": 3600,
+      "pendingMarkerDir": "data/markers",
+      "logPhrasing": {
+        "paused": "批次熔断暂停（可恢复）",
+        "stopped": "批次已停止（用户主动）",
+        "failed": "批次失败（异常终止）"
+      },
+      "markRemainingAs": "pending",
+      "persistKeys": ["cursor", "completed_ids", "remaining_ids"]
+    },
+    "criticalPathException": {
+      "criticalPathPatterns": [
+        "_on_startup", "run_migrations", "_init_db", "_init_session_manager",
+        "_on_close", "_shutdown", "_register_signal_handlers", "_register_routes"
+      ],
+      "requireLoggerException": true,
+      "forbiddenPatterns": [
+        "logger.warning\\(f\\\"\\.\\.\\.\\{e\\}\\\"\\)",
+        "logger.error\\(f\\\"\\.\\.\\.\\{e\\}\\\"\\)"
+      ],
+      "independentTryBlocks": true
+    },
+    "datetimeStrategy": {
+      "storageTimezone": "UTC",
+      "preferredNowFactory": "datetime.now(timezone.utc)",
+      "forbiddenPatterns": [
+        "datetime\\.now\\(\\)",
+        "datetime\\.utcnow\\(\\)"
+      ],
+      "serializationFormat": "iso8601_with_tz",
+      "naiveUnifyHelper": "_utcnow().replace(tzinfo=None)"
+    },
+    "stateSyncMarkers": {
+      "markerDir": "data/markers",
+      "markerFormat": "{category}_{user_id}_{timestamp}.json",
+      "maxRetryCount": 5,
+      "cleanupOnSuccess": true,
+      "startupCheckRequired": true,
+      "scanIntervalSec": 60
+    },
+    "errorCodeContract": {
+      "responseSchema": {
+        "error_code": "string (from reason_enum)",
+        "user_message": "string (人类可读)",
+        "detail": "string (技术细节)"
+      },
+      "reasonEnum": [
+        "token_expired", "anti_crawler", "page_unavailable", "rate_limited",
+        "login_expired", "session_invalid", "permission_denied", "validation_error",
+        "internal_error", "service_unavailable"
+      ],
+      "frontendConstantsFile": "frontend/src/constants/errorCode.ts",
+      "forbidSubstringJudgment": true
+    },
+    "businessKeywords": {
+      "sold": ["卖掉了", "已售", "已售罄", "宝贝不存在", "宝贝走丢了", "该宝贝不存在", "商品不存在", "已删除", "已被删除"],
+      "deleted": ["宝贝不存在", "宝贝走丢了", "该宝贝不存在", "商品不存在", "已删除", "已被删除"],
+      "loginExpired": ["登录已过期", "会话已失效", "未登录", "请重新登录"],
+      "antiCrawler": ["访问频率过高", "请稍后再试", "触发风控", "需要验证"],
+      "frontendConstantsFile": "frontend/src/constants/businessKeywords.ts",
+      "consistencyTest": "tests/test_keyword_consistency.py"
+    },
+    "asyncAwaitCheck": {
+      "requireTrueAwait": true,
+      "pythonMinVersionForRuntimeWarning": "3.14",
+      "forbiddenPatterns": ["async def.*\\n.*return <value>"],
+      "exemptDecorators": ["@asynccontextmanager", "@pytest.fixture"],
+      "reviewCheckpoint": "B-REVIEW-182 / F-REVIEW-148",
+      "stepRef": 198
+    },
+    "resourcePoolBenchmark": {
+      "requireDocstring": true,
+      "requireBenchmarkScript": true,
+      "benchmarkScriptDir": "tests/benchmarks/",
+      "slowQueryThresholdMs": 50,
+      "monitorDaysAfterChange": 7,
+      "systemOverheadAlertMs": 50,
+      "reviewCheckpoint": "B-REVIEW-183",
+      "stepRef": 199
+    },
+    "httpStatusCodeMapping": {
+      "mappingConfigPath": "config/http_status_code_mapping.yaml",
+      "requireConsistencyCheck": true,
+      "frontendClassificationRequired": true,
+      "reviewRequiredForChange": true,
+      "forbiddenMappings": [
+        {"error": "RGV587", "forbiddenStatus": [401]},
+        {"error": "_m_h5_tk_expired", "forbiddenStatus": [401]}
+      ],
+      "reviewCheckpoint": "B-REVIEW-184 / F-REVIEW-149",
+      "stepRef": 200
+    },
+    "cssSelectorFallback": {
+      "requiredLevels": 3,
+      "fallbackChainLogLevel": "debug",
+      "finalFailureLogLevel": "warning",
+      "dumpTriggerBasedOnBusinessSemantics": true,
+      "selectorRepositoryRequired": true,
+      "selectorRepoPath": "src/xianyu_hunter/modules/collector/selectors.py",
+      "reviewCheckpoint": "B-REVIEW-185",
+      "stepRef": 201
+    },
+    "exceptionLogSemantic": {
+      "criticalPathUseException": true,
+      "requireBusinessContext": true,
+      "contextFields": ["item_id", "user_id", "task_id", "request_id"],
+      "nonCriticalMinLogLevel": "warning",
+      "forbiddenPatterns": ["except: pass", "except Exception: pass", "logger.warning(f\"...{e}\")"],
+      "sensitiveFieldsToRedact": ["token", "password", "cookie", "authorization"],
+      "reviewCheckpoint": "B-REVIEW-186 / F-REVIEW-150",
+      "stepRef": 202
+    },
+    "externalResourceLifecycle": {
+      "requiredPairMethods": [["register", "unregister"], ["acquire", "release"]],
+      "strongReferenceRequired": true,
+      "isClosedCheckBeforeUse": true,
+      "cleanupInFinally": true,
+      "lockRequiredForUnregister": true,
+      "reviewCheckpoint": "B-REVIEW-187 / F-REVIEW-151",
+      "stepRef": 203
+    },
+    "dbWriteIdentityTrace": {
+      "requiredUserIdParam": true,
+      "userIdParamType": "str | None = None",
+      "whereFilterRequired": true,
+      "callSiteMustPassUserId": true,
+      "typeAnnotationRequired": true,
+      "exemptFunctions": ["admin_queries", "health_check", "system_stats"],
+      "userIdIsolationRequired": true,
+      "userIdFromAuthContextOnly": true,
+      "adminExemptDecoratorName": "require_admin",
+      "auditLogRequiredForWrite": true,
+      "auditLogFields": ["user_id", "operation", "resource_id", "timestamp"],
+      "reviewCheckpoint": "B-REVIEW-188",
+      "stepRef": 204
+    }
+  },
+  "sonarqube": {
+    "projectKey": "xianyu_hunter",
+    "projectName": "Xianyu Hunter",
+    "sources": "src/xianyu_hunter,frontend/src",
+    "tests": "tests",
+    "pythonVersion": "3.10",
+    "tsconfigPath": "frontend/tsconfig.json",
+    "frontendRules": {
+      "S2004": "嵌套层级 ≤ 4，超限时提取模块级函数",
+      "S3358": "嵌套三元拆为变量",
+      "S6757": "SFC 内不用 this，工厂函数替代 class",
+      "S7784": "使用 structuredClone 替代 JSON.parse(JSON.stringify())",
+      "S6848": "clickableProps 工厂函数配键盘事件",
+      "S1128": "删除未使用 import",
+      "S4325": "移除不必要类型断言",
+      "S3776": "认知复杂度，拆 case 为模块级 handler"
+    }
+  },
+  "preCommit": {
+    "hooks": [
+      "check-added-large-files (--maxkb=1024)",
+      "check-merge-conflict",
+      "check-yaml",
+      "end-of-file-fixer",
+      "trailing-whitespace",
+      "forbid-root-temp-files (local)",
+      "forbid-scannerwork (local)",
+      "forbid-browser-cache (local)"
+    ]
+  }
+}

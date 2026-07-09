@@ -7,27 +7,29 @@
 4. 备播机制：06:30 检查今日 episode 未发布则复用前一日音频
 
 设计要点：
-- 单进程内调度，避免多 worker 重复触发（Dockerfile 单 worker）
-- Redis 互斥锁防止并发触发（cron 与手动可能重叠）
+- 单进程内调度，避免多 worker 重复触发（单机 exe 单进程）
+- TTLCache 互斥锁防止并发触发（cron 与手动可能重叠）
 - 每步独立 session，避免长事务跨步骤持有连接
 """
 import asyncio
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
+from app.cache.manager import cache
 from app.config import get_settings
+from app.core.timeutil import utcnow_naive
 from app.database import AsyncSessionLocal
 from app.models import Episode, EpisodeStatus, Review, ReviewStatus, Workflow, WorkflowStep
+from app.models import CrawlerDedup
 from app.models.workflow import (
     WorkflowSource,
     WorkflowStatus,
     WorkflowStepName,
     WorkflowStepStatus,
 )
-from app.redis_client import redis_client
 from app.services.content_service import ContentService
 from app.services.play_service import PlayService
 from app.workflow.crawler import runner as crawler_mod
@@ -37,6 +39,23 @@ from app.workflow.stitch import concat as stitch_mod
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+def _is_cos_configured() -> bool:
+    """检测 COS 是否已配置真实可用值（非空且非占位符）。
+
+    开发态常无 COS 配置，flush_playlog 等依赖 COS 的任务跳过注册，
+    避免每分钟触发 list_objects 报错刷日志。生产态填入真实配置后自动恢复。
+    """
+    bucket = (settings.COS_BUCKET or "").strip()
+    secret_id = (settings.COS_SECRET_ID or "").strip()
+    secret_key = (settings.COS_SECRET_KEY or "").strip()
+    if not bucket or not secret_id or not secret_key:
+        return False
+    # 占位符检测：.env.example 的 <...> 占位符或中文提示
+    if bucket.startswith("<") or "<" in bucket or ">" in bucket:
+        return False
+    return True
 
 
 # ===== 异常定义 =====
@@ -60,13 +79,16 @@ class WorkflowScheduler:
     """工作流调度服务（单例，应用启动时创建）。"""
 
     def __init__(self):
-        self.redis = redis_client
+        # V1.2 改造：Redis → TTLCache（互斥锁/原子计数/键值操作均走 cache）
+        self.cache = cache
         # 时区固定 Asia/Shanghai，确保 cron 表达式按北京时间触发
         self.scheduler = AsyncIOScheduler(timezone="Asia/Shanghai")
+        # 保留后台任务强引用，避免被 GC 回收导致任务中途取消
+        self._running_tasks: set[asyncio.Task] = set()
 
     # ===== 生命周期 =====
 
-    async def start(self) -> None:
+    async def start(self) -> None:  # NOSONAR
         """应用启动时调用，注册全部 Cron 任务（LLD 5.1.1 / 7.5）。"""
         # 每日 05:00 触发工作流（主任务）
         self.scheduler.add_job(
@@ -100,14 +122,21 @@ class WorkflowScheduler:
             replace_existing=True,
         )
         # 每 1 分钟消费播放日志队列（与 PlayService.flush_playlog_queue 配合）
-        self.scheduler.add_job(
-            self._flush_playlog_queue,
-            trigger="interval",
-            minutes=1,
-            id="flush_playlog",
-            max_instances=1,
-            coalesce=True,
-        )
+        # COS 未配置时跳过注册：开发态常无 COS，避免每分钟刷 list_objects 错误日志
+        if _is_cos_configured():
+            self.scheduler.add_job(
+                self._flush_playlog_queue,
+                trigger="interval",
+                minutes=1,
+                id="flush_playlog",
+                max_instances=1,
+                coalesce=True,
+            )
+        else:
+            logger.warning(
+                "COS 未配置（COS_BUCKET/SECRET_ID/SECRET_KEY 为空或占位符），"
+                "跳过 flush_playlog 任务注册。生产部署请配置 COS 后重启。"
+            )
         # 每月 1 号 02:00 维护 play_log 分区（MVP 未分区，预留扩展点）
         self.scheduler.add_job(
             self._add_playlog_partition,
@@ -117,10 +146,27 @@ class WorkflowScheduler:
             id="add_partition",
             replace_existing=True,
         )
+        # 每日 03:00 清理 crawler_dedup 表过期记录（替代原 Redis Set EXPIRE 自动过期）
+        self.scheduler.add_job(
+            self._cleanup_crawler_dedup,
+            trigger="cron",
+            hour=3,
+            minute=0,
+            id="cleanup_crawler_dedup",
+            replace_existing=True,
+        )
+        # 每小时清理 jwt_blacklist 表过期记录（替代原 Redis TTL 自动过期）
+        self.scheduler.add_job(
+            self._cleanup_blacklist,
+            trigger="cron",
+            minute=0,
+            id="cleanup_blacklist",
+            replace_existing=True,
+        )
         self.scheduler.start()
-        logger.info("WorkflowScheduler 已启动，注册 5 个定时任务")
+        logger.info("WorkflowScheduler 已启动，注册 7 个定时任务")
 
-    async def stop(self) -> None:
+    async def stop(self) -> None:  # NOSONAR
         """应用关闭时关闭调度器，等待运行中任务完成。"""
         self.scheduler.shutdown(wait=True)
         logger.info("WorkflowScheduler 已停止")
@@ -153,9 +199,9 @@ class WorkflowScheduler:
         """
         # 生成 workflow_id：日期 + 当日序号，便于人工识别与日志检索
         date_str = episode_date.strftime("%Y%m%d")
-        seq = await self.redis.incr(f"workflow:seq:{date_str}")
+        seq = await self.cache.incr(f"workflow:seq:{date_str}")
         # 序号当日有效，次日从 1 开始
-        await self.redis.expire(f"workflow:seq:{date_str}", 48 * 3600)
+        await self.cache.expire(f"workflow:seq:{date_str}", 48 * 3600)
         workflow_id = f"wf-{date_str}-{seq:04d}"
 
         logger.info(
@@ -175,7 +221,10 @@ class WorkflowScheduler:
             await session.commit()
 
         # 异步执行主流程，不阻塞调度器（cron 触发后立即返回）
-        asyncio.create_task(self._run_workflow(workflow_id, episode_date))
+        # 任务加入 _running_tasks 保留强引用，完成时通过回调自动移除
+        task = asyncio.create_task(self._run_workflow(workflow_id, episode_date))
+        self._running_tasks.add(task)
+        task.add_done_callback(self._running_tasks.discard)
         return workflow_id
 
     # ===== 工作流主流程 =====
@@ -185,16 +234,19 @@ class WorkflowScheduler:
 
         前 4 步调用外部模块，第 5 步内置创建 review，第 6 步 publish 由审核通过后异步触发。
         """
+        # lock_acquired 标记本进程是否抢到锁；finally 仅在抢到时删 lock，
+        # 避免误删其他正在运行的工作流持有的锁
+        lock_acquired = False
         try:
-            # 抢 Redis 互斥锁，防止 cron 与手动触发并发
-            lock_ok = await self.redis.set(
-                "workflow:lock", workflow_id,
-                nx=True, ex=settings.WORKFLOW_LOCK_TTL_SEC,
+            # 抢 TTLCache 互斥锁（替代 Redis SET NX EX），防止 cron 与手动触发并发
+            lock_ok = await self.cache.acquire_lock(
+                "workflow:lock", workflow_id, ttl_sec=settings.WORKFLOW_LOCK_TTL_SEC,
             )
             if not lock_ok:
                 raise WorkflowConflictError("已有工作流在运行")
+            lock_acquired = True
 
-            await self.redis.set("workflow:current", workflow_id)
+            await self.cache.set("workflow:current", workflow_id)
             await self._update_workflow_status(workflow_id, WorkflowStatus.running)
 
             date_str = episode_date.isoformat()
@@ -268,8 +320,11 @@ class WorkflowScheduler:
             )
             await self._alert_operators(f"工作流 {workflow_id} 未预期异常: {e}")
         finally:
-            await self.redis.delete("workflow:lock")
-            await self.redis.delete("workflow:current")
+            # 仅本进程抢到锁才释放 lock，避免误删其他工作流的锁
+            # release_lock 内部校验 value 匹配，双重保险
+            if lock_acquired:
+                await self.cache.release_lock("workflow:lock", workflow_id)
+            await self.cache.delete("workflow:current")
 
     async def _run_step(
         self, workflow_id: str, step_name: WorkflowStepName, seq: int,
@@ -285,12 +340,12 @@ class WorkflowScheduler:
         last_error = None
         for attempt in range(3):  # 最多 3 次（含首次）
             try:
-                started = datetime.utcnow()
+                started = utcnow_naive()
                 result = await func(context)
-                duration_ms = int((datetime.utcnow() - started).total_seconds() * 1000)
+                duration_ms = int((utcnow_naive() - started).total_seconds() * 1000)
                 await self._update_step_status(
                     step_record.id, WorkflowStepStatus.success,
-                    result=result, retry_count=attempt, duration_ms=duration_ms,
+                    result=result, retry_count=attempt, _duration_ms=duration_ms,
                 )
                 # 将本步产出合并到上下文供后续步骤使用
                 context.update(result or {})
@@ -429,13 +484,13 @@ class WorkflowScheduler:
                 script_id=prev.script_id,
                 is_backup=1,
                 status=EpisodeStatus.published,
-                published_at=datetime.utcnow(),
+                published_at=utcnow_naive(),
             )
             session.add(backup)
             await session.commit()
 
         # 失效今日节目缓存，让小程序能看到备播节目
-        await self.redis.delete("episode:today")
+        await self.cache.delete("episode:today")
         await self._alert_operators(
             f"已启用备播（复用 {yesterday} 节目音频），请事后排查原因"
         )
@@ -455,7 +510,7 @@ class WorkflowScheduler:
             # 落库失败不中断调度器，下次调度继续处理（队列保留）
             logger.exception("播放日志落库失败: %s", e)
 
-    async def _add_playlog_partition(self) -> None:
+    async def _add_playlog_partition(self) -> None:  # NOSONAR
         """每月 1 号 02:00 维护 play_log 分区。
 
         MVP 阶段 play_log 未使用分区表，此方法预留扩展点。
@@ -466,6 +521,41 @@ class WorkflowScheduler:
             "play_log 分区维护任务触发（MVP 未分区，跳过）next_month=%s",
             next_month,
         )
+
+    async def _cleanup_crawler_dedup(self) -> None:
+        """每日 03:00 清理 crawler_dedup 表过期记录。
+
+        替代原 Redis Set 的 EXPIRE 自动过期：SQLite 表需主动清理，
+        按 CRAWLER_DEDUP_TTL_DAYS 配置保留窗口删除超出范围的记录。
+        """
+        cutoff = utcnow_naive() - timedelta(days=settings.CRAWLER_DEDUP_TTL_DAYS)
+        try:
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    delete(CrawlerDedup).where(CrawlerDedup.created_at < cutoff)
+                )
+                await session.commit()
+                deleted = result.rowcount
+            if deleted > 0:
+                logger.info("清理爬虫去重过期记录 %d 条", deleted)
+        except Exception as e:
+            # 清理失败不中断调度器，下次调度继续处理
+            logger.exception("清理爬虫去重表失败: %s", e)
+
+    async def _cleanup_blacklist(self) -> None:
+        """每小时清理 jwt_blacklist 表过期记录。
+
+        替代原 Redis 黑名单的 TTL 自动过期：SQLite 需定时清理已过期的 jti，
+        避免表无限增长。委托 blacklist_service.cleanup_expired_blacklist 执行。
+        """
+        from app.services.blacklist_service import cleanup_expired_blacklist
+        try:
+            deleted = await cleanup_expired_blacklist()
+            if deleted > 0:
+                logger.info("清理黑名单过期记录 %d 条", deleted)
+        except Exception as e:
+            # 清理失败不中断调度器，下次调度继续处理
+            logger.exception("清理黑名单失败: %s", e)
 
     # ===== 告警 =====
 
@@ -511,11 +601,11 @@ class WorkflowScheduler:
             if error:
                 wf.error = error
             if status in (WorkflowStatus.success, WorkflowStatus.failed, WorkflowStatus.cancelled):
-                wf.finished_at = datetime.utcnow()
+                wf.finished_at = utcnow_naive()
             await session.commit()
 
     async def _create_step_record(
-        self, workflow_id: str, step_name: WorkflowStepName, seq: int,
+        self, workflow_id: str, step_name: WorkflowStepName, _seq: int,
     ) -> WorkflowStep:
         """创建步骤记录（status=pending），返回 ORM 对象供后续更新。"""
         async with AsyncSessionLocal() as session:
@@ -523,7 +613,7 @@ class WorkflowScheduler:
                 workflow_id=workflow_id,
                 step_name=step_name,
                 status=WorkflowStepStatus.pending,
-                started_at=datetime.utcnow(),
+                started_at=utcnow_naive(),
             )
             session.add(step)
             await session.commit()
@@ -533,7 +623,7 @@ class WorkflowScheduler:
     async def _update_step_status(
         self, step_id: int, status: WorkflowStepStatus,
         result: dict = None, retry_count: int = None,
-        error: str = None, duration_ms: int = None,
+        error: str = None, _duration_ms: int = None,
     ) -> None:
         """更新步骤状态与产出。"""
         async with AsyncSessionLocal() as session:
@@ -551,7 +641,7 @@ class WorkflowScheduler:
             if error:
                 step.error = error
             if status in (WorkflowStepStatus.success, WorkflowStepStatus.failed):
-                step.finished_at = datetime.utcnow()
+                step.finished_at = utcnow_naive()
             await session.commit()
 
 

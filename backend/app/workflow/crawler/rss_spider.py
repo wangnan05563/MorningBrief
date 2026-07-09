@@ -11,7 +11,10 @@ from time import mktime
 import feedparser
 import httpx
 
+from app.config import get_settings
+
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class RSSSpider:
@@ -27,7 +30,7 @@ class RSSSpider:
         self.authority = source_config.get("authority", 0.5)
         self.category_hint = source_config.get("category_hint")
         # 从全局配置取 UA，未来可由 runner 注入覆盖
-        self.user_agent = "20NewsBot/1.0"
+        self.user_agent = settings.CRAWLER_USER_AGENT
 
     async def fetch(self) -> list[dict]:
         """爬取该 RSS 源所有条目。

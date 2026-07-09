@@ -1,12 +1,17 @@
-"""内容服务：今日节目、节目详情、历史列表、稿件、发布。"""
-import json
-from datetime import date, datetime
+"""内容服务：今日节目、节目详情、历史列表、稿件、发布。
+
+V1.2 起缓存层从 Redis 改为进程内 TTLCache：
+- TTLCache 直接存 Python dict，无需 json 序列化
+- 列表缓存逐页删除改为 delete_pattern 一次性清理
+"""
+from datetime import date
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cache.manager import cache as cache_manager
+from app.core.timeutil import utcnow_naive
 from app.models import Episode, Script, Review, EpisodeStatus
-from app.redis_client import redis_client
 
 # 缓存 TTL（秒）：与数据变更频率匹配
 TTL_TODAY = 3600   # 今日节目 1 小时
@@ -16,16 +21,17 @@ TTL_SCRIPT = 1800  # 稿件 30 分钟
 
 
 class ContentService:
-    def __init__(self, db: AsyncSession, redis=None):
+    def __init__(self, db: AsyncSession):
         self.db = db
-        self.redis = redis or redis_client
+        # 进程内缓存：替代原 Redis cache-aside，避免热点查询打 DB
+        self.cache = cache_manager
 
     async def get_today_episode(self) -> dict | None:
-        """今日节目，cache-aside：先查 Redis，未命中查 DB 后回写。"""
+        """今日节目，cache-aside：先查缓存，未命中查 DB 后回写。"""
         cache_key = "episode:today"
-        cached = await self.redis.get(cache_key)
+        cached = await self.cache.get(cache_key)
         if cached:
-            return json.loads(cached)
+            return cached
 
         today = date.today()
         result = await self.db.execute(
@@ -39,15 +45,15 @@ class ContentService:
             return None
 
         data = self._episode_to_dict(episode)
-        await self.redis.set(cache_key, json.dumps(data, default=str), ex=TTL_TODAY)
+        await self.cache.set(cache_key, data, ttl=TTL_TODAY)
         return data
 
     async def get_episode_by_id(self, episode_id: int) -> dict | None:
         """节目详情，cache-aside。"""
         cache_key = f"episode:detail:{episode_id}"
-        cached = await self.redis.get(cache_key)
+        cached = await self.cache.get(cache_key)
         if cached:
-            return json.loads(cached)
+            return cached
 
         result = await self.db.execute(
             select(Episode).where(Episode.id == episode_id)
@@ -57,7 +63,7 @@ class ContentService:
             return None
 
         data = self._episode_to_dict(episode)
-        await self.redis.set(cache_key, json.dumps(data, default=str), ex=TTL_DETAIL)
+        await self.cache.set(cache_key, data, ttl=TTL_DETAIL)
         return data
 
     async def get_history(self, page: int, size: int) -> dict:
@@ -66,9 +72,9 @@ class ContentService:
             return {"total": 0, "list": []}
 
         cache_key = f"episode:list:page:{page}"
-        cached = await self.redis.get(cache_key)
+        cached = await self.cache.get(cache_key)
         if cached:
-            return json.loads(cached)
+            return cached
 
         # 总数独立查询，避免扫描全部数据
         count_result = await self.db.execute(
@@ -102,15 +108,15 @@ class ContentService:
         ]
 
         data = {"total": total, "list": list_data}
-        await self.redis.set(cache_key, json.dumps(data, default=str), ex=TTL_LIST)
+        await self.cache.set(cache_key, data, ttl=TTL_LIST)
         return data
 
     async def get_script(self, episode_id: int) -> dict | None:
         """稿件全文，懒加载：先查 episode 拿 script_id，再查 script 表。"""
         cache_key = f"script:detail:{episode_id}"
-        cached = await self.redis.get(cache_key)
+        cached = await self.cache.get(cache_key)
         if cached:
-            return json.loads(cached)
+            return cached
 
         # 先取 script_id，避免无条件扫 script 表
         result = await self.db.execute(
@@ -132,7 +138,7 @@ class ContentService:
             "script": script.full_text,
             "segments": script.segments or [],
         }
-        await self.redis.set(cache_key, json.dumps(data, default=str), ex=TTL_SCRIPT)
+        await self.cache.set(cache_key, data, ttl=TTL_SCRIPT)
         return data
 
     async def publish_episode(self, workflow_id: str, review_id: int) -> int:
@@ -171,17 +177,16 @@ class ContentService:
             categories=script.categories if script else None,
             status=EpisodeStatus.published,
             workflow_id=workflow_id,
-            published_at=datetime.utcnow(),
+            published_at=utcnow_naive(),
         )
         self.db.add(episode)
         await self.db.commit()
         await self.db.refresh(episode)
 
         # 4. 缓存失效（发布后旧缓存必须清除，否则小程序看到旧节目）
-        await self.redis.delete("episode:today")
-        # 列表缓存逐页删除（MVP 页数少，SCAN 更稳妥但简化处理直接删前 10 页）
-        for p in range(1, 11):
-            await self.redis.delete(f"episode:list:page:{p}")
+        # TTLCache 不支持 SCAN，用 delete_pattern 一次性清理列表前缀
+        await self.cache.delete("episode:today")
+        await self.cache.delete_pattern("episode:list:page:*")
 
         return episode.id
 
@@ -195,5 +200,5 @@ class ContentService:
             "audio_url": episode.audio_url,
             "cover_url": episode.cover_url,
             "categories": episode.categories or [],
-            "status": episode.status.value if episode.status else None,
+            "status": episode.status if episode.status else None,
         }

@@ -1,0 +1,19 @@
+{
+  "_deprecated": true,
+  "_deprecated_since": "2026-07-02",
+  "_deprecation_message": "本文件已废弃。请使用新的分层配置：config/core_config.json（通用配置） + config/project_config.json（项目配置）。旧文件保留仅作兼容，新项目请勿使用。",
+  "_migration_guide": "https://github.com/your-org/sonarqube-mcp/blob/main/docs/migration-v1-to-v2.md",
+  "_old_format": {
+    "note": "Xianyu Hunter 项目 SonarQube 扫描配置（v1.0 大一统格式）",
+    "configSections": {
+      "project": "项目信息（key/name/base_path）",
+      "sonarqube_server": "SonarQube 服务器配置（已拆分到 core_config.json + project_config.json）",
+      "scan": "已拆分到 core_config.json",
+      "priority": "已拆分到 core_config.json",
+      "filters": "已拆分到 core_config.json",
+      "verify": "已拆分到 core_config.json + project_config.json",
+      "report": "已拆分到 core_config.json + project_config.json",
+      "hard_constraints": "已拆分到 config/hard_constraints/core.json + business/xianyu.json"
+    }
+  }
+}

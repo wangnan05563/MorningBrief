@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, String, Integer, SmallInteger, DateTime, Index
+from sqlalchemy import String, Integer, SmallInteger, DateTime, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -16,7 +16,7 @@ class AdMaterial(Base):
         {"comment": "广告素材表"},
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(String(512))
     file_url: Mapped[str] = mapped_column(String(512), nullable=False)

@@ -1,0 +1,3879 @@
+---
+name: "xianyu-hunter-dev"
+description: "闲鱼猎人项目个性化开发技能。该技能专门用于在闲鱼猎人代码库中进行增量功能开发、Bug 修复、代码审查与重构，严格遵循项目分层架构、异步并发模型与编码规范"
+whenToUse: "用户需要在闲鱼猎人项目开发新功能、修复 Bug、进行代码审查、编写测试、改造架构、配置部署时调用"
+triggers:
+  - "闲鱼猎人 开发/编码/实现 功能/需求"
+  - "修复/修改 闲鱼/XianyuHunter bug、问题、缺陷"
+  - "闲鱼 项目 重构/优化/改造"
+  - "XianyuHunter 编写 测试/路由/仓储/Hook/组件"
+version: "4.26.0"
+updated: "2026-07-04"
+config: "config/tech-stack.json"
+---
+
+# 闲鱼猎人个性化开发 Skill
+
+## Skill 职责
+
+本 Skill 用于闲鱼猎人（XianyuHunter）项目的个性化开发，遵循项目四层分层架构（domain → infra → modules → web）、异步并发模型与 SonarQube 代码质量规范，提供标准化的开发流程、代码模板与参考知识库。
+
+## 项目背景速查
+
+| 项 | 值 |
+|---|---|
+| 项目代号 | XianyuHunter / 闲鱼猎人 |
+| 当前版本 | 0.3.0（SemVer） |
+| 项目根 | `d:\code\otherProjects\17_xianyu` |
+| 后端入口 | `src/xianyu_hunter/__main__.py`（Typer CLI） |
+| Web 入口 | `src/xianyu_hunter/web/app.py`（FastAPI 工厂） |
+| 前端入口 | `frontend/src/main.tsx`（React 18 + Vite） |
+| 配置文件 | `config/config.yaml` + `config/eval.yaml` + `.env` |
+| 数据库 | SQLite（WAL）+ ChromaDB（向量库） |
+| 部署 | Docker 三阶段构建 / Windows bat / Linux systemd |
+| 单元测试 | 148/148 通过（pytest + vitest） |
+
+## 技术栈速查
+
+| 类别 | 技术 | 版本 |
+|---|---|---|
+| 后端语言 | Python | >=3.10（Docker 3.12-slim） |
+| Web 框架 | FastAPI | 0.136.3 |
+| ASGI | uvicorn[standard] | 0.48.0 |
+| CLI | typer | 0.26.6 |
+| ORM | SQLAlchemy | 2.0.50（DeclarativeBase + Mapped） |
+| 数据验证 | pydantic | 2.13.4 |
+| 配置 | pydantic-settings | 2.14.1 |
+| 浏览器自动化 | Playwright | 1.60.0 |
+| HTTP | httpx 0.28.1 / aiohttp 3.14.0 | - |
+| 调度 | APScheduler | 3.11.2 |
+| 日志 | loguru | 0.7.3 |
+| 密钥 | keyring | 25.7.0（Windows DPAPI） |
+| 重试 | tenacity | 9.1.4 |
+| 加密 | cryptography | 49.0.0（Chrome Cookie AES-256-GCM） |
+| 向量库 | chromadb | >=1.0.0 |
+| 测试 | pytest 9.0.3 / pytest-asyncio 1.4.0 | - |
+| 前端语言 | TypeScript | ^5.5.0 |
+| 前端框架 | React | ^18.3.1 |
+| UI 库 | Ant Design | ^5.21.0 |
+| 状态管理 | Zustand | ^4.5.0 |
+| 路由 | react-router-dom | ^6.26.0 |
+| HTTP | axios | ^1.7.0 |
+| 图表 | echarts | ^5.5.0 |
+| 拖拽 | @dnd-kit/core | ^6.1.0 |
+| 构建 | Vite | ^5.4.0 |
+| PWA | vite-plugin-pwa | ^1.3.0 |
+| 测试 | Vitest | ^4.1.9 |
+
+详细版本与依赖关系参见 [config/tech-stack.json](config/tech-stack.json)。
+
+## 文档结构
+
+```
+xianyu-hunter-dev/
+├── SKILL.md                          # 本文件 - Skill 定义
+├── README.md                         # 使用说明
+├── config/
+│   └── tech-stack.json               # 技术栈版本、路径与硬约束配置
+├── assets/
+│   ├── guides/                       # 分领域开发指南（规范+模板）
+│   │   ├── frontend-guide.md         # 前端开发指南（React/TS/AntD/Zustand）
+│   │   ├── backend-guide.md          # 后端开发指南（FastAPI/SQLAlchemy/async）
+│   │   ├── database-guide.md         # 数据库开发指南（SQLite/索引/迁移）
+│   │   ├── chatbot-guide.md          # 智能客服开发指南（RAG/Agent/KB）
+│   │   └── sonarqube-rules-guide.md  # SonarQube 规则速查与修复模式（16+ 条规则 + 复盘）
+│   └── templates/                    # 代码模板
+│       ├── python/
+│       │   ├── route.py              # FastAPI 路由模板
+│       │   ├── repository.py         # 仓储 Mixin 模板
+│       │   └── domain.py             # 领域模型模板
+│       └── typescript/
+│           ├── api.ts                # API 模块模板
+│           ├── hook.ts               # 自定义 Hook 模板
+│           └── store.ts              # Zustand store 模板
+└── references/                       # 参考文档
+    ├── project-rules.md              # 项目硬约束（强制规则）
+    ├── architecture-patterns.md      # 架构模式知识库
+    └── faq.md                        # 常见问题与最佳实践
+```
+
+## 开发规范文档
+
+本 Skill 遵循以下开发指南（每份指南整合规范、模板与避坑记录）：
+
+| 领域 | 文档 | 内容 |
+|---|---|---|
+| 前端 | [frontend-guide.md](assets/guides/frontend-guide.md) | 命名约定、组件设计、Hook 模式、Zustand store、AntD 主题、PWA、SonarQube 规则 |
+| 后端 | [backend-guide.md](assets/guides/backend-guide.md) | 分层架构、路由/仓储/领域模型模板、异步并发、安全约束、错误处理 |
+| 数据库 | [database-guide.md](assets/guides/database-guide.md) | SQLite 引擎配置、表设计、索引策略、幂等迁移、SQLAlchemy 2.0 风格 |
+| 智能客服 | [chatbot-guide.md](assets/guides/chatbot-guide.md) | RAG 引擎、Agent 工具调用、KB 管理、向量存储、降级链 |
+| SonarQube | 🆕 [sonarqube-rules-guide.md](assets/guides/sonarqube-rules-guide.md) | 16+ 条规则详解、修复模式、实战案例、复盘总结（2026-07） |
+| 项目规则 | [project-rules.md](references/project-rules.md) | 版本约束、目录规范、安全硬约束、命名规范 |
+| 架构模式 | [architecture-patterns.md](references/architecture-patterns.md) | DI 容器、EventBus、Mixin 仓储、PriorityBrowserLock、SSE 流 |
+| 编码与 I/O | 🆕 [encoding-and-io.md](references/encoding-and-io.md) | 字符编码铁律、外部脚本调用 API、字符乱码诊断五步法（FAQ 乱码复盘提炼） |
+| 数据一致性 | 🆕 [data-consistency-patterns.md](references/data-consistency-patterns.md) | 多入口参数合并、配置值格式匹配、价格采集一致性、状态检测关键词覆盖（实时搜索/价格不一致复盘提炼） |
+| 性能与安全 | 🆕 [performance-and-security-patterns.md](references/performance-and-security-patterns.md) | N+1 查询优化、json_extract vs LIKE、异常消息脱敏、计数器语义、前端阈值获取（代码审查 P0-P4 复盘提炼） |
+| FAQ | [faq.md](references/faq.md) | 常见问题解答、最佳实践 |
+
+## 执行步骤
+
+### 第一阶段：需求分析与规范确认
+
+1. **需求理解**
+   - 仔细阅读用户需求，明确功能目标与验收标准
+   - 识别涉及的层（domain / infra / modules / web / frontend）
+   - 评估是否需要数据库迁移、API 路由新增、前端组件改造
+
+2. **规范检查【强制】**
+   - 必须先阅读 [project-rules.md](references/project-rules.md) 了解项目硬约束
+   - 后端开发：必须检查是否触及认证白名单、安全约束、并发模型
+   - 前端开发：必须检查 SonarQube 规则（S2004/S3358/S6757/S7784/S6848/S1128/S4325/S3776）
+   - 数据库开发：必须检查索引策略与迁移幂等性
+
+3. **参考分析**
+   - 同类功能实现：在 `src/xianyu_hunter/` 与 `frontend/src/` 中搜索相似模式
+   - 设计文档：查阅 `docs/01-仪表盘/` 至 `docs/08-移动端/` 对应模块的详细设计
+   - 历史教训：参考 [architecture-patterns.md](references/architecture-patterns.md) 中的踩坑记录
+
+4. **开发指南参考【强制】**
+   - **前端开发**: 必须参考 [前端开发指南](assets/guides/frontend-guide.md)
+   - **后端开发**: 必须参考 [后端开发指南](assets/guides/backend-guide.md)
+   - **数据库开发**: 必须参考 [数据库开发指南](assets/guides/database-guide.md)
+   - **智能客服开发**: 必须参考 [智能客服开发指南](assets/guides/chatbot-guide.md)
+   - **🆕 SonarQube 规则预防**: 编码时主动对照 [SonarQube 规则速查](assets/guides/sonarqube-rules-guide.md) 预防问题（认知复杂度 ≤ 15、嵌套 ≤ 4、不必要 `async`、可访问性等）
+   - **项目规则**: 必须遵守 [项目规则](references/project-rules.md)
+   - **架构模式**: 涉及并发、事件、调度、登录等场景，必须参考 [架构模式知识库](references/architecture-patterns.md)
+   - **FAQ**: 遇到问题先查阅 [faq.md](references/faq.md)
+
+### 第二阶段：开发实施
+
+1. **后端开发**
+   - **指南参考**: 先参考 [后端开发指南 - 代码模板](assets/guides/backend-guide.md#二代码模板) 章节
+   - **路由层**: 新增 `src/xianyu_hunter/web/routes/api_<域>.py`，使用 `APIRouter(prefix="/api/<域>", tags=["<域>"])`
+   - **业务模块**: 新增/修改 `src/xianyu_hunter/modules/<域>.py` 或 `modules/<域>/` 子包
+   - **仓储层**: 新增 `src/xianyu_hunter/infra/repo_<域>.py` Mixin，并在 `infra/repository.py` 中聚合
+   - **领域模型**: 新增/修改 `src/xianyu_hunter/domain/<域>.py`，dataclass + Enum，无 IO 依赖
+   - **依赖注入**: 在 `container.py` 中装配新依赖（Composition Root）
+   - **启动钩子**: 涉及后台调度器，在 `web/startup.py` 注册 startup/shutdown
+
+2. **前端开发**
+   - **指南参考**: 先参考 [前端开发指南 - 代码模板](assets/guides/frontend-guide.md#二代码模板) 章节
+   - **API 模块**: 新增 `frontend/src/api/<域>.ts`，导出 `<域>Api`，在 `api/index.ts` re-export
+   - **类型定义**: 在 `api/types.ts` 按业务域分组追加类型
+   - **页面**: 新增 `frontend/src/pages/<域>/index.tsx`，在 `App.tsx` 注册路由（`lazyRetry`）
+   - **菜单**: 在 `MainLayout.tsx` 的 `menuItems` 注册，在 `sheetRegistry.tsx` 维护 path → component 映射
+   - **Hook**: 复用现有 `hooks/use*.ts`，必要时新增 `use<Feature>.ts`
+   - **Store**: 涉及跨页状态，新增 `stores/<feature>Store.ts`，导出 `use<Feature>Store`
+
+3. **数据库开发**
+   - **指南参考**: 必须参考 [数据库开发指南](assets/guides/database-guide.md)
+   - **新增表**: 在 `infra/db_models.py` 中定义 `*Row(Base)` 类，遵循 SQLAlchemy 2.0 `Mapped[T] + mapped_column` 风格
+   - **新增字段**: 在 `init_db()` 中追加 `_migrate_add_column` 调用（幂等，列已存在则跳过）
+   - **新增索引**: 在 `init_db()` 中追加 `_migrate_create_index` 调用（幂等）
+   - **修改列类型**: SQLite 不支持 ALTER COLUMN，使用 `_migrate_make_column_nullable` 表重建模式
+   - **仓储方法**: 在 `infra/repo_<域>.py` 中实现 CRUD，JSON 字段需在 `RepositoryBase._row_to_dict` 白名单中注册
+
+4. **智能客服开发**
+   - **指南参考**: 必须参考 [智能客服开发指南](assets/guides/chatbot-guide.md)
+   - **新工具**: 在 `modules/chatbot/tools/` 新增工具类，继承 `BaseTool`，在 `tool_registry.py` 注册
+   - **KB 数据源**: 修改 `KBManager._scan_and_chunk` 的扫描规则（白名单：`.md/.py/.jsonl/.txt`）
+   - **降级链**: 在 `ChatbotOrchestrator._handle_*` 中追加降级分支，发布 `CHATBOT_DEGRADED` 事件
+
+5. **功能实现约束【强制】**
+   - 编码必须遵守 [项目规则](references/project-rules.md) 中的安全、并发、命名硬约束
+   - 涉及 token 校验必须使用 `hmac.compare_digest`（防时序攻击）
+   - 涉及日志禁止打印敏感字段（authorization/cookie/xh_token/set-cookie）
+   - 涉及 SQLite 迁移必须保持幂等（已存在则跳过）
+   - 涉及 asyncio 任务必须保留引用防 GC（`self._task = asyncio.create_task(...)`）
+   - 涉及 `asyncio.CancelledError` 必须用 `with suppress(asyncio.CancelledError)` 包裹 await
+
+6. **注释项检查【强制】**
+   - 模块级 docstring：说明职责 + 设计要点 + 引用设计文档（如 `docs/<模块>-详细设计.md §x.y`）
+   - 类注释：说明类的职责、所属层、关键设计权衡
+   - 方法注释：说明用途、关键参数含义、返回值说明
+   - **注释应解释"为什么"而非"做什么"**（用户编程原则）
+   - 历史教训用 `# C-01 修复 / # F-16 / # MU1` 等版本化标记便于追溯
+
+7. **安全调用检查【强制】**
+   - 检查所有外部接口调用是否已做空值/边界判断
+   - 检查是否存在未处理的异常分支
+   - 确认敏感数据未在日志中明文输出（`_SENSITIVE_HEADERS` 脱敏）
+   - 验证权限校验逻辑是否完整（`BearerAuthMiddleware` 白名单是否需追加）
+   - SQL 注入防护：LIKE 用 `_escape_like`，表名/列名用 `_IDENT_RE` 白名单校验
+   - 路径遍历防护：用户输入用 `_USER_ID_RE` 等正则校验
+   - 🆕v4.0 外部链接安全：`target="_blank"` 必须配 `rel="noopener noreferrer"`（防 `window.opener` 钓鱼 + 不泄露 Referer）
+
+8. **SonarQube 规则检查【强制，前端必做】**
+   - **S2004**：嵌套层级 ≤ 4，超限时提取模块级函数（典型：setState updater）
+   - **S3358**：嵌套三元拆为变量
+   - **S6757**：SFC 内不用 `this`，工厂函数替代 class
+   - **S7784**：使用 `structuredClone` 替代 `JSON.parse(JSON.stringify())`
+   - **S6848**：`clickableProps` 工厂函数配键盘事件
+   - **S1128**：删除未使用 import
+   - **S4325**：移除不必要类型断言
+   - **S3776**：认知复杂度，拆 case 为模块级 handler
+   - 🆕 **S7503**：不必要的 `async` 函数（无 await）——改同步
+   - 🆕 **S6767**：未使用的 Props/State/参数 ——删除
+   - 🆕 **S6819/S6844**：用 `<a>`/`<div>` 替代 `<button>` ——改 `<button type="button">` + 键盘事件
+   - 🆕 **S7744**：不必要的类型转换 ——用类型守卫
+   - 🆕 **S6582**：冗余可选链 ——移除 `?.`
+   - 🆕 **S7735**：useEffect 依赖缺失 ——补全或用 ref 闭包
+   - 🆕 **S6551**：`for...in` ——改 `Object.keys/values/entries`
+   - 🆕 **S1874**：删除 API 未标 `@deprecated` ——加 JSDoc
+   - 🆕 **S1192**：重复字符串字面量 ——提取为模块级常量
+   - 🆕 **S1481/S2949**：FastAPI 装饰器误报 ——豁免规则
+   - 🆕 **S5843**：复杂正则 ——拆分或 VERBOSE
+   - **完整规则+修复模式+实战案例**：参见 [sonarqube-rules-guide.md](assets/guides/sonarqube-rules-guide.md)
+
+9. **代码修改后的编译→部署→重启流程【强制】**
+   - **后端**：Python 无需编译，但需要重启 uvicorn 进程使修改生效
+     - 开发模式：`scripts/automation.ps1 -Action rebuild` 或直接重启 Web 进程
+     - Docker 模式：`docker compose restart` 或 `docker compose up -d --build`
+   - **前端**：`cd frontend; npm run build`（产物落到 `src/xianyu_hunter/web/static/spa`）
+     - 开发模式：`cd frontend; npm run dev`（HMR，无需重启后端）
+     - 生产模式：构建后重启后端使 SPA 静态资源更新
+   - **数据库**：修改 `db_models.py` 后必须同步修改 `init_db()` 中的迁移逻辑，下次启动自动迁移
+
+10. **测试编写【强制】**
+    - **后端**: 在 `tests/` 新增 `test_<被测模块>.py`，遵循 `asyncio_mode = "auto"`，命名 `test_<scenario>` 或 `test_<issue>_fix`
+    - **前端**: 在组件/hook 同级目录新增 `__tests__/<Component>.test.tsx`
+    - **Cookie 隔离**: 后端测试自动应用 `isolate_cookie_json` fixture（conftest.py）
+    - **E2E**: 涉及全链路验证，参考 `tests/test_e2e.py` 用 Fake 依赖注入 Container
+    - **覆盖率目标**: 关键业务模块 80%+，无测试不合并
+
+11. **状态管理一致性【强制】**
+    - 状态变更操作必须同步更新所有相关字段，避免"激活但未恢复""关闭但未清除引用"等不一致状态
+    - 典型场景：`activateSheet` 激活最小化 sheet 时必须同时设 `minimized: false`，否则内容区显示空状态
+    - 检查方法：每个状态变更函数，列出影响的所有字段，确认全部同步更新
+    - 适用范围：Zustand store 的所有操作（open/close/activate/minimize/restore），后端状态机转换
+
+12. **容器适配原则【强制】**
+    - 被嵌入到固定高度容器（如 SheetWorkspace、MainLayout）的页面组件，用 `height: 100%` 适应父容器
+    - **禁止**在嵌入场景使用 `minHeight: 100vh` 或 `height: 100vh`，会溢出容器导致全屏显示
+    - 独立路由页面（未进 MainLayout，如 `/login`、`/onboarding`）可用 `100vh`
+    - flex 布局中 Header 用 `flex: '0 0 auto'`，Content 用 `flex: 1` + `overflow: auto`
+
+13. **文件扩展名判断【强制】**
+    - 含 JSX 语法的文件用 `.tsx`（如 `sheetRegistry.tsx` 含 `<DashboardOutlined />`）
+    - 纯逻辑文件用 `.ts`（如 `sheetStore.ts`、`useIsMobile.ts`）
+    - 测试文件扩展名跟随被测文件：组件测试用 `.test.tsx`，Hook/纯逻辑用 `.test.ts`
+    - 创建文件前先判断内容是否含 JSX，避免 oxc 解析错误
+
+14. **多视图切换与 state 提升【强制】🆕v4.0**
+    - 多视图（Tab/Accordion/Collapse/Drawer）共享同一数据源时，state 必须提升至最近共同父组件
+    - 容器组件用 `destroyInactiveTabPane={false}` 保留 DOM（表单类避免输入焦点丢失）
+    - 标题职责归容器（如 Tab label），子组件只保留功能说明文字，禁止标题重复
+    - **适用**：多视图共享数据源；**不适用**：各视图有独立数据源
+    - **判断信号**：两个子组件的 props 来自同一 config/state → 应提升
+
+15. **动态资源映射分离【强制】🆕v4.0**
+    - 映射表（`Record<string, string>`）与推断函数必须分离，不混合
+    - 推断函数返回 `null` 表示无匹配（如本地模式无需 API Key）
+    - 调用方根据返回值条件渲染，不在推断函数内渲染 JSX
+    - 业务参数（URL、阈值、间隔）通过配置文件管理，不硬编码在技能/组件中
+    - **适用**：根据配置值推断资源（如 base_url → 申请链接）；**不适用**：硬编码常量
+
+16. **事件触发时机【强制】🆕v4.0**
+    - "已完成"语义事件（如 `EVAL_PASSED`、`NOTIFY_SENT`、`TASK_COMPLETED`）必须在业务逻辑**完成后**触发
+    - "开始"语义事件（如 `TASK_STARTED`、`EVAL_STARTED`）在业务逻辑**开始前**触发
+    - **禁止**：在业务逻辑前置条件变更时就触发完成事件（如 DingTalk 通知在 AI 评估前就触发 EVAL_PASSED）
+    - **判断信号**：事件名含 PASSED/SENT/COMPLETED → 后置；含 STARTED/BEGIN → 前置
+
+17. **字段覆盖策略（数据合并）【强制】🆕v4.0**
+    - 数据采集合并（如爬虫数据覆盖历史快照）时，按字段语义分类覆盖策略，**不能一刀切**
+    - 基本信息字段（title/url/region/brand/seller_id/publish_time）：新值非空则覆盖
+    - 数值类字段（price/want_cnt/view_cnt）：新值 > 0 才覆盖（防止 0 覆盖有效值）
+    - 状态类字段（is_sold）：始终覆盖（状态时效性最高）
+    - 标识类字段（seller_nick）：只填缺失（稳定性高，无需频繁更新）
+    - **适用**：数据采集合并、缓存更新；**不适用**：审计日志（需保留全量历史）
+
+18. **幂等性设计【强制】🆕v4.0**
+    - 资源创建接口（如 `session/start`、`task/create`）必须幂等
+    - 重复调用返回当前状态 + `already_active` 标志，不重复创建资源
+    - 网络重试场景必须设计幂等键或状态检查
+    - **适用**：资源创建接口、网络重试；**不适用**：纯查询接口（天然幂等）、计数器递增（需去重键）
+
+19. **搜索接口标准化【强制】🆕v4.0**
+    - 实时搜索接口统一参数命名：`keyword`/`q`、`page`/`offset`、`page_size`/`limit`
+    - 统一响应结构：`{ items, total, page, page_size }`
+    - 统一防抖间隔（搜索场景默认 400ms，通过配置管理）
+    - `requestId` 竞态保护：每次请求生成 requestId，丢弃过期响应
+    - **适用**：实时搜索（用户输入 + 防抖 + 流式/分页）；**不适用**：主键精确查询、固定条件列表
+
+20. **注释与代码一致性【强制】🆕v4.0**
+    - 注释必须与代码逻辑**严格一致**，禁止误导性注释
+    - 防御性说明需明确标注是"防御性"而非"必需"（如"顺序不影响结果，但保留防御性排列"）
+    - 涉及顺序约束、依赖关系的注释需验证是否真实存在该约束
+    - **历史教训**：注释称"必须在 X 之前判断避免误匹配"，但实际不存在误匹配风险，浪费维护者验证时间
+
+21. **显式样式优于隐式间距【强制】🆕v4.0**
+    - 图标+文字、按钮+文字等内联元素间距用显式 `style={{ marginRight: N }}` 或 `Space` 组件
+    - **禁止**依赖 JSX 空格渲染间距（如 `<Icon /> 文字`），不同框架版本渲染不一致
+    - **适用**：所有内联元素间距场景
+
+22. **IIFE 反模式禁止【强制】🆕v4.0**
+    - JSX 内禁止 IIFE（`{(() => { ... })()}`），提取为组件顶部的变量
+    - JSX 中直接引用变量进行条件渲染（`{var ? <X/> : null}`）
+    - **理由**：提升可读性、避免每次渲染重新创建函数、便于调试
+    - **适用**：所有 JSX 中的条件渲染/计算逻辑；**不适用**：极简三元（`{a ? <X/> : null}` 可直接内联）
+
+23. **会话失效处理与错误粒度区分【强制】🆕v4.1**
+    - **重试失败后状态信号必须传递**：SSE/HTTP 接口包含重试逻辑时，重试代码块结束后必须检查关键状态标志（如 `last_session_invalid`），状态仍异常则推送明确错误事件并 `return`，**禁止**"重试失败但仍走成功流程"误导用户
+    - **错误粒度三类区分**（状态码与文案映射通过 review skill 的 config.yaml 管理）：
+      - `503/504`：稍后重试（网络超时/限流/服务繁忙）
+      - `401/403`：需用户介入（登录失效/权限不足）+ 明确指引"请前往 X 重新登录"
+      - `502`：需重启服务（浏览器断开/TargetClosed）
+    - **Cookie 检查全面性**：依赖多类 Cookie 的接口前置检查必须覆盖所有关键 token（身份 Cookie + 会话 token 如 `_m_h5_tk`），**不能**只检查身份 Cookie 存在性而忽略会话 token 有效性
+    - **对照证据定位法**（问题排查）：用户反馈"业务查不到"但无明确错误时，排查首要步是要求用户提供"相同条件下浏览器直连成功"的对照证据；浏览器直连成功 → 聚焦 Cookie/会话状态，而非网络/代理问题
+    - **适用**：所有含重试逻辑的 SSE/HTTP 接口、依赖多类 Cookie 的接口；**不适用**：一次性请求无重试逻辑、纯 token 认证（JWT）
+    - **历史教训**：实时搜索 RGV587 重试失败后未检查 `last_session_invalid`，继续走 filtering 流程，前端只看到"0 个商品"误以为没货，实际是闲鱼登录态已过期
+
+24. **UI 状态独立性原则【强制】🆕v4.2**
+    - **受控 UI 状态不应自动联动路由变化**：Menu `openKeys`、Tree `expandedKeys`、Collapse `activeKey`、Tabs `activeKey` 等用户手动控制的展开/折叠状态，必须独立于路由，仅在用户主动操作（点击 SubMenu 标题、折叠面板等）时变化
+    - **路由变化只应更新派生状态**：`selectedKeys`（高亮当前项）、breadcrumb（面包屑）、页面标题等派生状态应联动路由，但**不应**改变用户手动控制的 UI 状态
+    - **判断信号**：组件有 `useState` + `useEffect` 依赖 `location.pathname`/`useNavigate` → 检查是否过度联动（`openKeys`/`expandedKeys` 联动路由视为违规）
+    - **修复模式**：`openKeys` 仅在首次挂载时按当前路由初始化（`useState(() => autoOpenKeys)`），之后完全由用户通过 `onOpenChange` 控制，**移除** `useEffect(() => setOpenKeys(autoOpenKeys), [autoOpenKeys])` 联动逻辑
+    - **适用**：Menu `openKeys`、Tree `expandedKeys`、Collapse `activeKey`、Drawer `open` 等用户手动控制的 UI 状态
+    - **不适用**：`selectedKeys`（应联动路由高亮当前项）、breadcrumb（应联动路由）、页面标题（应联动路由）
+    - **历史教训**：MainLayout 的 `openKeys` 通过 `useEffect` 联动 `autoOpenKeys`，sheet 切换触发 `navigate` → URL 变化 → `autoOpenKeys` 重算 → `setOpenKeys` 重置 → SubMenu 展开/折叠动画遮挡内容。第一次修复用"合并"策略仍会展开新 SubMenu，最终改为完全移除 `useEffect` 联动才彻底解决
+
+25. **跨字段一致性校验【强制】🆕v4.3**
+    - 同一实体内多个语义相关联的字段必须在构造时校验一致性，禁止出现矛盾组合
+    - **判断信号**：同一 dataclass/dict/type 中存在语义关联字段对（如 `gpu_vendor`+`gpu_renderer`、`valid`+`written_count`、`layer`+`cookies` 分层定义）
+    - **修复模式**：在 `__post_init__` / 构造函数 / 工厂函数中校验关联字段一致性，不一致时抛 `ValueError`
+    - **适用**：指纹/配置/状态数据结构、Cookie 分层定义、前后端 DTO 字段对齐
+    - **不适用**：独立无关联字段、运行时动态拼装的临时对象
+    - **历史教训**：`fingerprint.py` Profile 2 的 `gpu_vendor="Intel Inc."` 配 `gpu_renderer="AMD Radeon RX 6600"`，真实 Chrome 中应为 `Google Inc. (AMD)`，被 AWSC fireyejs 识破
+
+26. **硬编码属性禁用【强制】🆕v4.3**
+    - 写入外部系统（浏览器 Cookie、HTTP 响应头、数据库列）的属性必须根据数据语义动态设置，**禁止**硬编码固定值
+    - **判断信号**：批量设置属性时使用固定值（如所有 Cookie 强制 `httpOnly:True`）而非从数据派生
+    - **修复模式**：属性值从数据语义派生（如 identity 层 Cookie 的 `httpOnly` 根据 Cookie 名称判断），或通过配置文件管理属性映射
+    - **适用**：Cookie/HTTP 头/数据库列属性、Playwright cookie 对象构造
+    - **不适用**：项目固定常量（如域名、路径前缀）、安全必需的固定值（如 `path: "/"`）
+    - **历史教训**：`cookie_rotator._batch_write` 强制 `httpOnly:True` + `secure:True`，导致 `unb`/`cookie2` 等 JS 可读 Cookie 被设为 httpOnly，页面 JS 读取失败触发闲鱼检测异常
+
+27. **死代码与资源生命周期【强制】🆕v4.3**
+    - 创建的长期存活对象（Proxy/Observer/Listener/Task）必须赋值给有生命周期的变量（实例属性/模块级变量），**禁止**赋值给局部变量后丢弃
+    - `try/finally` 块中使用的变量必须在 `try` 之前初始化为 `None`，确保 `finally` 不会因未绑定而抛 `UnboundLocalError`
+    - **判断信号**：`new Proxy()` / `new MutationObserver()` / `asyncio.create_task()` 的返回值赋值给局部变量；`try` 块内赋值的变量在 `finally` 中被引用
+    - **修复模式**：监听器赋值给实例属性（`self._observer = new MutationObserver(...)`）；资源变量 `page = None` 前置初始化
+    - **适用**：所有需要长期存活的监听器/观察者/后台任务；所有 try/finally 资源清理
+    - **不适用**：一次性使用的临时对象、`with` 语句（自动管理生命周期）
+    - **历史教训**：`awsc_spoof.py` 的 `var baxiaProxy = new Proxy(...)` 赋值给局部变量后从未使用，验证码触发事件永远不会被派发；`api_anticrawl.py` 的 `renew_callback` 中 `page` 变量未初始化，`new_page()` 抛异常时 `finally` 中 `page.close()` 报 `UnboundLocalError`
+
+28. **跨组件状态同步【强制】🆕v4.3**
+    - 多个组件对同一概念（如"会话有效性"、"登录状态"）做判断时，状态变更必须双向同步：
+      - 组件 A 检测到状态变化 → 主动通知组件 B 更新状态
+      - 组件 B 查询状态时 → 额外检查组件 A 的最新状态（而非仅依赖自身缓存）
+    - **判断信号**：两个以上组件各自独立判断"会话有效性"/"登录状态"/"Cookie 有效性"等同一概念
+    - **修复模式**：状态变更方调用 `invalidate_layer()` / `notify()` 通知其他组件；查询方在判断时额外检查其他组件的状态标志（如 `collector.last_session_invalid`）
+    - **适用**：分布式状态、跨层状态同步（如 orchestrator + worker + health_checker 对"会话有效性"的判断）
+    - **不适用**：单组件内部状态、无跨组件依赖的独立判断
+    - **历史教训**：健康检查器检查 Cookie 本地存在性（返回有效），但 worker 通过实际 API 调用检测到 RGV587_ERROR（服务端已注销会话），两者判断维度不同导致"健康检查显示有效但任务自动暂停"的矛盾现象
+
+29. **提示信息可操作性【强制】🆕v4.3**
+    - 面向用户的错误提示中引用的端点/方法/配置项/页面路径必须实际存在，提示应指向可操作的修复路径
+    - **判断信号**：错误信息中包含 URL/方法名/配置项/路由路径引用
+    - **修复模式**：提示中只引用已实现的端点；引用路由路径时确认前端路由已注册；提供具体的修复操作（如"请点击 X 按钮重新初始化"）
+    - **适用**：所有面向用户的错误信息（API 响应、前端错误提示、日志中的用户指引）
+    - **不适用**：内部调试日志（developer-facing）、堆栈跟踪
+    - **历史教训**：`/api/anticrawl/health` 端点提示"请先调用 /api/anticrawl/health/configure"，但该端点从未实现，用户无法按提示操作
+
+30. **加密升级退化策略模式【强制】🆕v4.4**
+    - 依赖外部进程/资源的加密机制（如 Chrome v20 App-Bound Encryption）无法离线解密时，必须选择运行时接管（CDP/IPC）而非等待离线解密方案出现
+    - **判断信号**：加密依赖外部进程状态 + IElevator/COM 接口 + 本地密钥不可访问 + 文档明确标注"App-Bound"
+    - **修复模式**：检测到 v20 加密 → 探测 CDP 端点可达性 → `Playwright.connect_over_cdp()` 接管运行中浏览器 → 通过 `Network.getAllCookies` 获取解密后 cookie
+    - **配置参数**：加密方案识别标志、CDP 端口、降级方案优先级在 `config/encryption.yaml` 的 `encryption_solutions` 节点管理（不硬编码）
+    - **适用**：依赖外部进程的加密（Chrome v20）、DRM 保护机制、需要在线状态验证的场景
+    - **不适用**：可离线解密的加密（v10 AES）、依赖本地密钥的对称加密、静态资源处理
+    - **历史教训**：浏览器 Cookie 导入增强任务中，v20 App-Bound Encryption 无法用传统 `CryptUnprotectData` 离线解密，调研后选择 CDP 接管方案（方案 A）而非 IElevator COM（方案 B）或智能降级（方案 C）
+
+31. **多配置文件发现模式【强制】🆕v4.4**
+    - 发现多个同名配置/profile 时，优先从结构化元数据（如 `Local State` JSON 的 `profile.info_cache`）读取，失败则 fallback 到目录扫描
+    - **判断信号**：需发现多个同名配置/profile + 存在结构化索引文件 + 用户可能使用非默认 profile
+    - **修复模式**：读取 `Local State` → 解析 `profile.info_cache` 字典 → 失败则扫描 `User Data/` 子目录匹配 `Profile *` 模式 → 按优先级排序（有目标 cookie → Default → 名称）
+    - **配置参数**：主数据源路径、fallback 扫描目录、profile 目录正则模式、优先级排序规则在 `config/discovery.yaml` 管理
+    - **适用**：浏览器多 profile 发现、多账户隔离环境、多环境配置加载
+    - **不适用**：单一配置场景、严格顺序访问场景、路径已知且唯一的场景
+    - **历史教训**：用户实际使用 `Profile 1` 而非 `Default`，原实现只读取 `Default` 导致 cookie 导入失败
+
+32. **文件锁绕过模式（SQLite immutable）【强制】🆕v4.4**
+    - 并发访问被锁文件时，使用 SQLite URI `immutable=1` 参数打开只读数据库，绕过 Windows 文件锁机制
+    - **判断信号**：Windows 文件锁报错（`database is locked` / `unable to open database`）+ 只读访问需求 + SQLite 数据库
+    - **修复模式**：构建 URI `file:./Cookies?immutable=1` → 用 `sqlite3.connect(uri=True)` 打开 → 仅执行 SELECT 查询
+    - **配置参数**：`immutable_flag` 默认 `true`，`lock_timeout_ms` 在 `config/database.yaml` 管理
+    - **适用**：浏览器 cookie 数据库并发访问、Windows 文件锁定机制、需要只读访问的共享资源
+    - **不适用**：需要写入的场景、Linux 文件锁（建议用 `flock`）、原子写场景
+    - **历史教训**：浏览器运行时持有 `Cookies` 数据库写锁，传统 `sqlite3.connect()` 打开失败，改用 `immutable=1` 后可并发读取
+
+33. **独立调度器隔离模式【强制】🆕v4.4**
+    - 生命周期/优先级不同的后台任务必须使用独立 APScheduler `BackgroundScheduler`，避免与项目主调度器耦合
+    - **判断信号**：后台任务生命周期与应用主调度器不同 + 共享状态有冲突风险 + 任务优先级不同
+    - **修复模式**：创建独立 `BackgroundScheduler()` → 独立 `add_job()` 注册 → 独立 `start()`/`shutdown()` 钩子 → 不共享 jobstore
+    - **配置参数**：`scheduler_name`、`max_instances`、`coalesce`、`misfire_grace_time` 在 `config/scheduler.yaml` 管理
+    - **适用**：Cookie 同步调度器、健康检查调度器、生命周期不同于主任务调度器的辅助任务
+    - **不适用**：紧耦合任务调度、共享状态访问需求、资源限制环境（内存敏感场景应合并调度器）
+    - **历史教训**：Cookie 同步任务若复用项目主任务调度器，会与采集任务的优先级产生冲突，且 shutdown 时序复杂；独立调度器后生命周期清晰
+
+34. **配置驱动功能开关模式【强制】🆕v4.4**
+    - 高风险/高资源消耗功能默认关闭，需用户显式启用；所有功能参数集中在 `Config` 类（如 `BrowserConfig`），不硬编码
+    - **判断信号**：功能需用户主动选择 + 可能耗资源（CPU/内存/网络） + 多环境部署需求
+    - **修复模式**：`Config` 类新增 `enable_flag: bool = False` + 详细参数字段 → `config.yaml` 暴露开关 → 文档明确启用条件与资源消耗
+    - **配置参数**：`enable_flag` 默认 `false`，详细参数（interval/threshold/port）集中在相应 `Config` 类
+    - **适用**：CDP 在线导入、Cookie 自动同步、向量库重建等高风险/高资源消耗功能
+    - **不适用**：核心功能（必须默认启用）、性能敏感场景（配置加载延迟不可接受）、简单脚本工具
+    - **历史教训**：`auto_sync` 默认 `false`，避免用户不知情下启用自动同步导致浏览器资源被占用；`cdp_port` 通过 `BrowserConfig` 管理而非硬编码
+
+35. **降级链模式【强制】🆕v4.4**
+    - 多重方案按优先级排序，失败后自动降级，3 次失败加倍间隔，最大间隔 2 小时
+    - **判断信号**：多方案优先级明确 + 网络不稳定环境 + 外部依赖不可控
+    - **修复模式**：方案 A 失败 → 尝试方案 B → 方案 B 失败 N 次后触发 backoff（`interval *= 2`，上限 `max_interval`）→ 记录降级原因到日志
+    - **配置参数**：`max_failures=3`、`backoff_multiplier=2`、`max_interval=7200` 在 `config/fallback.yaml` 管理
+    - **适用**：Cookie 同步（offline import → CDP import → backoff）、网络重试、外部 API 调用
+    - **不适用**：单一方案场景、降级后体验差于报错（应直接失败）、关键安全场景（必须 fail-fast）
+    - **历史教训**：Cookie 同步调度器实现 offline import 优先 → CDP import 次之 → backoff 兜底的降级链，3 次失败后间隔加倍避免无意义重试
+
+36. **Chrome 136+ 限制适配模式【强制】🆕v4.4**
+    - Chrome/Edge 136+ 版本使用 `--remote-debugging-port` 时必须配合 `--user-data-dir` 指向非标准目录
+    - **判断信号**：Chrome/Edge 136+ 版本 + 使用 `--remote-debugging-port` 参数 + 浏览器自动化场景
+    - **修复模式**：启动命令同时包含 `--remote-debugging-port=9222` + `--user-data-dir=<unique-path>` → 路径不指向默认 `User Data` 目录
+    - **配置参数**：`user_data_dir` 路径模板（`browser_data/debug_{timestamp}`）、`debug_port` 在 `config/browser.yaml` 管理
+    - **适用**：Chrome/Edge 浏览器自动化、CDP 调试、Playwright `connect_over_cdp`
+    - **不适用**：其他浏览器（Firefox/Safari）、旧版 Chrome（< 136）、不使用 remote-debugging 的场景
+    - **历史教训**：Chrome 136+ 安全限制要求 `--user-data-dir` 指向非标准目录，否则 `--remote-debugging-port` 不生效；使用独立 `Debug` profile 避免污染用户主 profile
+
+37. **Windows 测试环境 Mock 模式【强制】🆕v4.4**
+    - 测试代码中 Windows 环境变量（`LOCALAPPDATA`/`APPDATA`/`USERPROFILE`）必须用 `tmp_path` 正确 mock，路径结构需与实现一致
+    - **判断信号**：测试涉及 Windows 文件系统路径 + 使用环境变量 + 实现依赖 `Path(LOCALAPPDATA)` 等构造路径
+    - **修复模式**：`monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))` → 测试 fixture 创建 `tmp_path / "Microsoft" / "Edge" / "User Data"` 完整路径结构 → 与实现路径完全对齐
+    - **配置参数**：测试 fixture 路径模板、环境变量映射在 `tests/conftest.py` 管理
+    - **适用**：Windows 文件系统路径测试、浏览器 profile 发现测试、配置文件加载测试
+    - **不适用**：Linux/Mac 路径测试、不涉及环境变量的路径测试、纯函数测试
+    - **历史教训**：测试代码创建 `tmp_path / "Edge" / "User Data"` 但实现用 `Path(LOCALAPPDATA) / "Microsoft" / "Edge" / "User Data"`，路径结构不一致导致测试失败；调整测试 fixture 路径结构对齐实现后通过
+
+38. **第三方插件依赖预检模式【强制】🆕v4.4**
+    - 使用 pytest 插件（如 `pytest-timeout`）前必须验证项目已安装，避免运行时报错；插件依赖列表需在 `pyproject.toml` 显式声明
+    - **判断信号**：使用 pytest 命令行参数（如 `--timeout`）+ 依赖第三方插件 + 未在 `pyproject.toml` 声明
+    - **修复模式**：`pyproject.toml` `[tool.pytest.ini_options]` 显式声明 `addopts` + `requirements-dev.txt` 列出插件依赖 → 运行前用 `pytest --version` + 插件检查脚本验证
+    - **配置参数**：插件依赖列表在 `pyproject.toml` 管理，预检脚本在 `scripts/check-deps.ps1`
+    - **适用**：所有 pytest 插件依赖（`pytest-timeout`/`pytest-cov`/`pytest-asyncio`）、 tox/nox 多环境测试
+    - **不适用**：pytest 内置功能（无需预检）、CI 环境固定镜像（依赖明确）
+    - **历史教训**：使用 `pytest --timeout=60` 报错 `unrecognized arguments`，项目未安装 `pytest-timeout` 插件；移除 `--timeout` 标志后通过，但应预检插件依赖
+
+### 第三阶段：验证与交付
+
+1. **类型检查**
+   - 后端：`mypy` 未启用，依赖 Pydantic 运行时校验
+   - 前端：`cd frontend; npx tsc -b`（构建前强制类型检查）
+
+2. **测试执行**
+   - 后端：`pytest tests/`（asyncio_mode=auto 自动识别 async 测试）
+   - 前端：`cd frontend; npx vitest run`
+
+3. **代码审查**
+   - 前端代码审查：调用 `xianyu-frontend-code-review` Skill
+   - 后端代码审查：调用 `xianyu-backend-code-review` Skill
+   - SonarQube 扫描：调用 `xianyu-sonarqube-mcp` Skill
+
+4. **常见问题排查**
+   - 遇到问题先查阅 [faq.md](references/faq.md)
+   - 涉及架构疑问查阅 [architecture-patterns.md](references/architecture-patterns.md)
+   - 涉及反爬/登录/Cookie 链路，参考 `xianyu-automation-startserver` Skill 与 `docs/04-系统维护/反爬登录管理-详细设计.md`
+
+### 第四阶段：Git 操作规范与 Bug 修复
+
+1. **合并前检查【强制】**
+   - 检查 `.git/index.lock` 是否残留（失败 git 操作可能留下锁文件导致后续操作全失败）
+   - 检查工作区是否干净（有 modified 文件时先 stash）
+   - 检查当前分支是否正确（`git branch --show-current`）
+   - 检查是否有产物文件被 git track（`.scannerwork/`、`__pycache__/` 等）
+
+2. **产物文件清理【强制】**
+   - `.scannerwork/`、`node_modules/`、`dist/`、`__pycache__/` 等产物不应被 git track
+   - 发现已被 track 时用 `git rm -r --cached <dir>` 清理（不删除工作区文件）
+   - 确认 `.gitignore` 已包含对应路径
+   - 清理后提交独立的 chore commit，再进行合并
+
+3. **stash 操作注意事项**
+   - stash 前确认无大目录（如 `.scannerwork/`）被 modified，避免权限问题导致 stash 失败
+   - stash 失败后必须检查 `.git/index.lock` 是否残留
+   - PowerShell 中 `stash@{0}` 必须加引号：`git stash pop 'stash@{0}'`（避免哈希表解析错误）
+
+4. **.git 目录操作**
+   - PowerShell 和 `cmd /c` 可能被安全策略阻止操作 `.git` 目录
+   - 替代方案：用 Python `os.remove()` 删除 `.git` 下文件，或用 git 命令本身操作
+   - 示例：`python -c "import os; os.remove('.git/index.lock')"`
+
+5. **冲突解决原则**
+   - 保留更新版本（如 main 的 `await` 异步版本优于 feat 的同步版本）
+   - 同一功能两分支都有修改时，选择语义更完整的版本
+   - cherry-pick 后的合并冲突：main 已有 cherry-pick 的改动，feat 有原始改动，保留 main 版本
+
+6. **Bug 修复流程【强制】**
+   - **根因定位**：读取相关文件 → 追踪数据流 → 定位最小修改点
+   - **最小修改**：只修改必要的部分，不顺便重构（遵循精确编辑原则）
+   - **验证策略**：`tsc --noEmit` 验证类型 → 运行专项测试 → 必要时手动验证
+   - **状态一致性检查**：修复状态管理 bug 时，检查操作是否同步更新所有相关状态字段
+
+7. **测试环境兼容性**
+   - Node v24 + vitest 4.x 存在 worker 启动超时问题，测试命令必须加 `--no-isolate`
+   - antd 组件（Drawer/Grid/Skeleton）在 jsdom 中需要 `window.matchMedia` mock
+   - vitest 卡在 RUN 阶段时，用 `tsc --noEmit` 作为类型验证的备选手段
+   - 测试命令示例：`node node_modules/vitest/vitest.mjs run --no-isolate <test-file>`
+
+39. **错误提示语义准确性【强制】🆕v4.5**
+    - 面向用户的错误提示必须与实际错误原因语义匹配，**禁止**将特定错误码映射为不相关的语义
+    - **判断信号**：后端将特定错误码（如 RGV587）映射为 HTTP 状态码时，状态码语义必须与错误码根因一致
+    - **修复模式**：错误码根因分析 → 选择语义匹配的状态码 → 提示文案与根因一致 → 提供正确的操作出口（"稍后重试" vs "重新登录"）
+    - **适用**：所有面向用户的错误提示（API 响应 detail、前端 Alert、SSE error 事件）
+    - **不适用**：内部调试日志、堆栈跟踪（developer-facing）
+    - **历史教训**：RGV587 是 mtop API 的 `_m_h5_tk` 临时 token 过期（TTL 1 小时），不是浏览器 Cookie/登录态失效，但后端映射为 HTTP 401("闲鱼登录已过期")，前端显示"Cookie 失效或会话过期"。实际多查几次能成功——说明不是登录态失效。修复后提示改为"搜索令牌临时过期，请稍后重试"
+
+40. **配置全链路生效验证【强制】🆕v4.5**
+    - 配置项从定义到消费必须全链路追踪，**禁止**只注入到中间层就认为生效
+    - **判断信号**：`config.yaml` 新增字段 → Config 类有字段 → TaskConfig 注入 → 但 Worker/Module/方法参数中从未读取 `self.config.xxx` → 配置无效
+    - **检查方法**：grep 每个配置项的字段名，确认从定义到最终消费点（URL 构建方法、SQL 查询、阈值比较）都有读取代码
+    - **适用**：所有配置项（搜索参数、阈值、间隔、开关），尤其是新增配置项后
+    - **不适用**：编译期常量、安全固定值（如 `path: "/"`）
+    - **历史教训**：`search_sort_type` 和 `search_regions` 在 `startup.py` 注入到 TaskConfig，但 `worker.py` 和 `_search.py` 从未读取 `self.config.search_sort_type`，`build_search_url` 也不支持 sort_type 参数。用户在配置页设置了排序方式但搜索 URL 中从不包含 `&sortType=...` 参数
+
+41. **快速模式降级重试【强制】🆕v4.5**
+    - `fast=True` 模式跳过恢复机制（token 刷新、RGV587 重试）时，调用方应在 fast 失败后自动以非 fast 模式重试一次
+    - **判断信号**：方法签名含 `fast=True` 参数且 fast 模式跳过 `_ensure_fresh_*` / `*_retry` 逻辑 → 调用方必须检查 fast 返回结果的状态标志，失败时降级重试
+    - **修复模式**：`fast=True` 返回空结果且状态标志（如 `last_session_invalid=True`）指示可恢复 → 自动以 `fast=False` 重试 → 重试成功则正常返回结果，失败才报错 → 重试超时应放宽以容纳 token 刷新 + 搜索
+    - **配置参数**：降级重试超时（默认 45s，含 token 刷新 ~15s + 搜索 ~30s）在 `config.yaml` 的 `search` 节点管理
+    - **适用**：所有 fast/quick 模式接口（跳过恢复机制的快速路径），尤其是实时搜索、快速预览
+    - **不适用**：纯查询接口（无副作用）、实时性要求极高的接口（如心跳检测）、重试成本过高的操作
+    - **历史教训**：实时搜索用 `fast=True` 完全跳过 `_ensure_fresh_m5tk()` 和 RGV587 重试，刚登录后第一次搜索碰巧 token 有效成功，后续连续请求时 token 过期全部失败。修复后 `live_links` 端点在 fast 搜索返回空结果且 `last_session_invalid=True` 时自动以 `fast=False` 重试一次
+
+42. **硬编码阈值禁用【强制】🆕v4.5**
+    - 调度器/任务循环中的阈值参数必须从配置读取，**禁止**用硬编码常量替代已有配置项
+    - **判断信号**：代码中存在 `MAX_XXX = N` 硬编码常量，且 `config.yaml` 中已有对应的配置项 → 必须改为读取配置
+    - **修复模式**：`try: from infra.yaml_config import get_config; threshold = get_config().<section>.<field> except: threshold = <default>`
+    - **适用**：所有业务阈值（失败重试次数、超时时间、间隔时间、并发数），尤其是已有对应配置项的场景
+    - **不适用**：语言/框架级常量（如 HTTP 200）、数学常量、协议固定值
+    - **历史教训**：Scheduler 用硬编码 `MAX_CONSECUTIVE_ERRORS = 10` 控制连续失败暂停，但 `config.yaml` 的 `antidetect.fail_pause_threshold = 3`。用户设置了失败 3 次后暂停，实际要失败 10 次才暂停
+
+43. **参数透传链路完整性【强制】🆕v4.5**
+    - 方法签名新增参数时，必须同步更新所有内部调用点传递该参数，**禁止**只在外层方法签名添加而内部调用点遗漏
+    - **判断信号**：`git diff` 显示方法签名新增参数 → 必须 grep 方法名检查所有调用点（包括内部 `_private` 方法的调用）是否传递新参数
+    - **检查方法**：从方法签名 → 内部调用 `_call_xxx(new_param=new_param)` → 内部调用 `build_url(new_param=new_param)` → 最终 URL 查询参数追加，逐层验证
+    - **适用**：方法签名新增参数后的所有内部调用点，尤其是跨层参数传递（API → Module → Domain → URL Builder）
+    - **不适用**：向后兼容的可选参数（有默认值且不影响现有行为）
+    - **历史教训**：`search()` 方法新增 `sort_type`/`regions` 参数后，`_call_search_api()` 内部第 470 行 `build_search_url(keyword)` 未传 `sort_type`/`regions`，导致 RGV587 重试时 URL 中丢失排序和地区参数。`build_search_url` 本身也不支持这两个参数
+
+44. **多源状态同步统一入口【强制】🆕v4.6**
+    - 同一份状态（如 Cookie 层状态、用户登录态、连接池状态）有 ≥ 2 个写入入口时，必须建立**统一同步入口函数**（如 `sync_cookie_layers_from_json()`），在所有写入路径写完后主动调用
+    - **判断信号**：核心状态依赖外部存储（JSON / SQLite / 浏览器内存 / 远程 API），但内存层状态只在某个入口被同步 → 出现"实际有数据但显示失效"的脱节现象
+    - **修复模式**：识别所有写入路径（登录 / 注入 / 导入 / 工具刷新）→ 抽取 `sync_xxx_from_<主数据源>()` 公共函数 → 在每个写入路径的成功分支主动调用 → 同步逻辑必须重新读主数据源（而非用调用方传入的列表），避免过滤逻辑不一致
+    - **关键约束**：禁止依赖某个回调（如 `on_login_success`）自动触发而无任何调用方——必须显式调用
+    - **适用**：状态分布在多个存储介质（JSON / SQLite / 浏览器 / 内存）且需保持显示一致；多入口写入同一份状态
+    - **不适用**：单一写入入口、状态天然同步（无中间层缓存）、纯计算型状态
+    - **历史教训**：`CookieRotator` 的 `on_login_success` 钩子函数被定义后从未被任何调用方触发，导致 5 个登录路径（`browser_login` / `auth_helper` / `cookie_inject` / `browser_import` / `qr_login`）都绕过层状态更新，登录后 `/cookies/layers` 端点始终显示三层失效但功能完全正常
+
+45. **状态条件区分"从未初始化"与"主动失效"【强制】🆕v4.6**
+    - 当状态字段有"从未初始化 / 已初始化 / 主动失效"三种语义时，**禁止**用 `not state.valid` 笼统判断"该同步了"——必须用 `state.updated_at == 0.0` 区分"从未初始化"和"主动失效后"
+    - **判断信号**：状态对象有 `valid` + `updated_at` 两个字段 + 存在"主动失效"语义（如 `invalidate_layer()` 显式置 `valid=False` 但保留 `updated_at`）→ 用 `not valid` 会覆盖手动失效状态
+    - **修复模式**：
+      - **从未初始化**（`updated_at == 0.0`）：可主动补救同步（读主数据源、读浏览器内存兜底）
+      - **主动失效**（`updated_at > 0.0 and not valid`）：保留状态不覆盖（用户/系统已显式标记失效）
+      - **已初始化有效**（`updated_at > 0.0 and valid`）：正常返回
+    - **适用**：所有"状态机 + 主动失效"语义的场景（Cookie 层状态、用户会话状态、健康检查状态）
+    - **不适用**：纯二元状态（有效/无效）、无"主动失效"语义的简单标志位
+    - **历史教训**：`cookie_checker` 健康检查器用 `not identity_state.valid` 作为"需要同步"的判断条件，导致 collector 检测到 RGV587 主动失效 identity 层后，cookie_checker 在下次 tick 立即从 JSON 重新同步覆盖失效状态，造成"自动失效永远不生效"的死循环
+
+46. **浏览器内存兜底同步模式【强制】🆕v4.6**
+    - 当主数据源（JSON）可能与运行时状态（浏览器内存、内存缓存）脱节时，状态查询端点必须实现**两步同步**：第一步从主数据源同步；第一步后仍有状态未恢复时，从运行时载体读取作为兜底
+    - **判断信号**：主数据源 + 运行时载体共存 + 某些字段（如 MTOP token）只在运行时载体更新（被外部进程 `Set-Cookie`） + 状态查询可能因为 JSON 过期而误报失效
+    - **修复模式**：
+      1. **第一步（主数据源同步）**：从 JSON 读取、过滤过期、构造 cookie_map、调用 `sync_state_from_cookies()`
+      2. **第二步（兜底同步）**：检查仍有 `updated_at==0.0` 的层 → 从 `browser.context.cookies()` 读取对应域 → 重新构造 cookie_map → 同步 → 回写主数据源（避免下次再走兜底）
+    - **回写策略**：用 `upsert`（更新 + 添加）而非 `update`（只更新已存在），因 JSON 中可能完全不存在该 cookie 条目
+    - **配置参数**：兜底同步开关、读取的 cookie 域列表、回写白名单在 `config/cookie_fallback.yaml` 管理
+    - **适用**：浏览器 Cookie 多源持久化、CDP/Playwright 抓取场景、外部进程状态回写
+    - **不适用**：无运行时载体的纯文件存储、有强一致要求的场景（应直接报错而非兜底）
+    - **历史教训**：`_m_h5_tk` 等 session token 在 MTOP 响应中被 `Set-Cookie` 写入浏览器内存，但 `_sync_response_cookies_to_context` 只调 `add_cookies` 不回写 JSON。重启后浏览器从 JSON 加载旧 token 失败，但功能靠浏览器内存正常工作。`/cookies/layers` 端点增加浏览器内存兜底同步 + 回写 JSON 后彻底解决
+
+47. **Update vs Upsert 语义区分【强制】🆕v4.6**
+    - 持久化层（CookieStore / Repository）必须明确区分"Update"和"Upsert"两类操作，**禁止**用一个方法兼顾两种语义
+    - **判断信号**：函数命名含 `update` 但实际行为是"更新或新增"，或反之 → 维护者无法从命名判断行为
+    - **修复模式**：
+      - **`update_cookie_values(updates)`**：只更新已存在的 cookie（name 在 JSON 中存在 → 替换 value；不存在 → 跳过）。用于 token 刷新场景
+      - **`upsert_cookie_values(upserts)`**：更新已存在 + 添加不存在（name 在 JSON 中存在 → 替换 value；不存在 → 追加新条目）。用于浏览器兜底回写场景
+    - **关键约束**：upsert 必须携带完整属性（`value`/`domain`/`path`/`expires`），不能只传 value 因为新条目需要完整字段
+    - **并发安全**：读-改-写必须在 `self._lock`（`RLock`）内完成，避免与并发 `export_cookies` 交错导致数据丢失
+    - **元数据保护**：方法标签（如 `data["method"]`）必须用 `if "mtop_refresh" not in existing_method: data["method"] = existing_method + "+mtop_refresh"` 避免无限追加
+    - **适用**：所有持久化层的数据合并操作（Cookie / 缓存 / 索引）
+    - **不适用**：纯 add-only 日志、纯 replace 全量覆盖
+    - **历史教训**：MTOP 刷新 `_m_h5_tk` 时若用 `update_*` 但 JSON 中没有该条目 → 静默丢失；反之若用 `upsert_*` 但 JSON 中已有 → 字段被覆盖（如 `expires`）→ 下次过滤过期逻辑失效
+
+48. **写后钩子（Post-Write Hook）规范【强制】🆕v4.6**
+    - 所有"写主数据源 + 同步派生状态"的操作必须实现**显式写后钩子**——禁止依赖隐式回调、事件总线自动触发、定时器轮询
+    - **判断信号**：派生状态（缓存 / 索引 / 内存模型）需要与主数据源保持一致，但代码中只在某个特定入口同步 → 其他写入路径遗漏
+    - **修复模式**：
+      - 在每个写入路径的成功分支（`if json_written: ...`）添加显式调用
+      - 钩子函数应**幂等**：可重复调用而不会产生副作用
+      - 钩子失败必须**仅记录日志不抛异常**：派生状态同步失败不能阻断主写入
+      - 钩子逻辑应**重新读主数据源**而非用调用方传入的列表（避免过滤逻辑不一致）
+    - **典型实现**：
+      ```python
+      if json_written:
+          try:
+              sync_cookie_layers_from_json()
+          except Exception as e:
+              logger.debug("写后钩子失败（不影响主流程）: %s", e)
+      ```
+    - **适用**：所有"写后需要同步派生状态"的场景（Cookie 状态机、缓存失效、索引重建、计数器重置）
+    - **不适用**：单写入入口且无派生状态、性能敏感场景（钩子开销不可接受）
+    - **历史教训**：登录路径写 JSON 后没有任何钩子触发 `CookieRotator.sync_state_from_cookies()`，导致层状态永远停留在 `valid=False, updated_at=0.0`，`/cookies/layers` 显示三层全部失效
+
+49. **死代码检测与清理【强制】🆕v4.6**
+    - 业务流程中**未在任何调用点被触发的函数/方法**必须在每次大版本（v4.x → v4.x+1）时主动检测并清理
+    - **判断信号**：
+      - 函数被定义（如 `def on_login_success(self): ...`）但 `grep -rn "on_login_success" src/` 找不到任何调用
+      - 事件订阅被注册但 `grep` 不到发布者
+      - 抽象方法被子类实现但从未被子类外部调用
+    - **检测方法**：
+      1. `git log -p --all -S "<function_name>"` 查看该函数的所有历史变更
+      2. `grep -rn "<function_name>" src/ tests/` 确认无任何调用方
+      3. 在 PR/Commit 描述中显式标注"删除死代码 X"
+    - **修复模式**：
+      - **找到调用方**：恢复调用路径（适合误删调用方导致的死代码）
+      - **改写为入口函数**：将死代码改写为"统一同步入口"（如 `on_login_success` 改写为 `sync_cookie_layers_from_json`）
+      - **直接删除**：无任何依赖时直接删除
+    - **适用**：所有"定义即遗忘"的函数/回调/事件订阅/类方法
+    - **不适用**：保留作为 API 接口的方法（即便未被内部调用）、测试 fixture、抽象基类
+    - **历史教训**：`CookieRotator.on_login_success` 方法被定义后从未被任何登录路径调用，"逻辑上应该被触发"但实际是死代码，导致登录后层状态永远不更新
+
+50. **异步操作整体超时保护【强制】🆕v4.7**
+    - 所有 `await` 调用外部资源（浏览器自动化、HTTP 客户端、IO 操作、远程 API）的异步操作，必须在**调用层**用 `asyncio.wait_for(coro, timeout=N)` 包装整体超时，超时后返回语义化状态码（如 504 网关超时），禁止依赖被调用方内部 timeout 参数
+    - **判断信号**：代码含 `await container.<module>.<method>(...)` / `await client.<method>(...)` / `await page.<method>(...)` 调用外部资源 → 必须检查是否被 `asyncio.wait_for` 包裹；被调用方内部 `timeout` 参数不视为整体超时保护
+    - **修复模式**：
+      ```python
+      try:
+          detail = await asyncio.wait_for(
+              container.collector.detail(item_id), timeout=60.0
+          )
+      except asyncio.TimeoutError:
+          logger.warning("[RefreshItem] 采集超时 item=%s（%ss），外部资源可能异常", item_id, timeout)
+          raise HTTPException(status_code=504, detail="采集超时：外部资源异常或被反爬拦截，请稍后重试")
+      except Exception as e:
+          logger.warning("[RefreshItem] 采集失败 item=%s: %s", item_id, e)
+          raise HTTPException(status_code=502, detail=f"采集失败：{e}")
+      ```
+    - **关键约束**：
+      - 超时时间必须从配置读取（`config.async_timeout.<operation>_seconds`），**禁止**硬编码
+      - 超时后必须返回明确状态码（504=超时、502=失败、503=稍后重试），便于前端按状态码分类处理
+      - 超时日志必须记录操作类型 + 资源 ID + 超时秒数，便于排查
+      - `asyncio.CancelledError` 不应被 `wait_for` 的 `TimeoutError` 吞掉，应单独传播
+    - **配置参数**：`timeout_seconds`（默认 60）、`max_retries`（默认 0=不重试）、`status_code_mapping`（超时→504、失败→502）在 `config.yaml` 的 `async_timeout` 节点管理
+    - **适用**：所有 `await` 外部资源的异步操作（浏览器自动化、HTTP 请求、远程 API、IO 操作、子进程调用）
+    - **不适用**：有内建 timeout 的 HTTP 客户端（`httpx.Timeout` 已配置）、纯计算函数、`asyncio.CancelledError` 传播路径、有重试机制（如 tenacity）包裹的场景
+    - **历史教训**：`refresh_item` 调用 `collector.detail(item_id)` 时，`page.query_selector` 无 `timeout` 参数，闲鱼反爬 RGV587 拦截后浏览器实例异常导致 `query_selector` 无限挂起，前端 90 秒后客户端超时无任何错误提示。修复后 `refresh_item` 加 `asyncio.wait_for(..., timeout=60.0)` + 504 响应，14.4 秒返回明确错误
+
+51. **异步操作用户反馈三态【强制】🆕v4.7**
+    - 前端所有异步操作（按钮点击触发 API、表单提交、数据刷新）必须实现 **loading（进行中）→ success（成功）→ error（失败）** 三态用户反馈，**禁止** `.catch(() => {})` 静默吞错误
+    - **判断信号**：代码含 `.then(...).catch(() => {})` 空 catch / `try { await api() } catch {}` 空 catch / 异步操作无 loading 状态 → 视为违规
+    - **修复模式**：
+      ```typescript
+      const onAction = (id: string) => {
+        const hide = message.loading(`正在处理 ${id.slice(0, 8)}...`, 0)
+        api.execute(id).then(() => {
+          hide()
+          message.success(`已处理：${id.slice(0, 8)}...`)
+          refresh()
+        }).catch((err: unknown) => {
+          hide()
+          const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+          message.error(detail || `处理失败：${id.slice(0, 8)}...，请稍后重试`)
+        })
+      }
+      ```
+    - **关键约束**：
+      - `message.loading` 必须返回 `hide` 函数，在 `then` 和 `catch` 分支都调用 `hide()`
+      - 错误提示必须从 `err.response.data.detail` 提取后端返回的具体错误（与后端错误语义对齐，参考 F-REVIEW-ERROR-SEMANTICS），**禁止**只显示通用"操作失败"
+      - loading 文案必须包含资源标识（如 ID 前 8 位），让用户知道在处理什么
+      - 操作成功后必须触发数据刷新（`refresh()` / `refetch()`），让用户看到结果
+    - **配置参数**：`loading_template`（如"正在处理 {id}..."）、`success_template`（如"已处理：{id}..."）、`error_template`（如"处理失败：{id}...，请稍后重试"）、`id_display_length`（默认 8）在 `config.yaml` 的 `async_feedback` 节点管理
+    - **适用**：所有用户主动触发的异步操作（按钮点击、表单提交、链接点击触发 API）
+    - **不适用**：后台静默刷新（如 SSE 推送、定时轮询）、页面初始化加载（用 Skeleton/Spin）、开发环境调试
+    - **历史教训**：评估明细页点击商品标题超链接触发 `itemApi.refresh(itemId)`，前端 `.catch(() => {})` 静默吞错误，用户点击后无任何反馈，不知道采集是否成功。修复后加 `message.loading` + `message.success` + `message.error` 三态反馈
+
+52. **数据流转完整性 5 点追踪【强制】🆕v4.7**
+    - 用户反馈"某字段为空/显示异常"类问题时，必须按 **DB schema → Repo 查询过滤 → API 注入 → 前端 types → render 取值** 5 点逐层追踪根因，**禁止**只看前端代码或只查后端代码
+    - **判断信号**：用户反馈"字段为空/数据丢失/显示异常" → 必须从 DB 原始数据开始逐层验证，每层都打印中间值
+    - **追踪流程**：
+      1. **DB schema**：用 `sqlite3` / DB 客户端查询原始数据，确认数据是否存在（如 `SELECT * FROM orders WHERE item_id = ?`）
+      2. **Repo 查询过滤**：检查 Repo 层查询是否有 `WHERE`/`if status == 'failed': continue` 等过滤逻辑，确认数据是否被过滤
+      3. **API 注入**：检查 API 路由层是否正确调用 Repo 并将数据注入响应（如 `order_map = container.repo.list_orders_by_item_ids(ids, include_failed=True)`）
+      4. **前端 types**：检查 `frontend/src/api/types.ts` 中类型定义是否包含该字段（如 `order_status?: string`）
+      5. **render 取值**：检查前端组件是否正确从响应中取值并渲染（如 `record.order?.status || '—'`）
+    - **关键约束**：
+      - 5 点必须**逐层验证**，不能跳过任何一层
+      - 每层验证必须**打印中间值**（如 `print(order_map)` / `console.log(record.order)`），不能凭推断
+      - 找到根因后必须**修复根因**而非绕过（如 Repo 过滤逻辑错误应修 Repo，而非 API 层重新查询）
+      - 修复后必须**回归测试**覆盖该场景（如新增 `test_list_orders_by_item_ids_failed_filter`）
+    - **配置参数**：`trace_nodes`（5 个节点的标识）、`required_fields`（必检字段列表）、`null_value_check`（是否检查 null 值）在 `config.yaml` 的 `data_flow_trace` 节点管理
+    - **适用**：所有"字段为空/显示异常/数据丢失"类根因定位，尤其是涉及前后端多层的字段
+    - **不适用**：UI 样式问题（如颜色/布局错误）、纯前端计算字段（如 `total = price * quantity`）、权限不足导致字段隐藏
+    - **历史教训**：评估明细页"订单"列显示 "—"，根因是 `repo_orders.list_orders_by_item_ids` 无条件 `if status == 'failed': continue`，但 API 层评估明细调用未传 `include_failed=True`。数据库中实际有 3 条 failed 订单，但全部被 Repo 层过滤。修复后 API 返回 `order_status=failed`（之前为 `null`）
+
+53. **过滤逻辑场景区分【强制】🆕v4.7**
+    - 同一查询函数被多个场景复用时，过滤逻辑必须**参数化场景标志**（如 `include_failed` / `include_deleted` / `scope`），调用方按使用场景传值，**禁止**一刀切过滤导致展示页看不到完整数据
+    - **判断信号**：函数命名含 `list_*` / `get_*` / `query_*` 且 grep 多个调用点 → 检查过滤逻辑是否硬编码（如 `if status == 'failed': continue`）→ 必须改为参数化
+    - **修复模式**：
+      ```python
+      def list_orders_by_item_ids(
+          self, item_ids: list[str], include_failed: bool = False
+      ) -> dict[str, dict]:
+          """批量查询多个商品的最新订单状态
+
+          include_failed 控制是否包含 failed 订单：
+          - False（默认）：跳过 failed 订单，用于「是否允许重新抢单」判断
+          - True：保留 failed 订单，用于评估明细展示完整订单历史
+          """
+          if not item_ids:
+              return {}
+          result: dict[str, dict] = {}
+          with self.engine.connect() as conn:
+              stmt = (
+                  select(OrderRow)
+                  .where(OrderRow.item_id.in_(item_ids))
+                  .order_by(OrderRow.created_at.desc())
+              )
+              for row in conn.execute(stmt).all():
+                  order = self._row_to_dict(row)
+                  iid = order.get("item_id")
+                  if not iid or iid in result:
+                      continue
+                  if not include_failed and order.get("status") == "failed":
+                      continue
+                  result[iid] = order
+          return result
+      ```
+    - **关键约束**：
+      - 场景标志必须**默认安全**（`include_failed=False` 默认跳过失败，避免影响现有逻辑）
+      - 函数 docstring 必须说明**两种场景**的用途（操作判断 vs 展示历史）
+      - 调用方必须**显式传值**（如 `include_failed=True`），不依赖默认值
+      - 必须新增**回归测试**覆盖两种场景（参考 `test_list_orders_by_item_ids_failed_filter`）
+    - **配置参数**：`scenario_flag_field`（默认 `include_failed`）、`status_whitelist`（默认 `['succeeded', 'pending']`）、`multi_scene_callsites`（多场景调用点列表）在 `config.yaml` 的 `filter_scenario` 节点管理
+    - **适用**：同一查询被"操作判断"与"展示历史"两种场景复用，尤其是订单/任务/日志类查询
+    - **不适用**：单一场景的查询（如报表统计只看成功）、有独立 Repo 方法的查询、权限过滤（应单独抽取）
+    - **历史教训**：`list_orders_by_item_ids` 无条件 `if status == 'failed': continue`，导致评估明细页看不到失败订单记录，用户点击抢单失败后刷新页面看到 "—"，误以为没下过单而反复触发抢单。修复后增加 `include_failed` 参数，评估明细调用传 `True`
+
+54. **复用既有模式原则【强制】🆕v4.7**
+    - 新增功能前必须先 `grep` 项目内相似实现，复用既有 helper / 工具函数 / 模式（如 `_utcnow` / `_escape_like` / `hmac.compare_digest` / `asyncio.wait_for` / `logger.warning`），**禁止**重复造轮子或实现已有模式的变体
+    - **判断信号**：新增函数 + `grep` 发现已有相似命名/相似参数/相似功能的函数 → 必须复用而非重复实现；新增异步操作未复用 `asyncio.wait_for` 模式 → 视为违规
+    - **修复模式**：
+      1. **搜索阶段**：`grep -rn "<相似关键词>" src/ frontend/src/` 查找已有实现
+      2. **评估阶段**：对比新增函数与已有函数的差异，判断是否可复用（参数差异 / 返回值差异 / 副作用差异）
+      3. **复用阶段**：直接调用已有函数 / 抽取公共部分为 helper / 在已有函数上增加参数
+      4. **文档阶段**：在新增函数 docstring 中说明"为什么不复用 X"（如适用）
+    - **关键约束**：
+      - 复用优先级：**项目内 helper > 标准库 > 第三方库 > 新实现**
+      - 复用必须**保持一致性**：调用方式、参数命名、返回值格式与已有函数一致
+      - 若已有函数不完全满足需求，应**扩展已有函数**而非新建（参考 step 53 参数化场景标志）
+      - 必须复用的常见模式：`asyncio.wait_for`（异步超时）、`hmac.compare_digest`（凭据比较）、`_escape_like`（SQL LIKE 转义）、`_utcnow`（UTC 时间）、`logger.warning`（告警日志）
+    - **配置参数**：`search_keywords`（必须搜索的关键词列表）、`similarity_threshold`（默认 0.7，相似度高于此值时强制复用）、`reuse_priority`（复用优先级顺序）在 `config.yaml` 的 `reuse_pattern` 节点管理
+    - **适用**：所有新增功能 / 工具函数 / 帮助类 / 异步操作 / 安全相关代码
+    - **不适用**：业务完全独立的全新功能、性能优化重写、技术债清理重构
+    - **历史教训**：`refresh_item` 直接 `await collector.detail()` 而未复用 v4.4 的 fast 模式重试机制（`fast=False` 重试一次），也未加 `asyncio.wait_for` 整体超时（step 50 规范），导致浏览器异常时无限挂起。修复时复用 `asyncio.wait_for` 模式 + 504 状态码（与 v4.1 错误粒度三类区分一致）
+
+55. **AntD 主题 token 动态覆盖模式【强制】🆕v4.8**
+    - 项目支持暗色主题（`theme.darkAlgorithm`）时，任何在 `baseTheme.components.<Component>.<token>` 中**显式指定**的主题相关 token（token 名含 `Color` / `Bg` / `Border` / `Hover` / `Active` / `Focus` 后缀）必须根据 `isDark` 状态在能读取 `useTheme()` 的组件（通常是 `ThemedRoot`）内**动态覆盖**，**禁止**依赖 `darkAlgorithm` 自动重算或 `index.css` 中的 `--ant-*` CSS 变量
+    - **判断信号**：项目使用 AntD 5.x + 配置 `algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm` + `baseTheme.components.<Component>.<token>` 显式指定了主题相关 token → 必须检查该 token 是否在 `ThemedRoot` 内根据 `isDark` 动态覆盖
+    - **核心机制**（必须理解）：
+      - antd v5 的 `darkAlgorithm` **仅重算未指定的 token**，显式指定的 token 会被原样继承 → 这是 `baseTheme` 中显式指定的亮色值在暗色主题下失效的根因
+      - antd v5 的 `cssVar` 模式**默认未启用**，手动在 `index.css` 中写的 `--ant-*` CSS 变量不被组件引用，是死代码 → 不能依赖 CSS 变量覆盖 token，必须改 `ConfigProvider`
+    - **修复模式**（在 `ThemedRoot` 内 spread `baseTheme` 后动态覆盖）：
+      ```typescript
+      function ThemedRoot() {
+        const { isDark } = useTheme()
+        return (
+          <ConfigProvider
+            theme={{
+              ...baseTheme,
+              algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
+              components: {
+                ...baseTheme.components,
+                Table: {
+                  ...baseTheme.components.Table,
+                  // darkAlgorithm 不会重算显式指定的 token，故必须在此处动态覆盖
+                  // 暗色用品牌色淡橙透明叠加，与卡片背景 #1f1f1f 形成明显对比且与亮色 #fff7f0 调性一致
+                  rowHoverBg: isDark ? 'rgba(255, 98, 0, 0.08)' : '#fff7f0',
+                },
+              },
+            }}
+          >
+            <BrowserRouter basename="/app">
+              <App />
+            </BrowserRouter>
+          </ConfigProvider>
+        )
+      }
+      ```
+    - **暗色值选择原则**（与品牌色 `#FF6200` 保持视觉一致性）：
+      - `Hover` / `Active` 状态色：优先用「品牌色 + 低透明度」叠加（如 `rgba(255, 98, 0, 0.08)`），避免硬编码纯色或过深色
+      - 背景色（`Bg` 后缀）：用暗色阶梯色（如 `#1f1f1f` / `#141414`）
+      - 文字色（`Color` 后缀）：用 `rgba(255, 255, 255, 0.88)` 或 `#e0e0e0`
+      - 边框色（`Border` 后缀）：用 `rgba(255, 255, 255, 0.15)` 等半透明白
+    - **注释要求**（注释必须解释「为什么」而非「做什么」）：
+      1. 说明 `darkAlgorithm` 不会重算显式 token（避免后续维护者误以为会自动适配）
+      2. 说明 WCAG 对比度计算（暗色文字与 hover 背景的对比度需满足 AA 级 ≥ 4.5:1）
+      3. 说明品牌色一致性（暗色值与亮色值在视觉调性上保持一致，如都是淡橙调）
+    - **配置参数**：`theme_token_whitelist`（主题相关 token 名称后缀白名单：`Color`/`Bg`/`Border`/`Hover`/`Active`/`Focus`）、`dark_value_strategy`（暗色值生成策略：`hover_active=brand_overlay` / `background=dark_step` / `text=white_alpha`）、`brand_color`（默认 `#FF6200`）、`brand_overlay_alpha`（默认 `0.08`）、`wcag_level`（默认 `AA`）在 `config.yaml` 的 `antd_theme_override` 节点管理
+    - **诊断流程**（出现「暗色主题下文字看不见/对比度低」类问题时执行）：
+      1. `grep "components\\." main.tsx` 扫描所有显式指定的 token
+      2. 逐个检查 token 名是否含主题相关后缀（`Color`/`Bg`/`Border`/`Hover`/`Active`/`Focus`）
+      3. 对每个主题相关 token，验证是否响应了 `isDark` 动态切换
+      4. 若未响应 → 判定为违规，按修复模式动态覆盖
+      5. 顺手 `grep "\\-\\-ant-" index.css` 检查是否有死代码 CSS 变量，确认后清理
+    - **适用**：AntD 5.x 项目 + 多主题支持（`darkAlgorithm` / `defaultAlgorithm` 切换）+ `baseTheme.components.<Component>.<token>` 显式指定主题相关 token 的场景；WCAG 可访问性合规场景
+    - **不适用**：未启用多主题的项目（仅默认亮色）；antd v4 及以下（主题机制不同）；启用了 antd v5 `cssVar: true` 的项目（CSS 变量会生效，可优先用 CSS 变量方案）；非 antd UI 库；与主题无关的 token（`borderRadius`/`fontSize`/`lineHeight` 等 `darkAlgorithm` 会自动适配）
+    - **历史教训**：`baseTheme.components.Table.rowHoverBg` 显式指定为 `#fff7f0`（接近白色的淡橙），暗色主题下被原样继承，与暗色文字 `rgba(255, 255, 255, 0.88)≈#e0e0e0`（也接近白色）对比度近乎为零，hover 时文字几乎看不见。同时 `index.css` 中残留的 `--ant-table-row-hover-bg: #262626` 是死代码（未启用 cssVar 模式，不被组件引用）误导了初版诊断。修复后在 `ThemedRoot` 内根据 `isDark` 动态覆盖为 `rgba(255, 98, 0, 0.08)`
+
+56. **孤岛模块检测规范【强制】🆕v4.9**
+    - 统计/计数器/采样类模块（如 `FreqDisguise`、`MetricsCollector`、`Sampler`）设计时必须主动考虑"业务模块是否调用"——核心逻辑正确不等于有数据
+    - **判断信号**：
+      - 计数器/采样器类模块有 `_total_count` / `_history` 等内部状态
+      - 但 `grep` 不到任何业务模块（如 collector / buyer / notifier）调用其方法
+      - 出现"统计持续为 0 且无变化"或"前端页面永远是空数据"
+    - **修复模式**：
+      1. **检测阶段**：`grep -rn "<核心方法名>" src/ frontend/src/` 检查调用方数量
+      2. **入口封装**：在 Orchestrator / Service 层提供便捷方法封装（如 `LoginOrchestrator.apply_freq_delay()`）
+      3. **业务集成**：在所有相关业务模块（采集、详情、购买、登录）的关键路径调用
+      4. **前端展示**：确保前端有定时器（如 `setInterval(loadFreqStats, 10s)`）持续拉取统计
+    - **关键约束**：
+      - 业务模块集成时必须用 `try/except` 包裹（如 `try: get_orchestrator().record_freq_request(...)`）防止辅助功能失败阻塞主流程
+      - Orchestrator 单例初始化失败不应影响调用方（fail-safe 设计）
+      - 前端必须实现**定时刷新**才能反映业务模块持续调用的累计结果，不能只依赖"页面加载时拉一次"
+    - **配置参数**：`front_end_refresh_interval_ms`（前端定时刷新间隔，默认 10000）、`business_call_sites`（必须调用的业务模块路径列表）、`fail_safe`（默认 true，Orchestrator 异常是否静默）在 `config.yaml` 的 `freq_disguise_stats` 节点管理
+    - **适用**：所有内部状态需持续累加的模块（频率统计、采样器、计数器、令牌桶、健康评分）
+    - **不适用**：纯计算型工具函数（无内部状态）、一次性使用的辅助方法、纯前端 store 状态
+    - **历史教训**：`FreqDisguise` 模块设计完整（含 `next_interval` / `should_insert_noise` / `get_stats` 方法），`/api/anticrawl/freq/stats` API 端点也正确返回 stats，但所有业务模块（collector/buyer/notifier）从未调用过任何方法，统计永远为 0。修复后在 LoginOrchestrator 增加 `apply_freq_delay` / `record_freq_request` 便捷方法，collector/buyer 集成调用，前端 AntiCrawl 增加 10 秒定时刷新
+
+57. **时间敏感场景的延迟/统计分离规范【强制】🆕v4.9**
+    - 业务操作存在延迟容忍度差异时（如抢单 vs 采集），核心模块必须提供"延迟+统计"与"仅统计"两种调用入口，业务模块按场景选择，**禁止**一刀切（全 sleep 或全不 sleep）
+    - **判断信号**：
+      - 业务操作有秒级竞争（抢单/秒杀/实时通知）+ 同一模块的默认行为会引入 5s+ 延迟
+      - 业务模块用 `if fast: return` 完全跳过核心模块（导致统计失准）或 `if not fast: sleep(...)` 一刀切延迟
+    - **修复模式**：
+      ```python
+      # 核心模块：提供两种入口
+      def next_interval(self, action: ActionType) -> float:
+          """生成下一个请求的等待时间（采样+截断+累加统计）"""
+          ...
+      def record_request(self, action: ActionType) -> None:
+          """仅记录请求统计（不实际 sleep）
+
+          用于抢单等时间敏感场景：需要累加统计计数器，但不能引入额外延迟。
+          复用 next_interval 的采样+截断+写入 history+累加计数逻辑，避免重复。
+          """
+          self.next_interval(action)  # 复用消除代码重复
+
+      # Orchestrator 便捷方法：返回值类型明确业务语义
+      async def apply_freq_delay(self, action: ActionType) -> float:
+          """应用频率伪装延迟（业务模块集成入口）"""
+          delay = self._freq_disguiser.next_interval(action)
+          await asyncio.sleep(delay)
+          return delay  # 返回 delay_sec 便于调用方二次处理
+
+      def record_freq_request(self, action: ActionType) -> None:
+          """仅记录请求统计（不 sleep）"""
+          self._freq_disguiser.record_request(action)  # 返回 None 表达无副作用
+
+      # 业务模块：按场景选择
+      # 抢单场景
+      try:
+          get_orchestrator().record_freq_request(ActionType.LOGIN)
+      except Exception:
+          logger.warning("[Buyer] record_freq_request 失败，忽略不影响抢单")
+      # 采集场景
+      if not fast:
+          await get_orchestrator().apply_freq_delay(ActionType.SEARCH)
+      else:
+          get_orchestrator().record_freq_request(ActionType.SEARCH)
+      ```
+    - **关键约束**：
+      - **复用优先**：`record_request` 必须复用 `next_interval` 的采样+截断+累加逻辑，**禁止**重复实现（消除代码重复）
+      - **返回值语义明确**：`apply_freq_delay` 返回 `float`（delay_sec），`record_freq_request` 返回 `None`，**禁止**两个方法都返回被忽略的标志位（如 `should_noise`）导致统计虚高
+      - **fast 模式必须保持统计连续**：快速模式仅跳过 sleep，**禁止**完全跳过核心模块
+      - **try/except 包裹 Orchestrator 调用**：Orchestrator 初始化失败不应阻塞业务主流程
+    - **配置参数**：`time_sensitive_actions`（时间敏感操作类型列表，默认 `[LOGIN]`）、`default_actions`（默认 sleep 操作类型列表，默认 `[SEARCH, DETAIL, BROWSE]`）、`reuse_target`（默认 `next_interval`）在 `config.yaml` 的 `freq_disguise_time_sensitive` 节点管理
+    - **适用**：所有业务操作存在延迟容忍度差异的场景（抢单 vs 采集、实时通知 vs 批量推送、即时反馈 vs 后台同步）
+    - **不适用**：业务操作延迟容忍度一致的场景（全部秒级或全部分钟级）
+    - **历史教训**：抢单（buyer.buy）是秒级竞争，若调用 `apply_freq_delay(ActionType.LOGIN)` 会引入 5-60s 延迟导致抢单失败。原实现 `_search.py` 中 `fast=True` 完全跳过 `apply_freq_delay` 调用导致搜索统计缺失。修复后 buyer 调用 `record_freq_request`（仅统计），_search 在 fast 模式调用 `record_freq_request`（仅统计），保证统计连续性同时不破坏时间敏感场景
+
+58. **Orchestrator 便捷方法封装规范【强制】🆕v4.9**
+    - 多业务模块依赖同一核心模块时，必须在 Orchestrator 层提供便捷方法封装（命名 `<core_method>` 或 `<core_method>_<variant>`），业务模块通过 Orchestrator 集成而非直接调用核心模块
+    - **判断信号**：
+      - 多个业务模块（≥2 个）需要调用同一核心模块的同一/相似方法
+      - 每个业务模块都自己处理异常/日志/编排逻辑（代码重复）
+      - 核心模块的 API 不够"业务友好"（如返回原始统计 dict 而非格式化指标）
+    - **修复模式**：
+      1. **核心模块保持纯净**：只暴露底层方法（如 `FreqDisguise.next_interval`）
+      2. **Orchestrator 便捷方法**：提供"应用 + 副作用"封装（如 `LoginOrchestrator.apply_freq_delay` = `next_interval` + `asyncio.sleep`）
+      3. **业务模块通过 Orchestrator 调用**：业务模块只调 Orchestrator 方法，不直接 import 核心模块
+      4. **统一异常处理**：Orchestrator 内部处理核心模块异常，转换为业务可理解的错误
+    - **关键约束**：
+      - Orchestrator 必须是**单例**（如 `get_orchestrator()` 工厂函数），确保全局状态一致
+      - 便捷方法命名应**明确业务语义**（如 `apply_freq_delay` 表达"应用延迟"），不是 `do_thing` 之类的泛化命名
+      - 核心模块的纯逻辑方法应在 Orchestrator 中**也暴露**（如 `next_interval` 与 `apply_freq_delay` 并存），允许特殊场景直接使用
+      - 便捷方法应**支持异步**（`async def`），如果核心逻辑是同步的则内部用 `asyncio.sleep` 包装
+    - **配置参数**：`orchestrator_singleton_name`（默认 `get_orchestrator`）、`convenience_method_prefix`（默认 `apply_` / `record_`）、`core_module_aliases`（核心模块在 Orchestrator 中的别名映射）在 `config.yaml` 的 `orchestrator_pattern` 节点管理
+    - **适用**：所有多业务模块依赖同一核心模块、需要统一异常/日志/编排处理的场景
+    - **不适用**：单一业务模块使用核心模块（直接调用即可）、核心模块本身已有业务友好 API
+    - **历史教训**：collector 和 buyer 都需要调用 `FreqDisguise` 模块但各自直接 import，自己处理 sleep 和异常。修复后通过 `LoginOrchestrator.get_orchestrator().apply_freq_delay()` 统一封装，异常/日志/编排逻辑集中管理
+
+59. **辅助功能异常日志级别规范【强制】🆕v4.9**
+    - 辅助功能调用（如频率伪装统计、装饰器、日志记录）失败时，异常日志级别必须用 `logger.warning`，**禁止**用 `logger.debug`（默认不输出，难以排查）和 `logger.error`（过度严重，污染告警）
+    - **判断信号**：
+      - 辅助功能调用被 `try/except Exception` 包裹
+      - 异常处理中用 `logger.debug(...)` 记录失败原因
+      - 异常处理中用 `logger.error(...)` 触发告警（但功能失败不影响主流程）
+    - **修复模式**：
+      ```python
+      # ✅ 正确：logger.warning 记录可恢复异常
+      try:
+          get_orchestrator().record_freq_request(ActionType.LOGIN)
+      except Exception:  # noqa: BLE001
+          logger.warning("[Buyer] record_freq_request 失败，忽略不影响抢单")
+
+      # ❌ 错误：logger.debug 默认不输出
+      try:
+          ...
+      except Exception:
+          logger.debug("record_freq_request 失败")  # 默认级别看不到！
+
+      # ❌ 错误：logger.error 过度严重
+      try:
+          ...
+      except Exception:
+          logger.error("record_freq_request 失败")  # 会触发告警，但功能失败不影响主流程
+      ```
+    - **关键约束**：
+      - `logger.warning` 用于**可恢复异常 / 降级 / 重试**：辅助功能失败、配置项缺失、可选资源不可用
+      - `logger.error` 用于**需人工介入的失败**：主流程失败、数据丢失、安全事件
+      - `logger.info` 用于**业务关键路径**：触发抢单、采集完成、推送发送
+      - `logger.debug` 用于**调试信息**：默认 `INFO` 级别不输出，仅开发环境可见
+    - **配置参数**：`auxiliary_log_level`（默认 `warning`）、`recoverable_exceptions`（可恢复异常类型列表）、`critical_exceptions`（需人工介入异常类型列表）在 `config.yaml` 的 `log_level_strategy` 节点管理
+    - **适用**：所有辅助功能调用（统计、装饰、日志、监控、采样）的异常处理
+    - **不适用**：主流程失败的异常处理（应用 `logger.error`）、调试期主动记录上下文（应用 `logger.debug`）
+    - **历史教训**：`buyer.py` 中 `record_freq_request` 失败时用 `logger.debug` 记录，导致默认日志级别下完全看不到失败信息。修复后改为 `logger.warning`，符合项目惯例（参考 `project-rules.md` 日志规约）
+
+60. **状态机设计规范【强制】🆕v4.10**
+    - 任何含「状态」字段且状态会变化的业务对象（订单/任务/会话/工作流）必须按以下流程设计状态机：
+      1. **枚举穷举**：列出所有状态枚举值（如 `pending_pay`/`takeover_pending`/`succeeded`/`failed`/`cancelled`）
+      2. **转换白名单**：每个状态变更操作必须用白名单校验起始状态——只允许明确列出的 (起始状态 → 目标状态) 转换，**禁止**用黑名单（禁止某些转换）。白名单更安全：新增状态时不会意外允许非法转换
+      3. **终态不可复活**：`failed`/`succeeded`/`cancelled` 等终态禁止再转换到其他状态，状态变更接口必须前置校验 `if current_status in TERMINAL_STATES: raise HTTPException(409, ...)`
+      4. **中间态超时清理**：`pending_pay`/`takeover_pending` 等中间态必须有超时清理机制——独立 APScheduler `BackgroundScheduler` 定时扫描（默认 5 分钟，通过 `config.yaml` 的 `state_machine.<entity>.timeout_scan_interval` 节点管理）+ 一次 SQL 批量更新（SELECT + UPDATE 在同一事务），**禁止**逐条更新
+      5. **deadline 不可无限重置**：如 `takeover_deadline` 等截止时间字段，同一操作（如 `takeover_order`）禁止反复延长，状态机白名单天然保证（仅 `pending_pay → takeover_pending` 允许，再次接管会被白名单拒绝）
+      6. **前后端枚举值统一**：后端 `status: str = "pending_pay"` 与前端 `type Status = 'pending_pay' | ...` 必须字面值完全一致，**禁止**后端 snake_case 前端 camelCase 的映射转换（增加维护成本且易出错）
+    - **判断信号**：业务对象有 `status`/`state` 字段 + 字段会通过 API/调度器/事件变更 → 必须按此流程设计
+    - **修复模式**：
+      ```python
+      # ✅ 白名单模式：仅允许 pending_pay → takeover_pending
+      ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+          "pending_pay": {"takeover_pending", "cancelled"},
+          "takeover_pending": {"succeeded", "failed"},
+          # 终态 succeeded/failed/cancelled 不在 key 中 → 任何转换都被拒绝
+      }
+      def transition(current: str, target: str) -> None:
+          if current not in ALLOWED_TRANSITIONS or target not in ALLOWED_TRANSITIONS[current]:
+              raise HTTPException(409, detail=f"非法状态转换: {current} → {target}")
+      ```
+    - **配置参数**：`state_machine.<entity>.timeout_scan_interval`（默认 300s）、`state_machine.<entity>.timeout_threshold`（默认 1800s）、`state_machine.<entity>.terminal_states`（终态列表）、`state_machine.<entity>.allowed_transitions`（白名单映射）在 `config.yaml` 的 `state_machine` 节点管理
+    - **适用**：订单/任务/会话/工作流等有状态生命周期的业务对象
+    - **不适用**：纯 CRUD 实体（如配置项，无状态流转）；单状态字段（如 `is_active: bool` 用简单 if 判断即可）；一次性事件（如日志记录）
+    - **历史教训**：`takeover_order` 接口未校验起始状态，导致 `failed` 终态订单可被接管（终态复活）；`takeover_pending` 超时无清理机制，订单永久卡死；同一订单可被反复 `takeover_order` 延长 deadline（无限重置）。修复后改为白名单 + 独立调度器批量清理 + 终态前置校验
+
+61. **资源生命周期规范【强制】🆕v4.10**
+    - 所有可注册的组件（Worker/Adapter/Plugin/Handler）必须实现 `cleanup()` 钩子，由调度器/容器在 `unregister` 时统一调用，确保资源释放
+    - **关键约束**：
+      1. **cleanup 钩子约定**：即使当前实现为空，也必须保留 `async def cleanup(self) -> None: return None` 方法（为未来扩展预留接入点，参考 `TaskWorker.cleanup`）
+      2. **asyncio.Task 引用保留**：后台任务必须 `self._task = asyncio.create_task(...)` 保留引用防 GC，**禁止**裸 `asyncio.create_task(...)` 不持有引用
+      3. **取消+收集模式**：取消后台任务必须 `task.cancel()` + `await asyncio.gather(task, return_exceptions=True)`，确保资源清理完成
+      4. **try/finally 初始化**：`try/finally` 块中 `finally` 引用的变量必须在 `try` 之前初始化为 `None`（`page = None; try: page = await ...; finally: if page: await page.close()`）
+      5. **锁内原子检查**：共享状态（计数器/冷却时间）的「检查+更新」必须在同一锁内完成，避免竞态
+    - **判断信号**：组件有「注册/注销」生命周期 + 持有后台任务/连接/锁/文件句柄 → 必须按此流程设计
+    - **修复模式**：
+      ```python
+      # ✅ cleanup 钩子 + Task 引用保留 + cancel+gather
+      class TaskWorker:
+          def __init__(self):
+              self._task: asyncio.Task | None = None
+
+          async def cleanup(self) -> None:
+              """Worker 资源清理钩子，供 scheduler.unregister 调用"""
+              if self._task is not None and not self._task.done():
+                  self._task.cancel()
+                  await asyncio.gather(self._task, return_exceptions=True)
+                  self._task = None
+      ```
+    - **配置参数**：`lifecycle.cleanup_method_name`（默认 `cleanup`）、`lifecycle.task_cancel_timeout`（默认 5s）、`lifecycle.required_cleanup_components`（必须实现 cleanup 的组件类型列表）在 `config.yaml` 的 `resource_lifecycle` 节点管理
+    - **适用**：可注册组件（Worker/Adapter/Plugin/Handler）、持有后台任务的组件、持有连接/锁/文件句柄的组件
+    - **不适用**：纯函数（无状态无副作用）；一次性脚本（进程结束即释放）；纯数据对象（无生命周期）
+    - **历史教训**：`TaskWorker` 缺少 `cleanup()` 方法，`TaskScheduler.unregister` 时无法释放 worker 持有的资源；`_WorkerHandle` 缺少 `loop_task` 字段声明导致 `getattr` 兜底反模式。修复后 `TaskWorker` 实现 cleanup 钩子，`_WorkerHandle` 显式声明所有字段
+
+62. **双链路一致性规范【强制】🆕v4.10**
+    - 同一业务目标有 ≥2 条执行链路时（如 Worker 调度链路 + Live 实时链路都到达「下单」），共用前置条件必须提取为独立函数，两条链路调用同一函数，**禁止**各自实现
+    - **关键约束**：
+      1. **共用前置条件提取**：价格过滤/分数校验/库存检查等前置条件提取为独立函数（如 `_build_price_strategy(task) -> PriceStrategy`）
+      2. **两链路调用同一函数**：Worker 链路和 Live 链路必须调用同一函数，**禁止**各自实现相似逻辑
+      3. **过滤范围明确**：前置条件过滤仅阻止「执行动作」（如抢单），不阻止「评估写库」（评估结果仍写入 DB 供后续分析）
+      4. **grep 验证**：修改后必须 `grep` 验证两条链路确实调用同一函数，禁止遗漏
+      5. **测试覆盖**：必须新增测试覆盖两条链路的前置条件一致性
+    - **判断信号**：同一业务目标（如「下单」「采集」「通知」）有 ≥2 条执行链路 → 必须按此流程设计
+    - **修复模式**：
+      ```python
+      # ✅ 提取共用前置条件为独立函数
+      def _build_price_strategy(task: Task) -> PriceStrategy:
+          """构建价格策略，Worker 和 Live 链路共用"""
+          return PriceStrategy(
+              max_price=task.price_config.get("max_price") or 0,
+              min_price=task.price_config.get("min_price") or 0,
+          )
+
+      # Worker 链路
+      class TaskWorker:
+          async def run_once(self):
+              strategy = _build_price_strategy(self.task)
+              if not strategy.is_acceptable(item): return  # 共用过滤
+
+      # Live 链路
+      async def _trigger_live_auto_buy(item, task):
+          strategy = _build_price_strategy(task)
+          if not strategy.is_acceptable(item): return  # 共用过滤
+      ```
+    - **配置参数**：`dual_link.target_entities`（业务目标列表，如 `["buy", "collect", "notify"]`）、`dual_link.shared_predicate_patterns`（共用前置条件函数命名模式，如 `_build_*_strategy`）、`dual_link.verify_callers`（是否启用 grep 验证，默认 `true`）在 `config.yaml` 的 `dual_link_consistency` 节点管理
+    - **适用**：同一业务目标有多个触发入口（如 Worker 调度 + Live 实时 + API 手动 + CLI 命令）
+    - **不适用**：单一入口的业务（如只有 API 触发）；链路间业务逻辑本就不同（如 Worker 是异步批量，Live 是同步单条）——此时应抽取「共同部分」为函数，「差异部分」各自处理
+    - **历史教训**：Worker 链路调用 `PriceStrategy.is_acceptable()` 做价格过滤，Live 链路只看分数达标不做价格过滤，导致两条链路行为不一致——Worker 链路过滤掉的高价商品在 Live 链路被下单。修复后提取 `_build_live_price_strategy` 共用函数，两链路调用同一函数
+
+63. **并发安全规范【强制】🆕v4.10**
+    - 多线程/协程访问同一共享状态（计数器/冷却时间/最后执行时间）时，「检查+更新」必须在同一锁内完成，避免竞态
+    - **关键约束**：
+      1. **锁内原子检查**：共享状态的「检查+更新」必须在同一锁内（`with self._lock: if can_proceed(): self._last_run = now()`）
+      2. **锁粒度最小化**：锁仅保护临界区（检查+更新），**禁止**用锁保护 IO（如 `await` 网络请求），避免阻塞其他协程
+      3. **锁内禁止 await**：`asyncio.Lock` 内禁止 `await` 长时间操作（会导致锁持有过久），必要时先释放锁再做 IO
+      4. **Dataclass 字段显式声明**：dataclass 字段必须显式声明默认值（`consecutive_errors: int = 0`），**禁止**用 `getattr(h, 'consecutive_errors', 0)` 兜底（反模式，掩盖字段未初始化的 bug）
+      5. **锁类型选择**：跨线程用 `threading.RLock`（可重入），跨协程用 `asyncio.Lock`，**禁止**混用
+    - **判断信号**：多线程/协程访问同一字段 + 字段有「检查-更新」模式（如 `if self._last_run + interval < now: self._last_run = now()`）→ 必须加锁
+    - **修复模式**：
+      ```python
+      # ✅ 锁内原子检查 + Dataclass 字段显式声明
+      @dataclass
+      class _WorkerHandle:
+          consecutive_errors: int = 0  # ✅ 显式声明，禁止 getattr 兜底
+
+      class Scheduler:
+          def __init__(self):
+              self._lock = threading.RLock()
+              self._handles: dict[str, _WorkerHandle] = {}
+
+          def _check_and_update(self, task_id: str) -> bool:
+              with self._lock:  # 锁内原子检查+更新
+                  h = self._handles[task_id]
+                  if h.consecutive_errors >= threshold:
+                      return False
+                  h.consecutive_errors += 1
+                  return True
+      ```
+    - **配置参数**：`concurrency.lock_type`（默认 `RLock`）、`concurrency.critical_section_max_await`（默认 `0`，禁止 await）、`concurrency.required_lock_fields`（必须加锁保护的字段名列表）在 `config.yaml` 的 `concurrency_safety` 节点管理
+    - **适用**：多线程/协程访问同一共享状态；定时任务与 API 请求并发修改同一数据
+    - **不适用**：单线程顺序执行；thread-local 数据；不可变对象
+    - **历史教训**：`_WorkerHandle` 缺少 `consecutive_errors` 字段声明，代码用 `getattr(h, 'consecutive_errors', 0) + 1` 兜底，掩盖了字段未初始化的 bug；并发场景下「检查+更新」未在锁内可能导致竞态。修复后显式声明字段 + 锁内原子检查
+
+64. **Python 现代化规范【强制】🆕v4.10**
+    - Python 3.10+ 项目必须使用现代 asyncio API 与 dataclass 语法，**禁止**使用过时 API
+    - **关键约束**：
+      1. **asyncio.create_task 替代 get_event_loop**：`asyncio.create_task(coro)` 替代 `asyncio.get_event_loop().create_task(coro)`；在协程内获取事件循环用 `asyncio.get_running_loop()`（明确表示运行中循环），**禁止** `asyncio.get_event_loop()`（Python 3.10+ 已弃用，且在无运行循环时会创建新循环导致行为不可预期）
+      2. **避免 getattr 兜底 dataclass 字段**：dataclass 字段必须显式声明默认值，**禁止**用 `getattr(obj, 'field', default)` 兜底未声明字段（掩盖字段未初始化 bug）；仅在处理「外部输入的动态属性」（如 JSON 解析结果）时才允许 getattr
+      3. **模块级 import**：所有 import 必须在模块顶部，**禁止**函数内重复 import（除非解决循环依赖的延迟导入）
+      4. **CancelledError 传播**：`asyncio.CancelledError` 必须用 `contextlib.suppress(asyncio.CancelledError)` 包裹 await 并向上传播，**禁止** `except: pass` 静默吞掉
+      5. **类型注解现代语法**：`X | None` 替代 `Optional[X]`，`list[T]` 替代 `List[T]`，`dict[K, V]` 替代 `Dict[K, V]`
+    - **判断信号**：Python 3.10+ 代码 + 使用 asyncio / dataclass → 必须按此规范
+    - **修复模式**：
+      ```python
+      # ✅ 现代 asyncio API
+      _scheduler_task = asyncio.create_task(_scheduler_loop())  # ✅
+      # ❌ loop = asyncio.get_event_loop(); loop.create_task(...)  # 过时
+
+      # ✅ dataclass 字段显式声明
+      @dataclass
+      class _WorkerHandle:
+          consecutive_errors: int = 0  # ✅
+      # ❌ h.consecutive_errors = getattr(h, 'consecutive_errors', 0) + 1  # 兜底反模式
+
+      # ✅ CancelledError 传播
+      from contextlib import suppress
+      try:
+          await task
+      except asyncio.CancelledError:
+          logger.info("任务被取消")
+          raise  # 必须向上传播
+      ```
+    - **配置参数**：`modern_python.min_version`（默认 `"3.10"`）、`modern_python.deprecated_apis`（禁用 API 列表：`get_event_loop`/`utcnow`/`Optional`/`List`/`Dict`）、`modern_python.required_imports_at_module_level`（强制模块级导入的模块列表）在 `config.yaml` 的 `python_modern` 节点管理
+    - **适用**：Python 3.10+ 项目；使用 asyncio 的代码；使用 dataclass 的领域模型
+    - **不适用**：Python 3.9 及以下（部分语法不支持）；同步代码（无 asyncio）；非 dataclass 类
+    - **历史教训**：`startup.py` 用 `asyncio.get_event_loop().create_task()` 创建后台任务（过时 API），且函数内重复 `import asyncio`；`_WorkerHandle` 用 `getattr` 兜底 `consecutive_errors` 字段。修复后改为 `asyncio.create_task()` + 模块级 import + 显式字段声明
+
+65. **过滤结果可见性规范【强制】🆕v4.11**
+    - 后端过滤链（keyword/price/publish_days/自定义过滤）必须输出完整的 `filter_summary` 结构，前端必须实现三态提示策略并提供"查看被过滤结果"入口，**禁止**只返回 final_total 不暴露过滤过程
+    - **关键约束**：
+      1. **filter_summary 完整结构**：必须包含 `raw`（原始结果数）/`formatted`（去重后）/各阶段 `*_skipped`（如 `keyword_skipped`/`price_skipped`/`publish_days_skipped`）/`final_total`/`final_items`/`final_sellers`/`filtered_out`（被过滤项详情列表）
+      2. **filtered_out 项结构**：每项必须含 `link_type`/`link_key`/`display`/`filter_reason`/`filter_detail`，便于前端按原因分组展示
+      3. **filtered_out 数量上限**：为避免响应过大，`filtered_out` 列表长度限制由 `config.yaml` 的 `filter_summary.max_filtered_out_items` 节点管理（默认 `50`），超出部分只计入计数不进入详情
+      4. **前端三态提示策略**：
+         - `success`（`raw > 0 && final_total > 0`）：`message.success("实时查询完成，获取 N 条")`
+         - `warning`（`raw > 0 && final_total == 0`）：`message.warning`，文案必须列出各过滤原因计数（如"搜索到 32 条，但全部被过滤条件筛掉（关键词 5、价格 27），请调整任务过滤配置"）
+         - `info`（`raw == 0`）：`message.info("实时查询完成，未找到匹配商品")`
+      5. **"查看被过滤结果"入口**：当 `filtered_out` 非空时，前端必须提供按钮（如"查看被过滤的 N 条结果"）+ Modal 展示详情，Modal 内含 Alert（过滤链路统计）+ Table（商品标题/价格/过滤原因 Tag/详情）
+      6. **TypeScript 类型显式声明**：API 返回类型必须显式声明 `filter_summary?: LiveFilterSummary`，**禁止**用 `as { filter_summary?: ... }` 强制类型转换绕过 TS 检查
+    - **判断信号**：
+      - 后端代码含 `if not match_keyword: continue` / `if price > max: continue` 等过滤逻辑 → 必须记录到 `filter_summary`
+      - 前端实时搜索结果 `final_total == 0` 但无任何提示 → 视为违规
+      - 前端代码含 `(res as { filter_summary?: ... })` 强制类型转换 → 视为违规
+    - **修复模式**：
+      ```python
+      # ✅ 后端：filter_summary 初始化 + 三处过滤记录
+      _filter_summary = {
+          "raw": 0, "formatted": 0,
+          "keyword_skipped": 0, "price_skipped": 0, "publish_days_skipped": 0,
+          "final_total": 0, "final_items": 0, "final_sellers": 0,
+          "filtered_out": [],  # 限制 50 条
+      }
+      # keyword 过滤
+      if not _match_keyword(r, kw):
+          _filter_summary["keyword_skipped"] += 1
+          if len(_filter_summary["filtered_out"]) < max_filtered_out_items:
+              _filter_summary["filtered_out"].append({
+                  "link_type": r.get("link_type"), "link_key": r.get("link_key"),
+                  "display": r.get("display"),
+                  "filter_reason": "keyword", "filter_detail": f"未匹配关键词 {kw}",
+              })
+          continue
+      ```
+      ```typescript
+      // ✅ 前端：三态提示 + 类型显式声明
+      const fs = res.filter_summary  // 类型已在 live() 返回类型声明
+      setLiveFilterSummary(fs || null)
+      const itemCount = res.items?.length || 0
+      if (itemCount > 0) {
+        message.success(`实时查询完成，获取 ${itemCount} 条`)
+      } else if (fs && fs.raw > 0) {
+        const reasons: string[] = []
+        if (fs.keyword_skipped) reasons.push(`关键词 ${fs.keyword_skipped}`)
+        if (fs.price_skipped) reasons.push(`价格 ${fs.price_skipped}`)
+        if (fs.publish_days_skipped) reasons.push(`发布时间 ${fs.publish_days_skipped}`)
+        message.warning(`搜索到 ${fs.raw} 条，但全部被过滤条件筛掉（${reasons.join('、') || '未知原因'}），请调整任务过滤配置`)
+      } else {
+        message.info('实时查询完成，未找到匹配商品')
+      }
+      ```
+    - **配置参数**：`filter_summary.max_filtered_out_items`（默认 `50`）、`filter_summary.three_state_thresholds`（三态判定阈值：`success_raw_min=1`/`success_final_min=1`/`warning_raw_min=1`/`warning_final_max=0`）、`filter_summary.filter_reason_labels`（过滤原因中文标签映射）在 `config.yaml` 的 `filter_summary` 节点管理
+    - **适用**：所有含过滤链路的查询接口（实时搜索/历史查询/列表过滤）；前端展示后端过滤结果的场景
+    - **不适用**：无过滤的纯 CRUD 接口；前端纯前端过滤（如 Table 自带筛选）；过滤结果不影响用户体验的场景（如后台日志查询）
+    - **历史教训**：实时搜索接口 `final_total=0`（keyword 过滤 32 + price 过滤 27 = 0 最终）但前端只显示"实时查询完成"，用户无法判断是搜索无结果还是被过滤掉，反复调整搜索词无果。修复后添加 `filtered_out` 跟踪 + 三态提示 + "查看被过滤结果"Modal
+
+66. **pytest 模块重复 import 隔离规范【强制】🆕v4.11**
+    - pytest 在 `sys.modules` 中可能以 `test_xxx`（无包前缀）和 `tests.test_xxx`（带包前缀）两种名字持有同一测试文件的不同模块对象，conftest.py patch 模块属性时**禁止**硬编码模块名列表，必须遍历 `sys.modules` 找所有持目标属性的模块全部 patch
+    - **关键约束**：
+      1. **禁止硬编码模块名列表**：如 `for name in ["cookie_rotator", "api_tasks"]: patch(sys.modules[name])` —— 一旦新增模块需手动同步列表，极易遗漏
+      2. **必须遍历 sys.modules**：用 `hasattr(mod, TARGET_ATTR)` 动态识别所有持目标属性的模块，全部 patch
+      3. **禁止用 `__import__`**：`__import__("a.b")` 返回顶层包 `a` 而非子模块 `a.b`，必须用 `importlib.import_module` 正确返回子模块
+      4. **patch 后验证**：patch 完成后必须 `assert hasattr(mod, TARGET_ATTR)` 验证 patch 生效
+    - **判断信号**：
+      - conftest.py 含 `for name in [...]: monkeypatch.setattr(sys.modules[name], ...)` 硬编码列表 → 视为违规
+      - 测试用例 `import tests.test_xxx` 后修改模块属性，但被测代码 `from test_xxx import YYY` 读取的是另一份模块对象 → 典型症状
+      - 代码含 `__import__("a.b")` 且后续操作期望得到子模块 → 视为违规
+    - **修复模式**：
+      ```python
+      # ✅ 正确：遍历 sys.modules 找所有持目标属性的模块
+      import sys
+      TARGET_ATTR = "_COOKIE_JSON"
+
+      def patch_all_modules_with_cookie(tmp_path):
+          patched = []
+          for mod in sys.modules.values():
+              if mod is None:
+                  continue
+              if hasattr(mod, TARGET_ATTR):
+                  # patch 到 tmp_path 隔离生产数据
+                  setattr(mod, TARGET_ATTR, str(tmp_path / "cookies.json"))
+                  patched.append(mod.__name__)
+          assert patched, f"未找到持 {TARGET_ATTR} 属性的模块"
+          return patched
+
+      # ✅ 正确：importlib.import_module 替代 __import__
+      import importlib
+      mod = importlib.import_module("xianyu_hunter.modules.cookie_rotator")
+
+      # ❌ 错误：硬编码模块名列表
+      for name in ["cookie_rotator", "api_tasks", "auth_middleware"]:
+          monkeypatch.setattr(sys.modules[name], "_COOKIE_JSON", ...)
+
+      # ❌ 错误：__import__ 返回顶层包
+      mod = __import__("xianyu_hunter.modules.cookie_rotator")  # 返回 xianyu_hunter 而非 cookie_rotator
+      ```
+    - **配置参数**：`pytest_isolation.target_attr_pattern`（默认 `_COOKIE_JSON`，支持正则）、`pytest_isolation.module_name_prefixes`（默认 `[]` 表示全扫，可选限制如 `["xianyu_hunter", "tests"]`）、`pytest_isolation.use_importlib`（默认 `true`，强制使用 `importlib.import_module`）在 `config.yaml` 的 `pytest_isolation` 节点管理
+    - **适用**：pytest conftest.py 全局 fixture patch 模块属性；多模块共享同一配置文件路径的场景；任何需要 patch 跨模块共享状态的测试
+    - **不适用**：单模块测试（直接 monkeypatch 即可）；非 pytest 测试框架；patch 对象属性（非模块属性）
+    - **历史教训**：`conftest.py` 硬编码 `[cookie_rotator]` 列表 patch `_COOKIE_JSON`，但 pytest 以 `test_cookie_rotator` 和 `tests.test_cookie_rotator` 两种名字持有同一文件的两个模块对象，patch 只命中其中一个，导致生产 `data/cookies.json` 被测试数据污染。修复后改为遍历 `sys.modules` 找所有持 `_COOKIE_JSON` 属性的模块全部 patch
+
+67. **日志库占位符一致性规范【强制】🆕v4.11**
+    - 项目选定单一日志库后（如 loguru），所有 `logger.xxx()` 调用必须使用该库的占位符语法，**禁止**混用其他日志库的占位符（如 loguru 用 `{}`，标准 logging 用 `%s`/`%d`）
+    - **关键约束**：
+      1. **loguru 占位符**：`logger.info("用户 {} 操作 {}", user, action)` 用 `{}`，**禁止** `logger.info("用户 %s 操作 %s", user, action)`（混用不抛异常但显示 `%s` 字面量，极难发现）
+      2. **标准 logging 占位符**：`logging.info("用户 %s 操作 %s", user, action)` 用 `%s`/`%d`/`%r`/`%f`，**禁止** `logging.info("用户 {} 操作 {}", user, action)`
+      3. **f-string 例外**：简单变量拼接可用 f-string（如 `logger.info(f"用户 {user} 操作")`），但复杂格式推荐用占位符（性能更好，延迟格式化）
+      4. **诊断方法**：`grep -nE 'logger\\.(debug|info|warning|error|critical).*%[sdrf]' file.py` 在 logger 调用行附近即发现 loguru 项目混用 `%s` 的违规
+    - **判断信号**：
+      - 项目用 loguru（`from loguru import logger`）但代码含 `logger.xxx("...%s...", arg)` → 视为违规
+      - 项目用标准 logging 但代码含 `logger.xxx("...{}...", arg)` → 视为违规
+      - 日志输出含 `%s`/`%d` 字面量而非实际值 → 典型症状
+    - **修复模式**：
+      ```python
+      # ✅ loguru：{} 占位符
+      from loguru import logger
+      logger.info("用户 {} 登录，耗时 {:.2f}s", user, elapsed)  # loguru 原生
+      logger.warning("Cookie 刷新失败，原因：{}", reason)
+
+      # ❌ 错误：loguru 项目混用 %s
+      logger.info("用户 %s 登录", user)  # 输出"用户 %s 登录"字面量
+      logger.warning("Cookie 刷新失败，原因：%s", reason)
+
+      # ✅ 标准 logging：%s 占位符
+      import logging
+      logger = logging.getLogger(__name__)
+      logger.info("用户 %s 登录", user)
+
+      # ✅ f-string 例外（简单拼接可用）
+      logger.info(f"用户 {user} 登录")
+      ```
+    - **配置参数**：`log_placeholder.logger_lib`（默认 `loguru`，可选 `logging`/`structlog`）、`log_placeholder.placeholder_pattern`（默认 `\\{\\}` 对 loguru，`%[sdrf]` 对 logging）、`log_placeholder.forbidden_pattern`（默认 `%[sdrf]` 对 loguru 项目）、`log_placeholder.logger_method_names`（默认 `["debug", "info", "warning", "error", "critical"]`）、`log_placeholder.allow_fstring`（默认 `true`，允许简单 f-string 拼接）在 `config.yaml` 的 `log_placeholder` 节点管理
+    - **适用**：所有用 loguru/standard logging/structlog 的项目；混用多个日志库的项目（需统一到单一日志库）
+    - **不适用**：未使用日志库的项目（如仅用 print）；自定义日志库（需在配置中声明占位符语法）
+    - **历史教训**：`cookie_rotator.py` 第 197、245 行用 `logger.warning("...%s...", reason)`（loguru 项目混用 `%s`），loguru 不识别 `%s` 占位符但不抛异常，导致日志输出"Cookie 刷新失败，原因：%s"字面量。修复后改为 `logger.warning("...{}", reason)`
+
+68. **测试 fixture 生产隔离与数据污染应急规范【强制】🆕v4.11**
+    - conftest.py 必须 patch 生产路径（如 `data/cookies.json`、`*.db`）到 `tmp_path`，fixture 数据需带可识别特征（如 `test_fixture_` 前缀），数据污染应急必须按 5 步流程执行
+    - **关键约束**：
+      1. **生产路径 patch**：所有 fixture 必须用 `tmp_path` 隔离生产路径，**禁止**直接读写生产文件（如 `data/cookies.json`）
+      2. **fixture 数据可识别特征**：测试数据必须带前缀/后缀（如 `test_fixture_user_`、`__test__cookie`），便于污染后定位
+      3. **数据污染应急 5 步流程**：
+         - **步骤 1 停止服务**：立即停止所有可能读写污染文件的服务（避免污染扩散）
+         - **步骤 2 删除污染文件**：删除被测试数据污染的生产文件（如 `data/cookies.json`）
+         - **步骤 3 修复 conftest**：修复 conftest.py 隔离逻辑（参考 step 66 遍历 sys.modules patch）
+         - **步骤 4 重跑测试**：重跑全部测试验证修复有效（`pytest` 全绿）
+         - **步骤 5 通知用户**：明确告知用户哪些文件被污染、已删除、需重新初始化
+      4. **patch 验证**：fixture 加载后必须 `assert not os.path.exists(production_path)` 验证生产路径未被写入
+      5. **fixture 作用域**：跨测试共享的 fixture 用 `scope="session"`，单测试用 `scope="function"`，**禁止**用模块级全局变量持有测试数据
+    - **判断信号**：
+      - conftest.py 含 `open("data/cookies.json", "w")` 直接写生产路径 → 视为违规
+      - 测试数据无前缀/后缀特征（如 `user_id = "abc123"` 而非 `user_id = "test_fixture_abc123"`）→ 视为违规
+      - 生产文件含测试数据（如 `data/cookies.json` 含 `test_fixture_` 前缀的 cookie）→ 典型污染症状
+    - **修复模式**：
+      ```python
+      # ✅ 正确：tmp_path 隔离 + 可识别特征 + patch 验证
+      @pytest.fixture(scope="session")
+      def isolated_cookie_path(tmp_path_factory):
+          cookie_path = tmp_path_factory.mktemp("data") / "cookies.json"
+          # 写入带 test_fixture_ 前缀的测试数据
+          cookie_path.write_text('{"token": "test_fixture_token_xxx"}')
+          # patch 所有持 _COOKIE_JSON 属性的模块
+          patched = []
+          for mod in sys.modules.values():
+              if mod is not None and hasattr(mod, "_COOKIE_JSON"):
+                  setattr(mod, "_COOKIE_JSON", str(cookie_path))
+                  patched.append(mod.__name__)
+          assert patched, "未找到持 _COOKIE_JSON 属性的模块"
+          return cookie_path
+
+      # 数据污染应急流程（按 config.yaml 的 test_isolation.pollution_recovery_steps 执行）
+      # 1. 停止服务：xianyu-automation-startserver stop
+      # 2. 删除污染文件：rm data/cookies.json
+      # 3. 修复 conftest：参考 step 66 遍历 sys.modules patch
+      # 4. 重跑测试：pytest
+      # 5. 通知用户：告知污染文件清单
+      ```
+    - **配置参数**：`test_isolation.production_path_patterns`（默认 `["data/cookies.json", "data/*.db", "data/*.json"]`）、`test_isolation.test_data_markers`（默认 `["test_fixture_", "__test__"]`）、`test_isolation.pollution_recovery_steps`（默认 5 步流程列表）、`test_isolation.fixture_scope_default`（默认 `function`）、`test_isolation.assert_no_production_write`（默认 `true`，加载 fixture 后断言生产路径未写入）在 `config.yaml` 的 `test_isolation` 节点管理
+    - **适用**：所有 pytest fixture 涉及文件 IO 的场景；conftest.py 全局 fixture；CI/CD 测试环境
+    - **不适用**：纯内存测试（无文件 IO）；mock 替代真实文件的测试；一次性脚本测试
+    - **历史教训**：`conftest.py` 未隔离 `data/cookies.json`，测试用例直接写入生产文件，导致生产 cookie 被测试数据污染（含 `test_fixture_` 前缀的 token）。应急流程：停止服务 → 删除 `data/cookies.json` → 修复 conftest 遍历 sys.modules patch → 重跑 pytest 全绿 → 通知用户重新初始化 cookie
+
+69. **配置项边界值校验【强制】🆕v4.12**
+    - 数值型配置项必须有边界值校验（min/max/non_zero/range），加载时主动校验，无效值用默认值并 `logger.warning` 告警，**禁止**直接使用未校验的数值导致运行时 ZeroDivisionError / ValueError
+    - **判断信号**：`config.yaml` 新增数值字段 + 代码用 `interval / N` 或 `count * factor` 等算术运算 → 必须校验除数非零、乘数有界
+    - **修复模式**：
+      ```python
+      # ✅ 加载时校验 + 默认值兜底
+      interval = config.get("ai_suggestion_interval", 60)
+      if not isinstance(interval, (int, float)) or interval <= 0:
+          logger.warning("ai_suggestion_interval 配置无效（{}），使用默认值 60", interval)
+          interval = 60
+      # 使用 interval 做算术运算前已校验非零
+      ```
+    - **配置参数**：`config_validation.rules`（每条规则含 `field`/`min`/`max`/`non_zero`/`regex`/`default`）、`config_validation.on_invalid`（默认 `warn_and_fallback`，可选 `raise`）在 `config.yaml` 的 `config_validation` 节点管理
+    - **适用**：所有数值型配置项（间隔时间/阈值/并发数/超时/重试次数）；字符串枚举值（用 regex 校验）
+    - **不适用**：布尔型配置项（无需校验范围）；纯展示型字符串（如标题）
+    - **历史教训**：`ai_suggestion_interval=0` 未校验直接用于 `asyncio.sleep(interval / 2)` 导致 ZeroDivisionError，任务循环崩溃
+
+70. **DB 迁移失败处理【强制】🆕v4.12**
+    - `_migrate_*` 函数失败必须明确处理策略：关键迁移（schema 变更）失败 `raise RuntimeError` 中断启动；非关键迁移（索引补建/数据回填）失败 `logger.warning` + 继续启动，**禁止** `except: pass` 静默吞掉
+    - **判断信号**：`_migrate_*` 函数含 `try/except` 块 → except 块必须明确记录日志或抛出，禁止 `pass`
+    - **修复模式**：
+      ```python
+      # ✅ 关键迁移：失败必须中断
+      def _migrate_add_column(conn, table: str, column: str, sql_type: str) -> None:
+          try:
+              conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}")
+          except Exception as e:
+              if "duplicate column" in str(e).lower():
+                  return  # 幂等，已存在则跳过
+              raise RuntimeError(f"关键迁移失败 {table}.{column}: {e}") from e
+
+      # ✅ 非关键迁移：失败 warning + 继续
+      def _migrate_create_index(conn, name: str, table: str, columns: list[str]) -> None:
+          try:
+              conn.execute(f"CREATE INDEX IF NOT EXISTS {name} ON {table}({', '.join(columns)})")
+          except Exception as e:
+              logger.warning("非关键索引迁移失败 {}：{}（不影响启动）", name, e)
+      ```
+    - **配置参数**：`migration_failure_strategy.critical_migrations`（关键迁移函数名列表，失败 raise）、`migration_failure_strategy.non_critical_migrations`（非关键迁移函数名列表，失败 warn）、`migration_failure_strategy.default_strategy`（默认 `warn`，可选 `raise`）在 `config.yaml` 的 `migration_failure_strategy` 节点管理
+    - **适用**：所有 `_migrate_*` 函数（_migrate_add_column / _migrate_create_index / _migrate_make_column_nullable / _migrate_backfill_data）
+    - **不适用**：迁移幂等性检查（已通过"duplicate column"等错误识别处理）；测试代码中的迁移
+    - **历史教训**：`_migrate_create_index` 失败被 `except: pass` 吞掉，生产数据库索引长期缺失导致 Dashboard 查询慢 10 倍，但日志无任何记录
+
+71. **状态码语义精细化【强制】🆕v4.12**
+    - HTTP 状态码必须按语义精细化区分：`401` 未登录 / `403` 权限不足 / `440` Cookie 过期（需重新登录）/ `441` Token 过期（需刷新）/ `504` 网关超时，**禁止**所有认证失败都映射为 `401` 导致前端无法区分"未登录"与"登录态过期"
+    - **判断信号**：`raise HTTPException(status_code=401)` 出现在 Cookie 检查 / Token 刷新 / 登录校验等多处 → 必须按语义区分状态码
+    - **修复模式**：
+      ```python
+      # ✅ 按语义区分状态码
+      if not identity_cookies:
+          raise HTTPException(401, "未登录，请先登录")  # 完全未登录
+      if is_cookie_expired(identity_cookies):
+          raise HTTPException(440, "Cookie 已过期，请重新登录")  # 登录态过期
+      if is_m5tk_expired(session_cookies):
+          raise HTTPException(441, "会话 Token 已过期，请刷新")  # 临时 token 过期
+      if not has_permission(user, action):
+          raise HTTPException(403, "权限不足")  # 已登录但无权限
+      ```
+    - **配置参数**：`status_code_semantics.mapping`（错误场景到状态码的映射，如 `cookie_expired → 440`、`token_expired → 441`、`not_logged_in → 401`、`permission_denied → 403`）、`status_code_semantics.frontend_actions`（状态码到前端动作的映射，如 `401 → redirect_login`、`440 → redirect_relogin`、`441 → refresh_token`）在 `config.yaml` 的 `status_code_semantics` 节点管理
+    - **适用**：所有认证相关 API（登录/Cookie 校验/Token 刷新/权限检查）；SSE error 事件的状态码字段
+    - **不适用**：业务错误（如 404 资源不存在、409 状态冲突、422 参数校验失败）；纯内部 API
+    - **历史教训**：Cookie 过期、Token 过期、未登录全部映射为 `401`，前端无法区分应"跳转登录页"还是"刷新 Token"，导致用户反复被踢出登录
+
+72. **LLM 响应防御性三层级解析【强制】🆕v4.12**
+    - 调用 LLM API（OpenAI 兼容协议、Anthropic、本地模型）的响应必须按三层级防御性解析：`choices → message → content`，每层用 `.get()` / `isinstance` / 长度检查，**禁止**直接 `response["choices"][0]["message"]["content"]` 链式访问导致 KeyError / IndexError
+    - **判断信号**：代码含 `response["choices"]` 或 `response['choices'][0]` → 必须用 `.get()` + 边界检查
+    - **修复模式**：
+      ```python
+      # ✅ 三层级防御性解析
+      def _extract_llm_content(response: dict) -> str | None:
+          # 第一层：choices 数组存在且非空
+          choices = response.get("choices") if isinstance(response, dict) else None
+          if not choices or not isinstance(choices, list):
+              logger.warning("LLM 响应缺少 choices 字段：{}", response)
+              return None
+          # 第二层：message 对象存在
+          first = choices[0] if len(choices) > 0 else {}
+          message = first.get("message") if isinstance(first, dict) else None
+          if not message or not isinstance(message, dict):
+              logger.warning("LLM 响应缺少 message 字段")
+              return None
+          # 第三层：content 字符串非空
+          content = message.get("content")
+          if not content or not isinstance(content, str):
+              logger.warning("LLM 响应 content 为空")
+              return None
+          return content.strip()
+      ```
+    - **配置参数**：`llm_defensive_parsing.required_layers`（默认 `["choices", "message", "content"]`，必须校验的层级）、`llm_defensive_parsing.allow_empty_content`（默认 `false`，空 content 视为失败）、`llm_defensive_parsing.fallback_strategy`（默认 `return None`，可选 `raise`）在 `config.yaml` 的 `llm_defensive_parsing` 节点管理
+    - **适用**：所有调用 LLM API 的代码（OpenAI 兼容协议 / Anthropic / 本地 Ollama / sentence-transformers）；流式响应（每个 chunk 也需校验）
+    - **不适用**：本地模型直接返回对象（无 JSON 解析）；Embedding API 响应（结构不同）
+    - **历史教训**：`_call_ai_suggestion` 直接 `response["choices"][0]["message"]["content"]`，LLM 服务异常时返回 `{"error": "..."}` 导致 KeyError 未捕获，AI 建议任务静默失败
+
+73. **调度器状态与 DB 同步【强制】🆕v4.12**
+    - 调度器内存状态变更（pause/resume/stop/error_pause）必须同步到 DB（`update_task_status`），**禁止**只在内存变更导致 API 返回的状态与实际运行状态不一致
+    - **判断信号**：调度器代码含 `pause_event.clear()` / `pause_event.set()` / `self._active = False` → 必须同步调用 `self._repo.update_task_status(task_id, "paused"/"running"/"stopped")`
+    - **修复模式**：
+      ```python
+      # ✅ 状态变更后同步 DB
+      async def _auto_pause_on_errors(self, task_id: str, h: _WorkerHandle) -> None:
+          h.pause_event.clear()
+          h.consecutive_errors = 0
+          # 同步 DB 状态，确保 API 返回与实际一致
+          try:
+              await self._repo.update_task_status(task_id, "paused")
+          except Exception as e:
+              logger.warning("[Task {}] DB 状态同步失败：{}", task_id, e)
+      ```
+    - **配置参数**：`scheduler_db_sync.required_transitions`（必须同步 DB 的状态转换列表，如 `["running→paused", "paused→running", "running→stopped"]`）、`scheduler_db_sync.sync_failure_strategy`（默认 `warn`，可选 `raise`）、`scheduler_db_sync.status_field`（默认 `status`）在 `config.yaml` 的 `scheduler_db_sync` 节点管理
+    - **适用**：所有调度器状态变更（auto_pause / manual_pause / resume / stop / unregister）；任务状态机转换
+    - **不适用**：纯计算状态（如 consecutive_errors 计数器）；临时状态（如 pause_event 内部信号）；fire-and-forget 任务
+    - **历史教训**：调度器连续失败触发 `pause_event.clear()` 自动暂停，但未调用 `update_task_status("paused")`，API 仍返回 `running`，前端显示"运行中"但任务实际已停止
+
+74. **后台任务健康监控【强制】🆕v4.12**
+    - 后台任务（EventBus 消费者 / 调度器循环 / 健康检查器）必须用轮询监控（`while not stop_event.is_set(): if task.done(): break; await asyncio.wait_for(stop_event.wait(), timeout=N)`），**禁止** `await asyncio.Event().wait()` 静默等待导致任务异常退出时主循环无感知
+    - **判断信号**：代码含 `bus_task = asyncio.create_task(...)` 后 `await stop_event.wait()` → 必须改为轮询检查 `bus_task.done()`
+    - **修复模式**：
+      ```python
+      # ✅ 轮询监控后台任务
+      stop_event = asyncio.Event()
+      while not stop_event.is_set():
+          if bus_task.done():
+              exc = bus_task.exception()
+              if exc:
+                  logger.error("EventBus 异常退出：{}", exc)
+              else:
+                  logger.warning("EventBus 已退出")
+              break
+          try:
+              await asyncio.wait_for(stop_event.wait(), timeout=10.0)
+          except asyncio.TimeoutError:
+              continue  # 超时继续下一轮检查
+
+      # ❌ 错误：Event.wait 静默等待，bus_task 异常退出无感知
+      # bus_task = asyncio.create_task(event_bus.run())
+      # await stop_event.wait()  # bus_task 死了也不知道
+      ```
+    - **配置参数**：`background_task_monitor.poll_interval_seconds`（默认 `10`，轮询间隔）、`background_task_monitor.monitored_tasks`（必须监控的后台任务名列表，如 `["event_bus", "scheduler_loop", "health_check"]`）、`background_task_monitor.on_task_exit`（默认 `log_and_break`，可选 `restart`）在 `config.yaml` 的 `background_task_monitor` 节点管理
+    - **适用**：所有后台 asyncio.Task（EventBus / Scheduler / Health Checker / Cookie Sync / KB Refresh）；需要在主循环中感知子任务退出的场景
+    - **不适用**：fire-and-forget 任务（不需感知退出）；一次性任务（如启动初始化）；有 done_callback 处理的任务
+    - **历史教训**：`startup._scheduler_loop` 用 `await stop_event.wait()` 等待关闭信号，EventBus 任务异常退出时主循环无感知，事件推送静默失效 30 分钟才被用户发现
+
+75. **文本数值提取模式【强制】🆕v4.12**
+    - 从可能含多个数字的文本中提取数值时，必须用 `re.findall` 取 `numbers[-1]`（最后一个数字），**禁止** `re.search` 取第一个数字，因实际成交价/当前值通常出现在最后（如"原价 1000 现价 500"应取 500）
+    - **判断信号**：代码含 `re.search(r"\d+", text)` 或 `re.match(r"\d+", text)` 提取数值 → 必须评估文本是否可能含多数字，是则改为 `re.findall`
+    - **修复模式**：
+      ```python
+      # ✅ 取最后一个数字（实际成交价）
+      import re
+      text = "原价 1000 现价 500"
+      numbers = re.findall(r"\d+(?:\.\d+)?", text.replace(",", ""))
+      if numbers:
+          actual_price = float(numbers[-1])  # 500，正确
+
+      # ❌ 错误：取第一个数字（误取原价）
+      # m = re.search(r"\d+(?:\.\d+)?", text)
+      # if m: actual_price = float(m.group())  # 1000，错误
+      ```
+    - **配置参数**：`numeric_extraction_strategy.default_strategy`（默认 `last`，可选 `first`/`max`/`min`）、`numeric_extraction_strategy.scenarios`（场景到策略的映射，如 `price_extraction → last`、`quantity_extraction → first`）、`numeric_extraction_strategy.regex_pattern`（默认 `r"\d+(?:\.\d+)?"`）在 `config.yaml` 的 `numeric_extraction_strategy` 节点管理
+    - **适用**：从自由文本提取数值（价格/数量/评分/版本号）；多数字场景（"原价 X 现价 Y"、"最小 X 最大 Y"）
+    - **不适用**：单一数字文本（如纯数字字符串 "123"）；结构化数据（JSON 字段直接取值）；有明确位置的文本（如"价格:X"用 `re.search(r"价格:\s*(\d+)", text)` 分组提取）
+    - **历史教训**：`_extract_actual_price` 用 `re.search` 取第一个数字，订单页文本为"原价 1000 现价 500"时误取 1000，导致价格校验失败抢单被拒
+
+76. **前后端错误码契约与超时识别【强制】🆕v4.13**
+    - 前端调用后端含重试/异步逻辑的接口时，必须用模块级 `statusMessages: Record<number, string>` 映射表 + 独立 `isAxiosTimeout()` 函数双路识别错误：axios 超时无 `response.status`，必须用 `error.code === 'ECONNABORTED'` 或 `/timeout/i.test(error.message)` 识别；后端按语义区分的状态码（接续 step 71）必须在前端映射表中有对应文案，**禁止**所有错误走同一通用文案导致用户无法区分"网络超时"与"商品下架"
+    - **判断信号**：前端 catch 块含 `err.response?.status` 但无超时识别 → 必须补 `isAxiosTimeout()` 模块级函数；前端 `message.error('官方采集失败，请稍后重试')` 出现在多个 catch 块 → 必须按状态码差异化文案
+    - **修复模式**：
+      ```typescript
+      // ✅ 模块级常量 + 模块级函数
+      const COLLECT_OFFICIAL_ERROR_MESSAGES: Record<number, string> = {
+        503: '官方采集需要浏览器实例，请以 XH_WITH_SCHEDULER=1 模式启动',
+        403: '闲鱼登录已过期，请重新登录闲鱼',
+        440: '闲鱼登录已过期，请重新登录闲鱼',
+        441: '触发闲鱼反爬限制，请稍后重试或手动完成验证',
+        410: '商品详情页加载失败或已下架，请稍后重试',
+        502: '浏览器连接异常，请重启服务后重试',
+      }
+      const COLLECT_OFFICIAL_TIMEOUT_MESSAGE = '官方采集超时（详情页+卖家主页加载缓慢），请稍后重试或检查网络'
+      const COLLECT_OFFICIAL_FALLBACK_MESSAGE = '官方采集失败，请稍后重试'
+
+      // axios 超时无 response.status，需通过 code 识别
+      const isAxiosTimeout = (error: { code?: string; message?: string }): boolean =>
+        error?.code === 'ECONNABORTED' || /timeout/i.test(error?.message || '')
+
+      // 统一错误提示：超时优先 → status 映射 → fallback
+      function showStatusError(err: unknown, statusMessages: Record<number, string>,
+                               timeoutMessage: string, fallbackMessage: string): void {
+        const error = err as { response?: { status?: number; data?: { detail?: string } }; code?: string; message?: string }
+        if (isAxiosTimeout(error)) {
+          message.error(timeoutMessage)
+        } else if (error?.response?.status != null && statusMessages[error.response.status]) {
+          message.error(error?.response?.data?.detail || statusMessages[error.response.status])
+        } else {
+          message.error(error?.response?.data?.detail || fallbackMessage)
+        }
+      }
+      ```
+    - **配置参数**：`frontend_error_contract.timeout_codes`（默认 `['ECONNABORTED']`，axios 超时 code 列表）、`frontend_error_contract.timeout_patterns`（默认 `['/timeout/i']`，超时 message 正则模式列表）、`frontend_error_contract.status_message_map`（场景到消息映射，按业务接口分组，如 `collect_official: { 410: '...', 441: '...' }`）、`frontend_error_contract.timeout_priority`（默认 `true`，超时识别优先于 status 映射）在 `config.yaml` 的 `frontend_error_contract` 节点管理
+    - **适用**：含重试逻辑的 SSE/HTTP 接口、依赖多类 Cookie 的接口、含状态机的业务接口、浏览器自动化接口
+    - **不适用**：一次性请求无重试逻辑、纯 token 认证（JWT 无超时概念）、内部 API（无业务文案需求）
+    - **历史教训**：用户反馈"官方采集失败，请稍后重试"，理论推断为 axios 30s 超时，实际日志显示采集只花 12s，根因是后端选择器失效返回 502，前端无超时识别导致无法区分"超时"与"502"
+
+77. **前端可重试错误集与退避策略【强制】🆕v4.13**
+    - 前端调用后端接口必须区分「可重试错误」（410/441/502/timeout）与「需用户介入错误」（403/440/503），可重试错误用指数/固定退避重试 N 次（默认 N=1），重试时不弹消息避免打扰用户，**禁止**对所有错误一刀切重试导致需用户介入的错误被无意义重试
+    - **判断信号**：前端 catch 块直接 throw 或直接 `message.error` → 必须评估错误是否可重试；前端 `retry_count` 硬编码数字 → 必须移到配置或模块级常量
+    - **修复模式**：
+      ```typescript
+      // ✅ 可重试错误集 + 退避时间映射 + 重试不弹消息
+      const RETRYABLE_STATUSES = new Set([410, 441, 502])
+      const RETRY_DELAYS: Record<string, number> = {
+        '410': 1000,   // 页面未加载，快速重试
+        '441': 3000,   // 反爬触发，需 3s 冷却
+        '502': 1000,   // 连接异常，快速重试
+        'timeout': 2000,  // 超时，2s 后重试
+      }
+
+      async function collectOfficialWithRetry(itemId: string, taskId?: string): Promise<OfficialCollectResult> {
+        const MAX_RETRIES = 1
+        let lastErr: unknown
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            return await evalApi.collectOfficial(itemId, taskId)
+          } catch (err: unknown) {
+            lastErr = err
+            if (attempt >= MAX_RETRIES) break
+            const e = err as { response?: { status?: number }; code?: string; message?: string }
+            const status = e?.response?.status
+            const isTimeout = e?.code === 'ECONNABORTED' || /timeout/i.test(e?.message || '')
+            const retryable = isTimeout || (status !== undefined && RETRYABLE_STATUSES.has(status))
+            if (!retryable) break
+            const delayKey = isTimeout ? 'timeout' : String(status)
+            const delay = RETRY_DELAYS[delayKey] ?? 2000
+            await new Promise(resolve => setTimeout(resolve, delay))
+            // 重试时不弹消息，避免打扰用户（仅在最终失败时展示错误）
+          }
+        }
+        throw lastErr
+      }
+      ```
+    - **配置参数**：`frontend_retry_strategy.retryable_statuses`（默认 `[410, 441, 502]`，可重试状态码列表）、`frontend_retry_strategy.retry_delays_ms`（默认 `{410: 1000, 441: 3000, 502: 1000, timeout: 2000}`，状态码到退避时间映射）、`frontend_retry_strategy.max_retries`（默认 `1`，最大重试次数）、`frontend_retry_strategy.non_retryable_statuses`（默认 `[403, 440, 503]`，需用户介入的错误列表）、`frontend_retry_strategy.silent_on_retry`（默认 `true`，重试时不弹消息）在 `config.yaml` 的 `frontend_retry_strategy` 节点管理
+    - **适用**：网络请求（axios/fetch）、临时性错误（410/441/502/timeout）、浏览器自动化接口
+    - **不适用**：需用户介入的错误（403 权限不足/440 Cookie 过期/503 服务未启动）、不可重试业务错误（404 资源不存在）、事务性操作（POST/PUT/DELETE 需幂等性保证）
+    - **历史教训**：前端对所有错误直接 `message.error`，用户被偶发的 441 反爬或 502 连接异常打扰，需用户手动重试；改为仅对可重试错误自动重试 1 次后，95% 的偶发失败用户无感知
+
+78. **多层兜底链模式【强制】🆕v4.13**
+    - 从 SPA 页面提取数据必须按「特定→通用」多级兜底：DOM 选择器（className-dependent）→ `meta[property='og:title']` 等 SPA-universal 选择器（不依赖 className）→ `document.title` 等最末兜底，每层失败进入下一层，所有兜底失败才走 dump（参见 step 79），**禁止**只依赖单一 className 选择器导致页面改版时数据全空
+    - **判断信号**：代码含 `page.query_selector('.specific-class')` 后无兜底 → 必须补 og:meta 与 document.title 兜底；多个 DOM 选择器都属于 className 依赖型 → 必须至少补一层非 className 依赖的兜底
+    - **修复模式**：
+      ```python
+      # ✅ 多层兜底链：DOM 选择器 → og:title meta → document.title
+      title = ""
+      # 第一层：DOM 选择器（className-dependent，可能因页面改版失效）
+      try:
+          el = await page.query_selector(DETAIL_TITLE_MAIN)
+          if el:
+              title = (await el.inner_text() or "").strip()
+      except Exception as e:
+          logger.debug(f"详情页 {item_id} DOM 选择器提取失败: {e}")
+
+      # 第二层：og:title meta（SPA-universal，不依赖 className）
+      if not title:
+          try:
+              og_el = await page.query_selector("meta[property='og:title']")
+              if og_el:
+                  og_title = (await og_el.get_attribute("content") or "").strip()
+                  if og_title:
+                      title = og_title
+                      logger.debug(f"详情页 {item_id} 标题从 og:title 兜底提取: {title}")
+          except Exception as e:
+              logger.debug(f"详情页 {item_id} og:title 提取失败: {e}")
+
+      # 第三层：document.title（最末兜底）
+      if not title:
+          try:
+              title = (await page.title() or "").strip()
+          except Exception as e:
+              logger.debug(f"详情页 {item_id} document.title 提取失败: {e}")
+
+      # 所有兜底失败 → dump HTML（参见 step 79）
+      if not title:
+          await _dump_html_for_diagnosis(page, "title_extract", item_id)
+      ```
+    - **配置参数**：`dom_fallback_chain.strategies`（默认 `['dom_selector', 'og_meta', 'document_title']`，按顺序尝试的兜底策略）、`dom_fallback_chain.dom_selectors`（项目特定选择器列表，从 `infra/selectors.py` 读取）、`dom_fallback_chain.meta_selectors`（默认 `['og:title', 'og:description']`，SPA-universal meta 标签）、`dom_fallback_chain.final_fallback`（默认 `document_title`，最末兜底策略）、`dom_fallback_chain.dump_on_all_fail`（默认 `true`，所有兜底失败时触发 dump）在 `config.yaml` 的 `dom_fallback_chain` 节点管理（与 v4.3 B-REVIEW-FALLBACK-CHAIN 的"多方案降级"语义不同，本节点专指 DOM 提取兜底）
+    - **适用**：SPA 页面选择器提取（标题/描述/价格）、多源数据兜底（API→缓存→默认值）、爬虫类应用
+    - **不适用**：结构化 API 响应（JSON 字段直接取值）、单一来源数据、需要严格一致性的场景（如金融数据）
+    - **历史教训**：闲鱼详情页改版，原 `DETAIL_TITLE_MAIN` 选择器（h1 元素）失效，标题提取为空触发 502，30 个 dump 文件全为空数组无法定位；改为 og:title 兜底后即使页面改版也能提取标题
+
+79. **失败诊断 dump 机制【强制】🆕v4.13**
+    - 关键选择器/数据提取失败时必须自动 dump `page.content()` 到 `logs/<场景>_<id>_<timestamp>.html`，`logger.warning` 记录 dump 路径，dump 必须用 `try/except` 包裹不能阻塞主流程，dump 是「事后取证」不是「在线恢复」，**禁止**依赖 dump 结果做运行时决策，**禁止** dump 敏感数据（如完整 cookie/auth header）
+    - **判断信号**：代码含 `if not data: return None` 或 `raise HTTPException` 但无 dump → 必须在 return/raise 前 dump 现场用于事后取证；`logs/` 目录下 dump 文件全为空 `[]` → 必须验证 dump 时机（页面未渲染完成时 dump 会得到空数组）
+    - **修复模式**：
+      ```python
+      # ✅ dump HTML 到文件，不阻塞主流程
+      import time
+      from pathlib import Path
+
+      async def _dump_html_for_diagnosis(page, scenario: str, item_id: str) -> None:
+          """关键提取失败时 dump HTML 用于事后取证
+
+          为什么用 try/except 包裹：dump 失败不应影响主流程的异常处理
+          为什么 dump 到文件而非内存：完整 HTML 可能几百 KB，内存保存会污染日志
+          """
+          try:
+              timestamp = int(time.time())
+              dump_path = Path("logs") / f"{scenario}_{item_id}_{timestamp}.html"
+              html_content = await page.content()
+              if not html_content or html_content == "<html><head></head><body></body></html>":
+                  logger.warning(f"详情页 {item_id} {scenario} dump 为空（页面可能未渲染完成）")
+                  return
+              dump_path.write_text(html_content, encoding="utf-8")
+              logger.warning(f"详情页 {item_id} {scenario} 失败，HTML 已 dump 到 {dump_path}")
+          except Exception as dump_err:
+              logger.warning(f"详情页 {item_id} {scenario} dump 失败: {dump_err}")
+
+      # 在所有兜底失败后调用 dump
+      if not title:
+          await _dump_html_for_diagnosis(page, "title_extract", item_id)
+          raise HTTPException(502, "商品详情页加载失败或已下架")
+      ```
+    - **配置参数**：`failure_dump.enabled`（默认 `true`，是否启用 dump）、`failure_dump.dump_dir`（默认 `logs/`，dump 文件目录）、`failure_dump.filename_pattern`（默认 `{scenario}_{id}_{timestamp}.html`，文件名模式）、`failure_dump.max_file_size_mb`（默认 `10`，单文件最大大小，超过截断）、`failure_dump.max_files_per_scenario`（默认 `100`，每个场景保留的最大文件数，超过自动清理最旧）、`failure_dump.scenarios`（需 dump 的场景列表，如 `['title_extract', 'seller_extract', 'reviews_extract']`）、`failure_dump.sensitive_patterns`（默认 `['cookie', 'token', 'authorization', 'set-cookie']`，需脱敏的正则模式列表）在 `config.yaml` 的 `failure_dump` 节点管理
+    - **适用**：浏览器自动化选择器失败、HTML 内容提取失败、爬虫数据提取失败、需要事后取证的场景
+    - **不适用**：在线高频调用（dump 影响性能）、生产环境敏感数据（需脱敏或禁用 dump）、结构化 API 响应失败（应用日志记录 JSON）、纯计算函数失败（无 HTML 现场）
+    - **历史教训**：30 个 `detail_dom_*.json` dump 文件全为空数组 `[]`，无法定位选择器失效的具体原因，因为 dump 时机在页面未渲染完成时；改为 dump `page.content()` 完整 HTML 并校验非空后才写入文件
+
+80. **关键路径计时埋点【强制】🆕v4.13**
+    - 关键路径（`page.goto` / `wait_for_selector` / 外部 HTTP / DB 查询）必须用 `time.perf_counter()` 埋点，记录各阶段耗时与总耗时，超阈值（默认 5s）升为 `warning`，埋点不能影响业务逻辑（用 `try/finally` 包裹确保异常时也能记录耗时），**禁止**用 `time.time()`（精度低）或 `datetime.now()`（含时区开销）
+    - **判断信号**：代码含 `await page.goto(url)` 但无耗时记录 → 必须用 `time.perf_counter()` 包裹记录耗时；用户反馈"采集慢"但无耗时数据 → 必须在关键路径补埋点
+    - **修复模式**：
+      ```python
+      import time
+
+      # ✅ 关键路径计时埋点
+      async def _fetch_detail_with_timing(page, url: str, item_id: str) -> dict:
+          t_start = time.perf_counter()
+          try:
+              # 阶段 1：page.goto
+              t_goto_start = time.perf_counter()
+              await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+              goto_elapsed = (time.perf_counter() - t_goto_start) * 1000
+              if goto_elapsed > 5000:
+                  logger.warning(f"详情页 {item_id} page.goto 慢: {goto_elapsed:.0f}ms")
+              else:
+                  logger.debug(f"详情页 {item_id} page.goto: {goto_elapsed:.0f}ms")
+
+              # 阶段 2：wait_for_selector
+              t_wait_start = time.perf_counter()
+              await page.wait_for_selector(DETAIL_TITLE_MAIN, timeout=10000)
+              wait_elapsed = (time.perf_counter() - t_wait_start) * 1000
+              if wait_elapsed > 3000:
+                  logger.warning(f"详情页 {item_id} wait_for_selector 慢: {wait_elapsed:.0f}ms")
+
+              # 业务逻辑
+              ...
+          finally:
+              total_elapsed = (time.perf_counter() - t_start) * 1000
+              if total_elapsed > 30000:
+                  logger.warning(f"详情页 {item_id} 总耗时超阈值: {total_elapsed:.0f}ms")
+              else:
+                  logger.info(f"详情页 {item_id} 总耗时: {total_elapsed:.0f}ms")
+      ```
+    - **配置参数**：`timing_instrumentation.thresholds_ms`（默认 `{goto: 5000, wait_for_selector: 3000, http_request: 5000, db_query: 2000, total: 30000}`，各阶段超阈值）、`timing_instrumentation.log_level_normal`（默认 `debug`，正常耗时日志级别）、`timing_instrumentation.log_level_slow`（默认 `warning`，超阈值日志级别）、`timing_instrumentation.enabled_scenarios`（默认 `['browser_automation', 'http_request', 'db_query']`，启用埋点的场景）、`timing_instrumentation.timer_function`（默认 `time.perf_counter`，计时函数，禁止用 `time.time`）在 `config.yaml` 的 `timing_instrumentation` 节点管理
+    - **适用**：浏览器自动化（page.goto/wait_for_selector/evaluate）、外部 HTTP 请求（httpx/aiohttp）、数据库查询、文件 IO、需要性能监控的关键路径
+    - **不适用**：纯计算函数（如 math 运算）、高频调用（每秒百次以上，埋点开销影响性能）、已有 tenacity 装饰器的方法（装饰器内已处理）、CancelledError 处理（应用 suppress 包裹）
+    - **历史教训**：用户反馈"官方采集慢"但无耗时数据，无法定位是 page.goto 慢、wait_for_selector 慢还是业务逻辑慢；补埋点后发现 page.goto 平均 8s（网络问题），为后续优化提供数据支撑
+
+81. **凭证前置校验与并行采集【强制】🆕v4.13**
+    - 昂贵操作（如 `page.goto` 30s 超时）前必须校验凭证有效性（cookie.expires / token.exp / session.timeout）：session cookie（`expires=-1`）跳过校验，persistent cookie（`expires>0`）若 `expires < now` 判定过期直接报 440 不走昂贵流程；多个无依赖 IO 任务必须用 `asyncio.gather(*tasks, return_exceptions=True)` 并行执行，**禁止**串行调用导致总耗时累加
+    - **判断信号**：代码含 `await page.goto(url, timeout=30000)` 但前置无 cookie/token 校验 → 必须补前置校验；多个 `await self._fetch_xxx()` 串行调用且无依赖关系 → 必须改为 `asyncio.gather` 并行
+    - **修复模式**：
+      ```python
+      import asyncio
+      import time
+
+      # ✅ 凭证前置校验
+      async def _ensure_official_collect_cookies() -> None:
+          """调用 page.goto 前校验 cookie 有效性，避免 30s 浪费"""
+          async def _get_expired() -> list[str]:
+              cookies = await _get_cookies()
+              now = time.time()
+              expired = []
+              for c in cookies:
+                  name = str(c.get("name") or "")
+                  if name not in _OFFICIAL_COLLECT_IDENTITY_COOKIES:
+                      continue
+                  expires = c.get("expires", -1)
+                  # session cookie (expires=-1) 跳过，只校验 persistent cookie
+                  if expires > 0 and expires < now:
+                      expired.append(name)
+              return expired
+
+          expired = await _get_expired()
+          if expired:
+              raise HTTPException(440, f"Cookie 已过期: {expired}，请重新登录")
+
+      # ✅ 并行采集无依赖任务
+      async def _collect_official_data(page, item_id: str) -> dict:
+          # reviews extraction 与 seller profile 无依赖关系，并行执行
+          reviews_task = _extract_reviews_from_page(page, item_id)
+          seller_task = _fetch_seller_profile(page, item_id)
+
+          # return_exceptions=True 容错：一个失败不影响另一个
+          reviews_result, seller_result = await asyncio.gather(
+              reviews_task, seller_task, return_exceptions=True
+          )
+
+          # 逐个检查结果
+          reviews = reviews_result if not isinstance(reviews_result, Exception) else []
+          if isinstance(reviews_result, Exception):
+              logger.warning(f"详情页 {item_id} reviews 提取失败: {reviews_result}")
+
+          seller = seller_result if not isinstance(seller_result, Exception) else {}
+          if isinstance(seller_result, Exception):
+              logger.warning(f"详情页 {item_id} seller profile 提取失败: {seller_result}")
+
+          return {"reviews": reviews, "seller": seller}
+      ```
+    - **配置参数**：`precheck_parallel.credential_check_enabled`（默认 `true`，是否启用凭证前置校验）、`precheck_parallel.identity_cookies_whitelist`（项目特定，身份 cookie 白名单，如 `['_m_h5_tk', 'unb', 'cookie2', 'sgcookie']`）、`precheck_parallel.skip_session_cookies`（默认 `true`，`expires=-1` 的 session cookie 跳过校验）、`precheck_parallel.expiry_status_code`（默认 `440`，凭证过期时返回的 HTTP 状态码）、`precheck_parallel.parallel_gather_return_exceptions`（默认 `true`，asyncio.gather 是否容错）、`precheck_parallel.parallel_gather_max_concurrency`（默认 `0` 表示无限制，可设为正整数限制并发数）、`precheck_parallel.parallel_scenarios`（需并行的场景列表，如 `['reviews_and_seller', 'multi_item_collect']`）在 `config.yaml` 的 `precheck_parallel` 节点管理
+    - **适用**：昂贵操作前的凭证检查（cookie.expires / token.exp / session.timeout）、多个无依赖 IO 任务并行（reviews + seller、多个独立 API 调用）、批量数据采集
+    - **不适用**：有依赖关系的任务（如先登录再采集）、共享资源竞争（如同一浏览器 page 不能并行操作）、顺序敏感的流程（如订单状态机转换）、纯计算任务（并行无性能提升）
+    - **历史教训**：未做 cookie expires 前置校验，cookie 已过期仍走 30s page.goto，浪费 30s 后才报 502；reviews 与 seller 串行采集总耗时 12s，改为 asyncio.gather 并行后降至 7s
+
+82. **前端过滤与后端分类一致性验证【强制】🆕v4.14**
+    - 实现前端过滤功能前，必须先查看后端统计分类逻辑，确认分类互斥性。前端过滤结果数量必须与后端统计卡片显示的数字一致，否则用户困惑。例如后端 dist 统计中 insufficient（score==null）与 auto/pass/fail（有评分）互斥，前端过滤必须遵循同样的互斥逻辑
+    - **判断信号**：前端新增 filterStatus 过滤条件但未核对后端 insufficient_count/marginals/result 分类逻辑 → 必须先 grep 后端确认分类互斥性；前端过滤后各分类数量之和 ≠ 总数 → 必须对齐分类边界条件
+    - **修复模式**：
+      1. grep 后端代码确认分类逻辑：`grep -rn "insufficient_count\|marginals\|result\.auto\|result\.pass\|result\.fail" src/`
+      2. 确认分类互斥性：`total = insufficient_count + auto + pass + fail`
+      3. 前端过滤条件与后端对齐：`score == null → insufficient`，`score >= autoBuyScore → auto`，`passScore <= score < autoBuyScore → pass`，`score < passScore → fail`
+      4. 验证：过滤后各分类数量之和等于总数
+    - **配置参数**：`filter_backend_align.pass_score`（passScore 阈值，从 config 读取不硬编码）、`filter_backend_align.auto_buy_score`（autoBuyScore 阈值）、`filter_backend_align.category_mapping`（过滤分类映射表）在 `config.yaml` 的 `filter_backend_align` 节点管理
+    - **适用**：统计卡片过滤、Tab 分类过滤、状态分组过滤
+    - **不适用**：纯前端搜索过滤（无后端分类对应）、非互斥分类（一个记录可属于多个分类）
+    - **历史教训**：前端 filterStatus 过滤条件未与后端 dist 统计分类对齐，导致过滤后数量与统计卡片数字不一致，用户困惑
+
+83. **过滤+分页适配流程【强制】🆕v4.14**
+    - 添加 filterStatus 状态后，必须同步调整 pagination 的 total/current/pageSize 三参数。过滤后 filteredItems 可能少于 pageSize，若不调整分页参数会导致：(1) 分页器显示空页（total 仍是后端返回的全量总数）；(2) 当前页超出 filteredItems 范围显示空白；(3) 用户翻页触发不必要的后端 reload
+    - **判断信号**：新增 filterStatus 后 pagination 的 total 仍用后端返回值 → 必须改为 filteredItems.length；过滤后 current 页未重置 → 必须强制为 1；pageSize 未调整导致分页截断 → 必须设为 filteredItems.length 或全量
+    - **修复模式**：
+      1. `total`: 过滤时用 `filteredItems.length` 而非后端返回的 `total`
+      2. `current`: 过滤时强制为 1，不触发后端 reload
+      3. `pageSize`: 过滤时设为 `filteredItems.length || 1`（全量显示，避免分页截断遗漏数据）
+      4. `showTotal`: 过滤时显示「过滤后 N 条（共 M 条）」区分过滤前后
+    - **配置参数**：`filter_pagination_adapt.total_strategy`（默认 `filtered_length`，过滤时 total 取值策略）、`filter_pagination_adapt.current_reset`（默认 `true`，过滤时是否重置到第 1 页）、`filter_pagination_adapt.page_size_strategy`（默认 `all_filtered`，过滤时 pageSize 取值策略）、`filter_pagination_adapt.empty_page_size_fallback`（默认 `1`，空数组 pageSize 兜底值）在 `config.yaml` 的 `filter_pagination_adapt` 节点管理
+    - **适用**：前端过滤已加载的分页数据
+    - **不适用**：后端分页过滤（filter 参数传给后端，total 自然对齐）
+    - **历史教训**：新增 filterStatus 后未调整 pagination 参数，过滤后 current 页超出范围显示空白，用户翻页触发不必要的后端 reload
+
+84. **空状态边界条件处理规范【强制】🆕v4.14**
+    - 带过滤功能的列表，空状态判断必须用 filteredItems.length 而非原始 items.length，并区分两种情况。用 items.length 判断时，items 有数据但 filteredItems 过滤后为空，Table 会渲染空数组显示 antd 默认英文空状态，而非项目自定义的中文提示
+    - **判断信号**：空状态判断用 `items.length === 0` 但页面有 filterStatus → 必须改为 `filteredItems.length === 0`；空状态文案单一 → 必须区分「无数据」与「过滤后无匹配」两种文案
+    - **修复模式**：
+      1. 空状态判断用 `filteredItems.length === 0`
+      2. 区分两种文案：`items.length === 0 ? '暂无数据' : '当前过滤条件下无匹配记录'`
+      3. 验证：过滤后无数据时显示正确文案，清除过滤后恢复列表
+    - **配置参数**：`filter_empty_state.empty_text`（默认 `暂无数据`，无数据时文案）、`filter_empty_state.no_match_text`（默认 `当前过滤条件下无匹配记录`，过滤后无匹配时文案）在 `config.yaml` 的 `filter_empty_state` 节点管理
+    - **适用**：所有带过滤功能的列表页（评估明细、商品列表、订单列表等）
+    - **不适用**：无过滤功能的纯展示列表（直接用 items.length 即可）
+    - **历史教训**：空状态判断用 items.length，items 有数据但 filteredItems 为空时 Table 显示 antd 默认英文空状态，而非项目自定义中文提示
+
+85. **系统行为派生与用户配置正交原则【强制】🆕v4.14**
+    - 系统行为（如折叠态列宽自适应）通过 useMemo 派生，不修改通用 hook 的用户配置。用户手动配置的列显隐/排序与系统行为的列宽调整是两个正交的关注点。若系统行为直接修改 useColumnConfig hook 的状态，会污染用户配置，导致折叠展开后用户配置丢失
+    - **判断信号**：系统行为（如 panelCollapsed 变化）直接修改 useColumnConfig hook 状态 → 必须改为 useMemo 派生；列宽调整直接写入 hook 的 setColumns → 必须改为返回新数组
+    - **修复模式**：
+      1. 系统行为派生用 `useMemo` 包裹，依赖系统状态（如 panelCollapsed）
+      2. 派生函数返回新数组，不修改原始 columns：`columns.map(col => ({ ...col, width: newWidth }))`
+      3. 通用 hook（useColumnConfig）保持不变，系统行为在其外层派生
+      4. 验证：折叠/展开后用户配置的列显隐/排序保持不变
+    - **配置参数**：`derive_orthogonal.column_width_increment`（默认列宽增量）、`derive_orthogonal.remove_responsive_on_collapse`（默认 `true`，折叠时是否移除 responsive 属性）在 `config.yaml` 的 `derive_orthogonal` 节点管理
+    - **适用**：布局变化导致的列宽/列显隐调整（折叠面板、窗口缩放等）
+    - **不适用**：用户主动配置的列显隐/排序（直接写入 useColumnConfig）
+    - **历史教训**：折叠面板时直接修改 useColumnConfig hook 状态调整列宽，导致用户配置的列显隐/排序被污染，展开后配置丢失
+
+86. **浏览器自动化资源拦截粒度规范【强制】🆕v4.15**
+    - 浏览器自动化资源拦截必须考虑业务关键资源（二维码图片、关键数据接口），禁止盲目拦截 image/font/media。拦截前必须检查页面是否依赖图片渲染关键内容（如二维码图片是登录流程关键资源），若依赖则必须排除或延迟拦截
+    - **判断信号**：代码含 `route.abort("image")` 或 `route.abort("font")` 或 `route.abort("media")` → 必须检查页面是否依赖该类型资源渲染关键业务内容；登录流程/二维码页面/图片采集页面 → 禁止拦截 image
+    - **修复模式**：
+      1. 检查页面关键资源依赖：`grep -rn "route.abort" src/` 找到拦截逻辑
+      2. 分析拦截类型：是否拦截了业务关键资源（二维码图片、关键数据接口返回的图片）
+      3. 细化拦截规则：按 URL 或资源类型精细化拦截（如只拦截非关键广告图片，保留二维码图片）
+      4. 验证：拦截后关键内容仍能正常渲染/加载
+    - **配置参数**：`browser.route_block_types`（默认 `["font", "media"]`，不拦截 image）、`browser.route_block_whitelist`（关键资源 URL 白名单，如二维码图片 URL）、`browser.route_block_scenarios`（场景到拦截类型的映射，如 `login → []` 不拦截，`search → ["image", "font", "media"]` 可拦截）在 `config.yaml` 的 `browser.route_block` 节点管理
+    - **适用**：浏览器自动化场景的资源拦截优化（减少带宽、加快加载）
+    - **不适用**：纯数据抓取页面（无关键图片渲染）、纯 API 请求场景（无需浏览器）
+    - **历史教训**：登录流程 `route.abort("image")` 拦截所有图片，导致二维码图片无法渲染，用户看不到二维码无法扫码登录。修复后改为精细化拦截，排除二维码图片 URL
+
+87. **Cookie 层依赖关系信号匹配规范【强制】🆕v4.15**
+    - 层恢复信号必须与层范围匹配，SESSION 层信号不能恢复 IDENTITY 层，IDENTITY 无效时 SESSION 也不能恢复。层定义的 `depends_on` 字段指示依赖关系，信号只能恢复其所属层及以下层，禁止跨层恢复导致状态不一致
+    - **判断信号**：代码含 `sync_cookie_layers_from_json()` 或 `_sync_layers_from_signal()` → 必须检查信号与层的匹配关系；层定义含 `depends_on` 字段 → 信号恢复必须遵循依赖链
+    - **修复模式**：
+      1. 检查层定义依赖关系：`grep -rn "depends_on" src/` 找到层依赖配置
+      2. 分析信号范围：SESSION 层信号只能恢复 SESSION 层，IDENTITY 层信号可恢复 IDENTITY + SESSION 层（依赖链）
+      3. 修复跨层恢复：信号恢复逻辑必须按 `depends_on` 递归恢复，禁止直接跳层
+      4. 验证：层状态恢复后依赖链上的所有层状态一致
+    - **配置参数**：`cookie_layers.signal_layer_mapping`（信号到层的映射表，如 `login_success → identity`，`session_refresh → session`）、`cookie_layers.depends_on_chain`（层依赖链，如 `session → identity → base`）在 `config.yaml` 的 `cookie_layers` 节点管理
+    - **适用**：层级依赖的状态恢复、Cookie 层管理、多源状态同步
+    - **不适用**：无层级依赖的状态、独立状态恢复、单层状态管理
+    - **历史教训**：SESSION 层恢复信号 `sync_from_browser()` 被误用于恢复 IDENTITY 层，导致 IDENTITY 层状态与实际不一致（浏览器已失效但层状态显示有效）
+
+88. **DEBUG 代码清理规范【强制】🆕v4.15**
+    - 临时 DEBUG 代码在问题修复后必须移除，禁止留在生产代码中。DEBUG 代码包括：临时 import（如 `import os as _os`）、临时环境变量检查（如 `environ.get("DEBUG")`）、临时日志文件写入（如 `open("debug.log", "w")`）、临时打印语句（如 `print("DEBUG: ...")`）。问题修复后必须 grep 所有 DEBUG 代码并移除，避免污染生产环境
+    - **判断信号**：代码含 `import os as _os` / `environ.get("DEBUG")` / `open("debug.log")` / `print("DEBUG")` / `logger.debug` 异常密集 → 必须检查是否为临时 DEBUG 代码；问题修复后 grep 仍有 DEBUG 代码 → 必须移除
+    - **修复模式**：
+      1. 问题修复后 grep DEBUG 代码：`grep -rn "DEBUG\|debug\.log\|import os as _os\|environ.get(\"DEBUG\")" src/`
+      2. 逐项检查是否为临时调试代码（非长期监控指标）
+      3. 移除临时 DEBUG 代码：删除 import、删除环境变量检查、删除日志文件写入、删除打印语句
+      4. 验证：grep 无残留 DEBUG 代码
+    - **配置参数**：`debug.enabled`（默认 `false`，生产环境禁止 DEBUG 代码）、`debug.cleanup_after_fix`（默认 `true`，问题修复后自动清理 DEBUG 代码）、`debug.whitelist`（长期监控指标白名单，如 `["performance_metrics", "health_check"]`）在 `config.yaml` 的 `debug` 节点管理
+    - **适用**：临时调试代码、排查问题后的清理、开发环境调试
+    - **不适用**：日志级别动态降级（需保留配置）、长期监控指标收集（需保留）、性能埋点（需保留）
+    - **历史教训**：登录流程问题排查时添加 `import os as _os` 和 `open("debug.log", "w")` 写入调试信息，问题修复后未移除，导致生产环境产生 debug.log 文件污染日志目录
+
+89. **子进程创建标志规范【强制】🆕v4.15**
+    - WebView2/Playwright GUI 子进程必须用 `CREATE_NEW_CONSOLE` 标志创建，避免 GUI 进程与主进程控制台输出混淆。Windows 平台 `subprocess.Popen` 的 `creationflags` 参数必须包含 `CREATE_NEW_CONSOLE = 0x00000010`，确保 GUI 子进程有独立控制台窗口
+    - **判断信号**：代码含 `subprocess.Popen` 创建 WebView2/Playwright GUI 进程 → 必须检查 `creationflags` 是否包含 `CREATE_NEW_CONSOLE`；GUI 子进程无独立控制台 → 必须添加标志
+    - **修复模式**：
+      1. 检查 GUI 子进程创建：`grep -rn "subprocess.Popen" src/` 找到进程创建逻辑
+      2. 确认 GUI 进程类型：WebView2/Playwright/浏览器等 GUI 进程
+      3. 添加 `CREATE_NEW_CONSOLE` 标志：`creationflags=subprocess.CREATE_NEW_CONSOLE`（Windows）
+      4. 验证：GUI 子进程启动后有独立控制台窗口，不污染主进程控制台
+    - **配置参数**：`subprocess.creationflags_gui`（默认 `0x00000010` 即 CREATE_NEW_CONSOLE）、`subprocess.creationflags_cli`（默认 `0` 无特殊标志）、`subprocess.gui_process_types`（GUI 进程类型列表，如 `["webview2", "playwright", "browser"]`）在 `config.yaml` 的 `subprocess` 节点管理（引用 `project_memory.md` 硬约束）
+    - **适用**：所有 GUI 子进程创建（WebView2/Playwright/浏览器）
+    - **不适用**：CLI 子进程（无 GUI）、非 Windows 平台（无 CREATE_NEW_CONSOLE 标志）
+    - **历史教训**：WebView2 子进程未用 CREATE_NEW_CONSOLE 创建，GUI 输出污染主进程控制台，日志混乱难以排查
+
+90. **配置驱动原则强化【强制】🆕v4.15**
+    - 所有新增编码规范必须强调配置驱动，参数在 `config.yaml` 的对应节点管理，不硬编码。新增检查点必须包含适用/不适用场景说明，确保通用性。配置节点命名遵循 `snake_case`，层级结构清晰，避免扁平化命名冲突
+    - **判断信号**：新增编码规范含硬编码参数 → 必须改为配置驱动；新增检查点无适用/不适用场景说明 → 必须补充；配置节点命名不规范 → 必须改为 snake_case
+    - **修复模式**：
+      1. 检查新增规范：是否有硬编码参数（如阈值、超时时间、列表）
+      2. 提取配置节点：`config.yaml` 中新增对应节点（如 `browser.route_block`、`cookie_layers.signal_layer_mapping`）
+      3. 补充场景说明：适用/不适用场景列表，确保通用性
+      4. 验证：配置节点可被代码读取，场景说明覆盖典型用例
+    - **配置参数**：`config_driven.required_for_new_rules`（默认 `true`，新增规范必须配置驱动）、`config_driven.scenario_description_required`（默认 `true`，新增检查点必须包含场景说明）、`config_driven.node_naming_style`（默认 `snake_case`）在 `config.yaml` 的 `config_driven` 节点管理
+    - **适用**：所有新增编码规范、新增审查检查点、配置节点设计
+    - **不适用**：语言/框架级常量（无业务意义）、协议固定值（不可配置）
+    - **历史教训**：v4.14 新增规范部分参数仍硬编码，导致不同环境需改代码而非改配置；新增检查点无适用场景说明，审查时误用于不适用场景
+
+91. **缓存失效传播规范【强制】🆕v4.16**
+    - 任何持久化层（JSON 文件 / SQLite / 外部配置）变更后，必须**显式调用**对应缓存对象的 `invalidate_cache()` 或等价方法，TTL 兜底不替代主动失效
+    - 跨进程变更（子进程写、主进程读）必须主动通知主进程失效缓存，禁止依赖"下次读时发现不一致"（读时已晚）
+    - **判断信号**：类含 `_cache`/`_cache_time`/`_cached_*` 字段 → 必须有 `invalidate_cache()` 方法；写入主数据源的方法（`update_*`/`upsert_*`/`write_*`）未在写后调用同步钩子 → 必须补齐
+    - **修复模式**：
+      1. 识别共享状态：明确"输入字段"、"派生字段"、"持久化副本"三类
+      2. 设计 invalidate 入口：每个缓存对象暴露 `invalidate_cache()` 方法
+      3. 写入主路径后必调：所有写主数据源方法在写后**显式**调用 `invalidate_cache()`
+      4. 失败降级：同步钩子失败仅 `logger.warning`，不抛异常阻塞主流程
+    - **配置参数**：`cache_invalidation.enabled`（默认 `true`）、`cache_invalidation.ttl_grace_seconds`（TTL 兜底秒数，默认 0 即不依赖 TTL）、`cache_invalidation.fail_log_level`（默认 `warning`）在 `config.yaml` 的 `cache_invalidation` 节点管理
+    - **适用**：JSON 持久化层、跨进程 Cookie/状态同步、内存缓存与文件副本同步、登录态多进程写入
+    - **不适用**：纯函数、纯计算缓存（如 LRU math 缓存）、无外部数据源同步的内部状态
+    - **历史教训**：CookieStore 用 30 秒 TTL 兜底缓存，浏览器子进程登录后只更新子进程自己的缓存，主进程仍读到旧缓存，导致 3 个 Cookie 层显示失效（功能实际可用）
+
+92. **状态判定需区分"未检测"与"已检测未失效"【强制】🆕v4.16**
+    - 任何"功能信号"字段（`last_session_invalid`/`is_healthy`/`is_connected` 等）不能仅用布尔初始值（如 `False`）代表"未检测"——`False` 与"已检测无失效"语义混淆，会导致刚启动时误判为"功能正常"
+    - 必须配合"已发生过检测"标记（时间戳 `_last_check_at > 0`、计数器 `use_count > 0`、首次成功标记 `_has_run`）
+    - **判断信号**：布尔字段默认值 `False` + 实际语义是"初始未检测" → 必须增加时间戳/计数器区分；强制恢复/兜底逻辑仅依赖布尔字段 → 必须加前置条件
+    - **修复模式**：
+      1. 增加"已检测"标记：`_last_m5tk_refresh > 0` / `use_count > 0` / `_has_run = True`
+      2. 信号判定前置条件：`if has_searched and session_ok: signals.add(...)`
+      3. 强制恢复需白名单：信号 1/2 只能恢复其能证明有效的层范围（`collector.last_session_invalid=False` 恢复全层，`json_has_valid_m5tk` 恢复 SESSION 层）
+      4. 防御性 else：未识别的信号组合不默认恢复所有层，写 `logger.warning` 后 `set()`
+    - **配置参数**：`state_detection_bootstrap.required_marker`（前置条件类型：`timestamp`/`counter`/`flag`，默认 `timestamp`）、`state_detection_bootstrap.signal_layer_mapping`（信号到层范围映射，如 `collector_signal → [identity, session, tracking]`、`m5tk_signal → [session]`）、`state_detection_bootstrap.unknown_signal_strategy`（默认 `set()` 即不恢复）在 `config.yaml` 的 `state_detection_bootstrap` 节点管理
+    - **适用**：跨进程/跨模块状态判定、Cookie 层状态自愈、容器健康检查、服务可用性兜底
+    - **不适用**：纯客户端 UI 状态、单次函数返回值、无初始歧义的开关字段
+    - **历史教训**：collector 刚启动还没搜索过任何商品时，`last_session_invalid=False` 被解读为"会话有效"，强制恢复所有 Cookie 层（包括实际已失效的 IDENTITY），导致用户看到"状态闪烁"（失效→恢复→再失效）
+
+93. **SQLite DDL 修改列约束必须用表重建 + 事务安全【强制】🆕v4.16**
+    - SQLite 不支持 `ALTER COLUMN`，任何修改列约束的操作（NOT NULL→nullable、类型变更）必须通过 `_migrate_make_column_nullable` 模式（事务 + 残留清理 + 数据复制 + 异常恢复），禁止分散 commit 或裸 ALTER
+    - 关键约束：
+      1. **事务包裹**：整个表重建过程用 `engine.begin()` 包裹，任一步骤失败自动回滚
+      2. **残留清理**：迁移前 `DROP TABLE IF EXISTS {table}_old`，避免上次失败残留导致 RENAME 阻塞
+      3. **连接传参**：`orm_table.create(conn, checkfirst=True)` 传入连接而非 `engine`，确保 DDL 纳入事务
+      4. **数据复制**：用列名交集（`{c.name for c in orm_table.columns} & {c[1] for c in PRAGMA table_info}`）复制数据，防止列差异导致 INSERT 失败
+      5. **异常恢复**：失败后检查 `{table}` 是否存在，不存在则从 `{table}_old` RENAME 恢复
+    - **判断信号**：`_migrate_*` 函数含多个 `conn.commit()` → 拆分为单一事务；`ALTER TABLE ... MODIFY COLUMN` / `ALTER TABLE ... ALTER COLUMN` → SQLite 不支持，需改用表重建；DDL 操作未传 `conn` 给 `orm_table.create` → 必须改为传 `conn`
+    - **修复模式**：
+      ```python
+      with engine.begin() as conn:
+          conn.execute(sa_text(f"DROP TABLE IF EXISTS {table}_old"))
+          conn.execute(sa_text(f"ALTER TABLE {table} RENAME TO {table}_old"))
+          orm_table.create(conn, checkfirst=True)
+          old_cols = {c[1] for c in conn.execute(sa_text(f"PRAGMA table_info({table}_old)")).all()}
+          common_cols = [c for c in orm_table.columns if c.name in old_cols]
+          col_list = ", ".join(f'"{c.name}"' for c in common_cols)
+          conn.execute(sa_text(f"INSERT INTO {table} ({col_list}) SELECT {col_list} FROM {table}_old"))
+          conn.execute(sa_text(f"DROP TABLE {table}_old"))
+      ```
+    - **配置参数**：`migration_transaction.require_single_transaction`（默认 `true`）、`migration_transaction.cleanup_residual_table`（默认 `true`，自动 DROP `{table}_old`）、`migration_transaction.recover_from_old`（默认 `true`，失败后从 `{table}_old` 恢复）、`migration_transaction.exception_log_level`（默认 `error`）在 `config.yaml` 的 `migration_transaction` 节点管理
+    - **适用**：SQLite 修改列约束、表重建、任何不可逆 DDL
+    - **不适用**：PostgreSQL/MySQL（有原生 DDL 事务）、新增列（直接 `ADD COLUMN`）、纯查询/插入操作
+    - **历史教训**：旧版 `_migrate_make_column_nullable` 用 3 个独立 commit 拆分布骤 1/2/3/4，步骤 2 或 3 失败时旧表已 RENAME 但新表未创建完成，tasks 表变空且 tasks_old 残留，下次启动时 RENAME 因目标已存在永久阻塞；新版改用 `engine.begin()` 单事务 + 残留清理 + 异常恢复，彻底解决该问题
+
+### step 94：前后端字段契约对齐规范【强制】🆕v4.17
+
+**背景**：前端 types.ts 声明 `damages`/`inconsistencies` 字段，但后端 `_normalize_deep_result` 显式归并到 `signals`，导致前端通过 `check[signalKey]` 动态取值永远拿到 undefined。
+
+**规范**：
+1. 后端对 LLM/外部响应做归一化（合并/重命名/转换字段）时，必须在前端 types.ts 对应字段声明中加注释 `// 后端已归一化，前端消费 X 字段`
+2. types.ts 中保留旧字段名时必须标 optional 并加注释 `// 仅作兼容保留，后端不返回`
+3. 前端禁止通过动态 key（如 `check[signalKey]`）取归一化字段，必须直接用归一化后的字段名（如 `check.signals`）
+
+**判断逻辑**：
+- grep 后端源码查看是否有 `_normalize` / `_unify` / `_merge` / `_flatten` 等归一化函数
+- 有则同步检查前端 types.ts 声明是否与归一化结果对齐
+- grep 前端 `as string[] | undefined` 等动态类型转换，确认是否在取归一化字段
+
+**反例**：
+```typescript
+// ❌ 错误：signalKey 动态取值，后端归一化后 damages 永远 undefined
+const signals = (check[signalKey] as string[] | undefined) ?? []
+```
+
+**正例**：
+```typescript
+// ✅ 正确：直接用归一化字段
+const signals = check.signals ?? []
+```
+
+**配置参数**：`field_contract_align` 节点（enabled / require_doc_comment / detect_dynamic_key_access / fallback_to_legacy_field）
+
+**适用场景**：后端有 `_normalize` / `_unify` / `_merge` / `_flatten` 等字段转换函数 + 前端通过动态 key 取值
+**不适用场景**：后端直接返回原始响应无转换；前端类型声明与后端 pydantic 模型一一对应
+
+### step 95：长耗时异步请求 race condition 防护规范【强制】🆕v4.17
+
+**背景**：Vision 推理 90s 期间用户切换商品，旧请求的 result/error/loading 污染新商品 UI 状态；原 onAIEval（60s）也存在同源问题。
+
+**规范**：
+1. 任何 > 3s 的异步请求（LLM Vision/批量采集/重型 DB 查询）必须用 `useRef` 跟踪最新请求 ID
+2. 旧请求的 result/error/loading 三态在 setState 前必须校验 `ref.current === itemId`，不匹配则丢弃
+3. finally 块同样校验，避免提前关闭新请求的 loading
+
+**判断逻辑**：
+- grep 前端 `client.post` / `client.get` 调用看是否有 `timeout` 参数 >= 3000
+- 或调用方为 LLM/批量类（`aiApi.deepAnalyze` / `aiApi.evaluateCondition` / `evalApi.batchEvaluate`）
+- 有则强制加 `useRef` 防护
+
+**代码模板**：
+```typescript
+const itemIdRef = useRef('')
+const onXxx = async (itemId: string) => {
+  itemIdRef.current = itemId
+  setLoading(true)
+  setResult(null)
+  try {
+    const result = await api.fetch(itemId)
+    if (itemIdRef.current !== itemId) return  // 丢弃过期结果
+    setResult(result)
+  } catch (err) {
+    if (itemIdRef.current !== itemId) return  // 丢弃过期错误
+    handleError(err)
+  } finally {
+    if (itemIdRef.current === itemId) {  // 仅最新请求结束 loading
+      setLoading(false)
+    }
+  }
+}
+```
+
+**配置参数**：`async_race_condition` 节点（enabled / threshold_ms / detect_patterns / abort_controller_preferred）
+
+**适用场景**：timeout >= 3s 的异步请求 + 用户可触发多次切换商品/任务/对象的场景（Modal 内异步、列表行按钮异步）
+**不适用场景**：同步请求（< 1s）；一次性请求（页面加载）；用户无法重复触发（如表单提交后禁用按钮）；请求顺序由用户显式控制（如分页加载）
+
+注：`AbortController` 是更优解但需后端支持取消；`useRef` 方案是通用轻量解，无需后端配合。
+
+### step 96：除零兜底禁止凑数规范【强制】🆕v4.17
+
+**背景**：`_detect_post_burst` 中 `previous_count=0` 时用 `recent_count / 0.1` 凑数，产生 `ratio=100.0` 误导数字写入 reason 字符串展示给用户。
+
+**规范**：
+1. 除零/空值兜底禁止用凑数小数（`x / 0.1`）伪装比值
+2. 比值/比率/百分比计算中 `previous_count`/`baseline` 可能为 0 时，直接置为 `0.0` 或 `float('inf')`
+3. 写入 reason/log 展示给用户的数值，无意义时用字符串 `"N/A"` 而非数字
+
+**判断逻辑**：
+- grep ` / 0\.` 或 `/ 0.1` 或 `/ max(*, 1)` 等可疑除零兜底
+- 逐个核查语义：是否在展示给用户的 reason/log 中？是否在统计数值中？
+- 内部计算用途的 `max(prev, 1)` 防止除零可接受（结果不展示）；展示用途必须用 `0.0` + `N/A` 文案
+
+**反例**：
+```python
+# ❌ 错误：凑数小数伪装比值，展示 "ratio=100.0x" 误导用户
+ratio = recent_count / 0.1 if recent_count > 0 else 0.0
+result.reasons.append(f"dealer:post_burst(ratio={ratio}x)")
+```
+
+**正例**：
+```python
+# ✅ 正确：previous=0 时 ratio=0.0，reason 显示 N/A
+if previous_count > 0:
+    ratio = recent_count / previous_count
+else:
+    ratio = 0.0
+ratio_str = f"{ratio}x" if previous_count > 0 else "N/A"
+result.reasons.append(f"dealer:post_burst(ratio={ratio_str})")
+```
+
+**配置参数**：`divzero_fallback` 节点（enabled / detect_patterns / display_value_for_empty_baseline）
+
+**适用场景**：比值/比率/百分比计算；`previous_count`/`baseline` 可能为 0 的对比场景；写入 reason/log 展示给用户的数值
+**不适用场景**：内部计算用途的兜底（如 `max(prev, 1)` 防止除零但结果不展示）；倒计时/计时器场景
+
+### step 97：重复错误处理抽取规范【强制】🆕v4.17
+
+**背景**：`onAIEval` 与 `onDeepAnalyze` 的 403/404/422 三段 if-else 完全重复，复制粘贴模式导致后续修改状态码文案时需同步多处。
+
+**规范**：
+1. 两处以上相同的 if-else 状态码分支必须抽取工具函数
+2. 工具函数签名统一为 `handleXxxError(err, fallbackMsg, closeModal/...)`
+3. 抽取后原调用处仅保留 `handleXxxError(err, '失败文案', () => setModalOpen(false))` 一行
+
+**判断逻辑**：
+- grep `status === 403` 或 `status === 404` 出现位置
+- 同文件内 >= 2 处即需抽取
+- 检查抽取后的工具函数是否覆盖所有状态码分支（403/404/422/500 等）
+
+**反例**：
+```typescript
+// ❌ 错误：两处重复的 if-else
+const onAIEval = async (itemId) => {
+  try { ... } catch (err) {
+    if (status === 403) message.error('AI 功能未开启')
+    else if (status === 404) message.error('商品不存在')
+    else if (status === 422) message.error('参数错误')
+    else message.error(detail || 'AI 评估失败')
+    setAiModalOpen(false)
+  }
+}
+const onDeepAnalyze = async (itemId) => {
+  try { ... } catch (err) {
+    if (status === 403) message.error('AI 功能未开启')  // 重复
+    else if (status === 404) message.error('商品不存在')  // 重复
+    else if (status === 422) message.error('参数错误')  // 重复
+    else message.error(detail || '深度分析失败')
+    setDeepModalOpen(false)
+  }
+}
+```
+
+**正例**：
+```typescript
+// ✅ 正确：抽取 handleAiError 工具函数
+const handleAiError = (err: unknown, fallbackMsg: string, closeModal: () => void) => {
+  const status = (err as { response?: { status?: number } })?.response?.status
+  const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+  if (status === 403) message.error('AI 功能未开启，请在配置页面开启')
+  else if (status === 404) message.error('商品不存在于数据库中')
+  else if (status === 422) message.error('请求参数错误：商品 ID 为空')
+  else message.error(detail || fallbackMsg)
+  closeModal()
+}
+const onAIEval = async (itemId) => {
+  try { ... } catch (err) {
+    handleAiError(err, 'AI 评估失败，请检查 AI 配置', () => setAiModalOpen(false))
+  }
+}
+```
+
+**配置参数**：`error_handler_extract` 节点（enabled / min_duplicate_count / detect_patterns / unified_signature）
+
+**适用场景**：多个 async 函数调用同一后端端点；多个函数处理同一类外部 API 错误（HTTP 状态码分类）
+**不适用场景**：仅一处调用的错误处理（抽取后反而增加间接性）；错误处理逻辑有差异（如不同端点状态码集合不同）
+
+### step 98：元数据单源管理与跨端显示对齐规范【强制】🆕v4.18
+
+**背景**：版本管理菜单持续显示 "V10"，根因是前端 VersionManager 调用 `/api/config/version`（实际返回 `len(backups)`）当作版本号使用；同时后端 `export_config` 中残留占位符 `"version": "1.0"`。该问题暴露了元数据多源读取、占位符回填、前端"语义错位 API 调用"三类反模式同时存在时极难排查的现象。
+
+**规范**：
+
+1. **元数据必须有唯一源头**（Single Source of Truth）
+   - 版本号、构建时间、git_sha 等构建期元数据必须指定唯一源头文件（如 `src/xianyu_hunter/__init__.py` 的 `__version__`）
+   - 自动生成文件（如 `_build_info.py`）由 `scripts/build_info.py` 维护，**禁止**手动编辑
+   - 所有读取点优先读源头，失败时回退到生成文件，最后回退到 `'unknown'`
+   - **禁止**在生产代码路径出现占位符字面量（如 `'1.0'`/`'0.0.0'`/`'unknown version'`），占位符仅限测试 fixture
+
+2. **多端点读取同一元数据必须封装 `_safe_xxx()` 辅助函数**
+   - 函数名以 `_safe_` 前缀，表示"安全读取，失败回退"
+   - 三层 try/except 结构：源头 → 生成文件 → 默认值 `'unknown'`
+   - except 块使用宽泛 `Exception`（任何导入失败都应回退而非崩溃）
+   - 返回值必须为字符串（非 `None`/空串），避免下游类型判断复杂化
+   - 默认值统一为 `'unknown'`（不用空串，避免前端误判为"加载中"）
+
+3. **前端显示元数据必须调用语义对齐的 API**
+   - 版本号显示组件必须调用 `/api/about`（语义：系统元信息），**禁止**调用 `/api/config/version`（语义：备份数计数）等语义错位端点
+   - 卡片/Statistic 的 `value` 必须与 `title` 语义对齐（如 `title="系统版本"` 时 `value` 不能是 `backups.length`）
+   - 多个独立 API 调用应使用 `Promise.all` 并行化（如 `[configApi.listBackups(), aboutApi.get()]`）
+
+4. **跨端数据流问题必须前后端协同修复**
+   - 修复时必须检查前端调用 → 后端端点 → 数据源全链路，**禁止**只改一边
+   - 同步检查相关端点是否也有占位符（如修复 `/api/about` 时同步检查 `/api/config/export`）
+
+5. **修复时同步清理死代码**
+   - 修复 bug 时发现只 `set` 不 `read` 的 state / 只 `import` 不调用的函数必须同步清理
+   - 清理前用 `grep` 全局搜索确认无引用
+   - 删除声明、赋值、import 三处
+   - **禁止**"下次再说"——死代码会误导后续开发者认为该 state/函数仍在生效
+
+**判断逻辑**：
+
+- `grep "from xianyu_hunter import __version__" src/` 出现 ≥ 2 处 → 必须封装 `_safe_app_version()` 辅助函数
+- `grep -E "'(1\.0|0\.0\.0|unknown version)'" src/xianyu_hunter/` 出现匹配 → 必须改为调用辅助函数
+- 前端代码含 `configApi.getVersion()` 用于版本号显示 → 视为违规（应改用 `aboutApi.get()`）
+- 前端代码含 `title="[Vv]ersion"` 的 Statistic/Card 但 `value` 来自 `length`/`count`/`size` → 视为违规
+- 前端 `useState` 声明的变量在文件内只有 `setXxx` 调用无 `xxx` 读取 → 视为死代码
+
+**反例**：
+
+```python
+# ❌ 错误：生产代码占位符版本号 + 多端点独立读取未封装
+@api_router.get("/config/export")
+async def export_config():
+    return {"version": "1.0", "items": []}  # 占位符，与 __version__ 不一致
+```
+
+```typescript
+// ❌ 错误：前端调用语义错位 API + 用列表长度当版本号
+const [version, setVersion] = useState(0)
+const res = await configApi.getVersion()  // 实际返回备份数计数
+setVersion(res.count)  // 卡死在 BACKUP_KEEP=10
+return <Statistic title="系统版本" value={`V${version}`} />
+```
+
+**正例**：
+
+```python
+# ✅ 正确：封装 _safe_app_version() 辅助函数 + 三层回退
+def _safe_app_version() -> str:
+    """读取系统真实版本号，失败时回退为 'unknown'。
+
+    与 api_about._safe_build_info 同源：__init__.py 的 __version__ 是单一源头，
+    _build_info.py 由 scripts/build_info.py 重新生成。开发环境 _build_info 可能
+    未生成，所以优先读 __init__.py 的 __version__，再回退到 _build_info。
+    """
+    try:
+        from xianyu_hunter import __version__
+        if __version__:
+            return __version__
+    except Exception:
+        pass
+    try:
+        from xianyu_hunter import _build_info
+        return getattr(_build_info, "__version__", "unknown") or "unknown"
+    except Exception:
+        return "unknown"
+
+@api_router.get("/config/export")
+async def export_config():
+    return {"version": _safe_app_version(), "items": []}
+```
+
+```typescript
+// ✅ 正确：调用语义对齐的 aboutApi + Promise.all 并行化
+const [buildInfo, setBuildInfo] = useState<AboutInfo | null>(null)
+const [backupRes, aboutRes] = await Promise.all([
+  configApi.listBackups(),
+  aboutApi.get(),
+])
+setBackups(backupRes.backups || [])
+setBuildInfo(aboutRes)
+return (
+  <Statistic
+    title="系统版本"
+    value={buildInfo ? `v${buildInfo.version}` : '--'}
+  />
+)
+```
+
+**配置参数**：`version_source_management` 节点（enabled / single_source_file / auto_generated_file / safe_helper_function / fallback_default / forbidden_placeholders / forbidden_version_endpoints / cross_layer_fix_required）
+
+**适用场景**：
+- 版本号、构建时间、git_sha、构建者等构建期元数据的读取与显示
+- 多端点需读取同一元数据（如 `/api/about` + `/api/config/export` 都需返回 version）
+- 前端版本管理/关于页面/系统信息卡片等显示构建期元数据
+- 配置项、状态码、枚举值等"被多处引用的常量"的源管理
+
+**不适用场景**：
+- 业务数据（用户输入、数据库记录）—— 这些本身就是多源可变的
+- 临时调试变量（如 `DEBUG=true`）—— 临时性优先于单源性
+- 跨服务边界的元数据（如微服务间传递的 trace_id）—— 需要协议而非单源
+- 必须存在的核心依赖（如 FastAPI）—— 失败应直接崩溃，不应回退
+- Pydantic 模型字段 —— 应用类型系统而非 try/except 防御
+
+**历史教训**：版本管理菜单持续显示 "V10"。根因链路：前端 `VersionManager.tsx` 调用 `configApi.getVersion()` 拉取 `/api/config/version`，但该端点实际返回 `len(backups)`（备份数量），受 `BACKUP_KEEP=10` 上限影响永远卡在 10，前端拼成 `'V' + 10 = 'V10'`。同时后端 `api_config.py` 的 `export_config` 中残留 `"version": "1.0"` 占位符。修复时跨端协同：前端改用 `aboutApi.get()` 拉取 `/api/about`（返回真实 `__version__`）；后端新增 `_safe_app_version()` 辅助函数（三层 try/except 回退到 `'unknown'`）替换占位符；顺带清理 Dashboard 中只 set 不 read 的 `configVersion` 死代码。验证时还遇到 Python `__pycache__` 缓存导致修改未生效、`BearerAuthMiddleware` 在 `web_token=""` 时短路导致 401 等环境层陷阱。
+
+### step 99：选择器仓库同步与单一数据源规范【强制】🆕v4.19
+
+**背景**：DOM 回退批量解析提取到 1 条数据（实际 31 个卡片）。根因：`_BATCH_PARSE_SCRIPT`（嵌入到 `page.evaluate` 的 JS 字符串）用 2 种 CSS 选择器（`feeds-item-wrap`/`feeds-item`），而 `_find_cards` 的 `card_selectors` 用 6 种（含 `item-card`/`search-item`/`product-card`/`data-spm*='item'`）。两套选择器无同步机制，闲鱼前端 DOM 结构变更时主解析器会更新但批量解析脚本易遗漏。
+
+**规范**：
+
+1. **同一 DOM 数据源的所有解析路径必须引用同一选择器仓库**
+   - 选择器仓库（selector repository）是单一数据源，所有解析路径（主解析 `_find_cards` / 批量解析 `_BATCH_PARSE_SCRIPT` / 降级解析）必须引用同一份选择器列表
+   - **禁止**在 JS 脚本字符串中内联 CSS 选择器，必须通过 Python 端拼接后注入
+   - 选择器仓库需提供 `to_js_selector_string()` 方法，将 Python 列表转为 JS `document.querySelectorAll('...')` 可用的字符串
+
+2. **批量解析脚本必须动态拼接选择器**
+   - JS 脚本中的 `document.querySelectorAll(...)` 的参数必须由 Python 端 f-string 或 `.format()` 注入
+   - **禁止**在 JS 字符串中硬编码选择器候选列表
+   - 修改主解析器选择器时，批量解析脚本自动同步（单一数据源）
+
+3. **新增选择器候选时的同步验证**
+   - 在 `selectors.search_card_candidates()` 新增选择器后，必须 grep 所有 `_BATCH_PARSE_SCRIPT` 类变量确认选择器一致
+   - 审查时检查 `audit_files`（默认 `["_search.py", "_parser.py", "_detail.py"]`）中所有 `querySelectorAll` 调用
+
+4. **ID 提取多层级兜底**
+   - DOM 批量解析必须有 3 层 ID 提取兜底：data-* 属性 → 内部任意 `a[href]` → `/item/数字` 路径
+   - 单层提取失败时自动降级到下一层，**禁止**单层失败即返回 None
+
+**判断逻辑**：
+
+- `grep "document\.querySelectorAll" src/xianyu_hunter/modules/` 发现 JS 字符串中硬编码选择器 → 视为违规
+- 主解析器的 `card_selectors` 列表与 `_BATCH_PARSE_SCRIPT` 内的选择器字符串不一致 → 视为违规
+- 修改主解析器选择器后未同步批量脚本（grep 验证）→ 视为违规
+- DOM 解析脚本中 ID 提取只有单层无兜底 → 视为可疑
+
+**反例**：
+
+```python
+# ❌ 错误：JS 脚本硬编码 2 种选择器，与主解析器的 6 种不一致
+_BATCH_PARSE_SCRIPT = """
+() => {
+    const cards = document.querySelectorAll(
+        "[class*='feeds-item-wrap'], [class*='feeds-item']"  // 仅 2 种
+    );
+    // ...
+}
+"""
+```
+
+**正例**：
+
+```python
+# ✅ 正确：动态拼接选择器字符串，与主解析器共享 selectors 仓库
+def _build_batch_parse_script(self) -> str:
+    """构造批量解析 JS 脚本，选择器由 selectors 仓库统一提供。
+
+    为什么动态拼接：_BATCH_PARSE_SCRIPT 之前硬编码 2 种选择器，
+    与 _find_cards 的 6 种不一致，导致 31 个卡片仅提取到 1 条。
+    改为引用 selectors.search_card_candidates() 后自动同步。
+    """
+    js_selector = self.selectors.to_js_selector_string()  # 单一数据源
+    return f"""
+() => {{
+    const cards = document.querySelectorAll({js_selector});
+    // ... 3 层 ID 提取兜底
+}}
+"""
+```
+
+**配置参数**：`selector_repository_sync` 节点（enabled / require_js_consumer_method / audit_files / batch_script_marker / require_id_fallback_layers）
+
+**适用场景**：
+- 同一 DOM 数据源有多条解析路径（主解析 + 批量解析 + 降级解析）
+- DOM 解析脚本嵌入到 Playwright `page.evaluate` 中执行
+- 闲鱼/淘宝/第三方网站前端 DOM 结构频繁变更的场景
+
+**不适用场景**：
+- API 响应解析（结构固定，无 DOM 选择器概念）
+- 单次单卡片解析（无批量场景）
+- 一次性爬虫脚本（无长期维护需求）
+
+**历史教训**：DOM 回退模式检测到 31 个卡片，但 `_BATCH_PARSE_SCRIPT` 仅用 2 种选择器（`feeds-item-wrap`/`feeds-item`），与 `_find_cards` 的 6 种选择器（含 `item-card`/`search-item`/`product-card`/`data-spm*='item'`）不一致，导致仅提取到 1 条数据。修复：选择器对齐为 6 种 + 新增 3 层 ID 提取兜底（data-* 属性、内部任意 a[href]、/item/数字 路径）。
+
+### step 100：外部系统文本特征集中管理规范【强制】🆕v4.19
+
+**背景**：商品 1058031608014 实际已售（详情页含"卖掉了"文本），但系统误判为在售（`is_sold=0`）。根因：3 处独立关键词列表（`_detail.py` / `_parser.py` / `buyer.py`）都只检测"已售"/"已售出"等旧文案，未包含闲鱼新文案"卖掉了"。Chrome DevTools MCP 实际打开页面取 body 文本才发现该关键词。
+
+**规范**：
+
+1. **外部系统的文本特征必须集中到单一常量**
+   - 外部系统（闲鱼/淘宝/第三方 API）的文本特征（已售关键词/错误码/状态文案/反爬识别）必须提取为模块级常量
+   - 常量类型为 `tuple[str, ...]` 或 `frozenset[str]`（不可变，便于扩展）
+   - 常量名以 `_KEYWORDS` / `_TEXTS` / `_CODES` 后缀，明确语义
+   - **禁止**在多处重复定义同一类关键词列表
+
+2. **多处消费点必须复用同一检测函数**
+   - 检测函数封装为纯函数（`check_xxx(text: str) -> bool`），无副作用，便于单测
+   - 函数名以 `check_` 前缀，明确语义
+   - 多处消费点（详情页/DOM 卡片/抢单前检测）必须 import 并调用同一函数
+   - **禁止**在消费点内联关键词列表（如 `if "已售" in text`）
+
+3. **关键词清单变更时的单点修改**
+   - 新增外部文案时只需修改单一常量，所有消费点自动同步
+   - 修改前必须 grep 全局确认无内联关键词列表遗漏
+
+4. **关键词清单的版本化注释**
+   - 常量定义处必须注释历史遗漏案例（如 `# 2026-06-29 发现闲鱼新文案"卖掉了"`）
+   - 注释说明为什么集中维护（避免闲鱼文案变更时漏改）
+
+**判断逻辑**：
+
+- `grep "已售\|卖掉了\|已下架\|已删除" src/xianyu_hunter/` 发现同一关键词在多个文件重复 → 视为违规
+- 代码含 `if "xxx" in text` 但未调用统一函数 → 视为违规
+- 关键词以列表字面量出现在函数内部而非模块级常量 → 视为可疑
+- `grep "check_text_sold\|check_item_sold"` 调用点 < 定义点 → 视为可疑（有内联替代）
+
+**反例**：
+
+```python
+# ❌ 错误：3 处独立关键词列表，新增文案时漏改
+# _detail.py
+if any(kw in body_text for kw in ["已售", "已售出", "已售完"]):
+    is_sold = True
+
+# _parser.py
+if "已售" in text or "已售出" in text:  # 漏了"卖掉了"
+    return True
+
+# buyer.py
+SOLD_KEYWORDS = ["已售", "已售出"]  # 漏了"卖掉了"
+```
+
+**正例**：
+
+```python
+# ✅ 正确：单一常量 + 纯函数 + 3 处复用
+# collector_utils.py
+SOLD_TEXT_KEYWORDS: tuple[str, ...] = (
+    "已售", "已售出", "已售完", "已售罄", "宝贝已售", "商品已售",
+    "已下架", "已卖出",
+    "卖掉了",  # 闲鱼新版文案（2026-06-29 发现）
+    "宝贝不存在", "宝贝走丢了", "该宝贝不存在", "商品不存在", "已删除", "已被删除",
+)
+
+def check_text_sold(text: str) -> bool:
+    """检测页面文本是否表示商品已售。
+
+    为什么集中维护：闲鱼前端文案多次变更，分散在 3 个文件的关键词列表容易漏改。
+    历史遗漏案例：2026-06-29 发现商品 1058031608014 详情页显示"卖掉了"但被误判为在售。
+    """
+    if not text:
+        return False
+    return any(kw in text for kw in SOLD_TEXT_KEYWORDS)
+
+# _detail.py / _parser.py / buyer.py 统一复用
+from xianyu_hunter.modules.collector_utils import check_text_sold
+is_sold = check_text_sold(body_text)
+```
+
+**配置参数**：`external_text_pattern_centralize` 节点（enabled / require_constant_extraction / require_pure_function / audit_keywords / max_inline_occurrences / require_version_comment）
+
+**适用场景**：
+- 外部系统文案检测（已售/下架/错误状态/异常提示）
+- 错误码识别（HTTP 状态码/业务错误码/反爬识别）
+- 第三方 API 响应文本特征提取
+- 多处消费同一类文本特征的场景
+
+**不适用场景**：
+- 内部状态判断（如 `task.status == 'completed'`，前端可控）
+- 单一消费点的临时字符串比较
+- 配置文件中已管理的关键词（无需再提取为代码常量）
+
+**历史教训**：商品 1058031608014 实际已售（详情页 body 文本含"卖掉了"），但 3 处独立关键词列表（`_detail.py` / `_parser.py` / `buyer.py`）都未包含"卖掉了"，导致系统误判为在售，用户看到已售商品仍被推荐。Chrome DevTools MCP 实际打开页面取 body 文本才发现该关键词。修复后提取 `SOLD_TEXT_KEYWORDS` 常量 + `check_text_sold()` 函数到 `collector_utils.py`，3 处复用。
+
+### step 101：关键调度器启动状态可见性规范【强制】🆕v4.19
+
+**背景**：用户启动 web 服务时未加 `--with-scheduler` 参数，`BatchRefreshScheduler`（批量采集调度器，每 30 分钟回查 `is_sold=0` 商品状态）永远不运行。日志仅输出一条 info"批量采集调度器未启动（collector 未初始化，需 XH_WITH_SCHEDULER=1）"，用户无感知。导致商品 1058031608014 实际已售但数据库 `is_sold=0` 长期不刷新。
+
+**规范**：
+
+1. **关键后台调度器必须有启动状态可见性**
+   - 关键调度器（影响业务正确性的，如批量采集/状态回查/数据同步/定时清理）启动状态必须在启动日志中明确告知用户
+   - 启动时输出 INFO 级别日志：`调度器 {name} 已启动（间隔 {interval} 分钟）`
+   - 未启动时输出 WARNING 级别日志 + 醒目提示：`调度器 {name} 未启动，相关功能将不生效。如需启用：{startup_command}`
+
+2. **--help 输出必须说明启动参数的影响范围**
+   - 每个启动参数（如 `--with-scheduler`）必须在 `--help` 输出中说明启用什么/禁用什么
+   - 影响范围说明应包含：调度的任务名称、间隔、依赖该调度器的下游功能
+
+3. **调度器启动状态应可通过 API 查询**
+   - `/api/about` 或 `/api/health` 端点必须返回关键调度器启动状态
+   - 返回结构含 `schedulers: [{name, enabled, interval_minutes, last_run_at}]`
+   - 前端"关于"页面可展示调度器状态，让用户直观感知
+
+4. **调度器启动参数列表集中管理**
+   - 启动参数与环境变量的映射（如 `--with-scheduler` ↔ `XH_WITH_SCHEDULER`）在 `config.yaml` 的 `scheduler_startup_visibility.startup_param_env_mapping` 节点管理
+   - 关键调度器名单在 `critical_schedulers` 节点管理，便于扩展
+   - **禁止**在代码中硬编码调度器启动参数列表
+
+5. **未启动调度器的影响范围必须在文档中说明**
+   - 每个关键调度器必须在项目文档中说明"未启动时影响哪些功能"
+   - 文档位置：`docs/02-后台调度器.md` 或 `README.md` 的"调度器"章节
+
+**判断逻辑**：
+
+- `grep "asyncio.create_task\|scheduler.start" src/xianyu_hunter/` 发现调度器启动但无启动日志 → 视为违规
+- 启动日志仅用 `logger.info("xxx 已启动")` 但未告知用户如何禁用/启用 → 视为可疑
+- 调度器未启动时仅静默跳过（无 WARNING）→ 视为违规
+- `/api/about` 端点未返回调度器状态 → 视为可疑
+- `--help` 输出中启动参数无影响范围说明 → 视为可疑
+
+**反例**：
+
+```python
+# ❌ 错误：调度器未启动时仅静默跳过，用户无感知
+if not os.environ.get("XH_WITH_SCHEDULER"):
+    logger.info("批量采集调度器未启动")  # info 级别，用户看不到
+    return  # 静默跳过，用户以为系统正常
+```
+
+**正例**：
+
+```python
+# ✅ 正确：WARNING 级别 + 醒目提示 + 启动命令
+if not os.environ.get("XH_WITH_SCHEDULER"):
+    logger.warning(
+        "⚠️ 批量采集调度器未启动，已售商品状态将不刷新。\n"
+        "  如需启用：python -m xianyu_hunter web --with-scheduler\n"
+        "  影响范围：商品 is_sold 状态回查、已售商品检测"
+    )
+    return
+
+# 启动时输出 INFO + 间隔
+logger.info("✅ 批量采集调度器已启动（间隔 30 分钟，每批 100 条）")
+
+# /api/about 端点返回调度器状态
+@api_router.get("/about")
+async def about():
+    return {
+        "version": _safe_app_version(),
+        "schedulers": [
+            {
+                "name": "BatchRefreshScheduler",
+                "enabled": scheduler.is_running,
+                "interval_minutes": 30,
+                "last_run_at": scheduler.last_run_at,
+            }
+        ],
+    }
+```
+
+**配置参数**：`scheduler_startup_visibility` 节点（enabled / critical_schedulers / require_startup_log / require_warning_when_disabled / require_help_doc / require_about_endpoint / startup_param_env_mapping）
+
+**适用场景**：
+- 关键后台调度器（批量采集/状态回查/数据同步/定时清理）
+- 通过启动参数或环境变量控制的功能开关
+- 影响业务正确性的后台任务
+
+**不适用场景**：
+- 调试用的可选功能（如 `--debug` 模式）
+- 默认启动且无法关闭的核心功能
+- 一次性任务（如启动时迁移）
+
+**历史教训**：用户启动 web 服务时未加 `--with-scheduler` 参数，`BatchRefreshScheduler`（每 30 分钟回查 `is_sold=0` 商品状态）永远不运行。日志仅输出一条 info，用户无感知。导致商品 1058031608014 实际已售但数据库 `is_sold=0` 长期不刷新，用户看到已售商品仍被推荐。修复后调度器未启动时输出 WARNING + 醒目提示 + 启动命令 + 影响范围。
+
+### step 102：Pydantic 模型字段完整性规范【强制】🆕v4.19
+
+**背景**：通知渠道凭据字段（`serverchan_send_key` 等 10 个）未在 `AppConfig` 中显式声明，依赖 Pydantic v2 默认 `extra='ignore'` 行为，导致 `model_dump()` 丢弃这些字段，前端 `GET /api/config` 永远拿不到凭据，刷新页面后输入框清空。
+
+**规范**：
+
+1. **所有需持久化或回显的字段必须在 Pydantic 模型中显式声明**
+   - 不允许依赖 `extra='allow'` 或 `extra='ignore'` 处理 yaml 中的字段
+   - 即使字段默认值为空字符串，也必须显式声明（如 `serverchan_send_key: str = ""`）
+   - 字段必须包含类型注解和默认值
+
+2. **新增 yaml 字段时必须同步更新 Pydantic 模型**
+   - 编辑 `config/config.yaml` 添加新字段后，必须同步在对应的 Pydantic 模型中声明
+   - CI 检查：扫描 yaml 字段名与 Pydantic 模型字段对齐（`pydantic_field_integrity.scan_yaml_keys`）
+
+3. **`model_dump()` 输出必须包含所有持久化字段**
+   - 任何通过 `model_dump()` 序列化的字段集必须完整
+   - 禁止用 `exclude=True` 排除需持久化的字段（运行时计算字段除外）
+
+4. **API 响应必须验证字段完整性**
+   - 新增 API 端点返回配置时，必须用单元测试验证所有字段都被序列化
+   - 测试用例：写入 → `model_dump()` → 验证所有字段存在
+
+**判断逻辑**：
+
+- `grep "extra=.allow." src/xianyu_hunter/` 发现配置模型用 `extra='allow'` → 视为可疑
+- yaml 中有字段但 Pydantic 模型无对应声明 → 视为违规
+- API 返回字典缺失 yaml 中已有字段 → 必查 Pydantic 模型声明
+- 代码用 `model_extra` 或 `__pydantic_extra__` 访问未声明字段 → 视为可疑（应改为显式声明）
+
+**反例**：
+
+```python
+# ❌ 错误：依赖 extra='allow' 处理 yaml 字段
+class AppConfig(BaseModel):
+    model_config = ConfigDict(extra='allow')
+    notifier: NotifierConfig = NotifierConfig()
+    # 凭据字段未声明，model_dump() 时被丢弃
+```
+
+**正例**：
+
+```python
+# ✅ 正确：所有需持久化的字段显式声明（哪怕默认空字符串）
+class AppConfig(BaseModel):
+    notifier: NotifierConfig = NotifierConfig()
+    # 通知渠道凭据（明文存到 yaml，前端用 Input.Password 组件隐藏）
+    serverchan_send_key: str = ""
+    pushplus_token: str = ""
+    bark_server: str = ""
+    bark_key: str = ""
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    wecom_webhook: str = ""
+    dingtalk_webhook: str = ""
+    dingtalk_secret: str = ""
+    webhook_url: str = ""
+```
+
+**配置参数**：`pydantic_field_integrity` 节点（enabled / require_explicit_declare / scan_yaml_keys / exceptions）
+
+**适用场景**：
+- 所有继承 `BaseModel` 的配置模型（AppConfig / NotifierConfig 等）
+- 需持久化到 yaml/json 的字段
+- 通过 API 回显的字段
+
+**不适用场景**：
+- 运行时计算字段（用 `@computed_field`）
+- 显式标注 `exclude=True` 的字段
+- 临时内存对象（无需序列化）
+
+**历史教训**：通知渠道凭据字段未在 `AppConfig` 中显式声明，前端写入 yaml 后 `GET /api/config` 调用 `model_dump()` 丢弃这些字段，导致前端"填写后刷新页面变空"
+
+### step 103：凭据同步桥接规范（yaml→keyring）【强制】🆕v4.19
+
+**背景**：用户在通知渠道菜单填写钉钉 webhook 后，自动抢单成功却未收到钉钉通知。根因：前端写 yaml，`DingTalkNotifier` 从 keyring 读取，但中间无同步桥接，`is_configured=False`，渠道被 `NotifierHub` 静默跳过。同时 keyring KEY 常量名 `KEY_DINGTALK_WEBHOOK="dingtalk_webhook_url"` 与 yaml 字段名 `dingtalk_webhook` 不一致，即使有同步也会写错位置。
+
+**规范**：
+
+1. **双存储介质的凭据必须有显式同步桥接函数**
+   - 前端写入 yaml，运行时从 keyring 读取的场景，必须在 DI 容器中添加同步函数
+   - 同步时机：DI 容器初始化 Notifier/Client 之前必须先调用同步函数
+   - 同步函数必须重新读主数据源（yaml），不依赖调用方传参
+
+2. **keyring KEY 常量名必须与 yaml 字段名 1:1 对齐**
+   - 禁止出现 `KEY_DINGTALK_WEBHOOK = "dingtalk_webhook_url"` 而 yaml 字段为 `dingtalk_webhook` 的情况
+   - CI 检查：扫描 keyring KEY 常量名与 yaml 字段名对齐
+
+3. **同步映射表必须集中在模块顶部声明**
+   - 禁止散落在多个函数内的硬编码映射
+   - 映射表必须配置驱动（在 `config.yaml` 的 `credential_sync_bridge.yaml_to_keyring_map` 节点管理）
+
+4. **测试必须清理 keyring 避免污染**
+   - 测试 setup/teardown 必须清理 keyring 中的测试凭证
+   - 测试中调用 `wire_notifier()` 后，后续单测可能因 keyring 污染失败
+
+5. **同步失败必须告警**
+   - `secrets.set_secret()` 失败必须 `logging.warning()` 告警
+   - 不允许静默吞掉同步失败错误
+
+**判断逻辑**：
+
+- `grep "secrets.get_secret" src/xianyu_hunter/` 找到读取点 → 必须有对应的 `secrets.set_secret()` 同步点
+- keyring KEY 常量名与 yaml 字段名不一致 → 视为违规
+- DI 容器初始化 Notifier 之前无同步调用 → 视为违规
+- `grep "extra=.allow." src/xianyu_hunter/` 配置模型用 `extra='allow'` → 视为可疑
+
+**反例**：
+
+```python
+# ❌ 错误：Notifier 直接从 keyring 读取但 yaml 从未同步
+KEY_DINGTALK_WEBHOOK = "dingtalk_webhook_url"  # 与 yaml 字段名不一致
+
+class DingTalkNotifier:
+    def __init__(self):
+        self.webhook_url = secrets.get_secret(KEY_DINGTALK_WEBHOOK)  # 永远为 None
+        # is_configured = False，渠道被静默跳过
+```
+
+**正例**：
+
+```python
+# ✅ 1. keyring KEY 常量名与 yaml 字段名 1:1 对齐
+KEY_DINGTALK_WEBHOOK = "dingtalk_webhook"
+
+# ✅ 2. DI 容器初始化 Notifier 之前先同步
+def wire_notifier(self) -> None:
+    self._sync_yaml_credentials_to_keyring()  # 必须先同步
+    self.notifier_hub = NotifierHub(channels=enabled, ...)
+    self.notifier_hub.attach(self.event_bus)
+
+def _sync_yaml_credentials_to_keyring(self) -> None:
+    """把 yaml 中的明文凭证同步到 keyring"""
+    from xianyu_hunter.infra import secrets
+    cred_map = {
+        "serverchan_send_key": secrets.KEY_SERVERCHAN,
+        "pushplus_token": secrets.KEY_PUSHPLUS,
+        "bark_server": secrets.KEY_BARK_SERVER,
+        "bark_key": secrets.KEY_BARK_KEY,
+        "telegram_bot_token": secrets.KEY_TELEGRAM_TOKEN,
+        "telegram_chat_id": secrets.KEY_TELEGRAM_CHAT,
+        "wecom_webhook": secrets.KEY_WECOM_WEBHOOK,
+        "dingtalk_webhook": secrets.KEY_DINGTALK_WEBHOOK,
+        "dingtalk_secret": secrets.KEY_DINGTALK_SECRET,
+        "webhook_url": secrets.KEY_WEBHOOK_URL,
+    }
+    for yaml_attr, keyring_key in cred_map.items():
+        yaml_value = getattr(self.config, yaml_attr, "")
+        if yaml_value:
+            try:
+                secrets.set_secret(keyring_key, yaml_value)
+            except Exception as e:
+                logging.warning("同步凭据 %s 到 keyring 失败: %s", yaml_attr, e)
+```
+
+**配置参数**：`credential_sync_bridge` 节点（yaml_to_keyring_map / sync_timing / require_key_name_align）
+
+**适用场景**：
+- 双存储介质的凭据/配置同步（yaml ↔ keyring、yaml ↔ env、json ↔ 数据库）
+- Notifier/Client 从 keyring 读取的场景
+- 多写入入口的状态同步
+
+**不适用场景**：
+- 单一存储介质（如纯 yaml 或纯 keyring）
+- 运行时计算字段（无需同步）
+- 外部系统主动推送的状态（无本地写入）
+
+**历史教训**：用户填写钉钉 webhook 后未收到通知。根因：前端写 yaml，Notifier 从 keyring 读取，无同步桥接，`is_configured=False` 静默跳过。同时 keyring KEY 常量名与 yaml 字段名不一致
+
+### step 104：脱敏策略场景区分规范【强制】🆕v4.19
+
+**背景**：通知渠道凭据字段被加入 `_REDACT_KEYS`，导致 `GET /api/config` 返回 `***`，前端无法回显用户已填写的凭据，刷新页面后输入框清空。同时分享/导出场景未脱敏凭据，存在泄露风险。
+
+**规范**：
+
+1. **同一字段在不同 API 场景下脱敏策略必须区分**
+   - `GET /api/config`（前端回显，**不脱敏**凭据）：用 `_REDACT_KEYS` 仅脱敏真正敏感字段（如 cookie/session_id）
+   - `/share`/`/export`（分享导出，**必须脱敏**凭据）：用 `_SHARE_REDACT_PATHS` 脱敏凭据路径
+   - 日志输出（**必须脱敏**凭据）：用 `_SENSITIVE_KEYS` 过滤
+
+2. **三个脱敏集合必须分离**
+   - `_REDACT_KEYS`：全局脱敏字段集（仅前端无需回显的真正敏感字段，如 cookie/session_id）
+   - `_SHARE_REDACT_PATHS`：分享场景脱敏路径集（凭据字段的嵌套路径）
+   - `_SENSITIVE_KEYS`：日志脱敏字段集（所有凭据字段）
+
+3. **凭据字段必须从 `_REDACT_KEYS` 移除**
+   - 凭据字段需在前端回显，不能全局脱敏
+   - 凭据字段必须加入 `_SHARE_REDACT_PATHS` 和 `_SENSITIVE_KEYS`
+
+4. **UI 层用 `Input.Password` 组件隐藏敏感内容**
+   - 前端层防护：用 `Input.Password` 组件显示凭据（默认隐藏，点击眼睛图标显示）
+   - 不依赖后端脱敏（后端返回明文，前端 UI 层隐藏）
+
+5. **脱敏策略必须配置驱动**
+   - 三个脱敏集合在 `config.yaml` 的 `redact_strategy` 节点管理
+   - 场景到字段集的映射在 `redact_strategy.scenario_field_map` 管理
+
+**判断逻辑**：
+
+- API 返回字段被脱敏但前端需要回显 → 必查 `_REDACT_KEYS` 是否包含该字段
+- 分享/导出场景未脱敏凭据 → 必查 `_SHARE_REDACT_PATHS` 是否包含该字段
+- 日志中打印凭据明文 → 必查 `_SENSITIVE_KEYS` 是否包含该字段
+- 同一字段在所有 API 场景脱敏策略一致 → 视为可疑（未区分场景）
+
+**反例**：
+
+```python
+# ❌ 错误：所有 API 都用 _REDACT_KEYS 脱敏凭据
+_REDACT_KEYS = frozenset({
+    "cookie", "session_id",
+    "serverchan_send_key", "pushplus_token", "bark_key",  # 凭据字段也被脱敏
+    "dingtalk_webhook", "dingtalk_secret",
+})
+
+@app.get("/api/config")
+async def get_config():
+    return _redact(config.model_dump(), _REDACT_KEYS)  # 前端拿到 ***，无法回显
+```
+
+**正例**：
+
+```python
+# ✅ 三个脱敏集合分离
+_REDACT_KEYS = frozenset({
+    "cookie", "cookies", "session_id",  # 仅前端无需回显的真正敏感字段
+})
+_SHARE_REDACT_PATHS = [
+    ("notifier", "channels"),
+    ("serverchan_send_key",),
+    ("pushplus_token",),
+    ("bark_server",),
+    ("bark_key",),
+    ("telegram_bot_token",),
+    ("telegram_chat_id",),
+    ("wecom_webhook",),
+    ("dingtalk_webhook",),
+    ("dingtalk_secret",),
+    ("webhook_url",),
+    ("browser", "user_data_dir"),
+]
+_SENSITIVE_KEYS = frozenset({
+    "serverchan_send_key", "pushplus_token", "bark_key", "bark_server",
+    "telegram_bot_token", "telegram_chat_id", "wecom_webhook",
+    "dingtalk_webhook", "dingtalk_secret", "webhook_url",
+    "openai_api_key",
+})
+
+# GET /api/config 不脱敏凭据（前端需回显）
+@app.get("/api/config")
+async def get_config():
+    return config.model_dump()
+
+# /share 端点用 _SHARE_REDACT_PATHS 脱敏
+@app.post("/share")
+async def share_config():
+    data = config.model_dump()
+    return _redact_paths(data, _SHARE_REDACT_PATHS)
+```
+
+**配置参数**：`redact_strategy` 节点（scenarios / scenario_field_map / ui_protection_components）
+
+**适用场景**：
+- 所有需要脱敏的敏感字段（凭据、Cookie、Token、用户隐私数据）
+- 多场景 API 返回相同字段但脱敏策略不同
+- 前端需回显但分享需脱敏的场景
+
+**不适用场景**：
+- 单一场景的字段（所有 API 都需脱敏或都不需脱敏）
+- 非敏感字段（如配置项的开关状态）
+- 前端纯展示字段（无后端写入需求）
+
+**历史教训**：通知渠道凭据字段被加入 `_REDACT_KEYS`，导致 `GET /api/config` 返回 `***`，前端无法回显用户已填写的凭据。修复后将凭据字段从 `_REDACT_KEYS` 移除（前端需回显），同时扩展 `_SHARE_REDACT_PATHS` 和 `_SENSITIVE_KEYS`（分享和日志仍脱敏），前端用 `Input.Password` 组件隐藏内容
+
+### step 105：第三方平台 API 兼容性规范【强制】🆕v4.19
+
+**背景**：钉钉/企业微信等第三方平台对 markdown 子集支持不同，企业微信仅支持 `#/[]()/**/`/>/<font>` 子集，直接发送标准 markdown 会导致格式错乱或被截断。
+
+**规范**：
+
+1. **接入第三方平台前必须查阅官方文档确认 markdown 子集**
+   - 列出平台支持的所有 markdown 语法
+   - 列出平台不支持的语法（如企业微信不支持表格/代码块）
+   - 文档链接必须记录在代码注释中
+
+2. **必须实现降级转换函数**
+   - 标准 markdown → 平台特定 markdown 子集
+   - 不支持的语法降级为支持的等价表达（如表格降级为列表）
+   - 转换函数必须有单元测试覆盖所有语法分支
+
+3. **降级转换必须配置驱动**
+   - 平台支持的语法子集在 `config.yaml` 的 `third_party_markdown_compat` 节点管理
+   - 降级规则映射表在 `third_party_markdown_compat.degrade_rules` 管理
+
+4. **测试必须用真实平台样本验证**
+   - 单元测试必须用平台官方文档中的示例文本验证
+   - 必须覆盖所有支持的语法和不支持的语法
+
+**判断逻辑**：
+
+- `grep "send_markdown\|send_message" src/xianyu_hunter/modules/notifier/` 找到发送点 → 必须有降级转换函数
+- 第三方 Notifier 直接发送标准 markdown → 视为违规
+- 降级转换函数无单元测试 → 视为可疑
+
+**反例**：
+
+```python
+# ❌ 错误：直接发送标准 markdown
+class WeComNotifier(BaseNotifier):
+    async def send(self, message: str):
+        # 企业微信不支持表格/代码块，直接发送会被截断
+        payload = {"msgtype": "markdown", "markdown": {"content": message}}
+        await self._post(payload)
+```
+
+**正例**：
+
+```python
+# ✅ 实现降级转换函数
+class WeComNotifier(BaseNotifier):
+    async def send(self, message: str):
+        # 企业微信仅支持 #/[]()/**/`/>/<font> 子集
+        # 文档：https://developer.work.weixin.qq.com/document/path/91770
+        wecom_md = self._to_wecom_markdown(message)
+        payload = {"msgtype": "markdown", "markdown": {"content": wecom_md}}
+        await self._post(payload)
+
+    def _to_wecom_markdown(self, message: str) -> str:
+        """将标准 markdown 降级为企业微信支持的子集"""
+        # 表格 → 列表（企业微信不支持表格）
+        message = re.sub(r'\|.*?\|', lambda m: f'- {m.group(0)}', message)
+        # 代码块 → 引用（企业微信不支持代码块）
+        message = re.sub(r'```[\s\S]*?```', lambda m: f'> {m.group(0)}', message)
+        return message
+```
+
+**配置参数**：`third_party_markdown_compat` 节点（platforms / supported_syntax / degrade_rules / require_doc_link）
+
+**适用场景**：
+- 第三方平台 API 集成（钉钉/企业微信/飞书/Slack/Discord）
+- 富文本/Markdown 内容发送
+- 不同平台语法差异处理
+
+**不适用场景**：
+- 单一平台的纯文本消息（无 markdown 语法）
+- 内部系统消息（无第三方平台限制）
+- 已知平台支持完整 markdown（无需降级）
+
+**历史教训**：钉钉/企业微信通知发送标准 markdown，企业微信不支持表格/代码块导致格式错乱。修复后实现 `_to_wecom_markdown()` 降级转换函数
+
+### step 106：事件发布完整性规范【强制】🆕v4.19
+
+**背景**：`EventType` 枚举中定义了 `EVAL_PASSED` 事件，`NotifierHub` 的 `DEFAULT_NOTIFY_EVENTS` 也包含 `EVAL_PASSED`，但 `worker.py` 评估通过后只写 events 表，**不发布** `EVAL_PASSED` 事件到 EventBus，订阅端永远收不到事件，通知永远不发送。这是"设计-实现断层"的典型——定义了事件类型但无发布点。
+
+**规范**：
+
+1. **`EventType` 枚举中定义的事件必须在业务逻辑中实际发布**
+   - 定义事件类型后必须 grep 所有发布点（`event_bus.publish`）
+   - 订阅集（如 `DEFAULT_NOTIFY_EVENTS`）中的事件必须有对应的发布点
+   - 无发布点的事件类型视为"设计-实现断层"，必须在文档中标注"未实现"或删除
+
+2. **业务状态变更后必须发布对应事件**
+   - 评估通过 → 发布 `EVAL_PASSED`
+   - 抢单成功 → 发布 `BUY_SUCCEEDED`
+   - 抢单失败 → 发布 `BUY_FAILED`
+   - 任务完成 → 发布 `TASK_COMPLETED`
+
+3. **事件发布与数据库写入必须分离**
+   - 数据库写入（events 表）是持久化记录
+   - 事件发布（EventBus）是实时通知
+   - 两者不能互相替代：写库不等于发布事件
+
+4. **事件发布完整性必须用集成测试验证**
+   - 测试用例：触发业务状态变更 → 验证 EventBus 收到对应事件
+   - 测试必须覆盖所有 `DEFAULT_NOTIFY_EVENTS` 中的事件
+
+5. **事件发布点必须配置驱动**
+   - 业务状态到事件类型的映射在 `config.yaml` 的 `event_publish_mapping` 节点管理
+   - 订阅集（如 `DEFAULT_NOTIFY_EVENTS`）在 `notifier.subscribed_events` 节点管理
+   - **禁止**硬编码订阅集在代码中（应从 config 读取，便于动态调整）
+
+**判断逻辑**：
+
+- `grep "EventType\." src/xianyu_hunter/` 找到所有事件类型定义 → 每个事件必须有 `event_bus.publish(EventType.XXX)` 发布点
+- `grep "DEFAULT_NOTIFY_EVENTS\|subscribed_events" src/xianyu_hunter/` 找到订阅集 → 每个订阅事件必须有发布点
+- 业务状态变更代码（如 `if eval_passed:`）后无 `event_bus.publish()` → 视为违规
+- 订阅集硬编码在代码中而非 config.yaml → 视为可疑
+
+**反例**：
+
+```python
+# ❌ 错误：评估通过后只写库不发布事件
+async def evaluate(self, task_id: str):
+    score = await self._calculate_score(task_id)
+    if score >= self.pass_score:
+        # 写库但不发布事件
+        await self.event_repo.create(
+            task_id=task_id,
+            event_type="eval_passed",
+            payload={"score": score},
+        )
+        # 缺少：await self.event_bus.publish(EventType.EVAL_PASSED, {...})
+```
+
+**正例**：
+
+```python
+# ✅ 业务状态变更后同时写库和发布事件
+async def evaluate(self, task_id: str):
+    score = await self._calculate_score(task_id)
+    if score >= self.pass_score:
+        # 1. 写库（持久化记录）
+        await self.event_repo.create(
+            task_id=task_id,
+            event_type="eval_passed",
+            payload={"score": score},
+        )
+        # 2. 发布事件（实时通知）
+        await self.event_bus.publish(EventType.EVAL_PASSED, {
+            "task_id": task_id,
+            "score": score,
+        })
+```
+
+**配置参数**：`event_publish_mapping` 节点（business_state_to_event / require_publish_for_subscribed / require_integration_test）
+
+**适用场景**：
+- 所有 `EventType` 枚举中定义的事件
+- 业务状态变更需通知订阅方的场景
+- 事件驱动架构（EDA）的系统
+
+**不适用场景**：
+- 内部状态变更（无需通知订阅方）
+- 高频事件（如心跳检测，应直接调用而非事件发布）
+- 一次性任务（如启动初始化）
+
+**历史教训**：`EventType.EVAL_PASSED` 在枚举中定义，`DEFAULT_NOTIFY_EVENTS` 包含该事件，但 `worker.py` 评估通过后只写 events 表，不发布事件到 EventBus，订阅端永远收不到，自动抢单后通知永远不发送（用户反馈"自动抢单后未发送钉钉通知"）。修复后业务状态变更同时写库和发布事件
+
+### step 107：启动钩子完整性检查规范【强制】🆕v4.20
+
+**背景**：反爬会话管理（LoginOrchestrator + TokenRenewer）依赖 container.browser 进行 Cookie 续期，但 startup.py 的 `_on_startup` 只启动了主调度器/Cookie 同步/批量采集/知识库四个调度器，缺失反爬会话管理的启动钩子。导致服务重启后即使 Cookie 仍有效，TokenRenewer 后台续期也不会自动启动，用户必须手动点击「启动会话」按钮。
+
+**问题**：新增依赖 container.browser/collector 的组件时，未同步在 startup.py 添加对应启动钩子，导致功能不可用。
+
+**规范**：
+
+1. 所有依赖 `container.browser` 或 `container.collector` 的组件，必须在 `startup.py` 的 `_on_startup` 中有对应的 `start_xxx()` 启动钩子
+2. 启动钩子必须用 `if _should_start_scheduler():` 包裹，避免无浏览器时错误启动
+3. 启动钩子必须放在依赖的调度器之后（如反爬会话管理放在批量采集调度器之后，确保浏览器已就绪）
+4. 启动失败必须 try/except 兜底，仅记录 warning 不阻断主服务启动
+5. 验证方法：`grep -rn "container.browser\|container.collector" src/xianyu_hunter/` 找所有依赖点，逐个检查 startup.py 是否有对应 start_xxx 调用
+
+**配置驱动**：参数在 `config.yaml` 的 `startup_hook_completeness` 节点管理，包含 `required_components`（必须启动的组件列表）、`dependency_check_fields`（依赖检查字段）、`startup_order`（启动顺序）。
+
+**适用场景**：含 BackgroundScheduler/asyncio.Task 后台任务的项目，特别是依赖浏览器/外部资源的组件。
+
+**不适用场景**：纯 Web 项目无后台任务；单进程无外部依赖项目；纯前端组件。
+
+### step 108：任务历史持久化三层状态保护规范【强制】🆕v4.20
+
+**背景**：批量采集任务执行历史功能中，`_run_batch_async` 在开始时插入 running 状态记录，结束时更新为终态。但如果 `future.result(timeout=_BATCH_TIMEOUT)` 超时或协程异常退出，历史记录会残留 running 状态。
+
+**问题**：长时间运行任务的执行历史记录在异常退出时残留中间态（running），导致历史记录与实际状态不一致。
+
+**规范**：
+
+1. 任何写入 running 状态的代码路径，都必须有对应的 finalize 调用更新为终态（completed/failed/cancelled）
+2. finalize 必须覆盖三条路径：
+   - 正常结束路径（在 `_run_batch_async` 的 finally 块中调用）
+   - future.result 超时路径（在 `_run_batch_job` 的 except 块中调用 `_finalize_history_on_exception`）
+   - 协程异常路径（在 `_run_batch_async` 的 except 块中调用）
+3. 错误消息累积必须设上限（FIFO 切片丢弃最旧），避免 JSON 字段无限膨胀
+4. 状态语义必须区分：circuit_broken（连续失败熔断）→ failed，_stop_flag（用户主动停止）→ cancelled，正常完成 → completed
+5. 业务自增 task_id 不能依赖内存初始化（进程重启会重置），必须从 DB `SELECT MAX(task_id)` 初始化
+
+**配置驱动**：参数在 `config.yaml` 的 `task_history_protection` 节点管理，包含 `required_states`（必须覆盖的终态列表）、`exception_fallback_required`（是否需要异常兜底）、`max_error_messages`（错误消息上限默认 50）、`counter_init_query`（计数器初始化查询语句）。
+
+**适用场景**：长时间运行任务的执行历史记录（批量采集/数据同步/批处理/定时任务）。
+
+**不适用场景**：短时间 HTTP 请求；不需要历史记录的任务；一次性脚本任务。
+
+### step 109：业务自增计数器 DB MAX 初始化规范【强制】🆕v4.20
+
+**背景**：批量采集任务的 task_id 是业务字段（progress 表/历史表/日志均引用），调度器内存中维护自增计数器。如果进程重启，内存计数器从 0 开始，会与历史记录的 task_id 冲突。
+
+**问题**：业务自增 ID 依赖内存初始化，进程重启后重置，导致新记录的 ID 与历史记录冲突。
+
+**规范**：
+
+1. 业务自增 ID（task_id/batch_id/run_id 等）不能依赖内存初始化（进程重启会重置）
+2. 调度器 `__init__` 时必须从 DB `SELECT MAX(id)` 初始化计数器
+3. 查询失败时回退到 0 + `logger.warning`，不阻断启动
+4. `trigger_now()` 调用时 `+= 1` 后立即返回给前端，不等待 DB 写入
+5. 为什么不用 DB 自增主键：业务自增 ID 需在调度器内存中维护以便 trigger_now 立即返回给前端，DB 自增主键要等 INSERT 后才知道值
+
+**配置驱动**：参数在 `config.yaml` 的 `counter_db_max_init` 节点管理，包含 `counter_fields`（需要 DB MAX 初始化的字段列表）、`init_query_template`（初始化查询模板）、`fallback_value`（回退值默认 0）、`warning_on_failure`（失败时是否记录 warning）。
+
+**适用场景**：业务自增 ID（task_id/batch_id/run_id）跨进程重启不能重置的场景。
+
+**不适用场景**：DB 自增主键（autoincrement）；UUID/GUID；临时计数器（无需跨进程持久化）。
+
+### step 110：APScheduler interval 触发器首次执行控制规范【强制】🆕v4.20
+
+**背景**：APScheduler 的 interval 触发器默认首次执行时间是 `start_time + interval`（即启动后还要等 30 分钟才会第一次触发），用户感知不到调度器在工作，误以为功能不生效。
+
+**问题**：interval 触发器默认首次执行延迟一个完整间隔，用户感知不到调度器已启动。
+
+**规范**：
+
+1. 使用 APScheduler interval 触发器时，必须明确首次执行时间
+2. 需要启动后快速反馈的场景，必须设置 `next_run_time` 参数
+3. `next_run_time` 不建议设为 `datetime.now()`（立即执行），应留 5-10 秒延迟给初始化依赖（浏览器/collector/DB）就绪
+4. 日志必须输出间隔 + 首次执行时间：`logger.info("调度器已启动，间隔 %d 分钟，首次执行于 %s", interval, next_run)`
+5. 为什么不设为立即执行：给浏览器/collector 初始化留时间，避免首次采集因浏览器未就绪而连续失败触发熔断
+
+**配置驱动**：参数在 `config.yaml` 的 `apscheduler_interval_first_run` 节点管理，包含 `default_next_run_delay_seconds`（默认延迟秒数 10）、`needs_immediate_execution`（是否需要启动后立即执行）、`log_format`（日志格式模板）。
+
+**适用场景**：APScheduler interval 触发器且需要启动后快速反馈的场景（批量采集/数据同步/定时巡检）。
+
+**不适用场景**：cron 触发器（有明确时间点）；首次执行依赖外部状态需手动触发的场景；纯 Web 请求无定时任务。
+
+### step 111：CLI 默认参数友好性规范【强制】🆕v4.20
+
+**背景**：`xianyu web` 命令默认 `with_scheduler=False`，用户必须显式加 `--with-scheduler` 才能启动调度器。但实时搜索/批量采集/自动抢单等核心功能都依赖浏览器实例，不启动调度器等于核心功能不可用。
+
+**问题**：CLI 默认参数未启用核心功能，用户不知道需要加参数，导致功能不生效。
+
+**规范**：
+
+1. CLI 命令的核心功能参数应默认启用（如 `--with-scheduler` 默认 True）
+2. 必须提供关闭选项（如 `--no-with-scheduler`），让用户可以选择降级模式
+3. 启动时必须输出当前模式：`typer.echo("→ 模式: Web + 调度器（默认）")` 或 `typer.echo("→ 模式: Web only（纯 Web）")`
+4. `--help` 必须说明参数影响范围：「默认启用调度器与浏览器实例，使用 --no-with-scheduler 关闭」
+5. 启动脚本（.bat/.sh）可省略显式参数（因已是默认），但建议保留作为显式标记
+
+**配置驱动**：参数在 `config.yaml` 的 `cli_default_friendly` 节点管理，包含 `default_enabled_params`（默认启用的参数列表）、`disable_flag_pattern`（关闭参数命名模式 `--no-xxx`）、`mode_echo_required`（是否必须输出当前模式）。
+
+**适用场景**：CLI 命令有核心功能开关参数，且大部分场景需要启用。
+
+**不适用场景**：可选功能参数（如调试模式/日志级别）；有副作用的参数（如重置数据库）；开发专用参数。
+
+### step 112：能力驱动派发规范（capability-driven dispatch）【强制】🆕v4.21
+
+**背景**：闲鱼猎人有 2 个独立的 LLM 端点（`openai_chat_model` 用于成色评估、`openai_vision_model` 用于深度分析多模态场景）。深度分析无脑拼接 `image_url` content block，当 `openai_vision_model` 配置为纯文本模型（如 `qwen-turbo`/`deepseek-chat`）时，服务端 schema 拒绝并返回 400 `unknown variant 'image_url'`，触发 WARNING 日志噪音 + 降级失败。
+
+**问题**：调用 LLM 前未做"能力-需求"匹配校验，payload 携带模型不支持的内容块，导致服务端 400。
+
+**规范**：
+
+1. 任何 LLM/多模态/function_call 调用必须在**构造 payload 前**预检目标模型能力
+2. 校验模型能力的判断函数必须是共享的（如 `api_ai._is_vision_capable(model_name)`），禁止在多个调用点内联关键字白名单
+3. 关键字白名单与模型名映射必须配置化（`config.yaml` 的 `llm_capability_keywords` 节点），关键字散落在代码中即视为违规
+4. 校验逻辑分层：纯文本模型降级到 prompt 文字描述；多模态模型才发 `image_url` content block
+5. 关键字白名单维护单一入口（如 `api_ai._VISION_CAPABLE_KEYWORDS`），其他模块通过 `from xianyu_hunter.web.routes.api_ai import _is_vision_capable` 复用
+6. 单元测试必须覆盖：每类能力（vision / function_call / json_mode）的"支持"与"不支持"两组样本
+
+**配置驱动**：参数在 `config.yaml` 的 `llm_capability_keywords` 节点管理，包含 `vision_keywords`（Vision 能力关键字列表）、`function_call_keywords`（函数调用能力关键字列表）、`json_mode_keywords`（JSON 模式能力关键字列表）、`case_insensitive`（是否大小写不敏感默认 True）。
+
+**适用场景**：调用外部 LLM endpoint（OpenAI/Claude/通义千问/DeepSeek/Ollama）；调用多模态模型（Vision/Audio）；调用 function call / tool use；调用 structured output / JSON mode。
+
+**不适用场景**：调用固定单一能力的稳定服务（不会扩展能力维度）；本地固定函数（无外部 endpoint）；已由 SDK 强制约束的调用（如 langchain 的 with_structured_output）。
+
+### step 113：共享工具函数规范（避免散落内联判断）【强制】🆕v4.21
+
+**背景**：本次修复初版把 `vision_capable` 判断内联到 `api_ai_deep.py`，与 `api_ai.py` 早已存在的相同关键字白名单重复 → 模型升级时需同时改 2 处 → 散落修改风险。
+
+**问题**：跨模块复用的判断逻辑/常量被复制粘贴到多个调用点，导致关键字白名单/规则分散维护，模型升级时漏改。
+
+**规范**：
+
+1. 跨 ≥2 模块复用的判断逻辑必须抽取为"被依赖方"模块顶层的**纯函数**或**模块级常量**
+2. 导入方只能 `from <source_module> import <shared_name>`，禁止复制粘贴关键字列表
+3. 共享函数必须满足：纯函数（无副作用）/ 类型注解完整 / 单测覆盖 / docstring 注明"为什么是共享的"
+4. 共享函数位置选择原则：
+   - 业务最早引入该逻辑的模块作为"权威源"（避免循环依赖）
+   - 若多个模块都引入过早，提取到 `domain/` 或 `infra/` 公共层
+5. 审查场景：跨 ≥2 文件出现相同的关键字/正则/常量字面量，必须触发"抽取共享"建议
+6. 共享范围判定标准：≥2 调用点 / ≥2 模块 / 调用方不修改逻辑（纯查询）
+
+**配置驱动**：参数在 `config.yaml` 的 `shared_util_rules` 节点管理，包含 `min_call_sites`（触发抽取的最小调用点数默认 2）、`min_module_count`（触发抽取的最小模块数默认 2）、`pure_function_required`（是否强制纯函数默认 True）。
+
+**适用场景**：跨模块复用的关键字白名单/正则/常量；模型/接口/协议的版本判断；权限/角色/能力位判断；业务规则判断（如"是否已售"关键词）。
+
+**不适用场景**：仅单模块内部使用的 helper（不必抽取）；逻辑需要复用的同时还要扩展（应抽象为基类/策略模式）；性能敏感的 hot path 抽取会带来 import 开销（需评估）。
+
+### step 114：静默降级预检规范（不支持能力 → 友好降级）【强制】🆕v4.21
+
+**背景**：深度分析失败时直接抛 400，调用方需要 catch + 重试 + 降级，链路长且日志噪音大。`image_url` 这种"可选增强"内容块如果模型不支持，最优解不是抛错，而是**在调用前预检并降级到等价表达**（如 prompt 文本里加"图片请参考以下文字描述"）。
+
+**问题**：LLM 端点不支持的能力被无脑发送，导致服务端 400 → 调用方抛错 → 日志噪音 → 降级链冗长。
+
+**规范**：
+
+1. 任何"可选增强"能力（vision / function call / tool use / json_mode）调用前必须预检
+2. 预检失败时降级为"等价文本表达"，而非抛错：
+   - vision 不支持 → 在 prompt 追加"图片 URL + 描述"
+   - function call 不支持 → 用 prompt 引导模型输出 JSON 文本，调用方解析
+   - json_mode 不支持 → 用 prompt 引导 + 调用方解析
+3. 预检失败的日志级别必须是 `logger.warning`（step 59 规范），不阻断主流程
+4. 主路径（核心文本生成）能力缺失必须报错，不能静默降级（区分"可选增强"与"核心能力"）
+5. 降级路径必须有可观测性：日志中明确 `mode=downgrade reason=<缺失能力> model=<model_name>`
+6. 降级路径的 prompt 模板必须集中管理（`config.yaml` 的 `llm_downgrade_prompts` 节点），禁止在调用点拼接
+
+**配置驱动**：参数在 `config.yaml` 的 `llm_downgrade` 节点管理，包含 `optional_capabilities`（可选能力列表）、`downgrade_log_level`（降级日志级别默认 warning）、`prompt_templates`（降级 prompt 模板字典）、`downgrade_marker_format`（降级标记格式）。
+
+**适用场景**：调用外部 LLM endpoint 且 payload 含可选能力字段；多模态/function call/structured output 调用；用户上传图片但模型可能不支持 Vision；用户启用 tool 但模型可能不支持 function call。
+
+**不适用场景**：核心能力缺失（chat 文本生成失败必须报错）；用户明确要求某能力（如选择 vision-only 模型）；预检与降级开销大于直接调用（极简场景）。
+
+### step 115：用户偏好类 UI 状态持久化强制复用 usePersistentState 规范【强制】🆕v4.24
+
+**背景**：批量采集页面（`Maintenance/BatchRefresh.tsx`）的「自动刷新」开关使用 `useState(false)`，导致用户每次进入页面或刷新浏览器后开关状态丢失，需要反复手动开启。该开关属于用户偏好类 UI 状态（user preference），应跨会话保留。
+
+**问题**：用户偏好类 UI 状态（自动刷新开关、视图模式、列显隐、折叠状态、最近使用列表等）直接使用 `useState` 存储，状态不跨会话保留；或各组件自行实现 `localStorage` 读写逻辑，逻辑重复且错误处理不一致。
+
+**规范**：
+
+1. **状态分类识别【强制】**：新增 React state 时必须先识别其归属类别：
+   - **用户偏好类**（必须用 `usePersistentState`）：开关类（自动刷新、显示已售、折叠/展开）、视图模式（密度/列宽/列显隐）、主题偏好、最近使用列表、记住上次选中项
+   - **业务数据类**（必须走后端 API）：任务列表、订单状态、配置项（`enabled`/`interval_minutes` 等已通过后端 PATCH /config 持久化的字段）
+   - **会话状态类**（必须走 Zustand store）：登录态、当前选中项、跨页共享状态
+   - **临时状态类**（必须用 `useState`）：loading、modal open、按钮 submitting、表单 dirty
+   - **敏感数据类**（必须走 secure storage / httpOnly cookie）：token、密码、API key
+
+2. **强制复用既有 hook【强制】**：用户偏好类 UI 状态必须使用项目既有 `frontend/src/hooks/usePersistentState.ts`，禁止：
+   - 裸 `useState` 存储用户偏好（判别信号：刷新页面/路由切换后状态丢失即违规）
+   - 各组件自行实现 `localStorage.getItem/setItem` 逻辑
+   - 引入第三方持久化库（项目已有统一封装）
+
+3. **key 命名规范【强制】**：localStorage key 必须遵循 `xh.<page>.<field>` 命名模式（与项目既有命名一致）：
+   ```typescript
+   // ✅ 正确：遵循 xh.<page>.<field> 命名
+   const [autoRefresh, setAutoRefresh] = usePersistentState<boolean>(
+     'xh.batchRefresh.autoRefresh',
+     false,
+     { validator: (v): v is boolean => typeof v === 'boolean' },
+   )
+   
+   // ❌ 错误：无前缀/无命名规范
+   const [autoRefresh, setAutoRefresh] = usePersistentState('autoRefresh', false)
+   ```
+
+4. **validator 必填【强制】**：必须传入 `validator` 选项防止 localStorage 脏数据（旧版本数据、用户手动修改、其他项目同名 key）导致 UI 异常：
+   ```typescript
+   // ✅ 正确：validator 防御脏数据
+   usePersistentState<T>(key, defaultValue, {
+     validator: (v): v is T => /* 类型与边界检查 */,
+   })
+   ```
+
+5. **localStorage 不可用自动回退【强制】**：依赖 `usePersistentState` 内置的内存回退机制（隐私模式 / 存储已满 / 被禁用场景下功能不中断），禁止在业务代码中再 try-catch `localStorage` 调用。
+
+6. **不重复持久化后端已持久化字段【强制】**：若字段已通过后端 API 持久化（如批量采集的 `enabled` / `interval_minutes` 已通过 `PATCH /api/batch-refresh/config` 持久化），前端不得再用 `usePersistentState` 重复持久化，否则会导致前后端不一致：
+   - 前端从后端 `GET /status` 读取并填入 Form
+   - 表单 dirty 标记保护用户编辑中的值不被轮询覆盖
+   - 用户点击「保存」时 `PATCH /config` 提交到后端
+
+**配置驱动**：用户偏好类关键词、检测模式、检查信号等参数在 `xianyu-frontend-code-review` 的 `config.yaml` 的 `ui_preference_persistence` 节点管理（详见 `xianyu-frontend-code-review` v4.24.0 的 `F-REVIEW-UI-PREFERENCE-PERSISTENCE`），不硬编码在技能中。
+
+**适用场景**：
+- 用户偏好类 UI 状态（自动刷新、视图模式、列显隐、折叠/展开、主题偏好、最近使用列表、记住上次选中项）
+- 跨会话需要保留的 UI 偏好
+- 用户重复进入页面希望延续上次设置的场景
+
+**不适用场景**：
+- 业务数据（任务列表、订单状态、配置项）—— 必须走后端 API
+- 会话状态（登录态、当前选中项）—— 必须走 Zustand store
+- 临时状态（loading、modal open、表单 submitting）—— 必须用 `useState`
+- 敏感数据（token、密码、API key）—— 必须走 secure storage / httpOnly cookie
+- 已通过后端持久化的字段（如 `enabled` / `interval_minutes`）—— 不重复持久化避免前后端不一致
+
+**历史教训**：`Maintenance/BatchRefresh.tsx` 的 `autoRefresh` 开关使用 `useState(false)`，每次刷新页面开关重置为关闭，用户需要反复手动开启。修复方式：替换为 `usePersistentState<boolean>('xh.batchRefresh.autoRefresh', false, { validator: ... })`，复用项目既有 `hooks/usePersistentState.ts`（含防抖写入、数据验证、localStorage 不可用回退到内存 Map）。
+
+**判断信号（review 触发条件）**：
+- `grep "useState(false)$" frontend/src/pages/**/*.tsx` 命中用户偏好类变量名（含 `autoRefresh`/`viewMode`/`columnConfig`/`density`/`collapsed`/`expandedKeys`/`themePreference`/`recentItems` 等关键词）
+- 用户反馈"刷新页面后开关/设置丢失"
+- 用户反馈"每次进入页面都需要重新设置"
+
+### step 116：数据库迁移块独立容错与关键路径异常可见性规范【强制】🆕v4.25
+
+**背景**：用户报告 `sqlite3.OperationalError: no such column: notifications.read_at`，发生在 `add_notification` 的 UPSERT INSERT 语句中。ORM 模型 `NotificationRow` 已声明 `read_at` 字段，C-04 迁移逻辑（`ALTER TABLE notifications ADD COLUMN read_at`）也存在，但该列在实际数据库中缺失。
+
+**根因**：`run_migrations()` 函数内多个迁移块（C-01~C-05）顺序执行，C-01 步骤的 `auto_migrate_task_links()` 抛异常后，C-02/C-03/C-04/C-05 全部被跳过；而外层 `_on_startup` 的 `try/except Exception as e: logger.warning(f"启动迁移钩子失败（忽略）: {e}")` 又吞掉了异常，仅留一条 warning 日志。最终数据库 schema 与 ORM 不一致，运行时 INSERT 才报 "no such column"。
+
+**问题本质**：两个设计缺陷叠加——① 迁移块间无独立容错（前置失败阻断后续）；② 外层 try/except 吞掉关键路径异常（丢失完整堆栈，难以定位真正失败点）。
+
+**规范**：
+
+1. **迁移块独立容错【强制】**：同一迁移函数内的多个独立迁移块（如 C-01 表重建 / C-02 ADD COLUMN / C-03 ADD COLUMN / C-04 ADD COLUMN / C-05 CREATE INDEX）必须各自独立 `try/except`，每个块失败时记 `logger.warning` + 块标识（如 `"C-04 notifications.read_at 迁移失败（忽略）: {e}"`），不阻断后续块：
+   ```python
+   # ✅ 正确：每个迁移块独立 try/except
+   try:
+       # C-04 迁移
+       if insp.has_table("notifications"):
+           notif_cols = {c["name"] for c in insp.get_columns("notifications")}
+           if "read_at" not in notif_cols:
+               with engine.begin() as conn:
+                   conn.exec_driver_sql("ALTER TABLE notifications ADD COLUMN read_at DATETIME DEFAULT NULL")
+   except Exception as e:
+       logger.warning(f"C-04 notifications.read_at 迁移失败（忽略）: {e}")
+
+   # C-05 迁移不受 C-04 失败影响
+   try:
+       # ...
+   except Exception as e:
+       logger.warning(f"C-05 ... 迁移失败（忽略）: {e}")
+   ```
+
+2. **强依赖时允许合并【强制】**：仅当迁移块间有强依赖（B 依赖 A 成功，如表重建后才能回填数据）时才允许合并到一个 `try` 块，并在 docstring 中注明依赖关系。
+
+3. **外层禁止吞掉关键路径异常【强制】**：启动钩子（`_on_startup`）、迁移函数（`run_migrations`）、初始化函数（`init_db`/`init_container`）等关键路径的外层 `except` 必须用 `logger.exception()` 输出完整 traceback，禁止用 `logger.warning(f"...{e}")` 丢失堆栈：
+   ```python
+   # ❌ 错误：外层 warning 丢失堆栈，且内部无独立容错
+   try:
+       container = get_container()
+       run_migrations(container)  # 内部任一迁移失败 → 全部跳过
+   except Exception as e:
+       logger.warning(f"启动迁移钩子失败（忽略）: {e}")  # 只有一行 message
+
+   # ✅ 正确：外层 exception 保留堆栈（内部已有独立容错时，外层仅兜底）
+   try:
+       container = get_container()
+       run_migrations(container)  # 内部各块独立 try/except
+   except Exception:
+       logger.exception("启动迁移钩子失败（不阻断主服务）")  # 完整 traceback
+   ```
+
+4. **数据库 schema 三方对比诊断法【强制】**：遇到 `no such column` / `no such table` / `column not found` 类错误时，必须执行三方对比诊断：
+   - **① ORM 模型声明**（`db_models.py`）：确认字段是否在模型中声明
+   - **② 迁移逻辑**（`run_migrations`）：确认是否有对应的 ALTER TABLE / CREATE TABLE 迁移
+   - **③ 实际数据库 schema**（`PRAGMA table_info(<table>)`）：确认数据库实际列
+   - 三方一致 → 报错为历史日志或连接错库；ORM有/迁移无 → 补迁移；迁移有/实际无 → 迁移未执行（检查启动日志中被吞掉的 warning）
+
+**配置驱动**：迁移函数名列表、迁移块标识前缀、关键路径函数名、禁止的 except 模式等参数在 `xianyu-backend-code-review` 的 `config.yaml` 的 `migration_block_isolation` / `critical_path_no_swallow` 节点管理（详见 `xianyu-backend-code-review` v4.25.0 的 `B-REVIEW-MIGRATION-BLOCK-ISOLATION` / `B-REVIEW-CRITICAL-PATH-NO-SWALLOW`），不硬编码在技能中。
+
+**适用场景**：
+- 数据库增量迁移（ALTER TABLE / CREATE INDEX / 数据回填）多个独立步骤
+- 启动初始化序列（日志 / DB / 调度器 / 浏览器等多个独立组件初始化）
+- 配置加载多个独立配置项
+- 任何 `no such column` / `no such table` 类错误的诊断
+
+**不适用场景**：
+- 有强依赖的迁移序列（表重建后才能回填数据）—— 应合并 try 并在失败时整体回滚
+- 单一原子事务内的多个 SQL（应用事务的 ACID 保证，不应拆分 try）
+- 非关键路径的 fire-and-forget 操作（如 dump 诊断文件，失败可静默）
+- SQL 语法错误 / 权限错误 / 连接错误（非 schema 问题，三方对比不适用）
+
+**历史教训**：`startup.py` 的 `run_migrations()` 函数内 C-01~C-05 五个迁移块顺序执行无独立 try/except，外层 `_on_startup` 的 `except Exception as e: logger.warning(f"启动迁移钩子失败（忽略）: {e}")` 吞掉异常。C-01 步骤的 `auto_migrate_task_links()` 因 `task_links` 表结构问题抛异常，导致 C-04（`notifications.read_at` 列添加）被跳过。数据库 schema 缺少 `read_at` 列，前端 `_persistErrorAsNotif` 调用 `POST /api/notifications` 时 INSERT 失败。修复方式：将 C-01~C-05 改为各自独立 try/except，前置失败不阻断后续迁移。
+
+**判断信号（review 触发条件）**：
+- `grep -n "except Exception" src/xianyu_hunter/web/startup.py` 命中关键路径函数的外层统一 try/except
+- `grep -n "logger.warning.*忽略" src/xianyu_hunter/web/startup.py` 命中吞掉异常的 warning
+- 迁移函数体内多个 ALTER TABLE / CREATE INDEX 在同一 try 块内或无 try 包裹但外层有统一 try/except
+- 运行时报 `no such column` / `no such table` 但 ORM 模型已声明对应字段
+
+### step 117：API 更新接口三态语义规范【强制】🆕v4.26
+
+**背景**：PATCH/PUT 接口需要支持「未传字段（skip）」、「传 null（clear）」、「传值（update）」三态语义。手动循环跳过 None 无法区分「未传」和「传 null」，导致「清除覆盖」功能失效。
+
+**问题**：PATCH/PUT 接口的可选字段更新逻辑用 `for k, v in raw.items(): if v is None: continue` 跳过 None，无法区分用户「未传该字段」（应保留旧值）和「显式传 null」（应清除旧值），导致前端「清除任务级覆盖」功能失效。
+
+**规范**：
+
+1. **三态语义区分【强制】**：PATCH/PUT 接口必须用 Pydantic v2 的 `model_dump(exclude_unset=True)` 区分三态：
+   - **未传**（skip）：字段未在请求中提供 → `exclude_unset=True` 会过滤掉 → 跳过更新
+   - **传 null**（clear）：字段显式传 null → 保留在 dump 结果中 → 写入 None（清除）
+   - **传值**（update）：字段传具体值 → 保留在 dump 结果中 → 写入新值
+   ```python
+   # ✅ 正确：用 exclude_unset=True 区分三态
+   raw = body.model_dump(exclude_unset=True)
+   updates = dict(raw)
+
+   # ❌ 错误：手动循环跳过 None，无法区分未传和传 null
+   raw = body.model_dump()
+   for k, v in raw.items():
+       if v is None:
+           continue
+   ```
+
+2. **NOT NULL 字段防御性 pop【强制】**：DB schema 为 NOT NULL 的字段（如 `use_cron`、`interval_seconds`）传 null 时必须防御性 pop（`updates.pop(field, None)`），而非直接写入 DB 触发 IntegrityError：
+   ```python
+   # ✅ 正确：NOT NULL 字段传 null 时防御性 pop
+   for not_null_field in NOT_NULL_FIELDS:
+       if updates.get(not_null_field) is None:
+           updates.pop(not_null_field, None)
+
+   # ❌ 错误：直接写入触发 IntegrityError
+   # updates 中 use_cron=None 会触发 NOT NULL constraint failed
+   ```
+
+3. **覆盖字段允许 null 写入【强制】**：覆盖字段（如 `search_config`、`price_config`）传 null 表示「清除覆盖」，应正常写入 None，不得 pop：
+   ```python
+   # ✅ 正确：覆盖字段传 null 表示清除覆盖，正常写入 None
+   # updates['search_config'] = None → DB 存 None → startup 读取时回退到全局配置
+   ```
+
+**配置驱动**：三态字段分类、NOT NULL 字段清单、覆盖字段清单等参数在 `config.yaml` 的 `api_update_semantics` 节点管理，包含 `three_state_fields` / `not_null_fields` / `clear_override_fields` 等，不硬编码在技能中。
+
+**适用场景**：
+- 所有 PATCH/PUT 接口的可选字段更新
+- 需要支持「清除覆盖」语义的字段（任务级配置覆盖、用户偏好覆盖等）
+
+**不适用场景**：
+- POST 创建接口（所有字段都显式传，无需区分三态）
+- 内部函数调用（参数语义在调用点明确）
+
+**历史教训**：`api_tasks.py` 的 `update_task` 用手动循环 `for k, v in raw.items(): if v is None: continue` 跳过 None，导致前端「清除任务级覆盖」时 null 被跳过，旧值保留，覆盖无法清除。修复：改用 `model_dump(exclude_unset=True)` + NOT NULL 字段防御性 pop。
+
+**判断信号（review 触发条件）**：
+- `grep "model_dump()"` 不带 `exclude_unset` 的 PATCH/PUT 接口
+- `grep "if v is None: continue"` 模式出现在 PATCH/PUT 接口中
+- 前端「清除覆盖」功能无效（传 null 后旧值保留）
+
+### step 118：字段全链路消费规范【强制】🆕v4.26
+
+**背景**：新增任务级配置字段时必须同时实现「DB 存储 → startup 读取 → worker 消费」完整链路。禁止只实现存储和 API 暴露但不让 worker 消费（死字段）。
+
+**问题**：新增任务级配置字段（如 `eval_threshold`、`antidetect_config`）只在 DB schema 和 API 中暴露，但 worker 运行时不读取该字段，仍用全局配置，导致字段成为「死字段」——用户编辑后无效果，误导用户。
+
+**规范**：
+
+1. **完整链路实现【强制】**：新增任务级配置字段必须同时实现三步链路：
+   - **DB 存储**：schema 添加列 + ORM model 添加字段 + migration 脚本
+   - **startup 读取**：`startup.py` 在构造 Task dataclass 时从 DB row 读取该字段
+   - **worker 消费**：`worker.py` 在运行时优先读取 task 级字段，回退到全局配置
+   ```python
+   # ✅ 正确：worker 优先消费 task 级字段，回退到全局配置
+   _pass_score = task.eval_threshold if task.eval_threshold is not None else (eval_cfg.pass_score if eval_cfg else 60)
+
+   # ❌ 错误：worker 用全局配置，task.eval_threshold 成为死字段
+   _pass_score = eval_cfg.pass_score if eval_cfg else 60
+   ```
+
+2. **死字段处理【强制】**：字段不能消费时必须明确处理：
+   - 移除 UI 编辑入口（禁止用户编辑无效字段）
+   - 添加注释说明原因（如「保留以兼容旧数据，worker 不消费」）
+   - 不得保留可编辑的 UI 入口但不消费
+   ```python
+   # ✅ 正确：死字段添加注释说明
+   # antidetect_config: 保留以兼容旧数据，worker 不消费（全局 Modal 管理）
+   # 若未来需要任务级覆盖，需在 worker.py 激活消费
+   ```
+
+**配置驱动**：字段消费链路检查清单、死字段检测关键词、消费模式等参数在 `config.yaml` 的 `field_consumption_chain` 节点管理，包含 `required_chain_steps` / `dead_field_keywords` / `consume_pattern` 等，不硬编码在技能中。
+
+**适用场景**：
+- 所有任务级配置覆盖字段（`eval_threshold`、`ai_prompt`、`search_config`、`price_config` 等）
+- 新增的配置覆盖字段
+
+**不适用场景**：
+- 向前兼容的遗留字段（应添加注释说明「保留以兼容旧数据，worker 不消费」）
+- 纯展示字段（如 `created_at`、`updated_at`）
+
+**历史教训**：`eval_threshold` 和 `antidetect_config` 都是死字段——DB 有字段但 worker 不消费。修复 eval_threshold：激活 worker 消费（`task.eval_threshold if task.eval_threshold is not None else eval_cfg.pass_score`）；修复 antidetect_config：移除前端 UI 入口改为全局 Modal + 添加注释说明「worker 不消费」。
+
+**判断信号（review 触发条件）**：
+- `grep` DB schema 中的 JSON/nullable 字段，逐一检查 worker 是否消费
+- 前端有编辑入口但运行时不读取该字段
+- 用户反馈「编辑了某字段但运行行为无变化」
+
+### step 119：共享单例局部变量规范【强制】🆕v4.26
+
+**背景**：循环中创建任务级覆盖对象时必须用局部变量，禁止直接修改 container 单例。container 单例在循环中被直接修改会导致循环结束后指向最后一个任务的配置，影响共享 container 的其他代码。
+
+**问题**：startup/scheduler 中遍历任务构造 worker 时，直接 `container.xxx = new(...)` 修改共享单例，循环结束后 container 单例的属性指向最后一个任务的配置，污染共享 container 的其他代码（如 live 端点、状态查询）。
+
+**规范**：
+
+1. **局部变量隔离【强制】**：循环中创建任务级覆盖对象必须用局部变量（命名 `worker_xxx`），禁止直接修改 container 单例：
+   ```python
+   # ✅ 正确：用局部变量隔离，container 单例不受污染
+   worker_price_strategy = container.price_strategy
+   if override:
+       worker_price_strategy = type(container.price_strategy)(PriceConfig(...))
+   worker = TaskWorker(..., price_strategy=worker_price_strategy)
+
+   # ❌ 错误：直接修改 container 单例，循环结束后污染
+   container.price_strategy = type(container.price_strategy)(PriceConfig(...))
+   worker = TaskWorker(..., price_strategy=container.price_strategy)
+   ```
+
+2. **命名规范【强制】**：局部变量必须用 `worker_` 前缀命名（`worker_price_strategy`、`worker_search_config` 等），明确标识为「worker 专用副本」。
+
+**配置驱动**：共享单例清单、局部变量命名规则、检测模式等参数在 `config.yaml` 的 `shared_singleton_protection` 节点管理，包含 `shared_singletons` / `local_var_prefix` / `detection_patterns` 等，不硬编码在技能中。
+
+**适用场景**：
+- startup/scheduler 中遍历任务构造 worker 的循环体
+- 任何在循环中创建覆盖对象的场景
+
+**不适用场景**：
+- 单任务场景（无需局部变量）
+- 非共享对象（每次新建的实例）
+
+**历史教训**：`startup.py` 在遍历任务循环中直接 `container.price_strategy = new(...)`，导致循环结束后 container.price_strategy 污染（指向最后一个任务的配置），影响 live 端点等共享 container 的代码。修复：引入局部变量 `worker_price_strategy`。
+
+**判断信号（review 触发条件）**：
+- `grep` 循环体内的 `container.xxx =` 赋值语句
+- live 端点 / 状态查询返回的配置与预期不符（指向最后一个任务的配置）
+
+### step 120：跨前后端类型对齐规范【强制】🆕v4.26
+
+**背景**：前端 TypeScript interface 必须与后端运行时模型（Pydantic/dataclass）字段严格对齐。后端不消费的字段不得在前端 interface 中声明为「与后端对齐」。
+
+**问题**：前端 TypeScript interface 声明「与后端某 model 对齐」，但后端运行时创建的是另一个 model（字段不同），导致前端类型声明误导，开发者以为字段会被消费但实际不会。
+
+**规范**：
+
+1. **严格对齐【强制】**：前端 TypeScript interface 必须与后端运行时模型（Pydantic/dataclass）字段严格对齐，不得与配置文件 model（如 yaml 配置类）对齐而误导：
+   ```typescript
+   // ❌ 错误：声明与 PriceStrategyConfig 对齐，但运行时创建的是 PriceConfig（无 enabled_*）
+   // interface TaskPriceOverride {
+   //   min_price: number;
+   //   max_price: number;
+   //   enabled_max: boolean;  // 运行时不消费
+   //   enabled_min: boolean;  // 运行时不消费
+   // }
+
+   // ✅ 正确：与运行时 PriceConfig 对齐，并注释说明部分实现
+   interface TaskPriceOverride {
+     // 注意：仅消费 min_price/max_price/market_ratio
+     // PriceStrategyConfig 的 enabled_* 开关和 top_n 未消费（UI 未暴露编辑入口）
+     // PriceConfig 用 None 表示禁用，与 enabled_*=False 语义等价
+     min_price: number | null;
+     max_price: number | null;
+     market_ratio: number | null;
+   }
+   ```
+
+2. **部分实现注释【强制】**：部分实现时必须注释说明未消费字段及原因，不得让后续开发者误以为字段会被消费。
+
+**配置驱动**：类型对齐检查清单、允许部分实现的字段清单、对齐检查规则等参数在 `config.yaml` 的 `cross_stack_type_alignment` 节点管理，包含 `required_aligned_interfaces` / `partial_implementation_fields` / `alignment_check_rules` 等，不硬编码在技能中。
+
+**适用场景**：
+- 所有跨前后端的类型定义（TypeScript interface ↔ Python Pydantic/dataclass）
+- 任务级配置覆盖、API 请求/响应模型
+
+**不适用场景**：
+- 纯前端或纯后端的内部类型
+- 第三方库类型（无法控制）
+
+**历史教训**：`TaskPriceOverride`（前端）声明与 `PriceStrategyConfig`（yaml 配置）对齐，但运行时 startup.py 创建的是 `PriceConfig`（无 `enabled_*` 字段），不消费 `enabled_*`，导致前端类型声明误导。修复：添加注释说明「仅消费 min_price/max_price/market_ratio，PriceStrategyConfig 的 enabled_* 开关和 top_n 未消费」。
+
+**判断信号（review 触发条件）**：
+- diff 前端 interface 字段 vs 后端运行时模型字段，不一致即为可疑
+- 前端 interface 注释「与后端 xxx 对齐」但 grep 后端运行时创建的是另一个 model
+
+### step 121：前端错误处理规范【强制】🆕v4.26
+
+**背景**：前端 API 调用的 catch 块必须用统一错误提取工具（`extractApiError`），显示具体错误信息（含状态码 + 详情）。
+
+**问题**：前端 API 调用的 catch 块只显示 `message.error('保存失败')` 等无具体信息的错误提示，用户无法区分网络错误/验证错误/服务器错误，难以排查问题。
+
+**规范**：
+
+1. **统一错误提取【强制】**：API 调用的 catch 块必须用项目统一的 `extractApiError` 工具提取错误信息：
+   ```typescript
+   // ✅ 正确：用 extractApiError 显示具体错误信息，时长 5 秒
+   catch (e) {
+     message.error(extractApiError(e), 5);
+   }
+
+   // ❌ 错误：无具体信息的错误提示
+   catch (e) {
+     message.error('保存失败');
+   }
+   ```
+
+2. **错误显示时长【强制】**：错误显示时长不少于 5 秒（配置驱动），保证用户有时间阅读。
+
+3. **禁止无信息提示【强制】**：禁止 `message.error('保存失败')` / `message.error('操作失败')` 等无具体信息的错误提示。
+
+**配置驱动**：错误显示时长、错误提取函数名、禁止的错误模式等参数在 `config.yaml` 的 `frontend_error_handling` 节点管理，包含 `error_display_duration_sec` / `required_error_extractor` / `forbidden_error_patterns` 等，不硬编码在技能中。
+
+**适用场景**：
+- 所有含 try/catch 的 API 调用
+- 表单提交、配置保存、数据获取等可能失败的操作
+
+**不适用场景**：
+- 非 API 错误（如本地计算错误、表单验证错误）
+- 已知预期错误（如取消操作）
+
+**历史教训**：`TaskEditor.tsx` 的 `doSubmit` catch 块只显示 `message.error('保存失败')`，用户无法区分网络错误/验证错误/服务器错误，排查困难。修复：改用 `extractApiError(e)` + 5 秒显示时长。
+
+**判断信号（review 触发条件）**：
+- `grep "message.error('"` 不含 `extractApiError` 的 catch 块
+- `grep "catch (e)"` 后跟 `message.error('xxx失败')` 等无信息提示
+
+### step 122：默认值操作符规范【强制】🆕v4.26
+
+**背景**：默认值场景统一用 `??`（nullish coalescing），只有需要同时过滤 `0`/`''`/`false` 时才用 `||`（logical or）。
+
+**问题**：默认值场景混用 `||` 和 `??`，`||` 会将 `0`/`''`/`false` 也视为 falsy，可能导致意外行为（如 `v=0` 时被误判为 falsy 返回默认值）。
+
+**规范**：
+
+1. **默认值统一用 ??【强制】**：默认值场景必须用 `??`（nullish coalescing），只将 `null/undefined` 视为 falsy：
+   ```typescript
+   // ✅ 正确：v=0 时保留 0，v=null 时返回 1
+   onChange={(v) => update({ qps: v ?? 1 })}
+
+   // ❌ 错误：v=0 时会被误判为 falsy，返回 1
+   onChange={(v) => update({ qps: v || 1 })}
+   ```
+
+2. **|| 仅用于过滤场景【强制】**：只有需要同时过滤 `0`/`''`/`false` 时才用 `||`（如空字符串转默认值、0 转默认值）：
+   ```typescript
+   // ✅ 正确：需要过滤空字符串时用 ||
+   const name = inputName || 'default';
+   ```
+
+3. **风格一致性【强制】**：同一组件/模块内默认值操作符必须风格一致，禁止混用 `||` 和 `??` 导致语义不一致。
+
+**配置驱动**：默认值操作符选择规则、例外场景清单、检测模式等参数在 `config.yaml` 的 `default_operator` 节点管理，包含 `preferred_operator` / `logical_or_exceptions` / `detection_patterns` 等，不硬编码在技能中。
+
+**适用场景**：
+- 所有提供默认值的表达式（InputNumber onChange、函数参数默认值、变量初始化）
+
+**不适用场景**：
+- 需要同时过滤 `0`/`''`/`false` 的场景（如空字符串转默认值、0 转默认值）
+- 布尔逻辑判断（应用 `&&` / `||` 的本意）
+
+**历史教训**：`GlobalAntidetectConfigModal` 中 `qps: v || 1`、`fail_pause_threshold: v || 3`、`fail_window_sec: v || 3600` 用 `||`，而 `min_delay_ms: v ?? 200`、`max_delay_ms: v ?? 1500` 用 `??`，风格不一致。虽然 InputNumber 的 min 约束保证 0 不会发生，但 `??` 语义更准确。修复：统一改为 `??`。
+
+**判断信号（review 触发条件）**：
+- `grep "|| "` 在 onChange/默认值场景中，检查是否有更准确的 `??` 替代
+- 同一组件内混用 `||` 和 `??` 的默认值场景
+
+### step 123：失败原因传递链规范（reason propagation chain）【强制】🆕v4.27
+
+**背景**：底层操作（如 `collector.detail()`）返回 `None`/空结果时，上层调用者无法区分根因（cookie 失效 / 反爬验证 / 页面下架 / 网络异常），导致一律抛 502 含糊错误，用户无法判断该重登录、该等待还是该手动验证。
+
+**问题**：商品列表点击标题触发官方采集报错 `Failed to collect item detail: page unavailable or login expired`，所有失败都归为 502，用户无法区分根因，错误文案与实际原因无关。
+
+**规范**：
+
+1. **底层设置失败原因属性【强制】**：底层操作返回 `None`/空/失败时，必须在自身对象上设置 `last_<operation>_failure_reason` 属性，取值为可枚举的字符串：
+
+   ```python
+   # collector/_detail.py 各失败分支
+   self.last_detail_failure_reason = "home_title_redirect"  # 首页标题（cookie 失效）
+   self.last_detail_failure_reason = "login_redirect"        # 登录页重定向
+   self.last_detail_failure_reason = "verify_redirect"       # 验证码页
+   self.last_detail_failure_reason = "page_closed"           # 页面被关闭
+   self.last_detail_failure_reason = "http_status_error"     # HTTP 4xx/5xx
+   self.last_detail_failure_reason = "target_closed_exception"  # TargetClosed
+   self.last_detail_failure_reason = "redirected_away_from_item"  # 非商品页
+   ```
+
+2. **中层按 reason 映射状态码【强制】**：中层业务模块读取 `last_<operation>_failure_reason` 属性，按 reason 映射到语义正确的 HTTP 状态码：
+
+   ```python
+   reason = getattr(self.container.collector, "last_detail_failure_reason", "") or "unknown"
+   if reason in ("home_title_redirect", "login_redirect"):
+       raise CollectionError(401, "采集失败：登录态失效，请重新登录", item_id=item_id)
+   if reason == "verify_redirect":
+       raise CollectionError(429, "采集失败：触发反爬验证码，请手动完成验证", item_id=item_id)
+   if reason in ("page_closed", "target_closed_exception"):
+       raise CollectionError(503, "采集失败：浏览器页面被关闭，请稍后重试", item_id=item_id)
+   raise CollectionError(502, f"采集失败：详情页不可用（reason={reason}），请稍后重试", item_id=item_id)
+   ```
+
+3. **文案与根因语义匹配【强制】**：错误文案必须与根因一致，**禁止**含糊的"page unavailable or login expired"覆盖所有场景。
+
+4. **reason 值可枚举集中管理【强制】**：所有可能的 reason 值必须定义为模块级常量或 `Literal` 类型，禁止散落字符串字面量。
+
+**配置驱动**：reason 映射表、状态码映射、文案模板等参数在 `config.yaml` 的 `failure_reason_propagation` 节点管理，包含 `reason_to_status_code_mapping` / `reason_enum_values` / `fallback_status_code` / `fallback_message_template` 等，不硬编码在技能中。
+
+**适用场景**：
+- 多层架构中底层操作有明确失败原因枚举的场景（domain → infra → modules → web）
+- 浏览器自动化（Playwright detail/seller_profile/search 等多失败模式）
+- 含重试逻辑的 SSE/HTTP 接口
+
+**不适用场景**：
+- 单层脚本（无中层映射需求）
+- 失败原因不可枚举的场景（用 unknown 兜底即可）
+- 纯 token 认证（JWT 失败原因单一）
+
+**历史教训**：商品详情采集 `collector.detail()` 返回 `None` 时，`_collect_detail_only` 一律抛 `CollectionError(502, "Failed to collect item detail: page unavailable or login expired")`，用户反馈"还是报错"但无法判断是 cookie 失效还是页面下架。修复后 `_detail.py` 在 7 个失败分支设置 `last_detail_failure_reason`，`_collect_detail_only` 按 reason 映射 401/429/502/503，文案明确告诉用户该怎么做。
+
+**判断信号（review 触发条件）**：
+- `grep "raise.*Error.*502"` 出现含糊文案（如 "page unavailable" / "login expired" / "unknown error"）
+- 底层操作返回 `None` 但未设置 `last_*_failure_reason` 属性
+- reason 字符串字面量散落在多个 if/elif 分支而非集中常量
+
+### step 124：数据完整性预检规范（pre-call completeness check）【强制】🆕v4.27
+
+**背景**：依赖外部状态的接口（如依赖 cookie 的详情采集、依赖 token 的搜索）在调用失败后，上层无法区分是状态不完整还是目标不可用。前置检查可在调用前识别状态问题，给出明确错误。
+
+**问题**：`cookies_default.json` 只有 4 个身份 cookie（不完整），但 `_collect_detail_only` 直接调用 `collector.detail()`，详情页 SPA 渲染失败返回 `None`，上层抛 502 含糊错误。预检 cookie 完整性可避免"调用-失败-含糊报错"的循环。
+
+**规范**：
+
+1. **预检方法签名【强制】**：依赖外部状态的接口必须提供 `_check_<state>_completeness() -> str | None` 方法，返回 `None` 表示完整，返回 `str` 表示错误信息（含具体缺失情况）：
+
+   ```python
+   async def _check_detail_cookie_completeness(self) -> str | None:
+       cookies = await self._get_browser_cookies()
+       cookie_names = {c.get("name", "") for c in cookies}
+       identity_found = set(_IDENTITY_COOKIES) & cookie_names
+       session_found = _SESSION_COOKIES & cookie_names
+       if len(cookies) >= _MIN_COUNT and len(session_found) >= _MIN_HITS:
+           return None
+       return f"Cookie 不完整（共 {len(cookies)} 个，身份 {sorted(identity_found)}，会话 {sorted(session_found)} 不足）"
+   ```
+
+2. **双阈值 AND 判断【强制】**：完整性判断必须用双阈值 AND 关系（任一不满足即不完整），避免单阈值误判：
+   - 总数阈值（如 cookie 总数 < 10 → 不完整）
+   - 关键项命中阈值（如必需项命中 < 3 → 不完整）
+
+3. **调用前预检 + 调用后二次检查【强制】**：预检通过仅代表状态数量足够，但调用过程中可能因状态实际失效（如 token 过期）被重定向，需再次确认：
+
+   ```python
+   # 调用前预检
+   issue = await self._check_detail_cookie_completeness()
+   if issue:
+       raise CollectionError(401, issue, item_id=item_id)
+   result = await self._operation()
+   if result is None:
+       # 调用后二次检查
+       issue = await self._check_detail_cookie_completeness()
+       if issue:
+           raise CollectionError(401, issue, item_id=item_id)
+       # 走 reason 映射
+   ```
+
+4. **错误信息含具体缺失清单【强制】**：错误信息必须包含具体的缺失情况（总数、命中项、未命中项），便于用户排查。
+
+**配置驱动**：状态完整性判断的阈值、关键项清单、双阈值关系等参数在 `config.yaml` 的 `data_completeness_precheck` 节点管理，包含 `min_total_count` / `required_items` / `min_required_hits` / `threshold_relation`（"and"/"or"）等，不硬编码在技能中。
+
+**适用场景**：
+- 依赖多字段外部状态的接口（cookie/header/token）
+- 用户手动注入数据的场景（DevTools 复制 / 文件导入）
+- 浏览器自动化（详情页 SPA 渲染依赖完整 cookie 集）
+- 状态可能在中途失效的场景（token TTL 过期）
+
+**不适用场景**：
+- 主键精确查询（天然幂等）
+- 纯查询接口（无外部状态依赖）
+- 内部信任数据（无完整性风险）
+
+**历史教训**：用户从浏览器 DevTools 复制 cookie 时只粘贴 4 个身份 cookie，`export_cookies` 覆盖写丢失原有 22 个完整 cookie 集，详情页 SPA 渲染失败。预检可在调用前识别"4 个 cookie 不足 10 个阈值"，直接抛 401 + 缺失清单，而非走 detail() → None → 502 含糊错误。
+
+**判断信号（review 触发条件）**：
+- 接口依赖外部状态（cookie/token/header）但无前置完整性检查
+- 检查方法返回布尔值而非错误信息（无法告诉用户缺什么）
+- 单阈值判断（仅检查总数或仅检查关键项）
+- 调用前预检但无调用后二次检查
+
+### step 125：合并写入 vs 覆盖写入决策规范（merge vs overwrite write strategy）【强制】🆕v4.27
+
+**背景**：用户手动注入数据（如从 DevTools 复制 cookie）时可能只粘贴部分字段，若用覆盖写会丢失原有完整数据集，导致下游依赖完整数据的接口失败。
+
+**问题**：`cookie_inject.py` 用 `export_cookies`（覆盖写）注入用户手动复制的 4 个 cookie，丢失原有 22 个完整 cookie 集，详情页 SPA 渲染失败。
+
+**规范**：
+
+1. **写入策略决策矩阵【强制】**：数据写入必须按数据来源选择写入策略：
+
+   | 数据来源 | 写入策略 | 理由 |
+   |---|---|---|
+   | 用户手动注入（DevTools 复制） | 合并写（merge） | 用户可能只粘贴部分字段 |
+   | 文件导入（Netscape/JSON） | 合并写（merge） | 安全保底，保留旧字段额外属性 |
+   | 系统登录成功 | 覆盖写（overwrite） | 用完整集替换，但需先验证新集完整 |
+   | 系统刷新 token | 合并写（merge） | 只更新 token 相关字段 |
+
+2. **合并写方法签名【强制】**：合并写方法必须以字段名为 key 合并，相同 name 的新值覆盖旧值，旧文件中其他字段全部保留：
+
+   ```python
+   def merge_cookies(self, cookies: list[dict], method: str = "merge", user_id: str = "default") -> bool:
+       with self._lock:
+           existing = self._read_json(user_id)
+           merged_by_name: dict[str, dict] = {}
+           if existing and existing.get("cookies"):
+               for c in existing["cookies"]:
+                   merged_by_name[c.get("name", "")] = c
+           for new_c in cookies:
+               merged_by_name[new_c.get("name", "")] = new_c
+           merged_cookies = list(merged_by_name.values())
+           # ... 写入 + 同步
+   ```
+
+3. **合并后日志输出【强制】**：合并写必须输出"注入 N 个，原有 M 个，合并后 K 个"日志，便于排查数据丢失问题。
+
+4. **覆盖写必须先验证新集完整【强制】**：系统登录成功后用覆盖写时，必须先验证新集完整性（如 cookie 总数 ≥ 阈值），不完整时降级为合并写或拒绝写入。
+
+**配置驱动**：写入策略决策矩阵、合并 key 字段、完整性阈值等参数在 `config.yaml` 的 `write_strategy_decision` 节点管理，包含 `strategy_matrix` / `merge_key_field` / `overwrite_requires_validation` / `validation_threshold` 等，不硬编码在技能中。
+
+**适用场景**：
+- 用户手动注入数据（cookie/header/token）
+- 文件导入数据（Netscape/JSON/CSV）
+- 系统刷新部分字段（token 刷新）
+- 多源数据合并（多个用户身份）
+
+**不适用场景**：
+- 系统完整集替换（登录成功后的完整 cookie 集）
+- 审计日志（需保留全量历史，禁止合并）
+- 计数器递增（需去重键，禁止合并）
+
+**历史教训**：用户从 DevTools 复制 4 个身份 cookie 注入，`export_cookies` 覆盖写丢失原有 22 个完整 cookie 集（包括 cna/tracknick/_tb_token_/t/tfstk 等详情页 SPA 渲染必需的会话 cookie），导致详情页采集持续失败。修复后新增 `merge_cookies` 方法，用户注入只增量更新同名 cookie，保留原有其他 cookie。
+
+**判断信号（review 触发条件）**：
+- 用户手动注入接口（`/api/auth/cookie` 等）用 `export` / `overwrite` / `replace` 命名的方法
+- 写入方法无合并逻辑（直接覆盖整个文件）
+- 系统登录成功后用覆盖写但无完整性验证
+- 合并写方法无日志输出（无法排查数据丢失）
+
+### step 126：文案常量集中管理规范（error message constant centralization）【强制】🆕v4.27
+
+**背景**：错误文案散落在多个文件中（业务模块抛错、中间件日志降级 marker、前端错误映射），文案变更时需同步多处，漏改会导致日志降级失效或前端显示旧文案。
+
+**问题**：`exception_handler.py` 用字符串 `"Failed to collect item detail"` 作为日志降级 marker，业务模块修改文案后 marker 失效，日志降级不再触发。
+
+**规范**：
+
+1. **文案常量集中定义【强制】**：错误文案必须集中定义为模块级常量，禁止在多处内联字符串字面量：
+
+   ```python
+   # collection_service.py 模块级
+   _DETAIL_COOKIE_INCOMPLETE_MSG = "闲鱼登录 Cookie 不完整，请重新登录或导入完整 Cookie"
+   _DETAIL_LOGIN_EXPIRED_MSG = "采集失败：登录态失效或 _m_h5_tk token 过期，请重新登录"
+   _DETAIL_VERIFY_REQUIRED_MSG = "采集失败：触发闲鱼反爬验证码，请手动完成验证后重试"
+   _DETAIL_PAGE_CLOSED_MSG = "采集失败：浏览器页面被并发清理关闭，请稍后重试"
+   _DETAIL_UNKNOWN_FAILURE_MSG = "采集失败：详情页不可用或网络异常（reason={reason}），请稍后重试"
+   ```
+
+2. **跨模块引用必须 import 常量【强制】**：其他模块（如 exception_handler）引用文案做日志降级 marker 时，必须 import 常量而非硬编码字符串：
+
+   ```python
+   # exception_handler.py
+   from xianyu_hunter.modules.collection_service import _DETAIL_COOKIE_INCOMPLETE_MSG
+   _COOKIE_EXPIRED_MARKER = _DETAIL_COOKIE_INCOMPLETE_MSG  # 引用而非复制
+   ```
+
+3. **禁止用字符串子串做 marker【强制】**：日志降级判断禁止用 `if "Failed to collect" in detail`，必须用 `if detail == _DETAIL_COOKIE_INCOMPLETE_MSG` 或更精确的标识符（如 error_code 字段）。
+
+4. **错误响应增加 error_code 字段【建议】**：复杂错误响应应增加 `error_code` 字段（如 `"DETAIL_COOKIE_INCOMPLETE"`），前端按 error_code 而非文案字符串做映射，文案变更不影响前端逻辑。
+
+**配置驱动**：文案常量名、error_code 枚举、日志降级 marker 规则等参数在 `config.yaml` 的 `error_message_centralization` 节点管理，包含 `constant_naming_pattern` / `error_code_enum` / `forbidden_string_marker` / `require_constant_import` 等，不硬编码在技能中。
+
+**适用场景**：
+- 错误文案被多个模块引用（业务模块 + 中间件 + 前端）
+- 日志降级基于文案内容判断
+- 前端按错误文案做场景化提示
+- 错误响应需国际化的场景
+
+**不适用场景**：
+- 单次使用的临时错误信息
+- 内部调试日志（developer-facing）
+- 堆栈跟踪（系统生成）
+
+**历史教训**：`exception_handler.py` 用 `_COOKIE_EXPIRED_DETAIL_MARKER = "Failed to collect item detail"` 作为日志降级 marker，业务模块修改文案后 marker 失效，502 错误日志从 INFO 降级退回 WARNING，日志刷屏。修复后业务模块文案集中为模块级常量，exception_handler import 引用而非硬编码。
+
+**判断信号（review 触发条件）**：
+- `grep "Failed to collect"` 等字符串字面量出现在多个文件
+- 日志降级判断用 `if "<substring>" in detail` 而非常量比较
+- 业务模块抛错文案与中间件 marker 字符串不一致
+- 前端按文案子串做场景化映射而非 error_code
+
+### step 127：修改-验证-部署闭环规范（edit-verify-deploy closed loop）【强制】🆕v4.27
+
+**背景**：Python 代码修改后未重启服务导致用户报"还是报错"，且修改被回退后未及时发现，浪费多轮对话。
+
+**问题**：修改 `collection_service.py` 后未重启 uvicorn 进程，服务仍跑旧代码；git stash 管理失控导致修改丢失，未及时用 grep 验证关键标志符存在。
+
+**规范**：
+
+1. **修改后立即 grep 验证【强制】**：Edit 工具修改文件后，必须立即用 Grep 验证关键标志符（如新方法名、新常量名）存在于文件中：
+
+   ```bash
+   # 修改后立即验证
+   grep "_check_detail_cookie_completeness" src/xianyu_hunter/modules/collection_service.py
+   grep "merge_cookies" src/xianyu_hunter/web/services/cookie_store.py
+   ```
+
+2. **全局 grep 旧文案确保唯一来源【强制】**：修改错误文案后，必须全局 grep 旧文案，确保只有新文案存在：
+
+   ```bash
+   grep -r "Failed to collect item detail" src/  # 应无结果
+   grep -r "采集失败：详情页不可用" src/  # 应有结果
+   ```
+
+3. **Python 修改后必须重启服务【强制】**：Python 代码修改后必须重启 uvicorn 进程使代码生效，禁止认为"修改即生效"：
+
+   ```powershell
+   # PowerShell 重启服务
+   taskkill /F /T /PID <old_pid>
+   .venv\Scripts\python.exe -m xianyu_hunter web
+   ```
+
+4. **重启后验证端口 + 数据状态【强制】**：重启后必须验证端口监听 + 关键数据状态（如 cookies 数量）：
+
+   ```powershell
+   # 验证端口
+   Test-NetConnection -ComputerName 127.0.0.1 -Port 8000
+   # 验证数据状态
+   $c = Get-Content data/cookies_default.json -Raw | ConvertFrom-Json
+   Write-Host "cookies count: $($c.cookies.Count)"  # 应 ≥ 10
+   ```
+
+5. **git stash 前先 commit 保底【强制】**：修改前先 `git add . && git commit -m "WIP"` 保底，避免 stash 混合导致修改丢失：
+
+   ```bash
+   # 修改前保底
+   git add . && git commit -m "WIP: before refactor"
+   # 然后再做修改
+   ```
+
+**配置驱动**：验证步骤清单、grep 标志符、端口验证超时、数据状态阈值等参数在 `config.yaml` 的 `edit_verify_deploy_loop` 节点管理，包含 `verify_grep_markers` / `restart_required` / `port_verify_timeout` / `data_state_thresholds` 等，不硬编码在技能中。
+
+**适用场景**：
+- 所有 Python 代码修改（需重启服务）
+- 所有错误文案修改（需全局 grep 旧文案）
+- 所有 git stash 操作（需先 commit 保底）
+- 所有数据状态变更（需验证最终状态）
+
+**不适用场景**：
+- 前端 HMR 开发模式（自动热更新）
+- 配置热更新场景（无需重启）
+- 纯文档修改（无代码生效需求）
+
+**历史教训**：修改 `collection_service.py` 后未重启服务，用户报"还是报错"，排查发现服务进程启动时间早于修改时间。又因 git stash 管理失控，修改被回退后未及时发现，浪费多轮对话。修复后建立"修改-验证-部署闭环"：Edit → Grep 验证 → 重启服务 → 端口验证 → 数据状态验证。
+
+**判断信号（review 触发条件）**：
+- Python 代码修改后无 `taskkill` + 重启命令
+- 错误文案修改后无全局 grep 旧文案
+- git stash 前无 commit 保底
+- 重启后无端口验证或数据状态验证
+
+### step 128：测试 mock 同步规范（test mock synchronization）【强制】🆕v4.27
+
+**背景**：修改接口前置条件（如新增 cookie 完整性预检）后，原测试未同步更新 mock，导致测试失败或测试通过但实际逻辑错误。
+
+**问题**：`_collect_detail_only` 新增 `_check_detail_cookie_completeness` 预检后，原测试 `test_detail_only_collection_preserves_old_title_and_syncs_display` 未 mock `container.browser.get_cookies`，预检读不到 cookie 抛 401，测试失败。
+
+**规范**：
+
+1. **修改前置条件时同步更新测试 mock【强制】**：接口新增前置检查（如 cookie 完整性、token 有效性、配置加载）时，必须同步更新测试 mock 让前置检查通过：
+
+   ```python
+   # 修改前：原测试 mock
+   container = MagicMock()
+   container.collector.detail = AsyncMock(return_value=detail)
+
+   # 修改后：新增 cookie 预检，需 mock browser.get_cookies
+   container.browser.get_cookies = AsyncMock(return_value=[
+       {"name": n, "value": "v"} for n in [
+           "cookie2", "sgcookie", "unb", "_m_h5_tk",
+           "cna", "tracknick", "_tb_token_", "t", "tfstk",
+           "xlly_s", "_samesite_flag_", "KLNotice",
+       ]
+   ])
+   ```
+
+2. **mock 数据必须覆盖完整字段集【强制】**：mock 数据必须覆盖前置检查的所有关键字段（如 cookie 预检的 identity + session 双类 cookie），避免单类 mock 导致预检通过但实际逻辑错误。
+
+3. **测试失败时优先检查前置条件变更【强制】**：测试失败时优先检查是否是前置条件变更导致（如新增预检、新增参数、新增依赖），而非测试逻辑本身错误。
+
+4. **mock 数据集中管理【强制】**：测试 mock 数据集中的常量（如完整 cookie 集清单）应提取为测试模块级常量，避免散落多个测试函数：
+
+   ```python
+   # test_collection_service.py 模块级
+   _COMPLETE_COOKIE_MOCK = [
+       {"name": n, "value": "v"} for n in [
+           "cookie2", "sgcookie", "unb", "_m_h5_tk",
+           "cna", "tracknick", "_tb_token_", "t", "tfstk",
+       ]
+   ]
+
+   # 测试函数复用
+   container.browser.get_cookies = AsyncMock(return_value=_COMPLETE_COOKIE_MOCK)
+   ```
+
+**配置驱动**：mock 数据清单、前置条件检查项、测试失败排查步骤等参数在 `config.yaml` 的 `test_mock_synchronization` 节点管理，包含 `complete_mock_data` / `precheck_fields` / `failure_debug_steps` 等，不硬编码在技能中。
+
+**适用场景**：
+- 接口新增前置检查（cookie/token/config 完整性）
+- 接口新增依赖（如新增 browser.get_cookies 调用）
+- 接口签名变更（新增参数）
+- mock 数据需覆盖多类字段的场景
+
+**不适用场景**：
+- 纯函数测试（无外部依赖）
+- 已有完整 mock 的接口（无需新增）
+- 一次性脚本测试（无长期维护需求）
+
+**历史教训**：`_collect_detail_only` 新增 cookie 完整性预检后，原测试 `test_detail_only_collection_preserves_old_title_and_syncs_display` 未 mock `container.browser.get_cookies`，预检读不到 cookie 抛 401，测试失败。修复后添加 12 个 cookie 的 mock 数据（覆盖 identity + session 双类），测试通过。
+
+**判断信号（review 触发条件）**：
+- 接口新增前置检查但测试未更新 mock
+- 测试失败原因是 `AttributeError: 'MagicMock' object has no attribute '<new_method>'`
+- mock 数据只覆盖单类字段（如只有 identity cookie 无 session cookie）
+- 测试 mock 数据散落多个函数而非集中常量
+
+## 相关 Skills 协作
+
+| Skill | 协作场景 |
+|---|---|
+| `xianyu-automation-startserver` | 启停服务、构建、状态检查 |
+| `xianyu-backend-code-review` | 后端代码评审（Python/FastAPI） |
+| `xianyu-frontend-code-review` | 前端代码评审（React/TypeScript） |
+| `xianyu-sonarqube-mcp` | SonarQube 代码质量扫描与问题修复 |
+| `xianyu-logs-review` | 运行时日志分析与 WARNING/ERROR 排查 |
+
+## 阶段交接声明
+
+- 当前阶段：编码规范整合 + 技能交付（v4.26.0 API三态语义/死字段/共享单例/类型对齐/错误处理/默认值操作符复盘）✅ 已完成
+- 下一阶段：待定
+- 下一阶段智能体：待定
+- 下一阶段技能：待定
+- 交接上下文：v4.26.0 新增 step 117-122，6 条规范覆盖 API 更新接口三态语义、字段全链路消费、共享单例局部变量、跨前后端类型对齐、前端错误处理、默认值操作符一致性。代码修复点：api_tasks.py（exclude_unset=True + None 防御）、startup.py（worker_price_strategy 局部变量 + 注释）、worker.py（eval_threshold 激活）、TaskEditor.tsx（GlobalAntidetectConfigModal + extractApiError + ?? 统一）。对应前端审查 3 项 F-REVIEW（xianyu-frontend-code-review v4.25.0 → v4.26.0：F-REVIEW-78/79/80），后端审查 3 项 B-REVIEW（xianyu-backend-code-review v4.25.0 → v4.26.0：B-REVIEW-112/113/114）。注：v4.25.0 已先行落地 step 116 数据库迁移块独立容错规范（B-REVIEW-110/111），本次 step 117-122 顺延编号以避免冲突。
+
+## 版本历史
+
+> **v4.26.0 API三态语义/死字段/共享单例/类型对齐/错误处理/默认值操作符复盘**：基于本次「任务级配置覆盖功能开发 + 代码审查」复盘（使用 Sequential Thinking 8 步复盘法——成功步骤/不确定性与失败点/可抽象的固定流程与判断逻辑/适用场景与不适用场景/提炼编码规范/设计检查点/配置驱动方案/执行计划），新增 6 步编码规范（step 117-122）：(117) API 更新接口三态语义规范——PATCH/PUT 接口必须用 model_dump(exclude_unset=True) 区分未传/传null/传值三态，NOT NULL 字段传 null 时防御性 pop，配置参数在 api_update_semantics 节点管理；(118) 字段全链路消费规范——新增任务级配置字段必须同时实现 DB存储→startup读取→worker消费 完整链路，死字段必须移除 UI 入口或添加注释，配置参数在 field_consumption_chain 节点管理；(119) 共享单例局部变量规范——循环中创建任务级覆盖对象必须用局部变量 worker_xxx，禁止直接修改 container 单例，配置参数在 shared_singleton_protection 节点管理；(120) 跨前后端类型对齐规范——前端 TypeScript interface 必须与后端运行时模型字段严格对齐，部分实现时必须注释说明，配置参数在 cross_stack_type_alignment 节点管理；(121) 前端错误处理规范——API 调用的 catch 块必须用 extractApiError 显示具体错误信息，禁止 message.error('保存失败') 等无信息提示，配置参数在 frontend_error_handling 节点管理；(122) 默认值操作符规范——默认值场景统一用 ?? 而非 ||，只有需要同时过滤0/''/false 时才用 ||，配置参数在 default_operator 节点管理。所有新规范强调配置驱动（参数在 config.yaml 对应节点管理，不硬编码）与适用/不适用场景说明（确保通用性）。审查技能同步落地：xianyu-frontend-code-review v4.25.0 → v4.26.0 新增 3 项 F-REVIEW 检查点（F-REVIEW-THREE-STATE-NULL-SEMANTICS / F-REVIEW-ERROR-HANDLING-CONSISTENCY / F-REVIEW-DEFAULT-OPERATOR-CONSISTENCY），自动化扫描从 77 项扩展到 80 项；xianyu-backend-code-review v4.25.0 → v4.26.0 新增 3 项 B-REVIEW 检查点（B-REVIEW-EXCLUDE-UNSET-CHECK / B-REVIEW-NOT-NULL-NONE-DEFENSE / B-REVIEW-SHARED-SINGLETON-POLLUTION），自动化扫描从 111 项扩展到 114 项。代码修复点：api_tasks.py 的 update_task 改用 exclude_unset=True + NOT NULL 字段 None 防御；startup.py 引入 worker_price_strategy 局部变量 + antidetect_config 死字段注释；worker.py 激活 eval_threshold 任务级优先消费；TaskEditor.tsx 新增 GlobalAntidetectConfigModal + doSubmit 用 extractApiError + InputNumber onChange 统一 ?? 操作符。注：本次原计划为 v4.25.0 step 116-121，因文件已被先行更新至 v4.25.0（step 116 数据库迁移块独立容错），故顺延为 v4.26.0 step 117-122 以避免版本号与 step 编号冲突。
+
+> **v4.25.0 数据库迁移块独立容错与关键路径异常可见性复盘**：基于本轮对话解决的 `sqlite3.OperationalError: no such column: notifications.read_at` 问题复盘（使用 Sequential Thinking 6 步复盘法——成功步骤/不确定性与失败点/可抽象的固定流程与判断逻辑/适用场景与不适用场景/落地映射/配置节点设计），新增 1 步编码规范（step 116）：数据库迁移块独立容错与关键路径异常可见性规范。规范要点：(1) 迁移块独立容错——同一迁移函数内多个独立迁移块（C-01~C-05）必须各自独立 try/except，前置失败不阻断后续；(2) 强依赖时允许合并——表重建后才能回填数据等强依赖场景允许合并 try 并注明依赖；(3) 外层禁止吞掉关键路径异常——启动钩子/迁移/初始化等关键路径的外层 except 必须用 `logger.exception()` 输出完整 traceback，禁止 `logger.warning(f"...{e}")` 丢失堆栈；(4) 数据库 schema 三方对比诊断法——遇到 `no such column`/`no such table` 类错误必须执行 ORM 模型声明/迁移逻辑/实际数据库 schema（`PRAGMA table_info`）三方对比。规范强调配置驱动（迁移函数名列表、迁移块标识前缀、关键路径函数名、禁止的 except 模式等参数在 `xianyu-backend-code-review` 的 `config.yaml` 的 `migration_block_isolation` / `critical_path_no_swallow` 节点管理，不硬编码）与适用/不适用场景说明（确保通用性）。审查技能同步落地：`xianyu-backend-code-review` v4.24.0 → v4.25.0 新增 2 项 B-REVIEW 检查点（B-REVIEW-MIGRATION-BLOCK-ISOLATION / B-REVIEW-CRITICAL-PATH-NO-SWALLOW），自动化扫描从 109 项扩展到 111 项；`xianyu-frontend-code-review` v4.24.0 → v4.25.0 不新增 F-REVIEW 检查点（纯后端问题，仅在复盘记录中同步原则）。代码修复点：`src/xianyu_hunter/web/startup.py` 的 `run_migrations()` 将 C-01~C-05 五个迁移块改为各自独立 try/except，前置失败仅记 warning 不阻断后续迁移；外层 `_on_startup` 的 except 从 `logger.warning(f"...{e}")` 升级为 `logger.exception()`（保留完整堆栈）。
+
+> **v4.24.0 用户偏好类 UI 状态持久化复盘**：基于本次「批量采集菜单相关参数开关应支持持久化」需求复盘（使用 Sequential Thinking 7 步复盘法——成功步骤/不确定性与失败点/可抽象的固定流程与判断逻辑/适用场景与不适用场景/落地映射/配置节点设计/执行计划细化），新增 1 步编码规范（step 115）：用户偏好类 UI 状态持久化强制复用 usePersistentState 规范——用户偏好类 UI 状态（自动刷新/视图模式/列显隐/折叠/展开/主题偏好/最近使用列表/记住上次选中项）必须使用项目既有 `frontend/src/hooks/usePersistentState.ts`，禁止裸 `useState`（判别信号：刷新页面/路由切换后状态丢失即违规）、禁止各组件自行实现 localStorage 读写、禁止引入第三方持久化库。规范要点：(1) 状态分类识别——必须先识别为用户偏好类/业务数据类/会话状态类/临时状态类/敏感数据类五类；(2) 强制复用既有 hook；(3) key 命名规范 `xh.<page>.<field>`；(4) validator 必填防脏数据；(5) localStorage 不可用自动内存回退；(6) 不重复持久化后端已持久化字段避免前后端不一致。规范强调配置驱动（用户偏好类关键词、检测模式、检查信号等参数在 `xianyu-frontend-code-review` 的 `config.yaml` 的 `ui_preference_persistence` 节点管理，不硬编码）与适用/不适用场景说明（确保通用性）。审查技能同步落地：`xianyu-frontend-code-review` v4.23.0 → v4.24.0 新增 1 项 F-REVIEW 检查点（F-REVIEW-UI-PREFERENCE-PERSISTENCE），自动化扫描从 76 项扩展到 77 项；`xianyu-backend-code-review` v4.23.0 → v4.24.0 不新增 B-REVIEW 检查点（纯前端问题，仅在复盘记录中同步原则：若后端提供用户偏好 API，同样必须复用同一持久化策略与配置驱动，不硬编码）。代码修复点：`frontend/src/pages/Maintenance/BatchRefresh.tsx` 引入 `usePersistentState` hook，将 `const [autoRefresh, setAutoRefresh] = useState(false)` 替换为 `const [autoRefresh, setAutoRefresh] = usePersistentState<boolean>('xh.batchRefresh.autoRefresh', false, { validator: (v): v is boolean => typeof v === 'boolean' })`，构建产物 `BatchRefresh-r490l4v1.js` 通过类型检查与 vite build 验证。
+
+> **v4.21.0 能力驱动派发 / 共享工具函数 / 静默降级预检复盘**：基于本次"LLM 深度分析因 vision 模型不支持 image_url 触发 400"问题复盘（使用 Sequential Thinking 4 维度复盘法——成功步骤/不确定性与失败点/可抽象的固定流程与判断逻辑/适用场景与不适用场景），新增 3 步编码规范（step 112-114）：(112) 能力驱动派发规范（capability-driven dispatch）—— 任何 LLM/多模态/function_call 调用必须在构造 payload 前预检目标模型能力，校验函数必须共享（`api_ai._is_vision_capable`），关键字白名单配置化（`config.yaml` 的 `llm_capability_keywords` 节点），散落内联即违规；(113) 共享工具函数规范（避免散落内联判断）—— 跨 ≥2 模块复用的判断逻辑/常量必须抽取为"被依赖方"模块顶层的纯函数或模块级常量，导入方只能 `from <source> import <shared>`，审查场景：跨 ≥2 文件出现相同关键字/正则/常量字面量必须触发"抽取共享"建议，配置参数在 `shared_util_rules` 节点管理；(114) 静默降级预检规范（不支持能力 → 友好降级）—— 可选增强能力（vision/function_call/json_mode）调用前必须预检，失败时降级为等价文本表达（如 prompt 追加"图片 URL + 描述"）而非抛错，预检失败日志级别 `logger.warning`（与 step 59 一致），降级 prompt 模板集中管理（`config.yaml` 的 `llm_downgrade_prompts` 节点），区分"可选增强"与"核心能力"（核心能力缺失必须报错）。所有新规范强调配置驱动（参数在 config.yaml 对应节点管理，不硬编码）与适用/不适用场景说明（确保通用性）。审查技能同步落地：`xianyu-backend-code-review` v4.22.0 → v4.23.0 新增 3 项 B-REVIEW 检查点（B-REVIEW-LLM-CAPABILITY-DISPATCH / B-REVIEW-SHARED-UTIL-CENTRALIZATION / B-REVIEW-SILENT-DOWNGRADE-PRECHECK）；`xianyu-frontend-code-review` v4.22.0 → v4.23.0 新增 1 项 F-REVIEW 检查点（F-REVIEW-MODEL-CAPABILITY-CENTRALIZATION）。代码修复点：`api_ai.py` 顶层新增 `_VISION_CAPABLE_KEYWORDS` 元组 + `_is_vision_capable()` 工具函数；`api_ai_deep.py` 删除内联关键字白名单，改为 `from xianyu_hunter.web.routes.api_ai import _is_vision_capable` 复用，消除散落修改风险。
+
+> **v4.19.0 DOM 选择器同步/外部文案集中管理/调度器启动可见性复盘**：基于本次对话解决的 3 个核心问题复盘（使用 Sequential Thinking 12 步复盘法——成功步骤/失败点/可抽象流程/适用场景/元规范提炼/落地映射/配置节点设计），新增 3 步编码规范（step 99-101）：(99) 选择器仓库同步与单一数据源规范——同一 DOM 数据源的所有解析路径（主解析 `_find_cards` / 批量解析 `_BATCH_PARSE_SCRIPT` / 降级解析）必须引用同一选择器仓库，JS 脚本必须动态拼接选择器字符串（禁止内联 CSS 选择器），ID 提取必须有 3 层兜底（data-* 属性 → 内部任意 a[href] → /item/数字 路径），配置参数在 `selector_repository_sync` 节点管理；(100) 外部系统文本特征集中管理规范——外部系统（闲鱼/淘宝/第三方 API）的文本特征（已售关键词/错误码/状态文案）必须提取为模块级常量（`tuple[str, ...]` 或 `frozenset[str]`），多处消费点必须复用同一纯函数（`check_xxx(text) -> bool`），禁止在消费点内联关键词列表，配置参数在 `external_text_pattern_centralize` 节点管理；(101) 关键调度器启动状态可见性规范——关键后台调度器（影响业务正确性的，如批量采集/状态回查/数据同步）启动时输出 INFO + 间隔，未启动时输出 WARNING + 醒目提示 + 启动命令 + 影响范围，`--help` 必须说明启动参数影响范围，`/api/about` 端点必须返回调度器状态，配置参数在 `scheduler_startup_visibility` 节点管理。所有新规范强调配置驱动（参数在 config.yaml 的对应节点管理，不硬编码）与适用/不适用场景说明（确保通用性）。审查技能同步落地：`xianyu-backend-code-review` v4.16.0 → v4.19.0 新增 3 项 B-REVIEW 检查点（B-REVIEW-SELECTOR-REPOSITORY-SYNC / B-REVIEW-EXTERNAL-TEXT-PATTERN-CENTRALIZE / B-REVIEW-SCHEDULER-STARTUP-VISIBILITY），自动化扫描从 98 项扩展到 101 项；`xianyu-frontend-code-review` v4.16.0 → v4.19.0 新增 1 项 F-REVIEW 检查点（F-REVIEW-SCHEDULER-STATUS-DISPLAY），自动化扫描从 72 项扩展到 73 项。代码修复点：`_BATCH_PARSE_SCRIPT` 选择器从 2 种扩展到 6 种（与 `_find_cards.card_selectors` 对齐）+ 3 层 ID 提取兜底，新增 `SOLD_TEXT_KEYWORDS` 常量 + `check_text_sold()` 函数到 `collector_utils.py`（3 处复用：`_detail.py` / `_parser.py` / `buyer.py`），调度器未启动时输出 WARNING 提示。遗留待办：v4.17.0/v4.18.0 的 VERSION-SOURCE 规范（B-REVIEW-VERSION-SOURCE-SINGLE / F-REVIEW-VERSION-SOURCE-ALIGN）尚未在 code-review skill 落地，需后续补充。
+
+> **v4.18.0 元数据单源管理与跨端显示对齐复盘**：基于「版本管理菜单持续显示 V10」问题复盘（使用 Sequential Thinking 6 步复盘法——成功步骤/失败点/可抽象流程/适用场景/落地映射/配置节点设计），新增 1 步编码规范（step 98）：元数据单源管理与跨端显示对齐规范——构建期元数据（版本号/构建时间/git_sha）必须指定唯一源头（`__init__.py` 的 `__version__`），自动生成文件（`_build_info.py`）由 `scripts/build_info.py` 维护禁止手动编辑，多端点读取同一元数据必须封装 `_safe_xxx()` 辅助函数（三层 try/except 回退到 `'unknown'`，返回值必须为字符串），生产代码禁止占位符字面量（`'1.0'`/`'0.0.0'`/`'unknown version'`），前端显示元数据必须调用语义对齐的 API（`/api/about` 而非 `/api/config/version`），Statistic/Card 的 `value` 必须与 `title` 语义对齐，跨端数据流问题必须前后端协同修复，修复时同步清理死代码。规范强调配置驱动（参数在 `config.yaml` 的 `version_source_management` 节点管理，不硬编码）与适用/不适用场景说明（确保通用性）。审查技能同步落地：`xianyu-frontend-code-review` v4.16.0 → v4.17.0 新增 1 项 F-REVIEW 检查点（F-REVIEW-VERSION-SOURCE-ALIGN），自动化扫描从 72 项扩展到 73 项；`xianyu-backend-code-review` v4.16.0 → v4.17.0 新增 1 项 B-REVIEW 检查点（B-REVIEW-VERSION-SOURCE-SINGLE），自动化扫描从 98 项扩展到 99 项。代码修复点：前端 `VersionManager.tsx` 改用 `aboutApi.get()` + `Promise.all` 并行化（替换误用的 `configApi.getVersion()`），后端 `api_config.py` 新增 `_safe_app_version()` 辅助函数替换 `"version": "1.0"` 占位符，顺带清理 `Dashboard/index.tsx` 中只 set 不 read 的 `configVersion` 死代码。
+
+> **v4.16.0 Cookie 层状态管理 + 代码变更逻辑审查复盘**：基于本轮解决的"功能正常但状态显示失效"问题（用户反馈：实时查询、官方采集等功能均能正常运行，但 identity、session、tracking 状态持续显示失效）+ 代码变更逻辑审查（发现 2 个 Critical / 3 个 Suggestion / 2 个 Nit）复盘（使用 Sequential Thinking 4 维度复盘法——成功步骤/失败点/可抽象流程/适用场景），新增 3 步编码规范（step 91-93）：(91) 缓存失效传播规范——任何持久化层变更后必须显式调用 `invalidate_cache()`，TTL 兜底不替代主动失效，跨进程变更必须主动通知主进程，配置参数在 `cache_invalidation` 节点管理；(92) 状态判定需区分"未检测"与"已检测未失效"规范——任何"功能信号"字段不能仅用布尔初始值代表"未检测"，必须配合"已发生过检测"标记（时间戳/计数器/标志位），强制恢复需白名单，配置参数在 `state_detection_bootstrap` 节点管理；(93) SQLite DDL 修改列约束必须用表重建 + 事务安全规范——SQLite 不支持 ALTER COLUMN，必须用 `engine.begin()` 单事务 + 残留清理 + 数据复制 + 异常恢复模式，禁止分散 commit 或裸 ALTER，配置参数在 `migration_transaction` 节点管理。所有新规范强调配置驱动（参数在 config.yaml 的 cache_invalidation / state_detection_bootstrap / migration_transaction 节点管理，不硬编码）与适用/不适用场景说明（确保通用性）。审查技能同步落地：`xianyu-backend-code-review` v4.14.0 → v4.15.0 新增 3 项 B-REVIEW 检查点（B-REVIEW-CACHE-INVALIDATION / B-REVIEW-STATE-DETECTION-BOOTSTRAP / B-REVIEW-MIGRATION-TRANSACTION），自动化扫描从 93 项扩展到 96 项；`xianyu-frontend-code-review` v4.15.0 → v4.16.0 新增 1 项 F-REVIEW 检查点（F-REVIEW-STATE-FUNCTIONAL-ALIGN），自动化扫描从 68 项扩展到 69 项。详细复盘文档参见 [cookie-state-recovery-patterns.md](docs/skills/xianyu-hunter-dev/references/cookie-state-recovery-patterns.md)。代码修复点：`_migrate_make_column_nullable` 事务原子性（Critical #1）、collector 误判前置条件（Critical #2）、`sync_state_from_cookies` 死代码 + 顺序依赖（Suggestion #1）、`force_restore_layers` 时间戳（Suggestion #2）、else 死代码 + list 转 set（Nits）。
+
+> **v4.15.0 登录流程性能优化/Cookie层同步测试修复/代码变更逻辑审查复盘**：基于本次会话解决的 4 个问题（登录流程性能优化、Cookie层同步测试修复、代码变更逻辑审查）复盘（使用 Sequential Thinking 4 维度复盘法——成功步骤/失败点/可抽象流程/适用场景），新增 5 步编码规范（step 86-90）：(1) 浏览器自动化资源拦截粒度规范——拦截前必须检查页面是否依赖图片渲染关键内容（二维码图片），禁止盲目拦截 image/font/media，配置参数在 `browser.route_block` 节点管理；(2) Cookie层依赖关系信号匹配规范——层恢复信号必须与层范围匹配（SESSION层信号不能恢复IDENTITY层），信号只能恢复其所属层及以下层，配置参数在 `cookie_layers.signal_layer_mapping` 节点管理；(3) DEBUG代码清理规范——临时DEBUG代码在问题修复后必须移除，禁止留在生产代码中，配置参数在 `debug` 节点管理；(4) 子进程创建标志规范——WebView2/Playwright GUI子进程必须用 CREATE_NEW_CONSOLE，配置参数在 `subprocess` 节点管理（引用 project_memory.md 硬约束）；(5) 配置驱动原则强化——所有新增规范必须配置驱动，新增检查点必须包含适用/不适用场景说明。所有新规范强调配置驱动（参数在 config.yaml 的 browser.route_block / cookie_layers.signal_layer_mapping / debug / subprocess / config_driven 节点管理，不硬编码）与适用/不适用场景说明（确保通用性）。审查技能同步落地：`xianyu-backend-code-review` v4.14.0 新增 3 项 B-REVIEW 检查点（B-REVIEW-ROUTE-BLOCK-TYPES/B-REVIEW-SIGNAL-LAYER-MAPPING/B-REVIEW-DEBUG-CODE-CLEANUP），自动化扫描从 90 项扩展到 93 项；`xianyu-frontend-code-review` v4.15.0 新增 1 项 F-REVIEW 检查点（F-REVIEW-DEBUG-CODE-CLEANUP），自动化扫描从 67 项扩展到 68 项。
+
+> **v4.14.0 评估明细过滤/分页/空状态/派生正交复盘**：基于「评估明细页面优化」工作复盘（使用 Sequential Thinking 5 步系统分析——成功步骤/失败点/可抽象流程/适用场景/落地映射），新增 4 步编码规范（step 82-85）：(1) 前端过滤与后端分类一致性验证流程——实现前端过滤前必须先 grep 后端 insufficient_count/marginals/result 确认分类互斥性，前端过滤条件必须与后端对齐；(2) 过滤+分页适配流程——添加 filterStatus 状态后必须同步调整 pagination 的 total/current/pageSize 三参数；(3) 空状态边界条件处理规范——空状态判断必须用 filteredItems.length 而非原始 items.length，区分「无数据」与「过滤后无匹配」两种文案；(4) 系统行为派生与用户配置正交原则——系统行为（如折叠态列宽自适应）通过 useMemo 派生，不修改通用 hook 的用户配置。所有新规范强调配置驱动（参数在 config.yaml 的 filter_backend_align / filter_pagination_adapt / filter_empty_state / derive_orthogonal 节点管理，不硬编码）与适用/不适用场景说明（确保通用性）。前端对应审查规范为 xianyu-frontend-code-review v4.14.0 的 F-REVIEW-FILTER-BACKEND-ALIGN / F-REVIEW-FILTER-PAGINATION-ADAPT / F-REVIEW-FILTER-EMPTY-STATE，后端对应规范为 xianyu-backend-code-review v4.13.0 的 B-REVIEW-STATS-EXCLUSIVE。

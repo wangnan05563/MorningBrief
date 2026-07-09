@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, String, Integer, DateTime, Index
+from sqlalchemy import String, Integer, DateTime, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -16,7 +16,7 @@ class User(Base):
         {"comment": "C 端用户表"},
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     openid: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     unionid: Mapped[Optional[str]] = mapped_column(String(64))
     nickname: Mapped[Optional[str]] = mapped_column(String(64))

@@ -10,7 +10,9 @@
 from datetime import datetime
 from typing import Optional
 
-# 热点关键词词表（运营维护，可配置）
+from app.core.timeutil import utcnow_naive
+
+# 热点关键词词表（运营维护，可配置）  # NOSONAR
 # 命中后取最大分值，避免多关键词叠加导致偏差
 HOT_KEYWORDS = {
     "突破": 0.9,
@@ -54,7 +56,7 @@ def _recency_score(published_at: Optional[datetime]) -> float:
     """
     if not published_at:
         return 0.5
-    delta = datetime.utcnow() - published_at
+    delta = utcnow_naive() - published_at
     hours = delta.total_seconds() / 3600
     if hours <= 24:
         return 1.0 - (hours / 24) * 0.5

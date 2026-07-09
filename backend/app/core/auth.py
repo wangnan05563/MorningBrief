@@ -1,10 +1,10 @@
 """
 鉴权依赖：C 端用户 / B 端运营
 
-校验流程（HLD V1.4 10.1）：
+校验流程（HLD V1.6 10.1）：
 1. 从 Authorization 头提取 Bearer token
 2. JWT 本地验签
-3. 查 Redis 黑名单（仅 jti 命中才拒绝）
+3. 查 SQLite 黑名单（仅 jti 命中才拒绝；B 端本地查询，带内存缓存）
 4. 返回用户信息
 
 用法：
@@ -18,9 +18,9 @@ from typing import Optional
 import jwt
 from fastapi import Depends, Header
 
-from app.core.exceptions import AuthError, PermissionError
+from app.core.exceptions import AuthError, BizPermissionError
 from app.core.security import decode_token
-from app.redis_client import admin_blacklist_key, is_in_blacklist, user_blacklist_key
+from app.services.blacklist_service import is_in_blacklist
 
 
 @dataclass
@@ -29,6 +29,7 @@ class UserPayload:
     user_id: int
     jti: str
     token_type: str
+    exp: int = 0
 
 
 @dataclass
@@ -39,6 +40,7 @@ class AdminPayload:
     role: str
     jti: str
     token_type: str
+    exp: int = 0
 
 
 def _extract_token(authorization: Optional[str]) -> str:
@@ -63,13 +65,14 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> UserP
         raise AuthError("认证类型错误")
 
     jti = payload.get("jti", "")
-    if await is_in_blacklist(user_blacklist_key(jti)):
+    if await is_in_blacklist(jti):
         raise AuthError("登录已失效，请重新登录")
 
     return UserPayload(
         user_id=int(payload["sub"]),
         jti=jti,
         token_type=payload["type"],
+        exp=int(payload.get("exp", 0)),
     )
 
 
@@ -88,7 +91,7 @@ async def get_current_admin(authorization: Optional[str] = Header(None)) -> Admi
         raise AuthError("认证类型错误")
 
     jti = payload.get("jti", "")
-    if await is_in_blacklist(admin_blacklist_key(jti)):
+    if await is_in_blacklist(jti):
         raise AuthError("登录已失效，请重新登录")
 
     return AdminPayload(
@@ -97,13 +100,14 @@ async def get_current_admin(authorization: Optional[str] = Header(None)) -> Admi
         role=payload.get("role", "operator"),
         jti=jti,
         token_type=payload["type"],
+        exp=int(payload.get("exp", 0)),
     )
 
 
-async def require_admin(admin: AdminPayload = Depends(get_current_admin)) -> AdminPayload:
+async def require_admin(admin: AdminPayload = Depends(get_current_admin)) -> AdminPayload:  # NOSONAR
     """要求 admin 角色（工作流操作、用户管理等高权限接口）。"""
     if admin.role != "admin":
-        raise PermissionError("需要管理员权限")
+        raise BizPermissionError("需要管理员权限")
     return admin
 
 

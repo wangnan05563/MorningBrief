@@ -1,3 +1,10 @@
+# Node.js 依赖与构建产物
+node_modules/
+dist/
+build/
+.npm/
+.pnpm-store/
+
 # Python 缓存与字节码
 __pycache__/
 *.py[cod]
@@ -6,6 +13,7 @@ __pycache__/
 
 # 虚拟环境
 .venv/
+.venv-build/
 venv/
 env/
 ENV/
@@ -33,10 +41,12 @@ logs/
 .DS_Store
 Thumbs.db
 
-# 构建产物
-dist/
-build/
+# Python 构建产物
 *.egg-info/
+
+# PyInstaller / Inno Setup 构建产物
+installer.iss
+*.spec.bak
 
 # 数据库与缓存数据
 *.db

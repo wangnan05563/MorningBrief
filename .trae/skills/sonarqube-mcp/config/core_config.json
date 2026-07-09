@@ -1,0 +1,333 @@
+{
+  "_meta": {
+    "file": "core_config.json",
+    "purpose": "通用配置（与具体项目无关）。所有项目复用此配置。",
+    "version": "2.1.0",
+    "last_updated": "2026-07-07",
+    "changelog": "v2.1.0: 新增 es_resilience（ES 弹性配置）/ precheck（环境预检配置）/ report_polling（报告轮询配置）/ nosonar_validation（NOSONAR 校验配置）/ failure_recovery（失败恢复动作映射）节点"
+  },
+  "_configSections": {
+    "sonarqube_server": "SonarQube 服务器连接配置（端口/健康检查/启动超时）",
+    "es_resilience": "Elasticsearch 弹性配置（磁盘 watermark / read-only 锁解除 / SonarQube 内嵌 ES API 端口）",
+    "precheck": "环境预检配置（Java 版本 / 磁盘空间 / ES 状态 / 配置文件位置）",
+    "scan": "扫描执行参数（严重级别/分页/并行）",
+    "report_polling": "Compute Engine 报告处理状态轮询配置",
+    "priority": "修复优先级排序",
+    "filters": "通用过滤（路径/规则/严重级别）",
+    "verify": "修复后验证（含 NOSONAR 校验开关）",
+    "nosonar_validation": "NOSONAR 抑制注释校验配置",
+    "failure_recovery": "失败场景→恢复动作映射表",
+    "report": "报告输出",
+    "mcp_check": "MCP 能力要求",
+    "environment_variables": "环境变量说明"
+  },
+  "sonarqube_server": {
+    "host": "${ENV:SONARQUBE_URL}",
+    "port": "${ENV:SONARQUBE_PORT|9000}",
+    "java_home": "${ENV:JAVA_HOME_SONAR}",
+    "install_path": "${ENV:SONARQUBE_HOME}",
+    "startup_timeout_seconds": 120,
+    "health_check_interval_seconds": 5,
+    "health_check_endpoint": "/api/system/status",
+    "start_script": {
+      "windows": "bin\\windows-x86-64\\StartSonar.bat",
+      "linux": "bin/linux-x86-64/sonar.sh",
+      "macos": "bin/macosx-universal-64/sonar.sh"
+    },
+    "stop_script": {
+      "windows": "bin\\windows-x86-64\\StopSonar.bat",
+      "linux": "bin/linux-x86-64/sonar.sh",
+      "macos": "bin/macosx-universal-64/sonar.sh"
+    }
+  },
+  "es_resilience": {
+    "_description": "Elasticsearch 弹性配置。SonarQube 内嵌 ES 在磁盘使用率超 flood_stage watermark 时会自动将索引标记为 read-only-allow-delete，导致报告处理失败。本节点配置 watermark 阈值与解锁 API。",
+    "es_api_port": "${ENV:SONAR_ES_PORT|9001}",
+    "es_api_host": "127.0.0.1",
+    "watermark": {
+      "_description": "磁盘 watermark 阈值（百分比）。默认 low=85%/high=90%/flood_stage=95%，开发机磁盘紧张时建议提高到 low=95%/high=97%/flood_stage=99%",
+      "low": "95%",
+      "high": "97%",
+      "flood_stage": "99%"
+    },
+    "unlock_apis": {
+      "_description": "解除 ES read-only 锁的 REST API 调用配置",
+      "remove_read_only_block": {
+        "method": "PUT",
+        "path": "/_settings",
+        "body": {"index.blocks.read_only_allow_delete": null}
+      },
+      "persist_watermark": {
+        "method": "PUT",
+        "path": "/_cluster/settings",
+        "body_template": {
+          "persistent": {
+            "cluster.routing.allocation.disk.watermark.low": "{low}",
+            "cluster.routing.allocation.disk.watermark.high": "{high}",
+            "cluster.routing.allocation.disk.watermark.flood_stage": "{flood_stage}"
+          }
+        }
+      }
+    },
+    "config_file_paths": {
+      "_description": "SonarQube 内嵌 ES 配置文件实际位置（启动时自动生成并覆盖，因此通过 ES API 持久化设置更可靠）",
+      "actual": "data/es8/config/elasticsearch.yml",
+      "decoy": "elasticsearch/config/elasticsearch.yml"
+    },
+    "auto_unlock_on_failure": true,
+    "auto_persist_watermark_on_unlock": true
+  },
+  "precheck": {
+    "_description": "环境预检配置。每次扫描前执行预检，失败时按 failure_recovery 映射表执行恢复动作。",
+    "checks": [
+      {
+        "name": "server_status",
+        "description": "SonarQube 服务器状态必须是 UP",
+        "endpoint": "/api/system/status",
+        "expected_field": "status",
+        "expected_value": "UP",
+        "on_failure": "start_sonarqube"
+      },
+      {
+        "name": "java_version",
+        "description": "Java 版本必须满足最低要求（SonarQube 26 需要 Java 17+）",
+        "min_version": "${ENV:SONAR_JAVA_MIN_VERSION|17}",
+        "java_home_env_var": "JAVA_HOME_SONAR",
+        "check_method": "java -version",
+        "on_failure": "guide_set_java_home"
+      },
+      {
+        "name": "disk_space",
+        "description": "磁盘使用率不能超过 ES flood_stage watermark",
+        "check_drives": ["system", "sonarqube_install_drive"],
+        "threshold_pct": 95,
+        "on_failure": "unlock_es_and_persist_watermark"
+      },
+      {
+        "name": "es_read_only_block",
+        "description": "ES 索引不能被 read_only_allow_delete 锁定",
+        "check_endpoint": "http://{es_host}:{es_api_port}/_cluster/health",
+        "blocked_indicator": "read_only_allow_delete",
+        "on_failure": "unlock_es_read_only_block"
+      },
+      {
+        "name": "sonar_token",
+        "description": "SONAR_TOKEN 环境变量必须存在",
+        "env_var": "SONAR_TOKEN",
+        "on_failure": "terminate_with_guide"
+      }
+    ]
+  },
+  "sonar_scanner": {
+    "scanner_home": "${ENV:SONAR_SCANNER_HOME}",
+    "scanner_bin": {
+      "windows": "bin\\sonar-scanner.bat",
+      "linux": "bin/sonar-scanner",
+      "macos": "bin/sonar-scanner"
+    },
+    "project_properties_template": "sonar-project.properties.template",
+    "wait_timeout_seconds": 300,
+    "default_sources": "."
+  },
+  "mcp_check": {
+    "mcp_server_name": "${ENV:SONAR_MCP_SERVER_NAME|mcp_sonarqube}",
+    "fallback_enabled": true,
+    "fallback_message": "SonarQube MCP 未配置或不可用，将使用 sonar-scanner 命令行工具作为降级方案",
+    "capabilities_required": [
+      "search_projects",
+      "search_issues",
+      "get_quality_gate",
+      "analyze_snippet",
+      "show_rule",
+      "change_issue_status"
+    ]
+  },
+  "scan": {
+    "default_severities": ["BLOCKER", "CRITICAL", "MAJOR"],
+    "default_types": ["VULNERABILITY", "SECURITY_HOTSPOT", "BUG", "CODE_SMELL"],
+    "default_statuses": ["OPEN", "CONFIRMED", "REOPENED"],
+    "page_size": 500,
+    "languages": ["python", "typescript", "javascript", "java", "go"],
+    "snippet_analysis_enabled": true,
+    "parallel_agents": 4,
+    "files_per_agent": 5,
+    "timeout_seconds": 600,
+    "output_log": "scan-output.log",
+    "max_scan_iterations": 5,
+    "target_open_count": 0,
+    "_iteration_note": "max_scan_iterations 限制扫描-修复-重扫的最大循环次数；target_open_count 是收敛目标，达到则提前结束"
+  },
+  "report_polling": {
+    "_description": "Compute Engine 报告处理状态轮询配置。sonar-scanner 上传报告后，CE 异步处理报告，需轮询 /api/ce/task?id=xxx 直到 SUCCESS/FAILED。",
+    "endpoint": "/api/ce/task",
+    "task_id_param": "id",
+    "status_field": "task.status",
+    "terminal_statuses": ["SUCCESS", "FAILED", "CANCELED"],
+    "in_progress_statuses": ["PENDING", "IN_PROGRESS"],
+    "poll_interval_seconds": 5,
+    "max_poll_attempts": 80,
+    "execution_time_field": "task.executionTimeMs",
+    "warnings_field": "task.warnings",
+    "on_failure": "check_es_read_only_block"
+  },
+  "api_defaults": {
+    "_description": "API 调用默认参数（可在 invoke-api.ps1 中被 param 覆盖）",
+    "timeout_seconds": 30,
+    "page_size": 500,
+    "issue_statuses": ["falsepositive", "accept", "reopen", "resolve", "confirm"],
+    "issue_status_filter_values": ["OPEN", "CONFIRMED", "REOPENED", "RESOLVED", "CLOSED"],
+    "severity_filter_values": ["BLOCKER", "CRITICAL", "MAJOR", "MINOR", "INFO"],
+    "type_filter_values": ["BUG", "VULNERABILITY", "CODE_SMELL", "SECURITY_HOTSPOT"]
+  },
+  "api_endpoints": {
+    "_description": "SonarQube HTTP API 端点路径（支持自定义部署或 SonarCloud 替换）",
+    "system_status": "/api/system/status",
+    "projects_search": "/api/projects/search",
+    "issues_search": "/api/issues/search",
+    "issues_transition": "/api/issues/do_transition",
+    "qualitygates_status": "/api/qualitygates/project_status",
+    "rules_show": "/api/rules/show",
+    "measures_component": "/api/measures/component"
+  },
+  "platform_tools": {
+    "_description": "detect-platform.ps1 检测的工具列表（按需扩展）",
+    "required": ["java", "git"],
+    "optional": ["sonar-scanner", "python", "python3", "node", "npm", "pytest", "docker", "curl"]
+  },
+  "path_placeholders": {
+    "_description": "通用路径占位符（在 project_config.json 中可通过 ${PLACEHOLDER} 引用）",
+    "DOCS_DIR": "docs",
+    "TESTS_DIR": "tests",
+    "FRONTEND_DIR": "frontend",
+    "BACKEND_DIR": "src"
+  },
+  "priority": {
+    "severity_order": ["BLOCKER", "CRITICAL", "MAJOR", "MINOR", "INFO"],
+    "type_order": ["VULNERABILITY", "SECURITY_HOTSPOT", "BUG", "CODE_SMELL"],
+    "fix_threshold": "MAJOR",
+    "max_fix_per_run": 50
+  },
+  "filters": {
+    "ignore_paths": [
+      "tests/**",
+      "**/__tests__/**",
+      "**/__mocks__/**",
+      "**/migrations/**",
+      "**/node_modules/**",
+      "**/__pycache__/**",
+      "**/dist/**",
+      "**/build/**",
+      "**/.cache/**",
+      "**/*.min.js",
+      "**/*.min.css"
+    ],
+    "ignore_rules": [],
+    "ignore_severity_in_tests": ["MINOR", "INFO"],
+    "ignore_types": [],
+    "generated_code_markers": [
+      "// @generated",
+      "# @generated",
+      "/* eslint-disable */",
+      "__pycache__"
+    ]
+  },
+  "verify": {
+    "rescan_after_fix": true,
+    "run_tests_after_fix": true,
+    "test_command": "pytest tests/",
+    "fail_on_new_issues": true,
+    "validate_nosonar_position": true,
+    "_validate_note": "validate_nosonar_position=true 时，修复后扫描若 OPEN 数未下降，自动检查 NOSONAR 是否放在了正确的物理行（按 fix_strategies.json -> nosonar_position_rules 查表）"
+  },
+  "nosonar_validation": {
+    "_description": "NOSONAR 抑制注释校验配置。SonarQube 的 # NOSONAR 必须放在问题所在物理行的末尾，不同规则报问题的物理行不同。本节点配置校验开关与回退策略。",
+    "enabled": true,
+    "position_rules_source": "fix_strategies.json -> nosonar_position_rules",
+    "fallback_on_misposition": true,
+    "fallback_strategy": "若 NOSONAR 未生效，按 nosonar_position_rules 表查 rule 对应的 position，重新放置 NOSONAR 到正确物理行",
+    "common_mistakes": [
+      "NOSONAR 放在 def 行但规则报的是参数行（S107/S7483）",
+      "NOSONAR 放在 docstring 内（字符串内不生效）",
+      "使用小写 # nosonar（必须大写）",
+      "使用 Python # noqa（SonarQube 默认不识别）",
+      "JSX 标签内用 // NOSONAR（应改用 /* NOSONAR */）"
+    ]
+  },
+  "failure_recovery": {
+    "_description": "失败场景→恢复动作映射表。预检失败或扫描失败时，按本表查找恢复动作。",
+    "mappings": [
+      {
+        "failure": "server_status",
+        "action": "start_sonarqube",
+        "description": "SonarQube 服务未运行，执行 start-sonarqube.ps1 启动",
+        "retry_after": true
+      },
+      {
+        "failure": "java_version",
+        "action": "guide_set_java_home",
+        "description": "Java 版本不满足最低要求，提示用户设置 JAVA_HOME_SONAR 环境变量指向 Java 17+ 路径",
+        "retry_after": false
+      },
+      {
+        "failure": "disk_space",
+        "action": "unlock_es_and_persist_watermark",
+        "description": "磁盘空间不足触发 ES flood-stage，通过 ES REST API 解除 read-only 锁并持久化 watermark 阈值",
+        "retry_after": true,
+        "api_calls": [
+          "PUT http://{es_host}:{es_api_port}/_settings {index.blocks.read_only_allow_delete: null}",
+          "PUT http://{es_host}:{es_api_port}/_cluster/settings {persistent: {watermark thresholds}}"
+        ]
+      },
+      {
+        "failure": "es_read_only_block",
+        "action": "unlock_es_read_only_block",
+        "description": "ES 索引被 read-only-allow-delete 锁定，通过 ES REST API 解锁",
+        "retry_after": true
+      },
+      {
+        "failure": "sonar_token",
+        "action": "terminate_with_guide",
+        "description": "SONAR_TOKEN 环境变量缺失，终止并输出配置指南（绝不能硬编码 token）",
+        "retry_after": false
+      },
+      {
+        "failure": "report_processing_failed",
+        "action": "check_es_read_only_block",
+        "description": "Compute Engine 报告处理 FAILED，通常是 ES read-only 锁导致，检查并解锁后重试扫描",
+        "retry_after": true
+      },
+      {
+        "failure": "scm_blame_missing",
+        "action": "warn_only",
+        "description": "SCM blame 信息缺失（44+ 文件），输出警告但不阻塞扫描",
+        "retry_after": false
+      },
+      {
+        "failure": "nosonar_not_effective",
+        "action": "reposition_nosonar",
+        "description": "NOSONAR 未生效（OPEN 数未下降），按 nosonar_position_rules 表重新放置 NOSONAR 到正确物理行",
+        "retry_after": true
+      }
+    ]
+  },
+  "report": {
+    "output_dir": "docs/sonar-reports/",
+    "include_unfixed": true,
+    "format": "markdown",
+    "filename_pattern": "sonar-fix-report-YYYYMMDD-HHmmss.md"
+  },
+  "environment_variables": {
+    "required": ["SONAR_TOKEN"],
+    "optional": [
+      "SONARQUBE_URL",
+      "SONARQUBE_PORT",
+      "SONAR_PROJECT_KEY",
+      "SONAR_SCANNER_PATH",
+      "SONAR_SCANNER_HOME",
+      "JAVA_HOME_SONAR",
+      "SONARQUBE_HOME",
+      "SONAR_MCP_SERVER_NAME"
+    ],
+    "notes": "凭据必须从环境变量读取，禁止写入配置文件"
+  }
+}

@@ -3,7 +3,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import BigInteger, String, Text, DateTime, Date, Enum as SAEnum, ForeignKey, Index
+from sqlalchemy import Integer, String, Text, DateTime, Date, ForeignKey, Index, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -22,21 +22,22 @@ class Review(Base):
     __table_args__ = (
         Index("idx_status", "status"),
         Index("idx_date", "episode_date"),
+        CheckConstraint("status IN ('pending', 'approved', 'rejected', 'replaced')", name="ck_review_status"),
         {"comment": "审核表"},
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     workflow_id: Mapped[str] = mapped_column(String(64), nullable=False)
     episode_date: Mapped[date] = mapped_column(Date, nullable=False)
     script_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("script.id"), nullable=False
+        Integer, ForeignKey("script.id"), nullable=False
     )
     audio_url: Mapped[str] = mapped_column(String(512), nullable=False)
-    status: Mapped[Optional[ReviewStatus]] = mapped_column(
-        SAEnum(ReviewStatus), default=ReviewStatus.pending
+    status: Mapped[Optional[str]] = mapped_column(
+        String(16), default=ReviewStatus.pending.value
     )
     reviewer_id: Mapped[Optional[int]] = mapped_column(
-        BigInteger, comment="审核人 admin_user.id"
+        Integer, comment="审核人 admin_user.id"
     )
     reviewer_name: Mapped[Optional[str]] = mapped_column(String(64))
     reason: Mapped[Optional[str]] = mapped_column(Text, comment="打回/替换理由")

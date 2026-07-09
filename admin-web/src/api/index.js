@@ -1,0 +1,56 @@
+/**
+ * API 封装：axios 实例 + JWT 请求拦截 + 统一响应/错误处理
+ *
+ * 设计要点：
+ * - 请求拦截器自动注入 Bearer token，无需每个调用处手动添加
+ * - 响应拦截器解包 { code, message, data }，调用方直接拿到 data
+ * - 401 自动跳转登录，403 提示无权限，其他错误统一 ElMessage 提示
+ */
+import axios from 'axios'
+import { ElMessage } from 'element-plus'
+
+const api = axios.create({
+  baseURL: '/admin/api/v1',
+  timeout: 15000,
+})
+
+// 请求拦截：注入 token（延迟导入避免循环依赖）
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('admin_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// 响应拦截：解包统一响应格式 + 错误处理
+api.interceptors.response.use(
+  (response) => {
+    const { code, message, data } = response.data
+    // code !== 0 表示业务错误（如参数校验失败），统一提示
+    if (code !== 0) {
+      ElMessage.error(message || '请求失败')
+      return Promise.reject(new Error(message))
+    }
+    return data
+  },
+  (error) => {
+    if (error.response?.status === 401) {
+      // token 失效：清除本地状态并跳转登录
+      localStorage.removeItem('admin_token')
+      localStorage.removeItem('admin_username')
+      localStorage.removeItem('admin_role')
+      // 严格相等判断，避免含 /login 子串的路径（如 /login-callback）被误判为已在登录页
+      if (globalThis.location.pathname !== '/login') {
+        globalThis.location.href = '/login'
+      }
+    } else if (error.response?.status === 403) {
+      ElMessage.error('无权限执行此操作')
+    } else {
+      ElMessage.error(error.response?.data?.message || error.message || '请求失败')
+    }
+    return Promise.reject(error)
+  }
+)
+
+export default api

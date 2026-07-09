@@ -6,7 +6,7 @@ MVP 阶段简化为仅 localhost 校验。
 """
 from datetime import date
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.response import success
@@ -17,13 +17,23 @@ from app.services.workflow_service import WorkflowService
 router = APIRouter(prefix="/api/internal/workflow", tags=["内部-工作流"])
 
 
+async def verify_localhost(request: Request):  # NOSONAR
+    """内部接口仅允许 localhost 调用。
+
+    内部接口不经过 JWT 鉴权，必须限制来源 IP 防止外网越权触发工作流。
+    """
+    client_host = request.client.host if request.client else None
+    if client_host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(status_code=403, detail="仅允许本地调用")
+
+
 @router.post("/trigger")
 async def trigger_workflow(
     episode_date: str = Body(..., embed=True),
     source: str = Body("cron", embed=True),
+    _: None = Depends(verify_localhost),
 ):
     """触发工作流（APScheduler Cron 调用 / 运营后台内部调用）。"""
-    from datetime import date
     from app.services.workflow_scheduler import workflow_scheduler
 
     target_date = date.fromisoformat(episode_date)
@@ -50,6 +60,7 @@ async def publish_workflow(
     workflow_id: str,
     review_id: int = Body(..., embed=True),
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_localhost),
 ):
     """审核通过后发布节目。
 

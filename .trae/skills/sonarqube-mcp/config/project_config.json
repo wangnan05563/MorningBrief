@@ -1,0 +1,73 @@
+{
+  "_meta": {
+    "file": "project_config.json",
+    "purpose": "Xianyu Hunter 项目特定配置（与通用配置 core_config.json 配合使用）",
+    "version": "2.0.0",
+    "last_updated": "2026-07-02"
+  },
+  "project": {
+    "key": "${ENV:SONAR_PROJECT_KEY|xianyu_hunter}",
+    "name": "Xianyu Hunter",
+    "base_path": ".",
+    "description": "闲鱼猎人：FastAPI 后端 + React 前端"
+  },
+  "modules": {
+    "backend": {
+      "path": "src",
+      "languages": ["python"],
+      "frameworks": ["fastapi"],
+      "layers": {
+        "api": "api",
+        "core": "core",
+        "models": "models",
+        "services": "services",
+        "utils": "utils",
+        "web": "web",
+        "config": "config"
+      },
+      "exclude": ["web/static", "web/templates", "__pycache__", "node_modules", ".git", "dist", "build", "tests"]
+    },
+    "frontend": {
+      "path": "frontend/src",
+      "languages": ["typescript", "javascript"],
+      "frameworks": ["react"],
+      "layers": {
+        "components": "components",
+        "pages": "pages",
+        "hooks": "hooks",
+        "utils": "utils",
+        "services": "services",
+        "types": "types",
+        "store": "store"
+      },
+      "exclude": ["node_modules", "dist", "build", "__tests__"]
+    }
+  },
+  "verify": {
+    "test_command": "pytest tests/ ; cd frontend && npm test -- --watchAll=false",
+    "test_commands": {
+      "_description": "分模块测试命令（推荐，替代单一 test_command 拼接）",
+      "backend": "pytest tests/",
+      "frontend": "cd frontend && npm test -- --watchAll=false"
+    }
+  },
+  "report": {
+    "output_dir": "docs/04-系统维护/sonar-reports/"
+  },
+  "framework_extensions": {
+    "_deprecated": "v2.0 起框架模式统一从 config/framework_patterns.json 加载，不再使用此字段",
+    "fastapi_decorators": [
+      "@app.get", "@app.post", "@app.put", "@app.delete", "@app.patch",
+      "@router.get", "@router.post", "@router.put", "@router.delete", "@router.patch",
+      "@app.websocket", "@app.on_event", "@app.middleware"
+    ],
+    "react_patterns": ["useEffect", "useState", "useCallback", "useMemo", "React.memo"]
+  },
+  "fix_strategies_overrides": {
+    "_description": "项目级修复策略覆盖（与 config/fix_strategies.json 配合使用）",
+    "data_source": "基于 xianyu_hunter 项目实际扫描结果（523 个 issues 分布）",
+    "rule_overrides": {
+      "_example": "将某规则从 auto_fix 改为 manual_review: { 'python:S5857': 'manual_review' }"
+    }
+  }
+}

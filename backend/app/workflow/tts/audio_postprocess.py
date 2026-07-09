@@ -58,6 +58,12 @@ def _cleanup(*paths: str) -> None:
             pass
 
 
+def _read_file(path: str) -> bytes:
+    """同步读取文件（由 asyncio.to_thread 调用，避免阻塞事件循环）。"""
+    with open(path, "rb") as f:
+        return f.read()
+
+
 async def normalize_loudness(audio_bytes: bytes, target_lufs: int = -16) -> bytes:
     """响度归一化（FFmpeg loudnorm 滤镜）。
 
@@ -78,8 +84,7 @@ async def normalize_loudness(audio_bytes: bytes, target_lufs: int = -16) -> byte
         code, _, err = await asyncio.to_thread(_run_cmd, cmd)
         if code != 0:
             raise RuntimeError(f"loudnorm 失败: {err[:300]}")
-        with open(out_path, "rb") as f:
-            return f.read()
+        return await asyncio.to_thread(_read_file, out_path)
     finally:
         _cleanup(in_path, out_path)
 
@@ -104,8 +109,7 @@ async def trim_silence(audio_bytes: bytes, threshold_db: int = -50) -> bytes:
         code, _, err = await asyncio.to_thread(_run_cmd, cmd)
         if code != 0:
             raise RuntimeError(f"silenceremove 失败: {err[:300]}")
-        with open(out_path, "rb") as f:
-            return f.read()
+        return await asyncio.to_thread(_read_file, out_path)
     finally:
         _cleanup(in_path, out_path)
 

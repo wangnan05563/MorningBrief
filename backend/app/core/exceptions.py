@@ -30,8 +30,12 @@ class AuthError(BizError):
         super().__init__(code=401, message=message, http_status=401)
 
 
-class PermissionError(BizError):
-    """无权限。"""
+class BizPermissionError(BizError):
+    """无权限。
+
+    命名加 Biz 前缀避免遮蔽内置 PermissionError，
+    便于业务代码在需要时仍可捕获内置异常。
+    """
     def __init__(self, message: str = "无权限"):
         super().__init__(code=403, message=message, http_status=403)
 

@@ -1,0 +1,125 @@
+.page-profile {
+  min-height: 100vh;
+  padding-bottom: 60rpx;
+}
+
+/* 未登录态 */
+.login-wrap {
+  padding-top: 80rpx;
+}
+
+.login-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 80rpx 32rpx;
+}
+
+.login-icon {
+  font-size: 100rpx;
+  margin-bottom: 24rpx;
+}
+
+.login-tip {
+  font-size: 28rpx;
+  color: #A0AEC0;
+  margin-bottom: 48rpx;
+}
+
+.login-btn {
+  padding: 20rpx 80rpx;
+}
+
+/* 用户信息卡片：薄荷青到蜜桃粉渐变背景 */
+.user-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60rpx 32rpx 80rpx;
+  background: linear-gradient(135deg, #7ECEC1 0%, #FFD3E0 100%);
+  border-radius: 0 0 48rpx 48rpx;
+}
+
+.avatar {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 50%;
+  border: 4rpx solid #FFFFFF;
+  background: #FFFFFF;
+}
+
+.nickname {
+  margin-top: 20rpx;
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+/* 收听统计 */
+.stat-card {
+  display: flex;
+  align-items: center;
+  padding: 40rpx 24rpx;
+}
+
+.stat-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-num {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #5BA89B;
+}
+
+.stat-label {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #A0AEC0;
+}
+
+.stat-divider {
+  width: 2rpx;
+  height: 60rpx;
+  background: #E6F4F1;
+}
+
+/* 设置列表 */
+.list-card {
+  padding: 0 32rpx;
+}
+
+.list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 32rpx 0;
+  border-bottom: 2rpx solid #F0F4F2;
+}
+
+.list-item:last-child {
+  border-bottom: none;
+}
+
+.list-text {
+  font-size: 30rpx;
+  color: #2D3748;
+}
+
+.logout-text {
+  color: #FF6B8A;
+}
+
+.list-extra {
+  font-size: 26rpx;
+  color: #A0AEC0;
+}
+
+.list-arrow {
+  font-size: 40rpx;
+  color: #CBD5E0;
+  line-height: 1;
+}

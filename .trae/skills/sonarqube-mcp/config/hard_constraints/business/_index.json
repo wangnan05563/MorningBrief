@@ -1,0 +1,30 @@
+{
+  "_meta": {
+    "file": "_index.json",
+    "purpose": "硬约束业务规则索引文件。声明当前项目启用的业务规则文件，便于扫描脚本发现。",
+    "version": "2.0.0",
+    "last_updated": "2026-07-05"
+  },
+  "_description": "扫描脚本会按 enabled_business_rules 中的文件名依次加载 business/ 目录下的 JSON 文件，每个 JSON 都必须包含 rules 数组。",
+  "enabled_business_rules": [
+    {
+      "file": "xianyu.json",
+      "description": "Xianyu Hunter 项目业务硬约束（WebView2/HMAC/KBManager 等）",
+      "enabled": true,
+      "block_on_violation": true
+    }
+  ],
+  "auto_discovery": {
+    "enabled": true,
+    "description": "当 enabled_business_rules 为空时，自动扫描 business/ 目录加载所有 .json 文件",
+    "exclude_patterns": ["_*.json", ".*"]
+  },
+  "fallback_to_core": true,
+  "_notes": [
+    "1. 通用安全规则（core.json）始终加载，无需在此声明",
+    "2. 业务规则文件必须放在 config/hard_constraints/business/ 目录下",
+    "3. 每个业务规则文件必须包含 rules 数组（与 core.json 结构一致）",
+    "4. block_on_violation 控制是否在违规时阻塞合并",
+    "5. 项目级 block_on_violation 可覆盖全局设置"
+  ]
+}

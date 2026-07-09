@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, Integer, SmallInteger, DateTime, ForeignKey, Index
+from sqlalchemy import Integer, SmallInteger, DateTime, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -18,10 +18,10 @@ class PlayLog(Base):
         {"comment": "播放日志表"},
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("user.id"))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("user.id"))
     episode_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("episode.id"), nullable=False
+        Integer, ForeignKey("episode.id"), nullable=False
     )
     position: Mapped[Optional[int]] = mapped_column(
         Integer, default=0, comment="播放位置（秒）"
