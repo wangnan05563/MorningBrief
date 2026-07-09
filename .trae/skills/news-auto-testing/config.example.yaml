@@ -1,0 +1,529 @@
+# ===== 前端自动化测试技能配置模板 =====
+# 复制本文件为 config.yaml 并按项目实际情况修改
+# 所有测试参数（URL、账号、页面清单、阈值等）均通过本文件管理，技能本身不含硬编码值
+
+# --- 服务配置 ---
+service:
+  # 基础 URL（不含尾斜杠）
+  base_url: "http://127.0.0.1:8000"
+  # 健康检查端点
+  health_endpoint: "/api/health"
+  # 健康检查超时（秒）
+  health_timeout: 30
+  # 健康检查期望的 code 字段值
+  health_expected_code: 0
+  # 启动脚本路径（相对于项目根目录，留空则跳过自动启动）
+  start_script: "scripts/start.ps1"
+  # 启动脚本参数（如 ["-Dev"] 强制开发模式）
+  start_args: []
+  # 停止脚本路径（留空则跳过自动停止）
+  stop_script: "scripts/stop.ps1"
+
+# --- MCP 工具配置 ---
+mcp_tools:
+  # Playwright MCP 服务器名称（对应 .trae-cn/mcps 中的配置）
+  playwright_server: "mcp_Playwright"
+  # Chrome DevTools MCP 服务器名称
+  chrome_devtools_server: "mcp_Chrome_DevTools_MCP"
+  # 优先使用的工具（primary 为主，fallback 为备选）
+  primary_tool: "chrome_devtools"  # chrome_devtools | playwright
+  fallback_tool: "playwright"
+  # Playwright 浏览器配置
+  playwright:
+    # 无头模式
+    headless: true
+    # 视口宽度
+    viewport_width: 1280
+    # 视口高度
+    viewport_height: 800
+    # 浏览器类型
+    browser: "chromium"
+    # 浏览器安装命令（用于首次安装）
+    install_command: "npx playwright install chromium"
+  # Chrome DevTools 配置
+  chrome_devtools:
+    # 导航超时（毫秒）
+    nav_timeout: 15000
+    # 元素交互超时（毫秒）
+    interaction_timeout: 10000
+
+# --- 测试账号 ---
+credentials:
+  # 管理后台（B 端）账号
+  admin:
+    username: "admin"
+    password: "admin123"
+    # 登录 API 端点
+    login_endpoint: "/admin/api/v1/auth/login"
+    # 登录方法 POST/GET
+    login_method: "POST"
+    # 登录页 URL
+    login_page: "/login"
+    # 登录成功后跳转的页面（用于验证登录是否成功）
+    expected_redirect: "/review"
+    # token 在响应 JSON 中的字段路径（点分路径）
+    token_path: "data.token"
+    # token 存储的 localStorage key（用于前端验证）
+    token_storage_key: "admin_token"
+    # 用户名输入框 CSS 选择器
+    username_selector: 'input[type="text"]'
+    # 密码输入框 CSS 选择器
+    password_selector: 'input[type="password"]'
+    # 登录按钮 CSS 选择器
+    submit_selector: "button.login-btn"
+  # C 端用户账号（如需要测试小程序接口）
+  # consumer:
+  #   login_endpoint: "/api/v1/auth/login"
+  #   login_method: "POST"
+  #   login_payload: { "code": "test_code" }
+
+# --- 页面清单 ---
+# 每个页面会执行：导航 → 截图 → 快照 → 控制台检查 → 网络请求检查
+pages:
+  - name: "登录页"
+    path: "/login"
+    # 预期页面标题包含的文本
+    expected_title: ""
+    # 预期页面中出现的文本（至少一个）
+    expected_texts: ["登录"]
+    # 是否需要登录才能访问
+    requires_auth: false
+    # 是否跳过测试
+    skip: false
+
+  - name: "内容审核"
+    path: "/review"
+    expected_title: ""
+    expected_texts: ["内容审核", "待审核"]
+    requires_auth: true
+    skip: false
+
+  - name: "广告素材"
+    path: "/ads/materials"
+    expected_title: ""
+    expected_texts: ["广告素材"]
+    requires_auth: true
+    skip: false
+    # 页面内按钮交互测试清单（可选）
+    buttons:
+      - name: "新增素材"
+        # 按钮文本或定位提示（用于从快照中匹配 uid）
+        uid_hint: "新增素材"
+        # 预期交互行为：dialog_open / url_change / state_change / no_op
+        expected_action: "dialog_open"
+        # 如 expected_action=dialog_open，是否在验证后自动关闭对话框
+        close_after: true
+        # 关闭按钮的文本提示（用于定位取消/关闭按钮）
+        close_button_hint: "取消"
+        skip: false
+
+  - name: "投放规则"
+    path: "/ads/placements"
+    expected_title: ""
+    expected_texts: ["投放规则"]
+    requires_auth: true
+    skip: false
+
+  - name: "排期日历"
+    path: "/ads/schedule"
+    expected_title: ""
+    expected_texts: ["排期日历"]
+    requires_auth: true
+    skip: false
+
+  - name: "数据统计"
+    path: "/stats"
+    expected_title: ""
+    expected_texts: ["数据统计"]
+    requires_auth: true
+    skip: false
+
+  - name: "工作流监控"
+    path: "/workflows"
+    expected_title: ""
+    expected_texts: ["工作流监控"]
+    requires_auth: true
+    skip: false
+
+  - name: "API 文档"
+    path: "/docs"
+    expected_title: ""
+    expected_texts: ["Swagger"]
+    requires_auth: false
+    # 仅在开发模式下可访问
+    dev_only: true
+    skip: false
+
+# --- API 端点清单 ---
+# 每个 API 会执行：HTTP 请求 → 状态码检查 → 响应体 code 字段检查
+api_endpoints:
+  # --- 基础 ---
+  - name: "健康检查"
+    method: "GET"
+    path: "/api/health"
+    requires_auth: false
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  # --- B 端管理 API ---
+  - name: "B端登录"
+    method: "POST"
+    path: "/admin/api/v1/auth/login"
+    requires_auth: false
+    expected_status: 200
+    expected_code: 0
+    # 请求体模板（使用 ${username} ${password} 占位符）
+    body_template: '{"username":"${username}","password":"${password}"}'
+    skip: false
+
+  - name: "审核列表"
+    method: "GET"
+    path: "/admin/api/v1/reviews?status=pending&page=1&size=10"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  - name: "广告素材列表"
+    method: "GET"
+    path: "/admin/api/v1/ads/materials?page=1&size=20"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  - name: "投放规则列表"
+    method: "GET"
+    path: "/admin/api/v1/ads/placements?page=1&size=20"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  - name: "排期日历"
+    method: "GET"
+    path: "/admin/api/v1/ads/schedule?month=${current_month}"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  - name: "统计概览"
+    method: "GET"
+    path: "/admin/api/v1/stats/overview?date=${current_date}"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  - name: "趋势统计"
+    method: "GET"
+    path: "/admin/api/v1/stats/trend?metric=dau&range=7d"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  - name: "工作流列表"
+    method: "GET"
+    path: "/admin/api/v1/workflows?page=1&size=20"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  # --- C 端用户 API ---
+  - name: "今日节目"
+    method: "GET"
+    path: "/api/v1/episodes/today"
+    requires_auth: false
+    expected_status: 200
+    # code=2001 表示"今日节目尚未发布"，属正常业务逻辑
+    expected_code: 2001
+    # 允许的 code 值列表（第一个为 expected_code，其余为 acceptable_codes）
+    acceptable_codes: [0, 2001]
+    skip: false
+
+  - name: "历史节目"
+    method: "GET"
+    path: "/api/v1/episodes/history?page=1&size=5"
+    requires_auth: false
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+# --- 自定义占位符 ---
+# 扩展内置占位符（${username}/${password}/${current_date}/${current_month}/${current_year}/${timestamp}）
+# 用于 API 路径和请求体中的项目特定变量替换
+# 替换顺序：先自定义占位符，再内置占位符
+placeholders:
+  # 示例：${admin_role} → "admin"
+  admin_role: "admin"
+  # 示例：${default_page_size} → "20"
+  default_page_size: "20"
+
+# --- 性能阈值 ---
+performance:
+  # 是否启用 Lighthouse 审计
+  lighthouse_enabled: true
+  # Lighthouse 审计的页面（从 pages 中选择，用 path 匹配）
+  lighthouse_pages: ["/login"]
+  # Lighthouse 最低分数阈值（低于则报告 warning）
+  lighthouse_thresholds:
+    accessibility: 85
+    best_practices: 85
+    seo: 75
+  # Lighthouse 设备类型
+  lighthouse_device: "desktop"  # desktop | mobile
+  # Lighthouse 隔离 context（避免登录态干扰审计未登录页面）
+  lighthouse_isolated_context:
+    # 是否启用隔离 context
+    enabled: true
+    # 隔离 context 名称（同一名称的 context 共享 cookie/storage）
+    context_name: "lighthouse-audit"
+  # 是否启用 Performance Trace
+  trace_enabled: true
+  # Trace 的页面
+  trace_pages: ["/login"]
+  # 性能指标阈值（超出则报告 warning）
+  metrics_thresholds:
+    lcp_max_ms: 2500      # LCP 最大允许值（毫秒）
+    cls_max: 0.1           # CLS 最大允许值
+    ttfb_max_ms: 800       # TTFB 最大允许值（毫秒）
+  # Trace 失败时是否降级为仅 Lighthouse 结果
+  trace_failure_degrade: true
+
+# --- 判断逻辑 ---
+assertions:
+  # 页面加载成功的判断条件（全部满足才算通过）
+  page_success_criteria:
+    - "无控制台 error 级别日志（排除白名单）"
+    - "页面网络请求返回 200"
+    - "页面可见文本包含至少一个 expected_texts"
+  # API 调用成功的判断条件
+  api_success_criteria:
+    - "HTTP 状态码等于 expected_status"
+    - "响应 JSON 的 code 字段等于 expected_code 或在 acceptable_codes 中"
+  # 登录成功的判断条件
+  login_success_criteria:
+    - "登录 API 返回 200"
+    - "响应 JSON 包含 token 字段"
+    - "页面 URL 跳转到 expected_redirect"
+    - "页面显示用户名和角色信息"
+  # 测试结果严重级别
+  severity_levels:
+    - "PASS"     # 通过
+    - "WARN"     # 警告（不影响整体结果）
+    - "FAIL"     # 失败（需要修复）
+    - "SKIP"     # 跳过（条件不满足）
+  # 控制台 error 白名单（匹配 error 消息子串，命中则归类为 framework_behavior 不算 FAIL）
+  console_error_whitelist:
+    - "cancel"                    # Element Plus MessageBox 取消时的预期 error
+    - "NavigationDuplicated"      # Vue Router 重复导航的预期 error
+  # 文本匹配模式（用于 expected_texts 验证）
+  # any_substring: expected_texts 中任一文本作为子串出现在页面可见文本中即匹配
+  # exact: expected_texts 中任一文本与页面可见文本完全匹配
+  # regex: expected_texts 中任一文本作为正则表达式匹配页面可见文本
+  text_match_mode: "any_substring"
+
+# --- 问题分类 ---
+# 发现的问题按此分类，只有 code_defect 触发代码修复流程
+issue_classification:
+  # 代码缺陷：需修改源码修复
+  code_defect:
+    # 匹配关键词（用于自动分类控制台 error/warn）
+    match_keywords:
+      - "Failed to load module script"
+      - "MIME type"
+      - "404 Not Found"
+      - "is not defined"
+      - "is not a function"
+    action: "fix_code"
+  # 业务数据问题：需配置/数据修复，非代码缺陷
+  business_data:
+    match_keywords:
+      - "尚未发布"
+      - "为空"
+      - "未配置"
+      - "占位符"
+    action: "report_only"
+  # 框架预期行为：无需修复
+  framework_behavior:
+    match_keywords:
+      - "cancel"
+      - "deprecated"
+      - "NavigationDuplicated"
+    action: "ignore"
+  # 环境问题：需环境层面修复
+  environment:
+    match_keywords:
+      - "ECONNREFUSED"
+      - "ENOENT"
+      - "cannot find module"
+    action: "fix_environment"
+
+# --- 常见问题修复策略 ---
+# 测试过程中可能遇到的问题及自动修复策略
+fix_strategies:
+  # 前端静态文件 404
+  - problem: "前端页面返回 404 Not Found"
+    diagnosis: "后端未正确挂载前端静态文件目录"
+    fix: "检查 paths.py 中 resolve_admin_dist() 的路径是否指向实际构建产物目录"
+    severity: "FAIL"
+
+  # JS MIME 类型错误
+  - problem: "Failed to load module script: MIME type of text/plain"
+    diagnosis: "Windows mimetypes 模块缺少 .js/.css 的 MIME 映射"
+    fix: "在 main.py 顶部添加 mimetypes.add_type() 显式注册 application/javascript 等"
+    severity: "FAIL"
+
+  # Playwright 浏览器未安装
+  - problem: "Executable doesn't exist at chromium-XXXX"
+    diagnosis: "Playwright 浏览器未安装或版本不匹配"
+    fix: "运行 npx playwright install chromium 安装浏览器；版本不匹配时创建 junction 目录链接"
+    severity: "WARN"
+
+  # Chrome DevTools 元素交互超时
+  - problem: "Element did not become interactive within timeout"
+    diagnosis: "UI 组件库（如 Element Plus）的菜单项可能不是标准可点击元素"
+    fix: "改用直接导航到页面 URL 的方式替代点击菜单项"
+    severity: "WARN"
+
+  # 健康检查超时
+  - problem: "健康检查超时"
+    diagnosis: "服务启动慢或初始化阻塞（如 APScheduler 启动）"
+    fix: "增加 health_timeout 值或检查 lifespan 中的初始化逻辑是否有阻塞"
+    severity: "FAIL"
+
+  # PowerShell curl 引号转义
+  - problem: "curl.exe -d JSON 参数解析失败"
+    diagnosis: "PowerShell 中双引号转义与 curl.exe 不兼容"
+    fix: "改用 PowerShell 的 Invoke-RestMethod 替代 curl.exe"
+    severity: "WARN"
+
+  # 数据库无管理员账号
+  - problem: "登录失败：用户名或密码错误"
+    diagnosis: "数据库 admin_user 表为空，无初始管理员账号"
+    fix: "用 bcrypt 哈希密码后 INSERT 到 admin_user 表"
+    severity: "FAIL"
+
+  # 全页截图超时
+  - problem: "Page.captureScreenshot timed out"
+    diagnosis: "页面 DOM 复杂导致全页截图超时"
+    fix: "降级为视口截图（screenshot.full_page=false）"
+    severity: "WARN"
+
+  # 快照输出被截断
+  - problem: "快照输出过大被截断"
+    diagnosis: "a11y 树过大（如日历/表格组件）"
+    fix: "保存快照到文件后读取（snapshot.save_dir）"
+    severity: "WARN"
+
+  # 菜单点击不跳转
+  - problem: "菜单点击成功但 URL 未变化"
+    diagnosis: "UI 组件库菜单项路由未触发"
+    fix: "自动改用 navigate_page 直接导航（menu_click_fallback）"
+    severity: "WARN"
+
+  # UI 组件库废弃 API 警告
+  - problem: "label act as value is about to be deprecated"
+    diagnosis: "UI 组件库（如 Element Plus）API 即将废弃"
+    fix: "升级为新 API 用法（如 label → value）"
+    severity: "WARN"
+    issue_class: "code_defect"
+
+  # 图表插件未注册
+  - problem: "without the 'Filler' plugin enabled"
+    diagnosis: "图表库（如 Chart.js）使用了 fill 选项但未注册对应插件"
+    fix: "import 并 register 缺失的插件"
+    severity: "WARN"
+    issue_class: "code_defect"
+
+# --- 截图策略 ---
+screenshot:
+  # 是否使用全页截图（false=仅视口截图，避免复杂页面超时）
+  full_page: false
+  # 截图超时（毫秒），超时后自动降级为视口截图
+  timeout_ms: 10000
+  # 是否强制使用绝对路径（MCP 工具 cwd 可能与项目目录不同）
+  use_absolute_path: true
+  # 截图保存目录（相对于项目根目录，配合页面名生成文件名）
+  save_dir: "docs/test-reports/screenshots"
+  # 截图格式
+  format: "png"  # png | jpeg | webp
+
+# --- 快照策略 ---
+snapshot:
+  # 快照最大大小（KB），超过则自动保存到文件避免输出截断
+  max_size_kb: 8
+  # 是否将大快照保存到文件
+  save_to_file: true
+  # 快照保存目录（相对于项目根目录）
+  save_dir: "docs/test-reports/snapshots"
+  # 是否使用 verbose 模式（包含完整 a11y 树信息）
+  verbose: false
+
+# --- 报告配置 ---
+report:
+  # 报告输出目录（为空则不写文件，仅输出到对话）
+  output_dir: "docs/test-reports"
+  # 报告格式
+  format: "markdown"
+  # 是否包含截图引用
+  include_screenshots: true
+  # 是否包含性能数据
+  include_performance: true
+  # 是否包含修复建议
+  include_fix_suggestions: true
+  # 是否包含按钮交互结果
+  include_button_results: true
+  # 是否包含问题分类信息
+  include_issue_classification: true
+  # 最大问题数（超过则概括）
+  max_issues: 20
+
+# --- 测试流程控制 ---
+workflow:
+  # 是否在测试前自动启动服务
+  auto_start_service: true
+  # 是否在测试后自动停止服务
+  auto_stop_service: false
+  # 遇到 FAIL 时是否继续测试
+  continue_on_failure: true
+  # 遇到 FAIL 时是否自动尝试修复
+  auto_fix: true
+  # 修复后是否自动回归测试
+  regression_after_fix: true
+  # 最大修复尝试次数
+  max_fix_attempts: 3
+  # 是否并行测试多个页面（通过 dispatching-parallel-agents）
+  parallel_pages: false
+  # 菜单点击 fallback（菜单点击不跳转时自动改用 URL 导航）
+  menu_click_fallback:
+    # 是否启用菜单点击 fallback
+    enabled: true
+    # 检测方式：点击后比对 URL 是否变化
+    detect: "url_unchanged_after_click"
+    # fallback 方式：直接导航到目标 URL
+    fallback_action: "navigate_page"
+  # 回归前构建（修复代码后重新构建前端）
+  build_before_regression:
+    # 是否启用回归前构建
+    enabled: true
+    # 构建命令
+    command: "npm run build"
+    # 构建工作目录（相对于项目根目录）
+    cwd: "admin-web"
+    # 是否检查 node_modules 完整性（构建失败时重装依赖）
+    check_node_modules: true
+    # 依赖完整性检查的目标文件（不存在则重装）
+    node_modules_check_file: "node_modules/element-plus/dist/index.css"
+    # 重装依赖命令
+    reinstall_command: "npm install"
+  # 回归测试缓存策略
+  regression_cache_strategy:
+    # 是否强制刷新页面（ignoreCache）
+    ignore_cache: true
+    # 是否清除 localStorage（避免旧 token 干扰）
+    clear_storage: false

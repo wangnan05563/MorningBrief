@@ -1,0 +1,65 @@
+{
+  "project": {
+    "name": "20_News",
+    "description": "AI 驱动的播客新闻分发平台",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "backend_root": "backend/app",
+    "frontend_root": "admin-web/src",
+    "miniprogram_root": "miniprogram",
+    "tests_root": "backend/tests",
+    "deploy_dir": ".",
+    "docker_compose": "docker-compose.yml"
+  },
+  "backend": {
+    "python_version": "3.11",
+    "framework": "FastAPI",
+    "orm": "SQLAlchemy 2.0 async",
+    "database": "MySQL (aiomysql)",
+    "cache": "Redis",
+    "scheduler": "APScheduler",
+    "http_client": "httpx.AsyncClient",
+    "test_framework": "pytest + aiosqlite + fakeredis",
+    "linter": "py_compile / ruff"
+  },
+  "frontend": {
+    "framework": "Vue 3 + <script setup>",
+    "ui_library": "Element Plus",
+    "build_tool": "Vite",
+    "state_management": "Pinia",
+    "api_client": "axios",
+    "miniprogram": "原生微信小程序"
+  },
+  "ai_services": {
+    "llm": "通义千问 (DashScope)",
+    "tts": "阿里云 NLS",
+    "storage": "腾讯云 COS"
+  },
+  "deployment": {
+    "container_runtime": "Docker Compose",
+    "containers": ["nginx", "app", "mysql", "redis"],
+    "reverse_proxy": "nginx"
+  },
+  "hardConstraints": {
+    "jwt_secret_env": "JWT_SECRET",
+    "auth_whitelist": ["/api/v1/health", "/api/v1/auth/wechat-login", "/docs", "/redoc", "/openapi.json"],
+    "internal_routes_require_verify_localhost": true,
+    "forbidden_patterns": [
+      "datetime.utcnow()",
+      "datetime.now()",
+      "print(",
+      "any",
+      "bare_except_pass"
+    ],
+    "required_patterns": [
+      "utcnow_naive()",
+      "asyncio.to_thread()",
+      "logger.exception()"
+    ],
+    "enum_value_required": true,
+    "redis_lua_atomic": true,
+    "pydantic_v2_methods": true,
+    "sqlalchemy_2_0_style": true
+  }
+}

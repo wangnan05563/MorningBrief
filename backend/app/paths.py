@@ -70,12 +70,22 @@ def resolve_ffmpeg_path() -> str:
 def resolve_admin_dist() -> Path | None:
     """B 端运营后台静态资源目录（Vue 构建产物）。
 
-    打包态：嵌入 PyInstaller datas（_MEIPASS 临时目录）
-    开发态：backend/app/static/admin/dist
+    查找顺序：
+    1. exe 同级 admin-web/dist（build-exe.ps1 外置复制，便于前端独立更新）
+    2. _MEIPASS/app/static/admin/dist（PyInstaller datas 打包态）
+    3. backend/app/static/admin/dist（开发态）
     """
+    app_root = get_app_root()
+    # 优先：exe 同级外置目录（build-exe.ps1 复制到此，前端可独立更新无需重建 exe）
+    ext_dist = app_root / "admin-web" / "dist"
+    if ext_dist.exists():
+        return ext_dist
     if is_frozen():
         meipass = getattr(sys, "_MEIPASS", None)
         if meipass:
-            return Path(meipass) / "app" / "static" / "admin" / "dist"
-    dev_dist = get_app_root() / "app" / "static" / "admin" / "dist"
+            packed = Path(meipass) / "app" / "static" / "admin" / "dist"
+            if packed.exists():
+                return packed
+    # 开发态：项目根目录下的 admin-web/dist（vite 构建产物）
+    dev_dist = app_root.parent / "admin-web" / "dist"
     return dev_dist if dev_dist.exists() else None
