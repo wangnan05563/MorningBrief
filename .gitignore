@@ -52,3 +52,14 @@ installer.iss
 *.db
 *.sqlite
 *.rdb
+
+# ---------- 清理技能自动生成规则 ----------
+# SonarQube 扫描缓存目录
+.scannerwork/
+# Playwright 测试报告与结果产物
+admin-web/playwright-report/
+admin-web/test-results/
+# 空目录遗留防护
+doc/
+# IDE 运行配置
+.run/

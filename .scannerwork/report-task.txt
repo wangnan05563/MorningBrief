@@ -1,6 +1,0 @@
-projectKey=20_news
-serverUrl=http://localhost:9000
-serverVersion=26.1.0.118079
-dashboardUrl=http://localhost:9000/dashboard?id=20_news
-ceTaskId=06ea43f2-6053-4614-b36a-82115a81ca30
-ceTaskUrl=http://localhost:9000/api/ce/task?id=06ea43f2-6053-4614-b36a-82115a81ca30
