@@ -33,13 +33,13 @@
         <div class="trend-controls">
           <!-- 指标切换：仅这 3 个指标有意义做趋势 -->
           <el-radio-group v-model="metric" @change="loadTrend">
-            <el-radio-button label="dau">DAU</el-radio-button>
-            <el-radio-button label="play_count">播放量</el-radio-button>
-            <el-radio-button label="completion_rate">完播率</el-radio-button>
+            <el-radio-button value="dau">DAU</el-radio-button>
+            <el-radio-button value="play_count">播放量</el-radio-button>
+            <el-radio-button value="completion_rate">完播率</el-radio-button>
           </el-radio-group>
           <el-radio-group v-model="range" @change="loadTrend">
-            <el-radio-button label="7d">7 天</el-radio-button>
-            <el-radio-button label="30d">30 天</el-radio-button>
+            <el-radio-button value="7d">7 天</el-radio-button>
+            <el-radio-button value="30d">30 天</el-radio-button>
           </el-radio-group>
         </div>
       </div>
@@ -64,11 +64,12 @@ import {
   Title,
   Tooltip,
   Legend,
+  Filler,
 } from 'chart.js'
 import dayjs from 'dayjs'
 import api from '../../api'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend)
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
 
 // 概览数据：当日汇总
 const overview = ref({})

@@ -10,13 +10,23 @@ V1.2 起：
 - 启动时通过 SQLAlchemy Base.metadata.create_all 自动建表（开发态）
 """
 import logging
+import mimetypes
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+# Windows 注册表可能缺少常见前端文件类型的 MIME 映射，导致 FileResponse 返回 text/plain，
+# 浏览器拒绝执行 JS 模块（Strict MIME type checking）。此处显式注册以确保正确返回。
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("image/svg+xml", ".svg")
 
 from app.config import get_settings
 from app.core.exceptions import register_exception_handlers
+from app.paths import resolve_admin_dist
 from app.routers.health import router as health_router
 # C 端路由（小程序）
 from app.routers.api.auth import router as c_auth_router
@@ -111,6 +121,30 @@ def create_app() -> FastAPI:
     app.include_router(b_workflows_router)
     # 内部（工作流调度）
     app.include_router(internal_workflow_router)
+
+    # 挂载前端 SPA（B 端运营后台）
+    # API 路由已在前注册，不会被覆盖；未匹配的 GET 请求 fallback 到 index.html
+    dist_dir = resolve_admin_dist()
+    if dist_dir and dist_dir.exists():
+        # /assets 目录：JS/CSS/图片等静态资源（Vite 构建产物）
+        assets_dir = dist_dir / "assets"
+        if assets_dir.exists():
+            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+        # SPA history 模式 fallback：未匹配的 GET 请求返回 index.html
+        # 必须在所有 API 路由之后注册，否则会覆盖 API 路由
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def _spa_fallback(full_path: str):
+            # API 路径不 fallback，返回 404（避免 API 404 被误返回 index.html）
+            if full_path.startswith(("api/", "admin/api/")):
+                raise HTTPException(status_code=404, detail="Not Found")
+            # 尝试返回根目录下的静态文件（如 favicon.ico）
+            candidate = (dist_dir / full_path).resolve()
+            dist_resolved = dist_dir.resolve()
+            if str(candidate).startswith(str(dist_resolved) + "\\") and candidate.is_file():
+                return FileResponse(str(candidate))
+            # SPA history 模式：返回 index.html，由前端路由接管
+            return FileResponse(str(dist_dir / "index.html"))
 
     return app
 

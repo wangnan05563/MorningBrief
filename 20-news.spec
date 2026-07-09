@@ -21,6 +21,7 @@
 """
 
 import os
+import sys
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 block_cipher = None
@@ -29,8 +30,24 @@ block_cipher = None
 # 隐式导入收集
 # ============================================================
 
+# 关键：collect_submodules/collect_data_files 依赖 Python 标准 import 机制
+# 定位包，而 pathex 仅作用于 Analysis 阶段，不影响 spec 执行时的 sys.path。
+# 若不把 backend 加入 sys.path，collect_submodules('app') 会静默返回空列表，
+# 导致 app 包完全缺失，exe 启动时报 "Could not import module 'app.main'"。
+_project_root = os.path.abspath('.')
+_backend_dir = os.path.join(_project_root, 'backend')
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
+
 # V1.2 起爬虫改为 httpx + selectolax，不再依赖 scrapy/playwright/newspaper
 hiddenimports = []
+
+# app 包是项目自身的代码，但 launcher.py 通过字符串 "app.main:app"
+# 让 uvicorn 在运行时动态导入，PyInstaller 静态分析看不到这种依赖。
+# 必须显式收集整个 app 包的所有子模块，否则 exe 启动时报
+# "Error loading ASGI app. Could not import module 'app.main'"
+hiddenimports += collect_submodules('app')
+
 hiddenimports += collect_submodules('selectolax')
 hiddenimports += collect_submodules('jieba')
 hiddenimports += collect_submodules('ahocorasick')
@@ -64,9 +81,7 @@ datas += collect_data_files('app.workflow.tts')
 
 # 显式补充关键配置文件（确保路径正确）
 # 格式：(源文件相对路径, 目标目录相对路径)
-_project_root = os.path.abspath('.')
-_backend_dir = os.path.join(_project_root, 'backend')
-
+# 注：_project_root / _backend_dir 已在文件开头定义（需先于 collect_submodules）
 explicit_datas = [
     # 爬虫源配置
     (os.path.join(_backend_dir, 'app', 'workflow', 'crawler', 'sources', 'lists.yaml'),
