@@ -9,9 +9,10 @@ V1.2 起：
 - 缓存改为进程内 TTLCache（无需外部 Redis）
 - 启动时通过 SQLAlchemy Base.metadata.create_all 自动建表（开发态）
 """
-import logging
 import mimetypes
 from contextlib import asynccontextmanager
+
+from loguru import logger
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,9 +24,13 @@ from fastapi.staticfiles import StaticFiles
 mimetypes.add_type("application/javascript", ".js")
 mimetypes.add_type("text/css", ".css")
 mimetypes.add_type("image/svg+xml", ".svg")
+# PWA 清单文件：浏览器要求 application/manifest+json 才会解析
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 from app.config import get_settings
 from app.core.exceptions import register_exception_handlers
+from app.core.logging_setup import setup_logging
+from app.middleware.request_id import RequestIdMiddleware
 from app.paths import resolve_admin_dist
 from app.routers.health import router as health_router
 # C 端路由（小程序）
@@ -37,12 +42,16 @@ from app.routers.admin.auth import router as b_auth_router
 from app.routers.admin.reviews import router as b_reviews_router
 from app.routers.admin.ads import router as b_ads_router
 from app.routers.admin.stats import router as b_stats_router
+from app.routers.admin.tunnel import router as b_tunnel_router
 from app.routers.admin.workflows import router as b_workflows_router
+from app.routers.admin.ai_config import router as b_ai_config_router
+# 数据库维护与系统清理模块（仅 admin）
+from app.routers.admin.db_admin import router as b_db_admin_router
+from app.routers.admin.maintenance import router as b_maintenance_router
 # 内部路由（工作流调度）
 from app.routers.internal.workflow import router as internal_workflow_router
 
 settings = get_settings()
-logger = logging.getLogger(__name__)
 
 
 async def _init_sqlite_schema() -> None:
@@ -66,16 +75,62 @@ async def _init_sqlite_schema() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：启动时初始化资源，关闭时清理。"""
+    # 初始化日志系统（幂等：launcher.py 已提前调用则此处 no-op）
+    # 覆盖直接 import app.main 的场景（如 pytest）
+    try:
+        from app.paths import resolve_log_dir
+        log_dir = str(resolve_log_dir())
+    except Exception:
+        log_dir = settings.LOG_DIR
+    setup_logging(log_level=settings.LOG_LEVEL, log_dir=log_dir)
+
     # 首次启动建表（SQLite 嵌入式，开发与生产共用此路径）
     await _init_sqlite_schema()
+
+    # 从 SQLite 加载 AI 配置覆盖到 Settings 单例（前端修改的配置热生效）
+    from app.services.ai_config_service import AIConfigService
+    from app.database import AsyncSessionLocal
+    try:
+        async with AsyncSessionLocal() as session:
+            svc = AIConfigService(session)
+            await svc.apply_config_to_settings()
+    except Exception as e:
+        logger.warning("[startup] 加载 AI 配置失败，使用 .env 默认值: %s", e)
 
     # 启动 APScheduler 定时任务（工作流调度 + 播放日志落库 + 黑名单清理）
     from app.services.workflow_scheduler import workflow_scheduler
     await workflow_scheduler.start()
 
+    # 内网穿透自动启动：auto_start=True 时后台线程启动隧道
+    # 用 daemon 线程而非 asyncio：cloudflared/cpolar 是阻塞子进程，线程不占用事件循环
+    from app.services.tunnel_service import get_tunnel_service
+    try:
+        tunnel_svc = get_tunnel_service()
+        cfg = tunnel_svc.get_config()
+        if cfg.get("auto_start"):
+            import threading
+
+            def _auto_start_tunnel():
+                try:
+                    url = tunnel_svc.start()
+                    logger.info("[startup] 内网穿透隧道已自动启动: %s", url)
+                except Exception as e:
+                    # 自动启动失败不影响主服务，仅记录日志
+                    logger.warning("[startup] 内网穿透自动启动失败: %s", e)
+
+            threading.Thread(target=_auto_start_tunnel, daemon=True).start()
+    except Exception as e:
+        logger.warning("[startup] 读取隧道配置失败，跳过自动启动: %s", e)
+
     yield
 
-    # 关闭阶段：先停调度器（等待运行中任务），再关数据库引擎
+    # 关闭阶段：先停隧道（避免隧道继续转发流量到已关闭的服务），再停调度器，再关数据库引擎
+    try:
+        from app.services.tunnel_service import get_tunnel_service
+        get_tunnel_service().stop()
+    except Exception as e:
+        logger.warning("[shutdown] 停止内网穿透隧道失败: %s", e)
+
     await workflow_scheduler.stop()
     from app.database import engine
     await engine.dispose()
@@ -92,6 +147,9 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.is_dev else None,
         lifespan=lifespan,
     )
+
+    # RequestId 中间件：为每个请求注入全局流水号，贯穿全部日志
+    app.add_middleware(RequestIdMiddleware)
 
     # CORS：开发环境允许本地调试；生产环境单机 exe + 云函数 SCF 直连
     if settings.is_dev:
@@ -118,7 +176,11 @@ def create_app() -> FastAPI:
     app.include_router(b_reviews_router)
     app.include_router(b_ads_router)
     app.include_router(b_stats_router)
+    app.include_router(b_tunnel_router)
     app.include_router(b_workflows_router)
+    app.include_router(b_ai_config_router)
+    app.include_router(b_db_admin_router)
+    app.include_router(b_maintenance_router)
     # 内部（工作流调度）
     app.include_router(internal_workflow_router)
 

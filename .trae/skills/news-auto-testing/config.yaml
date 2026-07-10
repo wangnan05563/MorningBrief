@@ -145,6 +145,46 @@ pages:
     requires_auth: true
     skip: false
 
+  - name: "内网穿透"
+    path: "/tunnel"
+    expected_title: ""
+    expected_texts: ["内网穿透"]
+    requires_auth: true
+    skip: false
+
+  - name: "AI 服务"
+    path: "/ai-config"
+    expected_title: ""
+    expected_texts: ["AI 服务配置"]
+    requires_auth: true
+    skip: false
+
+  - name: "数据库维护"
+    path: "/db-admin"
+    expected_title: ""
+    expected_texts: ["数据库维护", "数据表"]
+    requires_auth: true
+    skip: false
+
+  - name: "系统清理"
+    path: "/maintenance"
+    expected_title: ""
+    expected_texts: ["系统清理"]
+    requires_auth: true
+    skip: false
+    # 页面内按钮交互测试清单
+    buttons:
+      - name: "刷新状态"
+        uid_hint: "刷新状态"
+        expected_action: "state_change"
+        close_after: false
+        skip: false
+      - name: "预览缓存清理"
+        uid_hint: "预览清理"
+        expected_action: "state_change"
+        close_after: false
+        skip: false
+
   - name: "API 文档"
     path: "/docs"
     expected_title: ""
@@ -231,6 +271,124 @@ api_endpoints:
     requires_auth: true
     expected_status: 200
     expected_code: 0
+    skip: false
+
+  - name: "隧道状态"
+    method: "GET"
+    path: "/admin/api/v1/tunnel/status"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  - name: "隧道配置"
+    method: "GET"
+    path: "/admin/api/v1/tunnel/config"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  # --- AI 服务 API ---
+  - name: "AI 配置"
+    method: "GET"
+    path: "/admin/api/v1/ai/config"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  - name: "AI 用量统计"
+    method: "GET"
+    path: "/admin/api/v1/ai/usage"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  - name: "AI 预设列表"
+    method: "GET"
+    path: "/admin/api/v1/ai/presets"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  - name: "AI 音色列表"
+    method: "GET"
+    path: "/admin/api/v1/ai/voices"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  # --- 系统清理 API ---
+  - name: "清理-存储状态"
+    method: "GET"
+    path: "/admin/api/v1/maintenance/status"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  # --- 数据库维护 API ---
+  - name: "DB维护-表列表"
+    method: "GET"
+    path: "/admin/api/v1/db-admin/tables"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  - name: "DB维护-表结构"
+    method: "GET"
+    path: "/admin/api/v1/db-admin/tables/user/schema"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  - name: "DB维护-行列表"
+    method: "GET"
+    path: "/admin/api/v1/db-admin/tables/user/rows?page=1&size=5"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  - name: "DB维护-审计日志"
+    method: "GET"
+    path: "/admin/api/v1/db-admin/audit-log?limit=10"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  - name: "清理-数据库预览"
+    method: "POST"
+    path: "/admin/api/v1/maintenance/database"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    body_template: '{"target":"old_dedup","days":1,"dry_run":true}'
+    skip: false
+
+  - name: "清理-日志预览"
+    method: "POST"
+    path: "/admin/api/v1/maintenance/logs"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    body_template: '{"target":"old_logs","days":30,"dry_run":true}'
+    skip: false
+
+  - name: "清理-缓存预览"
+    method: "POST"
+    path: "/admin/api/v1/maintenance/cache"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    body_template: '{"target":"pycache","dry_run":true}'
     skip: false
 
   # --- C 端用户 API ---

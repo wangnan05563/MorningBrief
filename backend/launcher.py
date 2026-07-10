@@ -62,6 +62,20 @@ def main():
     """启动 uvicorn 服务。"""
     setup_environment()
 
+    # 初始化日志系统（必须在 uvicorn.run 之前，以便 InterceptHandler 拦截 uvicorn 日志）
+    # loguru + colorama 统一颜色渲染，避免 uvicorn 默认 ANSI 码在 cmd 窗口显示为 [32m 乱码
+    from app.config import get_settings
+    from app.core.logging_setup import setup_logging
+
+    settings = get_settings()
+    try:
+        from app.paths import resolve_log_dir
+        log_dir = str(resolve_log_dir())
+    except Exception:
+        log_dir = settings.LOG_DIR
+
+    setup_logging(log_level=settings.LOG_LEVEL, log_dir=log_dir)
+
     import uvicorn
 
     app_dir = get_app_dir()
@@ -82,12 +96,14 @@ def main():
     print()
 
     # workers=1：APScheduler 仅在主进程运行，多 worker 会导致重复调度
+    # log_config=None：禁用 uvicorn 默认日志配置，日志已由 loguru InterceptHandler 接管
     uvicorn.run(
         "app.main:app",
         host=host,
         port=port,
         workers=1,
-        log_level=os.environ.get("LOG_LEVEL", "info").lower(),
+        log_level=settings.LOG_LEVEL.lower(),
+        log_config=None,
     )
 
 

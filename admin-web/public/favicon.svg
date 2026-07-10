@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 20_News 主图标：圆角方形青色渐变背景 + 白色声波线条（播客新闻产品定位）
+     设计语言：清新马卡龙色、圆润大圆角、扁平化 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7DD3DD"/>
+      <stop offset="100%" stop-color="#5BC0BE"/>
+    </linearGradient>
+  </defs>
+  <!-- 圆角方形背景：大圆角呼应"治愈系圆润"设计偏好 -->
+  <rect x="2" y="2" width="60" height="60" rx="16" ry="16" fill="url(#bg)"/>
+  <!-- 声波线条：5 条竖线，中间最高向两侧递减，linecap 圆润 -->
+  <g stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" fill="none">
+    <line x1="20" y1="34" x2="20" y2="30"/>
+    <line x1="28" y1="40" x2="28" y2="24"/>
+    <line x1="36" y1="44" x2="36" y2="20"/>
+    <line x1="44" y1="40" x2="44" y2="24"/>
+    <line x1="52" y1="34" x2="52" y2="30"/>
+  </g>
+</svg>

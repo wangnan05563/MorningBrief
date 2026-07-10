@@ -156,7 +156,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,           # 可后续添加 .ico 图标文件
+    icon=os.path.join(_project_root, 'assets', '20-news.ico'),  # exe 应用图标
 )
 
 # ============================================================

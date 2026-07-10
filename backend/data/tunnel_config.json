@@ -1,0 +1,7 @@
+{
+  "provider": "cloudflare",
+  "local_port": 0,
+  "cpolar_authtoken": "test_token_12345",
+  "binary_path": "",
+  "auto_start": false
+}
