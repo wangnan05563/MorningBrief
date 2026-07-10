@@ -192,32 +192,30 @@ Write-OK "目录就绪"
 
 Write-Step "[3/3] 启动服务进程"
 
-# 启动为后台进程，stdout/stderr 重定向到日志文件（Start-Process 直接写文件，无需手动管理 Stream）
+# 在独立 cmd 窗口中运行服务（参考闲鱼项目启动方式）
+# 颜色码已在 launcher.py 中通过 use_colors=False 禁用，无需在此设置环境变量
+# 2>&1 合并 stderr 到 stdout——uvicorn 日志默认走 stderr，不合并则窗口看不到日志
+# & pause 让窗口在服务结束后保持打开，方便查看最后的输出
 try {
     if ($mode -eq "exe") {
-        $proc = Start-Process -FilePath $ExePath `
-            -WorkingDirectory (Split-Path $ExePath) `
-            -RedirectStandardOutput $LogFile `
-            -RedirectStandardError "$LogFile.err" `
-            -WindowStyle Normal `
-            -PassThru
+        $workDir = Split-Path $ExePath
+        $cmdStr = "`"$ExePath`""
     } else {
         # dev / dev-sys 共用：dev 用 venv python，dev-sys 用系统 python
         $pyExe = if ($mode -eq "dev-sys") { $SystemPython } else { $VenvPython }
-        $proc = Start-Process -FilePath $pyExe `
-            -ArgumentList $LauncherPy `
-            -WorkingDirectory $ProjectRoot `
-            -RedirectStandardOutput $LogFile `
-            -RedirectStandardError "$LogFile.err" `
-            -WindowStyle Normal `
-            -PassThru
+        $workDir = $ProjectRoot
+        $cmdStr = "`"$pyExe`" `"$LauncherPy`""
     }
 
-    # 写入 PID 文件
-    Set-Content -Path $PidFile -Value $proc.Id -Encoding UTF8
-    Write-OK "服务已启动 (PID=$($proc.Id))"
-    Write-Host "  PID 文件: $PidFile" -ForegroundColor DarkGray
-    Write-Host "  日志文件: $LogFile" -ForegroundColor DarkGray
+    $proc = Start-Process -FilePath "cmd" `
+        -ArgumentList "/c", "$cmdStr 2>&1 & pause" `
+        -WorkingDirectory $workDir `
+        -WindowStyle Normal `
+        -PassThru
+
+    # $proc 是 cmd 窗口的 PID，不是服务进程的 PID
+    # 真正的服务 PID 将在端口就绪后通过 netstat 获取
+    Write-OK "服务窗口已启动（日志实时显示在弹出的 cmd 窗口中）"
 } catch {
     Write-Err "启动失败: $_"
     exit 1
@@ -249,37 +247,46 @@ if (Test-Path $envFile) {
 
 $healthUrl = "http://${host_}:${port}/api/health"
 $ready = $false
+$servicePid = $null
+
 for ($i = 1; $i -le 30; $i++) {
     Start-Sleep -Seconds 1
-    # 检查进程是否意外退出
-    if ($proc.HasExited) {
-        Write-Err "进程意外退出 (退出码 $($proc.ExitCode))"
-        Write-Host "  查看日志: $LogFile" -ForegroundColor Gray
-        Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
-        exit 1
-    }
-    try {
-        $resp = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
-        if ($resp.StatusCode -eq 200) {
-            $ready = $true
-            break
+    # 通过端口扫描检测服务是否就绪，同时获取真正的服务进程 PID
+    # （$proc 是外层 cmd 窗口的 PID，不是服务进程的 PID）
+    $netstatLine = netstat -aon | Select-String ":$port.*LISTENING" | Select-Object -First 1
+    if ($netstatLine -and $netstatLine -match '\s+(\d+)\s*$') {
+        $servicePid = [int]$Matches[1]
+        try {
+            $resp = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+            if ($resp.StatusCode -eq 200) {
+                $ready = $true
+                break
+            }
+        } catch {
+            Write-Host "." -NoNewline -ForegroundColor DarkGray
         }
-    } catch {
+    } else {
         Write-Host "." -NoNewline -ForegroundColor DarkGray
     }
 }
 Write-Host ""
+
+# 写入 PID 文件（使用端口扫描获取的服务进程 PID，供 stop.ps1 使用）
+if ($servicePid) {
+    Set-Content -Path $PidFile -Value $servicePid -Encoding UTF8
+    Write-Host "  PID 文件: $PidFile (PID=$servicePid)" -ForegroundColor DarkGray
+}
 
 if ($ready) {
     Write-Host ""
     Write-Host "============================================================" -ForegroundColor Green
     Write-Host "  服务启动成功！" -ForegroundColor Green
     Write-Host "============================================================" -ForegroundColor Green
-    Write-Host "  PID:         $($proc.Id)"
+    Write-Host "  PID:         $servicePid"
     Write-Host "  健康检查:    $healthUrl"
     Write-Host "  API 文档:    http://${host_}:${port}/docs"
     Write-Host "  运营后台:    http://${host_}:${port}/admin/"
-    Write-Host "  日志文件:    $LogFile"
+    Write-Host "  日志窗口:    请查看弹出的 cmd 窗口"
     Write-Host ""
     Write-Host "  停止服务:    双击 scripts\停止服务.bat" -ForegroundColor Cyan
     Write-Host "============================================================" -ForegroundColor Green
@@ -287,7 +294,7 @@ if ($ready) {
     Write-Warn "服务已启动但 30 秒内未通过健康检查"
     Write-Host "  可能仍在初始化，或 .env 配置有误" -ForegroundColor Gray
     Write-Host "  手动验证: $healthUrl" -ForegroundColor Gray
-    Write-Host "  查看日志: $LogFile" -ForegroundColor Gray
+    Write-Host "  查看日志:   请查看弹出的 cmd 窗口" -ForegroundColor Gray
 }
 
 Write-Host ""

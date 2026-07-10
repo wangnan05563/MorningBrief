@@ -73,6 +73,30 @@ const routes = [
         component: () => import('../views/workflow/WorkflowDetail.vue'),
         meta: { title: '工作流详情', hidden: true, requireRole: 'admin' },
       },
+      {
+        path: 'tunnel',
+        name: 'Tunnel',
+        component: () => import('../views/tunnel/Tunnel.vue'),
+        meta: { title: '内网穿透', icon: 'Connection', requireRole: 'admin' },
+      },
+      {
+        path: 'ai-config',
+        name: 'AIConfig',
+        component: () => import('../views/ai/AIConfig.vue'),
+        meta: { title: 'AI 服务', icon: 'Cpu', requireRole: 'admin' },
+      },
+      {
+        path: 'db-admin',
+        name: 'DatabaseAdmin',
+        component: () => import('../views/maintenance/DatabaseAdmin.vue'),
+        meta: { title: '数据库维护', icon: 'Coin', requireRole: 'admin' },
+      },
+      {
+        path: 'maintenance',
+        name: 'Maintenance',
+        component: () => import('../views/maintenance/Maintenance.vue'),
+        meta: { title: '系统清理', icon: 'Brush', requireRole: 'admin' },
+      },
     ],
   },
   // 404 兜底：未匹配路由统一回到审核页，避免白屏

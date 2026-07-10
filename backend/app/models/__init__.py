@@ -1,6 +1,6 @@
-"""SQLAlchemy ORM 模型层（V1.2：14 张表 = 11 业务 + 3 辅助）。
+"""SQLAlchemy ORM 模型层（V1.2：16 张表 = 11 业务 + 3 辅助 + 2 AI 服务）。
 
-与 SQLite schema 的 14 张表一一对应：
+与 SQLite schema 的表一一对应：
 - User          → user
 - AdminUser     → admin_user
 - Script        → script
@@ -15,6 +15,8 @@
 - JwtBlacklist      → jwt_blacklist       （V1.2 新增）
 - CrawlerDedup      → crawler_dedup       （V1.2 新增）
 - PlayProgress      → play_progress       （V1.2 新增）
+- AIConfig          → ai_config           （AI 服务模块新增）
+- AIUsageLog        → ai_usage_log        （AI 服务模块新增）
 
 用法：
     from app.models import User, Episode, Script
@@ -40,6 +42,10 @@ from app.models.play_log import PlayLog
 from app.models.jwt_blacklist import JwtBlacklist
 from app.models.crawler_dedup import CrawlerDedup
 from app.models.play_progress import PlayProgress
+# AI 服务模块
+from app.models.ai_config import AIConfig, AIUsageLog
+# 数据库维护与系统清理模块（V1.2 新增）
+from app.models.audit_log import AuditLog
 
 __all__ = [
     # 业务表
@@ -68,4 +74,9 @@ __all__ = [
     "JwtBlacklist",
     "CrawlerDedup",
     "PlayProgress",
+    # AI 服务模块
+    "AIConfig",
+    "AIUsageLog",
+    # 数据库维护与系统清理模块
+    "AuditLog",
 ]

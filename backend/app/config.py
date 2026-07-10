@@ -103,6 +103,28 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_DIR: str = "./logs"             # V1.2：改为 exe 同级相对路径
 
+    # ---- 数据库维护模块（V1.2 新增，对标 17_xianyu db_admin） ----
+    # 危险操作确认令牌：删除/批量删除/导入须传此值，防止误操作
+    DB_ADMIN_CONFIRM_TOKEN: str = "CONFIRM_DELETE"
+    # 单次查询/批量删除行数上限，防止全表扫描 OOM
+    DB_ADMIN_MAX_PAGE_SIZE: int = 1000
+    # 单次导入行数上限，防止大文件解析阻塞事件循环
+    DB_ADMIN_MAX_IMPORT_ROWS: int = 5000
+    # 审计日志查询上限
+    DB_ADMIN_AUDIT_LOG_LIMIT: int = 500
+
+    # ---- 系统清理模块（V1.2 新增，对标 17_xianyu maintenance） ----
+    # 旧 JWT 黑名单保留天数（过期后可清理）
+    MAINTENANCE_BLACKLIST_RETAIN_DAYS: int = 7
+    # 旧爬虫去重记录保留天数
+    MAINTENANCE_DEDUP_RETAIN_DAYS: int = 7
+    # 旧 AI 用量日志保留天数（统计价值低，按月清理）
+    MAINTENANCE_AI_USAGE_RETAIN_DAYS: int = 90
+    # 旧播放日志保留天数（统计价值递减，按季清理）
+    MAINTENANCE_PLAYLOG_RETAIN_DAYS: int = 90
+    # 大日志文件阈值（MB），超限可清理
+    MAINTENANCE_LARGE_LOG_MB: int = 10
+
     # ---- 派生属性 ----
     @property
     def sqlite_url(self) -> str:

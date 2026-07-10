@@ -1,0 +1,45 @@
+uid=15_0 RootWebArea "20_News 运营后台" url="http://127.0.0.1:8000/ai-config"
+  uid=15_1 StaticText "20_News"
+  uid=15_2 menubar orientation="horizontal"
+    uid=15_3 menuitem "内容审核"
+    uid=15_4 menuitem "广告素材"
+    uid=15_5 menuitem "投放规则"
+    uid=15_6 menuitem "排期日历"
+    uid=15_7 menuitem "数据统计"
+    uid=15_8 menuitem "工作流监控"
+    uid=15_9 menuitem "内网穿透"
+    uid=15_10 menuitem "AI 服务"
+  uid=15_11 StaticText "AI 服务"
+  uid=15_12 button "A admin 管理员" expandable haspopup="menu"
+  uid=15_13 main
+    uid=15_14 StaticText "AI 服务配置"
+    uid=15_15 button "保存配置"
+    uid=15_16 tab "LLM 大模型" selectable selected
+    uid=15_17 tab "TTS 语音合成" selectable
+    uid=15_18 tab "用量统计" selectable
+    uid=15_19 StaticText "快速选择提供商："
+    uid=15_20 generic
+      uid=15_21 combobox expandable haspopup="listbox"
+      uid=15_22 StaticText "选择预设"
+    uid=15_23 form
+      uid=15_24 StaticText "API Key"
+      uid=15_25 generic
+        uid=15_26 textbox "API Key" value="••••••••"
+      uid=15_27 button "显示"
+      uid=15_28 StaticText "Base URL"
+      uid=15_29 generic
+        uid=15_30 textbox "Base URL" value="https://dashscope.aliyuncs.com/compatible-mode/v1"
+      uid=15_31 StaticText "模型名称"
+      uid=15_32 generic
+        uid=15_33 textbox "模型名称" value="qwen-max"
+      uid=15_34 StaticText "超时(秒)"
+      uid=15_35 button "decrease number"
+      uid=15_36 button "increase number"
+      uid=15_37 generic
+        uid=15_38 spinbutton "超时(秒)" value="30" valuemax="120" valuemin="5" valuetext="30"
+      uid=15_39 StaticText "重试次数"
+      uid=15_40 button "decrease number"
+      uid=15_41 button "increase number"
+      uid=15_42 generic
+        uid=15_43 spinbutton "重试次数" value="3" valuemax="10" valuemin="0" valuetext="3"
+      uid=15_44 button "测试连接"

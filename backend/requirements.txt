@@ -42,6 +42,7 @@ apscheduler==3.10.4
 
 # ==== 日志 ====
 loguru==0.7.2
+colorama==0.4.6                        # Windows cmd 终端 ANSI 颜色兼容（loguru 底层依赖）
 
 # ==== 测试依赖 ====
 pytest==8.0.0
