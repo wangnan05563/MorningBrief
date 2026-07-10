@@ -268,8 +268,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref, computed, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import {
   Search, Plus, Delete, Download, Upload, View, Document, Refresh, Lock, EditPen,
 } from '@element-plus/icons-vue'
@@ -350,7 +350,7 @@ async function loadTables() {
       selectTable(tables.value[0].name)
     }
   } catch (e) {
-    // axios 拦截器已统一提示
+    console.warn('loadTables failed:', e)
   }
 }
 
@@ -370,6 +370,7 @@ async function loadSchema() {
     const schema = await getTableSchema(selectedTable.value)
     columns.value = schema.columns || []
   } catch (e) {
+    console.warn('loadSchema failed:', e)
     columns.value = []
   }
 }
@@ -387,6 +388,7 @@ async function loadRows() {
     rows.value = data.rows || []
     total.value = data.total || 0
   } catch (e) {
+    console.warn('loadRows failed:', e)
     rows.value = []
     total.value = 0
   }
@@ -421,7 +423,7 @@ async function submitForm() {
     formDialogVisible.value = false
     await loadRows()
   } catch (e) {
-    // 错误已由拦截器提示
+    console.warn('submitForm failed:', e)
   }
 }
 
@@ -440,6 +442,7 @@ async function handleDelete(row) {
   try {
     deleteCascade.value = await cascadePreview(selectedTable.value, [pkValue])
   } catch (e) {
+    console.warn('cascadePreview failed:', e)
     deleteCascade.value = null
   }
   deleteDialogVisible.value = true
@@ -458,6 +461,7 @@ async function handleBatchDelete() {
   try {
     deleteCascade.value = await cascadePreview(selectedTable.value, deleteIds.value)
   } catch (e) {
+    console.warn('batch cascadePreview failed:', e)
     deleteCascade.value = null
   }
   deleteDialogVisible.value = true
@@ -475,7 +479,7 @@ async function confirmDelete() {
     selectedRows.value = []
     await loadRows()
   } catch (e) {
-    // 错误已由拦截器提示
+    console.warn('confirmDelete failed:', e)
   }
 }
 
@@ -485,7 +489,7 @@ async function handleExport(format) {
     await exportRows(selectedTable.value, format)
     ElMessage.success('导出成功')
   } catch (e) {
-    // 错误已由拦截器提示
+    console.warn('handleExport failed:', e)
   }
 }
 
@@ -526,7 +530,7 @@ async function handleImport() {
     importContent.value = ''
     await loadRows()
   } catch (e) {
-    // 错误已由拦截器提示
+    console.warn('handleImport failed:', e)
   }
 }
 
@@ -536,7 +540,7 @@ async function loadAuditLogs() {
     auditLogs.value = await listAuditLogs(100)
     auditDialogVisible.value = true
   } catch (e) {
-    // 错误已由拦截器提示
+    console.warn('loadAuditLogs failed:', e)
   }
 }
 

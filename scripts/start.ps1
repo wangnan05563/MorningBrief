@@ -3,9 +3,9 @@
     20_News 服务启动脚本（V1.2 单机 exe / 开发模式）
 .DESCRIPTION
     智能启动 20_News 后端服务：
-    1. 优先启动已构建的 exe（dist\20-news\20-news.exe）
-    2. 回退到 venv 开发模式（.venv\Scripts\python.exe backend\launcher.py）
-    3. 再回退到系统 python（V1.2 开发模式不强制 venv）
+    1. 优先启动开发模式（.venv + backend\launcher.py）
+    2. 回退到系统 python 开发模式
+    3. 最后回退到已构建的 exe（dist\20-news\20-news.exe）
     启动后写入 PID 到 .run\20-news.pid，供 stop.ps1 使用。
 .PARAMETER Dev
     强制开发模式（venv 优先，回退系统 python），忽略 exe。
@@ -13,7 +13,7 @@
     强制 exe 模式（要求 dist\20-news\20-news.exe 存在）。
 .EXAMPLE
     .\start.ps1
-    自动选择模式（优先 exe → venv → 系统 python）。
+    自动选择模式（优先 venv → 系统 python → exe）。
 .EXAMPLE
     .\start.ps1 -Dev
     强制开发模式。
@@ -100,7 +100,7 @@ if ($Exe) {
         exit 1
     }
 } else {
-    # 自动选择：优先 exe → venv → 系统 python
+    # 自动选择：优先 venv → 系统 python → exe
     if ($exeExists) {
         $mode = "exe"
     } elseif ($venvExists -and $launcherExists) {
@@ -109,14 +109,14 @@ if ($Exe) {
         $mode = "dev-sys"
     } else {
         Write-Err "无可用的启动方式"
-        Write-Host "  方式 1（exe 模式）: 运行 scripts\构建打包.bat 生成 exe" -ForegroundColor Gray
-        Write-Host "  方式 2（venv 模式）: python -m venv .venv 并安装 backend\requirements.txt" -ForegroundColor Gray
-        Write-Host "  方式 3（系统 python）: 安装 Python 3.10+ 并 pip install -r backend\requirements.txt" -ForegroundColor Gray
+        Write-Host "  方式 1（venv 开发模式）: python -m venv .venv 并安装 backend\requirements.txt" -ForegroundColor Gray
+        Write-Host "  方式 2（系统 python 开发模式）: 安装 Python 3.10+ 并 pip install -r backend\requirements.txt" -ForegroundColor Gray
+        Write-Host "  方式 3（exe 模式）: 运行 scripts\构建打包.bat 生成 exe" -ForegroundColor Gray
         exit 1
     }
 }
 
-Write-Step "启动模式: $mode"
+Write-Step "启动模式: $mode (默认开发模式)"
 if ($mode -eq "exe") {
     Write-Host "  EXE: $ExePath" -ForegroundColor DarkGray
 } elseif ($mode -eq "dev") {
@@ -299,3 +299,12 @@ if ($ready) {
 
 Write-Host ""
 return 0
+
+
+
+
+
+
+
+
+

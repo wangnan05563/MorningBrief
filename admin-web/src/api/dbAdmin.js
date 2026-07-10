@@ -77,7 +77,7 @@ export async function exportRows(table, format = 'csv') {
   link.download = `${table}_export.${format}`
   document.body.appendChild(link)
   link.click()
-  document.body.removeChild(link)
+  link.remove()
   URL.revokeObjectURL(url)
 }
 

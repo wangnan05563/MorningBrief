@@ -183,7 +183,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   CopyDocument, Link, VideoPlay, VideoPause, Setting, Check,
@@ -219,9 +219,10 @@ let pollTimer = null
 const isRunning = computed(() => status.value?.status === 'running')
 
 // 加载状态
+// silent: true — 轮询请求不触发全局 ElMessage，避免浏览器最小化时积压错误提示弹出
 async function loadStatus() {
   try {
-    const data = await api.get('/tunnel/status')
+    const data = await api.get('/tunnel/status', { silent: true })
     status.value = data
   } catch (error) {
     // 静默失败：状态查询失败不影响页面其他功能
@@ -336,9 +337,10 @@ function providerDesc(name) {
 }
 
 // 运行中轮询状态（检测进程退出、URL 变化）
+// 页面不可见时暂停轮询，避免浏览器最小化时积压请求和错误提示
 function startPolling() {
   stopPolling()
-  if (isRunning.value) {
+  if (isRunning.value && !document.hidden) {
     pollTimer = setInterval(loadStatus, 3000)
   }
 }
@@ -350,8 +352,18 @@ function stopPolling() {
   }
 }
 
+// 监听页面可见性变化：最小化/切换标签页时暂停轮询，恢复时重启
+function handleVisibilityChange() {
+  if (document.hidden) {
+    stopPolling()
+  } else if (isRunning.value) {
+    // 恢复可见时立即刷新一次状态，再恢复轮询
+    loadStatus()
+    startPolling()
+  }
+}
+
 // 监听状态变化启停轮询
-import { watch } from 'vue'
 watch(isRunning, (running) => {
   if (running) {
     startPolling()
@@ -365,10 +377,12 @@ onMounted(async () => {
   await Promise.all([loadStatus(), loadConfig()])
   loading.value = false
   startPolling()
+  document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 onUnmounted(() => {
   stopPolling()
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 

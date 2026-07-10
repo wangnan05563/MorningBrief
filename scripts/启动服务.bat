@@ -1,34 +1,34 @@
-@echo off
+ï»¿@echo off
 chcp 936 >nul 2>&1
-REM ½Å±¾Î»ÓÚ scripts/ Ä¿Â¼£¬ÇÐ»ØÏîÄ¿¸ùÄ¿Â¼
+REM è„šæœ¬ä½äºŽ scripts/ ç›®å½•ï¼Œåˆ‡å›žé¡¹ç›®æ ¹ç›®å½•
 cd /d "%~dp0.."
 
 echo ========================================
-echo   20_News Æô¶¯·þÎñ
+echo   20_News å¯åŠ¨æœåŠ¡
 echo ========================================
 echo.
-echo Æô¶¯·½Ê½£¨×Ô¶¯Ñ¡Ôñ£©£º
-echo   - ÓÅÏÈÆô¶¯ÒÑ¹¹½¨µÄ exe£¨dist\20-news\20-news.exe£©
-echo   - »ØÍËµ½¿ª·¢Ä£Ê½£¨.venv + backend\launcher.py£©
+echo å¯åŠ¨æ–¹å¼ï¼ˆè‡ªåŠ¨é€‰æ‹©ï¼Œé»˜è®¤å¼€å‘æ¨¡å¼ï¼‰ï¼š
+echo   - ä¼˜å…ˆå¯åŠ¨å¼€å‘æ¨¡å¼ï¼ˆ.venv + backend\launcher.pyï¼‰
+echo   - å›žé€€åˆ° exe æ¨¡å¼ï¼ˆdist\20-news\20-news.exeï¼‰
 echo.
-echo ²ÎÊý£¨¿ÉÑ¡£©£º
-echo   -Dev  Ç¿ÖÆ¿ª·¢Ä£Ê½
-echo   -Exe  Ç¿ÖÆ exe Ä£Ê½
+echo å‚æ•°ï¼ˆå¯é€‰ï¼‰ï¼š
+echo   -Dev  å¼ºåˆ¶å¼€å‘æ¨¡å¼
+echo   -Exe  å¼ºåˆ¶ exe æ¨¡å¼
 echo.
 
-REM -NoProfile£ºÌø¹ýÓÃ»§×Ô¶¨Òå profile£¨±ÜÃâ±ðÃû¸ÉÈÅ£©
-REM -ExecutionPolicy Bypass£ºÔÊÐíÖ´ÐÐÎ´Ç©Ãû½Å±¾
-REM -File£ºÖ¸¶¨Èë¿Ú ps1£¬%* Í¸´«ËùÓÐ²ÎÊý
+REM -NoProfileï¼šè·³è¿‡ç”¨æˆ·è‡ªå®šä¹‰ profileï¼ˆé¿å…åˆ«åå¹²æ‰°ï¼‰
+REM -ExecutionPolicy Bypassï¼šå…è®¸æ‰§è¡Œæœªç­¾åè„šæœ¬
+REM -Fileï¼šæŒ‡å®šå…¥å£ ps1ï¼Œ%* é€ä¼ æ‰€æœ‰å‚æ•°
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0start.ps1" %*
 
 if errorlevel 1 (
     echo.
-    echo [ERROR] Æô¶¯Ê§°Ü£¬Çë²é¿´ÉÏ·½´íÎóÐÅÏ¢
+    echo [ERROR] å¯åŠ¨å¤±è´¥ï¼Œè¯·æŸ¥çœ‹ä¸Šæ–¹é”™è¯¯ä¿¡æ¯
     pause
     exit /b 1
 )
 
 echo.
-echo °´ÈÎÒâ¼ü¹Ø±Õ´°¿Ú...
+echo æŒ‰ä»»æ„é”®å…³é—­çª—å£...
 pause >nul
 exit

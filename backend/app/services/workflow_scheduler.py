@@ -20,6 +20,7 @@ from sqlalchemy import select, delete
 
 from app.cache.manager import cache
 from app.config import get_settings
+from app.core.event_bus import Event, get_event_bus
 from app.core.timeutil import utcnow_naive
 from app.database import AsyncSessionLocal
 from app.models import Episode, EpisodeStatus, Review, ReviewStatus, Workflow, WorkflowStep
@@ -85,6 +86,20 @@ class WorkflowScheduler:
         self.scheduler = AsyncIOScheduler(timezone="Asia/Shanghai")
         # 保留后台任务强引用，避免被 GC 回收导致任务中途取消
         self._running_tasks: set[asyncio.Task] = set()
+
+    # ===== 事件发布 =====
+
+    def _publish_event(self, event_type: str, data: dict) -> None:
+        """向 EventBus 发布工作流状态事件。
+
+        用 publish_nowait 而非 await publish：事件入队即返回，不阻塞工作流主流程。
+        若 EventBus 未启动（如单元测试），事件积压在队列中不影响主逻辑。
+        """
+        try:
+            bus = get_event_bus()
+            bus.publish_nowait(Event(type=event_type, data=data))
+        except Exception:
+            logger.debug("EventBus 发布事件失败（不影响主流程）", exc_info=True)
 
     # ===== 生命周期 =====
 
@@ -248,6 +263,9 @@ class WorkflowScheduler:
 
             await self.cache.set("workflow:current", workflow_id)
             await self._update_workflow_status(workflow_id, WorkflowStatus.running)
+            self._publish_event("workflow.started", {
+                "workflow_id": workflow_id, "episode_date": episode_date.isoformat(),
+            })
 
             date_str = episode_date.isoformat()
             context = {
@@ -296,6 +314,9 @@ class WorkflowScheduler:
 
             # 主流程结束（publish 由审核通过后异步触发）
             await self._update_workflow_status(workflow_id, WorkflowStatus.success)
+            self._publish_event("workflow.completed", {
+                "workflow_id": workflow_id,
+            })
             logger.info("工作流主流程完成 workflow_id=%s", workflow_id)
 
         except StepFailedError as e:
@@ -303,6 +324,11 @@ class WorkflowScheduler:
             await self._update_workflow_status(
                 workflow_id, WorkflowStatus.failed, error=str(e),
             )
+            self._publish_event("workflow.failed", {
+                "workflow_id": workflow_id,
+                "step": e.step_name,
+                "error": str(e),
+            })
             await self._alert_operators(
                 f"工作流 {workflow_id} 失败于步骤 {e.step_name}: {e}"
             )
@@ -312,12 +338,18 @@ class WorkflowScheduler:
             await self._update_workflow_status(
                 workflow_id, WorkflowStatus.cancelled, error=str(e),
             )
+            self._publish_event("workflow.cancelled", {
+                "workflow_id": workflow_id, "reason": str(e),
+            })
         except Exception as e:
             # 未预期异常兜底
             logger.exception("工作流异常 workflow_id=%s", workflow_id)
             await self._update_workflow_status(
                 workflow_id, WorkflowStatus.failed, error=str(e),
             )
+            self._publish_event("workflow.failed", {
+                "workflow_id": workflow_id, "error": str(e),
+            })
             await self._alert_operators(f"工作流 {workflow_id} 未预期异常: {e}")
         finally:
             # 仅本进程抢到锁才释放 lock，避免误删其他工作流的锁
@@ -349,6 +381,12 @@ class WorkflowScheduler:
                 )
                 # 将本步产出合并到上下文供后续步骤使用
                 context.update(result or {})
+                self._publish_event("workflow.step.completed", {
+                    "workflow_id": workflow_id,
+                    "step": step_name.value,
+                    "seq": seq,
+                    "duration_ms": duration_ms,
+                })
                 logger.info(
                     "步骤完成 workflow_id=%s step=%s attempt=%d duration=%dms",
                     workflow_id, step_name.value, attempt, duration_ms,
@@ -371,6 +409,12 @@ class WorkflowScheduler:
         await self._update_step_status(
             step_record.id, WorkflowStepStatus.failed, error=str(last_error),
         )
+        self._publish_event("workflow.step.failed", {
+            "workflow_id": workflow_id,
+            "step": step_name.value,
+            "seq": seq,
+            "error": str(last_error),
+        })
         raise StepFailedError(step_name.value, last_error)
 
     # ===== 审核与发布 =====
@@ -560,29 +604,32 @@ class WorkflowScheduler:
     # ===== 告警 =====
 
     async def _alert_operators(self, message: str) -> None:
-        """告警运维人员（短信 + 企业微信 webhook）。
+        """告警运维人员（通过 NotifierHub 多渠道分发）。
 
-        两种通道独立发送，任一失败不影响另一通道。
-        MVP 阶段仅记录日志 + 企业微信 webhook（若配置）。
+        使用 NotifierHub 替代直接 webhook 调用：
+        - 自动 fan-out 到所有已配置渠道（企微/钉钉/邮件）
+        - 免打扰时段 critical 仍可达
+        - 单渠道失败不影响其他渠道
         """
         logger.error("【告警】%s", message)
 
-        # 企业微信 webhook（若配置则发送）
-        webhook = settings.ALERT_WECOM_WEBHOOK
-        if webhook:
-            try:
-                import httpx
-                async with httpx.AsyncClient() as client:
-                    await client.post(
-                        webhook,
-                        json={
-                            "msgtype": "text",
-                            "text": {"content": f"【20_News 告警】\n{message}"},
-                        },
-                        timeout=10,
-                    )
-            except Exception as e:
-                logger.error("企业微信告警发送失败: %s", e)
+        from app.services.notifier import get_notifier_hub, NotificationEvent
+        hub = get_notifier_hub()
+        event = NotificationEvent(
+            title="20_News 工作流告警",
+            message=message,
+            severity="critical",  # 工作流故障为 critical，穿透免打扰
+            source="workflow_scheduler",
+        )
+        try:
+            result = await hub.send(event)
+            if result["failed"] > 0 and result["success"] == 0:
+                logger.error(
+                    "所有通知渠道发送失败: %s",
+                    [r.error for r in result["results"] if not r.success],
+                )
+        except Exception as e:
+            logger.error("NotifierHub 告警发送异常: %s", e)
 
     # ===== 数据库操作辅助 =====
 

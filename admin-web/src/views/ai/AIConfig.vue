@@ -88,12 +88,32 @@
       <!-- TTS 配置 -->
       <el-tab-pane label="TTS 语音合成" name="tts">
         <el-card shadow="never">
+          <!-- 密钥获取入口：阿里云 NLS 控制台直达 -->
+          <div class="preset-section">
+            <span class="section-label">获取密钥：</span>
+            <el-link
+              href="https://ram.console.aliyun.com/manage/ak"
+              target="_blank"
+              type="primary"
+              style="margin-right: 16px"
+            >
+              AccessKey 管理
+            </el-link>
+            <el-link
+              href="https://nls-portal.console.aliyun.com/applist"
+              target="_blank"
+              type="primary"
+            >
+              NLS 项目 AppKey
+            </el-link>
+          </div>
+
           <el-form :model="ttsForm" label-width="120px" class="config-form">
-            <el-form-item label="API Key">
+            <el-form-item label="AccessToken">
               <el-input
                 v-model="ttsForm.api_key"
                 :type="showTtsKey ? 'text' : 'password'"
-                placeholder="阿里云 NLS 访问令牌"
+                placeholder="NLS AccessToken（32位hex，非 AccessKey Secret）"
               >
                 <template #append>
                   <el-button @click="showTtsKey = !showTtsKey">
@@ -101,12 +121,15 @@
                   </el-button>
                 </template>
               </el-input>
+              <div class="field-tip">
+                NLS 控制台「获取 Token」生成的访问令牌，不要填 AccessKey Secret
+              </div>
             </el-form-item>
             <el-form-item label="App Key">
               <el-input
                 v-model="ttsForm.appkey"
                 :type="showTtsAppkey ? 'text' : 'password'"
-                placeholder="阿里云 NLS 项目 appkey"
+                placeholder="NLS 项目 AppKey"
               >
                 <template #append>
                   <el-button @click="showTtsAppkey = !showTtsAppkey">
@@ -114,6 +137,9 @@
                   </el-button>
                 </template>
               </el-input>
+              <div class="field-tip">
+                NLS 项目详情页的 AppKey（非 AccessKey ID）
+              </div>
             </el-form-item>
             <el-form-item label="音色">
               <el-select v-model="ttsForm.voice" style="width: 240px">
@@ -283,6 +309,11 @@ async function loadConfig() {
     }
     presets.value = presetData || []
     voices.value = voiceData || []
+    // 根据 base_url 自动匹配预设
+    if (llmForm.value.base_url) {
+      const matched = presets.value.find((p) => p.base_url === llmForm.value.base_url)
+      if (matched) selectedPreset.value = matched.key
+    }
   } finally {
     loading.value = false
   }
@@ -294,6 +325,7 @@ function applyPreset(key) {
   if (!preset) return
   llmForm.value.base_url = preset.base_url
   llmForm.value.model = preset.model
+  selectedPreset.value = key
 }
 
 // 保存配置
@@ -302,8 +334,9 @@ async function handleSave() {
   try {
     await api.put('/ai/config', { llm: llmForm.value, tts: ttsForm.value })
     ElMessage.success('配置已保存并热更新')
-  } finally {
     saving.value = false
+  } finally {
+    loading.value = false
   }
 }
 
@@ -318,8 +351,9 @@ async function handleTestLLM() {
       model: llmForm.value.model,
     })
     llmTestResult.value = data
-  } finally {
     testingLlm.value = false
+  } finally {
+    loading.value = false
   }
 }
 
@@ -333,8 +367,9 @@ async function handleTestTTS() {
       appkey: ttsForm.value.appkey,
     })
     ttsTestResult.value = data
-  } finally {
     testingTts.value = false
+  } finally {
+    loading.value = false
   }
 }
 
@@ -345,8 +380,9 @@ async function loadUsage() {
     const data = await api.get('/ai/usage')
     todayUsage.value = data.today || todayUsage.value
     usageTrend.value = data.trend || []
-  } finally {
     usageLoading.value = false
+  } finally {
+    loading.value = false
   }
 }
 
@@ -401,6 +437,13 @@ onMounted(() => {
 
   .config-form {
     max-width: 600px;
+
+    .field-tip {
+      font-size: 12px;
+      color: $color-text-secondary;
+      line-height: 1.5;
+      margin-top: 4px;
+    }
   }
 
   .usage-cards {

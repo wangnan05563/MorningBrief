@@ -68,7 +68,7 @@ LLM_PRESETS = [
     {
         "key": "deepseek", "label": "DeepSeek",
         "base_url": "https://api.deepseek.com/v1",
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "api_key_url": "https://platform.deepseek.com/api_keys",
     },
     {
@@ -101,6 +101,12 @@ LLM_PRESETS = [
         "model": "qwen2.5:7b",
         "api_key_url": "",
     },
+    {
+        "key": "agnes", "label": "Agnes AI",
+        "base_url": "https://api.agnes-ai.com/v1",
+        "model": "Agnes-2.0-Flash",
+        "api_key_url": "https://platform.agnes-ai.com/",
+    },
 ]
 
 # ---- 模型定价表（每 1K token 价格 USD）----
@@ -110,10 +116,12 @@ MODEL_PRICING = {
     "gpt-4o": {"input": 0.0025, "output": 0.01},
     "qwen-max": {"input": 0.0028, "output": 0.0084},
     "qwen-plus": {"input": 0.0004, "output": 0.0012},
-    "qwen-turbo": {"input": 0.0001, "output": 0.0003},
     "deepseek-chat": {"input": 0.00014, "output": 0.00028},
+    "deepseek-v4-flash": {"input": 0.00014, "output": 0.00028},
     "glm-4-flash": {"input": 0.0, "output": 0.0},
     "moonshot-v1-8k": {"input": 0.0017, "output": 0.0017},
+    # Agnes AI 当前免费开放，定价为 0
+    "Agnes-2.0-Flash": {"input": 0.0, "output": 0.0},
 }
 DEFAULT_PRICING = MODEL_PRICING["gpt-4o-mini"]
 
@@ -354,8 +362,8 @@ class AIConfigService:
         发送最小化请求（max_tokens=5），验证鉴权与网络连通性。
         超时 15s，避免长时间阻塞。
         """
-        if not api_key:
-            # 使用已保存的配置
+        if not api_key or _is_masked(api_key):
+            # 使用已保存的配置（前端传脱敏值时也回退到已保存值）
             saved_key = await self.get_config_value("llm_api_key")
             if not saved_key:
                 return {"success": False, "message": "API Key 未配置"}
@@ -409,13 +417,13 @@ class AIConfigService:
         发送最小化合成请求验证 token/appkey 有效性。
         不等待合成完成，仅检查创建任务是否成功。
         """
-        if not api_key:
+        if not api_key or _is_masked(api_key):
             saved_key = await self.get_config_value("tts_api_key")
             if not saved_key:
                 return {"success": False, "message": "TTS API Key 未配置"}
             api_key = saved_key
 
-        if not appkey:
+        if not appkey or _is_masked(appkey):
             saved_appkey = await self.get_config_value("tts_appkey")
             if not saved_appkey:
                 return {"success": False, "message": "TTS AppKey 未配置"}
@@ -447,21 +455,36 @@ class AIConfigService:
         except httpx.RequestError as e:
             return {"success": False, "message": f"网络错误: {e}"}
 
-        if resp.status_code == 200:
+        # 阿里云 NLS 错误码 → 可读提示映射
+        # 400 状态码下 error_code 更具诊断价值，统一解析后提示
+        NLS_ERROR_HINTS = {
+            40000001: "请确认填写的是 NLS AccessToken，而非 AccessKey Secret",
+            40000010: "阿里云 NLS 免费试用已过期，请在控制台开通正式服务",
+            40000004: "appkey 无效，请确认是 NLS 项目的 AppKey",
+        }
+
+        try:
             data = resp.json()
-            error_code = data.get("error_code")
-            if error_code == 20000000:
-                return {"success": True, "message": "TTS 鉴权成功"}
-            else:
-                return {
-                    "success": False,
-                    "message": f"TTS 鉴权失败 error_code={error_code} msg={data.get('error_msg')}",
-                }
-        else:
+        except Exception:
             return {
                 "success": False,
                 "message": f"HTTP {resp.status_code}: {resp.text[:200]}",
             }
+
+        error_code = data.get("error_code")
+        error_msg = data.get("error_message", "")
+
+        if error_code == 20000000:
+            return {"success": True, "message": "TTS 鉴权成功"}
+        if error_code in NLS_ERROR_HINTS:
+            return {
+                "success": False,
+                "message": f"{error_msg}（{error_code}）— {NLS_ERROR_HINTS[error_code]}",
+            }
+        return {
+            "success": False,
+            "message": f"TTS 鉴权失败 error_code={error_code} msg={error_msg}",
+        }
 
     # ---- 用量记录 ----
 
@@ -505,32 +528,10 @@ class AIConfigService:
         today_start = datetime.combine(today, datetime.min.time())
 
         # 今日统计
-        today_result = await self.db.execute(
-            select(
-                AIUsageLog.service_type,
-                func.sum(AIUsageLog.input_tokens + AIUsageLog.output_tokens).label("tokens"),
-                func.sum(AIUsageLog.char_count).label("chars"),
-                func.sum(AIUsageLog.cost_usd).label("cost"),
-                func.count(AIUsageLog.id).label("calls"),
-            ).where(AIUsageLog.created_at >= today_start).group_by(AIUsageLog.service_type)
-        )
-        today_rows = today_result.all()
-
-        today_llm_calls = 0
-        today_llm_tokens = 0
-        today_tts_calls = 0
-        today_tts_chars = 0
-        today_cost = 0.0
-
-        for row in today_rows:
-            cost = float(row.cost or 0)
-            today_cost += cost
-            if row.service_type == "llm":
-                today_llm_calls = row.calls or 0
-                today_llm_tokens = row.tokens or 0
-            elif row.service_type == "tts":
-                today_tts_calls = row.calls or 0
-                today_tts_chars = row.chars or 0
+        today_rows = (
+            await self.db.execute(self._build_usage_query(today_start, None))
+        ).all()
+        today_stats = self._aggregate_usage_rows(today_rows)
 
         # 7 天趋势
         trend = []
@@ -538,55 +539,57 @@ class AIConfigService:
             day = today - timedelta(days=i)
             day_start = datetime.combine(day, datetime.min.time())
             day_end = datetime.combine(day + timedelta(days=1), datetime.min.time())
-
-            day_result = await self.db.execute(
-                select(
-                    AIUsageLog.service_type,
-                    func.sum(AIUsageLog.input_tokens + AIUsageLog.output_tokens).label("tokens"),
-                    func.sum(AIUsageLog.char_count).label("chars"),
-                    func.sum(AIUsageLog.cost_usd).label("cost"),
-                    func.count(AIUsageLog.id).label("calls"),
-                ).where(
-                    AIUsageLog.created_at >= day_start,
-                    AIUsageLog.created_at < day_end,
-                ).group_by(AIUsageLog.service_type)
-            )
-            day_rows = day_result.all()
-
-            llm_calls = 0
-            llm_tokens = 0
-            tts_calls = 0
-            tts_chars = 0
-            day_cost = 0.0
-
-            for row in day_rows:
-                day_cost += float(row.cost or 0)
-                if row.service_type == "llm":
-                    llm_calls = row.calls or 0
-                    llm_tokens = row.tokens or 0
-                elif row.service_type == "tts":
-                    tts_calls = row.calls or 0
-                    tts_chars = row.chars or 0
-
-            trend.append({
-                "date": day.isoformat(),
-                "llm_calls": llm_calls,
-                "llm_tokens": llm_tokens,
-                "tts_calls": tts_calls,
-                "tts_chars": tts_chars,
-                "cost_usd": round(day_cost, 6),
-            })
+            day_rows = (
+                await self.db.execute(self._build_usage_query(day_start, day_end))
+            ).all()
+            day_stats = self._aggregate_usage_rows(day_rows)
+            day_stats["date"] = day.isoformat()
+            trend.append(day_stats)
 
         return {
-            "today": {
-                "llm_calls": today_llm_calls,
-                "llm_tokens": today_llm_tokens,
-                "tts_calls": today_tts_calls,
-                "tts_chars": today_tts_chars,
-                "cost_usd": round(today_cost, 6),
-            },
+            "today": today_stats,
             "trend": trend,
         }
+
+    @staticmethod
+    def _build_usage_query(start: datetime, end: datetime | None):
+        """构建按 service_type 聚合的用量查询（今日/单日复用）。
+
+        end=None 表示仅设下界（今日统计到当前时刻）。
+        """
+        conditions = [AIUsageLog.created_at >= start]
+        if end is not None:
+            conditions.append(AIUsageLog.created_at < end)
+        return (
+            select(
+                AIUsageLog.service_type,
+                func.sum(AIUsageLog.input_tokens + AIUsageLog.output_tokens).label("tokens"),
+                func.sum(AIUsageLog.char_count).label("chars"),
+                func.sum(AIUsageLog.cost_usd).label("cost"),
+                func.count(AIUsageLog.id).label("calls"),
+            ).where(*conditions).group_by(AIUsageLog.service_type)
+        )
+
+    @staticmethod
+    def _aggregate_usage_rows(rows) -> dict:
+        """将 SQL 聚合行合并为标准用量统计结构。"""
+        stats = {
+            "llm_calls": 0,
+            "llm_tokens": 0,
+            "tts_calls": 0,
+            "tts_chars": 0,
+            "cost_usd": 0.0,
+        }
+        for row in rows:
+            stats["cost_usd"] += float(row.cost or 0)
+            if row.service_type == "llm":
+                stats["llm_calls"] = row.calls or 0
+                stats["llm_tokens"] = row.tokens or 0
+            elif row.service_type == "tts":
+                stats["tts_calls"] = row.calls or 0
+                stats["tts_chars"] = row.chars or 0
+        stats["cost_usd"] = round(stats["cost_usd"], 6)
+        return stats
 
     # ---- 预设列表 ----
 
@@ -604,3 +607,4 @@ class AIConfigService:
             {"key": "xiaowei", "label": "小维（沉稳男声）"},
             {"key": "aiya", "label": "艾雅（活泼女声）"},
         ]
+

@@ -218,15 +218,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, h } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Refresh, Coin, Document, Cpu, Delete,
 } from '@element-plus/icons-vue'
 import api from '../../api'
-
-// 清理结果展示子组件（内联定义，避免额外文件）
-import { h } from 'vue'
 
 const CleanupResult = {
   props: ['result'],

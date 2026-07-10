@@ -60,6 +60,7 @@ class Settings(BaseSettings):
 
     # ---- 阿里云 TTS API ----
     ALIYUN_TTS_API_KEY: str = ""
+    ALIYUN_TTS_APPKEY: str = ""
     ALIYUN_TTS_VOICE: str = "xiaoyun"
     ALIYUN_TTS_SAMPLE_RATE: int = 44100
     ALIYUN_TTS_FORMAT: str = "mp3"
@@ -87,6 +88,15 @@ class Settings(BaseSettings):
     ALERT_SMS_TEMPLATE_CODE: str = ""
     ALERT_SMS_PHONE: str = ""
     ALERT_WECOM_WEBHOOK: str = ""
+    # 钉钉群机器人 Webhook + 加签密钥
+    ALERT_DINGTALK_WEBHOOK: str = ""
+    ALERT_DINGTALK_SECRET: str = ""
+    # 邮件 SMTP（运维告警存档用）
+    ALERT_EMAIL_SMTP_HOST: str = ""
+    ALERT_EMAIL_SMTP_PORT: int = 587
+    ALERT_EMAIL_SMTP_USER: str = ""
+    ALERT_EMAIL_SMTP_PASSWORD: str = ""
+    ALERT_EMAIL_TO: str = ""
 
     # ---- 工作流调度 ----
     WORKFLOW_CRON_HOUR: int = 5
@@ -102,6 +112,22 @@ class Settings(BaseSettings):
     # ---- 日志 ----
     LOG_LEVEL: str = "INFO"
     LOG_DIR: str = "./logs"             # V1.2：改为 exe 同级相对路径
+
+    # ---- API 限流（对标 17_xianyu anti_detect 滑动窗口） ----
+    # 每分钟全局请求上限，防止恶意刷接口触发工作流
+    RATE_LIMIT_PER_MINUTE: int = 120
+    # internal 路由鉴权 token（空字符串时仅校验 localhost，配置后双因素校验）
+    INTERNAL_API_TOKEN: str = ""
+
+    # ---- AI 预算控制（对标 17_xianyu ai_usage.py） ----
+    # 每日 LLM token 上限（input+output 合计），超限拒绝调用
+    AI_BUDGET_DAILY_TOKEN_LIMIT: int = 500000
+    # 每日费用上限（USD），超限拒绝调用
+    AI_BUDGET_DAILY_COST_LIMIT_USD: float = 5.0
+    # 每分钟最大调用次数（LLM+TTS 合计）
+    AI_BUDGET_RATE_LIMIT_PER_MIN: int = 20
+    # 预算持久化文件路径（服务重启后回填今日记录）
+    AI_BUDGET_FILE: str = "./data/ai_budget.json"
 
     # ---- 数据库维护模块（V1.2 新增，对标 17_xianyu db_admin） ----
     # 危险操作确认令牌：删除/批量删除/导入须传此值，防止误操作

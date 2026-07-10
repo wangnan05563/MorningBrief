@@ -24,12 +24,15 @@ api.interceptors.request.use((config) => {
 })
 
 // 响应拦截：解包统一响应格式 + 错误处理
+// 请求配置中可通过 silent: true 跳过全局 ElMessage 提示（适用于后台轮询等静默请求）
 api.interceptors.response.use(
   (response) => {
     const { code, message, data } = response.data
     // code !== 0 表示业务错误（如参数校验失败），统一提示
     if (code !== 0) {
-      ElMessage.error(message || '请求失败')
+      if (!response.config?.silent) {
+        ElMessage.error(message || '请求失败')
+      }
       return Promise.reject(new Error(message))
     }
     return data
@@ -44,10 +47,13 @@ api.interceptors.response.use(
       if (globalThis.location.pathname !== '/login') {
         globalThis.location.href = '/login'
       }
-    } else if (error.response?.status === 403) {
-      ElMessage.error('无权限执行此操作')
-    } else {
-      ElMessage.error(error.response?.data?.message || error.message || '请求失败')
+    } else if (!error.config?.silent) {
+      // silent 请求（如后台轮询）不弹 ElMessage，避免最小化时积压错误提示
+      if (error.response?.status === 403) {
+        ElMessage.error('无权限执行此操作')
+      } else {
+        ElMessage.error(error.response?.data?.message || error.message || '请求失败')
+      }
     }
     return Promise.reject(error)
   }
