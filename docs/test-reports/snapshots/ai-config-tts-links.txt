@@ -1,0 +1,5 @@
+uid=47_0 RootWebArea url="http://127.0.0.1:8000/ai-config"
+  uid=47_1 StaticText "{"code":500,"message":"服务内部错误","data":null}"
+  uid=47_2 form
+    uid=47_3 StaticText "美观输出"
+    uid=47_4 checkbox "美观输出"

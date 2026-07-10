@@ -17,6 +17,7 @@ from tenacity import (
 )
 
 from app.config import get_settings
+from app.core.ai_budget import check_budget, record_call
 from app.database import AsyncSessionLocal
 from app.models import Script
 from app.workflow.tts.aliyun_client import (
@@ -59,6 +60,9 @@ _client = AliyunSpeechClient(settings.ALIYUN_TTS_API_KEY)
 async def synthesize_segment(text: str, voice: str = None) -> bytes:
     """合成单段文本（tenacity 自动重试可重试错误）。
 
+    预算控制：调用前检查三重预算（token/费用/频率），超限直接抛 TTSRateLimitError
+    避免无效请求打到外部 API；调用成功后按字符数记录用量更新预算计数。
+
     Args:
         text: 待合成文本
         voice: 音色 ID，缺省用配置默认值
@@ -66,12 +70,27 @@ async def synthesize_segment(text: str, voice: str = None) -> bytes:
     Returns:
         音频二进制
     """
-    return await _client.synthesize(
+    # 预算检查：超限时不发起请求（避免外部 API 计费）
+    allowed, reason = check_budget()
+    if not allowed:
+        logger.warning("AI 预算超限，跳过 TTS 调用: %s", reason)
+        raise TTSRateLimitError(f"AI 预算超限: {reason}")
+
+    audio = await _client.synthesize(
         text,
         voice=voice,
         format=settings.ALIYUN_TTS_FORMAT,
         sample_rate=settings.ALIYUN_TTS_SAMPLE_RATE,
     )
+
+    # 调用成功后记录用量（按字符数计费）
+    record_call(
+        service_type="tts",
+        model=settings.ALIYUN_TTS_VOICE,
+        char_count=len(text),
+    )
+
+    return audio
 
 
 async def synthesize(workflow_id: str, script_id: int) -> dict:

@@ -290,6 +290,18 @@ foreach ($d in @("$distDir\logs", "$distDir\data\audio_cache")) {
     New-Item -ItemType Directory -Force $d | Out-Null
 }
 Write-OK "运行时目录已创建"
+# 5.3.1 Seed 默认管理员（首次启动即可登录）
+Write-Host "  [5.3.1] 初始化默认管理员..."
+$dbPath = "$distDir\data\news.db"
+$seedScript = "$backendDir\seed_admin.py"
+if (Test-Path $seedScript) {
+    python "$seedScript" "$dbPath"
+    Write-OK "默认管理员已初始化（admin/admin123)"
+} else {
+    Write-Warn "seed_admin.py 不存在，跳过管理员初始化"
+}
+
+
 
 # 5.4 数据库启动脚本（V1.2 起已移除：SQLite 嵌入式无需独立启动）
 
@@ -421,3 +433,4 @@ Write-Host "    1. 编辑 dist\20-news\.env 填入实际密钥（JWT_SECRET / LL
 Write-Host "    2. 双击 dist\20-news\20-news.exe 启动服务（SQLite 嵌入式，无需外部数据库）"
 Write-Host "    3. 访问 http://127.0.0.1:8000/docs"
 Write-Host "========================================" -ForegroundColor Green
+

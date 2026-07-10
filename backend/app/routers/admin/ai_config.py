@@ -5,7 +5,8 @@
 - PUT  /admin/api/v1/ai/config     保存配置（热更新）
 - POST /admin/api/v1/ai/test-llm   测试 LLM 连接
 - POST /admin/api/v1/ai/test-tts   测试 TTS 连接
-- GET  /admin/api/v1/ai/usage      用量统计
+- GET  /admin/api/v1/ai/usage      用量统计（历史，来自 DB）
+- GET  /admin/api/v1/ai/budget     实时预算摘要（来自内存，含限额信息）
 - GET  /admin/api/v1/ai/presets    LLM 提供商预设
 - GET  /admin/api/v1/ai/voices     TTS 音色列表
 
@@ -15,6 +16,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.ai_budget import get_today_summary, reset_budget
 from app.core.auth import require_admin, AdminPayload
 from app.core.response import success
 from app.database import get_db
@@ -123,6 +125,32 @@ async def get_usage(
     svc = AIConfigService(db)
     data = await svc.get_usage_summary()
     return success(data=data)
+
+
+@router.get("/budget")
+async def get_budget(
+    admin: AdminPayload = Depends(require_admin),
+):
+    """获取今日实时预算摘要（含已用额度与限额配置）。
+
+    与 /usage 区别：/usage 查 DB 历史聚合，/budget 查内存实时计数，
+    前端用量面板用此接口展示剩余额度与进度条。
+    """
+    data = get_today_summary()
+    return success(data=data)
+
+
+@router.post("/budget/reset")
+async def reset_budget_endpoint(
+    admin: AdminPayload = Depends(require_admin),
+):
+    """重置今日预算计数（运维应急用）。
+
+    清空内存计数与持久化文件中的今日记录。
+    用于预算误判（如测试调用被计入预算）后解锁。
+    """
+    reset_budget()
+    return success(message="预算计数已重置")
 
 
 @router.get("/presets")

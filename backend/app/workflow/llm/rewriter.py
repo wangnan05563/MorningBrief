@@ -26,6 +26,7 @@ from tenacity import (
 from sqlalchemy import select
 
 from app.config import get_settings
+from app.core.ai_budget import check_budget, record_call
 from app.database import AsyncSessionLocal
 from app.models import Material, Script
 from app.models.material import MaterialStatus
@@ -128,15 +129,23 @@ async def _call_llm(prompt: str) -> str:
     - 连接异常 APIConnectionError → LLMServiceError（重试）
     - HTTP 5xx InternalServerError → LLMServiceError（重试）
 
+    预算控制：调用前检查三重预算（token/费用/频率），超限直接抛 LLMAuthError
+    避免无效请求打到外部 API；调用成功后记录用量更新预算计数。
+
     其他异常（含内容审核）不在此处映射，由调用方按不可重试处理。
     """
+    # 预算检查：超限时不发起请求（避免外部 API 计费）
+    allowed, reason = check_budget()
+    if not allowed:
+        logger.warning("AI 预算超限，跳过 LLM 调用: %s", reason)
+        raise LLMServiceError(f"AI 预算超限: {reason}")
+
     try:
         resp = await _client.chat.completions.create(
             model=settings.LLM_MODEL,
             messages=[{"role": "user", "content": prompt}],
             timeout=settings.LLM_TIMEOUT_SEC,
         )
-        return resp.choices[0].message.content
     except Exception as e:
         # 按异常类型映射，便于 tenacity 精准判断是否重试
         # 用类名字符串匹配，避免直接 import openai 异常类造成耦合
@@ -151,6 +160,19 @@ async def _call_llm(prompt: str) -> str:
             raise LLMServiceError(str(e)) from e
         # 其他异常原样抛出，tenacity 不会重试（不在 retry_if_exception_type 列表）
         raise
+
+    # 调用成功后记录用量（更新预算计数 + 持久化）
+    usage = getattr(resp, "usage", None)
+    input_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
+    output_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
+    record_call(
+        service_type="llm",
+        model=settings.LLM_MODEL,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
+
+    return resp.choices[0].message.content
 
 
 def _build_prompt(material: dict, extra_constraint: str = None) -> str:

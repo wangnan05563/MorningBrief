@@ -128,7 +128,7 @@ def _serialize_value(val: Any) -> Any:
 
 def _mask_sensitive(table: str, row: dict) -> dict:
     """脱敏行数据中的敏感字段。"""
-    for col in list(row.keys()):
+    for col in row.keys():
         if _is_sensitive_column(table, col):
             # ai_config 表的 config_value 动态判断
             if table == "ai_config" and col == "config_value":
@@ -372,7 +372,6 @@ class DbAdminService:
         """预览级联删除影响范围（不执行删除）。"""
         table = _validate_table(table)
         schema = await self.get_table_schema(table)
-        pk_col = self._get_single_pk_column(schema)
         pk_values = [self._coerce_pk(str(v), schema) for v in ids]
 
         relations = []

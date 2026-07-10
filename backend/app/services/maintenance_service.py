@@ -144,48 +144,13 @@ class MaintenanceService:
         errors: list[str] = []
 
         if target in ("ttlcache", "all"):
-            try:
-                count = len(cache._cache) if hasattr(cache, "_cache") else 0
-                if not dry_run and count > 0:
-                    # 清空 TTLCache：逐个 pop 避免并发问题
-                    keys = list(cache._cache.keys())
-                    for k in keys:
-                        cache._cache.pop(k, None)
-                    # 同时清空计数器
-                    cache._counters.clear()
-                    cache._counters_ttl.clear()
-                cleaned.append(f"TTLCache {'将清空' if dry_run else '已清空'} {count} 条")
-            except Exception as e:
-                errors.append(f"TTLCache 清理失败: {e}")
-                logger.exception("TTLCache 清理失败")
+            await self._cache_step_ttlcache(dry_run, cleaned, errors)
 
         if target in ("pycache", "all"):
-            try:
-                app_root = get_app_root()
-                result = await asyncio.to_thread(
-                    self._cleanup_pycache, app_root, dry_run
-                )
-                cleaned.append(
-                    f"__pycache__ {'将清理' if dry_run else '已清理'} "
-                    f"{result['count']} 个目录（{result['size_mb']:.2f} MB）"
-                )
-            except Exception as e:
-                errors.append(f"__pycache__ 清理失败: {e}")
-                logger.exception("__pycache__ 清理失败")
+            await self._cache_step_pycache(dry_run, cleaned, errors)
 
         if target in ("temp", "all"):
-            try:
-                data_dir = resolve_data_dir()
-                result = await asyncio.to_thread(
-                    self._cleanup_temp_files, data_dir, dry_run
-                )
-                cleaned.append(
-                    f"临时文件 {'将删除' if dry_run else '已删除'} "
-                    f"{result['count']} 个（{result['size_mb']:.2f} MB）"
-                )
-            except Exception as e:
-                errors.append(f"临时文件清理失败: {e}")
-                logger.exception("临时文件清理失败")
+            await self._cache_step_temp(dry_run, cleaned, errors)
 
         await self._write_audit("cleanup_cache", target, admin_name, dry_run, cleaned, errors)
         return {
@@ -194,6 +159,57 @@ class MaintenanceService:
             "cleaned": cleaned,
             "errors": errors,
         }
+
+    async def _cache_step_ttlcache(self, dry_run, cleaned, errors) -> None:
+        """清理 TTLCache 进程内缓存。"""
+        try:
+            count = len(cache._cache) if hasattr(cache, "_cache") else 0
+            if not dry_run and count > 0:
+                # 清空 TTLCache：逐个 pop 避免并发问题
+                await asyncio.to_thread(self._clear_ttlcache)
+            cleaned.append(f"TTLCache {'将清空' if dry_run else '已清空'} {count} 条")
+        except Exception as e:
+            errors.append(f"TTLCache 清理失败: {e}")
+            logger.exception("TTLCache 清理失败")
+
+    @staticmethod
+    def _clear_ttlcache() -> None:
+        """同步清空 TTLCache 缓存与计数器。"""
+        keys = list(cache._cache.keys())
+        for k in keys:
+            cache._cache.pop(k, None)
+        cache._counters.clear()
+        cache._counters_ttl.clear()
+
+    async def _cache_step_pycache(self, dry_run, cleaned, errors) -> None:
+        """清理 __pycache__ 目录。"""
+        try:
+            app_root = get_app_root()
+            result = await asyncio.to_thread(
+                self._cleanup_pycache, app_root, dry_run
+            )
+            cleaned.append(
+                f"__pycache__ {'将清理' if dry_run else '已清理'} "
+                f"{result['count']} 个目录（{result['size_mb']:.2f} MB）"
+            )
+        except Exception as e:
+            errors.append(f"__pycache__ 清理失败: {e}")
+            logger.exception("__pycache__ 清理失败")
+
+    async def _cache_step_temp(self, dry_run, cleaned, errors) -> None:
+        """清理临时文件。"""
+        try:
+            data_dir = resolve_data_dir()
+            result = await asyncio.to_thread(
+                self._cleanup_temp_files, data_dir, dry_run
+            )
+            cleaned.append(
+                f"临时文件 {'将删除' if dry_run else '已删除'} "
+                f"{result['count']} 个（{result['size_mb']:.2f} MB）"
+            )
+        except Exception as e:
+            errors.append(f"临时文件清理失败: {e}")
+            logger.exception("临时文件清理失败")
 
     # ===== 数据库清理 =====
 
@@ -216,95 +232,33 @@ class MaintenanceService:
         errors: list[str] = []
         total_deleted = 0
 
-        if target in ("old_playlogs", "all"):
-            try:
-                deleted = await self._cleanup_by_time(
-                    PlayLog, PlayLog.played_at, cutoff, dry_run
-                )
-                total_deleted += deleted
-                cleaned.append(
-                    f"播放日志 {'将删除' if dry_run else '已删除'} {deleted} 条"
-                    f"（{days} 天前）"
-                )
-            except Exception as e:
-                errors.append(f"播放日志清理失败: {e}")
-                logger.exception("播放日志清理失败")
+        # 时间类清理步骤（共享 cutoff/days 语义）
+        time_steps = [
+            ("old_playlogs", "播放日志", PlayLog, PlayLog.played_at, ""),
+            ("old_workflows", "工作流记录", None, None, ""),
+            ("old_reviews", "审核记录", None, None, "，仅已完结"),
+            ("old_dedup", "爬虫去重", CrawlerDedup, CrawlerDedup.created_at, ""),
+            ("old_ai_usage", "AI 用量日志", AIUsageLog, AIUsageLog.created_at, ""),
+        ]
+        for key, name, model, time_field, suffix in time_steps:
+            if target not in (key, "all"):
+                continue
+            deleted = await self._run_db_time_step(
+                key, name, model, time_field, cutoff, dry_run, days, suffix, errors, cleaned
+            )
+            total_deleted += deleted
 
-        if target in ("old_workflows", "all"):
-            try:
-                deleted = await self._cleanup_workflows(cutoff, dry_run)
-                total_deleted += deleted
-                cleaned.append(
-                    f"工作流记录 {'将删除' if dry_run else '已删除'} {deleted} 条"
-                    f"（{days} 天前）"
-                )
-            except Exception as e:
-                errors.append(f"工作流清理失败: {e}")
-                logger.exception("工作流清理失败")
-
-        if target in ("old_reviews", "all"):
-            try:
-                # 仅清理已完结状态（approved/rejected/replaced）的旧审核记录
-                # pending 状态的审核记录即使超期也不清理，避免丢失待处理任务
-                deleted = await self._cleanup_old_reviews(cutoff, dry_run)
-                total_deleted += deleted
-                cleaned.append(
-                    f"审核记录 {'将删除' if dry_run else '已删除'} {deleted} 条"
-                    f"（{days} 天前，仅已完结）"
-                )
-            except Exception as e:
-                errors.append(f"审核记录清理失败: {e}")
-                logger.exception("审核记录清理失败")
-
+        # 黑名单按 expires_at 清理（不按 days）
         if target in ("expired_blacklist", "all"):
-            try:
-                # 黑名单按 expires_at 清理（JWT 原始过期时间），不按 days
-                deleted = await self._cleanup_expired_blacklist(dry_run)
-                total_deleted += deleted
-                cleaned.append(
-                    f"过期黑名单 {'将删除' if dry_run else '已删除'} {deleted} 条"
-                )
-            except Exception as e:
-                errors.append(f"黑名单清理失败: {e}")
-                logger.exception("黑名单清理失败")
+            total_deleted += await self._run_db_step(
+                target, "expired_blacklist", "黑名单",
+                lambda: self._cleanup_expired_blacklist(dry_run),
+                dry_run, cleaned, errors,
+            )
 
-        if target in ("old_dedup", "all"):
-            try:
-                deleted = await self._cleanup_by_time(
-                    CrawlerDedup, CrawlerDedup.created_at, cutoff, dry_run
-                )
-                total_deleted += deleted
-                cleaned.append(
-                    f"爬虫去重 {'将删除' if dry_run else '已删除'} {deleted} 条"
-                    f"（{days} 天前）"
-                )
-            except Exception as e:
-                errors.append(f"爬虫去重清理失败: {e}")
-                logger.exception("爬虫去重清理失败")
-
-        if target in ("old_ai_usage", "all"):
-            try:
-                deleted = await self._cleanup_by_time(
-                    AIUsageLog, AIUsageLog.created_at, cutoff, dry_run
-                )
-                total_deleted += deleted
-                cleaned.append(
-                    f"AI 用量日志 {'将删除' if dry_run else '已删除'} {deleted} 条"
-                    f"（{days} 天前）"
-                )
-            except Exception as e:
-                errors.append(f"AI 用量日志清理失败: {e}")
-                logger.exception("AI 用量日志清理失败")
-
+        # VACUUM 步骤（消息格式不同）
         if target in ("vacuum", "all"):
-            try:
-                freed_mb = await self._vacuum_database(dry_run)
-                cleaned.append(
-                    f"VACUUM {'预览完成' if dry_run else f'已压缩，释放 {freed_mb:.2f} MB'}"
-                )
-            except Exception as e:
-                errors.append(f"VACUUM 失败: {e}")
-                logger.exception("VACUUM 失败")
+            await self._db_step_vacuum(dry_run, cleaned, errors)
 
         await self._write_audit("cleanup_database", target, admin_name, dry_run, cleaned, errors)
         return {
@@ -315,6 +269,56 @@ class MaintenanceService:
             "errors": errors,
             "total_deleted": total_deleted,
         }
+
+    async def _run_db_time_step(
+        self, key, name, model, time_field, cutoff, dry_run, days, suffix, errors, cleaned
+    ) -> int:
+        """执行按时间清理的单个步骤（统一异常处理与消息格式）。
+
+        workflows 和 reviews 有专用清理方法（涉及级联/状态过滤），
+        其余通过通用 _cleanup_by_time 按时间字段删除。
+        """
+        try:
+            if key == "old_workflows":
+                deleted = await self._cleanup_workflows(cutoff, dry_run)
+            elif key == "old_reviews":
+                deleted = await self._cleanup_old_reviews(cutoff, dry_run)
+            else:
+                deleted = await self._cleanup_by_time(model, time_field, cutoff, dry_run)
+            action = "将删除" if dry_run else "已删除"
+            cleaned.append(f"{name} {action} {deleted} 条（{days} 天前{suffix}）")
+            return deleted
+        except Exception as e:
+            errors.append(f"{name}清理失败: {e}")
+            logger.exception(f"{name}清理失败")
+            return 0
+
+    async def _run_db_step(
+        self, target, key, name, cleanup_fn, dry_run, cleaned, errors
+    ) -> int:
+        """执行非时间类数据库清理步骤的通用包装。"""
+        if target not in (key, "all"):
+            return 0
+        try:
+            deleted = await cleanup_fn()
+            action = "将删除" if dry_run else "已删除"
+            cleaned.append(f"{name} {action} {deleted} 条")
+            return deleted
+        except Exception as e:
+            errors.append(f"{name}清理失败: {e}")
+            logger.exception(f"{name}清理失败")
+            return 0
+
+    async def _db_step_vacuum(self, dry_run, cleaned, errors) -> None:
+        """执行 VACUUM 步骤（消息格式与删除类不同）。"""
+        try:
+            freed_mb = await self._vacuum_database(dry_run)
+            cleaned.append(
+                f"VACUUM {'预览完成' if dry_run else f'已压缩，释放 {freed_mb:.2f} MB'}"
+            )
+        except Exception as e:
+            errors.append(f"VACUUM 失败: {e}")
+            logger.exception("VACUUM 失败")
 
     # ===== 日志清理 =====
 
@@ -491,7 +495,7 @@ class MaintenanceService:
         """获取文件大小（MB），文件不存在返回 0。"""
         try:
             return path.stat().st_size / (1024 * 1024)
-        except (OSError, FileNotFoundError):
+        except OSError:
             return 0.0
 
     def _scan_log_dir(self) -> dict:
@@ -576,25 +580,37 @@ class MaintenanceService:
 
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [d for d in dirnames if d not in exclude_dirs]
-            if os.path.basename(dirpath) == "__pycache__":
-                dir_size = 0
-                for fname in filenames:
-                    try:
-                        dir_size += os.path.getsize(os.path.join(dirpath, fname))
-                    except OSError:
-                        continue
-                total_size += dir_size
-                count += 1
-                if not dry_run:
-                    try:
-                        shutil.rmtree(dirpath)
-                    except OSError as e:
-                        logger.warning("删除 __pycache__ 失败 %s: %s", dirpath, e)
+            if os.path.basename(dirpath) != "__pycache__":
+                continue
+            dir_size = self._sum_file_sizes(dirpath, filenames)
+            total_size += dir_size
+            count += 1
+            if not dry_run:
+                self._try_rmtree(dirpath)
 
         return {
             "count": count,
             "size_mb": round(total_size / (1024 * 1024), 2),
         }
+
+    @staticmethod
+    def _sum_file_sizes(dirpath: str, filenames: list[str]) -> int:
+        """统计目录内所有文件总大小（忽略单个文件读取失败）。"""
+        total = 0
+        for fname in filenames:
+            try:
+                total += os.path.getsize(os.path.join(dirpath, fname))
+            except OSError:
+                continue
+        return total
+
+    @staticmethod
+    def _try_rmtree(dirpath: str) -> None:
+        """尝试删除目录，失败时仅记录警告（不影响后续清理）。"""
+        try:
+            shutil.rmtree(dirpath)
+        except OSError as e:
+            logger.warning("删除 __pycache__ 失败 %s: %s", dirpath, e)
 
     def _cleanup_temp_files(self, data_dir: Path, dry_run: bool) -> dict:
         """清理临时文件（.tmp 后缀）。"""
@@ -634,41 +650,15 @@ class MaintenanceService:
 
         try:
             for entry in log_dir.iterdir():
-                if not entry.is_file():
+                if not self._is_log_file(entry):
                     continue
-                if not (entry.name.endswith(".log") or ".log." in entry.name):
-                    continue
-
-                try:
-                    stat = entry.stat()
-                except OSError:
-                    continue
-
-                should_delete = False
-                reason = ""
-
-                if target in ("old_logs", "all"):
-                    if stat.st_mtime < cutoff_mtime:
-                        should_delete = True
-                        reason = f"超过 {days} 天"
-
-                if target in ("large_logs", "all"):
-                    if stat.st_size > LARGE_LOG_THRESHOLD_BYTES:
-                        should_delete = True
-                        size_mb = stat.st_size / (1024 * 1024)
-                        reason = f"大于 10MB（{size_mb:.1f}MB）"
-
+                should_delete, reason = self._check_log_deletion(
+                    entry, target, cutoff_mtime, days
+                )
                 if should_delete:
-                    size_mb = stat.st_size / (1024 * 1024)
-                    total_freed_mb += size_mb
-                    if not dry_run:
-                        try:
-                            entry.unlink()
-                            cleaned.append(f"已删除 {entry.name}（{reason}）")
-                        except OSError as e:
-                            errors.append(f"删除 {entry.name} 失败: {e}")
-                    else:
-                        cleaned.append(f"将删除 {entry.name}（{reason}）")
+                    total_freed_mb += self._delete_log_entry(
+                        entry, reason, dry_run, cleaned, errors
+                    )
         except OSError as e:
             errors.append(f"扫描日志目录失败: {e}")
 
@@ -677,6 +667,51 @@ class MaintenanceService:
             "errors": errors,
             "total_freed_mb": round(total_freed_mb, 2),
         }
+
+    @staticmethod
+    def _is_log_file(entry) -> bool:
+        """判断是否为日志文件（.log 后缀或 .log. 轮转文件）。"""
+        if not entry.is_file():
+            return False
+        return entry.name.endswith(".log") or ".log." in entry.name
+
+    def _check_log_deletion(
+        self, entry, target: str, cutoff_mtime: float, days: int
+    ) -> tuple[bool, str]:
+        """判断日志文件是否应删除，返回 (是否删除, 原因)。"""
+        try:
+            stat = entry.stat()
+        except OSError:
+            return False, ""
+
+        if target in ("old_logs", "all") and stat.st_mtime < cutoff_mtime:
+            return True, f"超过 {days} 天"
+
+        if target in ("large_logs", "all") and stat.st_size > LARGE_LOG_THRESHOLD_BYTES:
+            size_mb = stat.st_size / (1024 * 1024)
+            return True, f"大于 10MB（{size_mb:.1f}MB）"
+
+        return False, ""
+
+    @staticmethod
+    def _delete_log_entry(
+        entry, reason: str, dry_run: bool, cleaned: list, errors: list
+    ) -> float:
+        """删除单个日志文件，返回释放的 MB 数。"""
+        try:
+            size_mb = entry.stat().st_size / (1024 * 1024)
+        except OSError:
+            size_mb = 0.0
+
+        if not dry_run:
+            try:
+                entry.unlink()
+                cleaned.append(f"已删除 {entry.name}（{reason}）")
+            except OSError as e:
+                errors.append(f"删除 {entry.name} 失败: {e}")
+        else:
+            cleaned.append(f"将删除 {entry.name}（{reason}）")
+        return size_mb
 
     # ===== 审计日志 =====
 

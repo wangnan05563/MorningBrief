@@ -1,0 +1,47 @@
+uid=45_0 RootWebArea "20_News 运营后台" url="http://127.0.0.1:8000/ai-config"
+  uid=45_1 StaticText "20_News"
+  uid=45_2 menubar orientation="horizontal"
+    uid=45_3 menuitem "内容审核"
+    uid=45_4 menuitem "广告素材"
+    uid=45_5 menuitem "投放规则"
+    uid=45_6 menuitem "排期日历"
+    uid=45_7 menuitem "数据统计"
+    uid=45_8 menuitem "工作流监控"
+    uid=45_9 menuitem "内网穿透"
+    uid=45_10 menuitem "AI 服务"
+    uid=45_11 menuitem "数据库维护"
+    uid=45_12 menuitem "系统清理"
+  uid=45_13 StaticText "AI 服务"
+  uid=45_14 button "A admin 管理员" expandable haspopup="menu"
+  uid=45_15 main
+    uid=45_16 StaticText "AI 服务配置"
+    uid=45_17 button "保存配置"
+    uid=45_18 tab "LLM 大模型" selectable selected
+    uid=45_19 tab "TTS 语音合成" selectable
+    uid=45_20 tab "用量统计" selectable
+    uid=45_21 StaticText "快速选择提供商："
+    uid=45_22 generic
+      uid=45_23 combobox expandable haspopup="listbox"
+      uid=45_24 StaticText "选择预设"
+    uid=45_25 form
+      uid=45_26 StaticText "API Key"
+      uid=45_27 generic
+        uid=45_28 textbox "API Key" value="••••••••"
+      uid=45_29 button "显示"
+      uid=45_30 StaticText "Base URL"
+      uid=45_31 generic
+        uid=45_32 textbox "Base URL" value="https://dashscope.aliyuncs.com/compatible-mode/v1"
+      uid=45_33 StaticText "模型名称"
+      uid=45_34 generic
+        uid=45_35 textbox "模型名称" value="qwen-max"
+      uid=45_36 StaticText "超时(秒)"
+      uid=45_37 button "decrease number"
+      uid=45_38 button "increase number"
+      uid=45_39 generic
+        uid=45_40 spinbutton "超时(秒)" value="30" valuemax="120" valuemin="5" valuetext="30"
+      uid=45_41 StaticText "重试次数"
+      uid=45_42 button "decrease number"
+      uid=45_43 button "increase number"
+      uid=45_44 generic
+        uid=45_45 spinbutton "重试次数" value="3" valuemax="10" valuemin="0" valuetext="3"
+      uid=45_46 button "测试连接"

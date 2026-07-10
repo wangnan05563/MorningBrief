@@ -158,7 +158,7 @@ class TunnelProvider(ABC):
                 text = line.decode("utf-8", errors="ignore")
                 match = url_pattern.search(text)
                 if match:
-                    found_url.append(match.group(1))
+                    found_url.append(match.group(0))
                     return
                 logger.debug("[%s] %s", self.binary_name, text.strip())
 
@@ -210,7 +210,7 @@ class CloudflareProvider(TunnelProvider):
             "--no-autoupdate",
         ]
         # trycloudflare.com 域名
-        url_pattern = re.compile(r"(https://[a-z0-9-]+\.trycloudflare\.com)")
+        url_pattern = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
         self._public_url = self._start_process(cmd, url_pattern)
         return self._public_url
 
@@ -280,7 +280,7 @@ class CpolarProvider(TunnelProvider):
         # cpolar http <port> 启动 HTTP 隧道，输出 Forwarding https://xxx.cpolar.top
         cmd = [str(self._binary_path), "http", str(self._local_port)]
         # cpolar 域名后缀多样：.cpolar.top / .cpolar.io / .cpolar.cn / .cpolar.com
-        url_pattern = re.compile(r"(https://[a-z0-9-]+\.(?:cpolar\.(?:top|io|cn|com)))")
+        url_pattern = re.compile(r"https://[a-z0-9-]+\.cpolar\.(?:top|io|cn|com)")
         self._public_url = self._start_process(cmd, url_pattern)
         return self._public_url
 

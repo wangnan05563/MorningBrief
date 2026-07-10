@@ -2,13 +2,14 @@
 
 设计说明：这些接口供 APScheduler 或运营后台内部调用，
 通过本地回环地址 + 共享密钥签名鉴权（HLD 10.1）。
-MVP 阶段简化为仅 localhost 校验。
+MVP 阶段简化为仅 localhost 校验；配置 INTERNAL_API_TOKEN 后启用双因素校验。
 """
 from datetime import date
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.core.response import success
 from app.database import get_db
 from app.services.content_service import ContentService
@@ -21,10 +22,19 @@ async def verify_localhost(request: Request):  # NOSONAR
     """内部接口仅允许 localhost 调用。
 
     内部接口不经过 JWT 鉴权，必须限制来源 IP 防止外网越权触发工作流。
+    配置 INTERNAL_API_TOKEN 后，额外校验 X-Internal-Token 头，
+    形成 localhost + token 双因素校验（防止同机其他服务误调用）。
     """
     client_host = request.client.host if request.client else None
     if client_host not in ("127.0.0.1", "::1", "localhost"):
         raise HTTPException(status_code=403, detail="仅允许本地调用")
+
+    # 双因素校验：配置了 INTERNAL_API_TOKEN 时，请求须携带匹配的 token
+    settings = get_settings()
+    if settings.INTERNAL_API_TOKEN:
+        token = request.headers.get("X-Internal-Token", "")
+        if token != settings.INTERNAL_API_TOKEN:
+            raise HTTPException(status_code=403, detail="内部接口 token 无效")
 
 
 @router.post("/trigger")

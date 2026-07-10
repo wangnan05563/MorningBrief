@@ -9,6 +9,7 @@ V1.2 起：
 - 缓存改为进程内 TTLCache（无需外部 Redis）
 - 启动时通过 SQLAlchemy Base.metadata.create_all 自动建表（开发态）
 """
+import asyncio
 import mimetypes
 from contextlib import asynccontextmanager
 
@@ -30,6 +31,7 @@ mimetypes.add_type("application/manifest+json", ".webmanifest")
 from app.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging_setup import setup_logging
+from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 from app.paths import resolve_admin_dist
 from app.routers.health import router as health_router
@@ -101,6 +103,13 @@ async def lifespan(app: FastAPI):
     from app.services.workflow_scheduler import workflow_scheduler
     await workflow_scheduler.start()
 
+    # 启动 EventBus 后台消费任务（工作流状态事件分发）
+    # create_task 保留引用到 app.state，避免被 GC 回收导致任务中途取消
+    from app.core.event_bus import get_event_bus
+    event_bus = get_event_bus()
+    app.state.event_bus_task = asyncio.create_task(event_bus.run_forever())
+    logger.info("[startup] EventBus 已启动")
+
     # 内网穿透自动启动：auto_start=True 时后台线程启动隧道
     # 用 daemon 线程而非 asyncio：cloudflared/cpolar 是阻塞子进程，线程不占用事件循环
     from app.services.tunnel_service import get_tunnel_service
@@ -132,6 +141,15 @@ async def lifespan(app: FastAPI):
         logger.warning("[shutdown] 停止内网穿透隧道失败: %s", e)
 
     await workflow_scheduler.stop()
+
+    # 停止 EventBus：设置 _running=False，run_forever 下次轮询时退出
+    from app.core.event_bus import get_event_bus
+    get_event_bus().stop()
+    event_bus_task = getattr(app.state, "event_bus_task", None)
+    if event_bus_task:
+        await asyncio.wait_for(event_bus_task, timeout=2.0)
+    logger.info("[shutdown] EventBus 已停止")
+
     from app.database import engine
     await engine.dispose()
     logger.info("[shutdown] SQLite 引擎已释放")
@@ -150,6 +168,10 @@ def create_app() -> FastAPI:
 
     # RequestId 中间件：为每个请求注入全局流水号，贯穿全部日志
     app.add_middleware(RequestIdMiddleware)
+
+    # 限流中间件：按客户端 IP 滑动窗口限流，防止恶意刷接口
+    # 注册在 RequestId 之后（LIFO 后注册先执行）：限流前先有 request_id 便于日志关联
+    app.add_middleware(RateLimitMiddleware)
 
     # CORS：开发环境允许本地调试；生产环境单机 exe + 云函数 SCF 直连
     if settings.is_dev:
