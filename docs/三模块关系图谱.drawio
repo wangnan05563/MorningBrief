@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="26.0.0">
+  <diagram name="三模块关系图谱">
+    <mxGraphModel dx="1422" dy="757" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="20_News 频道管理 / 工作流监控 / 队列管理 三模块关系图谱" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="400" y="10" width="800" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="layer1" value="前端层 (admin-web)" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="80" y="60" width="1440" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="fe_channel" value="ChannelManagement.vue&#xa;频道管理页面&#xa;(CRUD + 启停开关)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="layer1">
+          <mxGeometry x="40" y="40" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="fe_workflow" value="WorkflowList.vue&#xa;工作流列表&#xa;(触发/删除/重跑)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="layer1">
+          <mxGeometry x="300" y="40" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="fe_detail" value="WorkflowDetail.vue&#xa;工作流详情&#xa;(6步进度/产物/轮询3s)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="layer1">
+          <mxGeometry x="560" y="40" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="fe_queue" value="QueueManagement.vue&#xa;队列管理页面&#xa;(统计/筛选/配置/轮询5s)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="layer1">
+          <mxGeometry x="820" y="40" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="fe_note" value="⚠ 前端三页面无联动&#xa;频道启停/工作流触发/队列变更&#xa;互不通知刷新" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;fontStyle=2;" vertex="1" parent="layer1">
+          <mxGeometry x="1100" y="40" width="280" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="layer2" value="API 路由层 (routers/admin)" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="80" y="220" width="1440" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="api_channels" value="channels.py&#xa;GET/POST/PUT/DELETE&#xa;/admin/api/v1/channels&#xa;(查询:admin+op 写:admin)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="layer2">
+          <mxGeometry x="40" y="40" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="api_workflows" value="workflows.py&#xa;GET/POST&#xa;/admin/api/v1/workflows&#xa;(trigger/batch-delete/retry)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="layer2">
+          <mxGeometry x="300" y="40" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="api_queue" value="queue.py&#xa;GET/POST/PUT&#xa;/admin/api/v1/queue&#xa;(stats/tasks/config)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="layer2">
+          <mxGeometry x="820" y="40" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="api_internal" value="internal/workflow.py&#xa;POST /api/internal/workflow&#xa;(localhost 鉴权)&#xa;trigger/publish" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="layer2">
+          <mxGeometry x="1100" y="40" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="api_note1" value="⚠ workflows.py retry 路由&#xa;MVP简化:重新触发完整流程&#xa;未接入 scheduler.retry_workflow&#xa;断点续跑逻辑" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;fontStyle=2;" vertex="1" parent="layer2">
+          <mxGeometry x="560" y="40" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="layer3" value="服务层 (services)" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="80" y="380" width="1440" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_channel" value="ChannelService&#xa;list/get/create/update/delete&#xa;cache-aside 5min&#xa;invalidate_list_cache" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="layer3">
+          <mxGeometry x="40" y="40" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_workflow" value="WorkflowService&#xa;get_today/list/detail&#xa;batch_delete(拒running/queued)&#xa;无channel_id筛选" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="layer3">
+          <mxGeometry x="300" y="40" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_queue" value="QueueService&#xa;stats/list/cancel/priority&#xa;retry/config&#xa;延迟import scheduler" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="layer3">
+          <mxGeometry x="560" y="40" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_scheduler" value="WorkflowScheduler (单例)&#xa;trigger_workflow/retry_workflow&#xa;_cron_trigger/_check_backup&#xa;queue_worker/semaphore" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="layer3">
+          <mxGeometry x="820" y="40" width="220" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_note1" value="⚠ ChannelService 启停频道&#xa;仅失效缓存&#xa;不通知 scheduler&#xa;已入队任务不受影响" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;fontStyle=2;" vertex="1" parent="layer3">
+          <mxGeometry x="1100" y="40" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="layer4" value="调度器核心 (workflow_scheduler 内部)" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="80" y="560" width="1440" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="pq" value="asyncio.PriorityQueue&#xa;QueueEntry(sort_priority,&#xa;created_at, workflow_id,&#xa;channel_id, cancelled)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="layer4">
+          <mxGeometry x="40" y="40" width="220" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="semaphore" value="asyncio.Semaphore&#xa;并发控制(1-5)&#xa;_config_dirty延迟重建&#xa;acquire/release" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="layer4">
+          <mxGeometry x="300" y="40" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="entry_map" value="_entry_map&#xa;workflow_id → QueueEntry&#xa;支持取消/改优先级定位&#xa;惰性清理" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="layer4">
+          <mxGeometry x="540" y="40" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="trigger_lock" value="_trigger_lock&#xa;入队串行化&#xa;防workflow_id冲突&#xa;max(cache_seq,db_seq+1)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="layer4">
+          <mxGeometry x="780" y="40" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="event_bus" value="EventBus&#xa;publish_nowait(5类事件)&#xa;workflow.started/completed&#xa;/failed/step.*" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="layer4">
+          <mxGeometry x="1020" y="40" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="event_note" value="⚠ EventBus 无订阅者&#xa;事件发布后无消费&#xa;前端靠轮询获取状态&#xa;无法实时推送" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;fontStyle=2;" vertex="1" parent="layer4">
+          <mxGeometry x="1260" y="40" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="layer5" value="数据层 (SQLite)" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="80" y="760" width="1440" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="db_channel" value="Channel 表&#xa;id(PK) / name(uniq)&#xa;description / is_active&#xa;idx_channel_active" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="layer5">
+          <mxGeometry x="40" y="40" width="180" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="db_workflow" value="Workflow 表&#xa;id(PK) / status / channel_id(FK)&#xa;priority / source / episode_date&#xa;idx_workflow_channel/queue_order" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="layer5">
+          <mxGeometry x="260" y="40" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="db_step" value="WorkflowStep 表&#xa;id(PK) / workflow_id(FK)&#xa;step_name / status / result(JSON)&#xa;idx_workflow_step" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="layer5">
+          <mxGeometry x="540" y="40" width="220" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="db_queue_cfg" value="QueueConfig 表&#xa;id=1(单行) / execution_mode&#xa;max_concurrent / updated_at" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="layer5">
+          <mxGeometry x="800" y="40" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="db_episode" value="Episode 表&#xa;id(PK) / channel_id(FK)&#xa;is_backup / audio_url&#xa;publish 后生成" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="layer5">
+          <mxGeometry x="1040" y="40" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="db_note" value="FK 策略:&#xa;channel_id ON DELETE SET NULL&#xa;nullable 兼容历史数据&#xa;删除频道不删关联数据" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;fontStyle=2;" vertex="1" parent="layer5">
+          <mxGeometry x="1280" y="40" width="220" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="e_fe_api1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="fe_channel" target="api_channels">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_fe_api2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="fe_workflow" target="api_workflows">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_fe_api3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="fe_detail" target="api_workflows">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_fe_api4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="fe_queue" target="api_queue">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_fe_queue_channel" value="复用listChannels" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;dashed=1;fontSize=10;" edge="1" parent="1" source="fe_queue" target="fe_channel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_svc1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="api_channels" target="svc_channel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_svc2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="api_workflows" target="svc_workflow">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_svc3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="api_queue" target="svc_queue">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_svc4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="api_internal" target="svc_scheduler">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_wf_sched" value="trigger直接调用" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;dashed=1;fontSize=10;" edge="1" parent="1" source="api_workflows" target="svc_scheduler">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_svc_sched" value="延迟import" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;dashed=1;fontSize=10;" edge="1" parent="1" source="svc_queue" target="svc_scheduler">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_sched_channel" value="遍历活跃频道" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;dashed=1;fontSize=10;flowAnimation=1;" edge="1" parent="1" source="svc_scheduler" target="svc_channel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_svc_db1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="svc_channel" target="db_channel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_svc_db2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="svc_workflow" target="db_workflow">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_svc_db3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="svc_scheduler" target="db_workflow">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_svc_db4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.3;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="svc_scheduler" target="db_step">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_svc_db5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="svc_queue" target="db_queue_cfg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_wf_channel" value="FK channel_id&#xa;SET NULL" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;dashed=1;fontSize=10;strokeColor=#b85450;" edge="1" parent="1" source="db_workflow" target="db_channel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_step_wf" value="FK workflow_id&#xa;CASCADE" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;dashed=1;fontSize=10;strokeColor=#b85450;" edge="1" parent="1" source="db_step" target="db_workflow">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ep_channel" value="FK channel_id&#xa;SET NULL" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;dashed=1;fontSize=10;strokeColor=#b85450;" edge="1" parent="1" source="db_episode" target="db_channel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" value="图例" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="80" y="940" width="1440" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1" value="蓝色矩形: 前端页面" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="legend">
+          <mxGeometry x="20" y="40" width="160" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2" value="橙色矩形: API路由" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="legend">
+          <mxGeometry x="200" y="40" width="160" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3" value="绿色矩形: 服务层" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="legend">
+          <mxGeometry x="380" y="40" width="160" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="leg4" value="黄色矩形: 队列/锁" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="legend">
+          <mxGeometry x="560" y="40" width="160" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="leg5" value="紫色矩形: 事件总线" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="legend">
+          <mxGeometry x="740" y="40" width="160" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="leg6" value="红色矩形: 协调性问题" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="legend">
+          <mxGeometry x="920" y="40" width="160" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="leg7" value="绿色圆柱: 数据表" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="legend">
+          <mxGeometry x="1100" y="40" width="160" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="leg8" value="虚线: 引用/关联&#xa;实线: 调用" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" vertex="1" parent="legend">
+          <mxGeometry x="1280" y="40" width="140" height="40" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

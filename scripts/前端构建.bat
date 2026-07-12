@@ -1,28 +1,31 @@
 @echo off
-chcp 936 >nul 2>&1
-REM 脚本位于 scripts/ 目录，切回项目根目录
+chcp 65001 >nul 2>&1
+setlocal
+
+REM Keep this entry script ASCII-only for reliable cmd.exe parsing.
 cd /d "%~dp0.."
 
 echo ========================================
-echo   20_News 前端构建（admin-web）
+echo   20_News Frontend Builder (admin-web)
 echo ========================================
 echo.
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build-frontend.ps1" %*
+set "FE_EXIT_CODE=%ERRORLEVEL%"
 
-if errorlevel 1 (
+if not "%FE_EXIT_CODE%"=="0" (
     echo.
-    echo [ERROR] 前端构建失败，请查看上方错误信息
+    echo [ERROR] Frontend build failed. Review the messages above.
     pause
-    exit /b 1
+    exit /b %FE_EXIT_CODE%
 )
 
 echo.
 echo ========================================
-echo   前端构建完成！
+echo   Frontend Build Complete!
 echo ========================================
-echo   产物目录：admin-web\dist\
-echo   部署方式：由 FastAPI StaticFiles 服务（单机 exe 模式）
+echo   Output dir: admin-web\dist\
+echo   Served by FastAPI StaticFiles (in exe mode)
 echo ========================================
 pause
-exit
+exit /b 0

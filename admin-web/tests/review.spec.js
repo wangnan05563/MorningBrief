@@ -54,27 +54,27 @@ test.describe('审核流程', () => {
     await page.goto('/review')
 
     // 等待列表加载完成
-    await expect(page.getByRole('tab', { name: '待审核' })).toBeVisible()
+    await expect(page.getByRole('tab', { name: '待审核' })).toBeVisible({ timeout: 15000 })
     // 表格应显示 mock 的两条数据
-    await expect(page.getByText('wf-001')).toBeVisible()
-    await expect(page.getByText('wf-002')).toBeVisible()
+    await expect(page.getByText('wf-001')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('wf-002')).toBeVisible({ timeout: 15000 })
     // 状态标签
-    await expect(page.getByText('待审核').first()).toBeVisible()
+    await expect(page.getByText('待审核').first()).toBeVisible({ timeout: 15000 })
   })
 
   test('tab 切换加载不同状态列表', async ({ page }) => {
     await page.goto('/review')
 
     // 默认待审核 tab
-    await expect(page.getByText('wf-001')).toBeVisible()
+    await expect(page.getByText('wf-001')).toBeVisible({ timeout: 15000 })
 
     // 切换到已通过 tab
     await page.getByRole('tab', { name: '已通过' }).click()
-    await expect(page.getByText('wf-003')).toBeVisible()
+    await expect(page.getByText('wf-003')).toBeVisible({ timeout: 15000 })
 
     // 切换到已打回 tab
     await page.getByRole('tab', { name: '已打回' }).click()
-    await expect(page.getByText('wf-004')).toBeVisible()
+    await expect(page.getByText('wf-004')).toBeVisible({ timeout: 15000 })
   })
 
   test('点击审核跳转详情页', async ({ page }) => {
@@ -84,38 +84,38 @@ test.describe('审核流程', () => {
     await page.getByRole('button', { name: '审核' }).first().click()
 
     // 应跳转到详情页
-    await expect(page).toHaveURL(/\/review\/1$/)
+    await expect(page).toHaveURL(/\/review\/1$/, { timeout: 15000 })
   })
 
   test('审核详情页显示稿件和音频', async ({ page }) => {
     await page.goto('/review/1')
 
     // 头部信息
-    await expect(page.getByText('2026-07-08').first()).toBeVisible()
-    await expect(page.getByText('wf-001')).toBeVisible()
+    await expect(page.getByText('2026-07-08').first()).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('wf-001')).toBeVisible({ timeout: 15000 })
 
     // 稿件全文卡片
-    await expect(page.getByText('稿件全文')).toBeVisible()
-    await expect(page.getByText('这是第一条稿件内容。')).toBeVisible()
+    await expect(page.getByText('稿件全文')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('这是第一条稿件内容。')).toBeVisible({ timeout: 15000 })
 
     // 引用素材链接
-    await expect(page.getByRole('link', { name: 'https://source1.com' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'https://source1.com' })).toBeVisible({ timeout: 15000 })
 
     // 音频试听卡片
-    await expect(page.getByText('音频试听')).toBeVisible()
-    await expect(page.locator('audio')).toBeVisible()
+    await expect(page.getByText('音频试听')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('audio')).toBeVisible({ timeout: 15000 })
 
     // 审核操作卡片
-    await expect(page.getByText('审核操作')).toBeVisible()
-    await expect(page.getByRole('radio', { name: '通过' })).toBeVisible()
-    await expect(page.getByRole('radio', { name: '打回' })).toBeVisible()
+    await expect(page.getByText('审核操作')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByRole('radio', { name: '通过' })).toBeVisible({ timeout: 15000 })
+    await expect(page.getByRole('radio', { name: '打回' })).toBeVisible({ timeout: 15000 })
   })
 
   test('通过审核操作', async ({ page }) => {
     await page.goto('/review/1')
 
     // 默认选中"通过"
-    await expect(page.getByRole('radio', { name: '通过' })).toBeChecked()
+    await expect(page.getByRole('radio', { name: '通过' })).toBeChecked({ timeout: 15000 })
 
     // 点击提交，触发确认弹窗
     await page.getByRole('button', { name: '提交' }).click()
@@ -124,9 +124,9 @@ test.describe('审核流程', () => {
     await page.getByRole('button', { name: 'OK' }).click()
 
     // 操作成功后应跳回列表页
-    await expect(page).toHaveURL(/\/review$/)
+    await expect(page).toHaveURL(/\/review$/, { timeout: 15000 })
     // 应显示成功提示
-    await expect(page.locator('.el-message').getByText('操作成功')).toBeVisible()
+    await expect(page.locator('.el-message').getByText('操作成功')).toBeVisible({ timeout: 15000 })
   })
 
   test('打回审核操作', async ({ page }) => {
@@ -145,7 +145,7 @@ test.describe('审核流程', () => {
     await page.getByRole('button', { name: 'OK' }).click()
 
     // 操作成功跳回列表
-    await expect(page).toHaveURL(/\/review$/)
-    await expect(page.locator('.el-message').getByText('操作成功')).toBeVisible()
+    await expect(page).toHaveURL(/\/review$/, { timeout: 15000 })
+    await expect(page.locator('.el-message').getByText('操作成功')).toBeVisible({ timeout: 15000 })
   })
 })

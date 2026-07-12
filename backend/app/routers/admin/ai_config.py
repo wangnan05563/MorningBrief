@@ -2,13 +2,14 @@
 
 端点：
 - GET  /admin/api/v1/ai/config     获取配置（API Key 脱敏）
-- PUT  /admin/api/v1/ai/config     保存配置（热更新）
+- PUT  /admin/api/v1/ai/config     保存配置（热更新，含预设配置同步）
 - POST /admin/api/v1/ai/test-llm   测试 LLM 连接
 - POST /admin/api/v1/ai/test-tts   测试 TTS 连接
 - GET  /admin/api/v1/ai/usage      用量统计（历史，来自 DB）
 - GET  /admin/api/v1/ai/budget     实时预算摘要（来自内存，含限额信息）
 - GET  /admin/api/v1/ai/presets    LLM 提供商预设
 - GET  /admin/api/v1/ai/voices     TTS 音色列表
+- POST /admin/api/v1/ai/reset-config  恢复 LLM 初始配置（清空预设配置）
 
 所有端点需要管理员权限，防止运营误改 AI 配置。
 """
@@ -34,6 +35,9 @@ class LLMConfigBody(BaseModel):
 
 
 class TTSConfigBody(BaseModel):
+    # Provider 选择（aliyun/edge/tencent）
+    provider: str = "aliyun"
+    # 阿里云 NLS 字段
     api_key: str = ""
     appkey: str = ""
     voice: str = "xiaoyun"
@@ -41,11 +45,25 @@ class TTSConfigBody(BaseModel):
     format: str = "mp3"
     timeout_sec: int = 60
     retry_attempts: int = 3
+    # Edge-TTS 字段
+    edge_voice: str = "zh-CN-XiaoxiaoNeural"
+    edge_rate: str = ""
+    edge_volume: str = ""
+    edge_pitch: str = ""
+    # 腾讯云 TTS 字段
+    tencent_secret_id: str = ""
+    tencent_secret_key: str = ""
+    tencent_region: str = "ap-guangzhou"
+    tencent_voice_type: int = 101011
+    tencent_volume: int = 0
+    tencent_speed: int = 0
 
 
 class SaveConfigBody(BaseModel):
     llm: LLMConfigBody
     tts: TTSConfigBody
+    # 当前选中的 LLM 预设 key（用于同步保存预设配置，空字符串表示未选择预设）
+    selected_preset: str = ""
 
 
 class TestLLMBody(BaseModel):
@@ -55,8 +73,17 @@ class TestLLMBody(BaseModel):
 
 
 class TestTTSBody(BaseModel):
+    provider: str = "aliyun"
+    # 阿里云
     api_key: str = ""
     appkey: str = ""
+    # Edge-TTS
+    edge_voice: str = ""
+    # 腾讯云
+    tencent_secret_id: str = ""
+    tencent_secret_key: str = ""
+    tencent_region: str = ""
+    tencent_voice_type: int = 0
 
 
 @router.get("/config")
@@ -64,7 +91,11 @@ async def get_config(
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
-    """获取 AI 配置（API Key 脱敏）。"""
+    """获取 AI 配置（API Key 脱敏）。
+
+    返回的 llm.preset_configs 为每个预设独立保存的配置（API Key 脱敏），
+    llm.selected_preset 为根据 base_url 反向匹配的当前预设 key。
+    """
     svc = AIConfigService(db)
     data = await svc.get_config_for_frontend()
     return success(data=data)
@@ -76,11 +107,16 @@ async def save_config(
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
-    """保存 AI 配置（热更新 Settings 单例）。"""
+    """保存 AI 配置（热更新 Settings 单例）。
+
+    当 selected_preset 非空时，同步将当前 LLM 配置保存到预设配置 JSON，
+    实现切换预设时返显之前保存的 API Key/Base URL/Model。
+    """
     svc = AIConfigService(db)
     await svc.update_config(
         llm_config=body.llm.model_dump(),
         tts_config=body.tts.model_dump(),
+        selected_preset=body.selected_preset,
     )
     return success(message="配置已保存")
 
@@ -107,11 +143,17 @@ async def test_tts(
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
-    """测试 TTS 连接（验证阿里云 NLS 鉴权）。"""
+    """测试 TTS 连接（按 provider 分支：阿里云鉴权 / Edge-TTS 合成 / 腾讯云合成）。"""
     svc = AIConfigService(db)
     result = await svc.test_tts_connection(
+        provider=body.provider,
         api_key=body.api_key,
         appkey=body.appkey,
+        edge_voice=body.edge_voice,
+        tencent_secret_id=body.tencent_secret_id,
+        tencent_secret_key=body.tencent_secret_key,
+        tencent_region=body.tencent_region,
+        tencent_voice_type=body.tencent_voice_type,
     )
     return success(data=result)
 
@@ -153,6 +195,22 @@ async def reset_budget_endpoint(
     return success(message="预算计数已重置")
 
 
+@router.post("/reset-config")
+async def reset_config(
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """恢复 LLM 初始配置（清空用户保存的预设配置和当前 LLM 配置）。
+
+    清空 llm_api_key / llm_base_url / llm_model / llm_preset_configs，
+    保留 timeout/retry 等通用项。热更新 Settings 单例回退到 .env 默认值。
+    返回重置后的 LLM 配置供前端刷新表单。
+    """
+    svc = AIConfigService(db)
+    llm_config = await svc.reset_to_defaults()
+    return success(data={"llm": llm_config}, message="LLM 配置已恢复初始状态")
+
+
 @router.get("/presets")
 async def get_presets(
     admin: AdminPayload = Depends(require_admin),
@@ -164,8 +222,9 @@ async def get_presets(
 
 @router.get("/voices")
 async def get_voices(
+    provider: str = None,
     admin: AdminPayload = Depends(require_admin),
 ):
-    """获取 TTS 音色列表。"""
+    """获取 TTS 音色列表（按 provider 返回不同音色体系）。"""
     svc = AIConfigService.__new__(AIConfigService)
-    return success(data=svc.get_voices())
+    return success(data=svc.get_voices(provider))

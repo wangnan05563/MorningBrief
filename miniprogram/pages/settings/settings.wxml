@@ -1,0 +1,39 @@
+<!-- 设置：播放设置 + 通知设置 + 缓存管理 -->
+<view class="page-settings">
+  <!-- 播放设置 -->
+  <view class="settings-section-title">播放设置</view>
+  <view class="card list-card">
+    <view class="list-item">
+      <text class="list-text">默认播放倍速</text>
+      <picker class="list-picker" mode="selector" range="{{rateOptions}}" value="{{rateIndex}}" bindchange="onRateChange">
+        <view class="list-extra">{{rateOptions[rateIndex]}}x <text class="list-arrow">›</text></view>
+      </picker>
+    </view>
+    <view class="list-item">
+      <text class="list-text">自动播放下一条</text>
+      <switch checked="{{autoPlayNext}}" bindchange="onAutoPlayNextChange" color="#5BA89B" />
+    </view>
+    <view class="list-item">
+      <text class="list-text">仅 WiFi 下自动播放</text>
+      <switch checked="{{wifiOnlyAutoPlay}}" bindchange="onWifiOnlyChange" color="#5BA89B" />
+    </view>
+  </view>
+
+  <!-- 通知设置 -->
+  <view class="settings-section-title">通知设置</view>
+  <view class="card list-card">
+    <view class="list-item">
+      <text class="list-text">新节目通知</text>
+      <switch checked="{{notifyNewEpisode}}" bindchange="onNotifyChange" color="#5BA89B" />
+    </view>
+  </view>
+
+  <!-- 存储管理 -->
+  <view class="settings-section-title">存储管理</view>
+  <view class="card list-card">
+    <view class="list-item" bindtap="onClearCache">
+      <text class="list-text">清除缓存</text>
+      <view class="list-extra">{{cacheSize}} <text class="list-arrow">›</text></view>
+    </view>
+  </view>
+</view>

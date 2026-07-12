@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 import sys
 from pathlib import Path
 
@@ -47,8 +47,10 @@ def main():
     if len(sys.argv) > 1:
         db_path = sys.argv[1]
     else:
-        project_root = backend_dir.parent
-        db_path = str(project_root / 'dist' / '20-news' / 'data' / 'news.db')
+        # 与运行时路径解析保持一致：dev 模式 → backend/data/news.db，exe 模式 → exe 同级 data/news.db
+        # 之前默认指向 dist/20-news/data/news.db，与开发态运行时数据库不一致，导致 dev 模式登录失败
+        from app.paths import resolve_db_path
+        db_path = str(resolve_db_path())
     if not Path(db_path).exists():
         print(f'  [seed] Database not found at {db_path}, creating...')
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)

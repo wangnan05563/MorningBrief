@@ -16,6 +16,7 @@ class WorkflowSource(str, Enum):
 
 
 class WorkflowStatus(str, Enum):
+    queued = "queued"
     running = "running"
     success = "success"
     failed = "failed"
@@ -44,8 +45,9 @@ class Workflow(Base):
     __table_args__ = (
         Index("idx_date", "episode_date"),
         Index("idx_status", "status"),
+        Index("idx_workflow_channel", "channel_id"),
         CheckConstraint("source IN ('cron', 'manual')", name="ck_workflow_source"),
-        CheckConstraint("status IN ('running', 'success', 'failed', 'cancelled')", name="ck_workflow_status"),
+        CheckConstraint("status IN ('queued', 'running', 'success', 'failed', 'cancelled')", name="ck_workflow_status"),
         {"comment": "工作流表"},
     )
 
@@ -53,8 +55,14 @@ class Workflow(Base):
     episode_date: Mapped[date] = mapped_column(Date, nullable=False)
     source: Mapped[str] = mapped_column(String(16), nullable=False)
     status: Mapped[Optional[str]] = mapped_column(
-        String(16), default=WorkflowStatus.running.value
+        String(16), default=WorkflowStatus.queued.value
     )
+    # 频道归属：频道删除时 ON DELETE SET NULL，避免频道删除连带删除工作流
+    channel_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("channel.id", ondelete="SET NULL"), nullable=True,
+    )
+    # 优先级 0-10，默认 5；sort_priority = -priority 实现 PriorityQueue DESC
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, server_default=func.now())
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     error: Mapped[Optional[str]] = mapped_column(Text)
@@ -62,6 +70,8 @@ class Workflow(Base):
     steps: Mapped[list["WorkflowStep"]] = relationship(
         "WorkflowStep", back_populates="workflow", cascade="all, delete-orphan"
     )
+    # joinedload 场景：queue_service.list_queue_tasks 需展示频道名
+    channel: Mapped[Optional["Channel"]] = relationship("Channel", lazy="joined")
 
 
 class WorkflowStep(Base):

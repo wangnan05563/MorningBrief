@@ -286,3 +286,37 @@ class FeishuAlertChannel:
 - 在 CI/CD 中添加字段契约检查
 - 维护一份字段映射文档
 - 使用代码生成工具自动生成类型定义
+
+## 11. 开发模式登录失败（admin 用户不存在）？
+
+**症状**：双击 `启动服务.bat` 启动开发模式后，使用 admin/admin123 登录报"用户名或密码错误"
+
+**根因**：`seed_admin.py` 默认数据库路径指向 `dist/20-news/data/news.db`（打包产物路径），与开发态运行时数据库 `backend/data/news.db` 不一致，导致开发态数据库中 `admin_user` 表为空
+
+**排查步骤**：
+
+1. 确认当前启动模式（dev/dev-sys/exe），参考 `scripts/start.ps1` 模式选择逻辑
+2. 确认运行时数据库路径：dev 模式 → `backend/data/news.db`，exe 模式 → `dist/20-news/data/news.db`
+3. 检查 `admin_user` 表是否有数据：
+   ```python
+   import sqlite3
+   conn = sqlite3.connect(r'backend/data/news.db')
+   print(conn.execute('SELECT COUNT(*) FROM admin_user').fetchone())
+   ```
+4. 若 count=0，确认是 seed 路径不一致问题
+
+**修复方案**：
+
+- **方案 A（立即修复）**：手动 seed 到正确的数据库路径
+  ```bash
+  python backend/seed_admin.py backend/data/news.db
+  ```
+
+- **方案 B（长期修复，已实施）**：
+  1. `seed_admin.py` 默认路径改用 `app.paths.resolve_db_path()`，与运行时路径解析保持一致
+  2. `main.py` lifespan 中添加 `_seed_default_admin()`，建表后自动 seed（幂等），确保无论何种模式启动都有 admin 用户
+
+**预防措施**：
+- 所有 seed 脚本的默认路径必须通过 `app.paths.resolve_db_path()` 解析，禁止硬编码 `dist/` 路径
+- 关键初始数据（admin 用户、默认配置）应在应用 lifespan 中自动 seed，不依赖外部脚本
+- 数据库路径相关的排查，优先检查 `paths.py` 的 `is_frozen()` 判定和 `get_app_root()` 返回值

@@ -34,34 +34,34 @@ test.describe('统计页面', () => {
   test('指标卡片显示', async ({ page }) => {
     await page.goto('/stats')
 
-    await expect(page.getByText('数据统计').first()).toBeVisible()
+    await expect(page.getByText('数据统计').first()).toBeVisible({ timeout: 15000 })
 
     // 5 个指标卡片：DAU/播放量/完播率/平均收听/广告曝光
-    await expect(page.getByText('DAU').first()).toBeVisible()
-    await expect(page.getByText('播放量').first()).toBeVisible()
-    await expect(page.getByText('完播率(%)').first()).toBeVisible()
-    await expect(page.getByText('平均收听(分钟)')).toBeVisible()
-    await expect(page.getByText('广告曝光').first()).toBeVisible()
+    await expect(page.getByText('DAU').first()).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('播放量').first()).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('完播率(%)').first()).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('平均收听(分钟)')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('广告曝光').first()).toBeVisible({ timeout: 15000 })
 
     // 概览数值应被渲染（formatNum 后的 12345）
-    await expect(page.locator('.metric-value').filter({ hasText: '12,345' })).toBeVisible()
+    await expect(page.locator('.metric-value').filter({ hasText: '12,345' })).toBeVisible({ timeout: 15000 })
     // 完播率 0.65 → 65.0
-    await expect(page.locator('.metric-value').filter({ hasText: '65.0' })).toBeVisible()
+    await expect(page.locator('.metric-value').filter({ hasText: '65.0' })).toBeVisible({ timeout: 15000 })
   })
 
   test('趋势图加载', async ({ page }) => {
     await page.goto('/stats')
 
     // 趋势卡片标题
-    await expect(page.getByText('趋势分析')).toBeVisible()
+    await expect(page.getByText('趋势分析')).toBeVisible({ timeout: 15000 })
 
     // hasTrend 为 true 时渲染 Line 图表（canvas）
-    await expect(page.locator('canvas')).toBeVisible()
+    await expect(page.locator('canvas')).toBeVisible({ timeout: 15000 })
 
     // 指标切换按钮组应可见
-    await expect(page.getByRole('radio', { name: 'DAU' })).toBeVisible()
-    await expect(page.getByRole('radio', { name: '播放量' })).toBeVisible()
-    await expect(page.getByRole('radio', { name: '完播率' })).toBeVisible()
+    await expect(page.getByRole('radio', { name: 'DAU' })).toBeVisible({ timeout: 15000 })
+    await expect(page.getByRole('radio', { name: '播放量' })).toBeVisible({ timeout: 15000 })
+    await expect(page.getByRole('radio', { name: '完播率' })).toBeVisible({ timeout: 15000 })
   })
 
   test('切换指标重新加载', async ({ page }) => {
@@ -75,7 +75,7 @@ test.describe('统计页面', () => {
     await page.goto('/stats')
 
     // 等待初始加载完成（onMounted 同时触发 loadOverview + loadTrend）
-    await expect(page.locator('canvas')).toBeVisible()
+    await expect(page.locator('canvas')).toBeVisible({ timeout: 15000 })
     const initialCount = trendCallCount
 
     // 切换到"播放量"指标
@@ -86,6 +86,6 @@ test.describe('统计页面', () => {
     // 应触发一次新的 trend 请求
     await expect.poll(() => trendCallCount).toBe(initialCount + 1)
     // canvas 应仍然可见
-    await expect(page.locator('canvas')).toBeVisible()
+    await expect(page.locator('canvas')).toBeVisible({ timeout: 15000 })
   })
 })

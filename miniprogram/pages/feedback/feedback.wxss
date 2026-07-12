@@ -1,0 +1,103 @@
+.page-feedback {
+  min-height: 100vh;
+  padding-bottom: 60rpx;
+}
+
+/* 卡片间距收敛：反馈页卡片较多，统一收紧上下边距 */
+.feedback-card {
+  padding: 28rpx 32rpx;
+  margin: 20rpx 24rpx;
+}
+
+.section-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #2D3748;
+  margin-bottom: 20rpx;
+}
+
+/* === 分类标签：薄荷青 + 浅粉双态，呼应全局马卡龙配色 === */
+.category-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20rpx;
+}
+
+.category-tag {
+  padding: 14rpx 32rpx;
+  font-size: 26rpx;
+  color: #5BA89B;
+  background: #E6F4F1;
+  border-radius: 32rpx;
+  border: 2rpx solid transparent;
+  transition: all 0.2s;
+}
+
+/* 选中态切换为蜜桃粉：与未选中的薄荷青形成明确对比 */
+.category-tag.active {
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #FF9AA2, #FF6B8A);
+  border-color: #FF6B8A;
+}
+
+/* === 反馈内容输入区 === */
+.content-input {
+  width: 100%;
+  min-height: 200rpx;
+  padding: 24rpx;
+  font-size: 28rpx;
+  color: #2D3748;
+  line-height: 1.6;
+  background: #F9FDFB;
+  border: 2rpx solid #E6F4F1;
+  border-radius: 16rpx;
+  box-sizing: border-box;
+}
+
+.content-ph {
+  color: #CBD5E0;
+}
+
+/* 字数统计贴右下角：用户输入时目光自然落点 */
+.content-counter {
+  margin-top: 12rpx;
+  text-align: right;
+  font-size: 24rpx;
+  color: #A0AEC0;
+}
+
+/* === 联系方式输入框 === */
+.contact-input {
+  width: 100%;
+  padding: 20rpx 24rpx;
+  font-size: 28rpx;
+  color: #2D3748;
+  background: #F9FDFB;
+  border: 2rpx solid #E6F4F1;
+  border-radius: 16rpx;
+  box-sizing: border-box;
+}
+
+.contact-ph {
+  color: #CBD5E0;
+}
+
+/* === 提交按钮 === */
+.submit-wrap {
+  padding: 40rpx 24rpx 0;
+}
+
+.submit-btn {
+  width: 100%;
+  border-radius: 40rpx;
+  font-size: 32rpx;
+}
+
+/* 禁用态降低饱和度，提示用户不可点击 */
+.submit-btn.disabled {
+  opacity: 0.6;
+}
+
+.submit-loading {
+  letter-spacing: 2rpx;
+}

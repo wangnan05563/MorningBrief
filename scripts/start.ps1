@@ -100,13 +100,15 @@ if ($Exe) {
         exit 1
     }
 } else {
-    # 自动选择：优先 venv → 系统 python → exe
-    if ($exeExists) {
-        $mode = "exe"
-    } elseif ($venvExists -and $launcherExists) {
+    # 自动选择：优先 venv → 系统 python → exe（默认开发模式）
+    # 开发模式便于热重载与调试，exe 仅作为无 Python 环境时的回退
+    if ($venvExists -and $launcherExists) {
         $mode = "dev"
     } elseif ($SystemPython -and $launcherExists) {
         $mode = "dev-sys"
+    } elseif ($exeExists) {
+        $mode = "exe"
+        Write-Warn "未找到 venv/系统 python，回退到 exe 模式"
     } else {
         Write-Err "无可用的启动方式"
         Write-Host "  方式 1（venv 开发模式）: python -m venv .venv 并安装 backend\requirements.txt" -ForegroundColor Gray
@@ -192,30 +194,39 @@ Write-OK "目录就绪"
 
 Write-Step "[3/3] 启动服务进程"
 
-# 在独立 cmd 窗口中运行服务（参考闲鱼项目启动方式）
-# 颜色码已在 launcher.py 中通过 use_colors=False 禁用，无需在此设置环境变量
-# 2>&1 合并 stderr 到 stdout——uvicorn 日志默认走 stderr，不合并则窗口看不到日志
-# & pause 让窗口在服务结束后保持打开，方便查看最后的输出
+# 直接启动服务进程（不通过 cmd /c 包装）
+# 原因：cmd /c 遇到多个引号对会剥离首尾引号，导致命令损坏、exe 从未启动
+# Start-Process -RedirectStandardOutput 直接重定向，避开 cmd 引号解析
+# -PassThru 返回真正的服务进程 PID（非 cmd 包装窗口 PID），简化 PID 跟踪
+# PS 限制：-RedirectStandardOutput 与 -RedirectStandardError 不能指向同一文件
+$errLogFile = Join-Path $ProjectRoot "logs\service-error.log"
+
 try {
     if ($mode -eq "exe") {
         $workDir = Split-Path $ExePath
-        $cmdStr = "`"$ExePath`""
+        $proc = Start-Process -FilePath $ExePath `
+            -WorkingDirectory $workDir `
+            -WindowStyle Hidden `
+            -RedirectStandardOutput $LogFile `
+            -RedirectStandardError $errLogFile `
+            -PassThru
     } else {
         # dev / dev-sys 共用：dev 用 venv python，dev-sys 用系统 python
         $pyExe = if ($mode -eq "dev-sys") { $SystemPython } else { $VenvPython }
         $workDir = $ProjectRoot
-        $cmdStr = "`"$pyExe`" `"$LauncherPy`""
+        $proc = Start-Process -FilePath $pyExe `
+            -ArgumentList $LauncherPy `
+            -WorkingDirectory $workDir `
+            -WindowStyle Hidden `
+            -RedirectStandardOutput $LogFile `
+            -RedirectStandardError $errLogFile `
+            -PassThru
     }
 
-    $proc = Start-Process -FilePath "cmd" `
-        -ArgumentList "/c", "$cmdStr 2>&1 & pause" `
-        -WorkingDirectory $workDir `
-        -WindowStyle Normal `
-        -PassThru
-
-    # $proc 是 cmd 窗口的 PID，不是服务进程的 PID
-    # 真正的服务 PID 将在端口就绪后通过 netstat 获取
-    Write-OK "服务窗口已启动（日志实时显示在弹出的 cmd 窗口中）"
+    # $proc.Id 是真正的服务进程 PID
+    # 健康检查循环中的 netstat 仍用于确认端口实际监听（服务就绪判据）
+    $servicePid = $proc.Id
+    Write-OK "服务已在后台启动（日志输出至 logs/service-start.log）"
 } catch {
     Write-Err "启动失败: $_"
     exit 1
@@ -247,12 +258,11 @@ if (Test-Path $envFile) {
 
 $healthUrl = "http://${host_}:${port}/api/health"
 $ready = $false
-$servicePid = $null
 
 for ($i = 1; $i -le 30; $i++) {
     Start-Sleep -Seconds 1
-    # 通过端口扫描检测服务是否就绪，同时获取真正的服务进程 PID
-    # （$proc 是外层 cmd 窗口的 PID，不是服务进程的 PID）
+    # 通过端口扫描确认服务已监听，再发健康检查请求
+    # $servicePid 已从 Start-Process -PassThru 获取，netstat 仅用于端口就绪验证
     $netstatLine = netstat -aon | Select-String ":$port.*LISTENING" | Select-Object -First 1
     if ($netstatLine -and $netstatLine -match '\s+(\d+)\s*$') {
         $servicePid = [int]$Matches[1]
@@ -271,7 +281,7 @@ for ($i = 1; $i -le 30; $i++) {
 }
 Write-Host ""
 
-# 写入 PID 文件（使用端口扫描获取的服务进程 PID，供 stop.ps1 使用）
+# 写入 PID 文件（Start-Process -PassThru 返回的服务进程 PID，供 stop.ps1 使用）
 if ($servicePid) {
     Set-Content -Path $PidFile -Value $servicePid -Encoding UTF8
     Write-Host "  PID 文件: $PidFile (PID=$servicePid)" -ForegroundColor DarkGray
@@ -286,7 +296,7 @@ if ($ready) {
     Write-Host "  健康检查:    $healthUrl"
     Write-Host "  API 文档:    http://${host_}:${port}/docs"
     Write-Host "  运营后台:    http://${host_}:${port}/admin/"
-    Write-Host "  日志窗口:    请查看弹出的 cmd 窗口"
+    Write-Host "  日志窗口:    请查看 logs/service-start.log"
     Write-Host ""
     Write-Host "  停止服务:    双击 scripts\停止服务.bat" -ForegroundColor Cyan
     Write-Host "============================================================" -ForegroundColor Green
@@ -294,7 +304,7 @@ if ($ready) {
     Write-Warn "服务已启动但 30 秒内未通过健康检查"
     Write-Host "  可能仍在初始化，或 .env 配置有误" -ForegroundColor Gray
     Write-Host "  手动验证: $healthUrl" -ForegroundColor Gray
-    Write-Host "  查看日志:   请查看弹出的 cmd 窗口" -ForegroundColor Gray
+    Write-Host "  查看日志:   请查看 logs/service-start.log" -ForegroundColor Gray
 }
 
 Write-Host ""

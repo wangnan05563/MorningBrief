@@ -1,34 +1,29 @@
-﻿@echo off
-chcp 936 >nul 2>&1
-REM 脚本位于 scripts/ 目录，切回项目根目录
+@echo off
+chcp 65001 >nul 2>&1
+setlocal
+
+REM Keep this entry script ASCII-only for reliable cmd.exe parsing.
 cd /d "%~dp0.."
 
 echo ========================================
-echo   20_News 启动服务
+echo   20_News Service Launcher
 echo ========================================
 echo.
-echo 启动方式（自动选择，默认开发模式）：
-echo   - 优先启动开发模式（.venv + backend\launcher.py）
-echo   - 回退到 exe 模式（dist\20-news\20-news.exe）
-echo.
-echo 参数（可选）：
-echo   -Dev  强制开发模式
-echo   -Exe  强制 exe 模式
+echo Launch mode is selected automatically.
+echo Optional arguments: -Dev or -Exe
 echo.
 
-REM -NoProfile：跳过用户自定义 profile（避免别名干扰）
-REM -ExecutionPolicy Bypass：允许执行未签名脚本
-REM -File：指定入口 ps1，%* 透传所有参数
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0start.ps1" %*
+set "START_EXIT_CODE=%ERRORLEVEL%"
 
-if errorlevel 1 (
+if not "%START_EXIT_CODE%"=="0" (
     echo.
-    echo [ERROR] 启动失败，请查看上方错误信息
+    echo [ERROR] Service startup failed. Review the messages above.
     pause
-    exit /b 1
+    exit /b %START_EXIT_CODE%
 )
 
 echo.
-echo 按任意键关闭窗口...
+echo Press any key to close this launcher window...
 pause >nul
-exit
+exit /b 0

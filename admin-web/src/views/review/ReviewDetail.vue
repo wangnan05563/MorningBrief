@@ -23,7 +23,7 @@
             <div class="card-subtitle">引用素材</div>
             <ul class="material-list">
               <li v-for="(url, i) in detail.script.referenced_materials" :key="i">
-                <a :href="url" target="_blank" rel="noopener">{{ url }}</a>
+                <a :href="url" target="_blank">{{ url }}</a>
               </li>
             </ul>
           </div>
@@ -86,7 +86,8 @@
  */
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from '../../utils/message'
+import { ElMessageBox } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import api from '../../api'
 

@@ -67,6 +67,18 @@ def resolve_ffmpeg_path() -> str:
     return "ffmpeg"
 
 
+def resolve_ffprobe_path() -> str:
+    """FFprobe 可执行文件路径。
+
+    与 resolve_ffmpeg_path 对称：打包态使用 bundled ffprobe.exe，开发态回退 PATH。
+    """
+    if is_frozen():
+        bundled = get_app_root() / "ffmpeg" / "bin" / "ffprobe.exe"
+        if bundled.exists():
+            return str(bundled)
+    return "ffprobe"
+
+
 def resolve_admin_dist() -> Path | None:
     """B 端运营后台静态资源目录（Vue 构建产物）。
 

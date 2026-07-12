@@ -1,21 +1,29 @@
 @echo off
-chcp 936 >nul 2>&1
-REM 脚本位于 scripts/ 目录，切回项目根目录
+chcp 65001 >nul 2>&1
+setlocal
+
+REM Keep this entry script ASCII-only for reliable cmd.exe parsing.
 cd /d "%~dp0.."
 
 echo ========================================
-echo   20_News 停止服务
+echo   20_News Service Stopper
 echo ========================================
 echo.
-echo 停止方式：
-echo   1. 读取 .run\20-news.pid 停止指定进程
-echo   2. 兜底按进程名查找（20-news.exe / launcher.py）
+echo Stop mode is selected automatically.
+echo Optional arguments: -Force (force kill)
 echo.
-echo 用法：停止服务.bat         优雅停止
-echo       停止服务.bat -Force  强制终止
+
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0stop.ps1" %*
+set "STOP_EXIT_CODE=%ERRORLEVEL%"
+
+if not "%STOP_EXIT_CODE%"=="0" (
+    echo.
+    echo [ERROR] Service stop failed. Review the messages above.
+    pause
+    exit /b %STOP_EXIT_CODE%
+)
 
 echo.
-echo 按任意键关闭窗口...
+echo Press any key to close this stopper window...
 pause >nul
-exit
+exit /b 0

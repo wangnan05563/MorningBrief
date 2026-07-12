@@ -21,7 +21,11 @@ export default defineConfig({
     baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    // vite 首次编译各路由组件较慢，需更长导航超时
+    navigationTimeout: 60000,
   },
+  // 单个测试超时：vite 编译 + 多次重试可能耗时较长
+  timeout: 60000,
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],

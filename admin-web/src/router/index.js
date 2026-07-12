@@ -7,10 +7,12 @@
  *   - /review       内容审核（operator + admin）
  *   - /ads/*        广告管理（operator + admin）
  *   - /stats        数据统计（operator + admin）
+ *   - /channels     频道管理（operator 只读 + admin 可操作）
+ *   - /queue        队列管理（operator 只读 + admin 可操作）
  *   - /workflows/*  工作流监控（仅 admin）
  */
 import { createRouter, createWebHistory } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from '../utils/message'
 
 const routes = [
   {
@@ -60,6 +62,18 @@ const routes = [
         name: 'Stats',
         component: () => import('../views/stats/StatsOverview.vue'),
         meta: { title: '数据统计', icon: 'DataLine' },
+      },
+      {
+        path: 'channels',
+        name: 'Channels',
+        component: () => import('../views/channel/ChannelManagement.vue'),
+        meta: { title: '频道管理', icon: 'Menu' },
+      },
+      {
+        path: 'queue',
+        name: 'Queue',
+        component: () => import('../views/queue/QueueManagement.vue'),
+        meta: { title: '队列管理', icon: 'Operation' },
       },
       {
         path: 'workflows',

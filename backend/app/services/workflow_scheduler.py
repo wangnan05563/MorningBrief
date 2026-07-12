@@ -8,12 +8,16 @@
 
 设计要点：
 - 单进程内调度，避免多 worker 重复触发（单机 exe 单进程）
-- TTLCache 互斥锁防止并发触发（cron 与手动可能重叠）
+- PriorityQueue + Semaphore 实现优先级排队与并发上限控制
+- 配置驱动并发模式（serial/parallel），QueueConfig 单行配置表为唯一真相源
+- trigger_lock 保证序号生成与入队的原子性，避免 cron 与手动触发竞态
 - 每步独立 session，避免长事务跨步骤持有连接
 """
 import asyncio
 import logging
+from dataclasses import dataclass, field
 from datetime import date, timedelta
+from typing import Any, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select, delete
@@ -21,10 +25,13 @@ from sqlalchemy import select, delete
 from app.cache.manager import cache
 from app.config import get_settings
 from app.core.event_bus import Event, get_event_bus
+from app.core.exceptions import ParamError
 from app.core.timeutil import utcnow_naive
 from app.database import AsyncSessionLocal
-from app.models import Episode, EpisodeStatus, Review, ReviewStatus, Workflow, WorkflowStep
+from app.models import Episode, EpisodeStatus, Review, ReviewStatus, Script, Workflow, WorkflowStep
 from app.models import CrawlerDedup
+from app.models.channel import Channel
+from app.models.queue_config import QueueConfig
 from app.models.workflow import (
     WorkflowSource,
     WorkflowStatus,
@@ -76,6 +83,18 @@ class StepFailedError(Exception):
         super().__init__(f"步骤 {step_name} 失败: {original}")
 
 
+@dataclass(order=True)
+class QueueEntry:
+    """PriorityQueue 条目。sort_priority 为负数实现 DESC（最小堆）。"""
+    sort_priority: int
+    created_at: float
+    workflow_id: str = field(compare=False)
+    channel_id: Optional[int] = field(compare=False, default=None)
+    priority: int = field(compare=False, default=5)
+    episode_date: date = field(compare=False, default=None)
+    cancelled: bool = field(compare=False, default=False)
+
+
 class WorkflowScheduler:
     """工作流调度服务（单例，应用启动时创建）。"""
 
@@ -86,6 +105,16 @@ class WorkflowScheduler:
         self.scheduler = AsyncIOScheduler(timezone="Asia/Shanghai")
         # 保留后台任务强引用，避免被 GC 回收导致任务中途取消
         self._running_tasks: set[asyncio.Task] = set()
+        # 队列与并发控制
+        self._queue: asyncio.PriorityQueue = asyncio.PriorityQueue()
+        # 引用 QueueConfig 默认常量，保持单一真相源
+        self._semaphore: asyncio.Semaphore = asyncio.Semaphore(QueueConfig.DEFAULT_MAX_CONCURRENT)
+        self._trigger_lock: asyncio.Lock = asyncio.Lock()
+        self._config_dirty: bool = False
+        self._entry_map: dict[str, QueueEntry] = {}
+        self._execution_mode: str = QueueConfig.DEFAULT_EXECUTION_MODE
+        self._max_concurrent: int = QueueConfig.DEFAULT_MAX_CONCURRENT
+        self._running_count: int = 0
 
     # ===== 事件发布 =====
 
@@ -100,6 +129,34 @@ class WorkflowScheduler:
             bus.publish_nowait(Event(type=event_type, data=data))
         except Exception:
             logger.debug("EventBus 发布事件失败（不影响主流程）", exc_info=True)
+
+    async def _on_channel_active_changed(self, event: Event) -> None:
+        """频道禁用时取消该频道所有 queued 工作流。"""
+        channel_id = event.data.get("channel_id")
+        is_active = event.data.get("is_active")
+        if channel_id is None or is_active is None:
+            return
+        if is_active != 0:
+            return
+        cancelled_ids: list[str] = []
+        for wf_id, entry in self._entry_map.items():
+            if entry.channel_id == channel_id and not entry.cancelled:
+                entry.cancelled = True
+                cancelled_ids.append(wf_id)
+        if cancelled_ids:
+            async with AsyncSessionLocal() as session:
+                from sqlalchemy import update as sa_update
+                stmt = (
+                    sa_update(Workflow)
+                    .where(
+                        Workflow.id.in_(cancelled_ids),
+                        Workflow.status == WorkflowStatus.queued.value,
+                    )
+                    .values(status=WorkflowStatus.cancelled.value, finished_at=utcnow_naive())
+                )
+                await session.execute(stmt)
+                await session.commit()
+            logger.info("频道 %s 禁用，取消 %d 个 queued 工作流", channel_id, len(cancelled_ids))
 
     # ===== 生命周期 =====
 
@@ -170,6 +227,19 @@ class WorkflowScheduler:
             id="cleanup_crawler_dedup",
             replace_existing=True,
         )
+        # 每日 04:00 执行 SQLite 数据库备份（在 05:00 cron 工作流触发前 1 小时）
+        # 选择 04:00 是因为此时系统空闲（无工作流执行），VACUUM INTO 不会与工作流写入竞争
+        self.scheduler.add_job(
+            self._daily_backup,
+            trigger="cron",
+            hour=4,
+            minute=0,
+            id="daily_backup",
+            misfire_grace_time=600,
+            coalesce=True,
+            max_instances=1,
+            replace_existing=True,
+        )
         # 每小时清理 jwt_blacklist 表过期记录（替代原 Redis TTL 自动过期）
         self.scheduler.add_job(
             self._cleanup_blacklist,
@@ -178,11 +248,31 @@ class WorkflowScheduler:
             id="cleanup_blacklist",
             replace_existing=True,
         )
+        # 每 30 分钟清理 entry_map 中已完成/取消的条目，避免内存泄漏
+        self.scheduler.add_job(
+            self._cleanup_entry_map,
+            trigger="cron",
+            minute=30,
+            id="cleanup_entry_map",
+            replace_existing=True,
+        )
+        # 加载队列配置（首次启动从 DB 读取，DB 无记录则用默认值）
+        await self._load_queue_config()
+        # 订阅频道启停事件：频道禁用时取消其 queued 工作流
+        bus = get_event_bus()
+        bus.subscribe("channel.active_changed", self._on_channel_active_changed)
+        # 启动队列消费 worker（后台常驻任务，强引用防 GC 回收）
+        worker_task = asyncio.create_task(self._queue_worker())
+        self._running_tasks.add(worker_task)
+        worker_task.add_done_callback(self._running_tasks.discard)
         self.scheduler.start()
-        logger.info("WorkflowScheduler 已启动，注册 7 个定时任务")
+        logger.info("WorkflowScheduler 已启动，注册 8 个定时任务")
 
     async def stop(self) -> None:  # NOSONAR
         """应用关闭时关闭调度器，等待运行中任务完成。"""
+        # 取消频道启停事件订阅，避免 shutdown 后回调访问已释放资源
+        bus = get_event_bus()
+        bus.unsubscribe("channel.active_changed", self._on_channel_active_changed)
         self.scheduler.shutdown(wait=True)
         logger.info("WorkflowScheduler 已停止")
 
@@ -197,50 +287,255 @@ class WorkflowScheduler:
         )
 
     async def trigger_workflow(
-        self, episode_date: date, source: str, triggered_by: str = None
+        self, episode_date: date, source: str,
+        channel_id: Optional[int] = None, priority: int = 5,
+        triggered_by: str = None,
     ) -> str:
         """触发工作流，返回 workflow_id。
 
         Args:
             episode_date: 目标节目日期
             source: cron / manual
+            channel_id: 频道归属，频道禁用时据此取消排队
+            priority: 优先级 0-10，默认 5（越大越先执行）
             triggered_by: 手动触发时记录 admin username
 
         Returns:
             workflow_id（如 wf-20260708-0001）
-
-        Raises:
-            WorkflowConflictError: 已有工作流在运行
         """
-        # 生成 workflow_id：日期 + 当日序号，便于人工识别与日志检索
-        date_str = episode_date.strftime("%Y%m%d")
-        seq = await self.cache.incr(f"workflow:seq:{date_str}")
-        # 序号当日有效，次日从 1 开始
-        await self.cache.expire(f"workflow:seq:{date_str}", 48 * 3600)
-        workflow_id = f"wf-{date_str}-{seq:04d}"
+        if not 0 <= priority <= 10:
+            raise ParamError("优先级范围 0-10")
 
+        # trigger_lock 串行化序号生成与入队，避免并发触发产生重复 ID
+        async with self._trigger_lock:
+            date_str = episode_date.strftime("%Y%m%d")
+            seq = await self.cache.incr(f"workflow:seq:{date_str}")
+            # 序号当日有效，次日从 1 开始
+            await self.cache.expire(f"workflow:seq:{date_str}", 48 * 3600)
+            # DB 校正：缓存可能因重启丢失，取 max(缓存序号, DB最大序号+1)
+            db_max = await self._get_db_max_seq(episode_date)
+            if db_max >= seq:
+                seq = db_max + 1
+            workflow_id = f"wf-{date_str}-{seq:04d}"
+
+            logger.info(
+                "触发工作流 workflow_id=%s date=%s source=%s channel_id=%s priority=%d triggered_by=%s",
+                workflow_id, episode_date, source, channel_id, priority, triggered_by,
+            )
+
+            # 创建 workflow 记录（status=queued，等待 worker 消费后转 running）
+            async with AsyncSessionLocal() as session:
+                wf = Workflow(
+                    id=workflow_id,
+                    episode_date=episode_date,
+                    source=WorkflowSource(source),
+                    status=WorkflowStatus.queued.value,
+                    channel_id=channel_id,
+                    priority=priority,
+                )
+                session.add(wf)
+                await session.commit()
+
+            # 入队 PriorityQueue（sort_priority 为负数实现 DESC 最小堆）
+            entry = QueueEntry(
+                sort_priority=-priority,
+                created_at=utcnow_naive().timestamp(),
+                workflow_id=workflow_id,
+                channel_id=channel_id,
+                priority=priority,
+                episode_date=episode_date,
+            )
+            await self._queue.put(entry)
+            self._entry_map[workflow_id] = entry
+
+        return workflow_id
+
+    # ===== 队列管理 =====
+
+    async def _queue_worker(self) -> None:
+        """常驻消费者：从 PriorityQueue 取条目，获取 Semaphore 后执行。
+
+        cancelled 条目直接丢弃，不消耗信号量配额。
+        """
+        while True:
+            entry: QueueEntry = await self._queue.get()
+            if entry.cancelled:
+                self._entry_map.pop(entry.workflow_id, None)
+                continue
+            # 先获取信号量再创建任务，限制同时运行的 _run_workflow 数量
+            await self._semaphore.acquire()
+            self._running_count += 1
+            task = asyncio.create_task(self._run_workflow_with_release(entry))
+            self._running_tasks.add(task)
+            task.add_done_callback(self._running_tasks.discard)
+
+    async def _run_workflow_with_release(self, entry: QueueEntry) -> None:
+        """执行工作流并在结束时释放信号量。
+
+        finally 块确保即使 _run_workflow 抛异常也能释放资源，
+        避免信号量泄漏导致后续任务永久阻塞。
+        """
+        try:
+            await self._run_workflow(entry.workflow_id, entry.episode_date)
+        finally:
+            self._semaphore.release()
+            self._running_count -= 1
+            self._entry_map.pop(entry.workflow_id, None)
+            # 配置变更延迟生效：等所有运行中任务完成后再重建信号量，
+            # 避免在任务执行中途更换信号量导致计数错乱
+            if self._config_dirty and self._running_count == 0:
+                self._rebuild_semaphore()
+
+    async def mark_entry_cancelled(self, workflow_id: str) -> None:
+        """标记内存队列条目为已取消，worker 取出时跳过。"""
+        entry = self._entry_map.get(workflow_id)
+        if entry is not None:
+            entry.cancelled = True
+
+    async def requeue_with_priority(self, workflow_id: str, priority: int) -> None:
+        """修改优先级后重新入队：旧条目标记 cancelled，新条目按新优先级入队。"""
+        old = self._entry_map.get(workflow_id)
+        if old is not None:
+            old.cancelled = True
+        # 从 DB 读取 episode_date 与 channel_id，保持与原记录一致
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(Workflow).where(Workflow.id == workflow_id)
+            )
+            wf = result.scalar_one_or_none()
+            if wf is None:
+                return
+            episode_date = wf.episode_date
+            channel_id = wf.channel_id
+        entry = QueueEntry(
+            sort_priority=-priority,
+            created_at=utcnow_naive().timestamp(),
+            workflow_id=workflow_id,
+            channel_id=channel_id,
+            priority=priority,
+            episode_date=episode_date,
+        )
+        await self._queue.put(entry)
+        self._entry_map[workflow_id] = entry
+
+    async def apply_config_change(self, mode: str, max_concurrent: int) -> None:
+        """标记配置待生效，不立即重建信号量（延迟到所有任务完成后）。"""
+        self._execution_mode = mode
+        self._max_concurrent = max_concurrent
+        self._config_dirty = True
+        logger.info("队列配置已标记待生效 mode=%s max_concurrent=%d", mode, max_concurrent)
+
+    def _rebuild_semaphore(self) -> None:
+        """根据 _max_concurrent 重建信号量并清除 dirty 标记。
+
+        同步方法：仅在 _running_count==0 时调用，无需加锁。
+        旧信号量可能仍有 pending acquire，但不影响新信号量的正确性——
+        旧 acquire 会在旧信号量上永久等待，但 _queue_worker 已切换到新信号量。
+        """
+        self._semaphore = asyncio.Semaphore(self._max_concurrent)
+        self._config_dirty = False
+        logger.info("信号量已重建 max_concurrent=%d", self._max_concurrent)
+
+    async def _load_queue_config(self) -> None:
+        """从 DB 加载队列配置，DB 无记录则插入默认配置。"""
+        async with AsyncSessionLocal() as session:
+            config = await session.get(QueueConfig, 1)
+            if config is None:
+                # 首次启动插入默认配置，与 QueueConfig 常量保持一致
+                config = QueueConfig(
+                    id=1,
+                    execution_mode=QueueConfig.DEFAULT_EXECUTION_MODE,
+                    max_concurrent=QueueConfig.DEFAULT_MAX_CONCURRENT,
+                )
+                session.add(config)
+                await session.commit()
+            self._execution_mode = config.execution_mode
+            self._max_concurrent = config.max_concurrent
+        # 初始加载直接重建信号量（无需等 _running_count==0，此时无任务运行）
+        self._semaphore = asyncio.Semaphore(self._max_concurrent)
+        self._config_dirty = False
         logger.info(
-            "触发工作流 workflow_id=%s date=%s source=%s triggered_by=%s",
-            workflow_id, episode_date, source, triggered_by,
+            "队列配置已加载 mode=%s max_concurrent=%d",
+            self._execution_mode, self._max_concurrent,
         )
 
-        # 创建 workflow 记录（status=running）
-        async with AsyncSessionLocal() as session:
-            wf = Workflow(
-                id=workflow_id,
-                episode_date=episode_date,
-                source=WorkflowSource(source),
-                status=WorkflowStatus.running,
-            )
-            session.add(wf)
-            await session.commit()
+    async def _rebuild_queue(self) -> None:
+        """从 DB 重建 PriorityQueue（重启恢复场景）。
 
-        # 异步执行主流程，不阻塞调度器（cron 触发后立即返回）
-        # 任务加入 _running_tasks 保留强引用，完成时通过回调自动移除
-        task = asyncio.create_task(self._run_workflow(workflow_id, episode_date))
-        self._running_tasks.add(task)
-        task.add_done_callback(self._running_tasks.discard)
-        return workflow_id
+        查询所有 status=queued 的工作流，按 priority DESC + started_at ASC 入队。
+        """
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(Workflow).where(
+                    Workflow.status == WorkflowStatus.queued.value
+                ).order_by(Workflow.priority.desc(), Workflow.started_at.asc())
+            )
+            workflows = result.scalars().all()
+
+        # 清空内存队列与 entry_map，避免重启后重复
+        self._queue = asyncio.PriorityQueue()
+        self._entry_map.clear()
+
+        for wf in workflows:
+            entry = QueueEntry(
+                sort_priority=-wf.priority,
+                created_at=wf.started_at.timestamp() if wf.started_at else utcnow_naive().timestamp(),
+                workflow_id=wf.id,
+                channel_id=wf.channel_id,
+                priority=wf.priority,
+                episode_date=wf.episode_date,
+            )
+            await self._queue.put(entry)
+            self._entry_map[wf.id] = entry
+        logger.info("队列重建完成，共 %d 个 queued 任务", len(workflows))
+
+    async def _get_db_max_seq(self, episode_date: date) -> int:
+        """查询 DB 中指定日期的最大 workflow 序号（从 workflow_id 解析）。
+
+        缓存重启后序号丢失，用 DB 校正避免 ID 冲突。
+        """
+        date_str = episode_date.strftime("%Y%m%d")
+        prefix = f"wf-{date_str}-"
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(Workflow.id).where(Workflow.id.like(f"{prefix}%"))
+            )
+            max_seq = 0
+            for (wid,) in result.all():
+                try:
+                    seq = int(wid.rsplit("-", 1)[-1])
+                    if seq > max_seq:
+                        max_seq = seq
+                except ValueError:
+                    continue
+            return max_seq
+
+    async def retry_workflow(self, workflow_id: str) -> str:
+        """重试失败的工作流，创建新 workflow 记录入队。
+
+        trigger_workflow 内部已用 _trigger_lock 包裹序号生成与入队，
+        保证并发重试不会产生 ID 冲突（C1 审查修复）。
+        """
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(Workflow).where(
+                    Workflow.id == workflow_id,
+                    Workflow.status == WorkflowStatus.failed.value,
+                )
+            )
+            wf = result.scalar_one_or_none()
+            if wf is None:
+                raise ParamError(f"任务不存在或非失败状态: {workflow_id}")
+            episode_date = wf.episode_date
+            channel_id = wf.channel_id
+            priority = wf.priority
+
+        return await self.trigger_workflow(
+            episode_date=episode_date,
+            source=WorkflowSource.manual.value,
+            channel_id=channel_id,
+            priority=priority,
+        )
 
     # ===== 工作流主流程 =====
 
@@ -248,19 +543,9 @@ class WorkflowScheduler:
         """串行执行 6 个步骤（LLD 5.1.2）。
 
         前 4 步调用外部模块，第 5 步内置创建 review，第 6 步 publish 由审核通过后异步触发。
+        并发控制由 _queue_worker + Semaphore 负责，本方法不再持有互斥锁。
         """
-        # lock_acquired 标记本进程是否抢到锁；finally 仅在抢到时删 lock，
-        # 避免误删其他正在运行的工作流持有的锁
-        lock_acquired = False
         try:
-            # 抢 TTLCache 互斥锁（替代 Redis SET NX EX），防止 cron 与手动触发并发
-            lock_ok = await self.cache.acquire_lock(
-                "workflow:lock", workflow_id, ttl_sec=settings.WORKFLOW_LOCK_TTL_SEC,
-            )
-            if not lock_ok:
-                raise WorkflowConflictError("已有工作流在运行")
-            lock_acquired = True
-
             await self.cache.set("workflow:current", workflow_id)
             await self._update_workflow_status(workflow_id, WorkflowStatus.running)
             self._publish_event("workflow.started", {
@@ -273,44 +558,57 @@ class WorkflowScheduler:
                 "episode_date": episode_date,
                 "date_str": date_str,
             }
+            # 断点续跑：加载已完成步骤与上下文，跳过已成功的步骤
+            completed_steps, resumed_context = await self._load_completed_step_context(workflow_id)
+            context.update(resumed_context)
 
             # 步骤 1：爬虫（签名 run(workflow_id, date_str)）
-            await self._run_step(
-                workflow_id, WorkflowStepName.crawl, 1,
-                lambda ctx: crawler_mod.run(ctx["workflow_id"], ctx["date_str"]),
-                context,
-            )
-
-            # 步骤 2：LLM 改写（签名 rewrite(workflow_id, date_str)）
-            await self._run_step(
-                workflow_id, WorkflowStepName.rewrite, 2,
-                lambda ctx: llm_mod.rewrite(ctx["workflow_id"], ctx["date_str"]),
-                context,
-            )
-
-            # 步骤 3：TTS（签名 synthesize(workflow_id, script_id)）
-            async def _tts_fn(ctx):
-                return await tts_mod.synthesize(ctx["workflow_id"], ctx["script_id"])
-
-            await self._run_step(
-                workflow_id, WorkflowStepName.tts, 3, _tts_fn, context,
-            )
-
-            # 步骤 4：拼接（签名 concat(workflow_id, episode_date, audio_segments)）
-            async def _stitch_fn(ctx):
-                return await stitch_mod.concat(
-                    ctx["workflow_id"], ctx["episode_date"], ctx["audio_segments"],
+            if WorkflowStepName.crawl not in completed_steps:
+                await self._run_step(
+                    workflow_id, WorkflowStepName.crawl, 1,
+                    lambda ctx: crawler_mod.run(ctx["workflow_id"], ctx["date_str"]),
+                    context,
                 )
 
-            await self._run_step(
-                workflow_id, WorkflowStepName.stitch, 4, _stitch_fn, context,
-            )
+            # 步骤 2：LLM 改写（签名 rewrite(workflow_id, date_str)）
+            if WorkflowStepName.rewrite not in completed_steps:
+                await self._run_step(
+                    workflow_id, WorkflowStepName.rewrite, 2,
+                    lambda ctx: llm_mod.rewrite(ctx["workflow_id"], ctx["date_str"]),
+                    context,
+                )
+            # 步骤 2.5：微信内容安全检测（不作为独立步骤，结果合并到 rewrite 步骤 result）
+            # 放在此处而非 _run_step 内，是为了保持原步骤重试逻辑不变，同时确保只在
+            # rewrite 首次成功执行后才检测（断点续跑场景 completed_steps 含 rewrite 时跳过）
+            if WorkflowStepName.rewrite not in completed_steps:
+                await self._run_content_security_check(workflow_id, context)
+
+            # 步骤 3：TTS（签名 synthesize(workflow_id, script_id)）
+            if WorkflowStepName.tts not in completed_steps:
+                async def _tts_fn(ctx):
+                    return await tts_mod.synthesize(ctx["workflow_id"], ctx["script_id"])
+
+                await self._run_step(
+                    workflow_id, WorkflowStepName.tts, 3, _tts_fn, context,
+                )
+
+            # 步骤 4：拼接（签名 concat(workflow_id, episode_date, audio_segments)）
+            if WorkflowStepName.stitch not in completed_steps:
+                async def _stitch_fn(ctx):
+                    return await stitch_mod.concat(
+                        ctx["workflow_id"], ctx["episode_date"], ctx["audio_segments"],
+                    )
+
+                await self._run_step(
+                    workflow_id, WorkflowStepName.stitch, 4, _stitch_fn, context,
+                )
 
             # 步骤 5：创建审核记录（内置方法）
-            await self._run_step(
-                workflow_id, WorkflowStepName.review, 5,
-                self._create_review, context,
-            )
+            if WorkflowStepName.review not in completed_steps:
+                await self._run_step(
+                    workflow_id, WorkflowStepName.review, 5,
+                    self._create_review, context,
+                )
 
             # 主流程结束（publish 由审核通过后异步触发）
             await self._update_workflow_status(workflow_id, WorkflowStatus.success)
@@ -332,15 +630,6 @@ class WorkflowScheduler:
             await self._alert_operators(
                 f"工作流 {workflow_id} 失败于步骤 {e.step_name}: {e}"
             )
-        except WorkflowConflictError as e:
-            # 并发冲突，不算失败，仅记录
-            logger.warning("工作流触发冲突 workflow_id=%s: %s", workflow_id, e)
-            await self._update_workflow_status(
-                workflow_id, WorkflowStatus.cancelled, error=str(e),
-            )
-            self._publish_event("workflow.cancelled", {
-                "workflow_id": workflow_id, "reason": str(e),
-            })
         except Exception as e:
             # 未预期异常兜底
             logger.exception("工作流异常 workflow_id=%s", workflow_id)
@@ -352,10 +641,6 @@ class WorkflowScheduler:
             })
             await self._alert_operators(f"工作流 {workflow_id} 未预期异常: {e}")
         finally:
-            # 仅本进程抢到锁才释放 lock，避免误删其他工作流的锁
-            # release_lock 内部校验 value 匹配，双重保险
-            if lock_acquired:
-                await self.cache.release_lock("workflow:lock", workflow_id)
             await self.cache.delete("workflow:current")
 
     async def _run_step(
@@ -406,8 +691,16 @@ class WorkflowScheduler:
                     await asyncio.sleep(5 * (attempt + 1))  # 5s, 10s 退避
 
         # 3 次均失败
+        # 若异常携带 failure_details（如 rewriter.LLMError），记录到 result 字段
+        # 供前端工作流详情页展示每条素材的失败原因，便于运维快速定位
+        failed_result = None
+        if last_error is not None and hasattr(last_error, "failure_details"):
+            details = getattr(last_error, "failure_details", None)
+            if details:
+                failed_result = {"failure_details": details}
         await self._update_step_status(
-            step_record.id, WorkflowStepStatus.failed, error=str(last_error),
+            step_record.id, WorkflowStepStatus.failed,
+            error=str(last_error), result=failed_result,
         )
         self._publish_event("workflow.step.failed", {
             "workflow_id": workflow_id,
@@ -416,6 +709,137 @@ class WorkflowScheduler:
             "error": str(last_error),
         })
         raise StepFailedError(step_name.value, last_error)
+
+    # 步骤执行顺序：用于断点续跑时判断哪些步骤已完成
+    _STEP_ORDER = [
+        WorkflowStepName.crawl,
+        WorkflowStepName.rewrite,
+        WorkflowStepName.tts,
+        WorkflowStepName.stitch,
+        WorkflowStepName.review,
+    ]
+
+    async def _load_completed_step_context(
+        self, workflow_id: str,
+    ) -> tuple[set, dict]:
+        """加载已成功完成的步骤及其 result，用于断点续跑跳过已完成步骤。
+
+        Returns:
+            (completed_step_names, resumed_context)
+            - completed_step_names: 已成功步骤的 WorkflowStepName 集合
+            - resumed_context: 已完成步骤 result 合并后的上下文字典
+        """
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(WorkflowStep).where(
+                    WorkflowStep.workflow_id == workflow_id,
+                    WorkflowStep.status == WorkflowStepStatus.success.value,
+                )
+            )
+            steps = result.scalars().all()
+
+        completed: set = set()
+        resumed_context: dict = {}
+        for step in steps:
+            try:
+                step_name = WorkflowStepName(step.step_name)
+            except ValueError:
+                continue
+            completed.add(step_name)
+            # 将已完成步骤的 result 合并到上下文，供后续步骤使用
+            if step.result:
+                resumed_context.update(step.result)
+        return completed, resumed_context
+
+    # ===== 内容安全检测（rewrite 步骤后执行） =====
+
+    async def _run_content_security_check(self, workflow_id: str, context: dict) -> None:
+        """rewrite 步骤后执行微信内容安全检测。
+
+        设计为"告警不阻断"：任何异常都只记录日志，不影响后续 tts/stitch 步骤。
+        原因：rewriter.py 中已有 AC 自动机敏感词替换作为硬兜底，
+        本检测作为二次告警层，供运营在后台审核时参考。
+        检测结果合并到 rewrite 步骤的 result.content_security 字段。
+        """
+        script_id = context.get("script_id")
+        if not script_id:
+            logger.warning("内容安全检测跳过：context 缺少 script_id")
+            return
+
+        # 查询稿件全文用于检测
+        try:
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    select(Script.full_text).where(Script.id == script_id)
+                )
+                full_text = result.scalar_one_or_none()
+        except Exception as e:
+            logger.warning(
+                "内容安全检测跳过：查询稿件失败 script_id=%s error=%s", script_id, e,
+            )
+            return
+
+        if not full_text:
+            logger.warning("内容安全检测跳过：script_id=%s 稿件为空", script_id)
+            return
+
+        # 调用检测服务（内部已处理所有异常，不会抛出）
+        try:
+            from app.services.content_security_service import ContentSecurityService
+            security_result = await ContentSecurityService.check_text(full_text)
+        except Exception as e:
+            # 防御性兜底：即使 check_text 内部漏处理异常也不影响工作流
+            logger.warning(
+                "内容安全检测异常（不阻断工作流）workflow_id=%s: %s", workflow_id, e,
+            )
+            return
+
+        # 将检测结果合并到 rewrite 步骤的 result.content_security 字段
+        try:
+            await self._merge_step_result_field(
+                workflow_id, WorkflowStepName.rewrite,
+                "content_security", security_result,
+            )
+            # 命中违规时发事件，便于后台实时告警
+            if not security_result.get("safe") and not security_result.get("skipped"):
+                self._publish_event("workflow.content_security.risky", {
+                    "workflow_id": workflow_id,
+                    "detail": security_result.get("detail", []),
+                })
+        except Exception as e:
+            logger.warning(
+                "写入内容安全检测结果到 workflow_step 失败 workflow_id=%s: %s",
+                workflow_id, e,
+            )
+
+    async def _merge_step_result_field(
+        self, workflow_id: str, step_name: WorkflowStepName,
+        field: str, value: Any,
+    ) -> None:
+        """合并更新 workflow_step.result 中的指定字段。
+
+        避免覆盖整个 result（rewrite 步骤 result 含 script_id/segments/total_words
+        等后续步骤依赖的字段），仅追加 content_security 等附加信息。
+        """
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(WorkflowStep).where(
+                    WorkflowStep.workflow_id == workflow_id,
+                    WorkflowStep.step_name == step_name.value,
+                ).order_by(WorkflowStep.id.desc()).limit(1)
+            )
+            step = result.scalar_one_or_none()
+            if step is None:
+                logger.warning(
+                    "合并 step result 失败：未找到步骤 %s workflow_id=%s",
+                    step_name.value, workflow_id,
+                )
+                return
+            # SQLAlchemy JSON 字段需整体赋值才会触发脏测试
+            current_result = dict(step.result or {})
+            current_result[field] = value
+            step.result = current_result
+            await session.commit()
 
     # ===== 审核与发布 =====
 
@@ -484,37 +908,56 @@ class WorkflowScheduler:
         await self.trigger_workflow(today, source=WorkflowSource.cron.value)
 
     async def _check_backup(self) -> None:
-        """06:30 备播检查：今日 episode 未发布则启用备播（LLD 5.1.3）。
+        """06:30 备播检查：对每个活跃频道独立检查备播（LLD 5.1.3）。
 
-        策略：复用前一日已发布节目的音频，标记 is_backup=1。
-        若前一日也无节目，告警人工介入。
+        多频道场景下按频道分组查询，避免 scalar_one_or_none 抛 MultipleResultsFound。
+        单频道失败不影响其他频道，异常隔离。
         """
         today = date.today()
-
         async with AsyncSessionLocal() as session:
-            # 今日已发布则无需备播
+            result = await session.execute(
+                select(Channel).where(Channel.is_active == 1)
+            )
+            channels = result.scalars().all()
+
+        for ch in channels:
+            try:
+                await self._check_backup_single(channel_id=ch.id, today=today)
+            except Exception:
+                logger.exception("频道 %s 备播检查失败", ch.id)
+
+    async def _check_backup_single(self, channel_id: int, today: date) -> None:
+        """单频道备播检查：今日 episode 未发布则复用前一日音频。
+
+        频道归属兜底：优先查 channel_id 匹配的 episode，
+        若无则查 channel_id IS NULL 的旧数据（频道功能上线前的历史节目）。
+        """
+        yesterday = today - timedelta(days=1)
+        async with AsyncSessionLocal() as session:
+            # 今日已发布则无需备播（频道归属兜底：channel_id 匹配或 NULL）
             result = await session.execute(
                 select(Episode).where(
                     Episode.date == today,
                     Episode.status == EpisodeStatus.published,
-                )
+                    (Episode.channel_id == channel_id) | (Episode.channel_id.is_(None)),
+                ).limit(1)
             )
             if result.scalar_one_or_none() is not None:
-                logger.info("备播检查：今日已发布，跳过")
+                logger.info("频道 %s 备播检查：今日已发布，跳过", channel_id)
                 return
 
-            # 查前一日已发布节目
-            yesterday = today - timedelta(days=1)
+            # 查前一日已发布节目（同样兜底 channel_id NULL）
             result = await session.execute(
                 select(Episode).where(
                     Episode.date == yesterday,
                     Episode.status == EpisodeStatus.published,
-                )
+                    (Episode.channel_id == channel_id) | (Episode.channel_id.is_(None)),
+                ).limit(1)
             )
             prev = result.scalar_one_or_none()
             if prev is None:
                 await self._alert_operators(
-                    f"备播失败：前一日 {yesterday} 节目也不存在，需人工介入"
+                    f"频道 {channel_id} 备播失败：前一日 {yesterday} 节目不存在，需人工介入"
                 )
                 return
 
@@ -526,6 +969,7 @@ class WorkflowScheduler:
                 audio_url=prev.audio_url,
                 cover_url=prev.cover_url,
                 script_id=prev.script_id,
+                channel_id=channel_id,
                 is_backup=1,
                 status=EpisodeStatus.published,
                 published_at=utcnow_naive(),
@@ -536,9 +980,9 @@ class WorkflowScheduler:
         # 失效今日节目缓存，让小程序能看到备播节目
         await self.cache.delete("episode:today")
         await self._alert_operators(
-            f"已启用备播（复用 {yesterday} 节目音频），请事后排查原因"
+            f"频道 {channel_id} 已启用备播（复用 {yesterday} 节目音频），请事后排查原因"
         )
-        logger.warning("已启用备播 date=%s 复用=%s", today, yesterday)
+        logger.warning("频道 %s 已启用备播 date=%s 复用=%s", channel_id, today, yesterday)
 
     # ===== 辅助任务 =====
 
@@ -586,6 +1030,27 @@ class WorkflowScheduler:
             # 清理失败不中断调度器，下次调度继续处理
             logger.exception("清理爬虫去重表失败: %s", e)
 
+    async def _daily_backup(self) -> None:
+        """每日 04:00 执行数据库备份 + 过期备份清理。
+
+        备份失败仅告警不中断调度器：备份是数据安全兜底，
+        单日失败可由次日备份补回，但需告警让运维感知并及时排查。
+        """
+        from app.services.backup_service import BackupService
+        try:
+            backup_path = await BackupService.backup_database()
+            logger.info("每日数据库备份完成 path=%s", backup_path)
+        except Exception as e:
+            logger.exception("每日数据库备份失败: %s", e)
+            await self._alert_operators(f"每日数据库备份失败: {e}")
+            # 备份失败仍尝试清理过期文件（独立失败不影响清理）
+        try:
+            deleted = await BackupService.cleanup_old_backups()
+            if deleted > 0:
+                logger.info("清理过期备份 %d 个", deleted)
+        except Exception as e:
+            logger.exception("清理过期备份失败: %s", e)
+
     async def _cleanup_blacklist(self) -> None:
         """每小时清理 jwt_blacklist 表过期记录。
 
@@ -600,6 +1065,31 @@ class WorkflowScheduler:
         except Exception as e:
             # 清理失败不中断调度器，下次调度继续处理
             logger.exception("清理黑名单失败: %s", e)
+
+    async def _cleanup_entry_map(self) -> None:
+        """定期清理 entry_map 中已离开 queued 状态的条目，避免内存泄漏。
+
+        工作流从 queued 转 running/success/failed/cancelled 后，
+        其 entry_map 条目不再有用但可能残留（如 _run_workflow_with_release
+        执行前异常退出），需定期扫描清理。
+        """
+        if not self._entry_map:
+            return
+        # 查询仍处于 queued 状态的 workflow_id，其余状态可安全移除
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(Workflow.id).where(
+                    Workflow.id.in_(list(self._entry_map.keys())),
+                    Workflow.status == WorkflowStatus.queued.value,
+                )
+            )
+            active_ids = {row[0] for row in result.all()}
+
+        stale_ids = set(self._entry_map.keys()) - active_ids
+        for wid in stale_ids:
+            self._entry_map.pop(wid, None)
+        if stale_ids:
+            logger.debug("清理 entry_map 中 %d 个过期条目", len(stale_ids))
 
     # ===== 告警 =====
 

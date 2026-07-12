@@ -1,0 +1,52 @@
+.page-settings {
+  min-height: 100vh;
+  padding-bottom: 60rpx;
+}
+
+/* 分组标题：与 list-card 视觉层级区分 */
+.settings-section-title {
+  padding: 32rpx 48rpx 12rpx;
+  font-size: 26rpx;
+  color: #A0AEC0;
+}
+
+/* 设置列表：复用 profile 页 list-item 风格 */
+.list-card {
+  padding: 0 32rpx;
+}
+
+.list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28rpx 0;
+  border-bottom: 2rpx solid #F0F4F2;
+}
+
+.list-item:last-child {
+  border-bottom: none;
+}
+
+.list-text {
+  font-size: 30rpx;
+  color: #2D3748;
+}
+
+.list-extra {
+  display: flex;
+  align-items: center;
+  font-size: 28rpx;
+  color: #A0AEC0;
+}
+
+.list-arrow {
+  margin-left: 8rpx;
+  font-size: 36rpx;
+  color: #CBD5E0;
+  line-height: 1;
+}
+
+.list-picker {
+  display: flex;
+  align-items: center;
+}

@@ -1,10 +1,10 @@
----
+﻿---
 name: "news-backend-code-review"
 description: "对 20_News 项目后端代码（backend/app/ 下 Python/FastAPI/SQLAlchemy 文件）进行全面评审与逻辑审查，覆盖分层架构、异步并发、数据库规约、安全、性能、错误处理、配置驱动、前后端字段契约、工作流编排、缓存一致性等维度。当用户要求'审查/检查/走查/把关/review/评估/看看对不对/规范不规范'后端 Python 代码、'.py 文件修改'、'迭代发布前后端走查'，或提到'后端评审/backend review/Python 代码审查/FastAPI 评审/SQLAlchemy 评审'时调用。仅审查后端 .py 文件；纯前端文件审查请改用 news-frontend-code-review。"
 whenToUse: "需要审查 20_News 后端代码（backend/app/ 下 .py 文件）是否符合项目规范"
 triggers: "后端代码 走查/审查/审核/把关/review/检查/评估 | .py 文件 修改/变更/迭代 走查 | 迭代发布前 后端 代码 走查 | 这段后端代码 写得对不对/规范不规范 | 路由/服务/模型/工作流 代码 审查"
-version: "1.0.0"
-updated: "2026-07-09"
+version: "1.4.0"
+updated: "2026-07-12"
 config: "config.yaml"
 scripts: "scripts/auto-scan.ps1"
 template: "templates/report-template.md"
@@ -14,7 +14,7 @@ template: "templates/report-template.md"
 
 ## 简介
 
-本技能对 20_News 项目后端代码（`backend/app/**/*.py`）进行系统性评审与逻辑审查，覆盖 **15 个维度**：分层架构、命名规范、类型注解、FastAPI 规范、SQLAlchemy 2.0 规范、异步并发、Redis 缓存规约、安全、错误处理、配置驱动、工作流编排、前后端字段契约、日志规范、性能、可测试性。
+本技能对 20_News 项目后端代码（`backend/app/**/*.py`）进行系统性评审与逻辑审查，覆盖 **32 个维度**：分层架构、命名规范、类型注解、FastAPI 规范、SQLAlchemy 2.0 规范、异步并发、Redis 缓存规约、安全、错误处理、配置驱动、工作流编排、前后端字段契约、日志规范、性能、可测试性。
 
 适用技术栈：FastAPI + SQLAlchemy 2.0 async + aiomysql（或 aiosqlite）+ Redis（或 TTLCache 进程内缓存）+ APScheduler + httpx + COS + 阿里云 TTS + 通义千问 LLM。
 
@@ -366,6 +366,61 @@ except Exception as e:
 - 测试中 `httpx.AsyncClient` 调真实 LLM API → 违规
 - 测试 mock 类型与生产不符（`MagicMock` vs `AsyncMock`）→ 违规
 
+## 补充审查要点
+
+> 以下审查要点来源于项目迭代复盘，配置详见 `config.yaml` 对应节点。
+
+### A. PriorityQueue 取消任务审查
+
+**配置节点**：`config.yaml#priority_queue_config`
+
+- 【强制】asyncio.PriorityQueue 的 QueueEntry 必须包含 `cancelled` 标记字段，worker 轮询时跳过已取消条目（规范 36）
+- 【强制】禁止尝试从 PriorityQueue 随机删除（底层是堆，不支持随机删除）
+- 【强制】维护 `id → entry` 索引用于取消查找
+- 判断信号：grep 搜索 `PriorityQueue(` 或 `queue.put(`，检查 QueueEntry 是否有 `cancelled` 字段
+
+### B. Semaphore 管理审查
+
+**配置节点**：`config.yaml#semaphore_management`
+
+- 【强制】Semaphore acquire 后必须用 `try/finally` 保证释放，避免异常时信号量泄漏
+- 【强制】配置热生效必须延迟重建（标记 `_config_dirty`），禁止立即重建（规范 33/37）
+- 【强制】重建时必须唤醒旧 Semaphore 上的等待者，防止永久阻塞泄漏
+- 判断信号：grep 搜索 `Semaphore(` 重新赋值，检查是否有 `_config_dirty` 标记 + `try/finally`
+
+### C. SQLite VACUUM INTO 隔离级别审查
+
+**配置节点**：`config.yaml#sqlite_vacuum`
+
+- 【强制】SQLite VACUUM INTO 必须在 AUTOCOMMIT 隔离级别执行，不能在事务内（规范 38）
+- 判断信号：grep 搜索 `VACUUM INTO` 在 `async with session.begin()` 或 `async with engine.begin()` 事务块内
+- 正确做法：`await conn.execution_options(isolation_level="AUTOCOMMIT")`
+
+### D. COS 同步幂等性审查
+
+**配置节点**：`config.yaml#cos_sync`
+
+- 【强制】COS 对象同步必须用 `INSERT OR IGNORE` 幂等插入 + 删除源对象双重保障（规范 40）
+- 【强制】同步表必须有 `object_key` 唯一约束
+- 【强制】同步成功后必须删除源对象（防止下次重复同步）
+- 判断信号：grep 搜索 COS 同步逻辑，检查是否有 `INSERT OR IGNORE` + `delete_object`
+
+### E. 文件上传校验审查
+
+**配置节点**：`config.yaml#file_upload`
+
+- 【强制】文件上传必须校验 Content-Type（如 `image/jpeg`、`audio/mpeg`），禁止无类型校验
+- 【强制】文件上传必须限制文件大小（从 `settings.MAX_UPLOAD_SIZE_MB` 读取），禁止无大小限制
+- 判断信号：grep 搜索 `UploadFile`，检查是否有 `content_type` 校验 + `size` 限制
+
+### F. 强制发布审查
+
+**配置节点**：`config.yaml#force_publish`
+
+- 【强制】强制发布接口必须校验 admin 权限（`require_admin`），禁止 operator 角色强制发布
+- 【强制】强制发布必须记录审计日志（操作人、目标 ID、时间戳、原因），便于事后追溯
+- 判断信号：grep 搜索 `force_publish`，检查是否有 `require_admin` 依赖 + `audit_log` 写入
+
 ## 四维度复盘
 
 > 基于本次 20_News 后端代码审查完整过程的复盘，沉淀可复用的工作流模板与判断逻辑。
@@ -445,3 +500,137 @@ except Exception as e:
 | `coding_standards` | 编码规范阈值 | 3, 5, 14 |
 | `verify` | 验证配置（py_compile / pytest） | 全部 |
 | `report` | 报告生成配置 | 全部 |
+
+
+---
+
+## 新增审查维度：外部服务与配置一致性
+
+### 维度 16：外部服务异常分类粒度
+
+第三方服务异常必须按类型分类为可重试或不可重试，不能笼统包装为通用异常。
+
+检查信号：Grep except Exception 后无按异常类型分类的分支
+修复建议：将 NoAudioReceived 等空响应分类为 TTSServiceError（可重试）
+
+### 维度 17：配置键一致性
+
+前端表单字段名、路由模型字段名、数据库配置键、Settings 属性四者必须一致或通过明确映射连接。
+
+检查信号：Grep 前端字段名与后端路由模型字段名不一致
+修复建议：统一键名或使用 LEGACY_KEY_MAP 兼容旧键名读取
+
+### 维度 18：批量失败诊断信息
+
+批量操作中每步每段失败原因必须收集并在最终异常中脱敏输出。
+
+检查信号：批量循环失败后无 summarize_segment_failures 类函数
+修复建议：添加分段失败摘要函数，脱敏 API Key 和稿件正文
+
+### 维度 19：分步重跑上游产物复用
+
+工作流重跑必须从指定步骤开始，复用上游成功产物，而非从头执行完整流水线。
+
+检查信号：Grep retry 路由后无提取上游产物逻辑
+修复建议：实现 extract_step_result 从原工作流提取产物，注入新 context
+
+### 维度 20：路由静态路径优先级
+
+FastAPI 按定义顺序匹配路由，静态路由必须在动态路由之前定义。
+
+检查信号：Grep 静态路由定义在动态路由之后
+修复建议：将 batch-delete 等静态路由移至 workflow_id 之前
+
+### 维度 21：批量操作上限约束
+
+接收列表参数的 API 端点必须设置上限，防止单次事务过大。
+
+检查信号：Grep list 字段无 max_length 约束
+修复建议：添加 Field max_length=100 约束
+
+### 维度 22：参数规范化写入
+
+前端提交的数值百分比参数在写入数据库前必须规范化，避免传给第三方库的无效值。
+
+检查信号：Grep 第三方库参数传入前无 normalize 处理
+修复建议：添加 normalize_edge_adjustment 将 0.0 转为空字符串
+
+### 维度 23：时长/容量约束自动调整
+
+**为什么**：所有有时间、容量、大小等硬性约束的拼接/聚合操作，必须在最终校验前实现自动调整能力（填充/切除），禁止直接报错失败导致工作流中断。
+
+检查信号：Grep duration.*超出.*范围 或 length.*exceed 后直接 raise StitchError / BusinessError
+修复建议：在校验前添加自动填充（不足时追加静音/空白）和切除（超出时从末尾裁剪）逻辑，填充/切除后进行二次校验
+
+### 维度 24：确定性失败的重试无效性
+
+**为什么**：工作流步骤的重试只对瞬态失败（网络超时、临时 IO 错误）有意义。对于确定性失败（输入数据导致的结果不变），重试是无效的，应在步骤内部自动调整。
+
+检查信号：Grep 步骤函数内部无外部状态依赖（无网络调用、无文件读写、无 DB 查询），却有重试逻辑
+修复建议：识别失败类型——瞬态失败用重试，确定性失败在函数内部自动调整（如音频时长填充）
+判断方法：检查步骤函数是否依赖外部可变状态
+
+### 维度 25：临时资源清理保障
+
+**为什么**：使用临时文件/目录的资源（如音频拼接、图片处理）必须在 try/finally 中确保清理，防止磁盘空间泄漏。
+
+检查信号：Grep 	empfile.mkdtemp 或 NamedTemporaryFile 后无 finally/shutil.rmtree 清理
+修复建议：使用 try/finally 确保临时资源清理，ignore_errors=True 容忍清理失败
+
+---
+
+## 新增审查维度：第三方服务模型名称与定价表一致性
+
+### 维度 26：第三方服务模型名称以官方文档为准
+
+**为什么**：第三方 AI 服务商（LLM/TTS）的模型名称是区分大小写的字符串。使用错误的模型名会导致 API 调用失败或路由到错误的模型。预设配置中的模型名称必须以官方文档为事实源。
+
+检查信号：Grep 预设配置中的模型名（如 deepseek-chat），与官网文档逐字核对
+修复建议：新接入服务商时先查阅官方文档确认模型名称大小写，修改预设默认模型时同步更新定价表
+
+### 维度 27：模型定价表同步更新
+
+**为什么**：每当修改或新增模型名称时，必须同步检查定价表中是否包含该模型条目。缺失定价条目的模型将使用默认费率（gpt-4o-mini），导致费用统计不准确。
+
+检查信号：Grep 新增模型名是否在 MODEL_PRICING 中存在
+修复建议：修改预设模型时，同时检查并更新定价表
+
+### 维度 28：配置键四者一致性
+
+**为什么**：前端表单字段名、路由模型字段名、数据库配置键、Settings 属性四者必须一致或通过明确映射连接。字段不一致会导致前端保存的值在后端被忽略。
+
+检查信号：Grep 前端字段名与后端路由模型字段名不一致
+修复建议：统一键名或使用 LEGACY_KEY_MAP 兼容旧键名读取
+
+---
+
+## 新增审查维度：批量删除与事务规范
+
+### 维度 29：批量删除事务原子性
+
+**为什么**：批量删除操作涉及多表关联数据，必须在一个事务中按依赖逆序删除，任一校验失败整批回滚，禁止部分删除。
+
+检查信号：Grep 搜索多表 delete 操作无 await db.commit() 包裹、无前置校验
+修复建议：实现 batch_delete 方法，按 play_progress → play_log → episode → review → script → material → workflow_step → workflow 顺序删除
+
+### 维度 30：路由静态路径优先级
+
+**为什么**：FastAPI 按定义顺序匹配路由，静态路由必须在动态路由之前定义，否则静态路径会被动态路由捕获。
+
+检查信号：Grep 静态路由（如 /batch-delete）定义在动态路由（如 /{workflow_id}）之后
+修复建议：将 batch-delete 等静态路由移至 /:id 之前
+
+### 维度 31：批量操作权限校验
+
+**为什么**：批量删除是高危操作，必须通过 require_admin 装饰器确保仅管理员可执行。
+
+检查信号：Grep POST /batch-delete 路由无 require_admin 装饰器
+修复建议：添加 @router.post("/batch-delete") 前装饰 require_admin
+
+### 维度 32：批量操作上限约束
+
+**为什么**：批量删除接口应设置单次操作数量上限，防止单次事务过大导致数据库压力。
+
+检查信号：Grep 批量操作接口无 max_length 约束
+修复建议：Pydantic model 中设置 Field(max_length=100)
+

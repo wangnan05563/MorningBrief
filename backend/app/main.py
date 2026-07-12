@@ -12,6 +12,7 @@ V1.2 起：
 import asyncio
 import mimetypes
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from loguru import logger
 
@@ -47,9 +48,17 @@ from app.routers.admin.stats import router as b_stats_router
 from app.routers.admin.tunnel import router as b_tunnel_router
 from app.routers.admin.workflows import router as b_workflows_router
 from app.routers.admin.ai_config import router as b_ai_config_router
+from app.routers.admin.channels import router as b_channels_router
+from app.routers.admin.queue import router as b_queue_router
+from app.routers.admin.materials import router as b_materials_router
+from app.routers.admin.scripts import router as b_scripts_router
+from app.routers.admin.system import router as b_system_router
+from app.routers.admin.events import router as b_events_router
+from app.routers.admin.feedbacks import router as b_feedbacks_router
 # 数据库维护与系统清理模块（仅 admin）
 from app.routers.admin.db_admin import router as b_db_admin_router
 from app.routers.admin.maintenance import router as b_maintenance_router
+from app.routers.admin.backup import router as b_backup_router
 # 内部路由（工作流调度）
 from app.routers.internal.workflow import router as internal_workflow_router
 
@@ -74,6 +83,35 @@ async def _init_sqlite_schema() -> None:
     logger.info("[startup] SQLite schema 已就绪")
 
 
+async def _seed_default_admin() -> None:
+    """首次启动自动 seed 默认 admin 用户（幂等）。
+
+    解决 dev/exe 模式数据库路径不一致导致登录失败的问题：
+    seed_admin.py 默认路径曾指向 dist/20-news/data/news.db，
+    与开发态运行时 backend/data/news.db 不一致。
+    在 lifespan 中调用确保无论何种模式启动，admin 用户都被创建。
+    """
+    import sqlite3
+    from app.paths import resolve_db_path
+    from app.core.security import hash_password
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute('SELECT COUNT(*) FROM admin_user WHERE username = ?', ('admin',))
+        if cur.fetchone()[0] > 0:
+            return
+        cur.execute(
+            'INSERT INTO admin_user (username, password_hash, role, status, nickname) VALUES (?, ?, ?, 1, ?)',
+            ('admin', hash_password('admin123'), 'admin', 'Admin'),
+        )
+        conn.commit()
+        logger.info("[startup] 默认 admin 用户已创建（admin/admin123）")
+    finally:
+        conn.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：启动时初始化资源，关闭时清理。"""
@@ -88,6 +126,12 @@ async def lifespan(app: FastAPI):
 
     # 首次启动建表（SQLite 嵌入式，开发与生产共用此路径）
     await _init_sqlite_schema()
+
+    # 自动 seed 默认 admin 用户（幂等，确保 dev/exe 模式均可登录）
+    try:
+        await _seed_default_admin()
+    except Exception as e:
+        logger.warning("[startup] 自动创建默认 admin 用户失败: %s", e)
 
     # 从 SQLite 加载 AI 配置覆盖到 Settings 单例（前端修改的配置热生效）
     from app.services.ai_config_service import AIConfigService
@@ -110,11 +154,14 @@ async def lifespan(app: FastAPI):
     app.state.event_bus_task = asyncio.create_task(event_bus.run_forever())
     logger.info("[startup] EventBus 已启动")
 
-    # 内网穿透自动启动：auto_start=True 时后台线程启动隧道
+    # 内网穿透：注入 on_started 回调，隧道启动成功后发送通知
     # 用 daemon 线程而非 asyncio：cloudflared/cpolar 是阻塞子进程，线程不占用事件循环
-    from app.services.tunnel_service import get_tunnel_service
+    from app.services.tunnel_service import get_tunnel_service, set_tunnel_service, TunnelService
+    from app.services.tunnel_notifications import notify_tunnel_started, notify_autostart_failed
     try:
-        tunnel_svc = get_tunnel_service()
+        # 注入带通知回调的 TunnelService 实例
+        tunnel_svc = TunnelService(on_started=notify_tunnel_started)
+        set_tunnel_service(tunnel_svc)
         cfg = tunnel_svc.get_config()
         if cfg.get("auto_start"):
             import threading
@@ -124,8 +171,9 @@ async def lifespan(app: FastAPI):
                     url = tunnel_svc.start()
                     logger.info("[startup] 内网穿透隧道已自动启动: %s", url)
                 except Exception as e:
-                    # 自动启动失败不影响主服务，仅记录日志
+                    # 自动启动失败不影响主服务：日志 + 通知双保障
                     logger.warning("[startup] 内网穿透自动启动失败: %s", e)
+                    notify_autostart_failed(str(e))
 
             threading.Thread(target=_auto_start_tunnel, daemon=True).start()
     except Exception as e:
@@ -201,10 +249,28 @@ def create_app() -> FastAPI:
     app.include_router(b_tunnel_router)
     app.include_router(b_workflows_router)
     app.include_router(b_ai_config_router)
+    app.include_router(b_channels_router)
+    app.include_router(b_queue_router)
+    app.include_router(b_materials_router)
+    app.include_router(b_scripts_router)
+    app.include_router(b_system_router)
+    app.include_router(b_events_router)
+    app.include_router(b_feedbacks_router)
     app.include_router(b_db_admin_router)
     app.include_router(b_maintenance_router)
+    app.include_router(b_backup_router)
     # 内部（工作流调度）
     app.include_router(internal_workflow_router)
+
+    # 挂载 /audio 静态目录：TTS 本地存储回退的音频文件（COS 未配置时使用）
+    # 路径与 uploader._local_root() 一致，开发态/打包态均自动创建目录
+    try:
+        from app.paths import resolve_data_dir
+        audio_dir = Path(resolve_data_dir()) / "audio_cache"
+    except Exception:
+        audio_dir = Path("data/audio_cache")
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/audio", StaticFiles(directory=str(audio_dir)), name="audio")
 
     # 挂载前端 SPA（B 端运营后台）
     # API 路由已在前注册，不会被覆盖；未匹配的 GET 请求 fallback 到 index.html

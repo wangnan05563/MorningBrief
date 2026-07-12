@@ -1,4 +1,4 @@
-# ===== 20_News 前端代码审查技能配置示例 v1.0.0 =====
+﻿# ===== 20_News 前端代码审查技能配置示例 v1.0.0 =====
 # 本文件为配置模板，复制为 config.yaml 后按项目实际情况修改
 # 所有评审规则、硬约束、项目规范均通过本文件管理，技能本身不含硬编码值
 # 完整审查维度对照见 SKILL.md（15 维度）
@@ -437,3 +437,44 @@ miniprogram_api:
     auth_header: "Authorization: Bearer <token>"
     business_error_check: "code !== 0"  # 业务错误判断
     error_reject_pattern: "reject(new Error(message))"
+
+# --- 批量操作审查配置（维度 30-33）---
+batch_operations:
+  # 多选表格要求
+  selection_table:
+    # 批量操作表格必须有 selection 列
+    require_selection_column: true
+    # 选择列仅管理员可见
+    admin_only: true
+    # 选择列宽度
+    selection_width: 48
+    # 使用 @selection-change 跟踪选中状态
+    track_selection_change: true
+
+  # 批量操作按钮要求
+  action_button:
+    # 必须显示选中数量
+    show_selected_count: true
+    # 未选中时禁用
+    disabled_when_empty: true
+    # 按钮类型（危险操作用 danger）
+    button_type: "danger"
+
+  # 确认对话框要求
+  confirmation_dialog:
+    # 必须二次确认
+    require_confirm: true
+    # 提示文案必须包含不可恢复声明
+    must_include_irreversible_warning: true
+    # 提示文案必须包含删除范围说明
+    must_include_deletion_scope: true
+    # 确认按钮文本
+    confirm_button_text: "确认删除"
+
+  # 删除后分页修正
+  pagination_correction:
+    # 删除后必须修正页码
+    require_page_correction: true
+    # 修正逻辑：剩余记录 < 当前页时回退
+    fallback_to_previous_page: true
+

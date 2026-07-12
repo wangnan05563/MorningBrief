@@ -2,8 +2,11 @@ import { test, expect } from '@playwright/test'
 import {
   setLoginState,
   workflowListResponse,
+  workflowListMultiSelectResponse,
   workflowDetailResponse,
   workflowTriggerResponse,
+  workflowBatchDeleteResponse,
+  channelsListResponse,
 } from './helpers/mock'
 
 /**
@@ -20,6 +23,20 @@ test.describe('工作流监控', () => {
   test.use({ expect: { timeout: 15000 } })
 
   test.beforeEach(async ({ page }) => {
+    // mock SSE 连接：WorkflowList 会发起 SSE 连接，后端未运行时 ECONNREFUSED 导致 flaky
+    await page.route('**/admin/api/v1/events/stream**', async (route) => {
+      // SSE 返回空的事件流，避免连接错误
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: '',
+      })
+    })
+    // mock channels API：WorkflowList 可能调用 channels API
+    await page.route('**/admin/api/v1/channels**', async (route) => {
+      await route.fulfill({ json: channelsListResponse })
+    })
+
     // 工作流列表接口：glob 尾部需带 * 以匹配查询参数 ?page=1&size=20
     await page.route('**/admin/api/v1/workflows*', async (route) => {
       await route.fulfill({ json: workflowListResponse })
@@ -40,13 +57,13 @@ test.describe('工作流监控', () => {
     await setLoginState(page, 'admin')
     await page.goto('/workflows')
 
-    await expect(page.getByText('工作流监控').first()).toBeVisible()
+    await expect(page.getByText('工作流监控').first()).toBeVisible({ timeout: 15000 })
     // 表格应展示 mock 数据
-    await expect(page.getByText('wf-001')).toBeVisible()
-    await expect(page.getByText('wf-002')).toBeVisible()
+    await expect(page.getByText('wf-001')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('wf-002')).toBeVisible({ timeout: 15000 })
     // 状态标签
-    await expect(page.locator('.el-tag').filter({ hasText: '成功' })).toBeVisible()
-    await expect(page.locator('.el-tag').filter({ hasText: '运行中' })).toBeVisible()
+    await expect(page.locator('.el-tag').filter({ hasText: '成功' })).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('.el-tag').filter({ hasText: '运行中' })).toBeVisible({ timeout: 15000 })
   })
 
   test('非 admin 不显示触发按钮', async ({ page }) => {
@@ -58,7 +75,7 @@ test.describe('工作流监控', () => {
 
     // 由于 operator 角色无权访问工作流路由，会被守卫拦截
     // 但即便访问成功，也不应看到"手动触发"按钮
-    await expect(page.getByRole('button', { name: '手动触发' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '手动触发' })).toHaveCount(0, { timeout: 15000 })
   })
 
   test('admin 显示触发按钮并可触发', async ({ page }) => {
@@ -66,7 +83,7 @@ test.describe('工作流监控', () => {
     await page.goto('/workflows')
 
     // admin 应看到触发按钮
-    await expect(page.getByRole('button', { name: '手动触发' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '手动触发' })).toBeVisible({ timeout: 15000 })
 
     // 点击触发
     await page.getByRole('button', { name: '手动触发' }).click()
@@ -74,7 +91,7 @@ test.describe('工作流监控', () => {
     await page.getByRole('button', { name: 'OK' }).click()
 
     // 应显示成功提示，包含新工作流 ID
-    await expect(page.locator('.el-message').getByText('已触发，工作流 ID: wf-003')).toBeVisible()
+    await expect(page.locator('.el-message').getByText('已触发，工作流 ID: wf-003')).toBeVisible({ timeout: 15000 })
   })
 
   test('点击工作流跳转详情', async ({ page }) => {
@@ -86,31 +103,129 @@ test.describe('工作流监控', () => {
     await page.locator('.el-link').filter({ hasText: 'wf-001' }).click()
 
     // 应跳转到详情页
-    await expect(page).toHaveURL(/\/workflows\/wf-001$/)
+    await expect(page).toHaveURL(/\/workflows\/wf-001$/, { timeout: 15000 })
   })
 
   test('工作流详情显示步骤', async ({ page }) => {
     await setLoginState(page, 'admin')
     await page.goto('/workflows/wf-001')
 
-    await expect(page.getByText('工作流详情').first()).toBeVisible()
+    await expect(page.getByText('工作流详情').first()).toBeVisible({ timeout: 15000 })
 
     // 基础信息
-    await expect(page.getByText('wf-001').first()).toBeVisible()
-    await expect(page.getByText('2026-07-08').first()).toBeVisible()
+    await expect(page.getByText('wf-001').first()).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('2026-07-08').first()).toBeVisible({ timeout: 15000 })
     // 详情页有 1 个工作流状态 tag + 5 个步骤状态 tag 都可能显示"成功"，存在 strict mode 冲突，取第一个即可
-    await expect(page.locator('.el-tag').filter({ hasText: '成功' }).first()).toBeVisible()
+    await expect(page.locator('.el-tag').filter({ hasText: '成功' }).first()).toBeVisible({ timeout: 15000 })
 
     // 5 个步骤标签应出现在进度条中
     // 详情页步骤名同时出现在 el-step 标题、表格单元格、tooltip 等多处，getByText 会命中多个节点触发 strict mode，取 .first()
-    await expect(page.getByText('爬虫采集').first()).toBeVisible()
-    await expect(page.getByText('LLM改写').first()).toBeVisible()
-    await expect(page.getByText('语音合成').first()).toBeVisible()
-    await expect(page.getByText('音频拼接').first()).toBeVisible()
-    await expect(page.getByText('创建审核').first()).toBeVisible()
+    await expect(page.getByText('爬虫采集').first()).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('LLM改写').first()).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('语音合成').first()).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('音频拼接').first()).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('创建审核').first()).toBeVisible({ timeout: 15000 })
 
     // 步骤详情表格也应展示这些步骤名
     const crawlCells = page.locator('td').filter({ hasText: '爬虫采集' })
-    await expect(crawlCells.first()).toBeVisible()
+    await expect(crawlCells.first()).toBeVisible({ timeout: 15000 })
+  })
+
+  test('admin 批量删除工作流：多选+确认+请求载荷+成功提示+列表刷新', async ({ page }) => {
+    // 拦截批量删除请求：校验 payload 后返回成功
+    let capturedPayload = null
+    let batchDeleteCallCount = 0
+    let listCallCount = 0
+
+    await page.route('**/admin/api/v1/workflows/batch-delete', async (route) => {
+      batchDeleteCallCount += 1
+      const body = route.request().postDataJSON()
+      capturedPayload = body
+      await route.fulfill({ json: workflowBatchDeleteResponse })
+    })
+
+    // 列表接口：首次加载返回 3 条，删除后刷新返回 1 条
+    await page.route('**/admin/api/v1/workflows*', async (route) => {
+      listCallCount += 1
+      // 第 1 次加载返回 3 条可删除工作流；第 2 次（删除后刷新）返回剩余 1 条
+      if (listCallCount === 1) {
+        await route.fulfill({ json: workflowListMultiSelectResponse })
+      } else {
+        await route.fulfill({
+          json: {
+            code: 0,
+            message: 'success',
+            data: {
+              total: 1,
+              list: [
+                {
+                  id: 'wf-003',
+                  episode_date: '2026-07-06',
+                  source: 'cron',
+                  status: 'failed',
+                  started_at: '2026-07-06T05:00:00',
+                  finished_at: '2026-07-06T05:10:00',
+                },
+              ],
+            },
+          },
+        })
+      }
+    })
+
+    await setLoginState(page, 'admin')
+    await page.goto('/workflows')
+
+    // 等待列表加载完成
+    await expect(page.getByText('wf-001')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('wf-002')).toBeVisible({ timeout: 15000 })
+
+    // admin 应看到批量删除按钮（初始禁用，因为未选中）
+    const batchDeleteBtn = page.getByRole('button', { name: '批量删除' })
+    await expect(batchDeleteBtn).toBeVisible({ timeout: 15000 })
+    await expect(batchDeleteBtn).toBeDisabled({ timeout: 15000 })
+
+    // 选择前两行（wf-001, wf-002）：勾选 el-table 的 selection checkbox
+    // el-table 的选择框渲染为 .el-checkbox，每行第一个 cell 内
+    const rowCheckboxes = page.locator('.el-table__body .el-checkbox')
+    await rowCheckboxes.nth(0).click()
+    await rowCheckboxes.nth(1).click()
+
+    // 选中后按钮应启用，并显示选中数量
+    await expect(batchDeleteBtn).toBeEnabled({ timeout: 15000 })
+    // 选中计数提示（"已选 2 项"）
+    await expect(page.getByText('已选 2 项')).toBeVisible({ timeout: 15000 })
+
+    // 点击批量删除
+    await batchDeleteBtn.click()
+
+    // ElMessageBox 二次确认：WorkflowList.vue 中设置 confirmButtonText 为"确定删除"
+    await page.getByRole('button', { name: '确定删除' }).click()
+
+    // 验证请求载荷：workflow_ids 包含 wf-001 和 wf-002
+    await expect.poll(() => batchDeleteCallCount).toBe(1)
+    expect(capturedPayload).toBeTruthy()
+    expect(capturedPayload.workflow_ids).toEqual(
+      expect.arrayContaining(['wf-001', 'wf-002'])
+    )
+    expect(capturedPayload.workflow_ids).toHaveLength(2)
+
+    // 验证成功提示
+    await expect(page.locator('.el-message').getByText(/删除成功|已删除/)).toBeVisible({ timeout: 15000 })
+
+    // 验证列表刷新：第二次 list 调用应被触发
+    await expect.poll(() => listCallCount).toBeGreaterThanOrEqual(2)
+
+    // 删除后选中状态应重置：批量删除按钮应再次禁用
+    await expect(batchDeleteBtn).toBeDisabled({ timeout: 15000 })
+  })
+
+  test('非 admin 不显示批量删除按钮', async ({ page }) => {
+    // operator 角色不应看到批量删除按钮（RBAC）
+    await setLoginState(page, 'operator')
+    await page.goto('/workflows')
+
+    // 即使路由守卫拦截，按钮也不应渲染
+    await expect(page.getByRole('button', { name: '批量删除' })).toHaveCount(0, { timeout: 15000 })
   })
 })

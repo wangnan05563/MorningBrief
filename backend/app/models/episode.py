@@ -21,12 +21,17 @@ class Episode(Base):
     __table_args__ = (
         Index("idx_date", "date"),
         Index("idx_status", "status"),
+        Index("idx_episode_channel", "channel_id"),
         CheckConstraint("status IN ('draft', 'published', 'offline')", name="ck_episode_status"),
         {"comment": "节目表"},
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    date: Mapped[date] = mapped_column(Date, nullable=False, unique=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    # 频道归属：多频道场景下同一日期可有多个频道的节目，故 date 不再 unique
+    channel_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("channel.id", ondelete="SET NULL"), nullable=True,
+    )
     title: Mapped[str] = mapped_column(String(128), nullable=False)
     duration: Mapped[int] = mapped_column(Integer, nullable=False, comment="时长（秒）")
     audio_url: Mapped[str] = mapped_column(String(512), nullable=False)

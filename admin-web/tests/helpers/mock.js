@@ -289,6 +289,141 @@ export const workflowRetryResponse = {
   data: { new_workflow_id: 'wf-004' },
 }
 
+// 批量删除成功响应：返回被删除的 workflow_id 列表
+export const workflowBatchDeleteResponse = {
+  code: 0,
+  message: 'success',
+  data: { deleted: ['wf-001', 'wf-002'] },
+}
+
+// 多选删除测试专用列表：3 条 success 状态工作流均可删除
+// 与 workflowListResponse 区分，避免影响其他测试用例
+export const workflowListMultiSelectResponse = {
+  code: 0,
+  message: 'success',
+  data: {
+    total: 3,
+    list: [
+      {
+        id: 'wf-001',
+        episode_date: '2026-07-08',
+        source: 'cron',
+        status: 'success',
+        started_at: '2026-07-08T05:00:00',
+        finished_at: '2026-07-08T05:30:00',
+      },
+      {
+        id: 'wf-002',
+        episode_date: '2026-07-07',
+        source: 'manual',
+        status: 'success',
+        started_at: '2026-07-07T05:00:00',
+        finished_at: '2026-07-07T05:30:00',
+      },
+      {
+        id: 'wf-003',
+        episode_date: '2026-07-06',
+        source: 'cron',
+        status: 'failed',
+        started_at: '2026-07-06T05:00:00',
+        finished_at: '2026-07-06T05:10:00',
+      },
+    ],
+  },
+}
+
+// ============== 队列管理相关 ==============
+// 后端响应字段为 execution_mode / max_concurrent（SRS 5.1 API 规范）
+export const queueConfigResponse = {
+  code: 0,
+  message: 'success',
+  data: {
+    execution_mode: 'serial',
+    max_concurrent: 1,
+  },
+}
+
+export const queueStatsResponse = {
+  code: 0,
+  message: 'success',
+  data: {
+    queued: 3,
+    running: 1,
+    success: 10,
+    failed: 2,
+    cancelled: 1,
+  },
+}
+
+// 任务列表：后端返回 items 字段（SRS 5.1），含 channel_name（joinedload）
+export const queueTasksResponse = {
+  code: 0,
+  message: 'success',
+  data: {
+    total: 2,
+    items: [
+      {
+        id: 'wf-20260708-0001',
+        episode_date: '2026-07-08',
+        source: 'cron',
+        status: 'queued',
+        channel_id: 1,
+        channel_name: '科技频道',
+        priority: 8,
+        started_at: '2026-07-08T05:00:00',
+        finished_at: null,
+        error: null,
+      },
+      {
+        id: 'wf-20260708-0002',
+        episode_date: '2026-07-08',
+        source: 'manual',
+        status: 'failed',
+        channel_id: 2,
+        channel_name: '财经频道',
+        priority: 5,
+        started_at: '2026-07-08T06:00:00',
+        finished_at: '2026-07-08T06:10:00',
+        error: 'TTS 合成失败',
+      },
+    ],
+  },
+}
+
+export const queueActionSuccessResponse = {
+  code: 0,
+  message: 'success',
+  data: null,
+}
+
+// ============== 频道管理相关 ==============
+export const channelsListResponse = {
+  code: 0,
+  message: 'success',
+  data: [
+    {
+      id: 1,
+      name: '科技频道',
+      description: '科技资讯',
+      is_active: 1,
+      created_at: '2026-07-01T10:00:00',
+    },
+    {
+      id: 2,
+      name: '财经频道',
+      description: '财经动态',
+      is_active: 1,
+      created_at: '2026-07-02T10:00:00',
+    },
+  ],
+}
+
+export const channelCreateSuccessResponse = {
+  code: 0,
+  message: 'success',
+  data: { id: 3 },
+}
+
 /**
  * 注入登录态到 localStorage
  * 用于跳过登录页直接进入受保护路由，简化非登录场景的测试
