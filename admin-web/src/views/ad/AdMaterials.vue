@@ -106,7 +106,9 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from '../../utils/message'
+import { ElMessageBox } from 'element-plus'
+
 import api from '../../api'
 
 const tableData = ref([])

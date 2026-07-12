@@ -1,0 +1,76 @@
+{
+  "records": [
+    {
+      "timestamp": 1783854884.7243707,
+      "service_type": "llm",
+      "model": "agnes-2.0-flash",
+      "input_tokens": 2017,
+      "output_tokens": 338,
+      "char_count": 0,
+      "cost_usd": 0.0
+    },
+    {
+      "timestamp": 1783854884.913015,
+      "service_type": "llm",
+      "model": "agnes-2.0-flash",
+      "input_tokens": 1594,
+      "output_tokens": 263,
+      "char_count": 0,
+      "cost_usd": 0.0
+    },
+    {
+      "timestamp": 1783854885.6236129,
+      "service_type": "llm",
+      "model": "agnes-2.0-flash",
+      "input_tokens": 1890,
+      "output_tokens": 263,
+      "char_count": 0,
+      "cost_usd": 0.0
+    },
+    {
+      "timestamp": 1783854885.8429704,
+      "service_type": "llm",
+      "model": "agnes-2.0-flash",
+      "input_tokens": 1908,
+      "output_tokens": 344,
+      "char_count": 0,
+      "cost_usd": 0.0
+    },
+    {
+      "timestamp": 1783854887.1746914,
+      "service_type": "llm",
+      "model": "agnes-2.0-flash",
+      "input_tokens": 1841,
+      "output_tokens": 285,
+      "char_count": 0,
+      "cost_usd": 0.0
+    },
+    {
+      "timestamp": 1783854913.6316364,
+      "service_type": "llm",
+      "model": "agnes-2.0-flash",
+      "input_tokens": 1338,
+      "output_tokens": 221,
+      "char_count": 0,
+      "cost_usd": 0.0
+    },
+    {
+      "timestamp": 1783854918.4526696,
+      "service_type": "llm",
+      "model": "agnes-2.0-flash",
+      "input_tokens": 2058,
+      "output_tokens": 303,
+      "char_count": 0,
+      "cost_usd": 0.0
+    },
+    {
+      "timestamp": 1783854920.1379626,
+      "service_type": "llm",
+      "model": "agnes-2.0-flash",
+      "input_tokens": 1379,
+      "output_tokens": 212,
+      "char_count": 0,
+      "cost_usd": 0.0
+    }
+  ]
+}

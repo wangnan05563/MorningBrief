@@ -1,4 +1,4 @@
-# ===== 20_News 后端代码审查技能配置 v1.0.0（详细注释版）=====
+﻿# ===== 20_News 后端代码审查技能配置 v1.0.0（详细注释版）=====
 # 首次使用：复制本文件为 config.yaml 并按项目实际情况修改
 # 所有评审规则、硬约束、阈值、白名单均通过本文件管理，技能本身不含硬编码值
 # 完整审查维度对照见 SKILL.md（15 维度）
@@ -621,3 +621,39 @@ coding_standards:
       - "def _init_"
       - "def trigger_workflow"
       - "def publish_episode"
+
+# ============================================================
+# 批量删除与事务规范（维度 29-32）
+# ============================================================
+batch_operations:
+  # 批量删除事务要求
+  cascade_delete:
+    # 必须使用单个事务包裹所有删除操作
+    require_single_transaction: true
+    # 删除依赖顺序（从叶子到根）
+    delete_order:
+      - "play_progress"
+      - "play_log"
+      - "episode"
+      - "review"
+      - "script"
+      - "material"
+      - "workflow_step"
+      - "workflow"
+    # 批量删除前必须校验
+    pre_validation:
+      check_all_ids_exist: true
+      check_no_running_status: true
+      check_admin_permission: true
+  # 批量操作上限
+  max_batch_size: 100
+  # 路由优先级
+  route_priority:
+    # 静态路由必须在动态路由之前定义
+    static_before_dynamic: true
+    # 批量操作路由示例
+    static_routes:
+      - "/batch-delete"
+      - "/trigger"
+      - "/retry"
+

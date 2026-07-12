@@ -1,0 +1,56 @@
+<!-- 意见反馈：分类 + 内容 + 联系方式 -->
+<view class="page-feedback">
+  <!-- 分类选择 -->
+  <view class="card feedback-card">
+    <view class="section-title">反馈分类</view>
+    <view class="category-list">
+      <view
+        wx:for="{{categories}}"
+        wx:key="*this"
+        class="category-tag {{selectedCategory === item ? 'active' : ''}}"
+        data-category="{{item}}"
+        bindtap="onCategoryTap"
+      >{{item}}</view>
+    </view>
+  </view>
+
+  <!-- 反馈内容 -->
+  <view class="card feedback-card">
+    <view class="section-title">反馈内容</view>
+    <textarea
+      class="content-input"
+      value="{{content}}"
+      placeholder="请详细描述您遇到的问题或建议（至少 10 个字）"
+      placeholder-class="content-ph"
+      maxlength="{{maxLength}}"
+      auto-height
+      bindinput="onContentInput"
+    />
+    <view class="content-counter">{{content.length}}/{{maxLength}}</view>
+  </view>
+
+  <!-- 联系方式 -->
+  <view class="card feedback-card">
+    <view class="section-title">联系方式</view>
+    <input
+      class="contact-input"
+      value="{{contact}}"
+      placeholder="选填，方便我们回复您"
+      placeholder-class="contact-ph"
+      maxlength="50"
+      bindinput="onContactInput"
+    />
+  </view>
+
+  <!-- 提交按钮：提交中禁用并显示 loading，避免重复提交 -->
+  <view class="submit-wrap">
+    <button
+      class="btn-primary submit-btn {{submitting ? 'disabled' : ''}}"
+      disabled="{{submitting}}"
+      bindtap="onSubmit"
+    >
+      <text wx:if="{{submitting}}" class="submit-loading">提交中...</text>
+      <text wx:else>提交反馈</text>
+    </button>
+  </view>
+</view>

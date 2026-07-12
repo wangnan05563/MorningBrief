@@ -1,10 +1,12 @@
 """TTS 主入口（LLD 5.3 / 7.5）。
 
-从 script 表读取 segments，并发合成 → 后处理 → 上传 COS。
+从 script 表读取 segments，并发合成 → 后处理 → 上传。
+支持多 Provider 切换（阿里云/Edge-TTS/腾讯云），通过工厂模式按配置选择。
 失败段跳过并告警，成功率 < 50% 视为整期失败。
 """
 import asyncio
 import logging
+import re
 import uuid
 
 from sqlalchemy import select
@@ -20,13 +22,13 @@ from app.config import get_settings
 from app.core.ai_budget import check_budget, record_call
 from app.database import AsyncSessionLocal
 from app.models import Script
-from app.workflow.tts.aliyun_client import (
-    AliyunSpeechClient,
+from app.workflow.tts.base_provider import (
     TTSError,
     TTSRateLimitError,
     TTSTimeoutError,
     TTSServiceError,
 )
+from app.workflow.tts.tts_factory import get_tts_provider
 from app.workflow.tts.audio_postprocess import (
     normalize_loudness,
     trim_silence,
@@ -38,10 +40,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # tenacity 重试装饰器（LLD 7.5）
-# - stop_after_attempt(N): 最多 N 次（含首次），N 取自配置便于调参
-# - wait_exponential(1, 10): 指数退避 1s 起、上限 10s，避免雪崩压垮下游
-# - 仅限流/超时/5xx 重试，其他错误（鉴权/内容）立即抛出
-# - reraise=True: 重试耗尽抛原异常，保留错误上下文
+# 异常类型从 base_provider 导入，保证所有 provider 抛出的可重试异常都能被识别
 tts_retry = retry(
     stop=stop_after_attempt(settings.TTS_RETRY_ATTEMPTS),
     wait=wait_exponential(min=1, max=10, multiplier=1),
@@ -52,31 +51,24 @@ tts_retry = retry(
     reraise=True,
 )
 
-# 复用同一客户端实例，避免每段重建连接
-_client = AliyunSpeechClient(settings.ALIYUN_TTS_API_KEY)
-
 
 @tts_retry
 async def synthesize_segment(text: str, voice: str = None) -> bytes:
     """合成单段文本（tenacity 自动重试可重试错误）。
 
-    预算控制：调用前检查三重预算（token/费用/频率），超限直接抛 TTSRateLimitError
-    避免无效请求打到外部 API；调用成功后按字符数记录用量更新预算计数。
-
-    Args:
-        text: 待合成文本
-        voice: 音色 ID，缺省用配置默认值
-
-    Returns:
-        音频二进制
+    通过工厂获取当前配置的 TTS Provider 实例，上层无需感知具体厂商。
+    预算控制：调用前检查三重预算（token/费用/频率），超限直接抛
+    TTSRateLimitError 避免无效请求打到外部 API；调用成功后按字符数
+    记录用量更新预算计数。
     """
-    # 预算检查：超限时不发起请求（避免外部 API 计费）
     allowed, reason = check_budget()
     if not allowed:
         logger.warning("AI 预算超限，跳过 TTS 调用: %s", reason)
         raise TTSRateLimitError(f"AI 预算超限: {reason}")
 
-    audio = await _client.synthesize(
+    # 工厂模式：按 settings.TTS_PROVIDER 动态选择阿里云/Edge/腾讯云
+    provider = get_tts_provider()
+    audio = await provider.synthesize(
         text,
         voice=voice,
         format=settings.ALIYUN_TTS_FORMAT,
@@ -93,11 +85,49 @@ async def synthesize_segment(text: str, voice: str = None) -> bytes:
     return audio
 
 
+# 凭证脱敏正则：捕获组 1 为键名（token/secret/key/... + 分隔符），值为 \S+
+# 替换时保留键名只抹去值，便于排查时定位是哪个凭证出错
+_CREDS_PATTERN = re.compile(
+    r"(?i)((?:token|secret|key|password|appkey)\s*[:=]\s*)\S+"
+)
+
+
+def _redact_credentials(text: str) -> str:
+    """脱敏文本中的凭证信息，避免日志泄露 API Key。
+
+    保留键名（token= / secret: 等）只抹去值，使日志仍能定位是哪个凭证出错。
+    """
+    return _CREDS_PATTERN.sub(
+        lambda m: m.group(1) + "***",
+        text,
+    )
+
+
+def _summarize_segment_failures(
+    failures: list[tuple[int, str, Exception]],
+) -> str:
+    """汇总分段失败信息为可读字符串，用于日志和告警。
+
+    Args:
+        failures: [(seg_seq, stage, exception), ...]
+            stage 为 "合成" 或 "后处理"，标识失败环节
+
+    Returns:
+        多行字符串，每行 "seq（stage）: ExceptionType: message"
+        message 中的凭证信息已脱敏（token=xxx → token=***）
+    """
+    lines = []
+    for seq, stage, exc in failures:
+        msg = _redact_credentials(str(exc))
+        lines.append(f"{seq}（{stage}）: {type(exc).__name__}: {msg}")
+    return "\n".join(lines)
+
+
 async def synthesize(workflow_id: str, script_id: int) -> dict:
     """TTS 主入口。
 
     Args:
-        workflow_id: 工作流 ID（用于日志关联与 COS key 防覆盖）
+        workflow_id: 工作流 ID（用于日志关联与上传 key 防覆盖）
         script_id: 稿件 ID
 
     Returns:
@@ -132,11 +162,13 @@ async def synthesize(workflow_id: str, script_id: int) -> dict:
 
     # 3. 后处理 + 上传，逐段 try 跳过失败
     audio_segments: list[dict] = []
+    failures: list[tuple[int, str, Exception]] = []
     for seg, res in zip(segments, results):
         seq = seg.get("seq")
         if isinstance(res, Exception):
-            # 合成阶段失败（重试耗尽），跳过并告警
+            # 合成阶段失败（重试耗尽），记录并跳过
             logger.warning("分段 %s 合成失败，跳过: %s", seq, res)
+            failures.append((seq, "合成", res))
             continue
         try:
             # 顺序：归一化 → 去静音 → 探测时长 → 上传
@@ -151,16 +183,26 @@ async def synthesize(workflow_id: str, script_id: int) -> dict:
             )
         except Exception as e:
             logger.warning("分段 %s 后处理/上传失败，跳过: %s", seq, e)
+            failures.append((seq, "后处理", e))
 
     # 4. 成功率检查：< 50% 视为整期失败（用 success*2 < total 避免浮点）
     success = len(audio_segments)
     if success * 2 < total:
+        summary = _summarize_segment_failures(failures)
         raise TTSError(
-            f"TTS 成功率过低: {success}/{total}（< 50%）"
+            f"TTS 成功率过低: {success}/{total}（< 50%）\n失败明细:\n{summary}"
         )
 
     # 5. 按 seg_seq 升序返回，便于后续按顺序拼接
     audio_segments.sort(key=lambda x: x["seg_seq"])
+
+    # 失败段摘要写入日志（即使成功率达标，也便于排查零星失败）
+    if failures:
+        logger.warning(
+            "TTS 部分段失败 workflow_id=%s\n%s",
+            workflow_id,
+            _summarize_segment_failures(failures),
+        )
 
     logger.info(
         "TTS 完成 workflow_id=%s script_id=%s success=%d/%d",

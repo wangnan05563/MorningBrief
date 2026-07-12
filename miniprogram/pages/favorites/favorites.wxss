@@ -1,0 +1,94 @@
+/* 收藏列表样式：复用历史页的马卡龙配色与卡片风格 */
+
+.container {
+  min-height: 100vh;
+  padding: 24rpx 0;
+}
+
+/* === 列表项卡片 === */
+.fav-list {
+  padding: 0 24rpx;
+}
+
+/* 覆盖 .card 的 margin，列表项间距统一用 margin-bottom */
+.fav-item {
+  margin: 0 0 24rpx 0;
+  padding: 28rpx 32rpx;
+  border-radius: 24rpx;
+  background: #FFFFFF;
+  box-shadow: 0 4rpx 16rpx rgba(126, 206, 193, 0.08);
+  transition: transform 0.15s ease;
+}
+
+.fav-item:active {
+  transform: scale(0.98);
+}
+
+/* 已下架/详情拉取失败的条目：弱化视觉，提示用户可取消收藏 */
+.item-unavailable {
+  opacity: 0.55;
+}
+
+/* 顶部：收藏时间 + 标签 */
+.item-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+/* 收藏时间用薄荷青色，与历史页日期风格一致 */
+.item-date {
+  font-size: 26rpx;
+  color: #7ECEC1;
+  font-weight: 500;
+  margin-right: 16rpx;
+}
+
+/* 标题用暖深灰 */
+.item-title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #2D3748;
+  line-height: 1.5;
+  margin-bottom: 20rpx;
+}
+
+/* 底部：时长 + 播放图标 */
+.item-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.item-duration {
+  font-size: 24rpx;
+  color: #A0AEC0;
+}
+
+/* 播放图标：圆形薄荷青背景，与历史页一致 */
+.play-icon-small {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 4rpx 12rpx rgba(126, 206, 193, 0.3);
+}
+
+/* 三角形字符左轻右重，需微调以视觉居中 */
+.icon-text {
+  font-size: 24rpx;
+  color: #FFFFFF;
+  margin-left: 4rpx;
+}
+
+/* === 底部操作提示 === */
+.list-tip {
+  text-align: center;
+  padding: 24rpx 0 48rpx;
+  font-size: 24rpx;
+  color: #A0AEC0;
+}

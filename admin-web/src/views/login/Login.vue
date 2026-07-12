@@ -55,7 +55,7 @@
  */
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from '../../utils/message'
 import { User, Lock } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
 
@@ -102,35 +102,35 @@ async function handleLogin() {
   justify-content: center;
   // 极浅渐变：薄荷青 → 蜜桃粉，营造柔和氛围而非抢眼
   background: linear-gradient(135deg, rgba(181, 234, 215, 0.45) 0%, rgba(255, 211, 224, 0.45) 100%);
-}
 
-.login-card {
-  width: 400px;
-  max-width: 90vw;
-  padding: 40px;
-  background: $color-bg-card;
-  border-radius: $radius-xl;
-  box-shadow: $shadow-lg;
-}
+  .login-card {
+    width: 400px;
+    max-width: 90vw;
+    padding: 40px;
+    background: $color-bg-card;
+    border-radius: $radius-xl;
+    box-shadow: $shadow-lg;
+  }
 
-.login-title {
-  text-align: center;
-  font-size: 22px;
-  font-weight: 700;
-  color: $color-primary-dark;
-  margin-bottom: 28px;
-  letter-spacing: 1px;
-}
+  .login-title {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: $color-primary-dark;
+    margin-bottom: 28px;
+    letter-spacing: 1px;
+  }
 
-// 输入框大圆角，与马卡龙风格统一
-:deep(.el-input__wrapper) {
-  border-radius: $radius-md;
-}
+  // 输入框大圆角，与马卡龙风格统一
+  :deep(.el-input__wrapper) {
+    border-radius: $radius-md;
+  }
 
-.login-btn {
-  width: 100%;
-  border-radius: $radius-md;
-  font-weight: 600;
-  letter-spacing: 2px;
+  .login-btn {
+    width: 100%;
+    border-radius: $radius-md;
+    font-weight: 600;
+    letter-spacing: 2px;
+  }
 }
 </style>

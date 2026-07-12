@@ -87,11 +87,22 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+/**
+ * 工作流详情页：展示单个工作流的元数据、5 步流水线进度、步骤详情表格
+ *
+ * 设计要点：
+ * - 步骤顺序固定（STEP_ORDER），即使后端缺失某步也用 pending 占位，保证进度条始终是 5 步
+ * - SSE 订阅仅处理本工作流事件（data.workflow_id 匹配），避免其他工作流事件触发刷新
+ * - 重跑步骤需用户显式选择，避免误操作整个流水线
+ * - background 标签页（document.hidden）时跳过 SSE 触发的刷新，减少无效请求
+ */
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from '../../utils/message'
+import { ElMessageBox } from 'element-plus'
 import { ArrowLeft, RefreshRight } from '@element-plus/icons-vue'
 import api from '../../api'
+import { subscribe } from '../../utils/sse'
 
 const route = useRoute()
 const router = useRouter()
@@ -120,6 +131,7 @@ const STEP_EL_STATUS_MAP = {
   pending: 'wait',
   retrying: 'process',
 }
+
 // 步骤状态中文文案
 const STEP_STATUS_TEXT = {
   pending: '等待中',
@@ -128,6 +140,7 @@ const STEP_STATUS_TEXT = {
   retrying: '重试中',
   failed: '失败',
 }
+
 // 步骤状态映射到 el-tag 类型（wait 用 info 灰色）
 const STEP_TAG_TYPE_MAP = {
   success: 'success',
@@ -201,6 +214,8 @@ async function loadDetail() {
   loading.value = true
   try {
     detail.value = await api.get(`/workflows/${route.params.id}`)
+  } catch {
+    // 响应拦截器已弹出 ElMessage，此处仅兜底防止 unhandled rejection
   } finally {
     loading.value = false
   }
@@ -208,24 +223,56 @@ async function loadDetail() {
 
 async function handleRetry() {
   if (!retryStep.value) return
-  // 重跑会消耗资源并生成新工作流，需二次确认
-  await ElMessageBox.confirm(
-    `确认从「${stepLabel(retryStep.value)}」步骤开始重跑？将生成新的工作流。`,
-    '提示',
-    { type: 'warning' },
-  )
+  // 用户取消确认时 ElMessageBox 会 reject，需 try-catch 静默处理
+  try {
+    await ElMessageBox.confirm(
+      `确认从「${stepLabel(retryStep.value)}」步骤开始重跑？将生成新的工作流。`,
+      '提示',
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
   retrying.value = true
   try {
     const data = await api.post(`/workflows/${route.params.id}/retry`, { step: retryStep.value })
     ElMessage.success('已创建重跑工作流')
     // 跳转到新工作流详情页，replace 避免回退回到旧工作流造成困惑
     router.replace(`/workflows/${data.new_workflow_id}`)
+  } catch {
+    // 错误提示由拦截器统一处理
   } finally {
     retrying.value = false
   }
 }
 
-onMounted(loadDetail)
+// SSE 订阅：实时刷新当前工作流详情
+// 仅处理本工作流的事件（data.workflow_id 匹配），其他工作流事件忽略
+let unsubscribeSseHandlers = []
+function setupSSE() {
+  const eventTypes = [
+    'workflow.started', 'workflow.completed', 'workflow.failed',
+    'workflow.step.completed', 'workflow.step.failed',
+  ]
+  unsubscribeSseHandlers = eventTypes.map((type) =>
+    subscribe(type, (event) => {
+      const wid = event.data?.workflow_id
+      if (!wid || wid !== detail.value.workflow_id) return
+      // 后台标签页跳过刷新，避免激活最小化窗口、减少无效请求
+      if (document.hidden) return
+      loadDetail()
+    }),
+  )
+}
+
+onMounted(() => {
+  loadDetail()
+  setupSSE()
+})
+onUnmounted(() => {
+  unsubscribeSseHandlers.forEach((fn) => fn())
+  unsubscribeSseHandlers = []
+})
 </script>
 
 <style scoped lang="scss">

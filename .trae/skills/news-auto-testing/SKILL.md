@@ -14,7 +14,7 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
 - 模板：`config.example.yaml`
 - 实际：`config.yaml`（从模板复制后按项目修改）
 
-配置文件分为 14 个区块：
+配置文件分为 15 个区块：
 
 | 区块 | 作用 |
 |------|------|
@@ -22,7 +22,7 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
 | `mcp_tools` | Playwright / Chrome DevTools 工具配置 |
 | `credentials` | 测试账号、登录选择器、token 路径 |
 | `pages` | 页面清单（路径、预期文本、是否需登录、按钮交互） |
-| `api_endpoints` | API 端点清单（方法、路径、期望状态码/code） |
+| `api_endpoints` | API 端点清单（方法、路径、期望状态码/code、priority） |
 | `placeholders` | 自定义占位符映射（扩展内置占位符） |
 | `performance` | Lighthouse 审计 + Performance Trace 阈值 |
 | `screenshot` | 截图策略（全页/视口、绝对路径、超时） |
@@ -32,6 +32,7 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
 | `fix_strategies` | 常见问题修复策略表 |
 | `workflow` | 流程控制（自动启停、失败继续、自动修复、回归构建、菜单 fallback） |
 | `report` | 报告输出配置 |
+| `test_priority` | 测试用例优先级分类（P0-P3，控制执行顺序和报告分组） |
 
 ## 测试流程（6 阶段）
 
@@ -125,7 +126,10 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
 对 `api_endpoints` 清单中每个 `skip: false` 的端点执行：
 
 ```
-1. 替换路径和请求体中的占位符：
+1. 按 test_priority.execution_order 排序测试用例（P0 → P1 → P2 → P3）
+   - 未标注 priority 的用例按 test_priority.default_priority 归类
+   - 同优先级内按 config.yaml 中的声明顺序执行
+2. 替换路径和请求体中的占位符：
    - 内置占位符：
      - ${username} → credentials.admin.username
      - ${password} → credentials.admin.password
@@ -135,14 +139,19 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
      - ${timestamp} → 当前 Unix 时间戳（秒）
    - 自定义占位符：从 placeholders 区块读取，键值对映射
    - 占位符替换顺序：先自定义占位符，再内置占位符（避免冲突）
-2. 如 requires_auth=true，先登录获取 token，设置 Authorization: Bearer <token>
-3. 发送 HTTP 请求（method + base_url + path）
-4. 检查状态码 == expected_status
-5. 检查 JSON.code == expected_code 或在 acceptable_codes 中
-6. 记录结果
+3. 如 requires_auth=true，先登录获取 token，设置 Authorization: Bearer <token>
+4. 发送 HTTP 请求（method + base_url + path）
+5. 检查状态码 == expected_status
+6. 检查 JSON.code == expected_code 或在 acceptable_codes 中
+7. 记录结果（含 priority 字段，用于报告分组）
 ```
 
 **PowerShell 注意**：POST 请求的 JSON body 在 PowerShell 中用 `Invoke-RestMethod` 而非 `curl.exe -d`，避免引号转义问题。
+
+**优先级执行策略**：
+- P0 用例失败时，如 `test_priority.P0.fail_action=block_release`，立即停止后续低优先级用例执行并报告阻塞
+- P1 用例失败时，记录并继续执行，发版前必须修复
+- P2/P3 用例失败时，仅记录，不阻塞流程
 
 ### 阶段 5：性能审计
 
@@ -174,15 +183,21 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
    - business_data：业务数据问题（需配置/数据修复，非代码缺陷）
    - framework_behavior：框架预期行为（如 Element Plus cancel error，无需修复）
    - environment：环境问题（如依赖缺失、端口占用）
-4. 如 report.output_dir 非空，生成 markdown 报告到该目录
-5. 报告内容：
-   - 测试概览（总数/通过/失败/跳过）
+4. 如 test_priority.group_by_priority=true，按优先级分组展示测试结果：
+   - P0 阻塞性：红色标识，失败时标注"阻止发布"
+   - P1 高优先级：橙色标识，失败时标注"发版前修复"
+   - P2 中优先级：黄色标识，失败时标注"下个迭代修复"
+   - P3 低优先级：灰色标识，失败时标注"仅记录"
+5. 如 report.output_dir 非空，生成 markdown 报告到该目录
+6. 报告内容：
+   - 测试概览（总数/通过/失败/跳过，按优先级统计通过率）
    - 页面测试详情表（含按钮交互结果）
-   - API 测试详情表
+   - API 测试详情表（含 priority 列，按优先级排序）
    - 性能审计数据
    - 发现的问题及分类（按 issue_classification 归类）
    - 发现的问题及修复建议（如 include_fix_suggestions=true）
    - 修复后的回归测试结果（如执行了修复）
+   - 优先级通过率摘要（P0/P1/P2/P3 各级通过率）
 ```
 
 ### 修复流程（如 workflow.auto_fix=true）
@@ -269,6 +284,42 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
 | framework_behavior | 框架预期行为 | 报告中记录，无需修复 |
 | environment | 环境问题 | 报告中标注，需环境层面修复 |
 
+### 测试用例优先级分类（P0-P3）
+
+通过 `test_priority` 配置节管理测试用例优先级，控制执行顺序和报告分组展示。每个 API 测试用例可在 `api_endpoints` 中标注 `priority` 字段，未标注的按 `default_priority` 归类。
+
+| 优先级 | 名称 | 颜色标识 | 失败处理 | 执行顺序 |
+|--------|------|----------|----------|----------|
+| P0 | 阻塞性 | 红色 | block_release（阻止发布） | 最先执行 |
+| P1 | 高优先级 | 橙色 | fix_before_release（发版前修复） | P0 之后 |
+| P2 | 中优先级 | 黄色 | fix_next_iteration（下个迭代修复） | P1 之后 |
+| P3 | 低优先级 | 灰色 | log_only（仅记录） | 最后执行 |
+
+**执行顺序**：按 `test_priority.execution_order`（默认 `["P0", "P1", "P2", "P3"]`）排序，同优先级内按 config.yaml 声明顺序执行。
+
+**P0 阻塞策略**：P0 用例失败时立即停止后续低优先级用例执行，报告中标注"阻止发布"。
+
+**新增测试用例覆盖范围**（均通过 config.yaml 管理，无硬编码）：
+
+| 端 | 测试用例 | 优先级 | 说明 |
+|----|---------|--------|------|
+| C端-小程序 | 播放进度上报 | P1 | 验证 playlogs/progress 接口 |
+| C端-小程序 | 倍速播放设置 | P2 | 验证 playback_rate 参数 |
+| C端-小程序 | 快进快退-seek操作 | P2 | 验证 position 参数边界 |
+| C端-小程序 | 收藏节目 | P1 | 验证 favorites POST 接口 |
+| C端-小程序 | 取消收藏 | P1 | 验证 favorites DELETE 接口 |
+| C端-小程序 | 收藏列表 | P2 | 验证 favorites 列表查询 |
+| C端-小程序 | 提交反馈 | P1 | 验证 feedback 提交接口 |
+| C端-小程序 | 频道筛选-列表 | P2 | 验证 channel 筛选参数 |
+| B端-前端 | 验证码获取 | P1 | 验证 captcha 生成接口 |
+| B端-前端 | 拖拽排序-更新 | P2 | 验证 placements/sort 接口 |
+| B端-前端 | 柱状图数据-播放统计 | P2 | 验证 stats/chart 接口 |
+| B端-前端 | 90天统计-趋势 | P2 | 验证 90d 范围趋势查询 |
+| B端-后端 | 内容安全检测 | P0 | 验证 moderation/check 接口 |
+| B端-后端 | 数据库备份 | P0 | 验证 db-admin/backup 接口 |
+| B端-后端 | feedback同步-COS | P1 | 验证 sync-feedback 接口 |
+| B端-后端 | 批量删除-节目 | P1 | 验证 batch-delete 接口 |
+
 ## 常见问题修复策略
 
 测试过程中遇到问题时，按 `fix_strategies` 表匹配并修复：
@@ -318,10 +369,10 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
 3. **页面遍历**：导航（菜单点击 + URL fallback）→ 截图（全页+超时降级）→ 快照（大文件落盘）→ 控制台/网络检查（error 白名单）
 4. **按钮交互**：定位按钮 → 点击 → 验证预期动作（dialog/url/state）→ 关闭对话框 → 超时重试验证
 5. **登录测试**：获取选择器 → 填表单 → 提交 → 验证跳转和 token
-6. **API 测试**：占位符替换（内置+自定义）→ HTTP 调用 → 状态码+code 验证
+6. **API 测试**：按 P0-P3 优先级排序 → 占位符替换（内置+自定义）→ HTTP 调用 → 状态码+code 验证 → P0 失败阻塞后续
 7. **性能审计**：Lighthouse（隔离 context）+ Performance Trace（失败降级）
 8. **问题修复**：问题分类 → 代码修复 → 依赖检查 → 前端构建 → 缓存清除 → 回归验证
-9. **报告生成**：汇总结果 → 问题分类 → 生成 markdown 报告
+9. **报告生成**：汇总结果 → 问题分类 → 优先级分组展示 → 生成 markdown 报告
 
 ### 任务执行中的不确定性与失败点
 
@@ -345,12 +396,14 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
 | node_modules 不完整 | 依赖包部分文件缺失 | 删除问题包后重装 |
 | Lighthouse 在已登录态审计 | 审计页面被路由守卫重定向 | 隔离 context 审计 |
 | 业务数据问题误判为代码缺陷 | 工作流因 API key 未配置而失败 | issue_classification 分类 |
+| P0 用例失败阻塞后续测试 | 阻塞性用例（如内容安全/备份）失败 | 按 fail_action=block_release 停止低优先级用例，立即报告 |
+| 未标注 priority 的用例归类 | 新增测试用例未标注优先级字段 | 按 default_priority（默认 P2）归类 |
 
 ### 可抽象的固定流程
 
 **适用于所有 SPA 应用的固定流程**：
 
-1. 环境预检 → 2. 页面遍历（含按钮交互）→ 3. 登录流程 → 4. API 测试 → 5. 性能审计 → 6. 报告（含问题分类）
+1. 环境预检 → 2. 页面遍历（含按钮交互）→ 3. 登录流程 → 4. API 测试（按 P0-P3 优先级排序）→ 5. 性能审计 → 6. 报告（含问题分类+优先级分组）
 
 **固定判断逻辑**：
 
@@ -360,6 +413,7 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
 - 登录成功 = token 返回 + URL 跳转 + 用户信息显示
 - 性能合格 = LCP/CLS/TTFB 在阈值内
 - 问题分类 = code_defect / business_data / framework_behavior / environment
+- 优先级执行 = P0 失败阻塞发布 → P1 发版前修复 → P2 下迭代修复 → P3 仅记录
 
 ### 适用场景
 
@@ -428,3 +482,6 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
 11. **error 白名单**：框架预期 error（如 Element Plus cancel）通过白名单过滤，不触发 FAIL
 12. **回归缓存**：修复后回归测试使用 `ignoreCache` 强制刷新，避免加载旧版本静态资源
 13. **问题分类**：发现的问题按 issue_classification 分类，只有 code_defect 触发代码修复流程
+14. **优先级执行**：API 测试按 `test_priority.execution_order`（P0→P1→P2→P3）顺序执行，P0 失败阻塞后续低优先级用例
+15. **优先级报告**：如 `test_priority.group_by_priority=true`，报告按优先级分组展示，含各级通过率摘要
+16. **默认优先级**：未标注 `priority` 的测试用例按 `test_priority.default_priority`（默认 P2）归类

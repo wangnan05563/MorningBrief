@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM 模型层（V1.2：16 张表 = 11 业务 + 3 辅助 + 2 AI 服务）。
+"""SQLAlchemy ORM 模型层（V1.2：20 张表 = 12 业务 + 3 辅助 + 2 AI 服务 + 1 队列配置 + 2 用户互动）。
 
 与 SQLite schema 的表一一对应：
 - User          → user
@@ -7,6 +7,7 @@
 - Material      → material
 - AdMaterial    → ad_material
 - AdPlacement   → ad_placement
+- Channel       → channel
 - Workflow      → workflow
 - WorkflowStep  → workflow_step
 - Review        → review
@@ -17,6 +18,9 @@
 - PlayProgress      → play_progress       （V1.2 新增）
 - AIConfig          → ai_config           （AI 服务模块新增）
 - AIUsageLog        → ai_usage_log        （AI 服务模块新增）
+- QueueConfig       → queue_config        （队列配置，单行表）
+- Favorite          → favorite            （用户收藏）
+- Feedback          → feedback            （用户反馈）
 
 用法：
     from app.models import User, Episode, Script
@@ -27,6 +31,9 @@ from app.models.script import Script, ScriptStatus
 from app.models.material import Material, MaterialStatus, MaterialSourceType
 from app.models.ad_material import AdMaterial
 from app.models.ad_placement import AdPlacement, AdPosition
+# Channel 必须在 Workflow 之前导入：workflow.channel_id 外键引用 channel.id，
+# 若 Channel 未注册到 Base.metadata，create_all 会抛 NoReferencedTableError
+from app.models.channel import Channel
 from app.models.workflow import (
     Workflow,
     WorkflowStep,
@@ -44,6 +51,11 @@ from app.models.crawler_dedup import CrawlerDedup
 from app.models.play_progress import PlayProgress
 # AI 服务模块
 from app.models.ai_config import AIConfig, AIUsageLog
+# 队列配置（单行配置表，首次启动插入默认值）
+from app.models.queue_config import QueueConfig
+# 用户互动表（收藏与反馈）
+from app.models.favorite import Favorite
+from app.models.feedback import Feedback
 # 数据库维护与系统清理模块（V1.2 新增）
 from app.models.audit_log import AuditLog
 
@@ -59,6 +71,7 @@ __all__ = [
     "AdMaterial",
     "AdPlacement",
     "AdPosition",
+    "Channel",
     "Workflow",
     "WorkflowStep",
     "WorkflowSource",
@@ -77,6 +90,11 @@ __all__ = [
     # AI 服务模块
     "AIConfig",
     "AIUsageLog",
+    # 队列配置
+    "QueueConfig",
+    # 用户互动表
+    "Favorite",
+    "Feedback",
     # 数据库维护与系统清理模块
     "AuditLog",
 ]

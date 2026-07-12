@@ -1,10 +1,10 @@
----
+﻿---
 name: "news-frontend-code-review"
 description: "对 20_News 项目前端代码（admin-web/src/ 下 Vue 3/Element Plus 文件 + miniprogram/ 下微信小程序文件）进行全面评审与逻辑审查，覆盖组件规范、状态管理、API 契约、路由设计、类型安全、性能、可访问性、前后端字段契约、小程序生命周期、音频播放管理等维度。当用户要求'审查/检查/走查/把关/review/评估/看看对不对/规范不规范'前端 Vue/JS 代码、'.vue/.js 文件修改'、'迭代发布前前端走查'，或提到'前端评审/frontend review/Vue 代码审查/小程序代码审查'时调用。仅审查前端文件；纯后端 .py 文件审查请改用 news-backend-code-review。"
 whenToUse: "需要审查 20_News 前端代码（admin-web/src/ 下 .vue/.js 文件 + miniprogram/ 下 .js/.wxml/.wxss 文件）是否符合项目规范"
 triggers: "前端代码 走查/审查/审核/把关/review/检查/评估 | .vue/.js 文件 修改/变更/迭代 走查 | 迭代发布前 前端 代码 走查 | 这段前端代码 写得对不对/规范不规范 | Vue/小程序 代码 review | 页面/组件/Store/路由 代码 审查"
-version: "1.0.0"
-updated: "2026-07-09"
+version: "1.4.0"
+updated: "2026-07-12"
 config: "config.yaml"
 scripts: "scripts/auto-scan.ps1"
 template: "templates/report-template.md"
@@ -12,7 +12,7 @@ template: "templates/report-template.md"
 
 # 20_News 前端代码审查
 
-对 20_News 项目前端代码进行全面的代码评审及逻辑审查，覆盖**运营后台（admin-web/，Vue 3 + Element Plus + Vite + Pinia）**与**微信小程序（miniprogram/，原生小程序）**两套前端代码。评审涵盖 **15 个维度**：目录结构、命名规范、Vue 3 组件规范、Element Plus 规范、Pinia 状态管理、API 调用规范、路由设计、前后端字段契约、小程序生命周期、小程序音频播放管理、小程序 API 层、性能、可访问性、代码质量、错误处理。
+对 20_News 项目前端代码进行全面的代码评审及逻辑审查，覆盖**运营后台（admin-web/，Vue 3 + Element Plus + Vite + Pinia）**与**微信小程序（miniprogram/，原生小程序）**两套前端代码。评审涵盖 **29 个维度**：目录结构、命名规范、Vue 3 组件规范、Element Plus 规范、Pinia 状态管理、API 调用规范、路由设计、前后端字段契约、小程序生命周期、小程序音频播放管理、小程序 API 层、性能、可访问性、代码质量、错误处理。
 
 ## 配置驱动
 
@@ -292,6 +292,53 @@ function request(options) {
 
 ---
 
+## 补充审查要点
+
+> 以下审查要点来源于项目迭代复盘，配置详见 `config.yaml` 对应节点。
+
+### A. el-table 拖拽排序审查
+
+**配置节点**：`config.yaml#element_plus_drag_sort`
+
+- 【强制】Sortable.js 拖拽 el-table 时，`onEnd` 回调必须先恢复 DOM（`removeChild` + `insertBefore`）再改数组，避免 Vue diff 冲突（规范 43）
+- 【强制】el-table 拖拽模式下必须取消 `fixed` 列，否则双 tbody 导致 Sortable 错位（规范 44）
+- 判断信号：grep 搜索 `Sortable.create` + `el-table`，检查 onEnd 是否有 DOM 恢复 + 是否有 `fixed` 属性
+
+### B. canvas 验证码审查
+
+**配置节点**：`config.yaml#canvas_captcha`
+
+- 【强制】验证码字符集必须排除形近字符（`0/O`、`l/I/1`、`5/S` 等），避免用户无法区分（规范 42）
+- 判断信号：grep 搜索验证码字符集定义，检查是否包含 `0`、`O`、`l`、`I`、`1` 等形近字符
+- 推荐安全字符集：`ABCDEFGHJKMNPQRSTUVWXYZ23456789`（已排除 I/L/O/Q/S/Z）
+
+### C. el-upload 文件校验审查
+
+**配置节点**：`config.yaml#el_upload_validation`
+
+- 【强制】`el-upload` 必须配置 `before-upload` 进行文件类型 + 大小双重校验
+- 【强制】`accept` 属性限制文件类型（如 `.jpg,.png,.mp3`）
+- 【强制】`before-upload` 函数校验失败时必须返回 `false` 阻止上传
+- 判断信号：grep 搜索 `<el-upload` 无 `before-upload` 属性
+
+### D. 图表组件注册审查
+
+**配置节点**：`config.yaml#chart_components`
+
+- 【强制】Chart.js 使用 `BarElement`/`LineElement`/`Filler` 等插件时必须 `import` 并 `Chart.register()`，否则图表渲染失败
+- 判断信号：grep 搜索 `new Chart(` 或 `fill: true`，检查是否 `Chart.register` 了对应插件
+- 常见遗漏：`Filler` 插件（折线图填充）、`BarElement`（柱状图）
+
+### E. 趋势图 Y 轴单位审查
+
+**配置节点**：`config.yaml#trend_chart`
+
+- 【强制】趋势图指标切换时 Y 轴单位必须同步更新（如 dau→"人"、completion_rate→"%"）
+- 【强制】指标→单位映射必须配置驱动（`metric_unit_map`），禁止硬编码在组件内
+- 判断信号：grep 搜索 Y 轴标题配置，检查是否随指标动态切换
+
+---
+
 ## 四维度复盘
 
 > 基于本次 20_News 前端代码审查实践，使用 Sequential Thinking 4 维度复盘法沉淀可复用的工作流模板。
@@ -338,6 +385,42 @@ function request(options) {
 | 路径严格相等判断 | 维度 6 | `grep "includes.*login\|includes.*admin" admin-web/src/` | `hard_constraints.rules.path_strict_equality` |
 | 环境化 BASE_URL | 维度 11 | `grep "BASE_URL.*=.*localhost\|http://" miniprogram/services/` 硬编码 | `miniprogram_api.env_based_base_url` |
 
+## 新增审查维度：前端与后端交互一致性
+
+### 维度 16：前端配置键与后端路由字段对齐
+
+**为什么**：前端表单字段名必须与后端路由模型字段名一致，否则配置值无法正确传递。
+
+检查信号：Grep ttsForm.edge_rate 等字段，确认后端 TTSConfigBody 中有同名字段
+修复建议：字段名不一致时统一命名，避免 edge_rate vs edge_tts_rate 混淆
+
+### 维度 17：重跑确认对话框显示正确步骤标签
+
+**为什么**：用户点击重跑时应看到从哪一步开始，而不是笼统的重跑。
+
+检查信号：Grep ElMessageBox.confirm 中的提示文本
+修复建议：使用 stepLabel(retryStep.value) 显示具体步骤名
+
+### 维度 18：前端路由静态路径定义顺序
+
+**为什么**：Vite + Vue Router 中静态路由必须在动态路由之前定义，否则动态路由会捕获静态路径。
+
+检查信号：Grep routes 数组中静态路径在动态路径之后
+修复建议：将 /batch-delete 等静态路由移至 /:id 之前
+
+### 维度 19：前端批量操作确认与上限提示
+
+**为什么**：批量删除等操作应显示数量上限和二次确认，防止误操作。
+
+检查信号：Grep 批量操作无 max_length 前端校验
+修复建议：添加 v-if selectedIds.length <= 100 禁用按钮 + 确认对话框
+
+### 维度 20：前端参数显示规范化
+
+**为什么**：前端展示的 Edge 语速/音量参数应格式化为友好显示（如 +10% 而非 0.1）。
+
+检查信号：Grep 表单绑定值直接显示原始数值
+修复建议：添加计算属性格式化显示值，编辑时转换回原始值
 ### 维度 4：适用场景与不适用场景
 
 | 模板 | 适用场景 | 不适用场景 |
@@ -386,3 +469,143 @@ pwsh .trae/skills/news-frontend-code-review/scripts/auto-scan.ps1
 ### 阶段 4：修复验证
 
 修复后重新运行阶段 1 + 阶段 2，确认问题已解决。
+
+---
+
+## 新增审查维度：前端与后端交互一致性
+
+### 维度 16：前端配置键与后端路由字段对齐
+
+**为什么**：前端表单字段名必须与后端路由模型字段名一致，否则配置值无法正确传递。
+
+检查信号：Grep 	tsForm.edge_rate 等字段，确认后端 TTSConfigBody 中有同名字段
+修复建议：字段名不一致时统一命名，避免 edge_rate vs edge_tts_rate 混淆
+
+### 维度 17：重跑确认对话框显示正确步骤标签
+
+**为什么**：用户点击重跑时应看到从哪一步开始，而不是笼统的"重跑"。
+
+检查信号：Grep ElMessageBox.confirm 中的提示文本
+修复建议：使用 stepLabel(retryStep.value) 显示具体步骤名
+
+### 维度 18：前端路由静态路径定义顺序
+
+**为什么**：Vite + Vue Router 中静态路由必须在动态路由之前定义，否则动态路由会捕获静态路径。
+
+检查信号：Grep outes 数组中静态路径在动态路径之后
+修复建议：将 /batch-delete 等静态路由移至 /:id 之前
+
+### 维度 19：前端批量操作确认与上限提示
+
+**为什么**：批量删除等操作应显示数量上限和二次确认，防止误操作。
+
+检查信号：Grep 批量操作无 max_length 前端校验
+修复建议：添加 -if="selectedIds.length <= 100" 禁用按钮 + 确认对话框
+
+### 维度 20：前端参数显示规范化
+
+**为什么**：前端展示的 Edge 语速/音量参数应格式化为用户友好的显示（如 +10% 而非  .1）。
+
+检查信号：Grep 表单绑定值直接显示原始数值
+修复建议：添加计算属性格式化显示值，编辑时转换回原始值
+
+
+### 维度 21：前端配置键与后端字段一致性
+
+**为什么**：前端表单字段名、路由模型字段名、数据库配置键、Settings 属性四者必须一致或通过明确映射连接。字段不一致会导致前端保存的值在后端被忽略。
+
+检查信号：Grep 前端字段名（如 edge_rate）与后端路由模型字段名不一致
+修复建议：统一键名或使用 LEGACY_KEY_MAP 兼容旧键名读取
+
+### 维度 22：前端批量失败诊断信息展示
+
+**为什么**：批量操作中每步每段失败原因必须在前端以友好方式展示，不能仅显示"X/Y 失败"。
+
+检查信号：Grep 批量操作失败后无分段级错误信息展示
+修复建议：解析后端返回的失败摘要，逐段展示错误原因（脱敏后）
+
+### 维度 23：前端路由静态路径优先级
+
+**为什么**：Vue Router 中静态路由必须在动态路由之前定义，否则动态路由会捕获静态路径。
+
+检查信号：Grep routes 数组中静态路径定义在动态路径之后
+修复建议：将 /batch-delete 等静态路由移至 /:id 之前
+
+### 维度 24：前端参数规范化展示
+
+**为什么**：前端展示的数值参数应格式化为友好显示（如 +10% 而非 0.1），编辑时转换回原始值。
+
+检查信号：Grep 表单绑定值直接显示原始数值
+修复建议：添加计算属性格式化显示值，编辑时转换回原始值
+
+### 维度 25：前端临时文件/资源清理意识
+
+**为什么**：前端上传/下载临时文件后应提供清理提示或自动清理机制，防止浏览器存储泄漏。
+
+检查信号：Grep Blob URL 创建后无 revokeObjectURL 调用
+修复建议：使用完 Blob URL 后调用 URL.revokeObjectURL() 释放内存
+
+---
+
+## 新增审查维度：第三方服务模型名称与配置持久化
+
+### 维度 26：第三方服务模型名称大小写核对
+
+**为什么**：第三方 AI 服务商（LLM/TTS）的模型名称是区分大小写的字符串。使用错误的模型名会导致 API 调用失败或路由到错误的模型。前端预设配置中的模型名称必须以官方文档为事实源。
+
+检查信号：Grep 预设配置中的模型名（如 deepseek-chat），与官网文档逐字核对
+修复建议：新接入服务商时先查阅官方文档确认模型名称大小写，修改预设默认模型时同步更新后端定价表
+
+### 维度 27：预设切换后下拉框状态反射
+
+**为什么**：用户选择预设后，下拉框应反映当前选中的预设，否则用户无法确认当前使用的是哪个提供商。
+
+检查信号：Grep applyPreset 函数中是否设置了 selectedPreset.value = key
+修复建议：预设切换函数中必须同步更新 selectedPreset 状态
+
+### 维度 28：页面加载后预设自动匹配
+
+**为什么**：页面加载后应从数据库读取配置，并根据 base_url 自动匹配对应的预设提供商，使用户一眼就能知道当前使用的是哪个服务商。
+
+检查信号：Grep loadConfig 函数中是否包含基于 base_url 的预设自动匹配逻辑
+修复建议：在 presets.value 赋值后，遍历预设列表匹配 base_url，设置 selectedPreset.value
+
+### 维度 29：预设切换时 API Key 不被覆盖
+
+**为什么**：不同服务商的 API Key 完全不同。切换预设时如果覆盖了已保存的 API Key，会导致鉴权失败。
+
+检查信号：Grep applyPreset 函数中是否意外设置了 api_key 字段
+修复建议：预设切换只更新 base_url 和 model，不触碰 api_key
+
+---
+
+## 新增审查维度：批量操作与多选交互
+
+### 维度 30：批量删除多选交互规范
+
+**为什么**：批量删除是不可逆操作，表格必须提供选择列、选中计数、二次确认，防止误操作。
+
+检查信号：Grep el-table 无 type="selection" 列、批量操作无 ElMessageBox.confirm
+修复建议：添加 selection 列 + @selection-change 事件 + 二次确认对话框
+
+### 维度 31：批量操作按钮禁用状态
+
+**为什么**：未选中任何行时批量操作按钮应禁用，避免空操作。
+
+检查信号：Grep 批量操作按钮无 :disabled="selectedRows.length === 0"
+修复建议：添加 disabled 绑定，选中数量变化时实时更新
+
+### 维度 32：删除后分页修正
+
+**为什么**：批量删除后剩余记录可能少于当前页，需要自动回退到有效页码。
+
+检查信号：Grep 批量删除后无分页修正逻辑
+修复建议：计算 remainingTotal，若 page > maxPage 则 page = maxPage，然后重新加载列表
+
+### 维度 33：批量操作前端确认提示文案
+
+**为什么**：确认对话框必须明确告知用户删除范围和数据不可恢复，降低误操作风险。
+
+检查信号：Grep ElMessageBox.confirm 中无"永久删除""不可恢复"等关键词
+修复建议：提示文案包含选中数量、删除范围（素材/稿件/审核/节目/播放数据）、不可恢复声明
+

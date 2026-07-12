@@ -7,7 +7,7 @@
  * - 401 自动跳转登录，403 提示无权限，其他错误统一 ElMessage 提示
  */
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from '../utils/message'
 
 const api = axios.create({
   baseURL: '/admin/api/v1',
@@ -43,8 +43,9 @@ api.interceptors.response.use(
       localStorage.removeItem('admin_token')
       localStorage.removeItem('admin_username')
       localStorage.removeItem('admin_role')
-      // 严格相等判断，避免含 /login 子串的路径（如 /login-callback）被误判为已在登录页
-      if (globalThis.location.pathname !== '/login') {
+      // 页面隐藏时不立即跳转（location.href 会激活最小化窗口）
+      // token 已清除，用户恢复页面后路由守卫会自动跳转到登录页
+      if (!document.hidden && globalThis.location.pathname !== '/login') {
         globalThis.location.href = '/login'
       }
     } else if (!error.config?.silent) {

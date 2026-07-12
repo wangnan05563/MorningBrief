@@ -1,43 +1,46 @@
 @echo off
-chcp 936 >nul 2>&1
-REM 脚本位于 scripts/ 目录，切回项目根目录
+chcp 65001 >nul 2>&1
+setlocal
+
+REM Keep this entry script ASCII-only for reliable cmd.exe parsing.
 cd /d "%~dp0.."
 
 echo ========================================
-echo   20_News EXE 一键构建打包
+echo   20_News EXE Builder
 echo ========================================
 echo.
-echo 构建流程：
-echo   1. 创建/更新构建虚拟环境（.venv-build）
-echo   2. 安装项目依赖 + PyInstaller
-echo   3. 构建 admin-web 前端（SPA 产物）
-echo   4. PyInstaller 打包后端为 exe
-echo   5. 复制配置文件与前端产物
-echo   6. 生成安装包（Inno Setup，未安装时自动安装）
+echo Build steps:
+echo   1. Prepare build venv (.venv-build)
+echo   2. Install deps + PyInstaller
+echo   3. Build admin-web SPA (if exists)
+echo   4. PyInstaller packaging
+echo   5. Copy external resources
+echo   6. Generate installer (Inno Setup, auto-install if missing)
 echo.
-echo 产物：dist\20-news\20-news.exe
+echo Output: dist\20-news\20-news.exe
 echo.
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build-exe.ps1" %*
+set "BUILD_EXIT_CODE=%ERRORLEVEL%"
 
-if errorlevel 1 (
+if not "%BUILD_EXIT_CODE%"=="0" (
     echo.
-    echo [ERROR] 打包失败，请查看上方错误信息
+    echo [ERROR] Build failed. Review the messages above.
     pause
-    exit /b 1
+    exit /b %BUILD_EXIT_CODE%
 )
 
 echo.
 echo ========================================
-echo   打包完成！
+echo   Build Complete!
 echo ========================================
-echo   产物目录：dist\20-news\
-echo   启动程序：dist\20-news\20-news.exe
-echo   安装包：  dist\20News-Setup-v*.exe（需 Inno Setup）
+echo   Output dir: dist\20-news\
+echo   EXE:        dist\20-news\20-news.exe
+echo   Installer:  dist\20News-Setup-v*.exe (if Inno Setup enabled)
 echo.
-echo   注意：
-echo   - V1.2 单机 exe：SQLite 嵌入式 + TTLCache，无需 MySQL/Redis/Docker
-echo   - 首次运行前编辑 exe 同目录的 .env，填入 JWT_SECRET / LLM_API_KEY / COS_* 等密钥
+echo   Notes:
+echo   - V1.2: SQLite embedded + TTLCache, no MySQL/Redis/Docker needed
+echo   - Edit .env in exe dir before first run (JWT_SECRET / LLM_API_KEY / COS_*)
 echo ========================================
 pause
-exit
+exit /b 0

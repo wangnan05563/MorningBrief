@@ -73,10 +73,24 @@ async def get_audio_duration(file_path: str) -> int:
 
 
 async def download_file(url: str, dest_path: str) -> None:
-    """用 httpx.AsyncClient 流式下载文件到本地。
+    """下载文件到本地，支持 HTTP URL 和本地 /audio/ 静态端点。
 
-    流式写入避免大文件占满内存;广告素材虽小,但分段音频可能较大。
+    COS 未配置时 TTS 上传降级到本地 /audio/ 路径，stitch 拼接阶段下载
+    此类 URL 时走本地文件复制，避免 httpx 无法访问相对路径。
     """
+    # 本地 /audio/ 端点：直接复制文件（COS 未配置时的回退路径）
+    if url.startswith("/audio/"):
+        import shutil
+        from app.paths import resolve_data_dir
+        try:
+            audio_root = Path(resolve_data_dir()) / "audio_cache"
+        except Exception:
+            audio_root = Path("data/audio_cache")
+        src = audio_root / url[len("/audio/"):]
+        logger.info("复制本地音频: %s -> %s", src, dest_path)
+        shutil.copyfile(str(src), dest_path)
+        return
+
     logger.info("下载文件: %s -> %s", url, dest_path)
     async with httpx.AsyncClient(timeout=60) as client:
         with open(dest_path, "wb") as f:  # NOSONAR

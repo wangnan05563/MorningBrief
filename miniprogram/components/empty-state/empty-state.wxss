@@ -1,0 +1,26 @@
+/* 空状态样式：从 app.wxss .empty-state 迁移，保持原视觉一致 */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 120rpx 0;
+  color: #A0AEC0;
+}
+
+.empty-icon {
+  font-size: 80rpx;
+  margin-bottom: 20rpx;
+}
+
+.empty-title {
+  font-size: 28rpx;
+  color: #A0AEC0;
+}
+
+/* 描述比标题略小且更淡，形成层次 */
+.empty-desc {
+  font-size: 24rpx;
+  color: #CBD5E0;
+  margin-top: 12rpx;
+}

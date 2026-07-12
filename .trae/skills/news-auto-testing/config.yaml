@@ -411,6 +411,161 @@ api_endpoints:
     expected_code: 0
     skip: false
 
+  # --- 小程序测试用例（C 端 API） ---
+  - name: "播放进度上报"
+    method: "POST"
+    path: "/api/v1/playlogs/progress"
+    requires_auth: false
+    expected_status: 200
+    expected_code: 0
+    body_template: '{"episode_id":1,"position":30,"completed":false,"duration":120}'
+    skip: false
+    priority: "P1"
+
+  - name: "倍速播放设置"
+    method: "POST"
+    path: "/api/v1/playlogs/progress"
+    requires_auth: false
+    expected_status: 200
+    expected_code: 0
+    body_template: '{"episode_id":1,"position":60,"playback_rate":1.5,"completed":false,"duration":120}'
+    skip: false
+    priority: "P2"
+
+  - name: "快进快退-seek操作"
+    method: "POST"
+    path: "/api/v1/playlogs/progress"
+    requires_auth: false
+    expected_status: 200
+    expected_code: 0
+    body_template: '{"episode_id":1,"position":90,"completed":false,"duration":120}'
+    skip: false
+    priority: "P2"
+
+  - name: "收藏节目"
+    method: "POST"
+    path: "/api/v1/favorites"
+    requires_auth: false
+    expected_status: 200
+    expected_code: 0
+    body_template: '{"episode_id":1}'
+    skip: false
+    priority: "P1"
+
+  - name: "取消收藏"
+    method: "DELETE"
+    path: "/api/v1/favorites/1"
+    requires_auth: false
+    expected_status: 200
+    expected_code: 0
+    skip: false
+    priority: "P1"
+
+  - name: "收藏列表"
+    method: "GET"
+    path: "/api/v1/favorites?page=1&size=10"
+    requires_auth: false
+    expected_status: 200
+    expected_code: 0
+    skip: false
+    priority: "P2"
+
+  - name: "提交反馈"
+    method: "POST"
+    path: "/api/v1/feedback"
+    requires_auth: false
+    expected_status: 200
+    expected_code: 0
+    body_template: '{"type":"bug","content":"测试反馈内容","contact":"test@example.com"}'
+    skip: false
+    priority: "P1"
+
+  - name: "频道筛选-列表"
+    method: "GET"
+    path: "/api/v1/episodes?channel=tech&page=1&size=10"
+    requires_auth: false
+    expected_status: 200
+    expected_code: 0
+    skip: false
+    priority: "P2"
+
+  # --- 前端测试用例（B 端 API） ---
+  - name: "验证码获取"
+    method: "GET"
+    path: "/admin/api/v1/auth/captcha"
+    requires_auth: false
+    expected_status: 200
+    expected_code: 0
+    skip: false
+    priority: "P1"
+
+  - name: "拖拽排序-更新"
+    method: "POST"
+    path: "/admin/api/v1/ads/placements/sort"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    body_template: '{"items":[{"id":1,"sort":0},{"id":2,"sort":1},{"id":3,"sort":2}]}'
+    skip: false
+    priority: "P2"
+
+  - name: "柱状图数据-播放统计"
+    method: "GET"
+    path: "/admin/api/v1/stats/chart?type=bar&metric=play_count&range=7d"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+    priority: "P2"
+
+  - name: "90天统计-趋势"
+    method: "GET"
+    path: "/admin/api/v1/stats/trend?metric=dau&range=90d"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+    priority: "P2"
+
+  # --- 后端测试用例（B 端 API） ---
+  - name: "内容安全检测"
+    method: "POST"
+    path: "/admin/api/v1/moderation/check"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    body_template: '{"content":"测试内容安全检测"}'
+    skip: false
+    priority: "P0"
+
+  - name: "数据库备份"
+    method: "POST"
+    path: "/admin/api/v1/db-admin/backup"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+    priority: "P0"
+
+  - name: "feedback同步-COS"
+    method: "POST"
+    path: "/admin/api/v1/maintenance/sync-feedback"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+    priority: "P1"
+
+  - name: "批量删除-节目"
+    method: "POST"
+    path: "/admin/api/v1/episodes/batch-delete"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    body_template: '{"ids":[9999,9998]}'
+    skip: false
+    priority: "P1"
+
 # --- 自定义占位符 ---
 # 扩展内置占位符（${username}/${password}/${current_date}/${current_month}/${current_year}/${timestamp}）
 # 用于 API 路径和请求体中的项目特定变量替换
@@ -685,3 +840,71 @@ workflow:
     ignore_cache: true
     # 是否清除 localStorage（避免旧 token 干扰）
     clear_storage: false
+
+# --- 测试用例优先级分类（P0-P3）---
+# 用于测试报告分类标识和执行顺序控制
+test_priority:
+  # P0：阻塞性测试（必须全部通过才能发布）
+  P0:
+    name: "阻塞性"
+    description: "核心功能、安全相关，失败必须立即修复，阻止发布"
+    color: "red"
+    fail_action: "block_release"       # 阻止发布
+    run_first: true                     # 优先执行
+    examples:
+      - "健康检查"
+      - "登录流程"
+      - "内容安全检测"
+      - "数据库备份"
+      - "今日节目"
+
+  # P1：高优先级测试（重要功能，失败需尽快修复）
+  P1:
+    name: "高优先级"
+    description: "重要业务功能，失败需在发版前修复"
+    color: "orange"
+    fail_action: "fix_before_release"  # 发版前修复
+    run_first: false
+    examples:
+      - "审核列表"
+      - "播放进度上报"
+      - "收藏/取消收藏"
+      - "提交反馈"
+      - "验证码获取"
+      - "feedback同步"
+      - "批量删除"
+
+  # P2：中优先级测试（辅助功能，失败可降级处理）
+  P2:
+    name: "中优先级"
+    description: "辅助功能和非核心路径，失败可降级或下个迭代修复"
+    color: "yellow"
+    fail_action: "fix_next_iteration"  # 下个迭代修复
+    run_first: false
+    examples:
+      - "倍速播放"
+      - "快进快退"
+      - "收藏列表"
+      - "频道筛选"
+      - "拖拽排序"
+      - "柱状图数据"
+      - "90天统计趋势"
+
+  # P3：低优先级测试（边缘场景，失败仅记录）
+  P3:
+    name: "低优先级"
+    description: "边缘场景和非关键 UI，失败仅记录不阻塞"
+    color: "gray"
+    fail_action: "log_only"            # 仅记录
+    run_first: false
+    examples:
+      - "页面文本匹配"
+      - "Lighthouse 性能审计"
+      - "UI 组件库废弃 API 警告"
+
+  # 默认优先级（未标注 priority 的测试用例）
+  default_priority: "P2"
+  # 报告中是否按优先级分组展示
+  group_by_priority: true
+  # 优先级执行顺序（P0 最先执行）
+  execution_order: ["P0", "P1", "P2", "P3"]

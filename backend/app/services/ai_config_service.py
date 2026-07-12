@@ -11,6 +11,7 @@
 启动时调用 apply_config_to_settings() 将数据库配置覆盖到 Settings 单例，
 使现有的 rewriter.py / synthesizer.py 等代码无需修改即可读取最新配置。
 """
+import json
 import logging
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
@@ -27,12 +28,16 @@ logger = logging.getLogger(__name__)
 
 # ---- 配置项与 Settings 字段的映射 ----
 # key = ai_config 表的 config_key，value = Settings 类的属性名
+# 覆盖 LLM + TTS 多 Provider（阿里云/Edge-TTS/腾讯云）全部字段
 CONFIG_KEY_MAP = {
+    # LLM 配置
     "llm_api_key": "LLM_API_KEY",
     "llm_base_url": "LLM_BASE_URL",
     "llm_model": "LLM_MODEL",
     "llm_timeout_sec": "LLM_TIMEOUT_SEC",
     "llm_retry_attempts": "LLM_RETRY_ATTEMPTS",
+    # TTS 通用 + 阿里云（保留原 key 兼容前端旧表单）
+    "tts_provider": "TTS_PROVIDER",
     "tts_api_key": "ALIYUN_TTS_API_KEY",
     "tts_appkey": "ALIYUN_TTS_APPKEY",
     "tts_voice": "ALIYUN_TTS_VOICE",
@@ -40,15 +45,38 @@ CONFIG_KEY_MAP = {
     "tts_format": "ALIYUN_TTS_FORMAT",
     "tts_timeout_sec": "ALIYUN_TTS_TIMEOUT_SEC",
     "tts_retry_attempts": "TTS_RETRY_ATTEMPTS",
+    # Edge-TTS（微软免费方案，无需 API Key）
+    "edge_tts_voice": "EDGE_TTS_VOICE",
+    "edge_tts_rate": "EDGE_TTS_RATE",
+    "edge_tts_volume": "EDGE_TTS_VOLUME",
+    "edge_tts_pitch": "EDGE_TTS_PITCH",
+    # 腾讯云 TTS（凭证可复用 COS）
+    "tencent_tts_secret_id": "TENCENT_TTS_SECRET_ID",
+    "tencent_tts_secret_key": "TENCENT_TTS_SECRET_KEY",
+    "tencent_tts_region": "TENCENT_TTS_REGION",
+    "tencent_tts_voice_type": "TENCENT_TTS_VOICE_TYPE",
+    "tencent_tts_volume": "TENCENT_TTS_VOLUME",
+    "tencent_tts_speed": "TENCENT_TTS_SPEED",
 }
 
-# 需要脱敏的配置项（API Key 类）
-SENSITIVE_KEYS = {"llm_api_key", "tts_api_key", "tts_appkey"}
+# 需要脱敏的配置项（API Key / Secret 类）
+SENSITIVE_KEYS = {
+    "llm_api_key", "tts_api_key", "tts_appkey",
+    "tencent_tts_secret_id", "tencent_tts_secret_key",
+}
+
+# 预设配置存储 key：在 ai_config 表中以 JSON 字符串形式存储每个预设的独立配置
+# 结构：{"qwen": {"api_key": "sk-xxx", "base_url": "...", "model": "..."}, ...}
+PRESET_CONFIGS_KEY = "llm_preset_configs"
+
+# 恢复初始配置时需要清空的 LLM 配置 key（保留 timeout/retry 等通用项）
+LLM_RESET_KEYS = ["llm_api_key", "llm_base_url", "llm_model", PRESET_CONFIGS_KEY]
 
 # 需要转为 int 类型的配置项
 INT_KEYS = {
     "llm_timeout_sec", "llm_retry_attempts",
     "tts_sample_rate", "tts_timeout_sec", "tts_retry_attempts",
+    "tencent_tts_voice_type", "tencent_tts_volume", "tencent_tts_speed",
 }
 
 # ---- LLM 提供商预设 ----
@@ -103,8 +131,11 @@ LLM_PRESETS = [
     },
     {
         "key": "agnes", "label": "Agnes AI",
-        "base_url": "https://api.agnes-ai.com/v1",
-        "model": "Agnes-2.0-Flash",
+        # base_url 以 Agnes AI 官方文档为准（https://wiki.agnes-ai.com/zh-Hans/docs/overview），
+        # 旧值 https://api.agnes-ai.com/v1 不可达，正确入口为 apihub.agnes-ai.com
+        "base_url": "https://apihub.agnes-ai.com/v1",
+        # 模型名以官方文档为准（小写 agnes-2.0-flash），避免大小写敏感导致 404
+        "model": "agnes-2.0-flash",
         "api_key_url": "https://platform.agnes-ai.com/",
     },
 ]
@@ -121,7 +152,9 @@ MODEL_PRICING = {
     "glm-4-flash": {"input": 0.0, "output": 0.0},
     "moonshot-v1-8k": {"input": 0.0017, "output": 0.0017},
     # Agnes AI 当前免费开放，定价为 0
+    # 同时支持大小写两种模型名，避免预设改名后定价失效
     "Agnes-2.0-Flash": {"input": 0.0, "output": 0.0},
+    "agnes-2.0-flash": {"input": 0.0, "output": 0.0},
 }
 DEFAULT_PRICING = MODEL_PRICING["gpt-4o-mini"]
 
@@ -182,13 +215,106 @@ class AIConfigService:
         )
         return result.scalar_one_or_none()
 
+    async def _get_preset_configs_raw(self) -> dict:
+        """读取预设配置 JSON（明文）。
+
+        返回结构：{preset_key: {"api_key": "明文", "base_url": "...", "model": "..."}}
+        若未配置则返回空 dict。
+        """
+        raw = await self.get_config_value(PRESET_CONFIGS_KEY)
+        if not raw:
+            return {}
+        try:
+            data = json.loads(raw)
+            return data if isinstance(data, dict) else {}
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("预设配置 JSON 解析失败，重置为空")
+            return {}
+
+    async def get_preset_configs(self) -> dict:
+        """获取预设配置（前端展示用，API Key 脱敏）。
+
+        返回结构：{preset_key: {"api_key": "****xxxx", "base_url": "...", "model": "..."}}
+        """
+        raw = await self._get_preset_configs_raw()
+        masked: dict[str, dict] = {}
+        for key, cfg in raw.items():
+            if not isinstance(cfg, dict):
+                continue
+            masked[key] = {
+                "api_key": _mask_key(cfg.get("api_key", "")),
+                "base_url": cfg.get("base_url", ""),
+                "model": cfg.get("model", ""),
+            }
+        return masked
+
+    async def _save_preset_config(
+        self, preset_key: str, api_key: str, base_url: str, model: str
+    ) -> None:
+        """保存单个预设的配置到 JSON 字段。
+
+        API Key 为脱敏值时保留原有明文（视为未修改）。
+        """
+        configs = await self._get_preset_configs_raw()
+        existing = configs.get(preset_key, {})
+
+        # 脱敏值视为未修改，保留原有明文
+        if api_key and not _is_masked(api_key):
+            final_key = api_key
+        else:
+            final_key = existing.get("api_key", "")
+
+        configs[preset_key] = {
+            "api_key": final_key,
+            "base_url": base_url,
+            "model": model,
+        }
+        await self._upsert_config(PRESET_CONFIGS_KEY, json.dumps(configs, ensure_ascii=False))
+
+    async def reset_to_defaults(self) -> dict:
+        """恢复 LLM 初始配置（清空用户保存的预设配置和当前 LLM 配置）。
+
+        清空 llm_api_key / llm_base_url / llm_model / llm_preset_configs，
+        保留 timeout/retry 等通用项。热更新 Settings 单例回退到 .env 默认值。
+
+        返回重置后的 LLM 配置（供前端刷新表单）。
+        """
+        for key in LLM_RESET_KEYS:
+            await self.db.execute(
+                delete(AIConfig).where(AIConfig.config_key == key)
+            )
+        await self.db.commit()
+
+        # 热更新 Settings 单例回退到 .env 默认值
+        settings = get_settings()
+        # 通过重新实例化 Settings 获取 .env 默认值，避免污染现有单例
+        from app.config import Settings
+        defaults = Settings()
+        settings.LLM_API_KEY = defaults.LLM_API_KEY
+        settings.LLM_BASE_URL = defaults.LLM_BASE_URL
+        settings.LLM_MODEL = defaults.LLM_MODEL
+
+        logger.info("LLM 配置已恢复初始状态，清空 key=%s", LLM_RESET_KEYS)
+
+        # 返回重置后的配置（脱敏）
+        return {
+            "api_key": _mask_key(settings.LLM_API_KEY),
+            "base_url": settings.LLM_BASE_URL,
+            "model": settings.LLM_MODEL,
+        }
+
     async def get_config_for_frontend(self) -> dict:
         """获取配置（前端展示用，API Key 脱敏）。
 
         返回结构：
         {
-            "llm": {"api_key": "****xxxx", "base_url": "...", ...},
-            "tts": {"api_key": "****xxxx", "voice": "...", ...},
+            "llm": {
+                "api_key": "****xxxx", "base_url": "...", "model": "...",
+                "timeout_sec": N, "retry_attempts": N,
+                "preset_configs": {preset_key: {"api_key": "****xxxx", "base_url": "...", "model": "..."}},
+                "selected_preset": "qwen|openai|...",
+            },
+            "tts": {...},
         }
         """
         raw = await self.get_all_config()
@@ -201,32 +327,69 @@ class AIConfigService:
                 return val
             return str(getattr(settings, settings_attr, default))
 
+        def _get_int(key: str, settings_attr: str, default: int) -> int:
+            val = raw.get(key)
+            if val is not None:
+                try:
+                    return int(val)
+                except (ValueError, TypeError):
+                    pass
+            return getattr(settings, settings_attr, default)
+
+        llm_base_url = _get("llm_base_url", "LLM_BASE_URL")
         llm_config = {
             "api_key": _mask_key(_get("llm_api_key", "LLM_API_KEY")),
-            "base_url": _get("llm_base_url", "LLM_BASE_URL"),
+            "base_url": llm_base_url,
             "model": _get("llm_model", "LLM_MODEL"),
             "timeout_sec": int(_get("llm_timeout_sec", "LLM_TIMEOUT_SEC", "30")),
             "retry_attempts": int(_get("llm_retry_attempts", "LLM_RETRY_ATTEMPTS", "3")),
+            # 预设配置（每个 provider 独立保存的 API Key/Base URL/Model，API Key 脱敏）
+            "preset_configs": await self.get_preset_configs(),
+            # 当前选中预设（根据 base_url 反向匹配）
+            "selected_preset": self._match_preset_by_base_url(llm_base_url),
         }
         tts_config = {
+            # Provider 选择（前端切换热生效）
+            "provider": _get("tts_provider", "TTS_PROVIDER", "aliyun"),
+            # 阿里云 NLS 字段（保留原 key 兼容）
             "api_key": _mask_key(_get("tts_api_key", "ALIYUN_TTS_API_KEY")),
             "appkey": _mask_key(_get("tts_appkey", "ALIYUN_TTS_APPKEY", "")),
             "voice": _get("tts_voice", "ALIYUN_TTS_VOICE"),
-            "sample_rate": int(_get("tts_sample_rate", "ALIYUN_TTS_SAMPLE_RATE", "44100")),
+            "sample_rate": _get_int("tts_sample_rate", "ALIYUN_TTS_SAMPLE_RATE", 44100),
             "format": _get("tts_format", "ALIYUN_TTS_FORMAT", "mp3"),
-            "timeout_sec": int(_get("tts_timeout_sec", "ALIYUN_TTS_TIMEOUT_SEC", "60")),
-            "retry_attempts": int(_get("tts_retry_attempts", "TTS_RETRY_ATTEMPTS", "3")),
+            "timeout_sec": _get_int("tts_timeout_sec", "ALIYUN_TTS_TIMEOUT_SEC", 60),
+            "retry_attempts": _get_int("tts_retry_attempts", "TTS_RETRY_ATTEMPTS", 3),
+            # Edge-TTS 字段
+            "edge_voice": _get("edge_tts_voice", "EDGE_TTS_VOICE", "zh-CN-XiaoxiaoNeural"),
+            "edge_rate": _get("edge_tts_rate", "EDGE_TTS_RATE", ""),
+            "edge_volume": _get("edge_tts_volume", "EDGE_TTS_VOLUME", ""),
+            "edge_pitch": _get("edge_tts_pitch", "EDGE_TTS_PITCH", ""),
+            # 腾讯云 TTS 字段
+            "tencent_secret_id": _mask_key(_get("tencent_tts_secret_id", "TENCENT_TTS_SECRET_ID", "")),
+            "tencent_secret_key": _mask_key(_get("tencent_tts_secret_key", "TENCENT_TTS_SECRET_KEY", "")),
+            "tencent_region": _get("tencent_tts_region", "TENCENT_TTS_REGION", "ap-guangzhou"),
+            "tencent_voice_type": _get_int("tencent_tts_voice_type", "TENCENT_TTS_VOICE_TYPE", 101011),
+            "tencent_volume": _get_int("tencent_tts_volume", "TENCENT_TTS_VOLUME", 0),
+            "tencent_speed": _get_int("tencent_tts_speed", "TENCENT_TTS_SPEED", 0),
         }
 
         return {"llm": llm_config, "tts": tts_config}
 
     # ---- 配置更新 ----
 
-    async def update_config(self, llm_config: dict, tts_config: dict) -> None:
+    async def update_config(
+        self, llm_config: dict, tts_config: dict, selected_preset: str = ""
+    ) -> None:
         """保存配置到 SQLite 并热更新 Settings 单例。
 
         API Key 脱敏值（****开头）视为未修改，跳过；
         空字符串视为清除 Key。
+
+        当 selected_preset 非空时，同步将当前 LLM 配置（api_key/base_url/model）
+        保存到预设配置 JSON 中，实现切换预设时返显之前保存的配置。
+
+        切换 TTS provider 或修改音色等配置后，清空 tts_factory 的 provider
+        缓存，使下次 synthesize 调用时重新创建实例读取最新配置。
         """
         updates: dict[str, str] = {}
 
@@ -234,6 +397,15 @@ class AIConfigService:
             updates[key] = value
         for key, value in self._normalize_tts(tts_config).items():
             updates[key] = value
+
+        # 同步保存预设配置（即使 updates 为空也需要更新预设配置）
+        if selected_preset:
+            await self._save_preset_config(
+                preset_key=selected_preset,
+                api_key=llm_config.get("api_key", ""),
+                base_url=llm_config.get("base_url", ""),
+                model=llm_config.get("model", ""),
+            )
 
         if not updates:
             return
@@ -246,6 +418,15 @@ class AIConfigService:
 
         # 热更新 Settings 内存单例
         self._apply_to_settings(updates)
+
+        # TTS 配置变更时清空 provider 工厂缓存，确保下次合成使用新配置
+        if any(k.startswith(("tts_", "edge_tts_", "tencent_tts_")) for k in updates):
+            try:
+                from app.workflow.tts.tts_factory import invalidate
+                invalidate()
+                logger.info("TTS provider 工厂缓存已清空（配置变更）")
+            except Exception as e:
+                logger.warning("清空 TTS provider 缓存失败: %s", e)
 
         logger.info("AI 配置已更新 keys=%s", list(updates.keys()))
 
@@ -270,8 +451,19 @@ class AIConfigService:
         return result
 
     def _normalize_tts(self, config: dict) -> dict[str, str]:
-        """将前端 TTS 配置转为 config_key -> value 映射。"""
+        """将前端 TTS 配置转为 config_key -> value 映射。
+
+        覆盖三套 Provider 字段：阿里云（api_key/appkey/voice/...）、
+        Edge-TTS（edge_voice/edge_rate/...）、腾讯云（tencent_secret_id/...）。
+        脱敏值跳过，空字符串清除。
+        """
         result: dict[str, str] = {}
+
+        # Provider 选择
+        if "provider" in config:
+            result["tts_provider"] = config["provider"]
+
+        # 阿里云 NLS 字段
         api_key = config.get("api_key", "")
         if api_key and not _is_masked(api_key):
             result["tts_api_key"] = api_key
@@ -290,6 +482,35 @@ class AIConfigService:
             result["tts_timeout_sec"] = str(config["timeout_sec"])
         if "retry_attempts" in config:
             result["tts_retry_attempts"] = str(config["retry_attempts"])
+
+        # Edge-TTS 字段
+        if "edge_voice" in config:
+            result["edge_tts_voice"] = config["edge_voice"]
+        if "edge_rate" in config:
+            result["edge_tts_rate"] = config["edge_rate"]
+        if "edge_volume" in config:
+            result["edge_tts_volume"] = config["edge_volume"]
+        if "edge_pitch" in config:
+            result["edge_tts_pitch"] = config["edge_pitch"]
+
+        # 腾讯云 TTS 字段
+        tencent_secret_id = config.get("tencent_secret_id", "")
+        if tencent_secret_id and not _is_masked(tencent_secret_id):
+            result["tencent_tts_secret_id"] = tencent_secret_id
+
+        tencent_secret_key = config.get("tencent_secret_key", "")
+        if tencent_secret_key and not _is_masked(tencent_secret_key):
+            result["tencent_tts_secret_key"] = tencent_secret_key
+
+        if "tencent_region" in config:
+            result["tencent_tts_region"] = config["tencent_region"]
+        if "tencent_voice_type" in config:
+            result["tencent_tts_voice_type"] = str(config["tencent_voice_type"])
+        if "tencent_volume" in config:
+            result["tencent_tts_volume"] = str(config["tencent_volume"])
+        if "tencent_speed" in config:
+            result["tencent_tts_speed"] = str(config["tencent_speed"])
+
         return result
 
     async def _upsert_config(self, key: str, value: str) -> None:
@@ -410,13 +631,39 @@ class AIConfigService:
             }
 
     async def test_tts_connection(
-        self, api_key: str, appkey: str
+        self,
+        provider: str = "aliyun",
+        api_key: str = "",
+        appkey: str = "",
+        edge_voice: str = "",
+        tencent_secret_id: str = "",
+        tencent_secret_key: str = "",
+        tencent_region: str = "",
+        tencent_voice_type: int = 0,
     ) -> dict:
-        """测试 TTS 连接（阿里云 NLS 鉴权验证）。
+        """测试 TTS 连接，按 provider 分支选择测试逻辑。
 
-        发送最小化合成请求验证 token/appkey 有效性。
-        不等待合成完成，仅检查创建任务是否成功。
+        aliyun：发送最小化合成请求验证 token/appkey 有效性（不等待合成完成）
+        edge：合成一句测试文本验证网络连通性（Edge-TTS 无鉴权概念）
+        tencent：合成一句测试文本验证凭证有效性
+
+        脱敏值（****开头）视为未修改，回退到已保存配置。
         """
+        provider = provider or settings.TTS_PROVIDER or "aliyun"
+
+        if provider == "aliyun":
+            return await self._test_aliyun(api_key, appkey)
+        elif provider == "edge":
+            return await self._test_edge(edge_voice)
+        elif provider == "tencent":
+            return await self._test_tencent(
+                tencent_secret_id, tencent_secret_key,
+                tencent_region, tencent_voice_type,
+            )
+        return {"success": False, "message": f"未知的 TTS provider: {provider}"}
+
+    async def _test_aliyun(self, api_key: str, appkey: str) -> dict:
+        """测试阿里云 NLS 鉴权（发送最小化合成任务创建请求）。"""
         if not api_key or _is_masked(api_key):
             saved_key = await self.get_config_value("tts_api_key")
             if not saved_key:
@@ -456,7 +703,6 @@ class AIConfigService:
             return {"success": False, "message": f"网络错误: {e}"}
 
         # 阿里云 NLS 错误码 → 可读提示映射
-        # 400 状态码下 error_code 更具诊断价值，统一解析后提示
         NLS_ERROR_HINTS = {
             40000001: "请确认填写的是 NLS AccessToken，而非 AccessKey Secret",
             40000010: "阿里云 NLS 免费试用已过期，请在控制台开通正式服务",
@@ -475,7 +721,7 @@ class AIConfigService:
         error_msg = data.get("error_message", "")
 
         if error_code == 20000000:
-            return {"success": True, "message": "TTS 鉴权成功"}
+            return {"success": True, "message": "阿里云 TTS 鉴权成功"}
         if error_code in NLS_ERROR_HINTS:
             return {
                 "success": False,
@@ -484,6 +730,74 @@ class AIConfigService:
         return {
             "success": False,
             "message": f"TTS 鉴权失败 error_code={error_code} msg={error_msg}",
+        }
+
+    async def _test_edge(self, edge_voice: str) -> dict:
+        """测试 Edge-TTS 连通性（合成一句测试文本）。
+
+        Edge-TTS 无鉴权概念，测试即实际合成。需能访问 edge-tts WebSocket 服务。
+        """
+        try:
+            from app.workflow.tts.edge_client import EdgeTTSProvider
+        except ImportError as e:
+            return {"success": False, "message": f"edge-tts 模块加载失败: {e}"}
+
+        # voice 留空时由 provider fallback 到 settings.EDGE_TTS_VOICE
+        voice = edge_voice or None
+        try:
+            provider = EdgeTTSProvider(voice=voice)
+        except Exception as e:
+            return {"success": False, "message": f"Edge-TTS 初始化失败: {e}"}
+
+        ok = await provider.test_connection()
+        if ok:
+            return {"success": True, "message": "Edge-TTS 连接成功（免费方案无鉴权）"}
+        return {
+            "success": False,
+            "message": "Edge-TTS 连接失败，请检查网络（需能访问 WebSocket 服务）或音色配置",
+        }
+
+    async def _test_tencent(
+        self,
+        secret_id: str,
+        secret_key: str,
+        region: str,
+        voice_type: int,
+    ) -> dict:
+        """测试腾讯云 TTS 凭证（合成一句测试文本）。
+
+        凭证脱敏值回退到已保存配置，再回退到 COS 凭证。
+        """
+        if not secret_id or _is_masked(secret_id):
+            saved_id = await self.get_config_value("tencent_tts_secret_id")
+            secret_id = saved_id or settings.COS_SECRET_ID
+        if not secret_key or _is_masked(secret_key):
+            saved_key = await self.get_config_value("tencent_tts_secret_key")
+            secret_key = saved_key or settings.COS_SECRET_KEY
+
+        if not secret_id or not secret_key:
+            return {
+                "success": False,
+                "message": "腾讯云 TTS 凭证未配置（TENCENT_TTS_SECRET_ID/SECRET_KEY 或 COS 凭证）",
+            }
+
+        from app.workflow.tts.tencent_client import TencentTTSProvider
+        try:
+            provider = TencentTTSProvider(
+                secret_id=secret_id,
+                secret_key=secret_key,
+                region=region or None,
+                voice_type=voice_type or None,
+            )
+        except Exception as e:
+            return {"success": False, "message": f"腾讯云 TTS 初始化失败: {e}"}
+
+        ok = await provider.test_connection()
+        if ok:
+            return {"success": True, "message": "腾讯云 TTS 连接成功"}
+        return {
+            "success": False,
+            "message": "腾讯云 TTS 连接失败，请检查凭证与音色配置",
         }
 
     # ---- 用量记录 ----
@@ -593,12 +907,46 @@ class AIConfigService:
 
     # ---- 预设列表 ----
 
+    @staticmethod
+    def _match_preset_by_base_url(base_url: str) -> str:
+        """根据 base_url 反向匹配预设 key，未匹配返回空字符串。"""
+        if not base_url:
+            return ""
+        for preset in LLM_PRESETS:
+            if preset["base_url"] == base_url:
+                return preset["key"]
+        return ""
+
     def get_presets(self) -> list[dict]:
         """返回 LLM 提供商预设列表。"""
         return LLM_PRESETS
 
-    def get_voices(self) -> list[dict]:
-        """返回常用 TTS 音色列表。"""
+    def get_voices(self, provider: str = None) -> list[dict]:
+        """返回对应 provider 的 TTS 音色列表。
+
+        不同 provider 的音色 ID 体系不同，前端切换 provider 时需重新加载音色列表。
+        """
+        provider = provider or settings.TTS_PROVIDER or "aliyun"
+
+        if provider == "edge":
+            return [
+                {"key": "zh-CN-XiaoxiaoNeural", "label": "晓晓（标准女声，与阿里云 xiaoyun 听感接近）"},
+                {"key": "zh-CN-YunyangNeural", "label": "云扬（新闻男声，业界新闻播报标杆）"},
+                {"key": "zh-CN-XiaoyiNeural", "label": "晓伊（温柔女声）"},
+                {"key": "zh-CN-YunxiNeural", "label": "云希（沉稳男声）"},
+                {"key": "zh-CN-XiaomengNeural", "label": "晓梦（甜美女声）"},
+                {"key": "zh-CN-YunfengNeural", "label": "云枫（磁性男声）"},
+            ]
+        elif provider == "tencent":
+            return [
+                {"key": "101011", "label": "智燕（新闻女声，精品音色，推荐）"},
+                {"key": "101013", "label": "智辉（新闻男声，精品音色）"},
+                {"key": "101021", "label": "智瑞（新闻男声，精品音色）"},
+                {"key": "501001", "label": "智兰（资讯女声，大模型音色，24k）"},
+                {"key": "101001", "label": "智瑜（情感女声）"},
+                {"key": "101004", "label": "智云（通用男声）"},
+            ]
+        # 默认阿里云
         return [
             {"key": "xiaoyun", "label": "小芸（标准女声）"},
             {"key": "xiaoyi", "label": "小伊（温柔女声）"},

@@ -1,0 +1,30 @@
+<!-- 节目信息卡片：日期+分类 / 标题 / 时长，可选操作按钮 -->
+<view class="episode-card">
+  <view class="episode-meta">
+    <text class="episode-date">{{episode.date}}</text>
+    <text class="tag tag-mint" wx:if="{{episode.categories}}">{{episode.categories[0]}}</text>
+  </view>
+  <view class="episode-title">{{episode.title}}</view>
+  <view class="episode-duration">
+    <text class="duration-icon">🎵</text>
+    <text>时长 {{fmt.time(episode.duration)}}</text>
+  </view>
+
+  <!-- 操作按钮区：仅 showActions=true 时显示，列表场景用 -->
+  <view class="episode-actions" wx:if="{{showActions}}">
+    <view class="action-btn action-play" catchtap="onPlay">播放</view>
+    <view class="action-btn action-detail" catchtap="onViewDetail">详情</view>
+  </view>
+</view>
+
+<!-- WXS：时长格式化 mm:ss，与各页面原 fmt.time 逻辑一致 -->
+<wxs module="fmt">
+  module.exports = {
+    time: function(s) {
+      s = s || 0;
+      var m = Math.floor(s / 60);
+      var sec = Math.floor(s % 60);
+      return (m < 10 ? '0' + m : m) + ':' + (sec < 10 ? '0' + sec : sec);
+    }
+  };
+</wxs>

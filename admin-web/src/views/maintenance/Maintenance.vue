@@ -219,7 +219,8 @@
 
 <script setup>
 import { ref, computed, onMounted, h } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from '../../utils/message'
+import { ElMessageBox } from 'element-plus'
 import {
   Refresh, Coin, Document, Cpu, Delete,
 } from '@element-plus/icons-vue'

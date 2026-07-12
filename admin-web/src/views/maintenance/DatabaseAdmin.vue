@@ -269,7 +269,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from '../../utils/message'
 import {
   Search, Plus, Delete, Download, Upload, View, Document, Refresh, Lock, EditPen,
 } from '@element-plus/icons-vue'

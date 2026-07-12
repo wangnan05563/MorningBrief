@@ -1,10 +1,10 @@
----
+﻿---
 name: "news-code-dev"
 description: "20_News 项目的标准化开发技能，覆盖后端(FastAPI/SQLAlchemy)、前端(Vue 3/Element Plus/小程序)、工作流编排(LLM/TTS)、测试、优化和缺陷修复。当用户要求'开发新功能/添加接口/修改代码/修复bug/重构/优化性能/写测试'时调用。"
 whenToUse: "需要开发新功能、修复缺陷、优化代码或编写测试时使用"
 triggers: "开发新功能/添加接口/修改代码/修复bug/重构/优化性能/写测试 | 开发/实现/添加/修改/修复/优化/重构 | 后端/前端/小程序/工作流/测试 开发 | 这段代码怎么写/怎么改/怎么优化"
-version: "1.0.0"
-updated: "2026-07-10"
+version: "1.4.0"
+updated: "2026-07-12"
 config: "config/project-config.json"
 ---
 
@@ -57,8 +57,8 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 ├── references/
 │   ├── architecture-patterns.md      ← 四层架构/工作流/缓存/认证/降级模式
 │   ├── coding-standards.md           ← Python/Vue/小程序/数据库/API 规范
-│   ├── meta-rules.md                 ← 20 条元规范（配置驱动/异步安全/JWT 安全等）
-│   ├── faq.md                        ← 10 个常见问题解答
+│   ├── meta-rules.md                 ← 30 条元规范（配置驱动/异步安全/JWT 安全/批量删除/多选交互等）（配置驱动/异步安全/JWT 安全等）
+│   ├── faq.md                        ← 11 个常见问题解答
 │   └── version-history.md            ← 版本演进和复盘
 ├── assets/
 │   ├── guides/
@@ -106,12 +106,12 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 |------|----------|
 | [architecture-patterns.md](references/architecture-patterns.md) | 四层架构/工作流编排/缓存模式/认证模式/降级模式 |
 | [coding-standards.md](references/coding-standards.md) | Python/Vue/小程序/数据库/API 契约详细规范 |
-| [meta-rules.md](references/meta-rules.md) | 20 条元规范（含 grep 判断信号） |
-| [faq.md](references/faq.md) | 添加 API/数据库表/工作流步骤/修改 Prompt 等 |
+| [meta-rules.md](references/meta-rules.md) | 24 条元规范（含 grep 判断信号） |
+| [faq.md](references/faq.md) | 添加 API/数据库表/工作流步骤/修改 Prompt/开发模式登录失败等 |
 
 ## 工作流元规范速查
 
-以下是 20 条核心元规范的精简版，详细规则请参考 [meta-rules.md](references/meta-rules.md)。
+以下是 24 条核心元规范的精简版，详细规则请参考 [meta-rules.md](references/meta-rules.md)。
 
 | # | 规范 | 适用场景 | 判断信号（grep） | 优先级 |
 |---|------|----------|------------------|--------|
@@ -135,6 +135,15 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 | 18 | 工作流重试上限 | 工作流步骤 | `while True` 或无 base case 的递归 | HIGH |
 | 19 | 敏感信息不落地 | 日志/数据库 | `logger.info.*password` | CRITICAL |
 | 20 | 测试隔离 | 测试用例 | 测试间共享全局状态 | MEDIUM |
+| 23 | 时长/容量约束自动调整 | 音频拼接/文档生成/报表 | 搜索 duration 超出范围后直接 raise | CRITICAL |
+| 24 | 确定性失败重试无效 | 工作流编排/批处理 | 步骤函数无外部状态依赖仍重试 | HIGH
+25 | 模型名称以官方为准 | 第三方服务接入 | 预设配置中的模型名与官网不符 | CRITICAL
+26 | 配置持久化完整返显 | 配置管理页面 | 预设切换覆盖 API Key / 下拉框不反射 | HIGH
+27 | 模型定价表同步更新 | LLM 服务商变更 | 新增模型名未同步定价表 | HIGH |
+
+28 | 批量删除事务原子性 | 级联删除操作 | 搜索多表删除无事务包裹 | CRITICAL
+29 | 前端多选交互规范 | 批量操作表格 | 搜索 el-table 无 selection 列 | HIGH
+30 | 路由静态路径优先级 | 所有路由定义 | 搜索静态路由在动态路由之后 | CRITICAL
 
 **状态分类**：CRITICAL（必须遵守）/ HIGH（强烈建议）/ MEDIUM（建议）/ LOW（可选）/ INFO（参考）
 
@@ -152,6 +161,8 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 - 工作流编排可考虑引入正式的状态机库（如 transitions）
 - 缓存键命名规范需要进一步细化（避免 key 碰撞）
 - 内部接口鉴权需加强（IP 校验 + 请求签名双重验证）
+- 时长/容量约束操作需实现自动填充/切除（见元规范 23）
+- 确定性失败不应依赖重试机制（见元规范 24）
 
 ### 维度 2：编码规范
 
@@ -165,6 +176,7 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 - 日志格式可进一步 JSON 化，便于 ELK 采集
 - 需要补充代码审查 checklist（PR 模板）
 - 前端组件拆分粒度需要统一标准（单一职责 vs 组合组件）
+- 工作流步骤的确定性失败需区分瞬态失败（可重试）和确定性失败（需自动调整）
 
 ### 维度 3：开发效率
 
@@ -187,7 +199,10 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 - 数据库迁移使用 Alembic，版本可控且支持回滚
 
 **待改进的**：
-- 需要建立正式的代码审查流程（PR template + review checklist）
+- 需要建立正式的代码审查流程（PR template + review checklist，已集成 news-backend-code-review / news-frontend-code-review）
 - 需要补充 Git 分支管理规范（git-flow/trunk-based）
 - 需要定义发布流程和回滚机制（灰度发布 + 快速回滚）
 - 需要建立监控告警体系（SLO/SLI + 告警分级）
+
+
+

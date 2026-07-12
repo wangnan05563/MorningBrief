@@ -1,0 +1,6 @@
+<!-- 空状态：图标 + 标题 + 可选描述 -->
+<view class="empty-state">
+  <text class="empty-icon" wx:if="{{icon}}">{{icon}}</text>
+  <text class="empty-title" wx:if="{{title}}">{{title}}</text>
+  <text class="empty-desc" wx:if="{{description}}">{{description}}</text>
+</view>

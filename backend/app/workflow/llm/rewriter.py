@@ -93,7 +93,17 @@ class SensitiveHitError(Exception):
 
 
 class LLMError(Exception):
-    """改写流程整体失败的兜底异常。"""
+    """改写流程整体失败的兜底异常。
+
+    携带 failure_details 属性时，包含每条素材的失败原因（供 workflow_step
+    记录详细错误，便于前端详情页展示与运维定位）。
+    """
+
+    def __init__(self, message: str, failure_details: list[dict] | None = None):
+        super().__init__(message)
+        # failure_details 结构：[{material_id, title, stage, error_type, error_message}]
+        # 仅在 rewrite() 中聚合并发失败时填充，单点失败场景为 None
+        self.failure_details = failure_details
 
 
 # tenacity 重试装饰器（LLD 7.4）
@@ -112,10 +122,55 @@ llm_retry = retry(
 )
 
 # 通义千问兼容 OpenAI SDK，复用同一客户端连接池
-_client = AsyncOpenAI(
-    api_key=settings.LLM_API_KEY,
-    base_url=settings.LLM_BASE_URL,
-)
+# 延迟初始化：模块加载时 settings.LLM_API_KEY 可能仍是 .env 占位符，
+# 前端通过 AIConfigService 热更新后才会注入真实 key。
+# 若在此处固化 _client，前端配置的 Key 无法生效。
+_client: AsyncOpenAI | None = None
+
+
+def _get_client() -> AsyncOpenAI:
+    """按需构建 OpenAI 客户端，每次读取最新 settings，兼容配置热更新。
+
+    模块加载时 _client=None，首次调用 _call_llm 时才创建实例。
+    若 settings.LLM_API_KEY 变更（前端配置或 .env 修改），
+    下次调用会重建客户端，避免占位符固化导致 401。
+    """
+    global _client
+    # 用 (api_key, base_url) 元组作为缓存键，配置变更时自动重建
+    cache_key = (settings.LLM_API_KEY, settings.LLM_BASE_URL)
+    if _client is None or getattr(_client, "_cache_key", None) != cache_key:
+        _client = AsyncOpenAI(
+            api_key=settings.LLM_API_KEY,
+            base_url=settings.LLM_BASE_URL,
+        )
+        # 附加缓存键到实例，避免重建时丢失
+        _client._cache_key = cache_key  # type: ignore[attr-defined]
+    return _client
+
+
+def _is_placeholder_api_key(key: str) -> bool:
+    """检测 API key 是否为占位符或无效值。
+
+    覆盖以下场景：
+    - 空字符串或纯空白
+    - .env.example 中的 <...> 占位符（含 < 或 >）
+    - 含中文说明文本（真实 key 只含 ASCII 字符）
+
+    提前拦截避免无效 key 浪费网络往返和重试配额（401 拒绝耗时虽短
+    但会消耗 3 次重试 + 退避时间，且日志被笼统的"段数不足"掩盖）。
+    """
+    if not key or not key.strip():
+        return True
+    key = key.strip()
+    # .env.example 占位符以 < 开头或 > 结尾
+    if key.startswith("<") or key.endswith(">"):
+        return True
+    # 真实 API key 只含 ASCII 字符，含中文说明是未替换的占位符
+    try:
+        key.encode("ascii")
+    except UnicodeEncodeError:
+        return True
+    return False
 
 
 @llm_retry
@@ -141,7 +196,7 @@ async def _call_llm(prompt: str) -> str:
         raise LLMServiceError(f"AI 预算超限: {reason}")
 
     try:
-        resp = await _client.chat.completions.create(
+        resp = await _get_client().chat.completions.create(
             model=settings.LLM_MODEL,
             messages=[{"role": "user", "content": prompt}],
             timeout=settings.LLM_TIMEOUT_SEC,
@@ -288,6 +343,52 @@ def _select_top_materials(materials: list[dict], top_n: int = SELECT_TOP_N) -> l
     return selected[:top_n]
 
 
+def _build_aggregated_error(segments: list[dict], failure_details: list[dict]) -> LLMError:
+    """根据并发失败的 failure_details 聚合错误信息，构建 LLMError。
+
+    策略：
+    - 若同一 error_type 出现次数 >= 总失败数的 2/3，认为这是根因，
+      错误消息中明确指出根因类型和示例，便于运维直接定位
+      （例：6 条全部 LLMAuthError → 明确报鉴权失败而非"段数不足"）
+    - 否则回退到笼统的"段数不足"消息，但附带 failure_details 供 workflow_step 展示
+
+    始终把完整 failure_details 附加到 LLMError.failure_details 属性，
+    供 workflow_scheduler._run_step 在 failed 状态下写入 workflow_step.result。
+    """
+    base_msg = (
+        f"有效改写段数 {len(segments)} < {MIN_VALID_SEGMENTS}，无法生成节目"
+    )
+
+    if not failure_details:
+        return LLMError(base_msg, failure_details=None)
+
+    # 统计 error_type 分布，识别主导错误
+    from collections import Counter
+    type_counter = Counter(d["error_type"] for d in failure_details)
+    most_common_type, most_common_count = type_counter.most_common(1)[0]
+    threshold = max(2, len(failure_details) * 2 // 3)
+
+    if most_common_count >= threshold:
+        # 同类型错误占主导：透传根因类型 + 代表性错误消息
+        representative = next(
+            d for d in failure_details if d["error_type"] == most_common_type
+        )
+        msg = (
+            f"有效改写段数 {len(segments)} < {MIN_VALID_SEGMENTS}，"
+            f"根因：{most_common_count}/{len(failure_details)} 条素材"
+            f"因 {most_common_type} 失败"
+            f"（示例: {representative['error_message'][:200]}）"
+        )
+    else:
+        # 错误类型分散：保留笼统消息，详情见 failure_details
+        type_summary = ", ".join(
+            f"{t}={c}" for t, c in type_counter.most_common()
+        )
+        msg = f"{base_msg}（失败分布: {type_summary}）"
+
+    return LLMError(msg, failure_details=failure_details)
+
+
 def _assemble_script(segments: list[dict]) -> dict:
     """组装整稿（开场白 + 改写正文 + 结尾）。
 
@@ -401,6 +502,15 @@ async def rewrite(workflow_id: str, date_str: str) -> dict:
     """
     logger.info("改写启动 workflow_id=%s date=%s", workflow_id, date_str)
 
+    # 0. 占位符前置检测：避免无效 API key 浪费重试配额
+    # 若 .env 未替换占位符或前端未配置真实 key，立即抛出明确错误
+    if _is_placeholder_api_key(settings.LLM_API_KEY):
+        masked = settings.LLM_API_KEY[:8] + "***" if settings.LLM_API_KEY else "(空)"
+        raise LLMError(
+            f"LLM_API_KEY 未配置或仍为占位符（当前值: {masked}），"
+            f"请在 .env 文件或前端 AI 配置页填入真实 API Key"
+        )
+
     # 1. 拉取当日 pending 素材
     materials = await _fetch_materials(date_str)
     logger.info("当日 pending 素材 %d 条", len(materials))
@@ -418,6 +528,7 @@ async def rewrite(workflow_id: str, date_str: str) -> dict:
 
     # 4. 过滤失败项 + 敏感词扫描
     segments = []
+    failure_details: list[dict] = []  # 记录每条素材失败原因，供 workflow_step 展示
     for m, r in zip(selected, results):
         if isinstance(r, SensitiveHitError):
             # 首次命中敏感词，带约束 prompt 二次重生成
@@ -426,16 +537,30 @@ async def rewrite(workflow_id: str, date_str: str) -> dict:
                 segments.append({**r, "seq": len(segments) + 1})
             except Exception as e:
                 logger.warning("素材 %s 二次改写失败: %s", m["id"], e)
+                failure_details.append({
+                    "material_id": m["id"],
+                    "title": m["title"][:50],
+                    "stage": "retry_with_constraint",
+                    "error_type": type(e).__name__,
+                    "error_message": str(e)[:300],
+                })
         elif isinstance(r, Exception):
             # 其他异常（LLM 调用失败、JSON 解析失败等）跳过该条
             logger.warning("素材 %s 改写失败: %s", m["id"], r)
+            failure_details.append({
+                "material_id": m["id"],
+                "title": m["title"][:50],
+                "stage": "initial_rewrite",
+                "error_type": type(r).__name__,
+                "error_message": str(r)[:300],
+            })
         else:
             segments.append({**r, "seq": len(segments) + 1})
 
     if len(segments) < MIN_VALID_SEGMENTS:
-        raise LLMError(
-            f"有效改写段数 {len(segments)} < {MIN_VALID_SEGMENTS}，无法生成节目"
-        )
+        # 错误聚合：若多数失败属同一类型，透传根因异常而非笼统报"段数不足"
+        # 避免掩盖真实问题（如全部 LLMAuthError 应明确报鉴权失败）
+        raise _build_aggregated_error(segments, failure_details)
 
     # 5. 组装整稿（开场白 + 改写段 + 结尾）
     assembled = _assemble_script(segments)

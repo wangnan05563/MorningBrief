@@ -1,0 +1,89 @@
+/*
+ * 节目卡片样式：融合 index/detail 两页样式，以 index 为主
+ * 卡片基础样式从 app.wxss .card 迁移，保持组件自包含（不依赖全局样式）
+ */
+.episode-card {
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 32rpx;
+  margin: 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(126, 206, 193, 0.08);
+  display: flex;
+  flex-direction: column;
+}
+
+.episode-meta {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+/* 日期用薄荷青，与全局主题色呼应 */
+.episode-date {
+  font-size: 26rpx;
+  color: #7ECEC1;
+  font-weight: 500;
+  margin-right: 16rpx;
+}
+
+/* 分类标签：复用全局 .tag .tag-mint 视觉，组件内重写以避免依赖全局样式 */
+.tag {
+  display: inline-block;
+  padding: 4rpx 16rpx;
+  border-radius: 20rpx;
+  font-size: 22rpx;
+}
+
+.tag-mint {
+  background: #B5EAD7;
+  color: #5BA89B;
+}
+
+.episode-title {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #2D3748;
+  line-height: 1.5;
+  margin-bottom: 16rpx;
+}
+
+.episode-duration {
+  display: flex;
+  align-items: center;
+  font-size: 24rpx;
+  color: #A0AEC0;
+}
+
+.duration-icon {
+  margin-right: 8rpx;
+}
+
+/* === 操作按钮区（showActions=true 时显示） === */
+.episode-actions {
+  display: flex;
+  margin-top: 24rpx;
+}
+
+.action-btn {
+  flex: 1;
+  text-align: center;
+  padding: 16rpx 0;
+  border-radius: 40rpx;
+  font-size: 28rpx;
+}
+
+.action-btn + .action-btn {
+  margin-left: 16rpx;
+}
+
+/* 播放按钮：薄荷青主色渐变，与全局 .btn-primary 风格一致 */
+.action-play {
+  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  color: #FFFFFF;
+}
+
+/* 详情按钮：蜜桃粉，与全局 .btn-secondary 风格一致 */
+.action-detail {
+  background: #FFD3E0;
+  color: #FF6B8A;
+}

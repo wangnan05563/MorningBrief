@@ -67,6 +67,25 @@ class Settings(BaseSettings):
     ALIYUN_TTS_TIMEOUT_SEC: int = 60
     TTS_RETRY_ATTEMPTS: int = 3
 
+    # ---- TTS Provider 选择（前端可在 ai_config 表覆盖） ----
+    # 可选值：aliyun / edge / tencent；edge 为微软免费方案，无需 API Key
+    TTS_PROVIDER: str = "aliyun"
+
+    # ---- Edge-TTS（微软免费方案，无需 API Key） ----
+    EDGE_TTS_VOICE: str = "zh-CN-XiaoxiaoNeural"
+    EDGE_TTS_RATE: str = ""         # 语速调节，如 "+10%" / "-10%"
+    EDGE_TTS_VOLUME: str = ""       # 音量调节，如 "+20%" / "-10%"
+    EDGE_TTS_PITCH: str = ""        # 基频调节，如 "+5Hz" / "-3Hz"
+
+    # ---- 腾讯云 TTS（基础语音合成 TextToVoice） ----
+    # 凭证 fallback 到 COS_SECRET_ID/SECRET_KEY（项目已用 COS 可复用）
+    TENCENT_TTS_SECRET_ID: str = ""
+    TENCENT_TTS_SECRET_KEY: str = ""
+    TENCENT_TTS_REGION: str = "ap-guangzhou"
+    TENCENT_TTS_VOICE_TYPE: int = 101011
+    TENCENT_TTS_VOLUME: int = 0     # 音量 [-10, 10]，0 为默认
+    TENCENT_TTS_SPEED: int = 0      # 语速 [-2, 6]，0 为默认
+
     # ---- 腾讯云 COS（对象存储 + C 端 API 共享层） ----
     COS_SECRET_ID: str = ""
     COS_SECRET_KEY: str = ""

@@ -1,35 +1,38 @@
 @echo off
-chcp 936 >nul 2>&1
-REM 脚本位于 scripts/ 目录，切回项目根目录
+chcp 65001 >nul 2>&1
+setlocal
+
+REM Keep this entry script ASCII-only for reliable cmd.exe parsing.
 cd /d "%~dp0.."
 
 echo ========================================
-echo   20_News 一键环境配置
+echo   20_News Environment Setup
 echo ========================================
 echo.
-echo 配置流程：
-echo   1. 检查 Node.js（前端构建用）/ Python（开发调试用）
-echo   2. 创建 .env 配置文件
-echo   3. 创建运行时数据目录
-echo   4. 安装前端依赖（npm install）
+echo Setup steps:
+echo   1. Check Node.js (frontend) / Python (backend)
+echo   2. Create .env config file
+echo   3. Create runtime directories
+echo   4. Install frontend deps (npm install)
 echo.
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-env.ps1" %*
+set "SETUP_EXIT_CODE=%ERRORLEVEL%"
 
-if errorlevel 1 (
+if not "%SETUP_EXIT_CODE%"=="0" (
     echo.
-    echo [ERROR] 环境配置失败，请查看上方错误信息
+    echo [ERROR] Environment setup failed. Review the messages above.
     pause
-    exit /b 1
+    exit /b %SETUP_EXIT_CODE%
 )
 
 echo.
 echo ========================================
-echo   环境配置完成！
+echo   Environment Setup Complete!
 echo ========================================
-echo   下一步：
-echo   1. 编辑 backend\.env 填入实际密钥（V1.2 无 MYSQL/REDIS 配置）
-echo   2. 构建打包：双击 scripts\构建打包.bat 生成 exe
+echo   Next steps:
+echo   1. Edit backend\.env with actual keys (V1.2: no MYSQL/REDIS needed)
+echo   2. Start service: double-click scripts\鍚姩鏈嶅姟.bat or build exe
 echo ========================================
 pause >nul
-exit
+exit /b 0
