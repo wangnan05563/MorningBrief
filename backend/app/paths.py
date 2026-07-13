@@ -57,25 +57,24 @@ def resolve_env_path() -> Path:
 def resolve_ffmpeg_path() -> str:
     """FFmpeg 可执行文件路径。
 
-    打包态：随 Inno Setup 安装到 ./ffmpeg/bin/ffmpeg.exe
-    开发态：依赖系统 PATH
+    优先使用项目自带的 ffmpeg.exe（./ffmpeg/bin/），保证滤镜支持一致性
+    （loudnorm/silenceremove 等滤镜需要完整构建，精简版 ffmpeg 不支持）。
+    仅当项目未附带 ffmpeg 时，才回退到系统 PATH。
     """
-    if is_frozen():
-        bundled = get_app_root() / "ffmpeg" / "bin" / "ffmpeg.exe"
-        if bundled.exists():
-            return str(bundled)
+    bundled = get_app_root() / "ffmpeg" / "bin" / "ffmpeg.exe"
+    if bundled.exists():
+        return str(bundled)
     return "ffmpeg"
 
 
 def resolve_ffprobe_path() -> str:
     """FFprobe 可执行文件路径。
 
-    与 resolve_ffmpeg_path 对称：打包态使用 bundled ffprobe.exe，开发态回退 PATH。
+    与 resolve_ffmpeg_path 对称：优先项目自带，回退 PATH。
     """
-    if is_frozen():
-        bundled = get_app_root() / "ffmpeg" / "bin" / "ffprobe.exe"
-        if bundled.exists():
-            return str(bundled)
+    bundled = get_app_root() / "ffmpeg" / "bin" / "ffprobe.exe"
+    if bundled.exists():
+        return str(bundled)
     return "ffprobe"
 
 

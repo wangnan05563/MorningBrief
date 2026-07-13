@@ -368,3 +368,36 @@
   3. 新增批量操作接口时，必须检查同级路由表中是否有动态路径在其后
 
 ---
+
+---
+
+## 规范 31：启动脚本路径含空格安全封装
+
+**为什么**：系统 Python 路径可能包含空格（如 F:\Program Files\Python3.14\python.exe）。PowerShell 的 Start-Process -ArgumentList 会将含空格的字符串重新拆分引号，导致可执行文件路径被截断成 F:\Program。
+
+- 适用：所有 .bat + .ps1 启动/构建脚本
+- 不适用：路径不含空格的场景（但应统一防护）
+- 判断信号：grep 搜索 Start-Process 后无 /s /c 双层引号封装
+- 正确做法：
+  1. 构造完整命令字符串 " 2>&1 & pause"
+  2. 使用 cmd /d /s /c "" 四层引号封装
+  3. -ArgumentList 传数组 @("/d", "/s", "/c", "\"\"")
+- 构建脚本同理：uild-exe.ps1 在 PyInstaller COLLECT 阶段需先终止占用旧产物的进程
+
+
+---
+
+## 规范 32：构建脚本并发保护
+
+**为什么**：多次执行构建脚本可能导致旧 PyInstaller 进程未完全退出，新旧进程同时写入 dist 目录造成 PermissionError / WinError 32。
+
+- 适用：所有 PyInstaller 构建、打包脚本
+- 不适用：纯编译型语言构建（C/C++/Rust）
+- 判断信号：grep 搜索 Remove-Item 后无进程检查和删除验证
+- 正确做法：
+  1. 构建前先按可执行路径和命令行查找并终止占用旧产物的进程
+  2. 等待进程退出（WaitForExit + 超时）
+  3. 删除旧产物时用 	ry/throw 而非 SilentlyContinue，验证删除成功
+  4. 删除失败时输出明确提示，而非静默继续让 PyInstaller 数分钟后才报错
+
+

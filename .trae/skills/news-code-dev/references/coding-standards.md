@@ -970,3 +970,36 @@ assert MIN_DURATION_SEC <= duration <= MAX_DURATION_SEC
 **不适用场景**：仅单条操作的页面、软删除场景
 
 ---
+
+---
+
+## 规范 33：共享构建依赖包完整提取
+
+**为什么**：FFmpeg 等共享构建（shared build）的 EXE 文件依赖同目录的 DLL。只复制 EXE 而不提取配套 DLL 会导致运行时 找不到 avdevice-63.dll 等系统错误。
+
+- 适用：所有共享构建压缩包（gpl-shared、shared 等）
+- 不适用：static build（不依赖额外 DLL）
+- 判断信号：grep 搜索 zf.open(ffmpeg_member) 后只提取 exe 文件
+- 正确做法：
+  1. 通过 fmpeg.exe 定位 zip 内动态顶层目录
+  2. 提取该 in/ 目录下的所有普通文件（含 DLL）
+  3. 提取前清除残缺或不同版本的旧文件，避免 DLL 版本混用
+  4. 提取后验证所有关键依赖文件存在
+- 安装流程：前端点击下载 → 后端流式下载 zip → 	o_thread 解压 → 重新检测可用性
+
+
+---
+
+## 规范 34：日志格式与异常信息透传
+
+**为什么**：Loguru 使用 {} 占位符，旧代码使用 %s 会导致异常对象被当作字符串格式化，真实错误信息被吞掉。日志格式中的 %s 占位符会让 logger.warning("msg: %s", e) 输出 msg: %s 而非 msg: <actual error>。
+
+- 适用：所有使用 loguru 的项目
+- 不适用：使用标准 logging 模块的项目
+- 判断信号：grep 搜索 logger\.(warning|error|info).*%s
+- 正确做法：
+  1. 统一使用 {} 占位符：logger.warning("msg: {}", e)
+  2. 日志消息中的格式化参数必须与 loguru 语义一致
+  3. 异常日志必须包含 exc_info=True 以记录 traceback
+- 运行环境验证：日志格式应与源码版本一致，不一致说明运行的是旧构建产物
+

@@ -1,9 +1,13 @@
 /**
  * 应用入口：创建 Vue 实例 + 挂载插件
  *
- * 插件加载顺序：Pinia（状态）→ Router（路由）→ Element Plus（UI）
+ * 插件加载顺序：window-guard（全局拦截）→ Pinia → Router → Element Plus
+ * - window-guard 必须最先加载，在任何其他代码调用可能激活窗口的 API 之前安装 hook
  * - 全局注入安全的 ElMessage，防止最小化时弹窗激活浏览器窗口
  */
+// 全局页面可见性守卫：必须在所有其他模块之前加载，安装 window/alert/location 等 hook
+import './utils/window-guard'
+
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'

@@ -15,6 +15,7 @@ from pathlib import Path
 import yaml
 
 from app.core.simhash import compute
+from app.core.timeutil import utcnow_naive
 from app.database import AsyncSessionLocal
 from app.models import Material
 from app.models.material import MaterialSourceType, MaterialStatus
@@ -72,6 +73,9 @@ async def _process_entry(entry: dict, workflow_id: str, session) -> bool:
         status=MaterialStatus.pending,
         simhash=simhash,
         workflow_id=workflow_id,
+        # 显式设置本地时间，不依赖 SQLite func.now()（返回 UTC）
+        # rewrite 按本地日期筛选 crawled_at，UTC 时间会导致跨日工作流查不到素材
+        crawled_at=utcnow_naive(),
     )
     session.add(material)
     # flush 让 DB 层 unique 约束（url）作为最后防线，避免去重表漏判时脏数据入库

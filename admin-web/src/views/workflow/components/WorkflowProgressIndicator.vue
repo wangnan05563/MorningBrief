@@ -28,7 +28,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { ElMessageBox } from 'element-plus'
+import { ElMessageBox } from '../../../utils/message'
 
 const props = defineProps({
   // 后端返回的 steps_summary 数组：[{ name, status, finished_at, error }, ...]

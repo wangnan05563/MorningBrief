@@ -66,7 +66,16 @@
                                                        "length.*exceed.*raise",
                                                        "model.*预设.*官网不符",
                                                        "batch_delete_no_transaction",
-                                                       "static_route_after_dynamic_route"
+                                                       "static_route_after_dynamic_route",
+                                                       "loguru_%s_placeholder",
+                                                       "shared_build_dll_only_exe",
+                                                       "start_process_no_double_quote",
+                                                       "loguru_%s_placeholder",
+                                                       "shared_build_dll_only_exe",
+                                                       "start_process_no_double_quote",
+                                                       "loguru_%s_placeholder",
+                                                       "shared_build_dll_only_exe",
+                                                       "start_process_no_double_quote"
                                                    ],
                             "required_patterns":  [
                                                       "utcnow_naive()",
@@ -76,7 +85,16 @@
                                                       "MAX_DURATION_SEC",
                                                       "MODEL_PRICING.*模型名同步",
                                                       "batch_delete_with_commit()",
-                                                      "selection_change_tracking"
+                                                      "selection_change_tracking",
+                                                      "loguru_{}_placeholder",
+                                                      "shared_build_extract_all_dlls",
+                                                      "build_process_kill_before_remove",
+                                                      "loguru_{}_placeholder",
+                                                      "shared_build_extract_all_dlls",
+                                                      "build_process_kill_before_remove",
+                                                      "loguru_{}_placeholder",
+                                                      "shared_build_extract_all_dlls",
+                                                      "build_process_kill_before_remove"
                                                   ],
                             "enum_value_required":  true,
                             "redis_lua_atomic":  true,

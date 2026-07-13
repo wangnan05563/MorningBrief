@@ -28,13 +28,16 @@ class ActionRequest(BaseModel):
 @router.get("")
 async def list_reviews(
     status: str = Query(None),
+    workflow_id: str = Query(None, description="按工作流 ID 过滤"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(get_current_admin),
 ):
     svc = ReviewService(db)
-    data = await svc.list_reviews(status=status, page=page, size=size)
+    data = await svc.list_reviews(
+        status=status, page=page, size=size, workflow_id=workflow_id,
+    )
     return success(data=data)
 
 

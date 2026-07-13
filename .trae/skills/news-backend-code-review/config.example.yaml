@@ -66,7 +66,7 @@ priority:
 # - expected_route_prefixes: 期望的路由前缀
 # - scan_dirs: 仅扫描指定目录
 # - exclude_files: 排除指定文件
-hard_constraints:
+hard_constraints:  # 新增 33-38: 启动脚本安全/构建并发/日志格式/共享构建依赖
   # 存在 CRITICAL 违规则阻止合并
   block_on_violation: true
   rules:
@@ -656,4 +656,22 @@ batch_operations:
       - "/batch-delete"
       - "/trigger"
       - "/retry"
+
+
+
+    # 规范 35：日志格式（Loguru {} 而非 %s）
+    - name: "loguru_placeholder_format"
+      pattern: 'logger\.(warning|error|info)\([^)]*%s[^)]*'
+      message: "Loguru 使用 {} 占位符，禁止使用 %s 格式（会吞掉异常信息）"
+      severity: HIGH
+      auto_fix: false
+      category: logging
+    # 规范 37：共享构建依赖完整提取
+    - name: "shared_build_dll_dependency"
+      pattern: 'zf\.open\(ffmpeg_member\)'
+      message: "共享构建需提取 bin 目录下所有文件（含 DLL），不能只复制 exe"
+      severity: CRITICAL
+      auto_fix: false
+      category: dependency_extraction
+
 

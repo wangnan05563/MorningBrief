@@ -32,6 +32,7 @@ class LLMConfigBody(BaseModel):
     model: str = ""
     timeout_sec: int = 30
     retry_attempts: int = 3
+    target_duration_sec: int = 600
 
 
 class TTSConfigBody(BaseModel):

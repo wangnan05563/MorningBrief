@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 
 from app.config import get_settings
+from app.paths import resolve_ffmpeg_path, resolve_ffprobe_path
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -73,7 +74,7 @@ async def normalize_loudness(audio_bytes: bytes, target_lufs: int = -16) -> byte
     in_path = _write_temp(audio_bytes, ".mp3")
     out_path = in_path.replace(".mp3", "_norm.mp3")
     cmd = [
-        "ffmpeg", "-y", "-i", in_path,
+        resolve_ffmpeg_path(), "-y", "-i", in_path,
         "-af", f"loudnorm=I={target_lufs}:TP=-1.5:LRA=11",
         "-ar", str(settings.ALIYUN_TTS_SAMPLE_RATE),
         "-ac", "1",
@@ -99,7 +100,7 @@ async def trim_silence(audio_bytes: bytes, threshold_db: int = -50) -> bytes:
     out_path = in_path.replace(".mp3", "_trim.mp3")
     # start_periods=1 去除首部静音；stop_periods=-1 去除尾部所有静音
     cmd = [
-        "ffmpeg", "-y", "-i", in_path,
+        resolve_ffmpeg_path(), "-y", "-i", in_path,
         "-af",
         f"silenceremove=start_periods=1:start_threshold={threshold_db}dB:"
         f"stop_periods=-1:stop_threshold={threshold_db}dB:stop_duration=0.3",
@@ -121,7 +122,7 @@ async def get_audio_duration(audio_bytes: bytes) -> int:
     """
     in_path = _write_temp(audio_bytes, ".mp3")
     cmd = [
-        "ffprobe", "-v", "error",
+        resolve_ffprobe_path(), "-v", "error",
         "-show_entries", "format=duration",
         "-of", "default=noprint_wrappers=1:nokey=1",
         in_path,

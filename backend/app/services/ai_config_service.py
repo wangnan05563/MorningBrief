@@ -46,10 +46,12 @@ CONFIG_KEY_MAP = {
     "tts_timeout_sec": "ALIYUN_TTS_TIMEOUT_SEC",
     "tts_retry_attempts": "TTS_RETRY_ATTEMPTS",
     # Edge-TTS（微软免费方案，无需 API Key）
-    "edge_tts_voice": "EDGE_TTS_VOICE",
-    "edge_tts_rate": "EDGE_TTS_RATE",
-    "edge_tts_volume": "EDGE_TTS_VOLUME",
-    "edge_tts_pitch": "EDGE_TTS_PITCH",
+    # 前端字段名 = config_key = edge_*（与路由层 TTSConfigBody 字段名一致），
+    # Settings 属性名 = EDGE_TTS_*（与 config.py 字段名一致）
+    "edge_voice": "EDGE_TTS_VOICE",
+    "edge_rate": "EDGE_TTS_RATE",
+    "edge_volume": "EDGE_TTS_VOLUME",
+    "edge_pitch": "EDGE_TTS_PITCH",
     # 腾讯云 TTS（凭证可复用 COS）
     "tencent_tts_secret_id": "TENCENT_TTS_SECRET_ID",
     "tencent_tts_secret_key": "TENCENT_TTS_SECRET_KEY",
@@ -57,6 +59,8 @@ CONFIG_KEY_MAP = {
     "tencent_tts_voice_type": "TENCENT_TTS_VOICE_TYPE",
     "tencent_tts_volume": "TENCENT_TTS_VOLUME",
     "tencent_tts_speed": "TENCENT_TTS_SPEED",
+    # 节目时长目标（秒）：与稿件字数反向关联，控制 rewriter 字数与 stitch 范围
+    "target_duration_sec": "TARGET_DURATION_SEC",
 }
 
 # 需要脱敏的配置项（API Key / Secret 类）
@@ -77,6 +81,7 @@ INT_KEYS = {
     "llm_timeout_sec", "llm_retry_attempts",
     "tts_sample_rate", "tts_timeout_sec", "tts_retry_attempts",
     "tencent_tts_voice_type", "tencent_tts_volume", "tencent_tts_speed",
+    "target_duration_sec",
 }
 
 # ---- LLM 提供商预设 ----
@@ -343,6 +348,9 @@ class AIConfigService:
             "model": _get("llm_model", "LLM_MODEL"),
             "timeout_sec": int(_get("llm_timeout_sec", "LLM_TIMEOUT_SEC", "30")),
             "retry_attempts": int(_get("llm_retry_attempts", "LLM_RETRY_ATTEMPTS", "3")),
+            # 目标节目时长（秒）：控制 rewriter 字数与 stitch 范围
+            # 默认 600s = 10 分钟，与稿件字数反向关联
+            "target_duration_sec": _get_int("target_duration_sec", "TARGET_DURATION_SEC", 600),
             # 预设配置（每个 provider 独立保存的 API Key/Base URL/Model，API Key 脱敏）
             "preset_configs": await self.get_preset_configs(),
             # 当前选中预设（根据 base_url 反向匹配）
@@ -359,11 +367,11 @@ class AIConfigService:
             "format": _get("tts_format", "ALIYUN_TTS_FORMAT", "mp3"),
             "timeout_sec": _get_int("tts_timeout_sec", "ALIYUN_TTS_TIMEOUT_SEC", 60),
             "retry_attempts": _get_int("tts_retry_attempts", "TTS_RETRY_ATTEMPTS", 3),
-            # Edge-TTS 字段
-            "edge_voice": _get("edge_tts_voice", "EDGE_TTS_VOICE", "zh-CN-XiaoxiaoNeural"),
-            "edge_rate": _get("edge_tts_rate", "EDGE_TTS_RATE", ""),
-            "edge_volume": _get("edge_tts_volume", "EDGE_TTS_VOLUME", ""),
-            "edge_pitch": _get("edge_tts_pitch", "EDGE_TTS_PITCH", ""),
+            # Edge-TTS 字段（config_key = edge_*，与前端字段名一致）
+            "edge_voice": _get("edge_voice", "EDGE_TTS_VOICE", "zh-CN-XiaoxiaoNeural"),
+            "edge_rate": _get("edge_rate", "EDGE_TTS_RATE", ""),
+            "edge_volume": _get("edge_volume", "EDGE_TTS_VOLUME", ""),
+            "edge_pitch": _get("edge_pitch", "EDGE_TTS_PITCH", ""),
             # 腾讯云 TTS 字段
             "tencent_secret_id": _mask_key(_get("tencent_tts_secret_id", "TENCENT_TTS_SECRET_ID", "")),
             "tencent_secret_key": _mask_key(_get("tencent_tts_secret_key", "TENCENT_TTS_SECRET_KEY", "")),
@@ -400,9 +408,17 @@ class AIConfigService:
 
         # 同步保存预设配置（即使 updates 为空也需要更新预设配置）
         if selected_preset:
+            # 解析实际的 api_key 明文值：
+            # 脱敏值 → 从数据库读取当前明文，fallback 到 Settings 默认值（与 get_config_for_frontend 一致）
+            # 新值/空值 → 直接使用（用户修改或清空了 API Key）
+            api_key_for_preset = llm_config.get("api_key", "")
+            if api_key_for_preset and _is_masked(api_key_for_preset):
+                api_key_for_preset = await self.get_config_value("llm_api_key")
+                if not api_key_for_preset:
+                    api_key_for_preset = get_settings().LLM_API_KEY or ""
             await self._save_preset_config(
                 preset_key=selected_preset,
-                api_key=llm_config.get("api_key", ""),
+                api_key=api_key_for_preset,
                 base_url=llm_config.get("base_url", ""),
                 model=llm_config.get("model", ""),
             )
@@ -420,7 +436,8 @@ class AIConfigService:
         self._apply_to_settings(updates)
 
         # TTS 配置变更时清空 provider 工厂缓存，确保下次合成使用新配置
-        if any(k.startswith(("tts_", "edge_tts_", "tencent_tts_")) for k in updates):
+        # edge_* 前缀覆盖 Edge-TTS 的 config_key（voice/rate/volume/pitch）
+        if any(k.startswith(("tts_", "edge_", "tencent_tts_")) for k in updates):
             try:
                 from app.workflow.tts.tts_factory import invalidate
                 invalidate()
@@ -448,6 +465,9 @@ class AIConfigService:
             result["llm_timeout_sec"] = str(config["timeout_sec"])
         if "retry_attempts" in config:
             result["llm_retry_attempts"] = str(config["retry_attempts"])
+        # 目标节目时长（秒）：与稿件字数反向关联
+        if "target_duration_sec" in config:
+            result["target_duration_sec"] = str(config["target_duration_sec"])
         return result
 
     def _normalize_tts(self, config: dict) -> dict[str, str]:
@@ -483,15 +503,26 @@ class AIConfigService:
         if "retry_attempts" in config:
             result["tts_retry_attempts"] = str(config["retry_attempts"])
 
-        # Edge-TTS 字段
+        # Edge-TTS 字段（config_key = edge_*，前端字段名即 config_key）
+        # rate/volume/pitch 的数值零（0 / 0.0 / "0" / "0.0"）等价于空字符串（无调整），
+        # 统一标准化避免 Edge-TTS 把 "0" 当成有效调整值
+        def _normalize_edge_adjustment(value) -> str:
+            """Edge-TTS rate/volume/pitch 零值标准化：数值零转为空字符串。"""
+            if value is None:
+                return ""
+            s = str(value).strip()
+            if s in ("0", "0.0", "0.00", "-0", "+0"):
+                return ""
+            return s
+
         if "edge_voice" in config:
-            result["edge_tts_voice"] = config["edge_voice"]
+            result["edge_voice"] = config["edge_voice"]
         if "edge_rate" in config:
-            result["edge_tts_rate"] = config["edge_rate"]
+            result["edge_rate"] = _normalize_edge_adjustment(config["edge_rate"])
         if "edge_volume" in config:
-            result["edge_tts_volume"] = config["edge_volume"]
+            result["edge_volume"] = _normalize_edge_adjustment(config["edge_volume"])
         if "edge_pitch" in config:
-            result["edge_tts_pitch"] = config["edge_pitch"]
+            result["edge_pitch"] = _normalize_edge_adjustment(config["edge_pitch"])
 
         # 腾讯云 TTS 字段
         tencent_secret_id = config.get("tencent_secret_id", "")

@@ -12,7 +12,7 @@ import asyncio
 import json
 import logging
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from openai import AsyncOpenAI
@@ -44,17 +44,37 @@ SENSITIVE_WORDS_PATH = Path(__file__).parent / "sensitive_words.txt"
 # 模块加载时初始化敏感词自动机（避免每次改写重复加载）
 sensitive_filter.load_words(str(SENSITIVE_WORDS_PATH))
 
-# 选题数量：5-6 条新闻，覆盖主要品类又不超出单期时长
-SELECT_TOP_N = 6
+# 选题数量：10 条新闻，覆盖主要品类又不超出单期时长
+# 从 6 调整到 10：部分素材可能因敏感词/JSON 解析失败，增加候选提高成功率
+# 最终组装稿件时仅使用成功段，不超过 MAX_SCRIPT_SEGMENTS 限制
+SELECT_TOP_N = 10
 SELECT_MIN_N = 5
 # 有效段数下限：少于 3 段无法构成一期节目
 MIN_VALID_SEGMENTS = 3
-# 播报语速（字/分钟），用于估算时长
+# 当日无 pending 素材时，向前回溯查询最近 N 天的 pending 素材
+# 场景：RSS 源无新内容时爬虫去重导致当日采集 0 条，回溯避免工作流直接失败
+FALLBACK_DAYS = 3
+# 稿件最大段数：组装时仅取前 N 条成功段，避免段数过多导致节目超长
+MAX_SCRIPT_SEGMENTS = 6
+# 基础播报语速（字/分钟），对应阿里云 xiaoyun / Edge-TTS Xiaoxiao 等标准女声在 1.0 倍速下的实测值
+# 注意：Edge-TTS 在 rate="" 时实际语速约 470 字/分（天然偏快），
+# 但为统一估算口径，仍以 210 字/分为基准，倍率通过 _get_rate_multiplier() 校正
 WORDS_PER_MINUTE = 210
+# 默认目标节目时长（秒），与 settings.TARGET_DURATION_SEC 对齐
+DEFAULT_TARGET_DURATION_SEC = 600
 
-# 开场白与结尾（固定文案，约 30s 播报）
-INTRO_TEXT = "各位听众早上好，欢迎收听今日要闻。"
-OUTRO_TEXT = "以上就是今天的全部内容，感谢收听，明天见。"
+# 开场白与结尾（固定文案，约 150 字 ≈ 45s 播报）
+# 扩充文案避免开场白/结尾过短导致实际 TTS 时长远低于预估
+INTRO_TEXT = (
+    "各位听众早上好，欢迎收听今日要闻。"
+    "我是您的 AI 新闻主播，接下来为您播报今天最重要的新闻资讯。"
+    "让我们一起了解今天发生了哪些值得关注的大事。"
+)
+OUTRO_TEXT = (
+    "以上就是今天的全部内容，感谢您的收听。"
+    "如果您觉得今天的节目对您有帮助，欢迎分享给身边的朋友。"
+    "我们明天同一时间再会，祝您度过愉快的一天。"
+)
 
 # 第一层过滤：生成前 prompt 约束（写入 prompt 末尾，引导 LLM 主动规避）
 PROMPT_CONSTRAINT = """
@@ -63,6 +83,90 @@ PROMPT_CONSTRAINT = """
 - 严禁编造未经证实的信息
 - 严禁出现具体人名负面评价
 """
+
+
+# ===== 时长/字数/语速三参数联动 =====
+# 数学关系：时长(秒) = 总字数 / (基础语速 × 语速倍率) × 60
+# 反算：总字数 = 时长 × 基础语速 × 语速倍率 / 60
+# 用户在 AI 配置页调整 target_duration_sec 或 edge_rate 时，
+# rewriter 按此公式反算所需字数，动态调整每段 prompt 的字数要求
+def _parse_edge_rate(rate_str: str) -> float:
+    """解析 Edge-TTS rate 字符串为倍率。
+
+    支持格式："+50%" / "-10%" / "+50" / "-10" / "50%" / ""
+    返回 1.0 + percent/100，如 "+50%" → 1.5，"-10%" → 0.9
+    倍率限制在 [0.5, 2.5] 避免极端值导致字数反算失真。
+    """
+    if not rate_str:
+        return 1.0
+    s = str(rate_str).strip().replace('%', '').replace('+', '')
+    try:
+        percent = float(s)
+        return max(0.5, min(2.5, 1.0 + percent / 100.0))
+    except ValueError:
+        return 1.0
+
+
+def _get_rate_multiplier() -> float:
+    """获取当前 TTS Provider 的实际语速倍率。
+
+    按 settings.TTS_PROVIDER 分支解析对应 provider 的语速字段：
+    - edge: 解析 EDGE_TTS_RATE（如 "+50%" → 1.5）
+    - tencent: TENCENT_TTS_SPEED（0=1.0, 2=1.2, -2=0.8 近似线性映射）
+    - aliyun: 默认 1.0（阿里云 NLS 无语速调节字段）
+
+    rewriter 用此倍率校正估算时长，stitch 用此倍率动态计算允许范围。
+    """
+    provider = (settings.TTS_PROVIDER or "aliyun").lower()
+    if provider == "edge":
+        return _parse_edge_rate(settings.EDGE_TTS_RATE)
+    if provider == "tencent":
+        # 腾讯云 speed: 0=默认, 正数加快, 负数减慢，近似每 +1 = +10%
+        return max(0.5, min(2.5, 1.0 + settings.TENCENT_TTS_SPEED * 0.1))
+    return 1.0
+
+
+def _get_target_duration_sec() -> int:
+    """读取目标节目时长（秒），fallback 到默认值 600。"""
+    val = getattr(settings, "TARGET_DURATION_SEC", None)
+    if val is None:
+        return DEFAULT_TARGET_DURATION_SEC
+    try:
+        return max(180, min(1800, int(val)))
+    except (ValueError, TypeError):
+        return DEFAULT_TARGET_DURATION_SEC
+
+
+def _calc_target_words(target_sec: int, rate_multiplier: float) -> int:
+    """按目标时长 + 实际语速反算所需总字数。
+
+    公式：总字数 = 时长(秒) × 基础语速(字/分) × 倍率 / 60
+    例：600s × 210 × 1.5 / 60 = 3150 字（1.5 倍速下需更多字数填满时长）
+    """
+    return int(target_sec * WORDS_PER_MINUTE * rate_multiplier / 60)
+
+
+def _calc_segment_words(target_sec: int, rate_multiplier: float) -> tuple[int, int]:
+    """计算每段目标字数与段数。
+
+    策略：
+    1. 总字数 = 目标时长 × 基础语速 × 倍率 / 60
+    2. 扣除开场白+结尾固定字数（约 145 字）= 正文总字数
+    3. 段数 = clamp(round(正文总字数 / 350), 3, 6)
+       - 350 字/段是经验值：基础语速下约 100s/段，节奏适中
+    4. 每段字数 = 正文总字数 / 段数
+
+    Returns:
+        (segment_count, words_per_segment)
+    """
+    total_words = _calc_target_words(target_sec, rate_multiplier)
+    intro_outro_words = len(INTRO_TEXT) + len(OUTRO_TEXT)
+    body_words = max(300, total_words - intro_outro_words)
+
+    # 段数动态调整：正文越长段数越多，但限制在 [3, 6]
+    target_segments = max(MIN_VALID_SEGMENTS, min(MAX_SCRIPT_SEGMENTS, round(body_words / 350)))
+    words_per_seg = max(200, int(body_words / target_segments))
+    return target_segments, words_per_seg
 
 
 # ===== 异常定义（LLD 7.4） =====
@@ -230,20 +334,31 @@ async def _call_llm(prompt: str) -> str:
     return resp.choices[0].message.content
 
 
-def _build_prompt(material: dict, extra_constraint: str = None) -> str:
-    """构建改写 prompt（读 rewrite.txt 模板，填入素材信息）。
+def _build_prompt(
+    material: dict,
+    words_per_segment: int = 450,
+    segment_duration: int = 60,
+    extra_constraint: str = None,
+    template_text: str = None,
+) -> str:
+    """构建改写 prompt（读 rewrite.txt 模板，填入素材信息 + 动态字数要求）。
 
     Args:
         material: 素材 dict，含 title/content/source/category/source_url
+        words_per_segment: 每段目标字数（由目标时长 + 语速倍率反算得出）
+        segment_duration: 每段预估时长（秒），供 LLM 输出 estimated_duration
         extra_constraint: 额外约束（如敏感词命中后追加的规避要求）
+        template_text: 频道级自定义模板，为 None 则读默认 rewrite.txt
     """
-    template = PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
+    template = template_text if template_text else PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
     prompt = template.format(
         title=material["title"],
         content=material["content"],
         source=material["source"],
         category=material.get("category") or "未分类",
         source_url=material["url"],
+        words_per_segment=words_per_segment,
+        segment_duration=segment_duration,
     )
     # 第一层过滤：在 prompt 末尾追加敏感词规避约束，引导 LLM 主动避开
     if extra_constraint:
@@ -251,11 +366,18 @@ def _build_prompt(material: dict, extra_constraint: str = None) -> str:
     return prompt
 
 
-async def _rewrite_one(material: dict, retry_with_constraint: bool = False) -> dict:
+async def _rewrite_one(
+    material: dict,
+    words_per_segment: int = 450,
+    segment_duration: int = 60,
+    retry_with_constraint: bool = False,
+    template_text: str = None,
+    constraint_text: str = None,
+) -> dict:
     """改写单条素材（LLD 7.3 双层过滤）。
 
     流程：
-    1. 构建 prompt（首次无约束，二次追加 PROMPT_CONSTRAINT）
+    1. 构建 prompt（首次无约束，二次追加 constraint）
     2. 调用 LLM（tenacity 自动重试可重试错误）
     3. 解析 JSON 响应
     4. 敏感词检查：
@@ -264,14 +386,23 @@ async def _rewrite_one(material: dict, retry_with_constraint: bool = False) -> d
 
     Args:
         material: 素材 dict
+        words_per_segment: 每段目标字数（动态注入 prompt）
+        segment_duration: 每段预估时长（秒）
         retry_with_constraint: 是否为二次重生成（追加敏感词约束 prompt）
+        template_text: 频道级自定义改写模板，None 则用默认 rewrite.txt
+        constraint_text: 频道级敏感词约束，None 则用默认 PROMPT_CONSTRAINT
 
     Returns:
         {title, content, estimated_duration, source_url, material_id}
     """
+    # 频道级约束优先，回退到默认 PROMPT_CONSTRAINT
+    effective_constraint = constraint_text if constraint_text is not None else PROMPT_CONSTRAINT
     prompt = _build_prompt(
         material,
-        extra_constraint=PROMPT_CONSTRAINT if retry_with_constraint else None,
+        words_per_segment=words_per_segment,
+        segment_duration=segment_duration,
+        extra_constraint=effective_constraint if retry_with_constraint else None,
+        template_text=template_text,
     )
     raw = await _call_llm(prompt)
 
@@ -323,23 +454,45 @@ async def _rewrite_one(material: dict, retry_with_constraint: bool = False) -> d
 
 
 def _select_top_materials(materials: list[dict], top_n: int = SELECT_TOP_N) -> list[dict]:
-    """按品类分组，每品类选 1-2 篇热度最高（LLD 5.3.2）。
+    """按品类分组选题，保证多样性与数量充足（LLD 5.3.2）。
 
-    分组策略避免单品类霸占整期节目，保证内容多样性。
+    策略：
+    1. 按品类分组，每品类按热度降序
+    2. 轮询各品类取热度最高的 1 篇（第一轮保证品类覆盖）
+    3. 若总量不足 top_n，第二轮从各品类补取次高热度的素材
+    4. 单品类素材池很大时仍受 top_n 上限约束
+
+    避免单一品类（如爬虫未分类导致全归"综合"）只能取 2 篇 < MIN_VALID_SEGMENTS 的缺陷。
     """
     by_category = defaultdict(list)
     for m in materials:
-        # category 可能为 None，统一归入"未分类"
         cat = m.get("category") or "未分类"
         by_category[cat].append(m)
 
+    # 每品类按热度降序
+    for cat in by_category:
+        by_category[cat].sort(key=lambda m: heat_score(m), reverse=True)
+
     selected = []
-    for cat, items in by_category.items():
-        # 每品类按热度降序，取前 2 篇
-        items.sort(key=lambda m: heat_score(m), reverse=True)
-        selected.extend(items[:2])
+    # 第一轮：每个品类取 1 篇，保证品类覆盖
+    cats = list(by_category.keys())
+    for cat in cats:
+        if by_category[cat]:
+            selected.append(by_category[cat].pop(0))
+        if len(selected) >= top_n:
+            return selected[:top_n]
+
+    # 第二轮：从剩余素材中按品类轮询补取，直到达到 top_n 或素材耗尽
+    # 收集所有剩余素材，按热度全局排序后补足
+    remaining = []
+    for cat in cats:
+        remaining.extend(by_category[cat])
+    remaining.sort(key=lambda m: heat_score(m), reverse=True)
+    for m in remaining:
         if len(selected) >= top_n:
             break
+        selected.append(m)
+
     return selected[:top_n]
 
 
@@ -360,7 +513,13 @@ def _build_aggregated_error(segments: list[dict], failure_details: list[dict]) -
     )
 
     if not failure_details:
-        return LLMError(base_msg, failure_details=None)
+        # 无单条素材失败（如素材总量不足选不够 top_n），构造诊断摘要写入 workflow_step.result
+        # 否则 result 为 NULL，前端详情页无法展示失败原因
+        return LLMError(base_msg, failure_details=[{
+            "stage": "insufficient_segments",
+            "error_type": "InsufficientSegments",
+            "error_message": base_msg,
+        }])
 
     # 统计 error_type 分布，识别主导错误
     from collections import Counter
@@ -389,30 +548,50 @@ def _build_aggregated_error(segments: list[dict], failure_details: list[dict]) -
     return LLMError(msg, failure_details=failure_details)
 
 
-def _assemble_script(segments: list[dict]) -> dict:
+def _assemble_script(
+    segments: list[dict],
+    rate_multiplier: float = 1.0,
+    intro_text: str = None,
+    outro_text: str = None,
+) -> dict:
     """组装整稿（开场白 + 改写正文 + 结尾）。
 
     Args:
         segments: 改写后的分段列表 [{seq, title, content, ...}]
+        rate_multiplier: TTS 实际语速倍率（如 1.5 = 1.5 倍速），
+            用于校正估算时长，避免与实际 TTS 输出时长偏差过大
+        intro_text: 频道级开场白，None 则用默认 INTRO_TEXT
+        outro_text: 频道级结尾，None 则用默认 OUTRO_TEXT
 
     Returns:
         {full_text, segments_json, total_words, estimated_duration}
     """
+    # 频道级文案优先，回退到默认 INTRO_TEXT/OUTRO_TEXT
+    effective_intro = intro_text if intro_text else INTRO_TEXT
+    effective_outro = outro_text if outro_text else OUTRO_TEXT
+
+    # 实际播报速率 = 基础语速 × 倍率（如 210 × 1.5 = 315 字/分）
+    actual_words_per_min = WORDS_PER_MINUTE * rate_multiplier
+
     # 开场白与结尾作为独立分段，便于 TTS 单独合成与时长控制
+    # 时长按实际字数 + 实际语速估算
+    intro_duration = int(len(effective_intro) / actual_words_per_min * 60)
     intro_segment = {
         "seq": 1,
         "title": "开场白",
-        "content": INTRO_TEXT,
+        "content": effective_intro,
         "start_sec": 0,
-        "end_sec": 30,
+        "end_sec": intro_duration,
         "material_ids": [],
     }
 
     body_segments = []
     # 正文段 seq 从 2 开始，衔接开场白
-    current_sec = 30
+    current_sec = intro_duration
     for idx, seg in enumerate(segments, start=2):
-        duration = seg.get("estimated_duration", 90)
+        # 每段时长按实际字数 + 实际语速估算，避免 LLM 返回的 estimated_duration 不准
+        seg_words = len(seg.get("content", ""))
+        duration = int(seg_words / actual_words_per_min * 60) if seg_words else seg.get("estimated_duration", 90)
         body_segments.append(
             {
                 "seq": idx,
@@ -425,12 +604,13 @@ def _assemble_script(segments: list[dict]) -> dict:
         )
         current_sec += duration
 
+    outro_duration = int(len(effective_outro) / actual_words_per_min * 60)
     outro_segment = {
         "seq": len(segments) + 2,
         "title": "结尾",
-        "content": OUTRO_TEXT,
+        "content": effective_outro,
         "start_sec": current_sec,
-        "end_sec": current_sec + 30,
+        "end_sec": current_sec + outro_duration,
         "material_ids": [],
     }
 
@@ -439,8 +619,8 @@ def _assemble_script(segments: list[dict]) -> dict:
     # 拼接完整稿件文本，用于全文检索与人工审阅
     full_text = "\n\n".join(s["content"] for s in all_segments)
     total_words = sum(len(s["content"]) for s in all_segments)
-    # 按 210 字/分钟估算总时长
-    estimated_duration = int(total_words / WORDS_PER_MINUTE * 60)
+    # 总时长按实际语速估算，与 TTS 实际输出对齐
+    estimated_duration = int(total_words / actual_words_per_min * 60)
 
     return {
         "full_text": full_text,
@@ -451,13 +631,13 @@ def _assemble_script(segments: list[dict]) -> dict:
 
 
 async def _fetch_materials(date_str: str) -> list[dict]:
-    """查询当日 pending 素材。
+    """查询当日 pending 素材，当日无素材时回溯最近 FALLBACK_DAYS 天。
 
     按 crawled_at 当日筛选，避免历史积压素材混入当日节目。
     status=pending 确保不重复消费已被选题的素材。
+    当日爬虫去重可能导致 0 条新素材（RSS 源无新内容），回溯避免工作流直接失败。
     """
     async with AsyncSessionLocal() as session:
-        # 当日 00:00 ~ 次日 00:00，覆盖完整一天的工作流产出
         day = date.fromisoformat(date_str)
         start = datetime.combine(day, datetime.min.time())
         end = datetime.combine(day, datetime.max.time())
@@ -469,6 +649,25 @@ async def _fetch_materials(date_str: str) -> list[dict]:
         )
         result = await session.execute(stmt)
         rows = result.scalars().all()
+
+        # 当日无 pending 素材时，回溯最近 FALLBACK_DAYS 天
+        # 场景：RSS 源周末/夜间无更新，爬虫去重后当日 0 条新素材
+        if not rows and FALLBACK_DAYS > 0:
+            fb_start = datetime.combine(
+                day - timedelta(days=FALLBACK_DAYS), datetime.min.time()
+            )
+            fb_stmt = select(Material).where(
+                Material.status == MaterialStatus.pending,
+                Material.crawled_at >= fb_start,
+                Material.crawled_at <= end,
+            ).order_by(Material.crawled_at.desc())
+            fb_result = await session.execute(fb_stmt)
+            rows = fb_result.scalars().all()
+            if rows:
+                logger.warning(
+                    "当日 %s 无 pending 素材，回溯最近 %d 天获取 %d 条",
+                    date_str, FALLBACK_DAYS, len(rows),
+                )
 
         # ORM 对象转 dict，便于热度计算与并发传递
         # 注：schema 未含 source_authority 字段，heat_score 内部默认 0.5
@@ -487,12 +686,44 @@ async def _fetch_materials(date_str: str) -> list[dict]:
         ]
 
 
-async def rewrite(workflow_id: str, date_str: str) -> dict:
+async def _fetch_channel_prompts(channel_id: int) -> dict:
+    """查询频道级提示词。空值字段返回 None，由调用方回退默认值。
+
+    Args:
+        channel_id: 频道 ID
+
+    Returns:
+        {intro_prompt, outro_prompt, constraint_prompt, rewrite_template}
+        频道不存在或字段为空时对应值为 None
+    """
+    from app.models import Channel
+    async with AsyncSessionLocal() as session:
+        ch = await session.get(Channel, channel_id)
+        if ch is None:
+            return {
+                "intro_prompt": None,
+                "outro_prompt": None,
+                "constraint_prompt": None,
+                "rewrite_template": None,
+            }
+        return {
+            "intro_prompt": ch.intro_prompt,
+            "outro_prompt": ch.outro_prompt,
+            "constraint_prompt": ch.constraint_prompt,
+            "rewrite_template": ch.rewrite_template,
+        }
+
+
+async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> dict:
     """改写主入口（LLD 5.3）。
+
+    整合目标时长 + TTS 实际语速，动态反算每段字数要求，注入 prompt。
+    channel_id 非空时使用频道级提示词，空值字段回退默认值。
 
     Args:
         workflow_id: 工作流 ID，用于关联稿件与回溯
         date_str: 日期字符串（如 "2026-07-08"），筛选当日素材
+        channel_id: 频道 ID，用于读取频道级提示词
 
     Returns:
         {"script_id": N, "segments": 6, "total_words": 2100}
@@ -500,7 +731,7 @@ async def rewrite(workflow_id: str, date_str: str) -> dict:
     Raises:
         LLMError: 有效改写段数 < 3，无法生成节目
     """
-    logger.info("改写启动 workflow_id=%s date=%s", workflow_id, date_str)
+    logger.info("改写启动 workflow_id=%s date=%s channel_id=%s", workflow_id, date_str, channel_id)
 
     # 0. 占位符前置检测：避免无效 API key 浪费重试配额
     # 若 .env 未替换占位符或前端未配置真实 key，立即抛出明确错误
@@ -510,6 +741,30 @@ async def rewrite(workflow_id: str, date_str: str) -> dict:
             f"LLM_API_KEY 未配置或仍为占位符（当前值: {masked}），"
             f"请在 .env 文件或前端 AI 配置页填入真实 API Key"
         )
+
+    # 0.3 读取频道级提示词（channel_id 为空或字段为空时，回退默认值）
+    channel_prompts = None
+    if channel_id:
+        channel_prompts = await _fetch_channel_prompts(channel_id)
+        logger.info(
+            "频道提示词 channel_id=%s intro=%s outro=%s template=%s",
+            channel_id,
+            bool(channel_prompts["intro_prompt"]),
+            bool(channel_prompts["outro_prompt"]),
+            bool(channel_prompts["rewrite_template"]),
+        )
+
+    # 0.5 读取目标时长 + TTS 语速倍率，反算每段目标字数
+    # 数学关系：总字数 = 目标时长 × 基础语速 × 倍率 / 60
+    # 用户调整目标时长或 TTS 语速时，自动协同调整稿件字数
+    target_sec = _get_target_duration_sec()
+    rate_multiplier = _get_rate_multiplier()
+    target_segments, words_per_segment = _calc_segment_words(target_sec, rate_multiplier)
+    segment_duration = int(words_per_segment / (WORDS_PER_MINUTE * rate_multiplier) * 60)
+    logger.info(
+        "时长/字数联动 target_sec=%d rate=%.2f 目标段数=%d 每段字数=%d 每段时长=%ds",
+        target_sec, rate_multiplier, target_segments, words_per_segment, segment_duration,
+    )
 
     # 1. 拉取当日 pending 素材
     materials = await _fetch_materials(date_str)
@@ -522,8 +777,17 @@ async def rewrite(workflow_id: str, date_str: str) -> dict:
     selected = _select_top_materials(materials, top_n=SELECT_TOP_N)
     logger.info("选题 %d 条（按热度排序）", len(selected))
 
-    # 3. 并发改写（5-6 条同时调用 LLM，return_exceptions 隔离单条失败）
-    tasks = [_rewrite_one(m) for m in selected]
+    # 3. 并发改写（注入动态字数要求 + 频道级模板/约束，return_exceptions 隔离单条失败）
+    tasks = [
+        _rewrite_one(
+            m,
+            words_per_segment=words_per_segment,
+            segment_duration=segment_duration,
+            template_text=channel_prompts["rewrite_template"] if channel_prompts else None,
+            constraint_text=channel_prompts["constraint_prompt"] if channel_prompts else None,
+        )
+        for m in selected
+    ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # 4. 过滤失败项 + 敏感词扫描
@@ -533,7 +797,14 @@ async def rewrite(workflow_id: str, date_str: str) -> dict:
         if isinstance(r, SensitiveHitError):
             # 首次命中敏感词，带约束 prompt 二次重生成
             try:
-                r = await _rewrite_one(m, retry_with_constraint=True)
+                r = await _rewrite_one(
+                    m,
+                    words_per_segment=words_per_segment,
+                    segment_duration=segment_duration,
+                    retry_with_constraint=True,
+                    template_text=channel_prompts["rewrite_template"] if channel_prompts else None,
+                    constraint_text=channel_prompts["constraint_prompt"] if channel_prompts else None,
+                )
                 segments.append({**r, "seq": len(segments) + 1})
             except Exception as e:
                 logger.warning("素材 %s 二次改写失败: %s", m["id"], e)
@@ -562,8 +833,22 @@ async def rewrite(workflow_id: str, date_str: str) -> dict:
         # 避免掩盖真实问题（如全部 LLMAuthError 应明确报鉴权失败）
         raise _build_aggregated_error(segments, failure_details)
 
-    # 5. 组装整稿（开场白 + 改写段 + 结尾）
-    assembled = _assemble_script(segments)
+    # 4.5 限制最终段数，避免选题数增加后节目时长过长
+    # 按 target_segments 截取，避免段数超出目标时长对应的需求
+    if len(segments) > target_segments:
+        logger.info(
+            "成功段数 %d 超过目标段数 %d，截取前 %d 段",
+            len(segments), target_segments, target_segments,
+        )
+        segments = segments[:target_segments]
+
+    # 5. 组装整稿（频道级开场白/结尾 + 改写段），用实际语速估算时长
+    assembled = _assemble_script(
+        segments,
+        rate_multiplier=rate_multiplier,
+        intro_text=channel_prompts["intro_prompt"] if channel_prompts else None,
+        outro_text=channel_prompts["outro_prompt"] if channel_prompts else None,
+    )
 
     # 6. 落库 script 表
     referenced_materials = [

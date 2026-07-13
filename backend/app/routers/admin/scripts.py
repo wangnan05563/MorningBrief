@@ -152,3 +152,25 @@ async def update_segments(
         **_script_to_dict(s),
         "sensitive_warning": sensitive_hits,
     })
+
+
+@router.delete("/{script_id}")
+async def delete_script(
+    script_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """硬删除稿件记录。
+
+    仅 admin 角色可调用。不做状态校验：审核流程外的物理清理场景
+    （如脏数据清理、运营误操作回滚）需要无前置条件删除。
+    关联数据（segments 等存储在 JSON 字段内）随记录一并清除。
+    """
+    result = await db.execute(select(Script).where(Script.id == script_id))
+    s = result.scalar_one_or_none()
+    if s is None:
+        raise NotFoundError("稿件不存在")
+
+    await db.execute(delete(Script).where(Script.id == script_id))
+    await db.commit()
+    return success(data={"deleted": script_id})

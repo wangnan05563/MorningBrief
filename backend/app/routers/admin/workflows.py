@@ -16,6 +16,11 @@ class RetryRequest(BaseModel):
     step: str
 
 
+class TriggerRequest(BaseModel):
+    """手动触发请求体。channel_id 可选，携带时使用频道级提示词。"""
+    channel_id: int | None = None
+
+
 class BatchDeleteRequest(BaseModel):
     """批量删除请求体。
 
@@ -93,15 +98,20 @@ async def get_workflow(
 
 @router.post("/trigger")
 async def trigger_workflow(
+    req: TriggerRequest,
     admin: AdminPayload = Depends(require_admin),
 ):
-    """手动触发工作流（运营后台调用）。"""
+    """手动触发工作流（运营后台调用）。
+
+    支持携带 channel_id，rewrite 步骤据此读取频道级提示词。
+    """
     from datetime import date
     from app.services.workflow_scheduler import workflow_scheduler
 
     workflow_id = await workflow_scheduler.trigger_workflow(
         episode_date=date.today(),
         source="manual",
+        channel_id=req.channel_id,
         triggered_by=admin.username,
     )
     return success(data={"workflow_id": workflow_id, "status": "running"})
@@ -113,22 +123,23 @@ async def retry_workflow(
     req: RetryRequest,
     admin: AdminPayload = Depends(require_admin),
 ):
-    """重跑失败的工作流（创建新工作流，断点续跑）。
+    """在原工作流上从指定步骤重跑（断点续跑）。
 
-    scheduler.retry_workflow 内部基于原工作流已完成步骤实现断点续跑，
-    无需路由层传递 from_step（step 参数保留前端契约，后续扩展时使用）。
+    删除 from_step 及其之后的步骤记录，保留之前的成功步骤，
+    重置状态为 queued 后重新入队，_run_workflow 跳过已成功步骤。
     """
     from app.services.workflow_scheduler import workflow_scheduler
     from app.core.exceptions import ParamError
     from app.core.response import error
 
     try:
-        new_wf_id = await workflow_scheduler.retry_workflow(workflow_id)
+        wf_id = await workflow_scheduler.retry_workflow(
+            workflow_id, from_step=req.step, triggered_by=admin.username,
+        )
     except ParamError as e:
         return error(code=400, message=str(e))
     return success(data={
-        "original_workflow_id": workflow_id,
-        "new_workflow_id": new_wf_id,
+        "workflow_id": wf_id,
         "retry_step": req.step,
         "status": "queued",
     })

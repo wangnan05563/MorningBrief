@@ -7,10 +7,8 @@
 用法：
     python seed_channels.py [db_path]
 
-不指定 db_path 时，按优先级回退：
-    1. 命令行参数
-    2. 项目根目录 dist/20-news/data/news.db（打包后路径）
-    3. backend/data/news.db（开发态路径）
+不指定 db_path 时，使用 app.paths.resolve_db_path() 统一解析路径，
+确保 dev/exe 模式下路径一致。
 """
 import sqlite3
 import sys
@@ -77,22 +75,25 @@ def seed(db_path: str, channels=None) -> int:
     return inserted
 
 
-def resolve_db_path() -> str:
-    """解析数据库路径，支持命令行参数与默认回退策略。"""
+def _resolve_db_path() -> str:
+    """解析数据库路径：命令行参数优先，否则使用 app.paths.resolve_db_path()。
+
+    统一使用 app.paths 的路径解析逻辑，确保 dev/exe 模式一致。
+    """
     if len(sys.argv) > 1:
         return sys.argv[1]
-
-    backend_dir = Path(__file__).resolve().parent
-    project_root = backend_dir.parent
-    # 回退顺序：打包后路径 → 开发态路径
-    dist_db = project_root / "dist" / "20-news" / "data" / "news.db"
-    if dist_db.exists():
-        return str(dist_db)
-    return str(backend_dir / "data" / "news.db")
+    # 使用 app.paths 统一路径解析，避免 dev/exe 模式路径不一致
+    try:
+        from app.paths import resolve_db_path
+        return str(resolve_db_path())
+    except Exception:
+        # fallback：app.paths 不可用时回退到 backend/data/news.db
+        backend_dir = Path(__file__).resolve().parent
+        return str(backend_dir / "data" / "news.db")
 
 
 def main():
-    db_path = resolve_db_path()
+    db_path = _resolve_db_path()
     print(f"  [seed] 数据库路径: {db_path}")
     seed(db_path)
 

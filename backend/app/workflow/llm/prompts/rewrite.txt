@@ -14,7 +14,7 @@
 6. 过渡自然：段落之间用口语化过渡词衔接（如"接下来""另外""值得一提的是"）
 7. 结尾升华：最后一句做总结或展望，引发思考
 8. 数字读法明确：如"3.5亿"写作"三点五亿"，"20%"写作"百分之二十"，"1/3"写作"三分之一"
-9. 时长控制：约 300 字（90 秒播报，按 210 字/分钟）
+9. 时长控制：正文约 {words_per_segment} 字（{segment_duration} 秒播报，按当前 TTS 语速配置估算）
 
 ## 输入
 标题：{title}
@@ -25,8 +25,8 @@
 ## 输出格式（严格 JSON，仅输出 JSON 本身）
 {{
   "title": "改写后的标题（口语化，≤20字，不含引号、编号、Markdown）",
-  "content": "改写后的正文（约300字，纯文本，段落之间用空行分隔，不含标题/编号/Markdown符号/解释性文字）",
-  "estimated_duration": 90,
+  "content": "改写后的正文（约{words_per_segment}字，纯文本，段落之间用空行分隔，不含标题/编号/Markdown符号/解释性文字）",
+  "estimated_duration": {segment_duration},
   "source_url": "{source_url}"
 }}
 

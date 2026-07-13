@@ -182,3 +182,49 @@
 - 后端：新增维度 29-31（批量删除事务原子性/路由优先级/权限校验）
 - 前端：新增维度 30-32（多选交互/确认对话框/分页修正）
 - 项目配置：新增 cascade_delete / batch_operation / route_priority 硬约束
+
+## v1.5.0 (2026-07-12)
+
+### 启动脚本安全、构建并发保护、共享构建依赖完整提取
+
+**问题**：
+1. 双击启动服务.bat默认启动 EXE 而非开发模式（优先级顺序错误）
+2. 系统 Python 路径含空格（F:\Program Files\Python3.14\python.exe）导致 Start-Process 路径被截断
+3. 构建打包时旧 EXE 占用 dist\20-news 导致 PyInstaller COLLECT 阶段 PermissionError
+4. FFmpeg 下载安装只提取两个 EXE，缺少配套 DLL 导致运行时 找不到 avdevice-63.dll
+5. 日志仍使用 %s 占位符（旧版），Loguru 实际使用 {}，异常信息被吞
+
+**成功执行步骤**：
+1. 定位根因：start.ps1 自动选择顺序 exe → venv → 系统 python 改为 env → 系统 python → exe
+2. 修复路径截断：Start-Process 使用 cmd /d /s /c 双层引号封装，-ArgumentList 传数组
+3. 构建并发保护：uild-exe.ps1 增加 Stop-DistProcesses 函数，按可执行路径和命令行定位并终止占用进程
+4. 共享构建依赖：fmpeg_service.py _extract_binaries 改为提取完整 bin 目录，提取前清除旧文件
+5. 日志格式统一：确认源码已改为 {}，运行日志仍显示 %s 说明运行的是旧进程
+
+**不确定性与失败点**：
+- 第一次短超时测试终止了外层 PowerShell，遗留 PyInstaller 子进程导致第二次构建再次冲突
+- pply_patch 匹配失败（编码问题），改用 exec_command 直接读取-修改-写入
+- 前端 review SKILL.md 的 29 个维度 替换经过多次尝试才成功（PowerShell 字符串替换在某些环境下不生效）
+
+**可抽象的固定流程**：
+1. 启动脚本标准流程：优先虚拟环境 → 系统 Python → EXE 兜底；-Exe 参数始终强制 EXE
+2. 路径安全封装：Start-Process 始终使用 cmd /d /s /c "" 四层引号封装
+3. 构建并发保护：终止占用进程 → 等待退出 → 删除旧产物 → 验证删除成功
+4. 共享构建提取：通过 EXE 定位 zip 内动态目录 → 提取 bin 下所有普通文件 → 清除旧文件 → 验证完整性
+5. 日志格式验证：日志格式与源码版本必须一致，不一致说明运行旧构建产物
+
+**适用场景**：所有 Windows 启动/构建脚本、共享构建压缩包解压、日志系统迁移
+**不适用场景**：Linux/macOS 环境、static build（不依赖额外 DLL）
+
+**新增元规范**：
+- 规范 31：启动脚本路径含空格安全封装（CRITICAL）
+- 规范 32：构建脚本并发保护（HIGH）
+
+**新增编码规范**：
+- 规范 33：共享构建依赖包完整提取（CRITICAL）
+- 规范 34：日志格式与异常信息透传（HIGH）
+
+**审查技能更新**：
+- 后端：新增维度 33-38（启动脚本安全/构建并发/日志格式/运行环境一致性/共享构建依赖）
+- 前端：新增维度 34-36（FFmpeg 依赖完整性/安装进度与超时/安装后自动检测）
+- 项目配置：新增 shared_build_dll_dependency / loguru_placeholder_format / start_process_path_safety 硬约束

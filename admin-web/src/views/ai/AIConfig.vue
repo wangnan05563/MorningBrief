@@ -49,6 +49,22 @@
           </div>
 
           <el-form :model="llmForm" label-width="120px" class="config-form">
+            <el-divider content-position="left">节目参数（时长/字数联动）</el-divider>
+            <el-form-item label="目标时长">
+              <el-slider
+                v-model="llmForm.target_duration_sec"
+                :min="180" :max="1200" :step="30"
+                show-input
+                style="max-width: 500px"
+              />
+              <span class="field-tip">默认 600 秒（10 分钟），与稿件字数反向关联</span>
+            </el-form-item>
+            <el-form-item label="预期字数">
+              <el-tag type="info">
+                当前配置下需约 {{ calculatedWords }} 字
+                （{{ calculatedSegments }} 段 × {{ calculatedWordsPerSeg }} 字/段 + 开场白/结尾 145 字）
+              </el-tag>
+            </el-form-item>
             <el-form-item label="API Key">
               <el-input
                 v-model="llmForm.api_key"
@@ -235,10 +251,16 @@
               </el-select>
             </el-form-item>
             <el-form-item label="语速调节">
-              <el-input
-                v-model="ttsForm.edge_rate"
-                placeholder="如 +10% / -10%（可为空）"
+              <el-slider
+                v-model="edgeRatePercent"
+                :min="-50" :max="100" :step="5"
+                show-input
+                style="max-width: 500px"
               />
+              <span class="field-tip">
+                当前倍率 {{ (edgeRatePercent / 100 + 1).toFixed(2) }}x，
+                实际播报速率约 {{ Math.round(210 * (edgeRatePercent / 100 + 1)) }} 字/分
+              </span>
             </el-form-item>
             <el-form-item label="音量调节">
               <el-input
@@ -397,10 +419,14 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
-import { ElMessage } from '../../utils/message'
-import { Check } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from '../../utils/message'
+import { Check, RefreshLeft } from '@element-plus/icons-vue'
 import api from '../../api'
+
+const route = useRoute()
+const router = useRouter()
 
 const activeTab = ref('llm')
 const saving = ref(false)
@@ -413,6 +439,7 @@ const llmForm = ref({
   model: '',
   timeout_sec: 30,
   retry_attempts: 3,
+  target_duration_sec: 600,
 })
 const showLlmKey = ref(false)
 const testingLlm = ref(false)
@@ -477,6 +504,38 @@ const usageTrend = ref([])
 const currentPreset = computed(() =>
   presets.value.find((p) => p.key === selectedPreset.value)
 )
+
+// Edge-TTS 语速百分比（-50 ~ 100，对应 0.5x ~ 2.0x）
+// 后端 edge_rate 字符串格式 "+50%" / "-10%" / ""
+const edgeRatePercent = computed({
+  get() {
+    const s = (ttsForm.value.edge_rate || '').toString().trim().replace('%', '').replace('+', '')
+    const n = parseFloat(s)
+    return isNaN(n) ? 0 : n
+  },
+  set(val) {
+    // 0 视为无调整（后端 _normalize_edge_adjustment 会把 0 转为空字符串）
+    ttsForm.value.edge_rate = val === 0 ? '' : (val > 0 ? `+${val}%` : `${val}%`)
+  }
+})
+
+// 字数反算：总字数 = 目标时长 × 210 × 倍率 / 60
+const calculatedWords = computed(() => {
+  const rate = edgeRatePercent.value / 100 + 1
+  return Math.round(llmForm.value.target_duration_sec * 210 * rate / 60)
+})
+
+// 段数：clamp(round((总字数 - 145) / 350), 3, 6)
+const calculatedSegments = computed(() => {
+  const body = Math.max(300, calculatedWords.value - 145)
+  return Math.max(3, Math.min(6, Math.round(body / 350)))
+})
+
+// 每段字数
+const calculatedWordsPerSeg = computed(() => {
+  const body = Math.max(300, calculatedWords.value - 145)
+  return Math.max(200, Math.round(body / calculatedSegments.value))
+})
 
 // 加载配置
 async function loadConfig() {
@@ -565,6 +624,38 @@ async function handleSave() {
   }
 }
 
+// 恢复初始配置：清空所有预设配置和当前 LLM 配置，回退到出厂默认值
+async function handleResetConfig() {
+  try {
+    await ElMessageBox.confirm(
+      '确认恢复 LLM 初始配置？将清空所有预设的已保存配置（API Key/Base URL/Model）和当前 LLM 配置，此操作不可恢复。',
+      '恢复初始配置',
+      { type: 'warning', confirmButtonText: '确认恢复', cancelButtonText: '取消' }
+    )
+  } catch {
+    return // 用户取消
+  }
+
+  resetting.value = true
+  try {
+    const data = await api.post('/ai/reset-config')
+    // 用后端返回的重置后配置刷新表单
+    if (data?.llm) {
+      llmForm.value.api_key = data.llm.api_key || ''
+      llmForm.value.base_url = data.llm.base_url || ''
+      llmForm.value.model = data.llm.model || ''
+    }
+    // 清空预设配置缓存和选中状态
+    presetConfigs.value = {}
+    selectedPreset.value = ''
+    llmTestResult.value = null
+    ElMessage.success('LLM 配置已恢复初始状态')
+    resetting.value = false
+  } finally {
+    loading.value = false
+  }
+}
+
 // 测试 LLM 连接
 async function handleTestLLM() {
   testingLlm.value = true
@@ -629,8 +720,41 @@ function handleTabChange(tab) {
   }
 }
 
-onMounted(() => {
-  loadConfig()
+// 从参数计算器同步配置：读取 query 中的 duration 和 rate，映射到表单字段
+function applyCalculatorParams() {
+  const { duration, rate } = route.query
+  let applied = []
+
+  if (duration !== undefined) {
+    const sec = parseInt(duration, 10)
+    if (!isNaN(sec)) {
+      // clamp 到滑块范围 180-1200
+      llmForm.value.target_duration_sec = Math.max(180, Math.min(1200, sec))
+      applied.push('目标时长')
+    }
+  }
+
+  if (rate !== undefined) {
+    const rateVal = parseFloat(rate)
+    if (!isNaN(rateVal)) {
+      // rateMultiplier → edge_rate 字符串：1.5 → "+50%", 0.8 → "-20%", 1.0 → ""
+      const percent = Math.round((rateVal - 1) * 100)
+      ttsForm.value.edge_rate = percent === 0 ? '' : (percent > 0 ? `+${percent}%` : `${percent}%`)
+      applied.push('语速倍率')
+    }
+  }
+
+  if (applied.length > 0) {
+    ElMessage.info(`已从参数计算器同步：${applied.join('、')}，请点击保存配置持久化`)
+  }
+
+  // 清除 query 参数，避免刷新页面时重复应用
+  router.replace({ path: route.path })
+}
+
+onMounted(async () => {
+  await loadConfig()
+  applyCalculatorParams()
 })
 </script>
 

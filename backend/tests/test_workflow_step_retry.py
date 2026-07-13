@@ -56,9 +56,10 @@ async def _add_step(db_session, workflow_id, name, status, result=None):
 
 
 @pytest.mark.asyncio
-async def test_retry_tts_copies_rewrite_result_and_preserves_metadata(
+async def test_retry_tts_deletes_failed_step_and_preserves_prior_success(
     db_session, monkeypatch,
 ):
+    """原工作流重跑：删除 from_step 及其之后的步骤，保留之前的成功步骤。"""
     _patch_scheduler_session(monkeypatch, db_session)
     scheduler = WorkflowScheduler()
     await _add_workflow(db_session)
@@ -75,16 +76,24 @@ async def test_retry_tts_copies_rewrite_result_and_preserves_metadata(
         WorkflowStepStatus.failed,
     )
 
-    new_workflow_id = await scheduler.retry_workflow(
+    # mock 入队操作，避免触发真实 PriorityQueue
+    class _FakeQueue:
+        async def put(self, item):
+            pass
+    monkeypatch.setattr(scheduler, "_queue", _FakeQueue())
+    returned_id = await scheduler.retry_workflow(
         "wf-original", "tts", "admin",
     )
 
-    new_workflow = await db_session.get(Workflow, new_workflow_id)
-    assert new_workflow.episode_date == date(2026, 7, 12)
-    assert new_workflow.channel_id == 7
-    assert new_workflow.priority == 8
+    # 返回原 workflow_id，不创建新工作流
+    assert returned_id == "wf-original"
+    wf = await db_session.get(Workflow, "wf-original")
+    assert wf.status == "queued"
+    assert wf.error is None
+    assert wf.finished_at is None
+    # 保留 crawl/rewrite 成功步骤，删除 failed 的 tts 步骤
     steps = (await db_session.execute(
-        select(WorkflowStep).where(WorkflowStep.workflow_id == new_workflow_id)
+        select(WorkflowStep).where(WorkflowStep.workflow_id == "wf-original")
         .order_by(WorkflowStep.id)
     )).scalars().all()
     assert [step.step_name for step in steps] == ["crawl", "rewrite"]

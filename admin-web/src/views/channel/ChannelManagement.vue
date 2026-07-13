@@ -8,13 +8,21 @@
 
     <el-card shadow="never">
       <el-table :data="list" v-loading="loading" stripe>
-        <el-table-column prop="name" label="名称" min-width="140" />
+        <el-table-column prop="name" label="名称" min-width="120" />
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
+        <el-table-column label="定时触发" width="110">
+          <template #default="{ row }">
+            <span v-if="row.schedule_time">{{ row.schedule_time }}</span>
+            <span v-else class="text-muted">默认</span>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <!-- 用 v-model 直接绑定，失败时手动回滚，保证 UI 即时反馈 -->
+            <!-- active-value/inactive-value 必须匹配后端整数 0/1，否则 el-switch 用 === 比较始终判定为 inactive -->
             <el-switch
               v-model="row.is_active"
+              :active-value="1"
+              :inactive-value="0"
               :disabled="!canOperate"
               @change="(val) => handleToggle(row, val)"
             />
@@ -33,17 +41,55 @@
     </el-card>
 
     <!-- 新增/编辑弹窗：复用同一 Dialog，通过 editing 标志区分 -->
-    <el-dialog v-model="dialogVisible" :title="editing ? '编辑频道' : '新增频道'" width="480px">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
+    <el-dialog v-model="dialogVisible" :title="editing ? '编辑频道' : '新增频道'" width="720px" :close-on-click-modal="false">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+        <!-- 基本信息区 -->
+        <el-divider content-position="left">基本信息</el-divider>
         <el-form-item label="名称" prop="name">
           <el-input v-model="form.name" placeholder="请输入频道名称" />
         </el-form-item>
         <el-form-item label="描述" prop="description">
-          <el-input v-model="form.description" type="textarea" :rows="3" placeholder="频道描述（选填）" />
+          <el-input v-model="form.description" type="textarea" :rows="2" placeholder="频道描述（选填）" />
+        </el-form-item>
+        <el-form-item label="定时触发">
+          <el-input v-model="form.schedule_time" placeholder="HH:MM:SS（如 04:00:00），留空使用全局默认" style="width: 280px" />
+          <span class="form-tip">为空则使用全局 cron（05:00）触发</span>
         </el-form-item>
         <el-form-item label="启用">
-          <el-switch v-model="form.is_active" />
+          <el-switch v-model="form.is_active" :active-value="1" :inactive-value="0" />
         </el-form-item>
+
+        <!-- 新增频道时可选 AI 自动生成提示词 -->
+        <el-form-item v-if="!editing" label="AI 生成">
+          <el-checkbox v-model="form.auto_generate_prompts">创建后自动调用 AI 生成提示词</el-checkbox>
+        </el-form-item>
+
+        <!-- 提示词区：折叠面板，减少视觉负担 -->
+        <el-divider content-position="left">
+          <span>频道提示词</span>
+          <el-button
+            v-if="editing"
+            type="primary"
+            link
+            :loading="generating"
+            @click="handleGeneratePrompts"
+            style="margin-left: 12px"
+          >AI 重新生成</el-button>
+        </el-divider>
+        <el-collapse v-model="promptCollapse">
+          <el-collapse-item title="开场白（intro）" name="intro">
+            <el-input v-model="form.intro_prompt" type="textarea" :rows="3" placeholder="留空使用默认开场白" />
+          </el-collapse-item>
+          <el-collapse-item title="结尾（outro）" name="outro">
+            <el-input v-model="form.outro_prompt" type="textarea" :rows="3" placeholder="留空使用默认结尾" />
+          </el-collapse-item>
+          <el-collapse-item title="敏感词约束（constraint）" name="constraint">
+            <el-input v-model="form.constraint_prompt" type="textarea" :rows="3" placeholder="留空使用默认约束" />
+          </el-collapse-item>
+          <el-collapse-item title="改写模板（template）" name="template">
+            <el-input v-model="form.rewrite_template" type="textarea" :rows="8" placeholder="留空使用默认 rewrite.txt 模板" />
+          </el-collapse-item>
+        </el-collapse>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -56,10 +102,9 @@
 <script setup>
 defineOptions({ name: 'ChannelManagement' })
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessageBox } from 'element-plus'
-import { ElMessage } from '../../utils/message'
+import { ElMessage, ElMessageBox } from '../../utils/message'
 import { Plus } from '@element-plus/icons-vue'
-import { listChannels, createChannel, updateChannel, deleteChannel } from '../../api/channels'
+import { listChannels, createChannel, updateChannel, deleteChannel, generateChannelPrompts } from '../../api/channels'
 
 // 角色控制：直接读 localStorage，operator 隐藏增删改操作
 const role = localStorage.getItem('admin_role') || ''
@@ -70,16 +115,26 @@ const loading = ref(false)
 const dialogVisible = ref(false)
 const editing = ref(false)
 const submitting = ref(false)
+const generating = ref(false)
 const formRef = ref()
 
 // 行级删除按钮 loading（P1-2.2 防重复点击）
 const deletingIds = ref(new Set())
 
+// 提示词折叠面板默认展开第一项
+const promptCollapse = ref(['intro'])
+
 const form = reactive({
   id: null,
   name: '',
   description: '',
-  is_active: true,
+  is_active: 1,
+  schedule_time: '',
+  intro_prompt: '',
+  outro_prompt: '',
+  constraint_prompt: '',
+  rewrite_template: '',
+  auto_generate_prompts: false,
 })
 
 const rules = {
@@ -97,12 +152,23 @@ async function loadList() {
   }
 }
 
-function openCreate() {
-  editing.value = false
+function resetForm() {
   form.id = null
   form.name = ''
   form.description = ''
-  form.is_active = true
+  form.is_active = 1
+  form.schedule_time = ''
+  form.intro_prompt = ''
+  form.outro_prompt = ''
+  form.constraint_prompt = ''
+  form.rewrite_template = ''
+  form.auto_generate_prompts = false
+  promptCollapse.value = ['intro']
+}
+
+function openCreate() {
+  editing.value = false
+  resetForm()
   dialogVisible.value = true
 }
 
@@ -111,7 +177,14 @@ function openEdit(row) {
   form.id = row.id
   form.name = row.name
   form.description = row.description || ''
-  form.is_active = !!row.is_active
+  form.is_active = row.is_active ? 1 : 0
+  form.schedule_time = row.schedule_time || ''
+  form.intro_prompt = row.intro_prompt || ''
+  form.outro_prompt = row.outro_prompt || ''
+  form.constraint_prompt = row.constraint_prompt || ''
+  form.rewrite_template = row.rewrite_template || ''
+  form.auto_generate_prompts = false
+  promptCollapse.value = ['intro']
   dialogVisible.value = true
 }
 
@@ -119,16 +192,27 @@ async function handleSubmit() {
   await formRef.value.validate()
   submitting.value = true
   try {
-    const payload = {
-      name: form.name,
-      description: form.description,
-      is_active: form.is_active,
-    }
     if (editing.value) {
-      await updateChannel(form.id, payload)
+      // 编辑：提交所有提示词字段（空字符串表示清空，后端会判断）
+      await updateChannel(form.id, {
+        name: form.name,
+        description: form.description,
+        is_active: form.is_active,
+        schedule_time: form.schedule_time || '',
+        intro_prompt: form.intro_prompt,
+        outro_prompt: form.outro_prompt,
+        constraint_prompt: form.constraint_prompt,
+        rewrite_template: form.rewrite_template,
+      })
       ElMessage.success('已更新')
     } else {
-      await createChannel(payload)
+      // 新增：仅提交基本信息 + 定时 + AI生成标志，提示词由 AI 生成或留空
+      await createChannel({
+        name: form.name,
+        description: form.description,
+        schedule_time: form.schedule_time || null,
+        auto_generate_prompts: form.auto_generate_prompts,
+      })
       ElMessage.success('已创建')
     }
     dialogVisible.value = false
@@ -139,12 +223,13 @@ async function handleSubmit() {
 }
 
 async function handleToggle(row, val) {
+  // val 为整数 1（启用）或 0（禁用），与 el-switch active-value/inactive-value 一致
   try {
     await updateChannel(row.id, { is_active: val })
     ElMessage.success(val ? '已启用' : '已禁用')
   } catch {
     // 请求失败时回滚 switch 状态，保持 UI 与后端一致
-    row.is_active = !val
+    row.is_active = val === 1 ? 0 : 1
   }
 }
 
@@ -172,6 +257,24 @@ async function handleDelete(row) {
   }
 }
 
+async function handleGeneratePrompts() {
+  if (!form.id) return
+  generating.value = true
+  try {
+    const data = await generateChannelPrompts(form.id)
+    // AI 生成后回填到表单，用户可继续编辑后保存
+    form.intro_prompt = data.intro_prompt || ''
+    form.outro_prompt = data.outro_prompt || ''
+    form.constraint_prompt = data.constraint_prompt || ''
+    form.rewrite_template = data.rewrite_template || ''
+    ElMessage.success('AI 已生成提示词，可编辑后点击确认保存')
+  } catch (e) {
+    console.warn('handleGeneratePrompts failed:', e)
+  } finally {
+    generating.value = false
+  }
+}
+
 onMounted(() => {
   loadList()
 })
@@ -192,6 +295,16 @@ onMounted(() => {
       font-weight: 600;
       color: $color-text-primary;
     }
+  }
+
+  .text-muted {
+    color: $color-text-secondary;
+  }
+
+  .form-tip {
+    margin-left: 12px;
+    font-size: 12px;
+    color: $color-text-secondary;
   }
 }
 </style>
