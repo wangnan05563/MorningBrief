@@ -63,7 +63,9 @@ class Workflow(Base):
     )
     # 优先级 0-10，默认 5；sort_priority = -priority 实现 PriorityQueue DESC
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, server_default=func.now())
+    # 不用 server_default=func.now()：SQLite 的 CURRENT_TIMESTAMP 返回 UTC，与本地时间混合导致前端显示偏差 8 小时
+    # Python 端在创建 Workflow 时显式赋值 utcnow_naive()（本地时间）
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     error: Mapped[Optional[str]] = mapped_column(Text)
 

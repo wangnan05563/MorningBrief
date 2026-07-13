@@ -86,8 +86,7 @@
  */
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from '../../utils/message'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from '../../utils/message'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import api from '../../api'
 

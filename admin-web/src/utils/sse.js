@@ -250,6 +250,27 @@ document.addEventListener('visibilitychange', () => {
   }
 })
 
+// Edge 中 blur 事件先于 visibilitychange 触发，必须在 blur 时就断开 SSE
+// 否则 Edge 检测到活跃的 SSE 连接会立即恢复窗口（最小化后瞬间弹出）
+window.addEventListener('blur', () => {
+  if (eventSource) {
+    console.debug('[SSE] window.blur，提前断开 SSE 连接')
+    _disconnect()
+  }
+})
+
+// 窗口恢复焦点时重新连接 SSE（与 visibilitychange 恢复逻辑互为补充）
+window.addEventListener('focus', () => {
+  // 延迟 2s 重连，与 window-guard 的恢复保护期一致，防止积压回调集中触发
+  setTimeout(() => {
+    if (!eventSource && subscribers.size > 0 && !document.hidden) {
+      console.debug('[SSE] window.focus 恢复，重新连接 SSE')
+      reconnectAttempt = 0
+      _connect()
+    }
+  }, 2000)
+})
+
 // 页面卸载时清理连接
 window.addEventListener('beforeunload', () => {
   _disconnect()

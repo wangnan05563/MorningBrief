@@ -158,6 +158,104 @@ class WorkflowScheduler:
                 await session.commit()
             logger.info("频道 %s 禁用，取消 %d 个 queued 工作流", channel_id, len(cancelled_ids))
 
+    # ===== 频道级定时任务 =====
+
+    async def _register_all_channel_crons(self) -> None:
+        """启动时为所有 schedule_time 非空的活跃频道注册 cron 任务。
+
+        频道未配置 schedule_time 时，使用全局 daily_workflow（05:00）触发。
+        配置了 schedule_time 的频道，按各自时间独立触发。
+        """
+        try:
+            async with AsyncSessionLocal() as session:
+                stmt = select(Channel).where(
+                    Channel.is_active == 1,
+                    Channel.schedule_time.is_not(None),
+                    Channel.schedule_time != "",
+                )
+                result = await session.execute(stmt)
+                channels = result.scalars().all()
+
+            for ch in channels:
+                self._register_channel_cron(ch.id, ch.schedule_time)
+            if channels:
+                logger.info("已注册 %d 个频道级 cron 任务", len(channels))
+        except Exception as e:
+            logger.warning("注册频道级 cron 任务失败: %s", e)
+
+    def _register_channel_cron(self, channel_id: int, schedule_time: str) -> None:
+        """为单个频道注册 cron 任务。
+
+        schedule_time 格式 HH:MM:SS，解析为 cron 的 hour/minute/second。
+        任务 id 格式：channel_workflow_{channel_id}，replace_existing 确保幂等。
+        args=[channel_id] 传递频道 ID 给 _channel_cron_trigger。
+        """
+        if not schedule_time:
+            return
+        parts = schedule_time.split(":")
+        if len(parts) != 3:
+            logger.warning("频道 %s schedule_time 格式错误: %s", channel_id, schedule_time)
+            return
+        try:
+            h, m, s = int(parts[0]), int(parts[1]), int(parts[2])
+        except ValueError:
+            logger.warning("频道 %s schedule_time 非数字: %s", channel_id, schedule_time)
+            return
+
+        job_id = f"channel_workflow_{channel_id}"
+        self.scheduler.add_job(
+            self._channel_cron_trigger,
+            trigger="cron",
+            hour=h, minute=m, second=s,
+            args=[channel_id],
+            id=job_id,
+            misfire_grace_time=300,
+            coalesce=True,
+            max_instances=1,
+            replace_existing=True,
+        )
+        logger.info("注册频道级 cron channel_id=%s schedule=%s", channel_id, schedule_time)
+
+    def _unregister_channel_cron(self, channel_id: int) -> None:
+        """移除频道的 cron 任务（频道删除或 schedule_time 清空时调用）。"""
+        job_id = f"channel_workflow_{channel_id}"
+        try:
+            self.scheduler.remove_job(job_id)
+            logger.info("移除频道级 cron channel_id=%s", channel_id)
+        except Exception:
+            # 任务不存在时静默（如频道未配置 schedule_time 时无任务可移除）
+            pass
+
+    async def _channel_cron_trigger(self, channel_id: int) -> None:
+        """频道级 cron 触发入口：按频道独立触发工作流。
+
+        与全局 _cron_trigger 的区别：携带 channel_id，rewrite 步骤据此读取频道级提示词。
+        """
+        today = date.today()
+        logger.info("频道级 cron 触发 channel_id=%s date=%s", channel_id, today)
+        await self.trigger_workflow(
+            episode_date=today,
+            source=WorkflowSource.cron.value,
+            channel_id=channel_id,
+        )
+
+    async def _on_channel_schedule_changed(self, event: Event) -> None:
+        """频道定时变更事件处理：重注册或移除 cron 任务。
+
+        schedule_time 为空字符串表示移除（频道删除或清空 schedule_time）。
+        schedule_time 非空且频道活跃时注册/更新 cron 任务。
+        """
+        channel_id = event.data.get("channel_id")
+        schedule_time = event.data.get("schedule_time", "")
+        is_active = event.data.get("is_active", 0)
+
+        if not schedule_time or is_active != 1:
+            # 清空 schedule_time 或频道禁用/删除：移除任务
+            self._unregister_channel_cron(channel_id)
+        else:
+            # 注册或更新任务
+            self._register_channel_cron(channel_id, schedule_time)
+
     # ===== 生命周期 =====
 
     async def start(self) -> None:  # NOSONAR
@@ -261,18 +359,23 @@ class WorkflowScheduler:
         # 订阅频道启停事件：频道禁用时取消其 queued 工作流
         bus = get_event_bus()
         bus.subscribe("channel.active_changed", self._on_channel_active_changed)
+        # 订阅频道定时变更事件：schedule_time 变化时重注册 cron 任务
+        bus.subscribe("channel.schedule_changed", self._on_channel_schedule_changed)
+        # 注册频道级定时任务（schedule_time 非空的活跃频道）
+        await self._register_all_channel_crons()
         # 启动队列消费 worker（后台常驻任务，强引用防 GC 回收）
         worker_task = asyncio.create_task(self._queue_worker())
         self._running_tasks.add(worker_task)
         worker_task.add_done_callback(self._running_tasks.discard)
         self.scheduler.start()
-        logger.info("WorkflowScheduler 已启动，注册 8 个定时任务")
+        logger.info("WorkflowScheduler 已启动，注册 8 个定时任务 + 频道级 cron")
 
     async def stop(self) -> None:  # NOSONAR
         """应用关闭时关闭调度器，等待运行中任务完成。"""
-        # 取消频道启停事件订阅，避免 shutdown 后回调访问已释放资源
+        # 取消频道事件订阅，避免 shutdown 后回调访问已释放资源
         bus = get_event_bus()
         bus.unsubscribe("channel.active_changed", self._on_channel_active_changed)
+        bus.unsubscribe("channel.schedule_changed", self._on_channel_schedule_changed)
         self.scheduler.shutdown(wait=True)
         logger.info("WorkflowScheduler 已停止")
 
@@ -332,6 +435,7 @@ class WorkflowScheduler:
                     status=WorkflowStatus.queued.value,
                     channel_id=channel_id,
                     priority=priority,
+                    started_at=utcnow_naive(),
                 )
                 session.add(wf)
                 await session.commit()
@@ -510,12 +614,47 @@ class WorkflowScheduler:
                     continue
             return max_seq
 
-    async def retry_workflow(self, workflow_id: str) -> str:
-        """重试失败的工作流，创建新 workflow 记录入队。
+    async def retry_workflow(
+        self, workflow_id: str, from_step: str = None, triggered_by: str = None,
+    ) -> str:
+        """在原工作流上从指定步骤重跑（不创建新工作流）。
 
-        trigger_workflow 内部已用 _trigger_lock 包裹序号生成与入队，
-        保证并发重试不会产生 ID 冲突（C1 审查修复）。
+        删除 from_step 及其之后的所有步骤记录（含失败记录），
+        保留之前的成功步骤，重置 workflow 状态为 queued 后重新入队。
+        _run_workflow 执行时通过 _load_completed_step_context 跳过已成功步骤。
+
+        Args:
+            workflow_id: 工作流 ID
+            from_step: 从哪一步开始重跑（WorkflowStepName 值，如 "tts"/"stitch"）
+            triggered_by: 手动触发者用户名
+
+        Returns:
+            工作流 ID（与传入相同，不创建新工作流）
+
+        Raises:
+            ParamError: 工作流不存在/非失败状态/from_step 无效/前驱步骤缺 result
         """
+        if not from_step:
+            raise ParamError("必须指定重跑起始步骤")
+        try:
+            from_step_name = WorkflowStepName(from_step)
+        except ValueError:
+            raise ParamError(f"无效的步骤名: {from_step}")
+
+        # 计算 from_step 之前的步骤（保留）和及其之后的步骤（删除）
+        keep_steps: list[WorkflowStepName] = []
+        delete_steps: list[WorkflowStepName] = []
+        found = False
+        for step in self._STEP_ORDER:
+            if step == from_step_name:
+                found = True
+                delete_steps.append(step)
+                continue
+            if found:
+                delete_steps.append(step)
+            else:
+                keep_steps.append(step)
+
         async with AsyncSessionLocal() as session:
             result = await session.execute(
                 select(Workflow).where(
@@ -530,14 +669,75 @@ class WorkflowScheduler:
             channel_id = wf.channel_id
             priority = wf.priority
 
-        return await self.trigger_workflow(
-            episode_date=episode_date,
-            source=WorkflowSource.manual.value,
+            # 校验：keep_steps 中每个步骤都必须有成功记录且有 result
+            result = await session.execute(
+                select(WorkflowStep).where(
+                    WorkflowStep.workflow_id == workflow_id,
+                    WorkflowStep.step_name.in_([s.value for s in keep_steps]),
+                    WorkflowStep.status == WorkflowStepStatus.success.value,
+                ).order_by(WorkflowStep.id)
+            )
+            keep_records = result.scalars().all()
+            keep_names = {r.step_name for r in keep_records}
+            for step in keep_steps:
+                if step.value not in keep_names:
+                    raise ParamError(
+                        f"步骤 {step.value} 未成功完成，无法从 {from_step} 重跑"
+                    )
+            for record in keep_records:
+                if not record.result:
+                    raise ParamError(
+                        f"步骤 {record.step_name} 缺少 result，无法断点续跑"
+                    )
+
+            # 删除 from_step 及其之后的所有步骤记录（含失败/重试中）
+            if delete_steps:
+                await session.execute(
+                    delete(WorkflowStep).where(
+                        WorkflowStep.workflow_id == workflow_id,
+                        WorkflowStep.step_name.in_([s.value for s in delete_steps]),
+                    )
+                )
+
+            # 重置工作流状态为 queued，清空失败信息
+            wf.status = WorkflowStatus.queued.value
+            wf.error = None
+            wf.finished_at = None
+            await session.commit()
+
+        # 取消内存队列中可能残留的旧条目（failed 状态一般已出队，防御性处理）
+        old = self._entry_map.get(workflow_id)
+        if old is not None:
+            old.cancelled = True
+
+        # 入队当前工作流（参考 requeue_with_priority 的入队逻辑）
+        entry = QueueEntry(
+            sort_priority=-priority,
+            created_at=utcnow_naive().timestamp(),
+            workflow_id=workflow_id,
             channel_id=channel_id,
             priority=priority,
+            episode_date=episode_date,
         )
+        await self._queue.put(entry)
+        self._entry_map[workflow_id] = entry
+
+        logger.info(
+            "重跑工作流 %s 从 %s 开始（triggered_by=%s，保留 %d 步，删除 %d 步）",
+            workflow_id, from_step, triggered_by, len(keep_steps), len(delete_steps),
+        )
+        return workflow_id
 
     # ===== 工作流主流程 =====
+
+    async def _get_workflow_channel_id(self, workflow_id: str) -> Optional[int]:
+        """查询 workflow 的 channel_id，用于 rewrite 步骤读取频道级提示词。
+
+        返回 None 表示工作流未关联频道，rewrite 将使用默认提示词。
+        """
+        async with AsyncSessionLocal() as session:
+            wf = await session.get(Workflow, workflow_id)
+            return wf.channel_id if wf else None
 
     async def _run_workflow(self, workflow_id: str, episode_date: date) -> None:
         """串行执行 6 个步骤（LLD 5.1.2）。
@@ -553,10 +753,13 @@ class WorkflowScheduler:
             })
 
             date_str = episode_date.isoformat()
+            # 查询 workflow 的 channel_id，用于 rewrite 步骤读取频道级提示词
+            channel_id = await self._get_workflow_channel_id(workflow_id)
             context = {
                 "workflow_id": workflow_id,
                 "episode_date": episode_date,
                 "date_str": date_str,
+                "channel_id": channel_id,
             }
             # 断点续跑：加载已完成步骤与上下文，跳过已成功的步骤
             completed_steps, resumed_context = await self._load_completed_step_context(workflow_id)
@@ -570,11 +773,11 @@ class WorkflowScheduler:
                     context,
                 )
 
-            # 步骤 2：LLM 改写（签名 rewrite(workflow_id, date_str)）
+            # 步骤 2：LLM 改写（签名 rewrite(workflow_id, date_str, channel_id)）
             if WorkflowStepName.rewrite not in completed_steps:
                 await self._run_step(
                     workflow_id, WorkflowStepName.rewrite, 2,
-                    lambda ctx: llm_mod.rewrite(ctx["workflow_id"], ctx["date_str"]),
+                    lambda ctx: llm_mod.rewrite(ctx["workflow_id"], ctx["date_str"], ctx.get("channel_id")),
                     context,
                 )
             # 步骤 2.5：微信内容安全检测（不作为独立步骤，结果合并到 rewrite 步骤 result）

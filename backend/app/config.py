@@ -123,6 +123,12 @@ class Settings(BaseSettings):
     WORKFLOW_BACKUP_CHECK_MINUTE: int = 30
     WORKFLOW_LOCK_TTL_SEC: int = 1800
 
+    # ---- 节目时长控制 ----
+    # 目标节目时长（秒），默认 10 分钟。与稿件字数呈反向关联：
+    # 时长增大 → 所需字数增多；时长减小 → 所需字数减少
+    # rewriter 按此时长 + TTS 实际语速反算所需字数，动态调整段数与每段字数
+    TARGET_DURATION_SEC: int = 600
+
     # ---- 爬虫配置 ----
     CRAWLER_DEDUP_TTL_DAYS: int = 7
     CRAWLER_QPS_DEFAULT: int = 1

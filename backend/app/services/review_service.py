@@ -14,9 +14,10 @@ class ReviewService:
         self.db = db
 
     async def list_reviews(
-        self, status: str, page: int, size: int
+        self, status: str, page: int, size: int,
+        workflow_id: str = None,
     ) -> dict:
-        """审核列表分页，status 为空时不过滤。"""
+        """审核列表分页，status/workflow_id 为空时不过滤。"""
         # 总数独立查询，避免扫描全部数据
         count_stmt = select(func.count(Review.id))
         list_stmt = select(Review)
@@ -25,6 +26,11 @@ class ReviewService:
         if status:
             count_stmt = count_stmt.where(Review.status == status)
             list_stmt = list_stmt.where(Review.status == status)
+
+        # workflow_id 可选过滤：工作流详情页按工作流查审核记录
+        if workflow_id:
+            count_stmt = count_stmt.where(Review.workflow_id == workflow_id)
+            list_stmt = list_stmt.where(Review.workflow_id == workflow_id)
 
         count_result = await self.db.execute(count_stmt)
         total = count_result.scalar() or 0

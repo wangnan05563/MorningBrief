@@ -3,7 +3,7 @@ name: "news-frontend-code-review"
 description: "对 20_News 项目前端代码（admin-web/src/ 下 Vue 3/Element Plus 文件 + miniprogram/ 下微信小程序文件）进行全面评审与逻辑审查，覆盖组件规范、状态管理、API 契约、路由设计、类型安全、性能、可访问性、前后端字段契约、小程序生命周期、音频播放管理等维度。当用户要求'审查/检查/走查/把关/review/评估/看看对不对/规范不规范'前端 Vue/JS 代码、'.vue/.js 文件修改'、'迭代发布前前端走查'，或提到'前端评审/frontend review/Vue 代码审查/小程序代码审查'时调用。仅审查前端文件；纯后端 .py 文件审查请改用 news-backend-code-review。"
 whenToUse: "需要审查 20_News 前端代码（admin-web/src/ 下 .vue/.js 文件 + miniprogram/ 下 .js/.wxml/.wxss 文件）是否符合项目规范"
 triggers: "前端代码 走查/审查/审核/把关/review/检查/评估 | .vue/.js 文件 修改/变更/迭代 走查 | 迭代发布前 前端 代码 走查 | 这段前端代码 写得对不对/规范不规范 | Vue/小程序 代码 review | 页面/组件/Store/路由 代码 审查"
-version: "1.4.0"
+version: "1.5.0"
 updated: "2026-07-12"
 config: "config.yaml"
 scripts: "scripts/auto-scan.ps1"
@@ -12,7 +12,7 @@ template: "templates/report-template.md"
 
 # 20_News 前端代码审查
 
-对 20_News 项目前端代码进行全面的代码评审及逻辑审查，覆盖**运营后台（admin-web/，Vue 3 + Element Plus + Vite + Pinia）**与**微信小程序（miniprogram/，原生小程序）**两套前端代码。评审涵盖 **29 个维度**：目录结构、命名规范、Vue 3 组件规范、Element Plus 规范、Pinia 状态管理、API 调用规范、路由设计、前后端字段契约、小程序生命周期、小程序音频播放管理、小程序 API 层、性能、可访问性、代码质量、错误处理。
+对 20_News 项目前端代码进行全面的代码评审及逻辑审查，覆盖**运营后台（admin-web/，Vue 3 + Element Plus + Vite + Pinia）**与**微信小程序（miniprogram/，原生小程序）**两套前端代码。评审涵盖 **36 个维度**：目录结构、命名规范、Vue 3 组件规范、Element Plus 规范、Pinia 状态管理、API 调用规范、路由设计、前后端字段契约、小程序生命周期、小程序音频播放管理、小程序 API 层、性能、可访问性、代码质量、错误处理。
 
 ## 配置驱动
 
@@ -608,4 +608,45 @@ pwsh .trae/skills/news-frontend-code-review/scripts/auto-scan.ps1
 
 检查信号：Grep ElMessageBox.confirm 中无"永久删除""不可恢复"等关键词
 修复建议：提示文案包含选中数量、删除范围（素材/稿件/审核/节目/播放数据）、不可恢复声明
+
+
+
+---
+
+## 新增审查维度：前端 FFmpeg 安装体验
+
+### 维度 34：FFmpeg 前端安装依赖完整性
+
+**为什么**：前端点击下载 FFmpeg 后，后端解压必须包含完整 bin 目录（含 DLL），仅复制 exe 会导致运行时 找不到 avdevice-63.dll。
+
+检查信号：Grep 前端安装流程无后端 DLL 完整性校验
+修复建议：安装完成后验证 bin 目录下 DLL 数量 >= 7（shared build 至少 7 个 DLL）
+
+### 维度 35：FFmpeg 安装进度与超时提示
+
+**为什么**：FFmpeg 下载约 30MB，解压需要时间。前端必须提供明确的进度反馈和合理的超时设置（建议 10 分钟）。
+
+检查信号：Grep installFFmpeg 请求无 timeout 配置
+修复建议：axios 请求设置 	imeout: 600000（10 分钟），前端显示"正在下载，请耐心等待..."
+
+### 维度 36：FFmpeg 安装后自动检测
+
+**为什么**：安装完成后应立即重新检测可用性，向用户反馈成功或失败状态，避免用户反复点击下载。
+
+检查信号：Grep 安装成功后无自动 re-check 逻辑
+修复建议：安装完成后调用 check_ffmpeg 验证，成功显示绿色勾 + 版本号，失败显示错误信息
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

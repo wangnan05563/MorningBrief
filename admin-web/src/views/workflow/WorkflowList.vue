@@ -112,8 +112,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from '../../utils/message'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from '../../utils/message'
 import { VideoPlay, Delete } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
 import api from '../../api'
@@ -198,14 +197,20 @@ async function loadList() {
 }
 
 async function handleTrigger() {
+  // 若已选择频道筛选，触发时携带频道 ID，rewrite 步骤据此读取频道级提示词
+  const channelId = filterChannelId.value
+  const tip = channelId
+    ? '确认立即触发该频道的工作流？将使用频道级提示词生成语音新闻。'
+    : '确认立即触发一期新闻工作流？（未选频道，使用默认提示词）'
   try {
-    await ElMessageBox.confirm('确认立即触发一期新闻工作流？', '提示', { type: 'warning' })
+    await ElMessageBox.confirm(tip, '提示', { type: 'warning' })
   } catch {
     return
   }
   triggering.value = true
   try {
-    const data = await api.post('/workflows/trigger', {})
+    const payload = channelId ? { channel_id: channelId } : {}
+    const data = await api.post('/workflows/trigger', payload)
     ElMessage.success(`已触发，工作流 ID: ${data.workflow_id}`)
     page.value = 1
     await loadList()

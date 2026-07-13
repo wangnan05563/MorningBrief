@@ -52,6 +52,7 @@ from app.routers.admin.channels import router as b_channels_router
 from app.routers.admin.queue import router as b_queue_router
 from app.routers.admin.materials import router as b_materials_router
 from app.routers.admin.scripts import router as b_scripts_router
+from app.routers.admin.audio import router as b_audio_router
 from app.routers.admin.system import router as b_system_router
 from app.routers.admin.events import router as b_events_router
 from app.routers.admin.feedbacks import router as b_feedbacks_router
@@ -112,6 +113,76 @@ async def _seed_default_admin() -> None:
         conn.close()
 
 
+async def _migrate_channel_schema() -> None:
+    """频道表结构迁移：为已存在的 channel 表追加新列（幂等）。
+
+    SQLite 的 create_all 不会修改已存在表结构，新增字段需显式 ALTER TABLE。
+    通过 PRAGMA table_info 检测列是否存在，已存在则跳过，实现幂等迁移。
+
+    新增字段：schedule_time / intro_prompt / outro_prompt / constraint_prompt / rewrite_template
+    """
+    import sqlite3
+    from app.paths import resolve_db_path
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        # PRAGMA table_info 返回 (cid, name, type, notnull, dflt_value, pk)
+        cur.execute("PRAGMA table_info(channel)")
+        existing_cols = {row[1] for row in cur.fetchall()}
+
+        new_columns = [
+            ("schedule_time", "TEXT"),
+            ("intro_prompt", "TEXT"),
+            ("outro_prompt", "TEXT"),
+            ("constraint_prompt", "TEXT"),
+            ("rewrite_template", "TEXT"),
+        ]
+        added = 0
+        for col_name, col_type in new_columns:
+            if col_name not in existing_cols:
+                cur.execute(f"ALTER TABLE channel ADD COLUMN {col_name} {col_type}")
+                added += 1
+        if added > 0:
+            conn.commit()
+            logger.info("[startup] channel 表迁移完成，新增 %d 列", added)
+    except Exception as e:
+        logger.warning("[startup] channel 表迁移失败: %s", e)
+    finally:
+        conn.close()
+
+
+async def _seed_default_channels() -> None:
+    """首次启动自动 seed 默认频道（幂等）。
+
+    调用 seed_channels.seed() 插入 8 个默认新闻频道，按 name 幂等。
+    """
+    import sqlite3
+    from app.paths import resolve_db_path
+    from seed_channels import DEFAULT_CHANNELS
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        inserted = 0
+        for name, description in DEFAULT_CHANNELS:
+            cur.execute('SELECT COUNT(*) FROM channel WHERE name = ?', (name,))
+            if cur.fetchone()[0] > 0:
+                continue
+            cur.execute(
+                'INSERT INTO channel (name, description, is_active) VALUES (?, ?, 1)',
+                (name, description),
+            )
+            inserted += 1
+        if inserted > 0:
+            conn.commit()
+            logger.info("[startup] 默认频道已 seed，新增 %d 个", inserted)
+    finally:
+        conn.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：启动时初始化资源，关闭时清理。"""
@@ -132,6 +203,18 @@ async def lifespan(app: FastAPI):
         await _seed_default_admin()
     except Exception as e:
         logger.warning("[startup] 自动创建默认 admin 用户失败: %s", e)
+
+    # channel 表结构迁移（幂等追加 schedule_time / prompt 字段）
+    try:
+        await _migrate_channel_schema()
+    except Exception as e:
+        logger.warning("[startup] channel 表迁移失败: %s", e)
+
+    # 自动 seed 默认频道（幂等，确保工作流监控页频道选项非空）
+    try:
+        await _seed_default_channels()
+    except Exception as e:
+        logger.warning("[startup] 自动 seed 默认频道失败: %s", e)
 
     # 从 SQLite 加载 AI 配置覆盖到 Settings 单例（前端修改的配置热生效）
     from app.services.ai_config_service import AIConfigService
@@ -253,6 +336,7 @@ def create_app() -> FastAPI:
     app.include_router(b_queue_router)
     app.include_router(b_materials_router)
     app.include_router(b_scripts_router)
+    app.include_router(b_audio_router)
     app.include_router(b_system_router)
     app.include_router(b_events_router)
     app.include_router(b_feedbacks_router)

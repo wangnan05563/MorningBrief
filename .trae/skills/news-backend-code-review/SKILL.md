@@ -14,7 +14,7 @@ template: "templates/report-template.md"
 
 ## 简介
 
-本技能对 20_News 项目后端代码（`backend/app/**/*.py`）进行系统性评审与逻辑审查，覆盖 **32 个维度**：分层架构、命名规范、类型注解、FastAPI 规范、SQLAlchemy 2.0 规范、异步并发、Redis 缓存规约、安全、错误处理、配置驱动、工作流编排、前后端字段契约、日志规范、性能、可测试性。
+本技能对 20_News 项目后端代码（`backend/app/**/*.py`）进行系统性评审与逻辑审查，覆盖 **38 个维度**：分层架构、命名规范、类型注解、FastAPI 规范、SQLAlchemy 2.0 规范、异步并发、Redis 缓存规约、安全、错误处理、配置驱动、工作流编排、前后端字段契约、日志规范、性能、可测试性。
 
 适用技术栈：FastAPI + SQLAlchemy 2.0 async + aiomysql（或 aiosqlite）+ Redis（或 TTLCache 进程内缓存）+ APScheduler + httpx + COS + 阿里云 TTS + 通义千问 LLM。
 
@@ -629,8 +629,62 @@ FastAPI 按定义顺序匹配路由，静态路由必须在动态路由之前定
 
 ### 维度 32：批量操作上限约束
 
+
+---
+
+## 新增审查维度：启动脚本路径与并发安全
+
+### 维度 33：启动脚本路径含空格安全封装
+
+**为什么**：系统 Python 路径可能包含空格（如 F:\Program Files\Python3.14\python.exe）。PowerShell 的 Start-Process -ArgumentList 会将含空格的字符串重新拆分引号，导致可执行文件路径被截断。
+
+检查信号：Grep Start-Process 后无 /s /c 双层引号封装
+修复建议：使用 cmd /d /s /c "" 四层引号封装，-ArgumentList 传数组
+
+### 维度 34：构建脚本并发保护
+
+**为什么**：多次执行构建脚本可能导致旧 PyInstaller 进程未完全退出，新旧进程同时写入 dist 目录造成 PermissionError / WinError 32。
+
+检查信号：Grep Remove-Item 后无进程检查和删除验证
+修复建议：构建前先终止占用旧产物的进程，删除后用 try/throw 验证成功
+
+---
+
+## 新增审查维度：日志格式与异常透传
+
+### 维度 35：日志格式与异常信息透传
+
+**为什么**：Loguru 使用 {} 占位符，旧代码使用 %s 会导致异常对象被当作字符串格式化，真实错误信息被吞掉。
+
+检查信号：Grep logger\.(warning|error|info).*%s
+修复建议：统一使用 {} 占位符，异常日志必须包含 exc_info=True
+
+### 维度 36：运行环境与源码一致性
+
+**为什么**：日志格式、异常透传方式与源码版本不一致时，说明运行的是旧构建产物，新修复未生效。
+
+检查信号：运行日志中出现 %s 格式但源码已改为 {}
+修复建议：确认运行进程使用的源码版本，必要时重启服务
+
+---
+
+## 新增审查维度：共享构建依赖包完整提取
+
+### 维度 37：共享构建依赖包完整提取
+
+**为什么**：FFmpeg 等共享构建的 EXE 文件依赖同目录 DLL。只复制 EXE 而不提取配套 DLL 会导致运行时找不到 vdevice-63.dll 等系统错误。
+
+检查信号：Grep zf.open(ffmpeg_member) 后只提取 exe 文件
+修复建议：通过 ffmpeg.exe 定位 zip 内 bin 目录，提取所有普通文件（含 DLL），提取前清除旧文件
+
+
 **为什么**：批量删除接口应设置单次操作数量上限，防止单次事务过大导致数据库压力。
 
 检查信号：Grep 批量操作接口无 max_length 约束
 修复建议：Pydantic model 中设置 Field(max_length=100)
+
+
+
+
+
 

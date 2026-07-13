@@ -18,6 +18,7 @@ from app.cache.manager import cache as cache_manager
 from app.core.event_bus import Event, get_event_bus
 from app.core.timeutil import utcnow_naive
 from app.models.channel import Channel
+from app.models.workflow import Workflow
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +49,26 @@ class ChannelService:
         await self.cache.delete("channels:list:all")
         await self.cache.delete("channels:list:active")
 
-    async def create_channel(self, name: str, description: str = "") -> Channel:
-        """新增频道。name 唯一约束，冲突抛 ValueError。"""
-        channel = Channel(name=name, description=description, is_active=1)
+    async def create_channel(
+        self, name: str, description: str = "",
+        schedule_time: Optional[str] = None,
+        intro_prompt: Optional[str] = None,
+        outro_prompt: Optional[str] = None,
+        constraint_prompt: Optional[str] = None,
+        rewrite_template: Optional[str] = None,
+    ) -> Channel:
+        """新增频道。name 唯一约束，冲突抛 ValueError。
+
+        支持 schedule_time（定时触发）与 4 个提示词字段，均为可选。
+        """
+        channel = Channel(
+            name=name, description=description, is_active=1,
+            schedule_time=schedule_time,
+            intro_prompt=intro_prompt,
+            outro_prompt=outro_prompt,
+            constraint_prompt=constraint_prompt,
+            rewrite_template=rewrite_template,
+        )
         self.db.add(channel)
         try:
             await self.db.commit()
@@ -59,24 +77,32 @@ class ChannelService:
             raise ValueError(f"频道名称已存在: {name}") from e
         await self.db.refresh(channel)
         await self.invalidate_list_cache()
-        logger.info("新增频道 channel_id=%s name=%s", channel.id, name)
+        logger.info("新增频道 channel_id=%s name=%s schedule=%s", channel.id, name, schedule_time)
         return channel
 
     async def update_channel(
         self, channel_id: int, name: Optional[str] = None,
         description: Optional[str] = None, is_active: Optional[int] = None,
+        schedule_time: Optional[str] = None,
+        intro_prompt: Optional[str] = None,
+        outro_prompt: Optional[str] = None,
+        constraint_prompt: Optional[str] = None,
+        rewrite_template: Optional[str] = None,
     ) -> Channel:
         """修改频道。显式设置 updated_at（SQLite 不支持 ON UPDATE）。
 
-        is_active 变更时通过 EventBus 发布 channel.active_changed 事件，
-        WorkflowScheduler 订阅该事件取消已入队的禁用频道工作流。
+        is_active 变更时发布 channel.active_changed 事件，
+        WorkflowScheduler 取消已入队的禁用频道工作流。
+        schedule_time 变更时发布 channel.schedule_changed 事件，
+        WorkflowScheduler 重注册该频道的定时任务。
         """
         channel = await self.get_channel(channel_id)
         if channel is None:
             raise ValueError(f"频道不存在: {channel_id}")
 
-        # 记录启停变更前的原值，用于判断是否需要发布事件
+        # 记录变更前的原值，用于判断是否需要发布事件
         old_is_active = channel.is_active
+        old_schedule_time = channel.schedule_time
 
         if name is not None:
             channel.name = name
@@ -84,6 +110,16 @@ class ChannelService:
             channel.description = description
         if is_active is not None:
             channel.is_active = is_active
+        if schedule_time is not None:
+            channel.schedule_time = schedule_time
+        if intro_prompt is not None:
+            channel.intro_prompt = intro_prompt
+        if outro_prompt is not None:
+            channel.outro_prompt = outro_prompt
+        if constraint_prompt is not None:
+            channel.constraint_prompt = constraint_prompt
+        if rewrite_template is not None:
+            channel.rewrite_template = rewrite_template
         channel.updated_at = utcnow_naive()
 
         try:
@@ -97,6 +133,10 @@ class ChannelService:
         # is_active 实际变化时发布事件，避免重复发布相同状态
         if is_active is not None and is_active != old_is_active:
             self._publish_active_changed(channel_id, is_active)
+
+        # schedule_time 变化时发布事件，触发调度器重注册定时任务
+        if schedule_time is not None and schedule_time != old_schedule_time:
+            self._publish_schedule_changed(channel_id, schedule_time, channel.is_active)
 
         logger.info("修改频道 channel_id=%s", channel_id)
         return channel
@@ -117,12 +157,45 @@ class ChannelService:
         except Exception:
             logger.debug("EventBus 发布 channel.active_changed 失败（不影响主流程）", exc_info=True)
 
+    @staticmethod
+    def _publish_schedule_changed(channel_id: int, schedule_time: str, is_active: int) -> None:
+        """发布频道定时变更事件，触发调度器重注册 cron 任务。
+
+        与 active_changed 同样用 publish_nowait 避免事务长时间持连接。
+        """
+        try:
+            bus = get_event_bus()
+            bus.publish_nowait(Event(
+                type="channel.schedule_changed",
+                data={
+                    "channel_id": channel_id,
+                    "schedule_time": schedule_time,
+                    "is_active": is_active,
+                },
+            ))
+        except Exception:
+            logger.debug("EventBus 发布 channel.schedule_changed 失败（不影响主流程）", exc_info=True)
+
     async def delete_channel(self, channel_id: int) -> None:
-        """删除频道。关联 workflow 的 channel_id 由外键 ON DELETE SET NULL 自动置 NULL。"""
+        """删除频道。关联 workflow 的 channel_id 手动置 NULL。
+
+        不依赖 SQLite 外键 ON DELETE SET NULL：测试环境默认未开启
+        PRAGMA foreign_keys，手动 UPDATE 保证行为一致。
+        同时发布 schedule_changed 事件（schedule_time 置空），
+        让调度器移除该频道的定时任务。
+        """
         channel = await self.get_channel(channel_id)
         if channel is None:
             raise ValueError(f"频道不存在: {channel_id}")
+        # 先解除关联 workflow 的 channel_id，避免删除时外键约束（若开启）报错
+        await self.db.execute(
+            update(Workflow)
+            .where(Workflow.channel_id == channel_id)
+            .values(channel_id=None)
+        )
         await self.db.delete(channel)
         await self.db.commit()
         await self.invalidate_list_cache()
+        # 移除该频道的定时任务（schedule_time 置空表示移除）
+        self._publish_schedule_changed(channel_id, "", channel.is_active)
         logger.info("删除频道 channel_id=%s name=%s", channel_id, channel.name)

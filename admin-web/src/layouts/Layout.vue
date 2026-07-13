@@ -63,7 +63,7 @@
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import { ElMessageBox } from 'element-plus'
+import { ElMessageBox } from '../utils/message'
 
 const route = useRoute()
 const router = useRouter()

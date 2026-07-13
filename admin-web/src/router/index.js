@@ -100,6 +100,12 @@ const routes = [
         meta: { title: 'AI 服务', icon: 'Cpu', requireRole: 'admin' },
       },
       {
+        path: 'tools/calculator',
+        name: 'ParamCalculator',
+        component: () => import('../views/tools/ParamCalculator.vue'),
+        meta: { title: '参数计算器', icon: 'Stopwatch', requireRole: 'admin' },
+      },
+      {
         path: 'db-admin',
         name: 'DatabaseAdmin',
         component: () => import('../views/maintenance/DatabaseAdmin.vue'),

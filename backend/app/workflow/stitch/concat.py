@@ -4,7 +4,7 @@
 1. 下载 TTS 分段音频并按序拼接为主音频
 2. 查询当日广告投放,中间位置插入广告
 3. 开头/结尾广告与主音频最终拼接,加静音过渡
-4. 时长校验(9:30-10:30)后上传 COS
+4. 时长校验(目标时长 ±15%)后上传 COS
 """
 import asyncio
 import logging
@@ -13,7 +13,9 @@ import tempfile
 from datetime import date
 from pathlib import Path
 
+from app.config import get_settings
 from app.database import AsyncSessionLocal
+from app.paths import resolve_ffmpeg_path
 from app.services.ad_service import AdService
 from app.workflow.stitch.ffmpeg_wrapper import (
     StitchError,
@@ -28,14 +30,34 @@ from app.workflow.stitch.ffmpeg_wrapper import (
 from app.workflow.tts.uploader import upload_to_cos
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
-# 时长校验区间(秒):9:30-10:30,超出则视为内容异常
-MIN_DURATION_SEC = 570
-MAX_DURATION_SEC = 630
-# 中间广告插入位置(秒):5 分钟处,避开开场白与首条新闻
-MID_AD_INSERT_AT = 300
+# 时长校验区间按 settings.TARGET_DURATION_SEC 动态计算:
+#   允许范围 = [target × 0.85, target × 1.15]
+# 即默认 600s → [510, 690]，用户调整 target_sec 后范围自动跟随
+# 绝对下限 180s 兜底防止目标时长配置异常导致范围过宽
+ABSOLUTE_MIN_DURATION_SEC = 180
+# 中间广告插入位置(秒):默认 5 分钟处,避开开场白与首条新闻
+# 若目标时长 < 600s，按目标时长的中点插入
+MID_AD_INSERT_AT_DEFAULT = 300
 # 广告与主音频之间的静音过渡时长(秒)
 SILENCE_DURATION = 0.5
+
+
+def _get_duration_range() -> tuple[int, int]:
+    """按目标时长动态计算允许的时长范围。
+
+    范围 = [max(180, target×0.85), target×1.15]
+    与 settings.TARGET_DURATION_SEC 联动，用户调整目标时长后范围自动更新。
+    """
+    target = getattr(settings, "TARGET_DURATION_SEC", 600) or 600
+    try:
+        target = int(target)
+    except (ValueError, TypeError):
+        target = 600
+    low = max(ABSOLUTE_MIN_DURATION_SEC, int(target * 0.85))
+    high = int(target * 1.15)
+    return low, high
 
 
 def _read_file(path: str) -> bytes:
@@ -127,19 +149,22 @@ async def concat(workflow_id: str, episode_date, audio_segments: list) -> dict:
         if len(final_inputs) == 1:
             # 无任何广告:主音频直接重编码统一格式输出
             await run_ffmpeg([
-                "ffmpeg", "-y", "-i", main_path,
+                resolve_ffmpeg_path(), "-y", "-i", main_path,
                 "-c:a", "libmp3lame", "-b:a", "128k",
                 "-ar", "44100", "-ac", "1", final_path,
             ])
         else:
             await run_ffmpeg(build_full_concat_cmd(final_inputs, final_path))
 
-        # 8. 时长校验:570 <= duration <= 630(9:30-10:30),否则视为内容异常
+        # 8. 时长校验：按目标时长动态计算允许范围 [target×0.85, target×1.15]
+        # 默认 600s → [510, 690]，避免硬编码范围导致调整目标时长后校验失效
         duration = await get_audio_duration(final_path)
-        if not (MIN_DURATION_SEC <= duration <= MAX_DURATION_SEC):
+        min_allowed, max_allowed = _get_duration_range()
+        if not (min_allowed <= duration <= max_allowed):
             raise StitchError(
                 f"最终音频时长 {duration}s 超出允许范围 "
-                f"[{MIN_DURATION_SEC}, {MAX_DURATION_SEC}]"
+                f"[{min_allowed}, {max_allowed}]（目标时长 "
+                f"{getattr(settings, 'TARGET_DURATION_SEC', 600)}s ±15%）"
             )
 
         # 9. 上传 COS:key 按日期分目录,便于按期检索与清理

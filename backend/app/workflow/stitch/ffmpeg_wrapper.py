@@ -10,6 +10,8 @@ from pathlib import Path
 
 import httpx
 
+from app.paths import resolve_ffmpeg_path, resolve_ffprobe_path
+
 logger = logging.getLogger(__name__)
 
 # FFmpeg 单次执行上限:超过 120s 大概率卡死,及时失败便于排查
@@ -59,7 +61,7 @@ async def get_audio_duration(file_path: str) -> int:
     """
     def _probe() -> int:
         cmd = [
-            "ffprobe", "-v", "error",
+            resolve_ffprobe_path(), "-v", "error",
             "-show_entries", "format=duration",
             "-of", "default=noprint_wrappers=1:nokey=1",
             file_path,
@@ -116,7 +118,7 @@ def build_concat_cmd(input_paths: list[str], output_path: str) -> list[str]:
     Path(list_path).write_text("\n".join(lines), encoding="utf-8")
 
     return [
-        "ffmpeg", "-y",
+        resolve_ffmpeg_path(), "-y",
         "-f", "concat", "-safe", "0",
         "-i", list_path,
         "-c:a", "libmp3lame", "-b:a", "128k",
@@ -134,7 +136,7 @@ def build_mid_ad_cmd(
     asetpts 重置时间戳,避免 concat 后时间戳错乱导致播放异常。
     """
     return [
-        "ffmpeg", "-y",
+        resolve_ffmpeg_path(), "-y",
         "-i", main_path,
         "-i", ad_path,
         "-filter_complex",
@@ -161,7 +163,7 @@ def build_full_concat_cmd(inputs: list[str], output_path: str) -> list[str]:
     # 拼接 [0:a][1:a]...[n-1:a]concat=n=N:v=0:a=1[out]
     labels = "".join(f"[{i}:a]" for i in range(n))
     return [
-        "ffmpeg", "-y",
+        resolve_ffmpeg_path(), "-y",
         *input_args,
         "-filter_complex",
         f"{labels}concat=n={n}:v=0:a=1[out]",
@@ -179,7 +181,7 @@ async def generate_silence(duration_sec: float, output_path: str) -> None:
     作为广告与主音频之间的过渡,避免突兀切换影响收听体验。
     """
     cmd = [
-        "ffmpeg", "-y",
+        resolve_ffmpeg_path(), "-y",
         "-f", "lavfi",
         "-i", "anullsrc=r=44100:cl=mono",
         "-t", str(duration_sec),

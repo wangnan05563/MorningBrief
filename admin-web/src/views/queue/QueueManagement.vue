@@ -198,8 +198,7 @@
 <script setup>
 defineOptions({ name: 'QueueManagement' })
 import { ref, reactive, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
-import { ElMessageBox } from 'element-plus'
-import { ElMessage } from '../../utils/message'
+import { ElMessage, ElMessageBox } from '../../utils/message'
 import {
   getQueueStats,
   listQueueTasks,

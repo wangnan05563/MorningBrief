@@ -93,8 +93,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from '../../utils/message'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from '../../utils/message'
 
 import api from '../../api'
 

@@ -27,6 +27,11 @@ api.interceptors.request.use((config) => {
 // 请求配置中可通过 silent: true 跳过全局 ElMessage 提示（适用于后台轮询等静默请求）
 api.interceptors.response.use(
   (response) => {
+    // blob 响应（音频流式下载）直接返回原始数据，不走 { code, message, data } 解构
+    // 否则 Blob 没有 code 字段，解构得 undefined，!== 0 触发误报"请求失败"
+    if (response.config?.responseType === 'blob') {
+      return response.data
+    }
     const { code, message, data } = response.data
     // code !== 0 表示业务错误（如参数校验失败），统一提示
     if (code !== 0) {
@@ -38,6 +43,10 @@ api.interceptors.response.use(
     return data
   },
   (error) => {
+    // 页面隐藏时所有错误静默处理，防止 ElMessage 或跳转激活窗口
+    if (document.hidden) {
+      return Promise.reject(error)
+    }
     if (error.response?.status === 401) {
       // token 失效：清除本地状态并跳转登录
       localStorage.removeItem('admin_token')
@@ -45,7 +54,7 @@ api.interceptors.response.use(
       localStorage.removeItem('admin_role')
       // 页面隐藏时不立即跳转（location.href 会激活最小化窗口）
       // token 已清除，用户恢复页面后路由守卫会自动跳转到登录页
-      if (!document.hidden && globalThis.location.pathname !== '/login') {
+      if (globalThis.location.pathname !== '/login') {
         globalThis.location.href = '/login'
       }
     } else if (!error.config?.silent) {
