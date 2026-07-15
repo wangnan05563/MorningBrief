@@ -1,5 +1,5 @@
 """
-20_News EXE 启动入口
+MorningBrief EXE 启动入口
 
 PyInstaller 打包后的入口脚本，负责：
 1. 定位 exe 同目录的 .env 配置文件
@@ -86,7 +86,7 @@ def main():
     port = int(os.environ.get("APP_PORT", "8000"))
 
     print("=" * 50)
-    print("  20_News 语音新闻播报服务")
+    print("  MorningBrief 语音新闻播报服务")
     print("=" * 50)
     print(f"  工作目录: {app_dir}")
     print(f"  监听地址: http://{host}:{port}")

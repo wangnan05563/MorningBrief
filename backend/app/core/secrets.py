@@ -37,9 +37,9 @@ except ImportError:
 from loguru import logger
 
 # 服务名（keyring 中的"应用名"分组）
-SERVICE_NAME = "20News"
+SERVICE_NAME = "MorningBrief"
 
-# 20_News 已知的敏感配置键（与 Settings 字段对应）
+# MorningBrief 已知的敏感配置键（与 Settings 字段对应）
 # 启动时 config.py 可优先从 keyring 读取这些键
 SENSITIVE_KEYS = {
     "llm_api_key": "LLM_API_KEY",

@@ -89,13 +89,19 @@ async def retry_task(
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
-    """重试失败任务。仅 admin。"""
+    """重试失败任务：在原工作流上从最早失败步骤断点续跑。仅 admin。
+
+    保留已成功步骤的产出（爬虫素材/LLM 稿件等），仅重跑失败步骤及其后续步骤。
+    不创建新工作流，原工作流 ID 不变。
+    """
+    from app.core.exceptions import ParamError
+
     svc = QueueService(db)
     try:
-        new_wf_id = await svc.retry_task(workflow_id=workflow_id)
-    except ValueError as e:
+        wf_id = await svc.retry_task(workflow_id=workflow_id)
+    except (ValueError, ParamError) as e:
         return error(code=400, message=str(e))
-    return success(data={"original_workflow_id": workflow_id, "new_workflow_id": new_wf_id})
+    return success(data={"workflow_id": wf_id, "status": "queued"})
 
 
 @router.get("/config")

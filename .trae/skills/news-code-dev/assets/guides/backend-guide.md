@@ -1,6 +1,6 @@
 # 后端开发指南
 
-本文档面向 20_News 项目后端开发，涵盖 FastAPI + SQLAlchemy 2.0 + Redis 的完整开发实践。
+本文档面向 MorningBrief 项目后端开发，涵盖 FastAPI + SQLAlchemy 2.0 + Redis 的完整开发实践。
 
 ## 1. 开发规范概述
 

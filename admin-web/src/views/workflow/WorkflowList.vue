@@ -1,14 +1,14 @@
 <template>
   <div class="page-container workflow-list">
-    <!-- 顶部操作区：标题 + 手动触发按钮（仅 admin 可见） -->
+    <!-- 顶部操作区：查询条件 + 手动触发按钮（仅 admin 可见）
+         去掉页面标题：导航栏已展示页面名称，避免重复 -->
     <div class="top-bar">
-      <span class="page-title">工作流监控</span>
-      <div class="top-actions">
+      <div class="filter-bar">
         <el-select
           v-model="filterChannelId"
-          placeholder="全部频道"
+          placeholder="频道"
           clearable
-          style="width: 160px"
+          style="width: 150px"
           @change="handleFilterChange"
         >
           <el-option
@@ -18,6 +18,42 @@
             :value="ch.id"
           />
         </el-select>
+        <el-date-picker
+          v-model="filterEpisodeDate"
+          type="date"
+          placeholder="节目日期"
+          format="YYYY-MM-DD"
+          value-format="YYYY-MM-DD"
+          clearable
+          style="width: 160px"
+          @change="handleFilterChange"
+        />
+        <el-select
+          v-model="filterStatus"
+          placeholder="状态"
+          clearable
+          style="width: 130px"
+          @change="handleFilterChange"
+        >
+          <el-option label="排队中" value="queued" />
+          <el-option label="运行中" value="running" />
+          <el-option label="成功" value="success" />
+          <el-option label="失败" value="failed" />
+          <el-option label="已取消" value="cancelled" />
+        </el-select>
+        <el-select
+          v-model="filterSource"
+          placeholder="来源"
+          clearable
+          style="width: 120px"
+          @change="handleFilterChange"
+        >
+          <el-option label="定时" value="cron" />
+          <el-option label="手动" value="manual" />
+        </el-select>
+        <el-button :icon="Refresh" @click="resetFilters">重置</el-button>
+      </div>
+      <div class="top-actions">
         <el-button
           v-if="userStore.isAdmin"
           type="primary"
@@ -66,6 +102,13 @@
             <el-link type="primary" @click="goDetail(row.id)">{{ row.id }}</el-link>
           </template>
         </el-table-column>
+        <el-table-column label="频道" width="130">
+          <template #default="{ row }">
+            <!-- channel_id 悬空（频道被删除）时显示占位，避免空白列 -->
+            <el-tag v-if="row.channel_name" size="small" type="info">{{ row.channel_name }}</el-tag>
+            <span v-else class="text-muted">默认</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="episode_date" label="节目日期" width="130" />
         <el-table-column prop="source" label="来源" width="100">
           <template #default="{ row }">
@@ -89,8 +132,12 @@
             />
           </template>
         </el-table-column>
-        <el-table-column prop="started_at" label="开始时间" min-width="170" />
-        <el-table-column prop="finished_at" label="结束时间" min-width="170" />
+        <el-table-column label="开始时间" min-width="170">
+          <template #default="{ row }">{{ formatTime(row.started_at) }}</template>
+        </el-table-column>
+        <el-table-column label="结束时间" min-width="170">
+          <template #default="{ row }">{{ formatTime(row.finished_at) }}</template>
+        </el-table-column>
       </el-table>
 
       <!-- 分页 -->
@@ -113,11 +160,12 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
-import { VideoPlay, Delete } from '@element-plus/icons-vue'
+import { VideoPlay, Delete, Refresh } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
 import api from '../../api'
 import { listChannels } from '../../api/channels'
 import { subscribe, broadcastLocal } from '../../utils/sse'
+import { formatTime } from '../../utils/format'
 import WorkflowProgressIndicator from './components/WorkflowProgressIndicator.vue'
 
 const router = useRouter()
@@ -135,8 +183,12 @@ const size = ref(20)
 const selectedRows = ref([])
 const tableRef = ref(null)
 
+// 查询条件：四项均可空，空时不传给后端（退化为不限制）
 const channels = ref([])
 const filterChannelId = ref(null)
+const filterEpisodeDate = ref(null)
+const filterStatus = ref(null)
+const filterSource = ref(null)
 
 async function loadChannels() {
   try {
@@ -148,6 +200,15 @@ async function loadChannels() {
 }
 
 function handleFilterChange() {
+  page.value = 1
+  loadList()
+}
+
+function resetFilters() {
+  filterChannelId.value = null
+  filterEpisodeDate.value = null
+  filterStatus.value = null
+  filterSource.value = null
   page.value = 1
   loadList()
 }
@@ -181,6 +242,15 @@ async function loadList() {
     if (filterChannelId.value !== null) {
       params.channel_id = filterChannelId.value
     }
+    if (filterEpisodeDate.value) {
+      params.episode_date = filterEpisodeDate.value
+    }
+    if (filterStatus.value) {
+      params.status = filterStatus.value
+    }
+    if (filterSource.value) {
+      params.source = filterSource.value
+    }
     const data = await api.get('/workflows', { params })
     list.value = data.list || []
     total.value = data.total || 0
@@ -191,6 +261,9 @@ async function loadList() {
       page.value -= 1
       await loadList()
     }
+
+    // 根据最新列表状态启停轮询：有活跃工作流时启动，全部终态时停止
+    startPollingIfNeeded()
   } finally {
     loading.value = false
   }
@@ -231,7 +304,7 @@ async function handleBatchDelete() {
   // 二次确认：显示具体 ID 数量让用户明确操作范围
   try {
     await ElMessageBox.confirm(
-      `确认删除选中的 ${ids.length} 个工作流？将级联删除稿件、素材、审核、节目及播放记录，此操作不可撤销。`,
+      `确认删除选中的 ${ids.length} 个工作流？\n\n将删除：稿件、审核、节目及播放记录。\n将保留：素材（重置为待处理状态，可被后续工作流复用）。\n\n此操作不可撤销。`,
       '危险操作',
       { type: 'warning', confirmButtonText: '确定删除', cancelButtonText: '取消' }
     )
@@ -281,19 +354,61 @@ function setupSSE() {
   }
 }
 
+// ===== 轮询兜底：SSE 断连或漏事件时仍能感知工作流状态变化 =====
+// 仅当列表中存在 running/queued 工作流时启动 5s 轮询，全部终态时停止
+// 避免无工作流运行时持续轮询浪费资源
+let pollTimer = null
+const RUNNING_STATUSES = new Set(['running', 'queued'])
+
+function hasActiveWorkflow() {
+  return list.value.some((w) => RUNNING_STATUSES.has(w.status))
+}
+
+function startPollingIfNeeded() {
+  if (pollTimer && !hasActiveWorkflow()) {
+    // 已无活跃工作流，停止轮询
+    clearInterval(pollTimer)
+    pollTimer = null
+    return
+  }
+  if (!pollTimer && hasActiveWorkflow()) {
+    // 有活跃工作流，启动 5s 轮询
+    pollTimer = setInterval(() => {
+      if (!document.hidden) loadList()
+    }, 5000)
+  }
+}
+
+// 页面恢复可见时立即刷新：弥补隐藏期间错过的 SSE 事件
+// SSE 在页面隐藏时会断开（sse.js 的 visibilitychange 处理），
+// 恢复可见后重连前的状态变化无法感知，需主动刷新一次
+function handleVisibilityChange() {
+  if (!document.hidden) {
+    loadList()
+    startPollingIfNeeded()
+  }
+}
+
 function handleResize() {
   // 预留：窗口尺寸变化时的响应式处理
 }
 
 onMounted(() => {
+  // loadList 内部会调用 startPollingIfNeeded，无需在此额外调用
   loadList()
   loadChannels()
   setupSSE()
   window.addEventListener('resize', handleResize)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
   if (unsubscribeSse) unsubscribeSse()
 })
 </script>
@@ -307,11 +422,14 @@ onUnmounted(() => {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
 
-    .page-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: $color-text-primary;
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
     }
 
     .top-actions {
@@ -325,6 +443,12 @@ onUnmounted(() => {
       font-size: 13px;
       color: $color-text-secondary;
     }
+  }
+
+  // 频道悬空时的占位文字：弱化显示，与有值时形成视觉对比
+  .text-muted {
+    font-size: 13px;
+    color: $color-text-secondary;
   }
 
   .pagination {

@@ -1,5 +1,5 @@
 {
-  "description": "20_News 语音新闻播报小程序",
+  "description": "MorningBrief 语音新闻播报小程序",
   "miniprogramRoot": "./",
   "compileType": "miniprogram",
   "setting": {
@@ -12,7 +12,7 @@
     "autoAudits": false
   },
   "appid": "wx0000000000000000",
-  "projectname": "20_News",
+  "projectname": "MorningBrief",
   "libVersion": "3.3.4",
   "condition": {}
 }

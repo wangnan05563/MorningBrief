@@ -1,7 +1,7 @@
 {
-  "name": "20-news-admin-web",
+  "name": "MorningBrief-admin-web",
   "version": "1.0.0",
-  "description": "20_News 语音新闻播报运营后台",
+  "description": "MorningBrief 语音新闻播报运营后台",
   "private": true,
   "type": "module",
   "scripts": {

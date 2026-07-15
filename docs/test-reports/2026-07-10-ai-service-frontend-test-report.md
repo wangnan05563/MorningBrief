@@ -28,7 +28,7 @@
 ### 3.1 导航与加载
 
 - 导航至 `http://127.0.0.1:8000/ai-config` 成功
-- 页面标题：`20_News 运营后台`
+- 页面标题：`MorningBrief 运营后台`
 - URL 正确：`http://127.0.0.1:8000/ai-config`
 
 ### 3.2 文本匹配（expected_texts: `["AI 服务配置"]`）

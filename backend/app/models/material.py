@@ -28,6 +28,7 @@ class Material(Base):
         Index("idx_workflow", "workflow_id"),
         Index("idx_category", "category"),
         Index("idx_simhash", "simhash"),
+        Index("idx_material_channel", "channel_id"),
         CheckConstraint("source_type IN ('rss', 'list')", name="ck_material_source_type"),
         CheckConstraint("status IN ('pending', 'selected', 'skipped')", name="ck_material_status"),
         {"comment": "爬取素材表"},
@@ -50,3 +51,6 @@ class Material(Base):
     )
     simhash: Mapped[Optional[str]] = mapped_column(String(64), comment="标题指纹（SimHash 去重）")
     workflow_id: Mapped[Optional[str]] = mapped_column(String(64))
+    # 素材归属频道 ID：crawler 入库时按采集频道写入，rewriter 选题时按频道过滤
+    # 为空表示历史遗留数据（未关联频道），rewriter 回退到全局素材池
+    channel_id: Mapped[Optional[int]] = mapped_column(Integer, comment="素材归属频道 ID")

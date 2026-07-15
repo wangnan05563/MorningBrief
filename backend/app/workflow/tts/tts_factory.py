@@ -32,7 +32,12 @@ def _create_aliyun() -> TTSProvider:
     """创建阿里云 NLS TTS provider。"""
     from app.workflow.tts.aliyun_client import AliyunSpeechClient
     settings = get_settings()
-    return AliyunSpeechClient(settings.ALIYUN_TTS_API_KEY)
+    return AliyunSpeechClient(
+        api_key=settings.ALIYUN_TTS_API_KEY,
+        volume=settings.ALIYUN_TTS_VOLUME,
+        speech_rate=settings.ALIYUN_TTS_SPEECH_RATE,
+        pitch_rate=settings.ALIYUN_TTS_PITCH_RATE,
+    )
 
 
 def _create_edge() -> TTSProvider:

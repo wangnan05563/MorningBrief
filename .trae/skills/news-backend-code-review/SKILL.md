@@ -1,20 +1,20 @@
-﻿---
+---
 name: "news-backend-code-review"
-description: "对 20_News 项目后端代码（backend/app/ 下 Python/FastAPI/SQLAlchemy 文件）进行全面评审与逻辑审查，覆盖分层架构、异步并发、数据库规约、安全、性能、错误处理、配置驱动、前后端字段契约、工作流编排、缓存一致性等维度。当用户要求'审查/检查/走查/把关/review/评估/看看对不对/规范不规范'后端 Python 代码、'.py 文件修改'、'迭代发布前后端走查'，或提到'后端评审/backend review/Python 代码审查/FastAPI 评审/SQLAlchemy 评审'时调用。仅审查后端 .py 文件；纯前端文件审查请改用 news-frontend-code-review。"
-whenToUse: "需要审查 20_News 后端代码（backend/app/ 下 .py 文件）是否符合项目规范"
+description: "对 MorningBrief 项目后端代码（backend/app/ 下 Python/FastAPI/SQLAlchemy 文件）进行全面评审与逻辑审查，覆盖分层架构、异步并发、数据库规约、安全、性能、错误处理、配置驱动、前后端字段契约、工作流编排、缓存一致性等维度。当用户要求'审查/检查/走查/把关/review/评估/看看对不对/规范不规范'后端 Python 代码、'.py 文件修改'、'迭代发布前后端走查'，或提到'后端评审/backend review/Python 代码审查/FastAPI 评审/SQLAlchemy 评审'时调用。仅审查后端 .py 文件；纯前端文件审查请改用 news-frontend-code-review。"
+whenToUse: "需要审查 MorningBrief 后端代码（backend/app/ 下 .py 文件）是否符合项目规范"
 triggers: "后端代码 走查/审查/审核/把关/review/检查/评估 | .py 文件 修改/变更/迭代 走查 | 迭代发布前 后端 代码 走查 | 这段后端代码 写得对不对/规范不规范 | 路由/服务/模型/工作流 代码 审查"
-version: "1.4.0"
-updated: "2026-07-12"
+version: "1.5.0"
+updated: "2026-07-15"
 config: "config.yaml"
 scripts: "scripts/auto-scan.ps1"
 template: "templates/report-template.md"
 ---
 
-# 20_News 后端代码审查
+# MorningBrief 后端代码审查
 
 ## 简介
 
-本技能对 20_News 项目后端代码（`backend/app/**/*.py`）进行系统性评审与逻辑审查，覆盖 **38 个维度**：分层架构、命名规范、类型注解、FastAPI 规范、SQLAlchemy 2.0 规范、异步并发、Redis 缓存规约、安全、错误处理、配置驱动、工作流编排、前后端字段契约、日志规范、性能、可测试性。
+本技能对 MorningBrief 项目后端代码（`backend/app/**/*.py`）进行系统性评审与逻辑审查，覆盖 **38 个维度**：分层架构、命名规范、类型注解、FastAPI 规范、SQLAlchemy 2.0 规范、异步并发、Redis 缓存规约、安全、错误处理、配置驱动、工作流编排、前后端字段契约、日志规范、性能、可测试性。
 
 适用技术栈：FastAPI + SQLAlchemy 2.0 async + aiomysql（或 aiosqlite）+ Redis（或 TTLCache 进程内缓存）+ APScheduler + httpx + COS + 阿里云 TTS + 通义千问 LLM。
 
@@ -145,14 +145,14 @@ async def trigger_workflow(
 
 - 【强制】用 `DeclarativeBase` + `Mapped` + `mapped_column`（2.0 风格），禁止旧式 `Column`
 - 【强制】异步 session（`AsyncSession`），禁止同步 `Session`
-- 【强制】所有时间字段用 `utcnow_naive()`（`core/timeutil.py`），禁止 `datetime.utcnow()` / `datetime.now()`
+- 【强制】所有时间字段必须使用项目选定的统一时区源（`core/timeutil.py` 的 `utcnow_naive()` 或 `datetime.now()` 本地时间），**禁止同一项目内混用 UTC 与本地时间**（详见维度 38：时区一致性）
 - 【强制】Enum 字段取值用 `.value`（`WorkflowStatus.RUNNING.value`），禁止裸枚举对象参与序列化
 - 【禁止】裸 SQL（`db.execute(text("SELECT * FROM ..."))`），如必须用则参数化（`text("...WHERE id=:id")`）
 - 【推荐】查询用 `select(Model).where(...)` 风格，禁止 legacy `Query` API
 
 **判断信号**：
 - 出现 `datetime.utcnow()` → 阻塞（Python 3.12+ 弃用）
-- 出现 `datetime.now()` 无 tzinfo → 阻塞
+- 出现 `datetime.now(timezone.utc)` 与 `datetime.now()` 在同一项目混用 → 阻塞（详见维度 38）
 - ORM 模型出现 `Column(Integer)` 而非 `mapped_column(Integer)` → 违规
 - Enum 字段直接返回对象（未调 `.value`）→ 违规
 
@@ -423,7 +423,7 @@ except Exception as e:
 
 ## 四维度复盘
 
-> 基于本次 20_News 后端代码审查完整过程的复盘，沉淀可复用的工作流模板与判断逻辑。
+> 基于本次 MorningBrief 后端代码审查完整过程的复盘，沉淀可复用的工作流模板与判断逻辑。
 
 ### 维度 1：成功执行任务的完整步骤
 
@@ -682,6 +682,120 @@ FastAPI 按定义顺序匹配路由，静态路由必须在动态路由之前定
 
 检查信号：Grep 批量操作接口无 max_length 约束
 修复建议：Pydantic model 中设置 Field(max_length=100)
+
+---
+
+## 新增审查维度：时区一致性与跨模块状态对齐
+
+> 以下维度来源于 2026-07-15 工作流执行链路复盘，覆盖时区漂移、级联清理、容错分支、动态注入、关联更新、频道级覆盖、定时触发等高频故障场景。配置详见 `config.yaml#hard_constraints.rules` 对应条目。
+
+### 维度 38：时区一致性跨模块对齐
+
+**为什么**：项目内多个模块涉及跨日判定（ai_budget 预算限流按"日"重置、workflow_scheduler 按本地日期触发、rewriter 按 crawled_at 本地日期回溯、crawler_dedup 按 TTL 清理）。如果 ai_budget 用 UTC 而其他模块用本地时间，会导致本地跨日时额度累加错误，触发"今日已用 501,599，上限 500,000"误报。
+
+检查信号：Grep `datetime.now(timezone.utc)` 或 `tz=timezone.utc` 在业务模块（非 core/timeutil.py 工具函数）
+修复建议：所有跨日判定统一使用 `datetime.now()` 本地时间或 `utcnow_naive()`，时区封装在 core/timeutil.py 内部
+适用场景：跨日额度计算、定时任务、去重表 TTL、素材回溯
+不适用场景：单次本地时间戳、纯日志时间
+
+### 维度 39：主从表级联清理完整性
+
+**为什么**：删除主表记录（如 workflow）时，必须同步处理所有引用主表 ID 的从表（material/crawler_dedup/script/review/episode）。否则会产生孤儿记录锁死后续流程——例如删除 workflow 后 material 被级联删除但 crawler_dedup 残留，导致爬虫重新爬取时所有 URL 命中 dedup 表，入库 0 条。
+
+检查信号：Grep `delete(Model)` 或 `db.delete(obj)` 后无对从表的 `update`/`delete`
+修复建议：删除主表前先 `UPDATE material SET workflow_id=NULL, status='pending'`（保留素材重置状态），并清理 crawler_dedup 中孤儿 URL 记录
+适用场景：workflow → material/crawler_dedup/script/review/episode、channel → workflow/material
+不适用场景：无外键引用的独立表
+
+### 维度 40：0 结果容错分支
+
+**为什么**：查询返回 0 条不一定是错误。例如 crawler 爬到 0 条新素材时，可能 material 表已有历史 pending 素材可用（rewriter 通过 FALLBACK_DAYS 回溯选取）。直接 `if count == 0: raise` 会导致工作流中断，但实际有可用资源。
+
+检查信号：Grep `if count == 0` 或 `if material_count == 0` 后直接 `raise RuntimeError` 无 fallback 检查
+修复建议：0 条新结果时先查询是否有可用历史/回退资源（如 pending 素材），有则放行并记录日志，无才报错
+适用场景：爬虫采集、LLM 改写选题、审核队列
+不适用场景：必填字段缺失、鉴权失败、配置加载失败
+
+### 维度 41：动态注入而非硬编码条件分支
+
+**为什么**：业务参数（如"结尾思考问题"开关）应通过动态注入 prompt 后缀实现，而不是在模板中硬编码后用 `if config_flag and not template_text` 条件跳过。后者会导致用户自定义模板时配置开关失效——所有频道都有自定义 rewrite_template，`not template_text` 永远为 False，开关被绕过。
+
+检查信号：Grep `if config_flag and not template_text` 或 `if flag and not has_xxx` 多条件跳过逻辑
+修复建议：配置开关直接控制后缀追加（`if enable_flag: prompt += suffix`），不依赖模板存在性判断
+适用场景：LLM prompt 后缀、字段可选序列化、特性开关
+不适用场景：安全相关的硬约束（如必填校验不应被开关绕过）
+
+### 维度 42：选题后关联关系更新
+
+**为什么**：业务流程中选取已有记录（如 rewriter 从 material 表选题改写）后，必须立即 UPDATE 关联字段（`material.workflow_id = 当前工作流 ID`）。否则工作流详情页按 `WHERE workflow_id = 'wf-xxx'` 过滤素材列表时查不到数据——回溯选取的历史素材 workflow_id 为 NULL。
+
+检查信号：Grep `select(Material)` 后无 `update(Material).values(workflow_id=...)`
+修复建议：选题后立即执行 `UPDATE material SET workflow_id=当前工作流, status='selected' WHERE id IN (选中ID)`
+适用场景：素材选题、任务分配、角色关联
+不适用场景：只读查询、一次性临时查询
+
+### 维度 43：blob/二进制响应错误解析
+
+**为什么**：前端 axios 请求设置 `responseType: 'blob'` 时，错误分支 `error.response.data` 也是 Blob 类型，axios 拦截器无法读取 `.message` 字段，前端只能显示 "Network Error"。后端返回的 `{code, message, data}` 结构在 blob 模式下被包装为 Blob，需要 `blob.text()` 解析。
+
+检查信号：前端 grep `responseType: 'blob'` 后无 `parseBlobError` 或 `blob.text()` 调用
+修复建议：blob 请求 catch 中先检查 `err.response?.data instanceof Blob`，是则 `await blob.text()` 解析 JSON 获取真实 message
+适用场景：文件下载、音频流、图片请求
+不适用场景：JSON 响应（默认 responseType）
+
+### 维度 44：频道级配置覆盖全局
+
+**为什么**：业务参数（BGM 路径/音量、段间静音 SEGMENT_GAP_SEC、思考问题开关）应支持频道级覆盖，频道未配置时回退全局 settings。如果只做全局配置，所有频道共享同一参数，无法差异化运营。
+
+检查信号：Grep `settings.BGM_VOLUME` 或 `settings.SEGMENT_GAP_SEC` 在业务代码中无 `if ch.xxx is not None` 频道级检查
+修复建议：解析配置时先读全局 settings 作为默认值，再查询频道记录，频道字段非 None 则覆盖
+适用场景：多频道/多租户场景的所有可配置参数
+不适用场景：全局唯一参数（如数据库路径、JWT 密钥）
+
+### 维度 45：定时任务频道级触发
+
+**为什么**：全局 cron 触发（如每日 05:00）时，必须为所有未配置独立定时的活跃频道各触发一个带 channel_id 的工作流。如果只触发一个无频道的工作流，多频道场景下只有"默认频道"执行定时任务，其他频道被遗漏。
+
+检查信号：Grep `_cron_trigger` 或全局 cron 入口中无遍历活跃频道列表
+修复建议：全局 cron 查询所有 `is_active=1 AND schedule_time IS NULL` 的频道，为每个频道各触发一个工作流
+适用场景：多频道调度、多租户定时
+不适用场景：单频道项目
+
+### 维度 46：ai_budget 预算限流时区
+
+**为什么**：ai_budget 按"日"重置 token 用量，如果用 UTC 日期而项目其他模块用本地时间，会导致本地跨日时额度累加到错误的 UTC 日。例如本地 7-14 23:30 到 7-15 00:30 的 LLM 调用全部累加到 UTC 7-14，超限后整个本地 7-15 无法调用 LLM。
+
+检查信号：Grep ai_budget 模块中 `datetime.now(timezone.utc)` 或 `tz=timezone.utc`
+修复建议：ai_budget 的 `_today_key()` 和 timestamp 解析统一使用本地时间 `datetime.now()`
+适用场景：所有按日/按时段重置的预算/限流模块
+不适用场景：跨时区服务的全局预算（需明确指定 UTC）
+
+### 维度 47：crawler_dedup 孤儿记录清理
+
+**为什么**：crawler_dedup 表通过 URL 去重防止重复爬取。如果 material 表被非标准方式删除（如直接 SQL 操作），crawler_dedup 残留的 URL 锁会永久阻止爬虫重新入库这些 URL。定时清理任务（每日 03:00）除了清理过期记录，还必须清理孤儿记录（url 不在 material 表中的记录）。
+
+检查信号：Grep `_cleanup_crawler_dedup` 中无 `url NOT IN (SELECT url FROM material)` 孤儿清理
+修复建议：定时清理任务额外执行 `DELETE FROM crawler_dedup WHERE url NOT IN (SELECT url FROM material)`
+适用场景：所有用 dedup 表做去重的爬虫系统
+不适用场景：无 dedup 表的爬虫
+
+### 维度 48：音频时长校验容差动态范围
+
+**为什么**：音频拼接的最终时长校验范围如果固定（如 ±15%），LLM 实际生成字数与 ±10% prompt 约束的偏差叠加 TTS 语速波动，容易超出范围导致工作流失败。应改为基于目标时长的动态范围（如 ±20%），允许更大的容差。
+
+检查信号：Grep `_get_duration_range` 或时长校验中固定 `0.85`/`1.15` 而非动态 `0.80`/`1.20`
+修复建议：时长校验范围改为动态计算 `target * 0.80` 到 `target * 1.20`，范围系数通过 config.yaml 可配
+适用场景：所有音频/视频拼接的时长校验
+不适用场景：精确时长要求的场景（如广告片段）
+
+### 维度 49：频道字段迁移与配置页面同步
+
+**为什么**：后端 Channel 模型新增字段（如 segment_gap_sec、enable_thinking_question）时，必须同步：①main.py 迁移脚本添加新列 ②channel_service.py 的 create/update 方法支持新参数 ③routers/admin/channels.py 的 Request/Response 模型包含新字段 ④前端 ChannelManagement.vue 表单包含新控件。任一环节缺失会导致配置无法持久化或前端看不到配置项。
+
+检查信号：Grep Channel 模型新增字段后，channel_service.py/routers/channels.py/ChannelManagement.vue 是否同步更新
+修复建议：新增频道字段时按 4 层同步清单（model → migration → service → router → frontend）逐项检查
+适用场景：所有频道/租户配置字段的新增
+不适用场景：内部字段（不暴露给前端配置）
 
 
 

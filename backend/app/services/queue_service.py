@@ -11,10 +11,13 @@ from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.core.exceptions import ParamError
 from app.core.timeutil import utcnow_naive
 from app.models.channel import Channel
 from app.models.queue_config import QueueConfig
-from app.models.workflow import Workflow, WorkflowStatus
+from app.models.workflow import (
+    Workflow, WorkflowStatus, WorkflowStep, WorkflowStepName, WorkflowStepStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +134,16 @@ class QueueService:
         logger.info("修改优先级 workflow_id=%s priority=%d", workflow_id, priority)
 
     async def retry_task(self, workflow_id: str) -> str:
-        """重试失败任务。重新触发工作流，返回新 workflow_id。"""
+        """重试失败任务：在原工作流上从最早失败步骤断点续跑。
+
+        自动定位 workflow_step 表中最早的 failed 步骤作为重跑起点，
+        调用 workflow_scheduler.retry_workflow 保留已成功步骤的产出，
+        避免重新爬取/LLM 改写等重复消耗。
+
+        Returns:
+            原工作流 ID（不创建新工作流）
+        """
+        # 1. 校验原工作流状态为 failed
         stmt = select(Workflow).where(
             Workflow.id == workflow_id, Workflow.status == WorkflowStatus.failed.value
         )
@@ -139,15 +151,45 @@ class QueueService:
         if wf is None:
             raise ValueError(f"任务不存在或非失败状态: {workflow_id}")
 
-        from app.services.workflow_scheduler import workflow_scheduler
-        new_wf_id = await workflow_scheduler.trigger_workflow(
-            episode_date=wf.episode_date,
-            source="manual",
-            channel_id=wf.channel_id,
-            priority=wf.priority,
+        # 2. 查询最早的 failed 步骤作为重跑起点
+        step_stmt = (
+            select(WorkflowStep)
+            .where(
+                WorkflowStep.workflow_id == workflow_id,
+                WorkflowStep.status == WorkflowStepStatus.failed.value,
+            )
+            .order_by(WorkflowStep.id.asc())
+            .limit(1)
         )
-        logger.info("重试任务 original=%s new=%s", workflow_id, new_wf_id)
-        return new_wf_id
+        failed_step = (await self.db.execute(step_stmt)).scalar_one_or_none()
+
+        # 3a. 有明确失败步骤：从该步骤断点续跑
+        if failed_step is not None:
+            from app.services.workflow_scheduler import workflow_scheduler
+            wf_id = await workflow_scheduler.retry_workflow(
+                workflow_id,
+                from_step=failed_step.step_name,
+                triggered_by="queue_retry",
+            )
+            logger.info(
+                "队列重试断点续跑 workflow_id=%s from_step=%s",
+                workflow_id, failed_step.step_name,
+            )
+            return wf_id
+
+        # 3b. 无 failed 步骤记录（workflow 整体异常退出未记录步骤）：
+        #     兜底从第一个步骤 crawl 重跑，保留原工作流 ID
+        from app.services.workflow_scheduler import workflow_scheduler
+        wf_id = await workflow_scheduler.retry_workflow(
+            workflow_id,
+            from_step=WorkflowStepName.crawl.value,
+            triggered_by="queue_retry",
+        )
+        logger.info(
+            "队列重试兜底全量重跑 workflow_id=%s（无 failed 步骤记录）",
+            workflow_id,
+        )
+        return wf_id
 
     async def get_queue_config(self) -> dict:
         """获取执行模式配置。首次调用时自动初始化默认配置。"""

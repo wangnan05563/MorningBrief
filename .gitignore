@@ -63,3 +63,5 @@ admin-web/test-results/
 doc/
 # IDE 运行配置
 .run/
+# data数据目录
+backend/data/audio_cache/*

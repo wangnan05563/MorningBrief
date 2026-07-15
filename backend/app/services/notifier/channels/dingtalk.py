@@ -1,7 +1,10 @@
 """钉钉 Webhook 通知渠道。
 
-通过群机器人 Webhook 发送 Markdown 消息。
-支持加签验证（DINGTALK_SECRET 配置时自动计算签名）。
+支持两种消息格式：
+1. actionCard：extra 含 action_url 时使用，含单按钮跳转（工作流审核/详情）
+2. markdown：无 action_url 时降级使用（测试通知、系统告警）
+
+加签验证：配置 ALERT_DINGTALK_SECRET 时自动计算 HmacSHA256 签名。
 """
 from __future__ import annotations
 
@@ -60,14 +63,30 @@ class DingTalkNotifier(INotifier):
         separator = "&" if "?" in self._webhook else "?"
         return f"{self._webhook}{separator}timestamp={timestamp}&sign={sign_encoded}"
 
-    async def send(self, event: NotificationEvent) -> NotifyResult:
-        if not self.is_configured():
-            return NotifyResult(
-                channel=self.name,
-                success=False,
-                error="Webhook 未配置",
-            )
+    def _build_payload(self, event: NotificationEvent) -> dict:
+        """构建钉钉消息 payload。
 
+        actionCard 模式：extra 含 action_url 时使用单按钮卡片，提升交互体验。
+        markdown 模式：无 action_url 时降级（测试通知、系统告警等场景）。
+        """
+        # 钉钉 PC 端卡片标题宽度限制，截断到 24 字符避免显示不全
+        title = event.title[:24] if len(event.title) > 24 else event.title
+
+        action_url = (event.extra or {}).get("action_url", "")
+        action_title = (event.extra or {}).get("action_title", "") or "查看详情"
+
+        if action_url:
+            return {
+                "msgtype": "actionCard",
+                "actionCard": {
+                    "title": title,
+                    "text": event.message,
+                    "singleTitle": action_title,
+                    "singleURL": action_url,
+                },
+            }
+
+        # 降级为 markdown：保留 severity 标识便于运维快速识别级别
         severity_emoji = {
             "critical": "🔴",
             "important": "🟡",
@@ -80,10 +99,20 @@ class DingTalkNotifier(INotifier):
             f"**级别**: {event.severity}\n\n"
             f"{event.message}"
         )
-        payload = {
+        return {
             "msgtype": "markdown",
-            "markdown": {"title": event.title, "text": markdown},
+            "markdown": {"title": title, "text": markdown},
         }
+
+    async def send(self, event: NotificationEvent) -> NotifyResult:
+        if not self.is_configured():
+            return NotifyResult(
+                channel=self.name,
+                success=False,
+                error="Webhook 未配置",
+            )
+
+        payload = self._build_payload(event)
 
         url = self._sign_url()
         try:

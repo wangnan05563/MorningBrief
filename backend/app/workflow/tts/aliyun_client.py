@@ -11,6 +11,7 @@ import asyncio
 import logging
 import os
 import time
+from typing import Optional
 
 import httpx
 
@@ -51,7 +52,13 @@ class AliyunSpeechClient:
     # 轮询间隔：NLS 长文本合成为异步批处理，过密轮询浪费配额且无收益
     POLL_INTERVAL_SEC = 2
 
-    def __init__(self, api_key: str):
+    def __init__(
+        self,
+        api_key: str,
+        volume: Optional[int] = None,
+        speech_rate: Optional[int] = None,
+        pitch_rate: Optional[int] = None,
+    ):
         # api_key 实为阿里云 NLS 访问令牌(token)，由 AccessKeyId/Secret 换取
         self._token = api_key
         # appkey 是 NLS 项目标识，与 token 不同；优先从 settings 读取，
@@ -60,6 +67,11 @@ class AliyunSpeechClient:
             getattr(settings, "ALIYUN_TTS_APPKEY", "")
             or os.environ.get("ALIYUN_TTS_APPKEY", "")
         )
+        # 音量/语速/基频：显式参数优先，未传则回退到 settings 默认值
+        # 试音时传入临时值，生产合成时用 settings 配置
+        self._volume = volume if volume is not None else getattr(settings, "ALIYUN_TTS_VOLUME", 50)
+        self._speech_rate = speech_rate if speech_rate is not None else getattr(settings, "ALIYUN_TTS_SPEECH_RATE", 0)
+        self._pitch_rate = pitch_rate if pitch_rate is not None else getattr(settings, "ALIYUN_TTS_PITCH_RATE", 0)
 
     async def synthesize(
         self,
@@ -125,6 +137,10 @@ class AliyunSpeechClient:
                     "format": format,
                     "enable_subtitle": False,
                     "text": text,
+                    # 音量/语速/基频调节（NLS tts_request 可选参数）
+                    "volume": self._volume,
+                    "speech_rate": self._speech_rate,
+                    "pitch_rate": self._pitch_rate,
                 },
             },
         }

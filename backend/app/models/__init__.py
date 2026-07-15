@@ -58,6 +58,9 @@ from app.models.favorite import Favorite
 from app.models.feedback import Feedback
 # 数据库维护与系统清理模块（V1.2 新增）
 from app.models.audit_log import AuditLog
+# 通知模块（钉钉消息通知，含模板与发送日志）
+from app.models.notification_template import NotificationTemplate
+from app.models.notification_log import NotificationLog
 
 __all__ = [
     # 业务表
@@ -97,4 +100,7 @@ __all__ = [
     "Feedback",
     # 数据库维护与系统清理模块
     "AuditLog",
+    # 通知模块
+    "NotificationTemplate",
+    "NotificationLog",
 ]

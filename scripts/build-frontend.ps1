@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    20_News 前端构建脚本（admin-web）
+    MorningBrief 前端构建脚本（admin-web）
 .DESCRIPTION
     构建 admin-web Vue 项目，产物输出到 admin-web/dist/。
     V1.2 起由 FastAPI StaticFiles 服务此目录（单机 exe 模式）。
@@ -19,7 +19,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Script:StepPrefix = "[20News-Frontend]"
+$Script:StepPrefix = "[MorningBrief-Frontend]"
 
 function Write-Step { param([string]$Message) Write-Host "$StepPrefix $Message" -ForegroundColor Cyan }
 function Write-OK    { param([string]$Message) Write-Host "$StepPrefix   [OK] $Message" -ForegroundColor Green }
@@ -31,7 +31,7 @@ $Script:DistDir     = Join-Path $FrontendDir "dist"
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  20_News 前端构建（admin-web）" -ForegroundColor Cyan
+Write-Host "  MorningBrief 前端构建（admin-web）" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 

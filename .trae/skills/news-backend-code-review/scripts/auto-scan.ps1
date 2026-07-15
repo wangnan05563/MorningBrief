@@ -1,4 +1,4 @@
-﻿# ========== 20_News 后端代码阻塞级问题自动扫描 v1.0.0 ==========
+﻿# ========== MorningBrief 后端代码阻塞级问题自动扫描 v1.0.0 ==========
 # 扫描 backend/app/ 下的 .py 文件，检查 12 项阻塞级问题
 # 用法：pwsh .trae/skills/news-backend-code-review/scripts/auto-scan.ps1
 #
@@ -57,7 +57,7 @@ function Get-PyFiles {
 $AllFiles = Get-PyFiles
 $TotalFiles = $AllFiles.Count
 
-Write-Host "========== 20_News 后端代码预检 ==========" -ForegroundColor Cyan
+Write-Host "========== MorningBrief 后端代码预检 ==========" -ForegroundColor Cyan
 Write-Host "源码目录: $SourceDir" -ForegroundColor Gray
 Write-Host "扫描文件数: $TotalFiles`n" -ForegroundColor Gray
 

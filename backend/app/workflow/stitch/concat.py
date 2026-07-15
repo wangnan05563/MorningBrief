@@ -1,30 +1,37 @@
 """音频拼接主入口:分段音频 → 主音频 → 广告插入 → 最终节目音频。
 
 流程(LLD 第 4 步 stitch):
-1. 下载 TTS 分段音频并按序拼接为主音频
-2. 查询当日广告投放,中间位置插入广告
-3. 开头/结尾广告与主音频最终拼接,加静音过渡
-4. 时长校验(目标时长 ±15%)后上传 COS
+1. 下载 TTS 分段音频,段间插入 0.5s 静音过渡,拼接为主音频
+2. (可选)叠加低音量 BGM 垫底,TTS 段间静音处 BGM 自然浮现
+3. 查询当日广告投放,中间位置插入广告
+4. 开头/结尾广告与主音频最终拼接,加静音过渡
+5. 时长校验(目标时长 ±20%)后上传 COS,key 含频道名+workflow_id 防覆盖
 """
 import asyncio
 import logging
+import re
 import shutil
 import tempfile
 from datetime import date
 from pathlib import Path
 
+from sqlalchemy import select
+
 from app.config import get_settings
 from app.database import AsyncSessionLocal
+from app.models import Channel
 from app.paths import resolve_ffmpeg_path
 from app.services.ad_service import AdService
 from app.workflow.stitch.ffmpeg_wrapper import (
     StitchError,
+    adjust_tempo,
     build_concat_cmd,
     build_full_concat_cmd,
     build_mid_ad_cmd,
     download_file,
     generate_silence,
     get_audio_duration,
+    mix_bgm,
     run_ffmpeg,
 )
 from app.workflow.tts.uploader import upload_to_cos
@@ -33,8 +40,9 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # 时长校验区间按 settings.TARGET_DURATION_SEC 动态计算:
-#   允许范围 = [target × 0.85, target × 1.15]
-# 即默认 600s → [510, 690]，用户调整 target_sec 后范围自动跟随
+#   允许范围 = [target × 0.80, target × 1.20]
+# 即默认 600s → [480, 720]，用户调整 target_sec 后范围自动跟随
+# ±20% 容差覆盖 LLM 字数波动(±10% prompt 约束实际可达 ±15-20%)+ TTS 语速波动 + 段间静音累加
 # 绝对下限 180s 兜底防止目标时长配置异常导致范围过宽
 ABSOLUTE_MIN_DURATION_SEC = 180
 # 中间广告插入位置(秒):默认 5 分钟处,避开开场白与首条新闻
@@ -44,19 +52,88 @@ MID_AD_INSERT_AT_DEFAULT = 300
 SILENCE_DURATION = 0.5
 
 
+def _slugify_channel_name(name: str | None) -> str:
+    """将频道名转换为 URL/COS key 友好的 slug。
+
+    中文频道名保留原样（COS key 支持 UTF-8），仅清理路径分隔符和特殊字符。
+    空名或 None 返回 "default"，保证 key 始终有可读的频道标识段。
+    """
+    if not name or not name.strip():
+        return "default"
+    # 清理 COS key 不允许的字符：/ : * ? " < > | 及控制字符
+    cleaned = re.sub(r'[/:\*\?"<>|\x00-\x1f]', '_', name.strip())
+    return cleaned[:32] or "default"
+
+
+async def _resolve_channel_bgm(channel_id: int | None) -> tuple[str, Path | None, float, float]:
+    """解析频道级配置（BGM + 段间静音，频道未配置时回退全局 settings）。
+
+    一次查询同时取 name + bgm_path + bgm_volume + segment_gap_sec，避免多次 DB 往返。
+
+    Returns:
+        slug: 频道名 slug（用于 COS key 命名）
+        bgm_path: BGM 文件绝对路径，None 表示无可用 BGM
+        bgm_volume: BGM 音量（0.0-1.0），频道未配时取全局值
+        gap_sec: 段间静音时长（秒），频道未配时取全局值
+    """
+    slug = "default"
+    bgm_rel = (settings.BGM_PATH or "").strip()
+    bgm_volume = float(getattr(settings, "BGM_VOLUME", 0.15) or 0.15)
+    gap_sec = float(getattr(settings, "SEGMENT_GAP_SEC", 0.5) or 0.5)
+
+    if channel_id:
+        try:
+            async with AsyncSessionLocal() as db:
+                ch = await db.get(Channel, channel_id)
+                if ch:
+                    slug = _slugify_channel_name(ch.name)
+                    # 频道级 BGM 优先于全局配置
+                    if ch.bgm_path:
+                        bgm_rel = ch.bgm_path
+                    if ch.bgm_volume is not None:
+                        bgm_volume = float(ch.bgm_volume)
+                    # 频道级段间静音优先于全局配置
+                    if ch.segment_gap_sec is not None:
+                        gap_sec = float(ch.segment_gap_sec)
+        except Exception as e:
+            logger.warning("查询频道配置失败 channel_id=%s: %s", channel_id, e)
+
+    # 解析 BGM 路径：频道级为相对 data/bgm/ 的路径，全局可能为绝对路径或相对 cwd
+    bgm_path = None
+    if bgm_rel:
+        # 先尝试作为 data/bgm/ 下的相对路径解析（频道级 BGM）
+        from app.paths import resolve_bgm_dir
+        bgm_root = resolve_bgm_dir()
+        p1 = bgm_root / bgm_rel
+        if p1.is_file():
+            bgm_path = p1
+        else:
+            # 回退到作为绝对路径或 cwd 相对路径解析（全局 BGM_PATH）
+            p2 = Path(bgm_rel)
+            if not p2.is_absolute():
+                p2 = Path.cwd() / p2
+            if p2.is_file():
+                bgm_path = p2
+            else:
+                logger.warning("BGM 文件不存在，降级为无 BGM 模式: %s", bgm_rel)
+
+    return slug, bgm_path, bgm_volume, gap_sec
+
+
 def _get_duration_range() -> tuple[int, int]:
     """按目标时长动态计算允许的时长范围。
 
-    范围 = [max(180, target×0.85), target×1.15]
+    范围 = [max(180, target×0.80), target×1.20]
     与 settings.TARGET_DURATION_SEC 联动，用户调整目标时长后范围自动更新。
+    ±20% 容差覆盖 LLM 字数波动 + TTS 语速波动 + 段间静音累加的综合误差。
     """
     target = getattr(settings, "TARGET_DURATION_SEC", 600) or 600
     try:
         target = int(target)
     except (ValueError, TypeError):
         target = 600
-    low = max(ABSOLUTE_MIN_DURATION_SEC, int(target * 0.85))
-    high = int(target * 1.15)
+    low = max(ABSOLUTE_MIN_DURATION_SEC, int(target * 0.80))
+    high = int(target * 1.20)
     return low, high
 
 
@@ -66,13 +143,19 @@ def _read_file(path: str) -> bytes:
         return f.read()
 
 
-async def concat(workflow_id: str, episode_date, audio_segments: list) -> dict:
+async def concat(
+    workflow_id: str,
+    episode_date,
+    audio_segments: list,
+    channel_id: int | None = None,
+) -> dict:
     """音频拼接主入口。
 
     Args:
-        workflow_id: 工作流 ID,用于日志关联与临时目录命名
+        workflow_id: 工作流 ID,用于日志关联与临时目录命名 + COS key 防覆盖
         episode_date: 节目日期(date 对象或 ISO 字符串),用于查询广告投放与生成 COS key
         audio_segments: TTS 分段列表 [{"seg_seq": 1, "audio_url": "...", "duration": 90}]
+        channel_id: 频道 ID,用于生成频道级 COS key,避免不同频道产物互相覆盖
 
     Returns:
         {"final_audio_url": str, "duration": int}
@@ -85,8 +168,8 @@ async def concat(workflow_id: str, episode_date, audio_segments: list) -> dict:
         episode_date = date.fromisoformat(episode_date)
 
     logger.info(
-        "拼接启动 workflow_id=%s date=%s segments=%d",
-        workflow_id, episode_date, len(audio_segments),
+        "拼接启动 workflow_id=%s date=%s segments=%d channel_id=%s",
+        workflow_id, episode_date, len(audio_segments), channel_id,
     )
 
     # 临时目录前缀含 workflow_id,便于排查时定位
@@ -102,9 +185,50 @@ async def concat(workflow_id: str, episode_date, audio_segments: list) -> dict:
             await download_file(seg["audio_url"], seg_path)
             seg_paths.append(seg_path)
 
-        # 3. 主音频拼接(concat demuxer)
+        # 2.5 预估拼接总时长（含段间静音），便于排查时长偏差根因
+        # TTS 段 duration 由 TTS 步骤上报，此处累加 + 段间静音得到预估总时长
+        # 段间静音时长取频道级配置，回退全局 settings.SEGMENT_GAP_SEC
+        seg_durations = [s.get("duration", 0) for s in segments]
+        channel_slug, bgm_path, bgm_volume, gap_sec = await _resolve_channel_bgm(channel_id)
+        estimated_total = sum(seg_durations) + max(0, len(seg_durations) - 1) * gap_sec
+        target_sec = getattr(settings, "TARGET_DURATION_SEC", 600) or 600
+        logger.info(
+            "时长预估 workflow_id=%s 段数=%d 段时长=%s 段间静音=%.1fs 预估总时长=%ds 目标=%ds",
+            workflow_id, len(seg_durations), seg_durations, gap_sec,
+            estimated_total, target_sec,
+        )
+
+        # 3. 主音频拼接：TTS 段之间插入静音过渡
+        # 段间静音的作用：① 避免 TTS 段突兀衔接 ② BGM 混音时在此时段自然浮现
+        # 形成节奏感。无 BGM 时静音过渡仍提供段间停顿，提升收听体验
+        gap_path = str(tmp_dir / "gap.mp3")
+        await generate_silence(gap_sec, gap_path)
+
+        # 交替排列 [seg1, gap, seg2, gap, seg3, ...]，concat demuxer 顺序拼接
+        interleaved: list[str] = []
+        for i, p in enumerate(seg_paths):
+            if i > 0:
+                interleaved.append(gap_path)
+            interleaved.append(p)
         main_path = str(tmp_dir / "main.mp3")
-        await run_ffmpeg(build_concat_cmd(seg_paths, main_path))
+        await run_ffmpeg(build_concat_cmd(interleaved, main_path))
+
+        # 3.5 (可选)叠加低音量 BGM 垫底
+        # 频道级 BGM 优先（channel.bgm_path + channel.bgm_volume），回退到全局配置
+        # BGM 整段循环/截断到主音频长度，TTS 段间静音处 BGM 自然变成主音
+        if bgm_path:
+            bgm_mix_path = str(tmp_dir / "main_bgm.mp3")
+            await mix_bgm(
+                main_path, str(bgm_path), bgm_mix_path,
+                volume=bgm_volume,
+            )
+            main_path = bgm_mix_path
+            logger.info(
+                "BGM 混音完成 workflow_id=%s volume=%.2f",
+                workflow_id, bgm_volume,
+            )
+        else:
+            logger.info("无 BGM 配置,跳过混音 workflow_id=%s", workflow_id)
 
         # 4. 查询当日广告投放,需独立 db session(本模块不在请求上下文中)
         async with AsyncSessionLocal() as db:
@@ -125,7 +249,7 @@ async def concat(workflow_id: str, episode_date, audio_segments: list) -> dict:
         else:
             logger.info("无中间广告,跳过插入 workflow_id=%s", workflow_id)
 
-        # 6. 生成 0.5s 静音过渡文件
+        # 6. 生成 0.5s 静音过渡文件（广告与主音频之间的过渡,与段间 gap 区分）
         silence_path = str(tmp_dir / "silence.mp3")
         await generate_silence(SILENCE_DURATION, silence_path)
 
@@ -156,25 +280,50 @@ async def concat(workflow_id: str, episode_date, audio_segments: list) -> dict:
         else:
             await run_ffmpeg(build_full_concat_cmd(final_inputs, final_path))
 
-        # 8. 时长校验：按目标时长动态计算允许范围 [target×0.85, target×1.15]
-        # 默认 600s → [510, 690]，避免硬编码范围导致调整目标时长后校验失效
+        # 8. 时长校验 + 超长 atempo 兜底
+        # 正常范围 [target×0.80, target×1.20]；超长但在 1.15x atempo 可修复范围内时
+        # 自动轻微加速（不改变音高），避免 LLM 字数波动导致工作流直接失败
+        # 安全边界：atempo 最多 1.15x（几乎不可察觉），超出则报错
         duration = await get_audio_duration(final_path)
         min_allowed, max_allowed = _get_duration_range()
-        if not (min_allowed <= duration <= max_allowed):
+        if duration > max_allowed:
+            tempo_needed = duration / max_allowed
+            if tempo_needed <= 1.15:
+                adjusted_path = str(tmp_dir / "final_adjusted.mp3")
+                await adjust_tempo(final_path, adjusted_path, tempo_needed)
+                final_path = adjusted_path
+                original_duration = duration
+                duration = await get_audio_duration(final_path)
+                logger.info(
+                    "atempo 加速兜底 workflow_id=%s tempo=%.3f 原时长=%ds 调整后=%ds",
+                    workflow_id, tempo_needed, original_duration, duration,
+                )
+            else:
+                raise StitchError(
+                    f"最终音频时长 {duration}s 超出允许范围 "
+                    f"[{min_allowed}, {max_allowed}]（目标时长 "
+                    f"{getattr(settings, 'TARGET_DURATION_SEC', 600)}s ±20%），"
+                    f"超长 {tempo_needed:.2f}x 超过 atempo 安全上限 1.15x"
+                )
+        elif duration < min_allowed:
             raise StitchError(
-                f"最终音频时长 {duration}s 超出允许范围 "
+                f"最终音频时长 {duration}s 低于允许范围 "
                 f"[{min_allowed}, {max_allowed}]（目标时长 "
-                f"{getattr(settings, 'TARGET_DURATION_SEC', 600)}s ±15%）"
+                f"{getattr(settings, 'TARGET_DURATION_SEC', 600)}s ±20%）"
             )
 
-        # 9. 上传 COS:key 按日期分目录,便于按期检索与清理
+        # 9. 上传 COS:key 含日期+频道名+workflow_id,避免同日多频道/重试覆盖
+        # channel_slug 已在步骤 3.5 获取（与 BGM 配置同时查询），避免重复 DB 往返
         data = await asyncio.to_thread(_read_file, final_path)
-        cos_key = f"episodes/{episode_date.strftime('%Y%m%d')}/final.mp3"
+        cos_key = (
+            f"episodes/{episode_date.strftime('%Y%m%d')}/"
+            f"{channel_slug}_{workflow_id}.mp3"
+        )
         final_url = await upload_to_cos(data, cos_key)
 
         logger.info(
-            "拼接完成 workflow_id=%s duration=%ds url=%s",
-            workflow_id, duration, final_url,
+            "拼接完成 workflow_id=%s duration=%ds channel=%s url=%s",
+            workflow_id, duration, channel_slug, final_url,
         )
         return {"final_audio_url": final_url, "duration": duration}
     finally:

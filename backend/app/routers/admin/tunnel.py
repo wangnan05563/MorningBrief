@@ -1,7 +1,7 @@
 """B 端内网穿透路由。
 
 提供一键开启/关闭远程访问的能力，返回公网 HTTPS 域名。
-全部端点需 admin 认证（20_News 是 B 端管理工具，不存在「未登录远程引导」场景）。
+全部端点需 admin 认证（MorningBrief 是 B 端管理工具，不存在「未登录远程引导」场景）。
 
 端口解析：环境变量 NEWS_WEB_PORT > local_port > settings.APP_PORT。
 

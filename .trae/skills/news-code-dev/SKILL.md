@@ -1,14 +1,14 @@
-﻿---
+---
 name: "news-code-dev"
-description: "20_News 项目的标准化开发技能，覆盖后端(FastAPI/SQLAlchemy)、前端(Vue 3/Element Plus/小程序)、工作流编排(LLM/TTS)、测试、优化和缺陷修复。当用户要求'开发新功能/添加接口/修改代码/修复bug/重构/优化性能/写测试'时调用。"
+description: "MorningBrief 项目的标准化开发技能，覆盖后端(FastAPI/SQLAlchemy)、前端(Vue 3/Element Plus/小程序)、工作流编排(LLM/TTS)、测试、优化和缺陷修复。当用户要求'开发新功能/添加接口/修改代码/修复bug/重构/优化性能/写测试'时调用。"
 whenToUse: "需要开发新功能、修复缺陷、优化代码或编写测试时使用"
 triggers: "开发新功能/添加接口/修改代码/修复bug/重构/优化性能/写测试 | 开发/实现/添加/修改/修复/优化/重构 | 后端/前端/小程序/工作流/测试 开发 | 这段代码怎么写/怎么改/怎么优化"
-version: "1.5.0"
-updated: "2026-07-12"
+version: "1.6.0"
+updated: "2026-07-15"
 config: "config/project-config.json"
 ---
 
-# 20_News 项目开发技能
+# MorningBrief 项目开发技能
 
 AI 驱动的播客新闻分发平台标准化开发技能。
 
@@ -29,11 +29,12 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 ### 后端
 - **框架**：FastAPI（异步）
 - **ORM**：SQLAlchemy 2.0（async）
-- **数据库**：MySQL（aiomysql 驱动）
-- **缓存**：Redis（redis.asyncio）
+- **数据库**：SQLite（aiosqlite 驱动，WAL 模式 + busy_timeout）
+- **缓存**：TTLCache（进程内缓存，V1.2 替代 Redis）
 - **调度**：APScheduler（AsyncIOScheduler）
 - **HTTP 客户端**：httpx（AsyncClient）
-- **测试**：pytest + aiosqlite + fakeredis
+- **打包**：PyInstaller 6.x（standalone exe）
+- **测试**：pytest + aiosqlite
 
 ### 前端（运营后台）
 - **框架**：Vue 3（`<script setup>` + Composition API）
@@ -122,7 +123,7 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 | 5 | 异步安全 | 异步代码 | `create_task(` 无赋值、`requests.get` | CRITICAL |
 | 6 | 迁移幂等 | 数据库迁移 | 无 `IF NOT EXISTS` | HIGH |
 | 7 | JWT 安全 | Token 验证 | `token ==` 而非 `hmac.compare_digest` | CRITICAL |
-| 8 | 时间 UTC | 所有时间字段 | `datetime.now()`、`datetime.utcnow()` | HIGH |
+| 8 | 时区一致性 | 跨模块时间判定（预算限流/调度/回溯/TTL） | `datetime.now(timezone.utc)` 与 `datetime.now()` 混用 | CRITICAL |
 | 9 | 枚举 .value | 数据库存储 | `str(MyEnum.VALUE)` | MEDIUM |
 | 10 | Redis Lua | 多步 Redis 操作 | 连续两次 Redis 操作 | HIGH |
 | 11 | 内部接口鉴权 | localhost 接口 | 路由有 `internal` 标签但无 IP 校验 | HIGH |
@@ -144,6 +145,17 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 30 | 构建脚本并发保护 | 级联删除操作 | 搜索多表删除无事务包裹 | CRITICAL
 31 | 启动脚本路径安全封装 | 批量操作表格 | 搜索 el-table 无 selection 列 | HIGH
 32 | 共享构建依赖完整提取 | 所有路由定义 | 搜索静态路由在动态路由之后 | CRITICAL
+33 | 时区一致性全局统一 | 跨模块时间判定 | `datetime.now(timezone.utc)` 与 `datetime.now()` 混用 | CRITICAL
+34 | 主从表级联清理完整性 | 删除主表记录 | `delete(Model)` 后无对从表的 update/delete | CRITICAL
+35 | 0 结果容错分支 | 查询返回 0 条 | `if count == 0: raise` 无 fallback 检查 | HIGH
+36 | 动态注入而非硬编码条件 | LLM prompt/字段可选 | `if config_flag and not template_text` 多条件跳过 | HIGH
+37 | 选题后关联关系更新 | 业务流程选取记录 | `select(Material)` 后无 `update(Material).workflow_id=` | HIGH
+38 | blob/二进制响应错误解析 | 前端文件下载 | `responseType: 'blob'` 无 `parseBlobError` | HIGH
+39 | 频道级配置覆盖全局 | 多频道场景 | `settings.X` 无 `if ch.x is not None` 频道级检查 | HIGH
+40 | 定时任务频道级触发 | 多频道调度 | `_cron_trigger` 无遍历活跃频道列表 | HIGH
+41 | el-switch 类型契约 | 前端开关字段 | `<el-switch` 无 `:active-value` 且后端字段为 int | HIGH
+42 | v-loading 状态恢复 | visibility 切换 | `handleVisibilityChange` 直接调用 load 无 nextTick | HIGH
+43 | 页面标题冗余 | 顶部导航已有页面名 | `<span class="page-title">` 且侧边栏已有同名菜单 | MEDIUM
 
 **状态分类**：CRITICAL（必须遵守）/ HIGH（强烈建议）/ MEDIUM（建议）/ LOW（可选）/ INFO（参考）
 

@@ -1,8 +1,9 @@
 /**
  * 应用入口：创建 Vue 实例 + 挂载插件
  *
- * 插件加载顺序：window-guard（全局拦截）→ Pinia → Router → Element Plus
+ * 插件加载顺序：window-guard（全局拦截）→ 主题初始化 → Pinia → Router → Element Plus
  * - window-guard 必须最先加载，在任何其他代码调用可能激活窗口的 API 之前安装 hook
+ * - 主题初始化紧随其后，避免 Vue 挂载前出现主题闪烁
  * - 全局注入安全的 ElMessage，防止最小化时弹窗激活浏览器窗口
  */
 // 全局页面可见性守卫：必须在所有其他模块之前加载，安装 window/alert/location 等 hook
@@ -20,6 +21,11 @@ import './styles/global.scss'
 
 // 全局安全的 ElMessage：页面隐藏/恢复中时静默丢弃，防止 DOM 插入激活最小化窗口
 import { ElMessage } from './utils/message'
+
+// 主题初始化：在 Vue 挂载前设置 data-theme 属性，避免主题闪烁
+// 此处直接读取 localStorage 并设置属性，无需等待 Pinia 初始化
+const savedTheme = localStorage.getItem('admin_theme') || 'macaron'
+document.documentElement.setAttribute('data-theme', savedTheme)
 
 const app = createApp(App)
 

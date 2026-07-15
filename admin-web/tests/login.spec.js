@@ -39,7 +39,7 @@ test.describe('登录流程', () => {
     await page.goto('/login')
 
     // 标题（显式超时避免 vite 首次编译延迟导致 flaky）
-    await expect(page.locator('.login-title')).toHaveText('20_News 运营后台', { timeout: 15000 })
+    await expect(page.locator('.login-title')).toHaveText('MorningBrief 运营后台', { timeout: 15000 })
     // 用户名/密码输入框存在
     await expect(page.getByPlaceholder('请输入用户名')).toBeVisible({ timeout: 15000 })
     await expect(page.getByPlaceholder('请输入密码')).toBeVisible({ timeout: 15000 })

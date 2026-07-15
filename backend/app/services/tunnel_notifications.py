@@ -6,7 +6,7 @@
 - 在子线程中用 asyncio.run 桥接异步 NotifierHub.send()，不阻塞 API 或自启动线程
 
 移植自 17_xianyu 的 tunnel_notifications.py，
-适配 20_News 的 NotifierHub + NotificationEvent 架构。
+适配 MorningBrief 的 NotifierHub + NotificationEvent 架构。
 """
 from __future__ import annotations
 

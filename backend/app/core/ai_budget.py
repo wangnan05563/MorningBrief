@@ -7,7 +7,10 @@
 三重预算控制：
 1. 每日 token 上限（默认 50 万）
 2. 每日费用上限（默认 $5）
-3. 每分钟频率上限（默认 20 次，滑动窗口）
+3. 每分钟频率上限（默认 60 次，滑动窗口，按 service_type 分桶）
+
+频率分桶：LLM 与 TTS 各自维护独立的滑动窗口，避免 TTS 密集调用挤占
+LLM 配额导致改写失败。token/费用上限仍为全局共享（每日总预算）。
 
 持久化：每条记录追加到 JSON 文件，服务重启后从文件回填今日记录，
 避免刷新页面/重启服务后预算计数归零被绕过。
@@ -55,14 +58,22 @@ class _DailySummary:
 # 全局状态（模块级单例，与 cache.manager 一致的模式）
 _lock = threading.Lock()
 _today_records: list[_UsageRecord] = []
-_minute_timestamps: list[float] = []  # 滑动窗口：最近 1 分钟的调用时间戳
+# 频率滑动窗口按 service_type 分桶：{"llm": [t1, t2], "tts": [t3]}
+# 避免 TTS 密集调用挤占 LLM 频率配额导致改写失败
+_minute_timestamps_by_service: dict[str, list[float]] = {}
 _daily_summary = _DailySummary()
 _last_persist_date: str = ""  # 上次持久化的日期，跨日时清空内存
 
 
 def _today_key() -> str:
-    """UTC 日期键，与 17_xianyu 对齐避免时区漂移。"""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    """本地日期键（香港时区 UTC+8）。
+
+    与项目其他模块对齐：rewriter/crawler/scheduler 均按本地日期筛选，
+    ai_budget 也必须用本地日期，否则本地跨日（UTC 仍为前一日）时
+    预算会错误累加两天的用量，导致 token 上限被提前触发。
+    """
+    from datetime import datetime as _dt
+    return _dt.now().strftime("%Y-%m-%d")
 
 
 def _budget_file_path() -> Path:
@@ -93,35 +104,48 @@ def _estimate_cost(
     )
 
 
-def check_budget() -> tuple[bool, str]:
+def check_budget(service_type: str | None = None) -> tuple[bool, str]:
     """检查是否允许发起下一次 AI 调用。
+
+    Args:
+        service_type: "llm" / "tts" 等，指定时只检查该 service 的频率桶；
+            None 时检查所有桶（任一超限即拒绝，用于通用检查/向后兼容）。
 
     Returns:
         (允许, 原因说明)。允许时原因为空字符串。
 
     在 rewriter._call_llm / synthesizer.synthesize_segment 调用前先检查。
+    频率按 service_type 分桶，token/费用为全局共享每日预算。
     """
     settings = get_settings()
     with _lock:
         _rollover_if_new_day()
 
-        # 频率：滑动窗口最近 1 分钟调用次数
+        # 频率：滑动窗口最近 1 分钟调用次数，按 service_type 分桶
         cutoff = time.time() - 60
-        _minute_timestamps[:] = [t for t in _minute_timestamps if t > cutoff]
-        if len(_minute_timestamps) >= settings.AI_BUDGET_RATE_LIMIT_PER_MIN:
-            return False, (
-                f"频率超限：每分钟最多 "
-                f"{settings.AI_BUDGET_RATE_LIMIT_PER_MIN} 次"
-            )
+        # 决定要检查哪些桶：指定 service_type 只查该桶，None 查所有桶
+        buckets_to_check = (
+            [service_type] if service_type
+            else list(_minute_timestamps_by_service.keys())
+        )
+        for svc in buckets_to_check:
+            ts_list = _minute_timestamps_by_service.get(svc, [])
+            # 原地清理过期时间戳，避免窗口堆积
+            ts_list[:] = [t for t in ts_list if t > cutoff]
+            if len(ts_list) >= settings.AI_BUDGET_RATE_LIMIT_PER_MIN:
+                return False, (
+                    f"频率超限：{svc} 每分钟最多 "
+                    f"{settings.AI_BUDGET_RATE_LIMIT_PER_MIN} 次"
+                )
 
-        # 每日 token 上限
+        # 每日 token 上限（全局共享，不分桶）
         if _daily_summary.total_tokens >= settings.AI_BUDGET_DAILY_TOKEN_LIMIT:
             return False, (
                 f"Token 超限：今日已用 {_daily_summary.total_tokens:,}，"
                 f"上限 {settings.AI_BUDGET_DAILY_TOKEN_LIMIT:,}"
             )
 
-        # 每日费用上限
+        # 每日费用上限（全局共享，不分桶）
         if _daily_summary.total_cost_usd >= settings.AI_BUDGET_DAILY_COST_LIMIT_USD:
             return False, (
                 f"费用超限：今日已用 ${_daily_summary.total_cost_usd:.2f}，"
@@ -162,7 +186,8 @@ def record_call(
     with _lock:
         _rollover_if_new_day()
         _today_records.append(record)
-        _minute_timestamps.append(time.time())
+        # 按 service_type 分桶记录频率时间戳，LLM/TTS 独立限流互不干扰
+        _minute_timestamps_by_service.setdefault(service_type, []).append(time.time())
         _daily_summary.total_calls += 1
         _daily_summary.total_tokens += input_tokens + output_tokens
         _daily_summary.total_cost_usd += cost
@@ -214,7 +239,7 @@ def _rollover_if_new_day() -> None:
 
     # 跨日：清空内存，从文件回填今日记录
     _today_records.clear()
-    _minute_timestamps.clear()
+    _minute_timestamps_by_service.clear()
     # 原地重置属性而非重新赋值，避免 global 声明遗漏
     _daily_summary.total_calls = 0
     _daily_summary.total_tokens = 0
@@ -231,6 +256,9 @@ def _load_today_from_file(today: str) -> None:
 
     服务重启后 _today_records 为空，若不回填则预算计数从 0 开始，
     可被绕过（重启服务即可重置预算）。
+
+    频率桶仅回填最近 60s 内的记录（滑动窗口语义），更早的记录
+    对频率限流无意义且会占用内存。
     """
     file_path = _budget_file_path()
     if not file_path.exists():
@@ -240,10 +268,15 @@ def _load_today_from_file(today: str) -> None:
     except (json.JSONDecodeError, OSError):
         return
 
+    # 频率窗口截止线：只回填最近 60s 内的记录
+    rate_cutoff = time.time() - 60
+
     for entry in data.get("records", []):
         try:
+            # 用本地时区解析 timestamp，与 _today_key 保持一致
+            # UTC 解析会导致本地跨日记录被错误归入前一日
             entry_date = datetime.fromtimestamp(
-                entry["timestamp"], tz=timezone.utc
+                entry["timestamp"]
             ).strftime("%Y-%m-%d")
         except (KeyError, ValueError, OSError):
             continue
@@ -265,6 +298,11 @@ def _load_today_from_file(today: str) -> None:
         _daily_summary.by_service[record.service_type] = (
             _daily_summary.by_service.get(record.service_type, 0) + 1
         )
+        # 频率桶仅回填滑动窗口内的记录，避免重启后频率限流失效
+        if record.timestamp > rate_cutoff and record.service_type:
+            _minute_timestamps_by_service.setdefault(
+                record.service_type, []
+            ).append(record.timestamp)
 
 
 def _persist_record(record: _UsageRecord) -> None:
@@ -311,7 +349,7 @@ def reset_budget() -> None:
     """
     with _lock:
         _today_records.clear()
-        _minute_timestamps.clear()
+        _minute_timestamps_by_service.clear()
         _daily_summary.total_calls = 0
         _daily_summary.total_tokens = 0
         _daily_summary.total_cost_usd = 0.0

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    20_News 图标生成脚本（PNG + ICO）
+    MorningBrief 图标生成脚本（PNG + ICO）
 .DESCRIPTION
     使用 .NET System.Drawing 绘制与 favicon.svg 相同的设计：
     圆角方形青色渐变背景 + 白色声波线条（播客新闻产品定位）
@@ -10,7 +10,7 @@
     - admin-web/public/apple-touch-icon.png (180x180)
     - admin-web/public/android-chrome-192x192.png
     - admin-web/public/android-chrome-512x512.png
-    - assets/20-news.ico（多尺寸：16/32/48/64/128/256）
+    - assets/MorningBrief.ico（多尺寸：16/32/48/64/128/256）
 .NOTES
     无需安装任何依赖，使用 Windows 自带 .NET GDI+。
     ICO 采用 PNG 编码（Vista+ 支持），文件更小且支持 256 色深。
@@ -139,7 +139,7 @@ foreach ($t in $pngTargets) {
 Write-Host "[generate-icons] 生成 ICO 文件..." -ForegroundColor Cyan
 
 $icoSizes = @(16, 32, 48, 64, 128, 256)
-$icoPath = Join-Path $assetsDir "20-news.ico"
+$icoPath = Join-Path $assetsDir "MorningBrief.ico"
 
 # 收集各尺寸 PNG 字节数据
 $pngDataList = @()
@@ -206,7 +206,7 @@ $icoBytes = $ms.ToArray()
 $bw.Dispose()
 $ms.Dispose()
 
-[System.IO.File]::WriteAllBytes((Resolve-Path $assetsDir).Path + "\20-news.ico", $icoBytes)
+[System.IO.File]::WriteAllBytes((Resolve-Path $assetsDir).Path + "\MorningBrief.ico", $icoBytes)
 Write-Host "  [OK] $icoPath ($($icoSizes.Count) sizes: $($icoSizes -join '/'))" -ForegroundColor Green
 
 Write-Host "[generate-icons] 完成" -ForegroundColor Cyan

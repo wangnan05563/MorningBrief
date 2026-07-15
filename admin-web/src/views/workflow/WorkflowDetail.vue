@@ -1,22 +1,27 @@
 <template>
   <div class="page-container workflow-detail">
-    <!-- 顶部：返回 + 标题 -->
+    <!-- 顶部：仅保留返回按钮，去掉页面标题（导航栏已显示页面名称）
+         spacer 占位把后续可能新增的按钮推到右侧 -->
     <div class="top-bar">
       <el-button :icon="ArrowLeft" plain @click="router.back()">返回</el-button>
-      <span class="page-title">工作流详情</span>
       <span class="spacer" />
     </div>
 
     <el-card v-loading="loading" shadow="never" class="info-card">
       <el-descriptions :column="3" border>
         <el-descriptions-item label="工作流 ID">{{ detail.workflow_id }}</el-descriptions-item>
+        <el-descriptions-item label="频道">
+          <!-- 频道可能因频道删除而悬空（ON DELETE SET NULL），显示占位而非空白 -->
+          <el-tag v-if="detail.channel_name" size="small" type="info">{{ detail.channel_name }}</el-tag>
+          <span v-else class="text-muted">默认</span>
+        </el-descriptions-item>
         <el-descriptions-item label="节目日期">{{ detail.episode_date }}</el-descriptions-item>
         <el-descriptions-item label="来源">{{ sourceLabel(detail.source) }}</el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="statusTagType(detail.status)">{{ statusLabel(detail.status) }}</el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="开始时间">{{ detail.started_at || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="结束时间">{{ detail.finished_at || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="开始时间">{{ formatTime(detail.started_at) }}</el-descriptions-item>
+        <el-descriptions-item label="结束时间">{{ formatTime(detail.finished_at) }}</el-descriptions-item>
       </el-descriptions>
 
       <el-alert
@@ -53,8 +58,12 @@
             <el-tag :type="stepTagType(row.status)" size="small">{{ stepStatusText(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="started_at" label="开始时间" min-width="170" />
-        <el-table-column prop="finished_at" label="结束时间" min-width="170" />
+        <el-table-column label="开始时间" min-width="170">
+          <template #default="{ row }">{{ formatTime(row.started_at) }}</template>
+        </el-table-column>
+        <el-table-column label="结束时间" min-width="170">
+          <template #default="{ row }">{{ formatTime(row.finished_at) }}</template>
+        </el-table-column>
         <el-table-column label="耗时(秒)" width="110">
           <template #default="{ row }">{{ formatDuration(row) }}</template>
         </el-table-column>
@@ -245,7 +254,7 @@
                   <el-descriptions-item label="状态">
                     <el-tag size="small" :type="reviewStatusType(review.data.status)">{{ reviewStatusLabel(review.data.status) }}</el-tag>
                   </el-descriptions-item>
-                  <el-descriptions-item label="创建时间">{{ review.data.created_at }}</el-descriptions-item>
+                  <el-descriptions-item label="创建时间">{{ formatTime(review.data.created_at) }}</el-descriptions-item>
                 </el-descriptions>
                 <div class="panel-toolbar">
                   <el-button
@@ -356,12 +365,13 @@
  * - stitch → 成品音频（试听/删除）
  * - review → 审核记录（查看/改状态）
  */
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, RefreshRight, Plus, Edit, Delete, Refresh } from '@element-plus/icons-vue'
 import api from '../../api'
 import { subscribe } from '../../utils/sse'
+import { formatTime } from '../../utils/format'
 import {
   listMaterials, getMaterial, createMaterial, updateMaterial, deleteMaterial,
 } from '../../api/materials'
@@ -438,6 +448,8 @@ async function loadDetail() {
   loading.value = true
   try {
     detail.value = await api.get(`/workflows/${route.params.id}`)
+    // 根据最新状态启停轮询：工作流非终态时启动，终态时停止
+    startPollingIfNeeded()
   } catch { /* 拦截器已提示 */ } finally {
     loading.value = false
   }
@@ -658,7 +670,10 @@ async function ensureTtsBlob(row) {
   row.loading = true
   try {
     row.blobUrl = await getTtsAudioUrl(route.params.id, row.name)
-  } catch { /* 拦截器已提示 */ } finally {
+  } catch (err) {
+    // blob 请求为 silent，需手动提示
+    ElMessage.error(err.message || '音频加载失败')
+  } finally {
     row.loading = false
   }
 }
@@ -669,7 +684,9 @@ async function ensureEpisodeBlob() {
   episodePlayer.value.loading = true
   try {
     episodePlayer.value.blobUrl = await getEpisodeAudioUrl(route.params.id)
-  } catch { /* 拦截器已提示 */ } finally {
+  } catch (err) {
+    ElMessage.error(err.message || '成品音频加载失败')
+  } finally {
     episodePlayer.value.loading = false
   }
 }
@@ -790,14 +807,71 @@ function setupSSE() {
   )
 }
 
+// ===== 轮询兜底：当前工作流非终态时 5s 轮询，SSE 断连时仍能感知状态变化 =====
+let pollTimer = null
+const TERMINAL_STATUSES = new Set(['success', 'failed', 'cancelled'])
+
+function isWorkflowActive() {
+  return !TERMINAL_STATUSES.has(detail.value.status)
+}
+
+function startPollingIfNeeded() {
+  if (pollTimer && !isWorkflowActive()) {
+    clearInterval(pollTimer)
+    pollTimer = null
+    return
+  }
+  if (!pollTimer && isWorkflowActive()) {
+    pollTimer = setInterval(() => {
+      if (!document.hidden) loadDetail()
+    }, 5000)
+  }
+}
+
+// 页面恢复可见时刷新：弥补隐藏期间错过的 SSE 事件
+// 根因：页面最小化时浏览器暂停 CSS transition，v-loading mask 的 after-leave
+// 回调不触发，DOM 残留；恢复可见时 loading 已是 false，赋值 false 不触发 Vue 更新
+// 修复：强制 toggle（true→nextTick→false）触发 v-loading update 清理残留 mask，
+// 配合 themes.scss 中 .el-loading-mask transition:none 让 mask 移除变为同步操作
+function handleVisibilityChange() {
+  if (!document.hidden) {
+    // 强制设 true，触发 v-loading 指令 update 钩子（即使之前是 true 也无副作用）
+    loading.value = true
+    materials.value.loading = true
+    audioFiles.value.loading = true
+    script.value.loading = true
+    review.value.loading = true
+    // nextTick 让 Vue 处理 loading=true 的 DOM 更新（创建/复用 mask）
+    nextTick(() => {
+      // 设 false 触发 mask 隐藏（transition 已禁用，同步移除 DOM）
+      loading.value = false
+      materials.value.loading = false
+      audioFiles.value.loading = false
+      script.value.loading = false
+      review.value.loading = false
+      // rAF 等待浏览器完成一次真实 paint 后再加载新数据
+      requestAnimationFrame(() => {
+        loadDetail()
+        startPollingIfNeeded()
+      })
+    })
+  }
+}
+
 onMounted(() => {
   loadDetail()
   setupSSE()
+  document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 onUnmounted(() => {
   unsubscribeSseHandlers.forEach((fn) => fn())
   unsubscribeSseHandlers = []
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
   // 清理所有 blob URL，避免内存泄漏
   revokeAllBlobUrls()
 })
@@ -813,13 +887,13 @@ onUnmounted(() => {
     gap: 12px;
     margin-bottom: 16px;
 
-    .page-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: $color-text-primary;
-    }
-
     .spacer { flex: 1; }
+  }
+
+  // 频道悬空时的占位文字：与列表页样式保持一致
+  .text-muted {
+    font-size: 13px;
+    color: $color-text-secondary;
   }
 
   .info-card, .steps-card, .table-card, .products-card, .action-card {

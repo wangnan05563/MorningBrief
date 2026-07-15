@@ -1,4 +1,4 @@
-﻿# ===== 20_News 前端代码审查技能配置示例 v1.0.0 =====
+﻿# ===== MorningBrief 前端代码审查技能配置示例 v1.0.0 =====
 # 本文件为配置模板，复制为 config.yaml 后按项目实际情况修改
 # 所有评审规则、硬约束、项目规范均通过本文件管理，技能本身不含硬编码值
 # 完整审查维度对照见 SKILL.md（15 维度）
@@ -6,7 +6,7 @@
 # --- 评审范围 ---
 scope:
   # 包含的路径（支持 glob）
-  # 20_News 项目包含两套前端：运营后台（admin-web）+ 微信小程序（miniprogram）
+  # MorningBrief 项目包含两套前端：运营后台（admin-web）+ 微信小程序（miniprogram）
   include_paths:
     - "admin-web/src/**/*.vue"      # Vue 3 组件
     - "admin-web/src/**/*.js"       # JS 模块（router/api/stores/utils）
@@ -89,7 +89,7 @@ checklist:
 
 # --- 硬约束检查（可扩展）---
 # 每条规则会在代码库中扫描，违规会写入报告
-# 这些规则来源于 20_News 项目实际前端代码审查复盘
+# 这些规则来源于 MorningBrief 项目实际前端代码审查复盘
 # 新增规则需包含：name（唯一标识）/pattern（正则）/message（提示）/severity（级别）/auto_fix（是否自动修复）
 hard_constraints:
   rules:
@@ -197,7 +197,7 @@ hard_constraints:
   # 硬约束违规时是否阻止合并
   block_on_violation: true
 
-# --- 抽象建议阈值（20_News 项目特色）---
+# --- 抽象建议阈值（MorningBrief 项目特色）---
 # 当重复代码达到以下阈值时，建议抽取共享组件/常量/纯函数
 abstraction_thresholds:
   # 重复内联样式达到 N 处时，建议抽取样式常量或共享组件

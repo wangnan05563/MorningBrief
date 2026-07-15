@@ -853,7 +853,7 @@
                 "height": 27
               },
               "snippet": "<span data-v-23e4d989=\"\" class=\"logo-text\">",
-              "nodeLabel": "20_News",
+              "nodeLabel": "MorningBrief",
               "explanation": "Fix any of the following:\n  Element has insufficient color contrast of 2.76 (foreground color: #5ba89b, background color: #fdfefe, font size: 15.0pt (20px), font weight: bold). Expected contrast ratio of 3:1"
             },
             "subItems": {
@@ -874,7 +874,7 @@
                       "height": 940
                     },
                     "snippet": "<aside data-v-23e4d989=\"\" class=\"el-aside sidebar glass\" style=\"--el-aside-width: 220px;\">",
-                    "nodeLabel": "20_News\n内容审核\n广告素材\n投放规则\n排期日历\n数据统计\n工作流监控\n内网穿透\nAI 服务\n数据库维护\n系统清理"
+                    "nodeLabel": "MorningBrief\n内容审核\n广告素材\n投放规则\n排期日历\n数据统计\n工作流监控\n内网穿透\nAI 服务\n数据库维护\n系统清理"
                   }
                 },
                 {
@@ -2981,7 +2981,7 @@
           },
           {
             "index": "17",
-            "line": "    <title>20_News 运营后台</title>",
+            "line": "    <title>MorningBrief 运营后台</title>",
             "message": "Syntax not understood"
           },
           {

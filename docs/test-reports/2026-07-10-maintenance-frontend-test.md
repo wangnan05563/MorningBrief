@@ -114,7 +114,7 @@
 
 ### 修复的文件
 
-1. [maintenance.py](file:///d:/code/otherProjects/20_News/backend/app/routers/admin/maintenance.py) - 路由层 per-request 实例化 + 移除重复审计调用 + 补充 admin_name 参数
+1. [maintenance.py](file:///d:/code/otherProjects/MorningBrief/backend/app/routers/admin/maintenance.py) - 路由层 per-request 实例化 + 移除重复审计调用 + 补充 admin_name 参数
 
 ## 7. 测试结论
 

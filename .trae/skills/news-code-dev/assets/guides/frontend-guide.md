@@ -1,6 +1,6 @@
 # 前端开发指南
 
-本文档面向 20_News 项目前端开发，涵盖 Vue 3（运营后台）和微信小程序的开发实践。
+本文档面向 MorningBrief 项目前端开发，涵盖 Vue 3（运营后台）和微信小程序的开发实践。
 
 ## 1. Vue 3 开发规范
 
@@ -597,7 +597,7 @@ App({
 const audioManager = wx.getBackgroundAudioManager()
 
 audioManager.title = '新闻播报'
-audioManager.epname = '20_News'
+audioManager.epname = 'MorningBrief'
 audioManager.singer = 'AI主播'
 
 audioManager.onPlay(() => {

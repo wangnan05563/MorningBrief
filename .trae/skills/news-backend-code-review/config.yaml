@@ -199,6 +199,80 @@ hard_constraints:
     severity: HIGH
     auto_fix: false
     category: config_four_way
+  - name: timezone_consistency
+    pattern: datetime\.now\(timezone\.utc\)
+    message: 跨模块时间判定必须使用同一时区源，禁止 ai_budget 用 UTC 而其他模块用本地时间
+    severity: CRITICAL
+    auto_fix: false
+    category: timezone
+    exceptions:
+    - app/core/timeutil.py
+  - name: cascade_cleanup_completeness
+    pattern: (delete\(.*\)|db\.delete\(.*\))
+    message: 删除主表记录时必须同步处理从表（material/crawler_dedup/script/review），避免孤儿记录锁死后续流程
+    severity: CRITICAL
+    auto_fix: false
+    category: cascade_cleanup
+  - name: zero_result_fallback
+    pattern: if\s+\w+_count\s*==\s*0.*raise
+    message: 查询返回 0 条不一定是错误，应先检查可用历史/回退资源再决定是否报错
+    severity: HIGH
+    auto_fix: false
+    category: zero_result_fallback
+  - name: dynamic_injection_not_hardcoded
+    pattern: if\s+\w+\s+and\s+not\s+template_text
+    message: 配置开关应直接控制后缀追加，不应依赖模板存在性判断（has_template 会绕过开关）
+    severity: HIGH
+    auto_fix: false
+    category: dynamic_injection
+  - name: selection_must_update_relation
+    pattern: select\(Material\)
+    message: 选题后必须 UPDATE material.workflow_id，否则详情页按 workflow_id 过滤查不到数据
+    severity: HIGH
+    auto_fix: false
+    category: relation_update
+  - name: blob_response_error_parsing
+    pattern: responseType.*blob
+    message: blob 请求错误分支 error.response.data 是 Blob，需 blob.text() 解析 JSON 获取真实 message
+    severity: HIGH
+    auto_fix: false
+    category: blob_error
+  - name: channel_level_config_override
+    pattern: settings\.(BGM_VOLUME|SEGMENT_GAP_SEC|BGM_PATH)
+    message: 业务参数应支持频道级覆盖（ch.xxx is not None 时覆盖 settings），不能只用全局 settings
+    severity: HIGH
+    auto_fix: false
+    category: channel_override
+  - name: cron_channel_level_trigger
+    pattern: _cron_trigger
+    message: 全局 cron 触发时必须为所有未配置独立定时的活跃频道各触发一个带 channel_id 的工作流
+    severity: HIGH
+    auto_fix: false
+    category: cron_channel_trigger
+  - name: ai_budget_timezone
+    pattern: ai_budget.*timezone\.utc
+    message: ai_budget 按"日"重置 token 用量必须用本地时间，UTC 会导致跨日额度累加错误
+    severity: CRITICAL
+    auto_fix: false
+    category: ai_budget_timezone
+  - name: crawler_dedup_orphan_cleanup
+    pattern: _cleanup_crawler_dedup
+    message: 定时清理任务除清理过期记录外，必须清理 url NOT IN material 的孤儿记录
+    severity: HIGH
+    auto_fix: false
+    category: dedup_orphan
+  - name: duration_range_dynamic
+    pattern: _get_duration_range
+    message: 音频时长校验范围应动态计算（target×0.80 到 target×1.20），禁止固定 ±15%
+    severity: HIGH
+    auto_fix: false
+    category: duration_range
+  - name: channel_field_migration_sync
+    pattern: segment_gap_sec|enable_thinking_question
+    message: Channel 模型新增字段必须 4 层同步：model → migration → service → router → frontend
+    severity: HIGH
+    auto_fix: false
+    category: channel_field_sync
 checklist:
   layering:
     enabled: true

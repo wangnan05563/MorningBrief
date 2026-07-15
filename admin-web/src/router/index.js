@@ -100,6 +100,12 @@ const routes = [
         meta: { title: 'AI 服务', icon: 'Cpu', requireRole: 'admin' },
       },
       {
+        path: 'notification',
+        name: 'NotificationConfig',
+        component: () => import('../views/notification/NotificationConfig.vue'),
+        meta: { title: '通知管理', icon: 'Bell', requireRole: 'admin' },
+      },
+      {
         path: 'tools/calculator',
         name: 'ParamCalculator',
         component: () => import('../views/tools/ParamCalculator.vue'),

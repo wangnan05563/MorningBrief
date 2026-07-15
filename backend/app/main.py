@@ -60,6 +60,8 @@ from app.routers.admin.feedbacks import router as b_feedbacks_router
 from app.routers.admin.db_admin import router as b_db_admin_router
 from app.routers.admin.maintenance import router as b_maintenance_router
 from app.routers.admin.backup import router as b_backup_router
+# 通知管理（钉钉消息通知，仅 admin）
+from app.routers.admin.notification import router as b_notification_router
 # 内部路由（工作流调度）
 from app.routers.internal.workflow import router as internal_workflow_router
 
@@ -88,7 +90,7 @@ async def _seed_default_admin() -> None:
     """首次启动自动 seed 默认 admin 用户（幂等）。
 
     解决 dev/exe 模式数据库路径不一致导致登录失败的问题：
-    seed_admin.py 默认路径曾指向 dist/20-news/data/news.db，
+    seed_admin.py 默认路径曾指向 dist/MorningBrief/data/news.db，
     与开发态运行时 backend/data/news.db 不一致。
     在 lifespan 中调用确保无论何种模式启动，admin 用户都被创建。
     """
@@ -138,6 +140,12 @@ async def _migrate_channel_schema() -> None:
             ("outro_prompt", "TEXT"),
             ("constraint_prompt", "TEXT"),
             ("rewrite_template", "TEXT"),
+            ("bgm_path", "TEXT"),
+            ("bgm_volume", "REAL"),
+            ("segment_gap_sec", "REAL"),
+            ("enable_thinking_question", "INTEGER"),
+            ("rss_sources", "TEXT"),
+            ("keywords", "TEXT"),
         ]
         added = 0
         for col_name, col_type in new_columns:
@@ -149,6 +157,33 @@ async def _migrate_channel_schema() -> None:
             logger.info("[startup] channel 表迁移完成，新增 %d 列", added)
     except Exception as e:
         logger.warning("[startup] channel 表迁移失败: %s", e)
+    finally:
+        conn.close()
+
+
+async def _migrate_material_schema() -> None:
+    """素材表结构迁移：为已存在的 material 表追加 channel_id 列（幂等）。
+
+    SQLite 的 create_all 不会修改已存在表结构，新增字段需显式 ALTER TABLE。
+    channel_id 用于频道级素材隔离：crawler 入库时写入频道 ID，rewriter 按频道选题。
+    历史遗留数据 channel_id 为 NULL，rewriter 回退到全局素材池兼容旧数据。
+    """
+    import sqlite3
+    from app.paths import resolve_db_path
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(material)")
+        existing_cols = {row[1] for row in cur.fetchall()}
+
+        if "channel_id" not in existing_cols:
+            cur.execute("ALTER TABLE material ADD COLUMN channel_id INTEGER")
+            conn.commit()
+            logger.info("[startup] material 表迁移完成，新增 channel_id 列")
+    except Exception as e:
+        logger.warning("[startup] material 表迁移失败: %s", e)
     finally:
         conn.close()
 
@@ -204,11 +239,17 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("[startup] 自动创建默认 admin 用户失败: %s", e)
 
-    # channel 表结构迁移（幂等追加 schedule_time / prompt 字段）
+    # channel 表结构迁移（幂等追加 schedule_time / prompt / rss_sources / keywords 字段）
     try:
         await _migrate_channel_schema()
     except Exception as e:
         logger.warning("[startup] channel 表迁移失败: %s", e)
+
+    # material 表结构迁移（幂等追加 channel_id 字段，用于频道级素材隔离）
+    try:
+        await _migrate_material_schema()
+    except Exception as e:
+        logger.warning("[startup] material 表迁移失败: %s", e)
 
     # 自动 seed 默认频道（幂等，确保工作流监控页频道选项非空）
     try:
@@ -225,6 +266,18 @@ async def lifespan(app: FastAPI):
             await svc.apply_config_to_settings()
     except Exception as e:
         logger.warning("[startup] 加载 AI 配置失败，使用 .env 默认值: %s", e)
+
+    # 初始化通知预设模板（幂等：已存在的 event_type 跳过）
+    # 与 AI 配置同一 session，避免重复创建连接
+    try:
+        from app.services.notification.template_service import TemplateService
+        async with AsyncSessionLocal() as session:
+            tpl_svc = TemplateService(session)
+            inserted = await tpl_svc.seed_preset_templates()
+            if inserted > 0:
+                logger.info("[startup] 通知预设模板已 seed，新增 %d 条", inserted)
+    except Exception as e:
+        logger.warning("[startup] 通知预设模板初始化失败: %s", e)
 
     # 启动 APScheduler 定时任务（工作流调度 + 播放日志落库 + 黑名单清理）
     from app.services.workflow_scheduler import workflow_scheduler
@@ -289,7 +342,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     """应用工厂，便于测试时创建独立实例。"""
     app = FastAPI(
-        title="20_News 语音新闻播报 API",
+        title="MorningBrief 语音新闻播报 API",
         version="1.0.0",
         description="全自动 AI 内容生产工作流 + 微信小程序播报服务",
         docs_url="/docs" if settings.is_dev else None,
@@ -343,6 +396,8 @@ def create_app() -> FastAPI:
     app.include_router(b_db_admin_router)
     app.include_router(b_maintenance_router)
     app.include_router(b_backup_router)
+    # 通知管理（钉钉消息通知）
+    app.include_router(b_notification_router)
     # 内部（工作流调度）
     app.include_router(internal_workflow_router)
 
@@ -355,6 +410,16 @@ def create_app() -> FastAPI:
         audio_dir = Path("data/audio_cache")
     audio_dir.mkdir(parents=True, exist_ok=True)
     app.mount("/audio", StaticFiles(directory=str(audio_dir)), name="audio")
+
+    # 挂载 /bgm 静态目录：频道 BGM 文件（预制 + 用户上传），前端试听用
+    # 目录与 paths.resolve_bgm_dir() 一致，开发态/打包态均自动创建
+    try:
+        from app.paths import resolve_bgm_dir
+        bgm_dir = resolve_bgm_dir()
+    except Exception:
+        bgm_dir = Path("data/bgm")
+    bgm_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/bgm", StaticFiles(directory=str(bgm_dir)), name="bgm")
 
     # 挂载前端 SPA（B 端运营后台）
     # API 路由已在前注册，不会被覆盖；未匹配的 GET 请求 fallback 到 index.html

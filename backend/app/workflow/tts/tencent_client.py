@@ -71,6 +71,8 @@ class TencentTTSProvider(TTSProvider):
         secret_key: Optional[str] = None,
         region: Optional[str] = None,
         voice_type: Optional[int] = None,
+        volume: Optional[int] = None,
+        speed: Optional[int] = None,
     ):
         """初始化腾讯云 TTS provider。
 
@@ -82,6 +84,8 @@ class TencentTTSProvider(TTSProvider):
             secret_key: 腾讯云 SecretKey，留空读 settings
             region: 地域，留空读 settings
             voice_type: 音色 ID，留空读 settings
+            volume: 音量 [-10, 10]，留空读 settings（试音时传入临时值）
+            speed: 语速 [-2, 6]，留空读 settings（试音时传入临时值）
         """
         self._secret_id = (
             secret_id
@@ -95,6 +99,9 @@ class TencentTTSProvider(TTSProvider):
         )
         self._region = region or settings.TENCENT_TTS_REGION
         self._voice_type = voice_type or settings.TENCENT_TTS_VOICE_TYPE
+        # 音量/语速：显式参数优先，未传则回退到 settings（试音时传入临时值）
+        self._volume = volume if volume is not None else settings.TENCENT_TTS_VOLUME
+        self._speed = speed if speed is not None else settings.TENCENT_TTS_SPEED
 
     async def synthesize(
         self,
@@ -155,14 +162,14 @@ class TencentTTSProvider(TTSProvider):
         # 构造请求体
         payload = {
             "Text": text,
-            "SessionId": f"20news-{uuid.uuid4().hex[:12]}",
+            "SessionId": f"MorningBrief-{uuid.uuid4().hex[:12]}",
             "ModelType": 1,
             "PrimaryLanguage": 1,  # 中文
             "VoiceType": actual_voice,
             "SampleRate": sample_rate,
             "Codec": format if format in ("mp3", "wav", "pcm") else "mp3",
-            "Volume": settings.TENCENT_TTS_VOLUME,
-            "Speed": settings.TENCENT_TTS_SPEED,
+            "Volume": self._volume,
+            "Speed": self._speed,
         }
 
         # 签名 + 发送请求

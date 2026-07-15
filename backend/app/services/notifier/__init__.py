@@ -13,12 +13,13 @@
 - 新增 email 渠道（SMTP），适配新闻系统运维告警场景
 - 保留 quiet_hours 免打扰（critical 仍可达）
 """
-from app.services.notifier.base import INotifier, NotifyResult
+from app.services.notifier.base import INotifier, NotificationEvent, NotifyResult
 from app.services.notifier.hub import NotifierHub, get_notifier_hub
 from app.services.notifier.registry import NotifierRegistry, registry
 
 __all__ = [
     "INotifier",
+    "NotificationEvent",
     "NotifyResult",
     "NotifierRegistry",
     "registry",

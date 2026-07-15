@@ -2,7 +2,10 @@
 
 提供工作流产物中音频文件的列表、流式播放与删除能力：
 - TTS 片段：data/audio_cache/tts/{workflow_id}/*.mp3
-- 拼接成品：data/audio_cache/episodes/{episode_date_str}/final.mp3
+- 拼接成品：data/audio_cache/episodes/{episode_date_str}/{channel_slug}_{workflow_id}.mp3
+
+成品命名规则（V1.2+）：含频道名 + workflow_id，避免同日多频道/重试覆盖。
+旧版 final.mp3 已废弃，查找时按 workflow_id 后缀匹配。
 
 所有路径均通过 resolve_data_dir() 派生，避免硬编码。
 """
@@ -34,9 +37,18 @@ def _tts_dir(workflow_id: str) -> Path:
     return _AUDIO_ROOT / "tts" / workflow_id
 
 
-def _episode_file(episode_date_str: str) -> Path:
-    """节目日期对应的成品音频路径。"""
-    return _AUDIO_ROOT / "episodes" / episode_date_str / "final.mp3"
+def _find_episode_file(episode_date_str: str, workflow_id: str) -> Path | None:
+    """按 workflow_id 后缀匹配成品音频文件。
+
+    新命名规则：{channel_slug}_{workflow_id}.mp3，channel_slug 长度可变，
+    用 glob "*_{workflow_id}.mp3" 匹配，避免依赖频道名反查。
+    返回第一个匹配项（理论上唯一），无匹配返回 None。
+    """
+    ep_dir = _AUDIO_ROOT / "episodes" / episode_date_str
+    if not ep_dir.is_dir():
+        return None
+    matches = list(ep_dir.glob(f"*_{workflow_id}.mp3"))
+    return matches[0] if matches else None
 
 
 def _check_filename_safe(filename: str) -> None:
@@ -77,16 +89,16 @@ async def list_audio(
                     "url": f"/admin/api/v1/workflows/{workflow_id}/audio/tts/{f.name}",
                 })
 
-    # 成品音频需要 episode_date 派生路径
+    # 成品音频按 workflow_id 后缀匹配（命名含频道名+workflow_id）
     result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
     wf = result.scalar_one_or_none()
     episode_file_info = None
     if wf is not None:
         episode_date_str = wf.episode_date.strftime("%Y%m%d")
-        ep_path = _episode_file(episode_date_str)
+        ep_path = _find_episode_file(episode_date_str, workflow_id)
         episode_file_info = {
-            "path": _rel_path(ep_path),
-            "exists": ep_path.exists(),
+            "path": _rel_path(ep_path) if ep_path else None,
+            "exists": ep_path.is_file() if ep_path else False,
         }
 
     return success(data={
@@ -118,7 +130,7 @@ async def stream_episode(
 ):
     """流式播放成品音频。
 
-    根据 workflow.episode_date 定位 final.mp3 路径。
+    按 workflow_id 后缀匹配成品文件（命名含频道名+workflow_id）。
     """
     result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
     wf = result.scalar_one_or_none()
@@ -126,8 +138,8 @@ async def stream_episode(
         raise NotFoundError("工作流不存在")
 
     episode_date_str = wf.episode_date.strftime("%Y%m%d")
-    ep_path = _episode_file(episode_date_str)
-    if not ep_path.is_file():
+    ep_path = _find_episode_file(episode_date_str, workflow_id)
+    if not ep_path or not ep_path.is_file():
         raise NotFoundError("成品音频尚未生成")
 
     return FileResponse(path=str(ep_path), media_type="audio/mpeg")
@@ -157,7 +169,7 @@ async def delete_episode(
 ):
     """删除成品音频文件（仅管理员）。
 
-    需要查 workflow.episode_date 确定文件路径。
+    按 workflow_id 后缀匹配成品文件路径。
     """
     result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
     wf = result.scalar_one_or_none()
@@ -165,8 +177,8 @@ async def delete_episode(
         raise NotFoundError("工作流不存在")
 
     episode_date_str = wf.episode_date.strftime("%Y%m%d")
-    ep_path = _episode_file(episode_date_str)
-    if not ep_path.is_file():
+    ep_path = _find_episode_file(episode_date_str, workflow_id)
+    if not ep_path or not ep_path.is_file():
         raise NotFoundError("成品音频尚未生成")
 
     ep_path.unlink()

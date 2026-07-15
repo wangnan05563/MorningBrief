@@ -1,4 +1,4 @@
-﻿# 20_News push to GitHub via Git Database API (batch commit)
+﻿# MorningBrief push to GitHub via Git Database API (batch commit)
 # Strategy: 1) Use Contents API to init repo with .gitignore (handles empty repo)
 #           2) Use Git Database API (blobs/tree/commit) to push all files in one commit
 # Usage: powershell -ExecutionPolicy Bypass -File scripts\push_to_github.ps1 -Token <PAT>
@@ -7,9 +7,9 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$Token,
     [string]$Owner = "wangnan05563",
-    [string]$Repo  = "20_News",
+    [string]$Repo  = "MorningBrief",
     [string]$Branch = "main",
-    [string]$CommitMessage = "chore: init 20_News project"
+    [string]$CommitMessage = "chore: init MorningBrief project"
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,7 +20,7 @@ $Headers = @{
     "X-GitHub-Api-Version" = "2022-11-28"
 }
 
-Write-Host "=== Push 20_News to GitHub ===" -ForegroundColor Cyan
+Write-Host "=== Push MorningBrief to GitHub ===" -ForegroundColor Cyan
 Write-Host "Repo: $Owner/$Repo (branch: $Branch)"
 Write-Host ""
 

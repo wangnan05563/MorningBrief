@@ -1,18 +1,18 @@
-﻿---
+---
 name: "news-frontend-code-review"
-description: "对 20_News 项目前端代码（admin-web/src/ 下 Vue 3/Element Plus 文件 + miniprogram/ 下微信小程序文件）进行全面评审与逻辑审查，覆盖组件规范、状态管理、API 契约、路由设计、类型安全、性能、可访问性、前后端字段契约、小程序生命周期、音频播放管理等维度。当用户要求'审查/检查/走查/把关/review/评估/看看对不对/规范不规范'前端 Vue/JS 代码、'.vue/.js 文件修改'、'迭代发布前前端走查'，或提到'前端评审/frontend review/Vue 代码审查/小程序代码审查'时调用。仅审查前端文件；纯后端 .py 文件审查请改用 news-backend-code-review。"
-whenToUse: "需要审查 20_News 前端代码（admin-web/src/ 下 .vue/.js 文件 + miniprogram/ 下 .js/.wxml/.wxss 文件）是否符合项目规范"
+description: "对 MorningBrief 项目前端代码（admin-web/src/ 下 Vue 3/Element Plus 文件 + miniprogram/ 下微信小程序文件）进行全面评审与逻辑审查，覆盖组件规范、状态管理、API 契约、路由设计、类型安全、性能、可访问性、前后端字段契约、小程序生命周期、音频播放管理等维度。当用户要求'审查/检查/走查/把关/review/评估/看看对不对/规范不规范'前端 Vue/JS 代码、'.vue/.js 文件修改'、'迭代发布前前端走查'，或提到'前端评审/frontend review/Vue 代码审查/小程序代码审查'时调用。仅审查前端文件；纯后端 .py 文件审查请改用 news-backend-code-review。"
+whenToUse: "需要审查 MorningBrief 前端代码（admin-web/src/ 下 .vue/.js 文件 + miniprogram/ 下 .js/.wxml/.wxss 文件）是否符合项目规范"
 triggers: "前端代码 走查/审查/审核/把关/review/检查/评估 | .vue/.js 文件 修改/变更/迭代 走查 | 迭代发布前 前端 代码 走查 | 这段前端代码 写得对不对/规范不规范 | Vue/小程序 代码 review | 页面/组件/Store/路由 代码 审查"
-version: "1.5.0"
-updated: "2026-07-12"
+version: "1.6.0"
+updated: "2026-07-15"
 config: "config.yaml"
 scripts: "scripts/auto-scan.ps1"
 template: "templates/report-template.md"
 ---
 
-# 20_News 前端代码审查
+# MorningBrief 前端代码审查
 
-对 20_News 项目前端代码进行全面的代码评审及逻辑审查，覆盖**运营后台（admin-web/，Vue 3 + Element Plus + Vite + Pinia）**与**微信小程序（miniprogram/，原生小程序）**两套前端代码。评审涵盖 **36 个维度**：目录结构、命名规范、Vue 3 组件规范、Element Plus 规范、Pinia 状态管理、API 调用规范、路由设计、前后端字段契约、小程序生命周期、小程序音频播放管理、小程序 API 层、性能、可访问性、代码质量、错误处理。
+对 MorningBrief 项目前端代码进行全面的代码评审及逻辑审查，覆盖**运营后台（admin-web/，Vue 3 + Element Plus + Vite + Pinia）**与**微信小程序（miniprogram/，原生小程序）**两套前端代码。评审涵盖 **36 个维度**：目录结构、命名规范、Vue 3 组件规范、Element Plus 规范、Pinia 状态管理、API 调用规范、路由设计、前后端字段契约、小程序生命周期、小程序音频播放管理、小程序 API 层、性能、可访问性、代码质量、错误处理。
 
 ## 配置驱动
 
@@ -341,7 +341,7 @@ function request(options) {
 
 ## 四维度复盘
 
-> 基于本次 20_News 前端代码审查实践，使用 Sequential Thinking 4 维度复盘法沉淀可复用的工作流模板。
+> 基于本次 MorningBrief 前端代码审查实践，使用 Sequential Thinking 4 维度复盘法沉淀可复用的工作流模板。
 
 ### 维度 1：成功执行任务的完整步骤
 
@@ -635,6 +635,57 @@ pwsh .trae/skills/news-frontend-code-review/scripts/auto-scan.ps1
 
 检查信号：Grep 安装成功后无自动 re-check 逻辑
 修复建议：安装完成后调用 check_ffmpeg 验证，成功显示绿色勾 + 版本号，失败显示错误信息
+
+---
+
+## 新增审查维度：类型契约与状态恢复
+
+> 以下维度来源于 2026-07-15 前端迭代复盘，覆盖 el-switch 类型契约、blob 请求错误处理、v-loading 状态恢复、页面标题冗余、频道级配置控件对齐等高频故障场景。配置详见 `config.yaml#hard_constraints.rules` 对应条目。
+
+### 维度 37：el-switch 类型契约（int vs bool）
+
+**为什么**：后端返回 `enabled: 1`（int），但 el-switch 默认 `active-value=true`（bool）。JavaScript 严格相等 `1 !== true`，el-switch 认为值不等于 active-value，显示为关闭状态。用户切换开关时 emit `true`（bool），后端存 1，刷新后返回 1，el-switch 又显示关闭——死循环，配置无法持久化。
+
+检查信号：Grep `<el-switch` 无 `:active-value` 且对应后端字段为 int 类型（如 enabled/status/is_active）
+修复建议：el-switch 显式配置 `:active-value="1" :inactive-value="0"` 与后端 int 类型一致
+适用场景：所有后端返回 int（0/1）的开关字段
+不适用场景：后端已返回 bool（true/false）
+
+### 维度 38：blob 请求超时与错误解析
+
+**为什么**：axios 全局 `timeout=15000ms`（15s）对大文件（成品音频 11MB+）下载可能不够，导致 Network Error。且 `responseType: 'blob'` 的请求返回错误时，`error.response.data` 是 Blob 类型，axios 拦截器无法读取 `.message` 字段，前端只能显示 "Network Error"，无法定位真实错误（如 404 文件不存在、500 服务器错误）。
+
+检查信号：Grep `responseType: 'blob'` 无 `timeout: 60000` 且无 `parseBlobError` 函数
+修复建议：blob 请求独立配置 `timeout: 60000` + `silent: true`，catch 中检查 `err.response?.data instanceof Blob`，是则 `await blob.text()` 解析 JSON 获取真实 message，调用方手动 `ElMessage.error`
+适用场景：文件下载、音频流、图片请求
+不适用场景：JSON 响应（默认 responseType）
+
+### 维度 39：v-loading 状态恢复（visibility 切换）
+
+**为什么**：页面 visibility 切换（窗口最小化/切 tab 再切回）时，`handleVisibilityChange` 立即调用 `loadDetail()` 会触发 `loading=true`。Element Plus v-loading 在窗口最小化/恢复时 DOM 布局变化导致 mask 元素定位异常或残留，页面永久遮罩。
+
+检查信号：Grep `handleVisibilityChange` 中直接调用 `loadDetail()` 或 `load()` 无 `nextTick` 延迟
+修复建议：切回时先重置所有 loading 状态为 false，用 `nextTick` 延迟到下一帧再执行加载，让 Vue 先处理 `loading=false` 的 DOM 更新，清除可能残留的 mask DOM
+适用场景：所有带 v-loading + visibility 事件的页面
+不适用场景：无 v-loading 的简单页面
+
+### 维度 40：页面标题冗余
+
+**为什么**：顶部导航栏（侧边栏菜单）已显示页面名称时，页面内再渲染 `<span class="page-title">页面名</span>` 是冗余信息，占用屏幕空间，破坏视觉层次。应只保留顶部导航，页面内容直接展示功能控件。
+
+检查信号：Grep `<span class="page-title">` 且 Layout 侧边栏已有同名菜单项
+修复建议：移除页面内 page-title，CSS `.top-bar` 改为 `justify-content: flex-end`，删除 `.page-title` 样式
+适用场景：所有带顶部导航的后台页面
+不适用场景：无顶部导航的独立页面（如登录页）
+
+### 维度 41：频道级配置控件与后端字段对齐
+
+**为什么**：后端 Channel 模型新增配置字段（如 segment_gap_sec、enable_thinking_question）时，前端频道管理页面必须同步添加对应控件（el-slider、el-switch 等）。否则用户无法在页面上配置这些参数，功能等于不存在。这与维度 21（前端配置键与后端字段一致性）是同一问题的前端侧补充——维度 21 关注字段名对齐，本维度关注控件存在性。
+
+检查信号：Grep 后端 Channel 模型新增字段后，ChannelManagement.vue 表单无对应 `el-form-item`
+修复建议：后端新增频道字段时，前端同步添加控件，控件类型与字段类型匹配（float→el-slider、int 0/1→el-switch、string→el-input）
+适用场景：所有频道/租户配置字段的前端控件
+不适用场景：内部字段（不暴露给前端配置）
 
 
 

@@ -1,14 +1,14 @@
 ---
 name: "news-automation-startserver"
-description: "20_News 项目服务生命周期自动化管理：启动/停止/前端构建/环境检查/状态查询，含环境预检查、日志记录、失败回滚。当用户要求'启动/开始/运行/起一下/打开/跑起来'20_News服务，'停止/关闭/退出/停一下/关掉'服务，'构建/重新构建/编译/rebuild'前端，或提到'news-automation-startserver / 20_News 启动 停止 构建'时调用。仅管理 20_News 项目自身服务生命周期；其他项目或系统级服务请用 RunCommand 直接操作。"
+description: "MorningBrief 项目服务生命周期自动化管理：启动/停止/前端构建/环境检查/状态查询，含环境预检查、日志记录、失败回滚。当用户要求'启动/开始/运行/起一下/打开/跑起来'MorningBrief服务，'停止/关闭/退出/停一下/关掉'服务，'构建/重新构建/编译/rebuild'前端，或提到'news-automation-startserver / MorningBrief 启动 停止 构建'时调用。仅管理 MorningBrief 项目自身服务生命周期；其他项目或系统级服务请用 RunCommand 直接操作。"
 ---
 
-# 20_News 服务生命周期自动化管理
+# MorningBrief 服务生命周期自动化管理
 
 ## 项目信息
 
-- **项目名称**：20_News 语音新闻播报系统
-- **项目根目录**：`d:\code\otherProjects\20_News`
+- **项目名称**：MorningBrief 语音新闻播报系统
+- **项目根目录**：`d:\code\otherProjects\MorningBrief`
 - **架构**：Docker Compose 单机部署（4 容器：nginx / app / mysql / redis）
 - **脚本目录**：`scripts\`
 - **日志目录**：`logs\`
@@ -35,7 +35,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\start.ps1"
 powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\start.ps1" -Build
 ```
 
-**工作目录**：`d:\code\otherProjects\20_News`
+**工作目录**：`d:\code\otherProjects\MorningBrief`
 
 **成功标志**：
 - 4 个容器全部 `Up`（news_nginx / news_app / news_mysql / news_redis）
@@ -68,7 +68,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\stop.ps1"
 powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\stop.ps1" -Clean
 ```
 
-**工作目录**：`d:\code\otherProjects\20_News`
+**工作目录**：`d:\code\otherProjects\MorningBrief`
 
 **成功标志**：
 - 4 个容器状态为 `Exited` 或不存在
@@ -99,7 +99,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\build-frontend.ps1"
 powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\build-frontend.ps1" -SkipInstall
 ```
 
-**工作目录**：`d:\code\otherProjects\20_News`
+**工作目录**：`d:\code\otherProjects\MorningBrief`
 
 **成功标志**：
 - `admin-web\dist\index.html` 存在
@@ -132,7 +132,7 @@ Invoke-RestMethod -Uri "http://localhost/api/health" -Method Get -TimeoutSec 5
 netstat -aon | findstr ":80 :443 :8000 :3306 :6379"
 ```
 
-**工作目录**：`d:\code\otherProjects\20_News`
+**工作目录**：`d:\code\otherProjects\MorningBrief`
 
 **输出内容**：
 - 4 个容器的运行状态（Up/Exited/重启次数）
@@ -246,10 +246,10 @@ docker-compose --env-file .\backend\.env down
 
 ## 完整执行示例
 
-### 示例 1：用户说"启动 20_News 服务"
+### 示例 1：用户说"启动 MorningBrief 服务"
 
 **AI 执行步骤**：
-1. 切换到项目目录 `d:\code\otherProjects\20_News`
+1. 切换到项目目录 `d:\code\otherProjects\MorningBrief`
 2. 环境预检查：Docker Desktop → .env → 端口占用
 3. 执行 `powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\start.ps1"`
 4. 等待执行完成（超时 120 秒）
@@ -260,7 +260,7 @@ docker-compose --env-file .\backend\.env down
 ### 示例 2：用户说"重新构建前端"
 
 **AI 执行步骤**：
-1. 切换到项目目录 `d:\code\otherProjects\20_News`
+1. 切换到项目目录 `d:\code\otherProjects\MorningBrief`
 2. 检查 Node.js 是否可用：`node --version`
 3. 执行 `powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\build-frontend.ps1"`
 4. 等待执行完成（超时 300 秒，npm install 可能较慢）
@@ -271,7 +271,7 @@ docker-compose --env-file .\backend\.env down
 ### 示例 3：用户说"停止服务"
 
 **AI 执行步骤**：
-1. 切换到项目目录 `d:\code\otherProjects\20_News`
+1. 切换到项目目录 `d:\code\otherProjects\MorningBrief`
 2. 执行 `powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\stop.ps1"`
 3. 等待执行完成（超时 30 秒）
 4. 验证：`docker-compose ps` 确认容器已停止
@@ -281,9 +281,9 @@ docker-compose --env-file .\backend\.env down
 
 ## 注意事项
 
-1. **工作目录**：所有命令必须在 `d:\code\otherProjects\20_News` 下执行，使用 RunCommand 的 `cwd` 参数指定
+1. **工作目录**：所有命令必须在 `d:\code\otherProjects\MorningBrief` 下执行，使用 RunCommand 的 `cwd` 参数指定
 2. **PowerShell 语法**：PowerShell 不支持 `&&`，多命令用 `;` 分隔或分行
 3. **编码**：bat 脚本使用 `chcp 65001` 确保 UTF-8 输出
 4. **超时**：启动服务超时 120 秒，前端构建超时 300 秒，停止服务超时 30 秒
-5. **仅管理 20_News 项目**：本技能仅管理 20_News 项目的服务生命周期，不适用于其他项目
+5. **仅管理 MorningBrief 项目**：本技能仅管理 MorningBrief 项目的服务生命周期，不适用于其他项目
 6. **Docker Compose 命令**：必须带 `--env-file .\backend\.env` 参数，否则环境变量无法加载

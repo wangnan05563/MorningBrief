@@ -1,0 +1,514 @@
+/**
+ * 主题定义：6 套主题通过 [data-theme] 属性切换 CSS 变量
+ *
+ * 对比度原则（WCAG AA 4.5:1）：
+ * - 浅色主题：深色文字（#1A202C / #2D3748）on 浅色背景（白/极浅色），对比度 7:1+
+ * - 暗色主题：浅色文字（#E2E8F0）on 深色背景（#0A0A0F），对比度 13:1+
+ * - 次级文字统一采用更浅但仍满足 3:1 的色值
+ */
+@use './variables.scss' as *;
+
+/* ============================================
+ * 1. 马卡龙（默认）：薄荷青 + 暖灰，柔和治愈
+ * primary-dark 加深至 #2D6B5F 确保 logo/active 文字对比度 ≥ 4.5
+ * ============================================ */
+:root,
+[data-theme='macaron'] {
+  --color-primary: #7ECEC1;
+  --color-primary-light: #B5EAD7;
+  --color-primary-dark: #2D6B5F;
+  --color-secondary: #FFD3E0;
+  --color-secondary-dark: #FF9AA2;
+
+  --color-success: #B5EAD7;
+  --color-warning: #FFE5B4;
+  --color-danger: #FF9AA2;
+  --color-info: #C7CEEA;
+
+  --color-bg: #F9FDFB;
+  --color-bg-card: #FFFFFF;
+  --color-text-primary: #4A5568;
+  --color-text-secondary: #5A6A7E;
+  --color-border: #E8F0ED;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  --shadow-sm: 0 2px 8px rgba(126, 206, 193, 0.08);
+  --shadow-md: 0 4px 16px rgba(126, 206, 193, 0.12);
+  --shadow-lg: 0 8px 32px rgba(126, 206, 193, 0.16);
+
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-blur: 12px;
+}
+
+/* ============================================
+ * 2. 现代企业：科技蓝 + 高级灰，专业可信赖
+ * 对比度：#1A202C on #F7FAFC = 16.1:1
+ * ============================================ */
+[data-theme='enterprise'] {
+  --color-primary: #2B6CB0;
+  --color-primary-light: #BEE3F8;
+  --color-primary-dark: #1E4E8C;
+  --color-secondary: #CBD5E0;
+  --color-secondary-dark: #718096;
+
+  --color-success: #38A169;
+  --color-warning: #D69E2E;
+  --color-danger: #E53E3E;
+  --color-info: #4A5568;
+
+  --color-bg: #F7FAFC;
+  --color-bg-card: #FFFFFF;
+  --color-text-primary: #1A202C;
+  --color-text-secondary: #4A5568;
+  --color-border: #E2E8F0;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --shadow-sm: 0 1px 3px rgba(43, 108, 176, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px rgba(43, 108, 176, 0.07), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px rgba(43, 108, 176, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05);
+
+  --glass-bg: rgba(255, 255, 255, 0.8);
+  --glass-blur: 16px;
+}
+
+/* ============================================
+ * 3. 创意品牌：渐变粉橙 + 活泼色，年轻创新
+ * primary 加深至 #C53030 确保白色按钮文字对比度 ≥ 4.5
+ * 对比度：#2D3748 on #FFF8F0 = 14.5:1
+ * ============================================ */
+[data-theme='creative'] {
+  --color-primary: #C53030;
+  --color-primary-light: #FED7D7;
+  --color-primary-dark: #9B2C2C;
+  --color-secondary: #4ECDC4;
+  --color-secondary-dark: #2C7A7B;
+
+  --color-success: #4ECDC4;
+  --color-warning: #FECA3A;
+  --color-danger: #C53030;
+  --color-info: #B388FF;
+
+  --color-bg: #FFF8F0;
+  --color-bg-card: #FFFFFF;
+  --color-text-primary: #2D3748;
+  --color-text-secondary: #4A5568;
+  --color-border: #FED7D7;
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  --shadow-sm: 0 2px 8px rgba(197, 48, 48, 0.1);
+  --shadow-md: 0 4px 16px rgba(197, 48, 48, 0.15);
+  --shadow-lg: 0 8px 32px rgba(197, 48, 48, 0.2);
+
+  --glass-bg: rgba(255, 248, 240, 0.75);
+  --glass-blur: 14px;
+}
+
+/* ============================================
+ * 4. 产品展示：暗黑主题 + 霓虹色点缀，科技未来感
+ * primary-dark 用浅霓虹色 #7DD3FC 确保作为文字时在暗黑背景上对比度 ≥ 10
+ * 对比度：#E2E8F0 on #0A0A0F = 13.5:1
+ * ============================================ */
+[data-theme='showcase'] {
+  --color-primary: #00E5FF;
+  --color-primary-light: rgba(0, 229, 255, 0.15);
+  --color-primary-dark: #7DD3FC;
+  --color-secondary: #B388FF;
+  --color-secondary-dark: #7C3AED;
+
+  --color-success: #00E676;
+  --color-warning: #FFAB00;
+  --color-danger: #FF1744;
+  --color-info: #7C3AED;
+
+  --color-bg: #0A0A0F;
+  --color-bg-card: #15151F;
+  --color-text-primary: #E2E8F0;
+  --color-text-secondary: #A0AEC0;
+  --color-border: rgba(0, 229, 255, 0.2);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  --shadow-sm: 0 2px 8px rgba(0, 229, 255, 0.08);
+  --shadow-md: 0 4px 16px rgba(0, 229, 255, 0.12);
+  --shadow-lg: 0 8px 32px rgba(0, 229, 255, 0.18);
+
+  --glass-bg: rgba(21, 21, 31, 0.75);
+  --glass-blur: 16px;
+}
+
+/* ============================================
+ * 5. 电商零售：明亮扁平 + 电商红，干净舒适
+ * primary 加深至 #BC2A38 确保白色按钮文字对比度 ≥ 4.5
+ * 对比度：#1A202C on #FFFFFF = 16.1:1
+ * ============================================ */
+[data-theme='commerce'] {
+  --color-primary: #BC2A38;
+  --color-primary-light: #FFD6D6;
+  --color-primary-dark: #8E1E2A;
+  --color-secondary: #457B9D;
+  --color-secondary-dark: #2C5F7D;
+
+  --color-success: #2A9D8F;
+  --color-warning: #F4A261;
+  --color-danger: #BC2A38;
+  --color-info: #457B9D;
+
+  --color-bg: #F1FAF8;
+  --color-bg-card: #FFFFFF;
+  --color-text-primary: #1A202C;
+  --color-text-secondary: #4A5568;
+  --color-border: #E2E8F0;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(188, 42, 56, 0.05);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.04), 0 4px 8px rgba(188, 42, 56, 0.08);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.04), 0 8px 16px rgba(188, 42, 56, 0.1);
+
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --glass-blur: 10px;
+}
+
+/* ============================================
+ * 6. 艺术作品集：极简高雅 + 优雅金
+ * primary 加深至 #8B6F3C 确保白色按钮文字对比度 ≥ 4.5
+ * 对比度：#1A202C on #FAFAFA = 16.5:1
+ * ============================================ */
+[data-theme='portfolio'] {
+  --color-primary: #8B6F3C;
+  --color-primary-light: #F0E5D0;
+  --color-primary-dark: #5C4A2E;
+  --color-secondary: #8B7355;
+  --color-secondary-dark: #5C4A36;
+
+  --color-success: #6B8E23;
+  --color-warning: #DAA520;
+  --color-danger: #A0522D;
+  --color-info: #8B7355;
+
+  --color-bg: #FAFAFA;
+  --color-bg-card: #FFFFFF;
+  --color-text-primary: #1A202C;
+  --color-text-secondary: #4A5568;
+  --color-border: #E8E2D5;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 2px 8px rgba(139, 111, 60, 0.08);
+  --shadow-lg: 0 4px 16px rgba(139, 111, 60, 0.12);
+
+  --glass-bg: rgba(255, 255, 255, 0.78);
+  --glass-blur: 14px;
+}
+
+/* === 暗黑主题特殊适配：Element Plus 组件深色化 === */
+[data-theme='showcase'] {
+  // 输入框/表格等浅色组件在暗黑主题下需要深色背景
+  --el-bg-color: var(--color-bg-card);
+  --el-bg-color-page: var(--color-bg);
+  --el-bg-color-overlay: #1E1E2A;
+  --el-fill-color: rgba(255, 255, 255, 0.04);
+  --el-fill-color-light: rgba(255, 255, 255, 0.03);
+  --el-fill-color-blank: var(--color-bg);
+  --el-fill-color-dark: rgba(255, 255, 255, 0.08);
+  --el-border-color: var(--color-border);
+  --el-border-color-light: rgba(0, 229, 255, 0.15);
+  --el-border-color-lighter: rgba(0, 229, 255, 0.1);
+  --el-text-color-primary: var(--color-text-primary);
+  --el-text-color-regular: var(--color-text-primary);
+  --el-text-color-secondary: var(--color-text-secondary);
+  --el-text-color-placeholder: #718096;
+  --el-text-color-disabled: #4A5568;
+  --el-mask-color: rgba(0, 0, 0, 0.7);
+  --el-disabled-bg-color: rgba(255, 255, 255, 0.02);
+  --el-disabled-text-color: #4A5568;
+
+  // 关闭全局 cssVar 浅色背景覆盖，让组件真正跟随我们的暗色变量
+  color-scheme: dark;
+}
+
+/* === showcase 暗黑主题：Element Plus 组件深色化具体样式 === */
+[data-theme='showcase'] {
+  /* 表格：斑马纹/悬浮/表头统一为深色，避免刺眼白底 */
+  .el-table {
+    background-color: var(--color-bg-card) !important;
+    color: var(--color-text-primary) !important;
+    --el-table-bg-color: var(--color-bg-card);
+    --el-table-tr-bg-color: var(--color-bg-card);
+    --el-table-header-bg-color: rgba(0, 229, 255, 0.06);
+    --el-table-header-text-color: var(--color-text-primary);
+    --el-table-row-hover-bg-color: rgba(0, 229, 255, 0.08);
+    --el-table-border-color: rgba(0, 229, 255, 0.1);
+    --el-table-border: 1px solid rgba(0, 229, 255, 0.1);
+  }
+  .el-table tr,
+  .el-table th.el-table__cell,
+  .el-table td.el-table__cell {
+    background-color: var(--color-bg-card) !important;
+    border-bottom-color: rgba(0, 229, 255, 0.08) !important;
+    color: var(--color-text-primary) !important;
+  }
+  .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+    background-color: rgba(255, 255, 255, 0.02) !important;
+  }
+  .el-table__body tr:hover > td.el-table__cell {
+    background-color: rgba(0, 229, 255, 0.08) !important;
+  }
+  .el-table__empty-block,
+  .el-table__empty-text {
+    background-color: var(--color-bg-card) !important;
+    color: var(--color-text-secondary) !important;
+  }
+
+  /* 标签：使用低透明度实色背景 + 亮色文字 */
+  .el-tag {
+    --el-tag-bg-color: transparent;
+    border: 1px solid currentColor;
+  }
+  .el-tag--success {
+    color: #00E676;
+    background-color: rgba(0, 230, 118, 0.12) !important;
+  }
+  .el-tag--warning {
+    color: #FFAB00;
+    background-color: rgba(255, 171, 0, 0.12) !important;
+  }
+  .el-tag--danger {
+    color: #FF1744;
+    background-color: rgba(255, 23, 68, 0.12) !important;
+  }
+  .el-tag--info {
+    color: var(--color-primary);
+    background-color: rgba(0, 229, 255, 0.12) !important;
+  }
+  .el-tag--primary {
+    color: var(--color-primary);
+    background-color: rgba(0, 229, 255, 0.12) !important;
+  }
+
+  /* 按钮：实底按钮 + 暗色文字 */
+  .el-button--primary {
+    color: #0A0A0F;
+    background-color: var(--color-primary);
+    border-color: var(--color-primary);
+    &:hover,
+    &:focus {
+      color: #0A0A0F;
+      background-color: var(--color-primary-dark);
+      border-color: var(--color-primary-dark);
+    }
+  }
+  .el-button--success {
+    color: #0A0A0F;
+    background-color: #00E676;
+    border-color: #00E676;
+  }
+  .el-button--warning {
+    color: #0A0A0F;
+    background-color: #FFAB00;
+    border-color: #FFAB00;
+  }
+  .el-button--danger {
+    color: #0A0A0F;
+    background-color: #FF1744;
+    border-color: #FF1744;
+  }
+  .el-button--info {
+    color: #0A0A0F;
+    background-color: var(--color-primary);
+    border-color: var(--color-primary);
+  }
+  // 浅色按钮：透明底 + 浅色描边/文字
+  .el-button--default {
+    color: var(--color-text-primary);
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(0, 229, 255, 0.3);
+    &:hover,
+    &:focus {
+      color: var(--color-primary);
+      background-color: rgba(0, 229, 255, 0.1);
+      border-color: var(--color-primary);
+    }
+  }
+
+  /* 卡片：透明深色 + 霓虹描边 */
+  .el-card {
+    background-color: var(--color-bg-card) !important;
+    border-color: rgba(0, 229, 255, 0.15) !important;
+    color: var(--color-text-primary) !important;
+    .el-card__header {
+      border-bottom-color: rgba(0, 229, 255, 0.1) !important;
+    }
+  }
+
+  /* 输入框/下拉框/日期选择器：深色背景 */
+  .el-input__wrapper,
+  .el-textarea__inner,
+  .el-select .el-input__wrapper,
+  .el-date-editor.el-input__wrapper {
+    background-color: rgba(255, 255, 255, 0.04) !important;
+    box-shadow: inset 0 0 0 1px rgba(0, 229, 255, 0.2) !important;
+    &:hover {
+      box-shadow: inset 0 0 0 1px rgba(0, 229, 255, 0.4) !important;
+    }
+  }
+  .el-input.is-focus .el-input__wrapper,
+  .el-select.is-focused .el-input__wrapper,
+  .el-date-editor.is-focused {
+    box-shadow: inset 0 0 0 1px var(--color-primary) !important;
+  }
+  .el-input__inner,
+  .el-textarea__inner {
+    color: var(--color-text-primary) !important;
+    &::placeholder {
+      color: var(--color-text-secondary) !important;
+    }
+  }
+  .el-select__placeholder {
+    color: var(--color-text-secondary) !important;
+  }
+
+  /* 下拉面板 */
+  .el-select-dropdown,
+  .el-popper {
+    background-color: #1E1E2A !important;
+    border-color: rgba(0, 229, 255, 0.2) !important;
+  }
+  .el-select-dropdown__item {
+    color: var(--color-text-primary) !important;
+    &:hover {
+      background-color: rgba(0, 229, 255, 0.1) !important;
+    }
+    &.is-selected {
+      color: var(--color-primary) !important;
+      font-weight: 600;
+    }
+  }
+  .el-select-dropdown__item.is-hovering,
+  .el-select-dropdown__item:hover {
+    background-color: rgba(0, 229, 255, 0.1) !important;
+  }
+
+  /* 弹窗 */
+  .el-dialog {
+    background-color: var(--color-bg-card) !important;
+    border: 1px solid rgba(0, 229, 255, 0.2);
+  }
+  .el-dialog__title,
+  .el-dialog__body {
+    color: var(--color-text-primary) !important;
+  }
+  .el-dialog__header {
+    border-bottom: 1px solid rgba(0, 229, 255, 0.1);
+  }
+
+  /* 表单标签 */
+  .el-form-item__label {
+    color: var(--color-text-primary) !important;
+  }
+
+  /* 复选框/单选/开关 */
+  .el-checkbox__label,
+  .el-radio__label {
+    color: var(--color-text-primary) !important;
+  }
+  .el-switch {
+    --el-switch-on-color: var(--color-primary);
+    --el-switch-off-color: rgba(255, 255, 255, 0.15);
+  }
+
+  /* 分页 */
+  .el-pagination {
+    --el-pagination-bg-color: transparent;
+    --el-pagination-button-bg-color: transparent;
+    --el-pagination-hover-color: var(--color-primary);
+    color: var(--color-text-primary) !important;
+    .el-pager li,
+    button {
+      background-color: transparent !important;
+      color: var(--color-text-primary) !important;
+      &:hover {
+        color: var(--color-primary) !important;
+      }
+      &.is-active {
+        color: var(--color-primary) !important;
+        font-weight: 600;
+      }
+    }
+  }
+
+  /* 警告/信息提示 */
+  .el-alert {
+    background-color: rgba(0, 229, 255, 0.08) !important;
+    border-color: rgba(0, 229, 255, 0.2) !important;
+    color: var(--color-text-primary) !important;
+  }
+
+  /* Loading/空状态 */
+  .el-loading-mask {
+    background-color: rgba(10, 10, 15, 0.7) !important;
+  }
+  .el-empty__description p {
+    color: var(--color-text-secondary) !important;
+  }
+
+  /* 日期选择器面板 */
+  .el-date-table td.current:not(.disabled) span {
+    background-color: var(--color-primary) !important;
+    color: #0A0A0F !important;
+  }
+  .el-date-table td.available:hover {
+    color: var(--color-primary) !important;
+  }
+
+  /* Tab 标签 */
+  .el-tabs__item {
+    color: var(--color-text-secondary) !important;
+    &.is-active {
+      color: var(--color-primary) !important;
+    }
+  }
+  .el-tabs__active-bar {
+    background-color: var(--color-primary) !important;
+  }
+}
+
+/* === macaron 主题：薄荷青按钮较浅，按钮文字改用 primary-dark 确保可读 === */
+[data-theme='macaron'] {
+  .el-button--primary {
+    color: var(--color-primary-dark);
+    &:hover {
+      color: var(--color-primary-dark);
+    }
+  }
+}
+
+/* === v-loading mask transition 禁用 ===
+ * 根因：页面最小化时浏览器暂停 CSS transition，mask 的 after-leave 回调不触发，
+ * DOM 永久残留。禁用 transition 后 mask 移除变为同步 DOM 操作，不依赖 transitionend。
+ */
+.el-loading-mask {
+  transition: none !important;
+}

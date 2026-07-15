@@ -748,7 +748,7 @@
                 "height": 29
               },
               "snippet": "<h1 data-v-175c1c0c=\"\" class=\"login-title\">",
-              "nodeLabel": "20_News 运营后台",
+              "nodeLabel": "MorningBrief 运营后台",
               "explanation": "Fix any of the following:\n  Element has insufficient color contrast of 2.79 (foreground color: #5ba89b, background color: #ffffff, font size: 16.5pt (22px), font weight: bold). Expected contrast ratio of 3:1"
             },
             "subItems": {
@@ -769,7 +769,7 @@
                       "height": 311
                     },
                     "snippet": "<div data-v-175c1c0c=\"\" class=\"login-card\">",
-                    "nodeLabel": "20_News 运营后台\n登录"
+                    "nodeLabel": "MorningBrief 运营后台\n登录"
                   }
                 }
               ]
@@ -1910,7 +1910,7 @@
           },
           {
             "index": "17",
-            "line": "    <title>20_News 运营后台</title>",
+            "line": "    <title>MorningBrief 运营后台</title>",
             "message": "Syntax not understood"
           },
           {

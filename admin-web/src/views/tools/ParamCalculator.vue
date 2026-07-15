@@ -1,7 +1,6 @@
 <template>
   <div class="page-container param-calculator">
     <div class="top-bar">
-      <span class="page-title">参数计算器</span>
       <el-button type="primary" :icon="ArrowRight" @click="goToAiConfig">
         应用到 AI 配置
       </el-button>
@@ -309,15 +308,8 @@ function goToAiConfig() {
 .param-calculator {
   .top-bar {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     margin-bottom: 16px;
-
-    .page-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: $color-text-primary;
-    }
   }
 
   .intro-alert {

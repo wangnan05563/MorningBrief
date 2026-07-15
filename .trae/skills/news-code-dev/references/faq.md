@@ -1,6 +1,6 @@
 # 常见问题
 
-本文档收录 20_News 项目开发过程中的常见问题及解决方案。
+本文档收录 MorningBrief 项目开发过程中的常见问题及解决方案。
 
 ## 1. 如何添加新的 API 接口？
 
@@ -291,12 +291,12 @@ class FeishuAlertChannel:
 
 **症状**：双击 `启动服务.bat` 启动开发模式后，使用 admin/admin123 登录报"用户名或密码错误"
 
-**根因**：`seed_admin.py` 默认数据库路径指向 `dist/20-news/data/news.db`（打包产物路径），与开发态运行时数据库 `backend/data/news.db` 不一致，导致开发态数据库中 `admin_user` 表为空
+**根因**：`seed_admin.py` 默认数据库路径指向 `dist/MorningBrief/data/news.db`（打包产物路径），与开发态运行时数据库 `backend/data/news.db` 不一致，导致开发态数据库中 `admin_user` 表为空
 
 **排查步骤**：
 
 1. 确认当前启动模式（dev/dev-sys/exe），参考 `scripts/start.ps1` 模式选择逻辑
-2. 确认运行时数据库路径：dev 模式 → `backend/data/news.db`，exe 模式 → `dist/20-news/data/news.db`
+2. 确认运行时数据库路径：dev 模式 → `backend/data/news.db`，exe 模式 → `dist/MorningBrief/data/news.db`
 3. 检查 `admin_user` 表是否有数据：
    ```python
    import sqlite3

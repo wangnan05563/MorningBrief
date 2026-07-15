@@ -278,6 +278,7 @@ import {
   createRow, updateRow, deleteRow, batchDelete,
   cascadePreview, exportRows, importRows, listAuditLogs,
 } from '../../api/dbAdmin'
+import { formatTime } from '../../utils/format'
 
 // ---- 表列表 ----
 const tables = ref([])
@@ -586,11 +587,6 @@ function formatCellValue(val) {
   if (typeof val === 'object') return JSON.stringify(val)
   if (typeof val === 'string' && val.length > 100) return val.substring(0, 100) + '...'
   return String(val)
-}
-
-function formatTime(t) {
-  if (!t) return '-'
-  return t.replace('T', ' ').substring(0, 19)
 }
 
 onMounted(() => {

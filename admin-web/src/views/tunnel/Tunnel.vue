@@ -1,10 +1,5 @@
 <template>
   <div class="page-container tunnel-page">
-    <!-- 顶部工具栏 -->
-    <div class="toolbar">
-      <h2 class="page-title">内网穿透</h2>
-    </div>
-
     <!-- 状态卡片 -->
     <div class="card-soft status-card" v-loading="loading">
       <div class="status-row">
@@ -180,7 +175,7 @@
               </div>
               <el-input
                 v-model="createTunnelName"
-                placeholder="输入隧道名称（如 20-news-tunnel）"
+                placeholder="输入隧道名称（如 MorningBrief-tunnel）"
                 style="max-width: 320px"
               />
               <el-button
@@ -691,18 +686,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-
-  .page-title {
-    font-size: 20px;
-    font-weight: 700;
-    color: $color-text-primary;
-  }
 }
 
 .status-card {

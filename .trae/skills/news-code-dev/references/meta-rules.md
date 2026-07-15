@@ -1,6 +1,6 @@
-﻿# 元规范
+# 元规范
 
-本文档定义 20_News 项目开发过程中必须遵守的 22 条元规范。这些规范来源于实际开发中遇到的问题和经验教训。
+本文档定义 MorningBrief 项目开发过程中必须遵守的 22 条元规范。这些规范来源于实际开发中遇到的问题和经验教训。
 
 ## 规范 1：配置驱动
 
@@ -70,15 +70,18 @@
 - 判断信号：grep 搜索 `token ==` 或 `jwt_token ==`
 - 正确做法：`hmac.compare_digest(provided_token, expected_token)`
 
-## 规范 8：时间字段统一 UTC
+## 规范 8：时区一致性
 
-**所有时间字段存储和传输使用 UTC，展示时转换为本地时区。**
+**项目内所有跨模块时间判定必须使用同一时区源，禁止混用 UTC 与本地时间。**
 
-- 判断信号：grep 搜索 `datetime.now()`、`datetime.utcnow()`
+- 为什么：ai_budget 按日重置 token 用量、workflow_scheduler 按本地日期触发、rewriter 按 crawled_at 本地日期回溯、crawler_dedup 按 TTL 清理。如果 ai_budget 用 UTC 而其他模块用本地时间，会导致本地跨日时额度累加到错误的 UTC 日，触发"今日已用 501,599，上限 500,000"误报
+- 判断信号：grep 搜索 `datetime.now(timezone.utc)` 或 `tz=timezone.utc` 在业务模块（非 core/timeutil.py 工具函数）
 - 正确做法：
-  - 存储：使用 `utcnow_naive()` 获取 naive datetime（不带时区信息）
-  - 传输：ISO8601 格式，末尾带 Z（如 `2026-07-10T12:00:00Z`）
-  - 展示：前端根据用户时区转换
+  - 项目选定时区源后，所有业务模块统一使用（本项目使用 `datetime.now()` 本地时间）
+  - 时区封装在 `core/timeutil.py` 内部，业务模块不直接调用时区相关函数
+  - 跨日额度计算、定时任务、去重表 TTL、素材回溯必须使用同一时区源
+- 适用：跨日额度计算、定时任务、去重表 TTL、素材回溯
+- 不适用：单次本地时间戳、纯日志时间
 
 ## 规范 9：枚举字段 .value 取值
 
@@ -399,5 +402,121 @@
   2. 等待进程退出（WaitForExit + 超时）
   3. 删除旧产物时用 	ry/throw 而非 SilentlyContinue，验证删除成功
   4. 删除失败时输出明确提示，而非静默继续让 PyInstaller 数分钟后才报错
+
+---
+
+## 规范 33-43：2026-07-15 工作流执行链路复盘新增规范
+
+> 以下规范来源于工作流 wf-20260714-0001 到 wf-20260715-0004 的执行链路故障复盘，覆盖时区漂移、级联清理、容错分支、动态注入、关联更新、blob 错误解、频道级覆盖、定时触发、类型契约、状态恢复、标题冗余等高频故障场景。
+
+### 规范 33：时区一致性全局统一
+
+**跨模块时间判定（预算限流/调度/回溯/TTL）必须使用同一时区源。**
+
+- 为什么：ai_budget 用 UTC 而其他模块用本地时间，导致本地跨日时额度累加到错误的 UTC 日
+- 判断信号：grep `datetime.now(timezone.utc)` 与 `datetime.now()` 在同一项目混用
+- 正确做法：所有跨日判定统一使用本地时间 `datetime.now()`，时区封装在 core/timeutil.py
+- 适用：跨日额度计算、定时任务、去重表 TTL、素材回溯
+- 不适用：单次本地时间戳、纯日志时间
+
+### 规范 34：主从表级联清理完整性
+
+**删除主表记录时必须同步处理所有引用主表 ID 的从表（重置或删除）。**
+
+- 为什么：删除 workflow 后 material 被级联删除但 crawler_dedup 残留，导致爬虫重新爬取时所有 URL 命中 dedup 表，入库 0 条
+- 判断信号：grep `delete(Model)` 后无对从表的 update/delete
+- 正确做法：删除主表前先 `UPDATE material SET workflow_id=NULL, status='pending'`（保留素材重置状态），并清理 crawler_dedup 中孤儿 URL
+- 适用：workflow → material/crawler_dedup/script/review/episode
+- 不适用：无外键引用的独立表
+
+### 规范 35：0 结果容错分支
+
+**查询返回 0 条不一定是错误，应先检查是否有可用的历史/回退资源。**
+
+- 为什么：crawler 爬到 0 条新素材时，可能 material 表已有历史 pending 素材可用。直接 `if count == 0: raise` 会导致工作流中断
+- 判断信号：grep `if count == 0: raise` 后无 `pending_count` / `fallback` 检查
+- 正确做法：0 条新结果时先查询是否有可用历史资源，有则放行并记录日志，无才报错
+- 适用：爬虫采集、LLM 改写选题、审核队列
+- 不适用：必填字段缺失、鉴权失败
+
+### 规范 36：动态注入而非硬编码条件
+
+**业务参数应通过动态注入 prompt/字段/参数实现，禁止在模板中硬编码后用 has_template 条件跳过。**
+
+- 为什么：思考问题开关用 `if config_flag and not template_text` 跳过，所有频道都有自定义 rewrite_template，`not template_text` 永远为 False，开关被绕过
+- 判断信号：grep `if config_flag and not template_text` 之类的多条件跳过
+- 正确做法：配置开关直接控制后缀追加（`if enable_flag: prompt += suffix`）
+- 适用：LLM prompt 后缀、字段可选序列化、特性开关
+- 不适用：安全相关的硬约束
+
+### 规范 37：选题后关联关系更新
+
+**业务流程中选取已有记录后，必须立即 UPDATE 关联字段。**
+
+- 为什么：rewriter 选题改写后未更新 material.workflow_id，工作流详情页按 workflow_id 过滤查不到素材
+- 判断信号：grep `select(Material)` 后无 `update(Material).workflow_id=`
+- 正确做法：选题后立即 `UPDATE material SET workflow_id=当前工作流, status='selected' WHERE id IN (选中ID)`
+- 适用：素材选题、任务分配、角色关联
+- 不适用：只读查询
+
+### 规范 38：blob/二进制响应错误解析
+
+**responseType='blob' 的请求在错误分支需读取 blob.text() 解析 JSON 获取真实 message。**
+
+- 为什么：axios 拦截器无法读取 Blob 类型的 .message 字段，前端只能显示 "Network Error"
+- 判断信号：前端 grep `responseType: 'blob'` 后无 `parseBlobError`
+- 正确做法：catch 中检查 `err.response?.data instanceof Blob`，是则 `await blob.text()` 解析 JSON
+- 适用：文件下载、音频流、图片请求
+- 不适用：JSON 响应
+
+### 规范 39：频道级配置覆盖全局
+
+**业务参数应支持频道级覆盖，频道未配置时回退全局 settings。**
+
+- 为什么：只做全局配置，所有频道共享同一参数，无法差异化运营
+- 判断信号：grep `settings.X` 在业务代码中无 `if ch.x is not None` 频道级检查
+- 正确做法：解析配置时先读全局 settings 作为默认值，再查询频道记录，频道字段非 None 则覆盖
+- 适用：多频道/多租户场景的所有可配置参数
+- 不适用：全局唯一参数（如数据库路径、JWT 密钥）
+
+### 规范 40：定时任务频道级触发
+
+**全局 cron 触发时必须为所有未配置独立定时的活跃频道各触发一次。**
+
+- 为什么：只触发一个无频道的工作流，多频道场景下只有"默认频道"执行定时任务
+- 判断信号：grep `_cron_trigger` 中无遍历活跃频道列表
+- 正确做法：全局 cron 查询所有 `is_active=1 AND schedule_time IS NULL` 的频道，为每个频道各触发一个工作流
+- 适用：多频道调度、多租户定时
+- 不适用：单频道项目
+
+### 规范 41：el-switch 类型契约
+
+**当后端返回 int（0/1）时，el-switch 必须显式 :active-value="1" :inactive-value="0"。**
+
+- 为什么：el-switch 默认 active-value=true（bool），JavaScript 严格相等 `1 !== true`，开关死循环无法持久化
+- 判断信号：grep `<el-switch` 无 `:active-value` 且后端字段为 int
+- 正确做法：el-switch 显式配置 `:active-value="1" :inactive-value="0"` 与后端 int 类型一致
+- 适用：所有后端返回 int（0/1）的开关字段
+- 不适用：后端已返回 bool
+
+### 规范 42：v-loading 状态恢复
+
+**页面 visibility 切换时必须先重置所有 loading 状态为 false，用 nextTick 延迟加载。**
+
+- 为什么：Element Plus v-loading 在窗口最小化/恢复时 DOM 布局变化导致 mask 元素残留，页面永久遮罩
+- 判断信号：grep `handleVisibilityChange` 中直接调用 load 而无 nextTick
+- 正确做法：切回时先重置所有 loading 为 false，用 nextTick 延迟到下一帧再执行加载
+- 适用：所有带 v-loading + visibility 事件的页面
+- 不适用：无 v-loading 的简单页面
+
+### 规范 43：页面标题冗余
+
+**顶部导航已显示页面名时，页面内不再渲染 page-title。**
+
+- 为什么：页面内 page-title 与顶部导航重复，占用屏幕空间，破坏视觉层次
+- 判断信号：grep `<span class="page-title">` 且 Layout 侧边栏已有同名菜单
+- 正确做法：移除页面内 page-title，CSS `.top-bar` 改为 `justify-content: flex-end`
+- 适用：所有带顶部导航的后台页面
+- 不适用：无顶部导航的独立页面
 
 
