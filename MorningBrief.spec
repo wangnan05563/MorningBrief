@@ -1,10 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-20_News PyInstaller 打包配置
+MorningBrief PyInstaller 打包配置
 
 产物结构（COLLECT 模式，目录形式）：
-  dist/20-news/
-    20-news.exe              ← 启动入口
+  dist/MorningBrief/
+    MorningBrief.exe              ← 启动入口
     _internal/               ← Python 运行时 + 依赖 + app 代码
       app/                   ← FastAPI 应用
         workflow/            ← AI 工作流模块
@@ -145,7 +145,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='20-news',
+    name='MorningBrief',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -156,7 +156,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=os.path.join(_project_root, 'assets', '20-news.ico'),  # exe 应用图标
+    icon=os.path.join(_project_root, 'assets', 'MorningBrief.ico'),  # exe 应用图标
 )
 
 # ============================================================
@@ -171,5 +171,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='20-news',
+    name='MorningBrief',
 )

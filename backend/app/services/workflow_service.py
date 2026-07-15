@@ -5,7 +5,7 @@
 """
 from datetime import date
 
-from sqlalchemy import delete, select, func
+from sqlalchemy import delete, select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BizError, NotFoundError, ParamError
@@ -19,6 +19,7 @@ from app.models import (
     Workflow,
     WorkflowStep,
 )
+from app.models.material import MaterialStatus
 from app.models.workflow import WorkflowStatus
 
 
@@ -40,11 +41,34 @@ class WorkflowService:
             return None
         return await self._workflow_to_dict(workflow)
 
-    async def list_workflows(self, page: int, size: int, channel_id: int | None = None) -> dict:
-        """历史工作流分页列表（含每条工作流的 steps_summary，供列表页进度条展示）。"""
-        count_stmt = select(func.count(Workflow.id))
+    async def list_workflows(
+        self,
+        page: int,
+        size: int,
+        channel_id: int | None = None,
+        episode_date: date | None = None,
+        status: str | None = None,
+        source: str | None = None,
+    ) -> dict:
+        """历史工作流分页列表（含每条工作流的 steps_summary，供列表页进度条展示）。
+
+        支持按频道/节目日期/状态/来源过滤，所有过滤参数可选，None 表示不限制。
+        Workflow.channel 关系 lazy="joined"，访问 wf.channel.name 不会触发额外查询。
+        """
+        # 动态构建 WHERE 条件：所有过滤参数 None 时退化为全表查询
+        filters = []
         if channel_id is not None:
-            count_stmt = count_stmt.where(Workflow.channel_id == channel_id)
+            filters.append(Workflow.channel_id == channel_id)
+        if episode_date is not None:
+            filters.append(Workflow.episode_date == episode_date)
+        if status:
+            filters.append(Workflow.status == status)
+        if source:
+            filters.append(Workflow.source == source)
+
+        count_stmt = select(func.count(Workflow.id))
+        if filters:
+            count_stmt = count_stmt.where(*filters)
         count_result = await self.db.execute(count_stmt)
         total = count_result.scalar() or 0
 
@@ -55,8 +79,8 @@ class WorkflowService:
             .offset(offset)
             .limit(size)
         )
-        if channel_id is not None:
-            stmt = stmt.where(Workflow.channel_id == channel_id)
+        if filters:
+            stmt = stmt.where(*filters)
         result = await self.db.execute(stmt)
         workflows = result.scalars().all()
 
@@ -86,6 +110,9 @@ class WorkflowService:
                     "episode_date": wf.episode_date.isoformat() if wf.episode_date else None,
                     "source": wf.source if wf.source else None,
                     "status": wf.status if wf.status else None,
+                    # 频道可能因 ON DELETE SET NULL 而悬空，需同时判断 channel_id 与 channel 对象
+                    "channel_id": wf.channel_id,
+                    "channel_name": wf.channel.name if wf.channel else None,
                     "started_at": wf.started_at.isoformat() if wf.started_at else None,
                     "finished_at": wf.finished_at.isoformat() if wf.finished_at else None,
                     "steps_summary": steps_by_wf.get(wf.id, []),
@@ -120,6 +147,8 @@ class WorkflowService:
             "episode_date": workflow.episode_date.isoformat() if workflow.episode_date else None,
             "source": workflow.source if workflow.source else None,
             "status": workflow.status if workflow.status else None,
+            "channel_id": workflow.channel_id,
+            "channel_name": workflow.channel.name if workflow.channel else None,
             "started_at": workflow.started_at.isoformat() if workflow.started_at else None,
             "finished_at": workflow.finished_at.isoformat() if workflow.finished_at else None,
             "error": workflow.error,
@@ -137,10 +166,11 @@ class WorkflowService:
         }
 
     async def batch_delete_workflows(self, workflow_ids: list[str]) -> dict:
-        """批量删除工作流（事务级联删除全部关联数据）。
+        """批量删除工作流（事务级联删除关联数据，但保留素材）。
 
         级联范围（依赖反序）：
-            play_log / play_progress → episode → review → script → material
+            play_log / play_progress → episode → review → script
+            → material（重置为 pending + 解除关联，不删除）
             → workflow_step → workflow
 
         设计要点：
@@ -150,6 +180,8 @@ class WorkflowService:
           任一校验失败或删除异常都整批回滚，绝不留下部分删除的孤儿数据
         - 先查 episode_ids 再删 play_log/play_progress：PlayLog/PlayProgress
           通过 episode_id 关联，必须先收集再删，否则 episode 删除后无法定位
+        - 素材保留并重置为 pending：素材是"原材料"，不应随工作流删除而丢失。
+          重跑工作流时 rewrite 可直接复用，crawler_dedup 也保留避免重复爬取
         - SQL delete 不触发 ORM cascade，故所有从表显式删除
         """
         # 空列表拒绝：避免 no-op 调用掩盖上游 bug
@@ -207,8 +239,13 @@ class WorkflowService:
             await self.db.execute(
                 delete(Script).where(Script.workflow_id.in_(workflow_ids))
             )
+            # 素材是"原材料"，不随工作流删除而丢失：重置为 pending + 解除关联
+            # 重跑工作流时 rewrite 可直接复用这些 pending 素材，无需重新爬取
+            # crawler_dedup 也保留，防止爬虫重复爬取已入库的 URL
             await self.db.execute(
-                delete(Material).where(Material.workflow_id.in_(workflow_ids))
+                update(Material)
+                .where(Material.workflow_id.in_(workflow_ids))
+                .values(status=MaterialStatus.pending.value, workflow_id=None)
             )
             await self.db.execute(
                 delete(WorkflowStep).where(WorkflowStep.workflow_id.in_(workflow_ids))

@@ -1,16 +1,16 @@
 ﻿<#
 .SYNOPSIS
-    20_News 服务启动脚本（V1.2 单机 exe / 开发模式）
+    MorningBrief 服务启动脚本（V1.2 单机 exe / 开发模式）
 .DESCRIPTION
-    智能启动 20_News 后端服务：
+    智能启动 MorningBrief 后端服务：
     1. 优先启动开发模式（.venv + backend\launcher.py）
     2. 回退到系统 python 开发模式
-    3. 最后回退到已构建的 exe（dist\20-news\20-news.exe）
-    启动后写入 PID 到 .run\20-news.pid，供 stop.ps1 使用。
+    3. 最后回退到已构建的 exe（dist\MorningBrief\MorningBrief.exe）
+    启动后写入 PID 到 .run\MorningBrief.pid，供 stop.ps1 使用。
 .PARAMETER Dev
     强制开发模式（venv 优先，回退系统 python），忽略 exe。
 .PARAMETER Exe
-    强制 exe 模式（要求 dist\20-news\20-news.exe 存在）。
+    强制 exe 模式（要求 dist\MorningBrief\MorningBrief.exe 存在）。
 .EXAMPLE
     .\start.ps1
     自动选择模式（优先 venv → 系统 python → exe）。
@@ -29,7 +29,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Script:StepPrefix = "[20News-Start]"
+$Script:StepPrefix = "[MorningBrief-Start]"
 
 function Write-Step { param([string]$Message) Write-Host "$StepPrefix $Message" -ForegroundColor Cyan }
 function Write-OK    { param([string]$Message) Write-Host "$StepPrefix   [OK] $Message" -ForegroundColor Green }
@@ -41,7 +41,7 @@ function Write-Err   { param([string]$Message) Write-Host "$StepPrefix   [FAIL] 
 # ============================================================
 
 $Script:ProjectRoot = (Resolve-Path "$PSScriptRoot\..").Path
-$Script:ExePath     = Join-Path $ProjectRoot "dist\20-news\20-news.exe"
+$Script:ExePath     = Join-Path $ProjectRoot "dist\MorningBrief\MorningBrief.exe"
 $Script:VenvPython  = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $Script:LauncherPy  = Join-Path $ProjectRoot "backend\launcher.py"
 # 系统回退：venv 不存在时用系统 python（V1.2 开发模式不强制 venv）
@@ -49,7 +49,7 @@ $Script:SystemPython = $null
 $sysPyCmd = Get-Command python -ErrorAction SilentlyContinue
 if ($sysPyCmd) { $Script:SystemPython = $sysPyCmd.Source }
 $Script:RunDir      = Join-Path $ProjectRoot ".run"
-$Script:PidFile     = Join-Path $RunDir "20-news.pid"
+$Script:PidFile     = Join-Path $RunDir "MorningBrief.pid"
 $Script:LogFile     = Join-Path $ProjectRoot "logs\service-start.log"
 
 # ============================================================
@@ -58,7 +58,7 @@ $Script:LogFile     = Join-Path $ProjectRoot "logs\service-start.log"
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor DarkCyan
-Write-Host "  20_News 服务启动" -ForegroundColor Cyan
+Write-Host "  MorningBrief 服务启动" -ForegroundColor Cyan
 Write-Host "  项目目录: $ProjectRoot" -ForegroundColor DarkGray
 Write-Host "============================================================" -ForegroundColor DarkCyan
 Write-Host ""
@@ -151,7 +151,7 @@ if (Test-Path $PidFile) {
 # 按进程名查找（兜底：PID 文件可能丢失）
 $existingProcs = @()
 if ($mode -eq "exe") {
-    $existingProcs = Get-Process -Name "20-news" -ErrorAction SilentlyContinue
+    $existingProcs = Get-Process -Name "MorningBrief" -ErrorAction SilentlyContinue
 } else {
     # dev / dev-sys 均按命令行含 launcher.py 的 python.exe 匹配
     $existingProcs = Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |

@@ -6,7 +6,7 @@ REM Keep this entry script ASCII-only for reliable cmd.exe parsing.
 cd /d "%~dp0.."
 
 echo ========================================
-echo   20_News Environment Setup
+echo   MorningBrief Environment Setup
 echo ========================================
 echo.
 echo Setup steps:

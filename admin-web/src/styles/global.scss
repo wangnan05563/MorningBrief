@@ -2,6 +2,7 @@
  * 全局样式：重置 + 通用工具类
  */
 @use './variables.scss' as *;
+@use './themes.scss' as *;
 
 * {
   margin: 0;
@@ -27,9 +28,9 @@ html, body {
 
 /* === 磨砂玻璃效果（header/sidebar） === */
 .glass {
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 /* === 指标卡片 === */

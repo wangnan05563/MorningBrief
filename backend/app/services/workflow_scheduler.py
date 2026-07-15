@@ -20,7 +20,7 @@ from datetime import date, timedelta
 from typing import Any, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, or_
 
 from app.cache.manager import cache
 from app.config import get_settings
@@ -29,7 +29,7 @@ from app.core.exceptions import ParamError
 from app.core.timeutil import utcnow_naive
 from app.database import AsyncSessionLocal
 from app.models import Episode, EpisodeStatus, Review, ReviewStatus, Script, Workflow, WorkflowStep
-from app.models import CrawlerDedup
+from app.models import CrawlerDedup, Material
 from app.models.channel import Channel
 from app.models.queue_config import QueueConfig
 from app.models.workflow import (
@@ -382,12 +382,47 @@ class WorkflowScheduler:
     # ===== 触发入口 =====
 
     async def _cron_trigger(self) -> None:
-        """APScheduler cron 触发入口：自动确定日期与来源。"""
+        """APScheduler 全局 cron 触发入口（默认 05:00）。
+
+        schedule_time 为空的频道使用此全局触发：为每个活跃且未配置独立定时的频道
+        各触发一个工作流。schedule_time 非空的频道由各自独立的 cron 任务触发。
+        """
         today = date.today()
-        await self.trigger_workflow(
-            episode_date=today,
-            source=WorkflowSource.cron.value,
-        )
+        try:
+            async with AsyncSessionLocal() as session:
+                # 未配置 schedule_time 的活跃频道走全局 cron
+                stmt = select(Channel.id).where(
+                    Channel.is_active == 1,
+                    or_(
+                        Channel.schedule_time.is_(None),
+                        Channel.schedule_time == "",
+                    ),
+                )
+                result = await session.execute(stmt)
+                channel_ids = [row[0] for row in result.all()]
+        except Exception as e:
+            logger.warning("全局 cron 查询频道列表失败，回退到无频道触发: %s", e)
+            channel_ids = []
+
+        if not channel_ids:
+            # 无活跃频道或全部配置了独立定时：回退到原有行为（channel_id=None）
+            logger.warning("全局 cron 触发：无未配置独立定时的活跃频道，触发默认工作流")
+            await self.trigger_workflow(
+                episode_date=today,
+                source=WorkflowSource.cron.value,
+            )
+            return
+
+        logger.info("全局 cron 触发：为 %d 个频道各触发工作流", len(channel_ids))
+        for cid in channel_ids:
+            try:
+                await self.trigger_workflow(
+                    episode_date=today,
+                    source=WorkflowSource.cron.value,
+                    channel_id=cid,
+                )
+            except Exception as e:
+                logger.error("全局 cron 触发频道 %s 失败: %s", cid, e)
 
     async def trigger_workflow(
         self, episode_date: date, source: str,
@@ -765,11 +800,15 @@ class WorkflowScheduler:
             completed_steps, resumed_context = await self._load_completed_step_context(workflow_id)
             context.update(resumed_context)
 
-            # 步骤 1：爬虫（签名 run(workflow_id, date_str)）
+            # 步骤 1：爬虫（签名 run(workflow_id, date_str, channel_id)）
+            # channel_id 用于频道级数据源隔离：按频道 rss_sources 白名单过滤源、
+            # 按 keywords 过滤标题、入库写入 channel_id 供 rewriter 按频道选题
             if WorkflowStepName.crawl not in completed_steps:
                 await self._run_step(
                     workflow_id, WorkflowStepName.crawl, 1,
-                    lambda ctx: crawler_mod.run(ctx["workflow_id"], ctx["date_str"]),
+                    lambda ctx: crawler_mod.run(
+                        ctx["workflow_id"], ctx["date_str"], ctx.get("channel_id"),
+                    ),
                     context,
                 )
 
@@ -795,11 +834,13 @@ class WorkflowScheduler:
                     workflow_id, WorkflowStepName.tts, 3, _tts_fn, context,
                 )
 
-            # 步骤 4：拼接（签名 concat(workflow_id, episode_date, audio_segments)）
+            # 步骤 4：拼接（签名 concat(workflow_id, episode_date, audio_segments, channel_id)）
+            # channel_id 用于生成频道级 COS key，避免同日多频道产物互相覆盖
             if WorkflowStepName.stitch not in completed_steps:
                 async def _stitch_fn(ctx):
                     return await stitch_mod.concat(
-                        ctx["workflow_id"], ctx["episode_date"], ctx["audio_segments"],
+                        ctx["workflow_id"], ctx["episode_date"],
+                        ctx["audio_segments"], ctx.get("channel_id"),
                     )
 
                 await self._run_step(
@@ -819,6 +860,11 @@ class WorkflowScheduler:
                 "workflow_id": workflow_id,
             })
             logger.info("工作流主流程完成 workflow_id=%s", workflow_id)
+            # 工作流完成即进入待审核状态，触发 pending_review 通知
+            # 通过 actionCard 引导管理员跳转 admin-web 审核页
+            await self._send_notification(
+                "workflow.pending_review", workflow_id,
+            )
 
         except StepFailedError as e:
             # 某步重试耗尽仍失败：置 failed + 告警，不立即备播（等 06:30 统一处理）
@@ -830,8 +876,10 @@ class WorkflowScheduler:
                 "step": e.step_name,
                 "error": str(e),
             })
-            await self._alert_operators(
-                f"工作流 {workflow_id} 失败于步骤 {e.step_name}: {e}"
+            # 走结构化通知（含 failed_step/error_message 变量），失败时降级到通用告警
+            await self._send_notification(
+                "workflow.failed", workflow_id,
+                {"failed_step": e.step_name, "error_message": str(e)},
             )
         except Exception as e:
             # 未预期异常兜底
@@ -842,7 +890,10 @@ class WorkflowScheduler:
             self._publish_event("workflow.failed", {
                 "workflow_id": workflow_id, "error": str(e),
             })
-            await self._alert_operators(f"工作流 {workflow_id} 未预期异常: {e}")
+            await self._send_notification(
+                "workflow.failed", workflow_id,
+                {"error_message": str(e)},
+            )
         finally:
             await self.cache.delete("workflow:current")
 
@@ -1214,21 +1265,42 @@ class WorkflowScheduler:
         )
 
     async def _cleanup_crawler_dedup(self) -> None:
-        """每日 03:00 清理 crawler_dedup 表过期记录。
+        """每日 03:00 清理 crawler_dedup 表过期记录 + 孤儿记录。
 
         替代原 Redis Set 的 EXPIRE 自动过期：SQLite 表需主动清理，
         按 CRAWLER_DEDUP_TTL_DAYS 配置保留窗口删除超出范围的记录。
+
+        额外清理孤儿记录：dedup 表中 url 不在 material 表中的记录。
+        场景：用户通过非标准方式删除了 material（如直接 SQL 操作），
+        导致 dedup 表残留的 URL 锁阻止爬虫重新入库。
+        正常流程下 batch_delete_workflows 已保留 material，不会产生孤儿，
+        此清理是防御性兜底。
         """
         cutoff = utcnow_naive() - timedelta(days=settings.CRAWLER_DEDUP_TTL_DAYS)
         try:
             async with AsyncSessionLocal() as session:
-                result = await session.execute(
+                # 1. 清理过期记录（TTL 窗口外）
+                result_ttl = await session.execute(
                     delete(CrawlerDedup).where(CrawlerDedup.created_at < cutoff)
                 )
+                deleted_ttl = result_ttl.rowcount
+
+                # 2. 清理孤儿记录（url 不在 material 表中）
+                # 子查询取 material 表所有 url，删除 dedup 表中不在其中的记录
+                material_urls = select(Material.url)
+                result_orphan = await session.execute(
+                    delete(CrawlerDedup).where(
+                        CrawlerDedup.url.not_in(material_urls)
+                    )
+                )
+                deleted_orphan = result_orphan.rowcount
+
                 await session.commit()
-                deleted = result.rowcount
-            if deleted > 0:
-                logger.info("清理爬虫去重过期记录 %d 条", deleted)
+            if deleted_ttl > 0 or deleted_orphan > 0:
+                logger.info(
+                    "清理爬虫去重表：过期 %d 条，孤儿 %d 条",
+                    deleted_ttl, deleted_orphan,
+                )
         except Exception as e:
             # 清理失败不中断调度器，下次调度继续处理
             logger.exception("清理爬虫去重表失败: %s", e)
@@ -1294,6 +1366,42 @@ class WorkflowScheduler:
         if stale_ids:
             logger.debug("清理 entry_map 中 %d 个过期条目", len(stale_ids))
 
+    # ===== 通知 =====
+
+    async def _send_notification(
+        self,
+        event_type: str,
+        workflow_id: str,
+        extra_vars: dict | None = None,
+    ) -> None:
+        """发送结构化工作流通知（基于模板 + actionCard 卡片）。
+
+        - sender 内部已处理开关检查、频次去重、模板渲染、日志记录
+        - 任何异常都不向上抛出，避免中断工作流主流程
+        - sender 返回 failed 时降级调用 _alert_operators 兜底，确保运维一定收到消息
+        """
+        try:
+            from app.services.notification import get_notification_sender
+            sender = get_notification_sender()
+            result = await sender.send_workflow_event(
+                event_type, workflow_id, extra_vars,
+            )
+            status = result.get("status")
+            if status == "failed":
+                # 结构化通知失败时降级走通用告警，确保运维一定收到
+                await self._alert_operators(
+                    f"工作流 {workflow_id} 通知发送失败 "
+                    f"(event={event_type}): {result.get('message', '')}"
+                )
+        except Exception as e:
+            logger.exception(
+                "通知发送异常 workflow_id=%s event_type=%s: %s",
+                workflow_id, event_type, e,
+            )
+            await self._alert_operators(
+                f"工作流 {workflow_id} 通知发送异常 (event={event_type}): {e}"
+            )
+
     # ===== 告警 =====
 
     async def _alert_operators(self, message: str) -> None:
@@ -1309,7 +1417,7 @@ class WorkflowScheduler:
         from app.services.notifier import get_notifier_hub, NotificationEvent
         hub = get_notifier_hub()
         event = NotificationEvent(
-            title="20_News 工作流告警",
+            title="MorningBrief 工作流告警",
             message=message,
             severity="critical",  # 工作流故障为 critical，穿透免打扰
             source="workflow_scheduler",

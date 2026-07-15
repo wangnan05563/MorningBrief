@@ -3,8 +3,9 @@
     <!-- 左侧菜单：磨砂玻璃 + 薄荷青主题 -->
     <el-aside :width="collapsed ? '64px' : '220px'" class="sidebar glass">
       <div class="logo">
-        <span v-if="!collapsed" class="logo-text">20_News</span>
-        <span v-else class="logo-mini">20</span>
+        <!-- 展开时显示系统全称，收缩时显示系统 logo 图标（避免显示无意义的数字） -->
+        <span v-if="!collapsed" class="logo-text">MorningBrief</span>
+        <img v-else src="/favicon.svg" alt="logo" class="logo-img" />
       </div>
       <el-menu
         :default-active="activeMenu"
@@ -32,6 +33,12 @@
           <span class="page-title">{{ currentTitle }}</span>
         </div>
         <div class="header-right">
+          <!-- 主题切换入口：调色板图标，全局可达 -->
+          <el-tooltip content="主题设置" placement="bottom">
+            <el-icon class="theme-btn" @click="openThemeSwitcher">
+              <Brush />
+            </el-icon>
+          </el-tooltip>
           <el-dropdown @command="handleCommand">
             <span class="user-info">
               <el-avatar :size="32" class="user-avatar">
@@ -57,17 +64,34 @@
       </el-main>
     </el-container>
   </el-container>
+  <!-- 主题切换对话框：通过 ref 暴露 open 方法 -->
+  <ThemeSwitcher ref="themeSwitcherRef" />
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
+import { useThemeStore } from '../stores/theme'
 import { ElMessageBox } from '../utils/message'
+import ThemeSwitcher from '../components/ThemeSwitcher.vue'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const themeStore = useThemeStore()
+
+// 主题切换器引用
+const themeSwitcherRef = ref()
+
+// 初始化主题：确保进入后台时已应用 localStorage 中的主题
+onMounted(() => {
+  themeStore.initTheme()
+})
+
+function openThemeSwitcher() {
+  themeSwitcherRef.value?.open()
+}
 
 const collapsed = ref(false)
 const username = computed(() => userStore.username || '用户')
@@ -125,10 +149,11 @@ async function handleCommand(command) {
     letter-spacing: 1px;
   }
 
-  .logo-mini {
-    font-size: 18px;
-    font-weight: 700;
-    color: $color-primary-dark;
+  // 收缩态 logo：复用 favicon.svg，尺寸适配 64px 侧栏
+  .logo-img {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
   }
 }
 
@@ -149,7 +174,7 @@ async function handleCommand(command) {
     }
 
     &:hover {
-      background: rgba(181, 234, 215, 0.4);
+      background: var(--color-primary-light);
     }
   }
 }
@@ -182,6 +207,19 @@ async function handleCommand(command) {
     font-size: 16px;
     font-weight: 600;
     color: $color-text-primary;
+  }
+
+  // 主题切换按钮：与 collapse-btn 风格统一
+  .theme-btn {
+    font-size: 20px;
+    cursor: pointer;
+    color: $color-text-secondary;
+    transition: color 0.2s;
+    margin-right: 16px;
+
+    &:hover {
+      color: $color-primary-dark;
+    }
   }
 
   .user-info {

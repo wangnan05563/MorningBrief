@@ -33,6 +33,21 @@ class Channel(Base):
     outro_prompt: Mapped[Optional[str]] = mapped_column(Text)
     constraint_prompt: Mapped[Optional[str]] = mapped_column(Text)
     rewrite_template: Mapped[Optional[str]] = mapped_column(Text)
+    # 频道级 BGM：相对路径（相对 data/bgm/），为空时 stitch 回退到全局 settings.BGM_PATH
+    # 值形如 "preset/calm.mp3" 或 "custom/2_intro.mp3"，前端通过 /audio/bgm/{path} 试听
+    bgm_path: Mapped[Optional[str]] = mapped_column(String(256))
+    # BGM 音量覆盖（0.0-1.0）：为空时使用全局 settings.BGM_VOLUME
+    bgm_volume: Mapped[Optional[float]] = mapped_column(default=None)
+    # 频道级段间静音时长（秒）：为空时使用全局 settings.SEGMENT_GAP_SEC
+    segment_gap_sec: Mapped[Optional[float]] = mapped_column(default=None)
+    # 是否在每段新闻末尾追加思考问题（0=关闭，1=开启，None=开启默认行为）
+    enable_thinking_question: Mapped[Optional[int]] = mapped_column(default=None)
+    # 频道专属 RSS 源列表（JSON 数组，存储 rss.yaml 中的 source name，如 ["人民网-国内"]）
+    # 为空时 crawler 回退到全局所有源；非空时仅采集列表中的源，实现频道级数据源隔离
+    rss_sources: Mapped[Optional[str]] = mapped_column(Text, comment="频道专属 RSS 源列表（JSON 数组）")
+    # 频道关键词过滤（逗号分隔，如 "游戏,主机,PS5,Xbox,任天堂"）
+    # crawler 入库前按关键词过滤标题/内容，为空表示不关键词过滤
+    keywords: Mapped[Optional[str]] = mapped_column(Text, comment="频道关键词过滤（逗号分隔）")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     # SQLite 不支持 ON UPDATE，updated_at 由 ChannelService.update_channel 显式维护
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

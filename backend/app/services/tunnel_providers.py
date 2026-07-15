@@ -9,7 +9,7 @@
 - Tailscale 复用系统已安装的 CLI，状态查询用 `funnel status --json`
 
 移植自 D:\\code\\otherProjects\\17_xianyu\\src\\xianyu_hunter\\web\\services\\tunnel_providers.py，
-适配 20_News 的 paths.py（resolve_data_dir）。
+适配 MorningBrief 的 paths.py（resolve_data_dir）。
 """
 from __future__ import annotations
 

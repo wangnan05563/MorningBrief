@@ -154,6 +154,36 @@ hard_constraints:
     severity: CRITICAL
     auto_fix: false
     category: api_key_protection
+  - name: el_switch_int_type_contract
+    pattern: <el-switch
+    message: 后端返回 int（0/1）的开关字段，el-switch 必须显式 :active-value="1" :inactive-value="0"，否则类型不匹配导致开关死循环
+    severity: HIGH
+    auto_fix: false
+    category: switch_type_contract
+  - name: blob_request_timeout_and_error
+    pattern: responseType.*blob
+    message: blob 请求需独立配置长超时（≥60s）+ silent，catch 中解析 Blob.text() 获取真实错误消息
+    severity: HIGH
+    auto_fix: false
+    category: blob_request
+  - name: vloading_visibility_recovery
+    pattern: handleVisibilityChange
+    message: visibility 切换时先重置所有 loading 为 false + nextTick 延迟加载，避免 v-loading mask 残留
+    severity: HIGH
+    auto_fix: false
+    category: vloading_recovery
+  - name: page_title_redundancy
+    pattern: <span\s+class="page-title">
+    message: "顶部导航已显示页面名时，页面内不再渲染 page-title，移除并改 .top-bar 为 justify-content: flex-end"
+    severity: MEDIUM
+    auto_fix: false
+    category: page_title_redundancy
+  - name: channel_config_control_alignment
+    pattern: segment_gap_sec|enable_thinking_question
+    message: 后端 Channel 新增配置字段时，前端 ChannelManagement.vue 必须同步添加对应控件（el-slider/el-switch/el-input）
+    severity: HIGH
+    auto_fix: false
+    category: channel_control_align
   block_on_violation: true
 abstraction_thresholds:
   inline_style_repeat: 3

@@ -1,4 +1,4 @@
-# 20_News 生产部署文档
+# MorningBrief 生产部署文档
 
 > 目标：单机 Linux 服务器，4 容器一键部署上线。
 
@@ -104,7 +104,7 @@ vi backend/.env
 | 变量 | 说明 |
 | --- | --- |
 | `CRAWLER_DEDUP_TTL_DAYS` | 去重保留天数，默认 7 |
-| `CRAWLER_USER_AGENT` | 爬虫 UA，默认 `20NewsBot/1.0` |
+| `CRAWLER_USER_AGENT` | 爬虫 UA，默认 `MorningBriefBot/1.0` |
 | `CRAWLER_QPS_DEFAULT` | 爬虫默认 QPS，默认 1 |
 
 ### 2.2 构建前端

@@ -5,6 +5,7 @@
 - PUT  /admin/api/v1/ai/config     保存配置（热更新，含预设配置同步）
 - POST /admin/api/v1/ai/test-llm   测试 LLM 连接
 - POST /admin/api/v1/ai/test-tts   测试 TTS 连接
+- POST /admin/api/v1/ai/preview-tts  TTS 试音（用当前表单参数合成测试音频）
 - GET  /admin/api/v1/ai/usage      用量统计（历史，来自 DB）
 - GET  /admin/api/v1/ai/budget     实时预算摘要（来自内存，含限额信息）
 - GET  /admin/api/v1/ai/presets    LLM 提供商预设
@@ -14,12 +15,13 @@
 所有端点需要管理员权限，防止运营误改 AI 配置。
 """
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.ai_budget import get_today_summary, reset_budget
 from app.core.auth import require_admin, AdminPayload
-from app.core.response import success
+from app.core.response import error, success
 from app.database import get_db
 from app.services.ai_config_service import AIConfigService
 
@@ -46,6 +48,10 @@ class TTSConfigBody(BaseModel):
     format: str = "mp3"
     timeout_sec: int = 60
     retry_attempts: int = 3
+    # 阿里云 TTS 音量/语速/基频（NLS tts_request 参数）
+    aliyun_volume: int = 50
+    aliyun_speech_rate: int = 0
+    aliyun_pitch_rate: int = 0
     # Edge-TTS 字段
     edge_voice: str = "zh-CN-XiaoxiaoNeural"
     edge_rate: str = ""
@@ -85,6 +91,31 @@ class TestTTSBody(BaseModel):
     tencent_secret_key: str = ""
     tencent_region: str = ""
     tencent_voice_type: int = 0
+
+
+class PreviewTTSBody(BaseModel):
+    """试音请求体：携带当前表单参数（不依赖已保存配置），合成测试文本。"""
+    provider: str = "edge"
+    text: str = ""
+    # 阿里云
+    aliyun_api_key: str = ""
+    aliyun_appkey: str = ""
+    aliyun_voice: str = ""
+    aliyun_volume: int = 50
+    aliyun_speech_rate: int = 0
+    aliyun_pitch_rate: int = 0
+    # Edge-TTS
+    edge_voice: str = ""
+    edge_rate: str = ""
+    edge_volume: str = ""
+    edge_pitch: str = ""
+    # 腾讯云
+    tencent_secret_id: str = ""
+    tencent_secret_key: str = ""
+    tencent_region: str = ""
+    tencent_voice_type: int = 0
+    tencent_volume: int = 0
+    tencent_speed: int = 0
 
 
 @router.get("/config")
@@ -157,6 +188,47 @@ async def test_tts(
         tencent_voice_type=body.tencent_voice_type,
     )
     return success(data=result)
+
+
+@router.post("/preview-tts")
+async def preview_tts(
+    body: PreviewTTSBody,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """试音：用当前表单参数合成测试文本，返回音频二进制供前端播放。
+
+    与 /test-tts 区别：测试连接只验证鉴权返回 JSON 结果，试音返回实际
+    MP3 音频流。用户调整音量/语速/基频后无需保存即可试听效果。
+    """
+    svc = AIConfigService(db)
+    try:
+        audio = await svc.preview_tts(
+            text=body.text,
+            provider=body.provider,
+            aliyun_api_key=body.aliyun_api_key,
+            aliyun_appkey=body.aliyun_appkey,
+            aliyun_voice=body.aliyun_voice,
+            aliyun_volume=body.aliyun_volume,
+            aliyun_speech_rate=body.aliyun_speech_rate,
+            aliyun_pitch_rate=body.aliyun_pitch_rate,
+            edge_voice=body.edge_voice,
+            edge_rate=body.edge_rate,
+            edge_volume=body.edge_volume,
+            edge_pitch=body.edge_pitch,
+            tencent_secret_id=body.tencent_secret_id,
+            tencent_secret_key=body.tencent_secret_key,
+            tencent_region=body.tencent_region,
+            tencent_voice_type=body.tencent_voice_type,
+            tencent_volume=body.tencent_volume,
+            tencent_speed=body.tencent_speed,
+        )
+    except ValueError as e:
+        return error(400, str(e), http_status=400)
+    except Exception as e:
+        return error(500, f"试音合成失败: {e}", http_status=500)
+
+    return Response(content=audio, media_type="audio/mpeg")
 
 
 @router.get("/usage")

@@ -1,5 +1,5 @@
-uid=37_0 RootWebArea "20_News 运营后台" url="http://127.0.0.1:8000/maintenance"
-  uid=37_1 StaticText "20_News"
+uid=37_0 RootWebArea "MorningBrief 运营后台" url="http://127.0.0.1:8000/maintenance"
+  uid=37_1 StaticText "MorningBrief"
   uid=37_2 menubar orientation="horizontal"
     uid=37_3 menuitem "内容审核"
     uid=37_4 menuitem "广告素材"

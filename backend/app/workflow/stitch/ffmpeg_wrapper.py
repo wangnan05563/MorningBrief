@@ -190,3 +190,61 @@ async def generate_silence(duration_sec: float, output_path: str) -> None:
         output_path,
     ]
     await run_ffmpeg(cmd)
+
+
+async def mix_bgm(
+    main_path: str, bgm_path: str, output_path: str, volume: float = 0.15
+) -> None:
+    """将 BGM 以低音量叠加到主音频上。
+
+    BGM 处理流程：
+    1. stream_loop=-1 无限循环 BGM（BGM 通常短于主音频）
+    2. -t 与主音频等长，截断循环 BGM
+    3. volume 滤镜调整 BGM 音量（默认 0.15，TTS 播报期间垫底）
+    4. amix 合并主音频 + BGM，主音频权重 1.0，BGM 权重由 volume 控制
+
+    TTS 段间静音处主音频无声，BGM 自然变成主音，实现衔接处"背景音并发大音量"效果。
+    无需复杂的时间段音量调节，利用主音频自身的静音结构自然过渡。
+
+    Args:
+        main_path: 主音频路径（TTS 段 + 段间静音拼接后的完整音频）
+        bgm_path: BGM 文件路径（任意长度，会循环到主音频长度）
+        output_path: 混音输出路径
+        volume: BGM 音量（0.0-1.0），建议 0.10-0.20
+    """
+    # 先探测主音频时长，用于截断循环 BGM
+    main_duration = await get_audio_duration(main_path)
+    cmd = [
+        resolve_ffmpeg_path(), "-y",
+        "-i", main_path,
+        "-stream_loop", "-1", "-i", bgm_path,
+        "-filter_complex",
+        f"[1:a]volume={volume}[bgm];[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=0[out]",
+        "-map", "[out]",
+        "-t", str(main_duration),
+        "-c:a", "libmp3lame", "-b:a", "128k",
+        "-ar", "44100", "-ac", "1",
+        output_path,
+    ]
+    await run_ffmpeg(cmd)
+
+
+async def adjust_tempo(input_path: str, output_path: str, tempo: float) -> None:
+    """用 atempo 滤镜调整音频速度（不改变音高）。
+
+    用于 stitch 阶段音频轻微超长时的兜底加速，避免 LLM 字数波动导致直接失败。
+    atempo 1.12x 几乎不可察觉，1.2x 开始有轻微失真，安全上限 1.25x。
+
+    Args:
+        input_path: 输入音频路径
+        output_path: 输出音频路径
+        tempo: 速度倍率（0.5-2.0），>1 加速，<1 减速
+    """
+    cmd = [
+        resolve_ffmpeg_path(), "-y", "-i", input_path,
+        "-filter:a", f"atempo={tempo}",
+        "-c:a", "libmp3lame", "-b:a", "128k",
+        "-ar", "44100", "-ac", "1",
+        output_path,
+    ]
+    await run_ffmpeg(cmd)

@@ -1,6 +1,6 @@
 ﻿{
     "project":  {
-                    "name":  "20_News",
+                    "name":  "MorningBrief",
                     "description":  "AI 驱动的播客新闻分发平台",
                     "version":  "1.0.0"
                 },

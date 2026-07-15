@@ -1,10 +1,10 @@
 ﻿<#
 .SYNOPSIS
-    20_News 服务停止脚本（V1.2 单机 exe / 开发模式）
+    MorningBrief 服务停止脚本（V1.2 单机 exe / 开发模式）
 .DESCRIPTION
-    停止 20_News 后端服务进程：
-    1. 优先读取 .run\20-news.pid 停止指定进程
-    2. 兜底按进程名查找（20-news.exe 或运行 launcher.py 的 python.exe）
+    停止 MorningBrief 后端服务进程：
+    1. 优先读取 .run\MorningBrief.pid 停止指定进程
+    2. 兜底按进程名查找（MorningBrief.exe 或运行 launcher.py 的 python.exe）
     3. 清理 PID 文件
 .PARAMETER Force
     强制终止（Kill），不等进程优雅退出。
@@ -25,7 +25,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Script:StepPrefix = "[20News-Stop]"
+$Script:StepPrefix = "[MorningBrief-Stop]"
 
 function Write-Step { param([string]$Message) Write-Host "$StepPrefix $Message" -ForegroundColor Cyan }
 function Write-OK    { param([string]$Message) Write-Host "$StepPrefix   [OK] $Message" -ForegroundColor Green }
@@ -38,11 +38,11 @@ function Write-Err   { param([string]$Message) Write-Host "$StepPrefix   [FAIL] 
 
 $Script:ProjectRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $Script:RunDir      = Join-Path $ProjectRoot ".run"
-$Script:PidFile     = Join-Path $RunDir "20-news.pid"
+$Script:PidFile     = Join-Path $RunDir "MorningBrief.pid"
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor DarkCyan
-Write-Host "  20_News 服务停止" -ForegroundColor Cyan
+Write-Host "  MorningBrief 服务停止" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor DarkCyan
 Write-Host ""
 
@@ -72,7 +72,7 @@ if (Test-Path $PidFile) {
 # 方式 2：按进程名兜底查找（PID 文件丢失或进程重启时）
 if ($targetProcs.Count -eq 0) {
     # exe 模式进程
-    $exeProcs = Get-Process -Name "20-news" -ErrorAction SilentlyContinue
+    $exeProcs = Get-Process -Name "MorningBrief" -ErrorAction SilentlyContinue
     if ($exeProcs) {
         $targetProcs += $exeProcs
         Write-Host "  按 exe 进程名找到: $($exeProcs.Count) 个" -ForegroundColor DarkGray
@@ -92,7 +92,7 @@ if ($targetProcs.Count -eq 0) {
 }
 
 if ($targetProcs.Count -eq 0) {
-    Write-Warn "未找到运行中的 20_News 服务进程"
+    Write-Warn "未找到运行中的 MorningBrief 服务进程"
     # 清理可能残留的 PID 文件
     if (Test-Path $PidFile) {
         Remove-Item $PidFile -Force -ErrorAction SilentlyContinue

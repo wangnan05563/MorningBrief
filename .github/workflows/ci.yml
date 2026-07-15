@@ -1,4 +1,4 @@
-# 20_News 项目 CI 流水线
+# MorningBrief 项目 CI 流水线
 # 触发：push / PR 到 main 分支
 # 三个 job：backend-test、frontend-build-test、pyinstaller-build
 name: CI
@@ -103,7 +103,7 @@ jobs:
 
   # ==========================================================================
   # Job 3: PyInstaller 打包验证
-  # 仅 push 到 main（非 PR）时触发，验证 20-news.spec 能正确打包
+  # 仅 push 到 main（非 PR）时触发，验证 MorningBrief.spec 能正确打包
   # V1.2 起从 Docker 部署改为单机 exe（PyInstaller + Inno Setup）
   # ==========================================================================
   pyinstaller-build:
@@ -125,10 +125,10 @@ jobs:
           pip install pyinstaller
 
       - name: PyInstaller 打包验证
-        # 验证 20-news.spec 能正常打包（不签名、不生成安装包）
-        run: pyinstaller 20-news.spec --noconfirm
+        # 验证 MorningBrief.spec 能正常打包（不签名、不生成安装包）
+        run: pyinstaller MorningBrief.spec --noconfirm
 
       - name: 验证产物存在
-        # COLLECT 模式产物在 dist/20-news/20-news.exe
-        run: Test-Path dist/20-news/20-news.exe
+        # COLLECT 模式产物在 dist/MorningBrief/MorningBrief.exe
+        run: Test-Path dist/MorningBrief/MorningBrief.exe
         shell: powershell

@@ -19,8 +19,8 @@ Page({
       { icon: '⚡', title: '倍速播放', desc: '支持多种倍速切换' },
       { icon: '📥', title: '离线收听', desc: '下载后无网络也能听' },
     ],
-    author: '20News 团队',
-    contact: 'support@20news.example.com',
+    author: 'MorningBrief 团队',
+    contact: 'support@MorningBrief.example.com',
   },
 
   onLoad() {

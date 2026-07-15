@@ -3,7 +3,7 @@
   <!-- 应用信息头部 -->
   <view class="about-header">
     <view class="app-logo">🎧</view>
-    <view class="app-name">20News 语音新闻</view>
+    <view class="app-name">MorningBrief 语音新闻</view>
     <view class="app-version">版本 {{version}}{{buildDate ? ' · ' + buildDate : ''}}</view>
     <view class="app-desc">{{description}}</view>
   </view>
@@ -35,5 +35,5 @@
     </view>
   </view>
 
-  <view class="about-footer">© 2025 20News · 用耳朵听新闻</view>
+  <view class="about-footer">© 2025 MorningBrief · 用耳朵听新闻</view>
 </view>

@@ -47,9 +47,37 @@ sources:
     category_hint: 科技
     qps: 1
 
+  # === 游戏类 RSS 源（主机游戏频道专用）===
+  # 使用 RSSHub 公开实例转换，如不稳定可替换为自部署实例或原生 RSS
+  # 单源失败由 crawler 单源隔离机制处理，不影响其他源
+
+  - name: 游民星空-资讯
+    url: https://rsshub.app/gamersky/news
+    authority: 0.80
+    category_hint: 游戏
+    qps: 1
+
+  - name: 3DM-资讯
+    url: https://rsshub.app/3dm/news
+    authority: 0.78
+    category_hint: 游戏
+    qps: 1
+
+  - name: 机核-资讯
+    url: https://rsshub.app/gcores/category/news
+    authority: 0.75
+    category_hint: 游戏
+    qps: 1
+
+  - name: 游侠网-资讯
+    url: https://rsshub.app/ali213/news
+    authority: 0.76
+    category_hint: 游戏
+    qps: 1
+
 # 全局配置
 global:
   timeout_sec: 30            # 单源请求超时
   retry: 2                   # 单源失败重试次数
-  user_agent: "20NewsBot/1.0 (+https://github.com/xxx/20_News)"
+  user_agent: "MorningBriefBot/1.0 (+https://github.com/xxx/MorningBrief)"
   respect_robots_txt: true   # 遵守 robots.txt

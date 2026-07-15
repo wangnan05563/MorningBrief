@@ -45,6 +45,10 @@ CONFIG_KEY_MAP = {
     "tts_format": "ALIYUN_TTS_FORMAT",
     "tts_timeout_sec": "ALIYUN_TTS_TIMEOUT_SEC",
     "tts_retry_attempts": "TTS_RETRY_ATTEMPTS",
+    # 阿里云 TTS 音量/语速/基频（NLS tts_request 参数）
+    "aliyun_tts_volume": "ALIYUN_TTS_VOLUME",
+    "aliyun_tts_speech_rate": "ALIYUN_TTS_SPEECH_RATE",
+    "aliyun_tts_pitch_rate": "ALIYUN_TTS_PITCH_RATE",
     # Edge-TTS（微软免费方案，无需 API Key）
     # 前端字段名 = config_key = edge_*（与路由层 TTSConfigBody 字段名一致），
     # Settings 属性名 = EDGE_TTS_*（与 config.py 字段名一致）
@@ -61,6 +65,8 @@ CONFIG_KEY_MAP = {
     "tencent_tts_speed": "TENCENT_TTS_SPEED",
     # 节目时长目标（秒）：与稿件字数反向关联，控制 rewriter 字数与 stitch 范围
     "target_duration_sec": "TARGET_DURATION_SEC",
+    # TTS 段间静音时长（秒）：拼接时每段新闻之间的留白，影响节奏感与 BGM 浮现
+    "segment_gap_sec": "SEGMENT_GAP_SEC",
 }
 
 # 需要脱敏的配置项（API Key / Secret 类）
@@ -80,8 +86,14 @@ LLM_RESET_KEYS = ["llm_api_key", "llm_base_url", "llm_model", PRESET_CONFIGS_KEY
 INT_KEYS = {
     "llm_timeout_sec", "llm_retry_attempts",
     "tts_sample_rate", "tts_timeout_sec", "tts_retry_attempts",
+    "aliyun_tts_volume", "aliyun_tts_speech_rate", "aliyun_tts_pitch_rate",
     "tencent_tts_voice_type", "tencent_tts_volume", "tencent_tts_speed",
     "target_duration_sec",
+}
+
+# 需要转为 float 类型的配置项（如段间静音时长，需支持小数精度）
+FLOAT_KEYS = {
+    "segment_gap_sec",
 }
 
 # ---- LLM 提供商预设 ----
@@ -341,6 +353,15 @@ class AIConfigService:
                     pass
             return getattr(settings, settings_attr, default)
 
+        def _get_float(key: str, settings_attr: str, default: float) -> float:
+            val = raw.get(key)
+            if val is not None:
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    pass
+            return getattr(settings, settings_attr, default)
+
         llm_base_url = _get("llm_base_url", "LLM_BASE_URL")
         llm_config = {
             "api_key": _mask_key(_get("llm_api_key", "LLM_API_KEY")),
@@ -351,6 +372,9 @@ class AIConfigService:
             # 目标节目时长（秒）：控制 rewriter 字数与 stitch 范围
             # 默认 600s = 10 分钟，与稿件字数反向关联
             "target_duration_sec": _get_int("target_duration_sec", "TARGET_DURATION_SEC", 600),
+            # TTS 段间静音时长（秒）：拼接时每段新闻之间的留白
+            # 默认 0.5s，过大影响节奏紧凑度，过小衔接生硬且 BGM 无浮现空间
+            "segment_gap_sec": _get_float("segment_gap_sec", "SEGMENT_GAP_SEC", 0.5),
             # 预设配置（每个 provider 独立保存的 API Key/Base URL/Model，API Key 脱敏）
             "preset_configs": await self.get_preset_configs(),
             # 当前选中预设（根据 base_url 反向匹配）
@@ -367,6 +391,10 @@ class AIConfigService:
             "format": _get("tts_format", "ALIYUN_TTS_FORMAT", "mp3"),
             "timeout_sec": _get_int("tts_timeout_sec", "ALIYUN_TTS_TIMEOUT_SEC", 60),
             "retry_attempts": _get_int("tts_retry_attempts", "TTS_RETRY_ATTEMPTS", 3),
+            # 阿里云 TTS 音量/语速/基频（NLS tts_request 参数）
+            "aliyun_volume": _get_int("aliyun_tts_volume", "ALIYUN_TTS_VOLUME", 50),
+            "aliyun_speech_rate": _get_int("aliyun_tts_speech_rate", "ALIYUN_TTS_SPEECH_RATE", 0),
+            "aliyun_pitch_rate": _get_int("aliyun_tts_pitch_rate", "ALIYUN_TTS_PITCH_RATE", 0),
             # Edge-TTS 字段（config_key = edge_*，与前端字段名一致）
             "edge_voice": _get("edge_voice", "EDGE_TTS_VOICE", "zh-CN-XiaoxiaoNeural"),
             "edge_rate": _get("edge_rate", "EDGE_TTS_RATE", ""),
@@ -468,6 +496,9 @@ class AIConfigService:
         # 目标节目时长（秒）：与稿件字数反向关联
         if "target_duration_sec" in config:
             result["target_duration_sec"] = str(config["target_duration_sec"])
+        # TTS 段间静音时长（秒）：拼接时每段新闻之间的留白
+        if "segment_gap_sec" in config:
+            result["segment_gap_sec"] = str(config["segment_gap_sec"])
         return result
 
     def _normalize_tts(self, config: dict) -> dict[str, str]:
@@ -502,6 +533,14 @@ class AIConfigService:
             result["tts_timeout_sec"] = str(config["timeout_sec"])
         if "retry_attempts" in config:
             result["tts_retry_attempts"] = str(config["retry_attempts"])
+
+        # 阿里云 TTS 音量/语速/基频（NLS tts_request 参数）
+        if "aliyun_volume" in config:
+            result["aliyun_tts_volume"] = str(config["aliyun_volume"])
+        if "aliyun_speech_rate" in config:
+            result["aliyun_tts_speech_rate"] = str(config["aliyun_speech_rate"])
+        if "aliyun_pitch_rate" in config:
+            result["aliyun_tts_pitch_rate"] = str(config["aliyun_pitch_rate"])
 
         # Edge-TTS 字段（config_key = edge_*，前端字段名即 config_key）
         # rate/volume/pitch 的数值零（0 / 0.0 / "0" / "0.0"）等价于空字符串（无调整），
@@ -572,6 +611,12 @@ class AIConfigService:
                     setattr(settings, attr, int(value))
                 except (ValueError, TypeError):
                     pass
+            # float 类型字段转换（如段间静音时长）
+            elif key in FLOAT_KEYS:
+                try:
+                    setattr(settings, attr, float(value))
+                except (ValueError, TypeError):
+                    pass
             else:
                 setattr(settings, attr, value)
 
@@ -595,6 +640,11 @@ class AIConfigService:
             if key in INT_KEYS:
                 try:
                     setattr(settings, attr, int(value))
+                except (ValueError, TypeError):
+                    pass
+            elif key in FLOAT_KEYS:
+                try:
+                    setattr(settings, attr, float(value))
                 except (ValueError, TypeError):
                     pass
             else:
@@ -830,6 +880,131 @@ class AIConfigService:
             "success": False,
             "message": "腾讯云 TTS 连接失败，请检查凭证与音色配置",
         }
+
+    # ---- 试音合成 ----
+
+    async def preview_tts(
+        self,
+        text: str,
+        provider: str = "edge",
+        # 阿里云参数
+        aliyun_api_key: str = "",
+        aliyun_appkey: str = "",
+        aliyun_voice: str = "",
+        aliyun_volume: int = 50,
+        aliyun_speech_rate: int = 0,
+        aliyun_pitch_rate: int = 0,
+        # Edge-TTS 参数
+        edge_voice: str = "",
+        edge_rate: str = "",
+        edge_volume: str = "",
+        edge_pitch: str = "",
+        # 腾讯云参数
+        tencent_secret_id: str = "",
+        tencent_secret_key: str = "",
+        tencent_region: str = "",
+        tencent_voice_type: int = 0,
+        tencent_volume: int = 0,
+        tencent_speed: int = 0,
+    ) -> bytes:
+        """用传入的临时参数合成试音音频（不依赖已保存配置）。
+
+        与 test_tts_connection 的区别：测试连接只验证鉴权，试音返回实际音频
+        供前端播放判断效果。所有参数从当前表单实时传入，用户调整参数后无需
+        保存即可试听。
+
+        Raises:
+            ValueError: provider 未知或凭证缺失
+            TTSError: 合成失败（网络/鉴权/音色等）
+        """
+        provider = provider or settings.TTS_PROVIDER or "edge"
+
+        if not text.strip():
+            raise ValueError("试音文本不能为空")
+
+        if provider == "aliyun":
+            return await self._preview_aliyun(
+                text, aliyun_api_key, aliyun_appkey, aliyun_voice,
+                aliyun_volume, aliyun_speech_rate, aliyun_pitch_rate,
+            )
+        elif provider == "edge":
+            return await self._preview_edge(
+                text, edge_voice, edge_rate, edge_volume, edge_pitch,
+            )
+        elif provider == "tencent":
+            return await self._preview_tencent(
+                text, tencent_secret_id, tencent_secret_key,
+                tencent_region, tencent_voice_type,
+                tencent_volume, tencent_speed,
+            )
+        raise ValueError(f"未知的 TTS provider: {provider}")
+
+    async def _preview_aliyun(
+        self, text, api_key, appkey, voice,
+        volume, speech_rate, pitch_rate,
+    ) -> bytes:
+        """阿里云试音：脱敏值回退到已保存配置，用临时参数创建实例合成。"""
+        if not api_key or _is_masked(api_key):
+            api_key = await self.get_config_value("tts_api_key") or ""
+        if not appkey or _is_masked(appkey):
+            appkey = await self.get_config_value("tts_appkey") or ""
+        if not api_key:
+            raise ValueError("阿里云 TTS API Key 未配置")
+        if not appkey:
+            raise ValueError("阿里云 TTS AppKey 未配置")
+
+        from app.workflow.tts.aliyun_client import AliyunSpeechClient
+        client = AliyunSpeechClient(
+            api_key=api_key,
+            volume=volume,
+            speech_rate=speech_rate,
+            pitch_rate=pitch_rate,
+        )
+        return await client.synthesize(
+            text, voice=voice or None,
+            format=settings.ALIYUN_TTS_FORMAT,
+            sample_rate=settings.ALIYUN_TTS_SAMPLE_RATE,
+        )
+
+    async def _preview_edge(
+        self, text, voice, rate, volume, pitch,
+    ) -> bytes:
+        """Edge-TTS 试音：用临时参数创建实例合成。"""
+        from app.workflow.tts.edge_client import EdgeTTSProvider
+        provider = EdgeTTSProvider(
+            voice=voice or None,
+            rate=rate or None,
+            volume=volume or None,
+            pitch=pitch or None,
+        )
+        return await provider.synthesize(text, format="mp3", sample_rate=16000)
+
+    async def _preview_tencent(
+        self, text, secret_id, secret_key, region, voice_type,
+        volume, speed,
+    ) -> bytes:
+        """腾讯云试音：脱敏值回退到已保存配置，用临时参数创建实例合成。"""
+        if not secret_id or _is_masked(secret_id):
+            secret_id = await self.get_config_value("tencent_tts_secret_id") or ""
+        if not secret_id:
+            secret_id = settings.COS_SECRET_ID
+        if not secret_key or _is_masked(secret_key):
+            secret_key = await self.get_config_value("tencent_tts_secret_key") or ""
+        if not secret_key:
+            secret_key = settings.COS_SECRET_KEY
+        if not secret_id or not secret_key:
+            raise ValueError("腾讯云 TTS 凭证未配置")
+
+        from app.workflow.tts.tencent_client import TencentTTSProvider
+        provider = TencentTTSProvider(
+            secret_id=secret_id,
+            secret_key=secret_key,
+            region=region or None,
+            voice_type=voice_type or None,
+            volume=volume,
+            speed=speed,
+        )
+        return await provider.synthesize(text, format="mp3", sample_rate=16000)
 
     # ---- 用量记录 ----
 

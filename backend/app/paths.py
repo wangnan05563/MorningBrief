@@ -21,7 +21,7 @@ def is_frozen() -> bool:
 def get_app_root() -> Path:
     """获取应用根目录。
 
-    打包态：exe 所在目录（如 C:\\Program Files\\20_News\\）
+    打包态：exe 所在目录（如 C:\\Program Files\\MorningBrief\\）
     开发态：backend/ 目录（app 包的父目录）
     """
     if is_frozen():
@@ -40,6 +40,20 @@ def resolve_data_dir() -> Path:
 def resolve_db_path() -> Path:
     """SQLite 数据库文件路径。"""
     return resolve_data_dir() / "news.db"
+
+
+def resolve_bgm_dir() -> Path:
+    """BGM 文件根目录（预制 + 用户上传）。
+
+    结构：
+    - data/bgm/preset/   预制 BGM，随安装包分发或用户自行放入
+    - data/bgm/custom/   用户上传的 BGM，按 {channel_id}_{filename} 命名
+    """
+    bgm_dir = resolve_data_dir() / "bgm"
+    bgm_dir.mkdir(parents=True, exist_ok=True)
+    (bgm_dir / "preset").mkdir(exist_ok=True)
+    (bgm_dir / "custom").mkdir(exist_ok=True)
+    return bgm_dir
 
 
 def resolve_log_dir() -> Path:

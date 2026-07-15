@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     ALIYUN_TTS_SAMPLE_RATE: int = 44100
     ALIYUN_TTS_FORMAT: str = "mp3"
     ALIYUN_TTS_TIMEOUT_SEC: int = 60
+    # 音量/语速/基频调节（NLS tts_request 参数）
+    # volume: [0, 100]，默认 50；speech_rate/pitch_rate: [-500, 500]，默认 0
+    ALIYUN_TTS_VOLUME: int = 50
+    ALIYUN_TTS_SPEECH_RATE: int = 0
+    ALIYUN_TTS_PITCH_RATE: int = 0
     TTS_RETRY_ATTEMPTS: int = 3
 
     # ---- TTS Provider 选择（前端可在 ai_config 表覆盖） ----
@@ -129,10 +134,23 @@ class Settings(BaseSettings):
     # rewriter 按此时长 + TTS 实际语速反算所需字数，动态调整段数与每段字数
     TARGET_DURATION_SEC: int = 600
 
+    # ---- 背景音乐（BGM）配置 ----
+    # BGM 文件路径：绝对路径或相对项目根目录的路径。文件不存在时降级为无 BGM 模式
+    # （仅插入段间静音过渡，不叠加背景音）
+    # 推荐使用节奏舒缓、无明显旋律的轻音乐，避免与新闻内容冲突
+    BGM_PATH: str = "assets/bgm.mp3"
+    # BGM 主音量（0.0-1.0）：TTS 播报期间的垫底音量，建议 0.10-0.20
+    # TTS 段间 0.5s 静音过渡处 BGM 自然浮现，形成衔接节奏感
+    BGM_VOLUME: float = 0.15
+    # TTS 段间过渡时长（秒）：段与段之间插入的静音长度，BGM 在此时段显现
+    SEGMENT_GAP_SEC: float = 0.5
+
     # ---- 爬虫配置 ----
-    CRAWLER_DEDUP_TTL_DAYS: int = 7
+    # 去重表保留天数：3 天后过期，允许爬虫重新爬取同源新闻
+    # 原值 7 天对"删除工作流后重跑"场景偏长，3 天覆盖一个工作日周期足够
+    CRAWLER_DEDUP_TTL_DAYS: int = 3
     CRAWLER_QPS_DEFAULT: int = 1
-    CRAWLER_USER_AGENT: str = "20NewsBot/1.0"
+    CRAWLER_USER_AGENT: str = "MorningBriefBot/1.0"
 
     # ---- 日志 ----
     LOG_LEVEL: str = "INFO"
@@ -149,8 +167,9 @@ class Settings(BaseSettings):
     AI_BUDGET_DAILY_TOKEN_LIMIT: int = 500000
     # 每日费用上限（USD），超限拒绝调用
     AI_BUDGET_DAILY_COST_LIMIT_USD: float = 5.0
-    # 每分钟最大调用次数（LLM+TTS 合计）
-    AI_BUDGET_RATE_LIMIT_PER_MIN: int = 20
+    # 每分钟最大调用次数（按 service_type 分桶，LLM/TTS 各自独立限流）
+    # 默认 60 对齐通义千问 qwen-max dashscope 默认 RPM 限制
+    AI_BUDGET_RATE_LIMIT_PER_MIN: int = 60
     # 预算持久化文件路径（服务重启后回填今日记录）
     AI_BUDGET_FILE: str = "./data/ai_budget.json"
 

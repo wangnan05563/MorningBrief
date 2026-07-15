@@ -98,8 +98,8 @@
             <el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="started_at" label="开始时间" min-width="170">
-          <template #default="{ row }">{{ row.started_at || '-' }}</template>
+        <el-table-column label="开始时间" min-width="170">
+          <template #default="{ row }">{{ formatTime(row.started_at) }}</template>
         </el-table-column>
         <el-table-column label="耗时" width="120">
           <template #default="{ row }">{{ formatDuration(row) }}</template>
@@ -167,8 +167,8 @@
           <el-descriptions-item label="状态">
             <el-tag :type="statusTagType(currentTask.status)">{{ statusLabel(currentTask.status) }}</el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="开始时间">{{ currentTask.started_at || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="结束时间">{{ currentTask.finished_at || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="开始时间">{{ formatTime(currentTask.started_at) }}</el-descriptions-item>
+          <el-descriptions-item label="结束时间">{{ formatTime(currentTask.finished_at) }}</el-descriptions-item>
           <el-descriptions-item label="耗时">{{ formatDuration(currentTask) }}</el-descriptions-item>
         </el-descriptions>
 
@@ -177,7 +177,7 @@
           <el-timeline-item
             v-for="(step, i) in currentTask.steps"
             :key="i"
-            :timestamp="step.finished_at || step.started_at || ''"
+            :timestamp="formatTime(step.finished_at || step.started_at)"
             :type="stepStatusType(step.status)"
           >
             <div class="step-name">{{ step.name }}</div>
@@ -185,7 +185,7 @@
               <el-tag size="small" :type="stepStatusType(step.status)">{{ statusLabel(step.status) }}</el-tag>
             </div>
             <div v-if="step.started_at" class="step-time">
-              {{ step.started_at }} ~ {{ step.finished_at || '进行中' }}
+              {{ formatTime(step.started_at) }} ~ {{ step.finished_at ? formatTime(step.finished_at) : '进行中' }}
             </div>
           </el-timeline-item>
         </el-timeline>
@@ -210,6 +210,7 @@ import {
 } from '../../api/queue'
 import { listChannels } from '../../api/channels'
 import { subscribe } from '../../utils/sse'
+import { formatTime } from '../../utils/format'
 
 // 角色控制：直接读 localStorage，operator 隐藏操作按钮
 const role = localStorage.getItem('admin_role') || ''
@@ -402,14 +403,18 @@ async function handlePriority(row) {
 async function handleRetry(id) {
   if (retryingIds.value.has(id)) return
   try {
-    await ElMessageBox.confirm('确认重试该任务？', '提示', { type: 'warning' })
+    await ElMessageBox.confirm(
+      '将在原工作流上从失败步骤重跑，已成功的步骤（爬虫/改写等）不会重复执行。确认重试？',
+      '断点续跑确认',
+      { type: 'warning' },
+    )
   } catch {
     return
   }
   retryingIds.value.add(id)
   try {
     await retryTask(id)
-    ElMessage.success('已加入重试队列')
+    ElMessage.success('已从失败步骤断点续跑，原工作流已重新入队')
     await Promise.all([loadTasks(), loadStats()])
   } catch (e) {
     console.warn('handleRetry failed:', e)

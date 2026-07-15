@@ -1,7 +1,6 @@
 <template>
   <div class="page-container ai-config">
     <div class="top-bar">
-      <span class="page-title">AI 服务配置</span>
       <el-button type="primary" :icon="Check" :loading="saving" @click="handleSave">
         保存配置
       </el-button>
@@ -58,6 +57,15 @@
                 style="max-width: 500px"
               />
               <span class="field-tip">默认 600 秒（10 分钟），与稿件字数反向关联</span>
+            </el-form-item>
+            <el-form-item label="段间静音">
+              <el-slider
+                v-model="llmForm.segment_gap_sec"
+                :min="0" :max="3" :step="0.1"
+                show-input
+                style="max-width: 500px"
+              />
+              <span class="field-tip">TTS 段间留白（秒），默认 0.5s，BGM 在此时段自然浮现</span>
             </el-form-item>
             <el-form-item label="预期字数">
               <el-tag type="info">
@@ -222,6 +230,18 @@
             <el-form-item label="重试次数">
               <el-input-number v-model="ttsForm.retry_attempts" :min="0" :max="10" />
             </el-form-item>
+            <el-form-item label="音量">
+              <el-input-number v-model="ttsForm.aliyun_volume" :min="0" :max="100" />
+              <span class="field-tip" style="margin-left: 8px">[0, 100]，默认 50</span>
+            </el-form-item>
+            <el-form-item label="语速">
+              <el-input-number v-model="ttsForm.aliyun_speech_rate" :min="-500" :max="500" />
+              <span class="field-tip" style="margin-left: 8px">[-500, 500]，默认 0</span>
+            </el-form-item>
+            <el-form-item label="基频">
+              <el-input-number v-model="ttsForm.aliyun_pitch_rate" :min="-500" :max="500" />
+              <span class="field-tip" style="margin-left: 8px">[-500, 500]，默认 0</span>
+            </el-form-item>
           </el-form>
 
           <!-- Edge-TTS 配置（免费方案） -->
@@ -343,6 +363,51 @@
             </el-form-item>
           </el-form>
 
+          <!-- 试音区域（三套 Provider 共用） -->
+          <div class="preview-section">
+            <div class="preset-section" style="border-bottom: none; padding-bottom: 0; margin-bottom: 12px;">
+              <span class="section-label">风格预设：</span>
+              <el-button-group>
+                <el-button
+                  v-for="p in currentTtsPresets"
+                  :key="p.name"
+                  size="small"
+                  @click="applyTtsPreset(p)"
+                >
+                  {{ p.name }}
+                </el-button>
+              </el-button-group>
+              <span class="field-tip" style="margin-left: 12px;">点击预设一键填入参数，然后试音</span>
+            </div>
+            <el-form label-width="120px" class="config-form">
+              <el-form-item label="试音文本">
+                <el-input
+                  v-model="previewText"
+                  type="textarea"
+                  :rows="2"
+                  placeholder="输入试音文本"
+                  style="max-width: 500px"
+                />
+              </el-form-item>
+              <el-form-item>
+                <el-button
+                  type="primary"
+                  plain
+                  :loading="previewing"
+                  @click="handlePreviewTTS"
+                >
+                  试音
+                </el-button>
+                <audio
+                  v-if="previewAudioUrl"
+                  :src="previewAudioUrl"
+                  controls
+                  style="margin-left: 12px; height: 36px; vertical-align: middle;"
+                />
+              </el-form-item>
+            </el-form>
+          </div>
+
           <!-- 测试连接（三套 Provider 共用） -->
           <el-form
             :model="ttsForm"
@@ -440,6 +505,7 @@ const llmForm = ref({
   timeout_sec: 30,
   retry_attempts: 3,
   target_duration_sec: 600,
+  segment_gap_sec: 0.5,
 })
 const showLlmKey = ref(false)
 const testingLlm = ref(false)
@@ -461,6 +527,10 @@ const ttsForm = ref({
   format: 'mp3',
   timeout_sec: 60,
   retry_attempts: 3,
+  // 阿里云 TTS 音量/语速/基频（NLS tts_request 参数）
+  aliyun_volume: 50,
+  aliyun_speech_rate: 0,
+  aliyun_pitch_rate: 0,
   // Edge-TTS
   edge_voice: 'zh-CN-XiaoxiaoNeural',
   edge_rate: '',
@@ -488,6 +558,37 @@ const ttsProviders = [
   { key: 'edge', label: 'Edge-TTS（免费，微软神经网络音色）' },
   { key: 'tencent', label: '腾讯云 TTS（付费，可复用 COS 凭证）' },
 ]
+
+// TTS 风格预设：按 provider 提供不同的参数组合
+// 每组预设覆盖该 provider 支持的音量/语速/基频参数
+const ttsPresets = {
+  edge: [
+    { name: '标准', rate: 0, volume: 0, pitch: 0 },
+    { name: '沉稳新闻', rate: -10, volume: 0, pitch: -3 },
+    { name: '活泼播报', rate: 10, volume: 10, pitch: 5 },
+    { name: '柔和轻语', rate: -5, volume: -15, pitch: -2 },
+  ],
+  tencent: [
+    { name: '标准', volume: 0, speed: 0 },
+    { name: '沉稳新闻', volume: 0, speed: -1 },
+    { name: '活泼播报', volume: 2, speed: 1 },
+    { name: '柔和轻语', volume: -3, speed: -1 },
+  ],
+  aliyun: [
+    { name: '标准', volume: 50, speech_rate: 0, pitch_rate: 0 },
+    { name: '沉稳新闻', volume: 50, speech_rate: -100, pitch_rate: -50 },
+    { name: '活泼播报', volume: 60, speech_rate: 100, pitch_rate: 50 },
+    { name: '柔和轻语', volume: 40, speech_rate: -50, pitch_rate: -30 },
+  ],
+}
+
+// 当前 provider 对应的预设列表
+const currentTtsPresets = computed(() => ttsPresets[ttsForm.value.provider] || [])
+
+// 试音相关状态
+const previewText = ref('大家好，欢迎收听今日新闻早报。以下是本期为您精选的头条资讯。')
+const previewing = ref(false)
+const previewAudioUrl = ref('')
 
 // 用量统计
 const usageLoading = ref(false)
@@ -584,6 +685,11 @@ async function loadVoices(provider) {
 // 切换 TTS Provider：重新加载音色列表并清空测试结果
 async function handleProviderChange(provider) {
   ttsTestResult.value = null
+  // 清空试音音频，避免切换 provider 后播放上一个引擎的音频
+  if (previewAudioUrl.value) {
+    URL.revokeObjectURL(previewAudioUrl.value)
+    previewAudioUrl.value = ''
+  }
   await loadVoices(provider)
 }
 
@@ -700,6 +806,91 @@ async function handleTestTTS() {
   }
 }
 
+// 应用 TTS 风格预设：按当前 provider 将预设参数填入表单
+function applyTtsPreset(preset) {
+  const f = ttsForm.value
+  if (f.provider === 'edge') {
+    // Edge-TTS rate/volume/pitch 为百分比字符串，0 视为无调整（空字符串）
+    f.edge_rate = preset.rate === 0 ? '' : (preset.rate > 0 ? `+${preset.rate}%` : `${preset.rate}%`)
+    f.edge_volume = preset.volume === 0 ? '' : (preset.volume > 0 ? `+${preset.volume}%` : `${preset.volume}%`)
+    f.edge_pitch = preset.pitch === 0 ? '' : (preset.pitch > 0 ? `+${preset.pitch}Hz` : `${preset.pitch}Hz`)
+  } else if (f.provider === 'tencent') {
+    f.tencent_volume = preset.volume
+    f.tencent_speed = preset.speed
+  } else if (f.provider === 'aliyun') {
+    f.aliyun_volume = preset.volume
+    f.aliyun_speech_rate = preset.speech_rate
+    f.aliyun_pitch_rate = preset.pitch_rate
+  }
+  ElMessage.success(`已应用「${preset.name}」预设，点击试音听效果`)
+}
+
+// 试音：用当前表单参数合成测试文本，返回音频后播放
+async function handlePreviewTTS() {
+  if (!previewText.value.trim()) {
+    ElMessage.warning('请输入试音文本')
+    return
+  }
+  previewing.value = true
+  // 清空旧音频 URL，避免播放上一次的音频
+  if (previewAudioUrl.value) {
+    URL.revokeObjectURL(previewAudioUrl.value)
+    previewAudioUrl.value = ''
+  }
+  try {
+    const f = ttsForm.value
+    const payload = {
+      provider: f.provider,
+      text: previewText.value,
+    }
+    // 按 provider 附加当前表单参数，使试音使用未保存的临时值
+    if (f.provider === 'aliyun') {
+      payload.aliyun_api_key = f.api_key
+      payload.aliyun_appkey = f.appkey
+      payload.aliyun_voice = f.voice
+      payload.aliyun_volume = f.aliyun_volume
+      payload.aliyun_speech_rate = f.aliyun_speech_rate
+      payload.aliyun_pitch_rate = f.aliyun_pitch_rate
+    } else if (f.provider === 'edge') {
+      payload.edge_voice = f.edge_voice
+      payload.edge_rate = f.edge_rate
+      payload.edge_volume = f.edge_volume
+      payload.edge_pitch = f.edge_pitch
+    } else if (f.provider === 'tencent') {
+      payload.tencent_secret_id = f.tencent_secret_id
+      payload.tencent_secret_key = f.tencent_secret_key
+      payload.tencent_region = f.tencent_region
+      payload.tencent_voice_type = f.tencent_voice_type
+      payload.tencent_volume = f.tencent_volume
+      payload.tencent_speed = f.tencent_speed
+    }
+    const blob = await api.post('/ai/preview-tts', payload, {
+      responseType: 'blob',
+      timeout: 60000,
+      silent: true,
+    })
+    previewAudioUrl.value = URL.createObjectURL(blob)
+    ElMessage.success('试音合成成功')
+  } catch (e) {
+    // axios blob 错误响应需手动解析 JSON，否则只拿到 Blob 对象无法读取 message
+    if (e.response?.data instanceof Blob) {
+      try {
+        const text = await e.response.data.text()
+        const errData = JSON.parse(text)
+        ElMessage.error(errData.message || '试音失败')
+      } catch {
+        ElMessage.error('试音失败')
+      }
+    } else if (e.response?.status === 401) {
+      ElMessage.error('登录已过期，请重新登录')
+    } else {
+      ElMessage.error(e.message || '试音失败')
+    }
+  } finally {
+    previewing.value = false
+  }
+}
+
 // 加载用量统计
 async function loadUsage() {
   usageLoading.value = true
@@ -764,15 +955,8 @@ onMounted(async () => {
 .ai-config {
   .top-bar {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     margin-bottom: 16px;
-
-    .page-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: $color-text-primary;
-    }
   }
 
   .config-tabs {
@@ -804,6 +988,14 @@ onMounted(async () => {
       line-height: 1.5;
       margin-top: 4px;
     }
+  }
+
+  .preview-section {
+    margin-top: 16px;
+    padding: 16px;
+    background: $color-bg-card;
+    border: 1px solid $color-border;
+    border-radius: $radius-md;
   }
 
   .usage-cards {

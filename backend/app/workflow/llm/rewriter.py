@@ -10,20 +10,20 @@
 """
 import asyncio
 import json
-import logging
+import time
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from openai import AsyncOpenAI
+from loguru import logger
 from tenacity import (
     retry,
     stop_after_attempt,
     wait_exponential,
     retry_if_exception_type,
-    before_sleep_log,
 )
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 
 from app.config import get_settings
 from app.core.ai_budget import check_budget, record_call
@@ -33,8 +33,6 @@ from app.models.material import MaterialStatus
 from app.models.script import ScriptStatus
 from app.workflow.llm import sensitive_filter
 from app.workflow.llm.heat_score import heat_score
-
-logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # Prompt 模板与敏感词表路径（与模块同级目录）
@@ -55,25 +53,39 @@ MIN_VALID_SEGMENTS = 3
 # 场景：RSS 源无新内容时爬虫去重导致当日采集 0 条，回溯避免工作流直接失败
 FALLBACK_DAYS = 3
 # 稿件最大段数：组装时仅取前 N 条成功段，避免段数过多导致节目超长
-MAX_SCRIPT_SEGMENTS = 6
-# 基础播报语速（字/分钟），对应阿里云 xiaoyun / Edge-TTS Xiaoxiao 等标准女声在 1.0 倍速下的实测值
-# 注意：Edge-TTS 在 rate="" 时实际语速约 470 字/分（天然偏快），
-# 但为统一估算口径，仍以 210 字/分为基准，倍率通过 _get_rate_multiplier() 校正
-WORDS_PER_MINUTE = 210
+# 与 SELECT_TOP_N 对齐：10 条候选全部可用时不浪费，目标 900s 时每段约 655 字（LLM 可达成）
+MAX_SCRIPT_SEGMENTS = 10
+# 基础播报语速（字/分钟）：Edge-TTS zh-CN-YunyangNeural +0% 实测约 303 字/分
+# 取 330 而非 303：LLM 实际生成字数通常为 prompt 要求的 80%-90%（±10% 措辞下），
+# 高出 9% 的余量补偿 LLM 生成不足，使最终 TTS 时长落在目标范围内
+# 数学关系：330×1.5=495 字/分（+50% rate），LLM 85% 达成 → 实际约 420 字/分 → 接近实测 454
+WORDS_PER_MINUTE = 330
 # 默认目标节目时长（秒），与 settings.TARGET_DURATION_SEC 对齐
 DEFAULT_TARGET_DURATION_SEC = 600
 
-# 开场白与结尾（固定文案，约 150 字 ≈ 45s 播报）
-# 扩充文案避免开场白/结尾过短导致实际 TTS 时长远低于预估
+# LLM 并发上限：限制同时发起的 LLM 请求数，避免瞬间打爆 API 频率限制
+# AI_BUDGET_RATE_LIMIT_PER_MIN 默认 20 次/分钟，10 条无限制并发 + tenacity 重试
+# 会在 3s 内产生 30 次调用尝试，全部被 check_budget 拦截
+# 3 并发：10 条分 4 批，每批约 3s，总耗时约 12s，且不会超出频率预算
+_LLM_CONCURRENCY_LIMIT = 3
+
+# 开场白与结尾（固定文案，约 180 字 ≈ 50s 播报）
+# {date_placeholder} 由 _assemble_script 动态替换为"今天是7月15日星期三"
+# 文案风格：口语化、有温度，像真人主播与听众聊天而非念稿
 INTRO_TEXT = (
-    "各位听众早上好，欢迎收听今日要闻。"
-    "我是您的 AI 新闻主播，接下来为您播报今天最重要的新闻资讯。"
-    "让我们一起了解今天发生了哪些值得关注的大事。"
+    "{date_placeholder}，"
+    "欢迎收听今天的新闻节目，我是您的新闻主播。"
+    "忙碌的清晨，让我用几分钟时间，陪您了解今天最值得关注的事儿。"
+    "无论您在通勤路上，还是正在准备一天的工作，"
+    "希望这份简明扼要的新闻速递，能帮您快速掌握外界动态。"
+    "话不多说，我们一起进入今天的要闻。"
 )
 OUTRO_TEXT = (
-    "以上就是今天的全部内容，感谢您的收听。"
-    "如果您觉得今天的节目对您有帮助，欢迎分享给身边的朋友。"
-    "我们明天同一时间再会，祝您度过愉快的一天。"
+    "以上就是今天节目的全部内容，感谢您的收听。"
+    "世界很大，变化很快，但您愿意花几分钟听听这些故事，"
+    "本身就是一件很了不起的事。"
+    "如果今天的节目对您有帮助，欢迎分享给身边的朋友，"
+    "我们明天同一时间再会，祝您今天一切顺利。"
 )
 
 # 第一层过滤：生成前 prompt 约束（写入 prompt 末尾，引导 LLM 主动规避）
@@ -82,6 +94,36 @@ PROMPT_CONSTRAINT = """
 - 严禁出现以下类型词汇：政治敏感、暴力、色情、歧视性表达
 - 严禁编造未经证实的信息
 - 严禁出现具体人名负面评价
+"""
+
+# JSON 输出格式后缀：频道级模板可能省略 JSON 格式要求时自动追加
+# 频道模板若缺少此格式，LLM 会返回纯文本导致 json.loads 失败（char 0）
+# 用 {{ }} 转义 JSON 花括号，与默认 rewrite.txt 模板一致
+_JSON_FORMAT_SUFFIX = """
+
+## 输出格式（严格 JSON，仅输出 JSON 本身，不要输出任何其他内容）
+{{
+  "title": "改写后的标题（≤20字，不含引号、编号、Markdown）",
+  "content": "改写后的正文（{words_per_segment}字±10%，纯文本，段落之间用空行分隔，不含标题/编号/Markdown符号/解释性文字）",
+  "estimated_duration": {segment_duration},
+  "source_url": "{source_url}"
+}}
+
+## 禁止
+- 不要输出 JSON 以外的任何内容（无引导语、无注释、无解释）
+- 不要输出 Markdown 标记（如 **、#、-、``` 等）
+- content 字段内不要包含标题、序号、列表符号、分点编号
+- content 字段只能是适合语音播报的连续纯文本，段落用空行分隔
+- 不要编造未在原文出现的事实、数字、引语
+"""
+
+
+# 思考问题后缀：频道开启 enable_thinking_question 时追加到 prompt 末尾
+# 作为"第9条改写要求"动态注入，关闭时不追加，rewrite.txt 默认不含此要求
+_THINKING_QUESTION_SUFFIX = """
+
+## 补充要求（结尾思考）
+正文最后用一句话向听众提出引发思考的问题（15-25字），问题需紧扣本段新闻核心，激发听众联想或判断，如"这项政策落地后，你会是受益者吗？""技术进步带来的便利，是否也让我们失去了什么？"。问题以问号结尾，语气亲切自然，像与朋友聊天。思考问题计入总字数。
 """
 
 
@@ -215,13 +257,30 @@ class LLMError(Exception):
 # - wait_exponential(1, 10)：1s, 2s, 4s... 退避上限 10s，避免雪崩压垮下游
 # - retry_if_exception_type：仅可重试错误重试，不可重试错误立即抛出
 # - reraise=True：重试耗尽后抛出原异常，保留错误上下文
+def _log_retry(retry_state):
+    """tenacity before_sleep 回调：重试前记录 warning 日志。
+
+    替代 tenacity.before_sleep_log，因为后者依赖标准库 logging 接口，
+    与项目 loguru logger 不兼容。
+    """
+    exc = retry_state.outcome.exception() if retry_state.outcome else None
+    next_action = retry_state.next_action if hasattr(retry_state, 'next_action') else 'sleep'
+    logger.warning(
+        "LLM 调用重试 attempt={} wait={:.1f}s exc={}: {}",
+        retry_state.attempt_number,
+        float(retry_state.next_sleep) if hasattr(retry_state, 'next_sleep') else 0,
+        type(exc).__name__ if exc else 'None',
+        str(exc)[:200] if exc else '',
+    )
+
+
 llm_retry = retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(min=1, max=10, multiplier=1),
     retry=retry_if_exception_type(
         (LLMRateLimitError, LLMTimeoutError, LLMServiceError)
     ),
-    before_sleep=before_sleep_log(logger, logging.WARNING),
+    before_sleep=_log_retry,
     reraise=True,
 )
 
@@ -277,6 +336,28 @@ def _is_placeholder_api_key(key: str) -> bool:
     return False
 
 
+async def _wait_for_rate_limit_slot(timeout: float = 65) -> bool:
+    """等待本地频率预算有空位（频率超限时的恢复策略）。
+
+    60s 滑动窗口内的旧记录会随时间过期，轮询 check_budget 直到通过或超时。
+    避免 10 条并发 + tenacity 短退避（1-2s）导致的"全部失败"连锁反应：
+    tenacity 重试间隔远小于 60s 频率窗口，短退避后重试仍会被 check_budget 拦截。
+
+    Returns:
+        True 如果等到空位；False 如果超时或遇到不可恢复的预算超限（token/费用）
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        allowed, reason = check_budget(service_type="llm")
+        if allowed:
+            return True
+        if "频率超限" not in reason:
+            # token/费用超限不可恢复，无需等待
+            return False
+        await asyncio.sleep(3)
+    return False
+
+
 @llm_retry
 async def _call_llm(prompt: str) -> str:
     """调用通义千问 API（LLD 7.4 重试策略）。
@@ -291,13 +372,26 @@ async def _call_llm(prompt: str) -> str:
     预算控制：调用前检查三重预算（token/费用/频率），超限直接抛 LLMAuthError
     避免无效请求打到外部 API；调用成功后记录用量更新预算计数。
 
+    频率超限特殊处理：主动等待 60s 滑动窗口滑过后重试，而非立即抛错。
+    因为 tenacity 的 wait_exponential(1-10s) 远小于 60s 频率窗口，
+    立即抛错后 tenacity 短退避重试仍然会被 check_budget 拦截，导致全部失败。
+
     其他异常（含内容审核）不在此处映射，由调用方按不可重试处理。
     """
     # 预算检查：超限时不发起请求（避免外部 API 计费）
-    allowed, reason = check_budget()
+    allowed, reason = check_budget(service_type="llm")
     if not allowed:
-        logger.warning("AI 预算超限，跳过 LLM 调用: %s", reason)
-        raise LLMServiceError(f"AI 预算超限: {reason}")
+        if "频率超限" in reason:
+            # 频率超限：等待 60s 滑动窗口滑过后重试，而非立即抛错
+            # tenacity 短退避（1-2s）无法突破 60s 频率窗口，立即抛错会导致
+            # 10 条并发全部失败（tenacity 3 次重试均在窗口内，全部被拦截）
+            logger.warning("频率超限，等待滑动窗口滑过后重试: %s", reason)
+            if not await _wait_for_rate_limit_slot(timeout=65):
+                raise LLMServiceError(f"AI 预算超限: {reason}")
+        else:
+            # token/费用超限：不可恢复，立即失败
+            logger.warning("AI 预算超限，跳过 LLM 调用: %s", reason)
+            raise LLMServiceError(f"AI 预算超限: {reason}")
 
     try:
         resp = await _get_client().chat.completions.create(
@@ -340,6 +434,7 @@ def _build_prompt(
     segment_duration: int = 60,
     extra_constraint: str = None,
     template_text: str = None,
+    enable_thinking_question: bool = True,
 ) -> str:
     """构建改写 prompt（读 rewrite.txt 模板，填入素材信息 + 动态字数要求）。
 
@@ -349,8 +444,13 @@ def _build_prompt(
         segment_duration: 每段预估时长（秒），供 LLM 输出 estimated_duration
         extra_constraint: 额外约束（如敏感词命中后追加的规避要求）
         template_text: 频道级自定义模板，为 None 则读默认 rewrite.txt
+        enable_thinking_question: 是否在 prompt 中注入结尾思考问题要求
     """
     template = template_text if template_text else PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
+    # 预计算字数范围，供模板中 {words_min}/{words_max} 使用
+    # .format() 不支持表达式，必须预计算后传入
+    words_min = int(words_per_segment * 0.9)
+    words_max = int(words_per_segment * 1.1)
     prompt = template.format(
         title=material["title"],
         content=material["content"],
@@ -358,8 +458,23 @@ def _build_prompt(
         category=material.get("category") or "未分类",
         source_url=material["url"],
         words_per_segment=words_per_segment,
+        words_min=words_min,
+        words_max=words_max,
         segment_duration=segment_duration,
     )
+    # 频道级模板可能省略 JSON 输出格式要求，导致 LLM 返回纯文本
+    # 检测模板是否已含 JSON 格式声明（双引号包裹的 title/content 字段），
+    # 缺失时追加 JSON 格式后缀，保证 LLM 输出可解析的 JSON
+    if template_text and '"title"' not in template_text:
+        prompt = prompt + _JSON_FORMAT_SUFFIX.format(
+            words_per_segment=words_per_segment,
+            segment_duration=segment_duration,
+            source_url=material["url"],
+        )
+    # 思考问题要求动态注入：开关开启时追加，无论使用默认模板还是频道自定义模板
+    # 频道自定义模板通常不含思考问题要求（seed 模板已移除），追加不会重复
+    if enable_thinking_question:
+        prompt = prompt + _THINKING_QUESTION_SUFFIX
     # 第一层过滤：在 prompt 末尾追加敏感词规避约束，引导 LLM 主动避开
     if extra_constraint:
         prompt = prompt + "\n" + extra_constraint
@@ -373,6 +488,7 @@ async def _rewrite_one(
     retry_with_constraint: bool = False,
     template_text: str = None,
     constraint_text: str = None,
+    enable_thinking_question: bool = True,
 ) -> dict:
     """改写单条素材（LLD 7.3 双层过滤）。
 
@@ -391,6 +507,7 @@ async def _rewrite_one(
         retry_with_constraint: 是否为二次重生成（追加敏感词约束 prompt）
         template_text: 频道级自定义改写模板，None 则用默认 rewrite.txt
         constraint_text: 频道级敏感词约束，None 则用默认 PROMPT_CONSTRAINT
+        enable_thinking_question: 是否在 prompt 中注入结尾思考问题要求
 
     Returns:
         {title, content, estimated_duration, source_url, material_id}
@@ -403,8 +520,20 @@ async def _rewrite_one(
         segment_duration=segment_duration,
         extra_constraint=effective_constraint if retry_with_constraint else None,
         template_text=template_text,
+        enable_thinking_question=enable_thinking_question,
     )
     raw = await _call_llm(prompt)
+
+    # 空 content 防御：某些 API 在限流/审核拒绝时返回 200 + 空 content
+    # 不做检查会导致 json.loads("") 报 char 0，丢失真实原因
+    if not raw or not raw.strip():
+        logger.error(
+            "LLM 返回空 content material_id={} prompt_len={}",
+            material["id"], len(prompt),
+        )
+        raise LLMContentError(
+            f"LLM 返回空 content（可能被限流或审核拒绝），prompt 长度={len(prompt)}"
+        )
 
     # LLM 偶尔会输出 Markdown 代码块包裹，剥离后再解析
     text = raw.strip()
@@ -421,12 +550,14 @@ async def _rewrite_one(
         data = json.loads(text)
     except json.JSONDecodeError as e:
         # JSON 解析失败视为不可重试错误，记录原始响应便于排查
+        # 把 raw 前 300 字存入错误消息，使 failure_details 能直接展示
         logger.error(
-            "LLM 响应 JSON 解析失败 material_id=%s raw=%s",
-            material["id"],
-            raw[:200],
+            "LLM 响应 JSON 解析失败 material_id={} raw_len={} raw_preview={}",
+            material["id"], len(raw), raw[:300],
         )
-        raise LLMContentError(f"JSON 解析失败: {e}") from e
+        raise LLMContentError(
+            f"JSON 解析失败: {e}，raw 前300字: {raw[:300]}"
+        ) from e
 
     # 第二层过滤：生成后词表扫描
     content = data.get("content", "")
@@ -570,6 +701,18 @@ def _assemble_script(
     effective_intro = intro_text if intro_text else INTRO_TEXT
     effective_outro = outro_text if outro_text else OUTRO_TEXT
 
+    # 开场白动态注入今日日期：替换 {date_placeholder} 为"今天是7月15日星期三"
+    # 频道自定义文案也可使用 {date_placeholder} 占位符享受日期注入
+    # 兜底：频道文案不含占位符时前置日期，确保所有频道都有日期播报
+    today = datetime.now()
+    weekdays = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+    date_str = f"今天是{today.month}月{today.day}日{weekdays[today.weekday()]}"
+    if "{date_placeholder}" in effective_intro:
+        effective_intro = effective_intro.replace("{date_placeholder}", date_str)
+    else:
+        # 频道自定义 intro_prompt 未声明占位符，前置日期作为兜底
+        effective_intro = f"{date_str}，{effective_intro}"
+
     # 实际播报速率 = 基础语速 × 倍率（如 210 × 1.5 = 315 字/分）
     actual_words_per_min = WORDS_PER_MINUTE * rate_multiplier
 
@@ -630,12 +773,15 @@ def _assemble_script(
     }
 
 
-async def _fetch_materials(date_str: str) -> list[dict]:
-    """查询当日 pending 素材，当日无素材时回溯最近 FALLBACK_DAYS 天。
+async def _fetch_materials(date_str: str, channel_id: int = None) -> list[dict]:
+    """查询当日 pending 素材，当日不足 SELECT_MIN_N 条时回溯最近 FALLBACK_DAYS 天。
 
     按 crawled_at 当日筛选，避免历史积压素材混入当日节目。
     status=pending 确保不重复消费已被选题的素材。
-    当日爬虫去重可能导致 0 条新素材（RSS 源无新内容），回溯避免工作流直接失败。
+    回溯阈值取 SELECT_MIN_N 而非 0：RSS 源稀疏日即使爬到 1-2 条，
+    也常不足 MIN_VALID_SEGMENTS=3，提前回溯避免工作流必然失败。
+    channel_id 非空时按频道过滤，确保各频道素材互不交叉（频道级隔离）；
+    为空时查询全部 pending 素材（兼容全局模式/历史遗留数据 channel_id IS NULL）。
     """
     async with AsyncSessionLocal() as session:
         day = date.fromisoformat(date_str)
@@ -647,26 +793,40 @@ async def _fetch_materials(date_str: str) -> list[dict]:
             Material.crawled_at >= start,
             Material.crawled_at <= end,
         )
+        # 频道级素材隔离：channel_id 非空时仅查本频道素材
+        # 历史遗留素材（channel_id IS NULL）只在全局模式下可用
+        if channel_id is not None:
+            stmt = stmt.where(Material.channel_id == channel_id)
         result = await session.execute(stmt)
-        rows = result.scalars().all()
+        rows = list(result.scalars().all())
 
-        # 当日无 pending 素材时，回溯最近 FALLBACK_DAYS 天
-        # 场景：RSS 源周末/夜间无更新，爬虫去重后当日 0 条新素材
-        if not rows and FALLBACK_DAYS > 0:
+        # 当日 pending 素材不足时，回溯最近 FALLBACK_DAYS 天补足
+        # 场景：RSS 源周末/夜间/稀疏日，单日仅 1-2 条素材，
+        # 改写后段数 < MIN_VALID_SEGMENTS 必然失败，提前回溯兜底
+        if len(rows) < SELECT_MIN_N and FALLBACK_DAYS > 0:
             fb_start = datetime.combine(
                 day - timedelta(days=FALLBACK_DAYS), datetime.min.time()
             )
+            existing_ids = {r.id for r in rows}
             fb_stmt = select(Material).where(
                 Material.status == MaterialStatus.pending,
                 Material.crawled_at >= fb_start,
-                Material.crawled_at <= end,
-            ).order_by(Material.crawled_at.desc())
+                Material.crawled_at < start,
+            )
+            # 回溯也按频道过滤，保持隔离一致性
+            if channel_id is not None:
+                fb_stmt = fb_stmt.where(Material.channel_id == channel_id)
+            fb_stmt = fb_stmt.order_by(Material.crawled_at.desc())
             fb_result = await session.execute(fb_stmt)
-            rows = fb_result.scalars().all()
-            if rows:
+            fb_rows = [r for r in fb_result.scalars().all() if r.id not in existing_ids]
+            if fb_rows:
+                rows.extend(fb_rows)
                 logger.warning(
-                    "当日 %s 无 pending 素材，回溯最近 %d 天获取 %d 条",
-                    date_str, FALLBACK_DAYS, len(rows),
+                    "当日 %s pending 素材不足（%d < %d），回溯最近 %d 天补 %d 条，合计 %d 条"
+                    "（channel_id=%s）",
+                    date_str, len(existing_ids), SELECT_MIN_N,
+                    FALLBACK_DAYS, len(fb_rows), len(rows),
+                    channel_id,
                 )
 
         # ORM 对象转 dict，便于热度计算与并发传递
@@ -687,13 +847,13 @@ async def _fetch_materials(date_str: str) -> list[dict]:
 
 
 async def _fetch_channel_prompts(channel_id: int) -> dict:
-    """查询频道级提示词。空值字段返回 None，由调用方回退默认值。
+    """查询频道级提示词与配置。空值字段返回 None，由调用方回退默认值。
 
     Args:
         channel_id: 频道 ID
 
     Returns:
-        {intro_prompt, outro_prompt, constraint_prompt, rewrite_template}
+        {intro_prompt, outro_prompt, constraint_prompt, rewrite_template, enable_thinking_question}
         频道不存在或字段为空时对应值为 None
     """
     from app.models import Channel
@@ -705,12 +865,15 @@ async def _fetch_channel_prompts(channel_id: int) -> dict:
                 "outro_prompt": None,
                 "constraint_prompt": None,
                 "rewrite_template": None,
+                "enable_thinking_question": None,
             }
         return {
             "intro_prompt": ch.intro_prompt,
             "outro_prompt": ch.outro_prompt,
             "constraint_prompt": ch.constraint_prompt,
             "rewrite_template": ch.rewrite_template,
+            # None=默认开启，0=关闭，1=开启；统一转为 bool
+            "enable_thinking_question": ch.enable_thinking_question != 0,
         }
 
 
@@ -766,28 +929,65 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         target_sec, rate_multiplier, target_segments, words_per_segment, segment_duration,
     )
 
-    # 1. 拉取当日 pending 素材
-    materials = await _fetch_materials(date_str)
-    logger.info("当日 pending 素材 %d 条", len(materials))
+    # 1. 拉取当日 pending 素材（频道级隔离：channel_id 非空时仅查本频道素材）
+    materials = await _fetch_materials(date_str, channel_id)
+    logger.info("当日 pending 素材 %d 条（channel_id=%s）", len(materials), channel_id)
 
     if not materials:
-        raise LLMError(f"当日 {date_str} 无 pending 素材，无法改写")
+        # 查询 material 表诊断信息，帮助定位根因
+        # 场景：爬虫从未成功、RSS 源全部不可达、数据库被重置、素材状态被批量修改
+        async with AsyncSessionLocal() as session:
+            total_count = await session.scalar(select(func.count(Material.id)))
+            status_rows = (
+                await session.execute(
+                    select(Material.status, func.count(Material.id))
+                    .group_by(Material.status)
+                )
+            ).all()
+            status_dist = dict(status_rows) if status_rows else {}
+        raise LLMError(
+            f"当日 {date_str} 无 pending 素材（回溯 {FALLBACK_DAYS} 天亦无），"
+            f"无法改写。material 表共 {total_count} 条，"
+            f"状态分布: {status_dist or '空表'}。"
+            f"请检查爬虫是否正常运行、RSS 源配置是否可达"
+        )
 
     # 2. 选题：按品类分组，每品类选 1-2 篇热度最高
     selected = _select_top_materials(materials, top_n=SELECT_TOP_N)
     logger.info("选题 %d 条（按热度排序）", len(selected))
 
-    # 3. 并发改写（注入动态字数要求 + 频道级模板/约束，return_exceptions 隔离单条失败）
-    tasks = [
-        _rewrite_one(
-            m,
-            words_per_segment=words_per_segment,
-            segment_duration=segment_duration,
-            template_text=channel_prompts["rewrite_template"] if channel_prompts else None,
-            constraint_text=channel_prompts["constraint_prompt"] if channel_prompts else None,
-        )
-        for m in selected
-    ]
+    # 2.5 关联素材到当前工作流并标记为 selected
+    # 回溯选取的历史素材 workflow_id 可能为 NULL，需更新为当前工作流
+    # 否则工作流详情页按 workflow_id 过滤素材列表会查不到数据
+    selected_ids = [m["id"] for m in selected]
+    if selected_ids:
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                update(Material)
+                .where(Material.id.in_(selected_ids))
+                .values(workflow_id=workflow_id, status=MaterialStatus.selected.value)
+            )
+            await session.commit()
+        logger.info("已关联 %d 条素材到 %s", len(selected_ids), workflow_id)
+
+    # 3. 并发改写（Semaphore 限流 + return_exceptions 隔离单条失败）
+    # 限制并发数避免瞬间打爆 LLM API 频率限制（AI_BUDGET_RATE_LIMIT_PER_MIN=20）
+    # 无 Semaphore 时 10 条并发 + tenacity 重试会在 3s 内产生 30 次调用尝试，
+    # 远超 20 次/分钟的频率预算，导致全部被 check_budget 拦截
+    semaphore = asyncio.Semaphore(_LLM_CONCURRENCY_LIMIT)
+
+    async def _rewrite_one_with_limit(m: dict) -> dict:
+        async with semaphore:
+            return await _rewrite_one(
+                m,
+                words_per_segment=words_per_segment,
+                segment_duration=segment_duration,
+                template_text=channel_prompts["rewrite_template"] if channel_prompts else None,
+                constraint_text=channel_prompts["constraint_prompt"] if channel_prompts else None,
+                enable_thinking_question=channel_prompts["enable_thinking_question"] if channel_prompts else True,
+            )
+
+    tasks = [_rewrite_one_with_limit(m) for m in selected]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # 4. 过滤失败项 + 敏感词扫描
@@ -804,6 +1004,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                     retry_with_constraint=True,
                     template_text=channel_prompts["rewrite_template"] if channel_prompts else None,
                     constraint_text=channel_prompts["constraint_prompt"] if channel_prompts else None,
+                    enable_thinking_question=channel_prompts["enable_thinking_question"] if channel_prompts else True,
                 )
                 segments.append({**r, "seq": len(segments) + 1})
             except Exception as e:
@@ -849,6 +1050,25 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         intro_text=channel_prompts["intro_prompt"] if channel_prompts else None,
         outro_text=channel_prompts["outro_prompt"] if channel_prompts else None,
     )
+
+    # 5.5 字数上限校验：LLM 常不遵守 prompt 字数约束（中文 LLM 尤甚），
+    # 超长时从末尾丢弃正文段，避免 TTS 合成后时长超出 stitch 校验上限
+    # 安全边界：保留至少 MIN_VALID_SEGMENTS 段正文 + intro + outro
+    max_allowed_duration = int(target_sec * 1.2)
+    if assembled["estimated_duration"] > max_allowed_duration:
+        segs = assembled["segments_json"]
+        while len(segs) > MIN_VALID_SEGMENTS + 2 and assembled["estimated_duration"] > max_allowed_duration:
+            segs.pop(-2)
+            assembled["total_words"] = sum(len(s["content"]) for s in segs)
+            assembled["estimated_duration"] = int(
+                assembled["total_words"] / (WORDS_PER_MINUTE * rate_multiplier) * 60
+            )
+        assembled["full_text"] = "\n\n".join(s["content"] for s in segs)
+        assembled["segments_json"] = segs
+        logger.warning(
+            "字数超限截断 target=%ds max=%ds 保留段数=%d estimated=%ds",
+            target_sec, max_allowed_duration, len(segs), assembled["estimated_duration"],
+        )
 
     # 6. 落库 script 表
     referenced_materials = [

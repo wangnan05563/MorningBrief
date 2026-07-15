@@ -48,7 +48,7 @@ def main():
         db_path = sys.argv[1]
     else:
         # 与运行时路径解析保持一致：dev 模式 → backend/data/news.db，exe 模式 → exe 同级 data/news.db
-        # 之前默认指向 dist/20-news/data/news.db，与开发态运行时数据库不一致，导致 dev 模式登录失败
+        # 之前默认指向 dist/MorningBrief/data/news.db，与开发态运行时数据库不一致，导致 dev 模式登录失败
         from app.paths import resolve_db_path
         db_path = str(resolve_db_path())
     if not Path(db_path).exists():

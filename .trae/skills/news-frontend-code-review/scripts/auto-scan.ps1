@@ -1,4 +1,4 @@
-﻿# ========== 20_News 前端代码阻塞级问题自动扫描 v1.0.0 ==========
+﻿# ========== MorningBrief 前端代码阻塞级问题自动扫描 v1.0.0 ==========
 # 扫描 admin-web/src/ 下的 .vue/.js 文件 + miniprogram/ 下的 .js/.wxml/.wxss 文件
 # 检查 12 项阻塞级问题（来源于 config.yaml#hard_constraints）
 # 用法：pwsh .trae/skills/news-frontend-code-review/scripts/auto-scan.ps1
@@ -30,7 +30,7 @@ if (-not (Test-Path $Miniprogram)) {
     exit 1
 }
 
-Write-Host "========== 20_News 前端代码预检 ==========" -ForegroundColor Cyan
+Write-Host "========== MorningBrief 前端代码预检 ==========" -ForegroundColor Cyan
 Write-Host "运营后台目录: $AdminWebSrc" -ForegroundColor Gray
 Write-Host "小程序目录  : $Miniprogram" -ForegroundColor Gray
 Write-Host "" -ForegroundColor Gray

@@ -1,6 +1,6 @@
 # 异步并发规则
 
-本文档定义 20_News 项目的异步并发开发规则。
+本文档定义 MorningBrief 项目的异步并发开发规则。
 
 ## asyncio.create_task 规则
 

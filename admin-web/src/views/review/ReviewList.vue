@@ -16,7 +16,9 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="created_at" label="创建时间" width="200" />
+      <el-table-column label="创建时间" width="200">
+        <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+      </el-table-column>
       <el-table-column label="操作" width="120" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" size="small" @click="goReview(row.id)">审核</el-button>
@@ -49,6 +51,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../../api'
+import { formatTime } from '../../utils/format'
 
 const router = useRouter()
 

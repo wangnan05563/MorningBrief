@@ -1,4 +1,6 @@
 """B 端工作流路由。"""
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,12 +60,19 @@ async def get_today_workflow(
 async def list_workflows(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
-    channel_id: int | None = Query(None),
+    channel_id: int | None = Query(None, description="频道 ID 筛选"),
+    episode_date: date | None = Query(None, description="节目日期筛选（ISO 格式 YYYY-MM-DD）"),
+    status: str | None = Query(None, description="状态筛选：queued/running/success/failed/cancelled"),
+    source: str | None = Query(None, description="来源筛选：cron/manual"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(get_current_admin),
 ):
+    """工作流分页列表，支持按频道/节目日期/状态/来源组合过滤。"""
     svc = WorkflowService(db)
-    data = await svc.list_workflows(page=page, size=size, channel_id=channel_id)
+    data = await svc.list_workflows(
+        page=page, size=size, channel_id=channel_id,
+        episode_date=episode_date, status=status, source=source,
+    )
     return success(data=data)
 
 
@@ -105,7 +114,6 @@ async def trigger_workflow(
 
     支持携带 channel_id，rewrite 步骤据此读取频道级提示词。
     """
-    from datetime import date
     from app.services.workflow_scheduler import workflow_scheduler
 
     workflow_id = await workflow_scheduler.trigger_workflow(

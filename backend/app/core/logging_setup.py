@@ -92,7 +92,7 @@ def setup_logging(log_level: str = "INFO", log_dir: str | Path | None = None) ->
         log_path = Path(log_dir)
         log_path.mkdir(parents=True, exist_ok=True)
         logger.add(
-            log_path / "20news_{time:YYYY-MM-DD}.log",
+            log_path / "MorningBrief_{time:YYYY-MM-DD}.log",
             level="DEBUG",
             format=(
                 "{time:YYYY-MM-DD HH:mm:ss.SSS} | "

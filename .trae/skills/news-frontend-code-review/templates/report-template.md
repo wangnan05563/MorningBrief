@@ -1,4 +1,4 @@
-# 20_News 前端代码审查报告
+# MorningBrief 前端代码审查报告
 
 ## 基本信息
 
@@ -165,7 +165,7 @@ pwsh .trae/skills/news-frontend-code-review/scripts/auto-scan.ps1
 
 ## 四维度复盘
 
-> 基于本次 20_News 前端代码审查实践，使用 Sequential Thinking 4 维度复盘法沉淀可复用的工作流模板。
+> 基于本次 MorningBrief 前端代码审查实践，使用 Sequential Thinking 4 维度复盘法沉淀可复用的工作流模板。
 
 ### 维度 1：成功执行任务的完整步骤
 

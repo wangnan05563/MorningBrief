@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    20_News 一键环境配置脚本
+    MorningBrief 一键环境配置脚本
 .DESCRIPTION
     在新 PC 上自动检测依赖、初始化配置文件与数据目录、安装前端依赖。
     V1.2 单机 exe 部署：覆盖 Node.js / Python / .env 配置 / 数据目录 / admin-web 前端依赖。
@@ -31,7 +31,7 @@ param(
 
 # 强制遇错即停：任一步骤失败应立即暴露，避免后续步骤在错误状态下继续
 $ErrorActionPreference = "Stop"
-$Script:StepPrefix = "[20News-Setup]"
+$Script:StepPrefix = "[MorningBrief-Setup]"
 
 # ============================================================
 # 工具函数
@@ -120,7 +120,7 @@ $Script:NodeMinMinor = 0
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor DarkCyan
-Write-Host "  20_News 一键环境配置" -ForegroundColor Cyan
+Write-Host "  MorningBrief 一键环境配置" -ForegroundColor Cyan
 Write-Host "  项目目录: $ProjectRoot" -ForegroundColor DarkGray
 Write-Host "============================================================" -ForegroundColor DarkCyan
 Write-Host ""

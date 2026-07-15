@@ -41,10 +41,10 @@ _META_PROMPT_TEMPLATE = """你是一位专业的语音新闻节目制作人。�
 
 请生成以下 4 个字段，每个字段都要贴合频道定位与受众特点：
 
-1. intro（开场白）：约 60-80 字，欢迎语 + 频道定位介绍 + 今日要闻引导。要体现频道特色，如科技频道可强调"前沿"，财经频道可强调"洞察"。
+1. intro（开场白）：必须以 "{date_placeholder}，" 开头（占位符会在运行时替换为"今天是X月X日星期X"），然后约 60-80 字，欢迎语 + 频道定位介绍 + 今日要闻引导。要体现频道特色，如科技频道可强调"前沿"，财经频道可强调"洞察"。
 2. outro（结尾）：约 60-80 字，总结语 + 分享引导 + 期待再会。与开场白风格呼应。
 3. constraint（敏感词约束）：针对频道内容特点的额外约束，如财经频道需强调"不构成投资建议"，健康频道需强调"不替代医疗诊断"。
-4. template（改写模板）：完整的改写 prompt 模板，参考通用模板结构，但语气、风格、术语解释要贴合频道特色。模板中保留占位符 {{title}} {{content}} {{source}} {{category}} {{source_url}} {{words_per_segment}} {{segment_duration}}。
+4. template（改写模板）：完整的改写 prompt 模板，参考通用模板结构，但语气、风格、术语解释要贴合频道特色。模板中保留占位符 {{title}} {{content}} {{source}} {{category}} {{source_url}} {{words_per_segment}} {{segment_duration}}。模板中须包含"每段新闻正文最后用一句话向听众提出引发思考的问题"的要求，问题需紧扣本段新闻核心。
 
 输出格式（严格 JSON，仅输出 JSON 本身）：
 {{
@@ -75,7 +75,7 @@ async def generate_prompts_for_channel(name: str, description: str) -> dict:
         ValueError: LLM 响应解析失败或预算超限
     """
     # 预算检查：超限时不发起请求
-    allowed, reason = check_budget()
+    allowed, reason = check_budget(service_type="llm")
     if not allowed:
         logger.warning("AI 预算超限，跳过频道提示词生成: %s", reason)
         raise ValueError(f"AI 预算超限: {reason}")
@@ -129,4 +129,110 @@ async def generate_prompts_for_channel(name: str, description: str) -> dict:
         "outro_prompt": data.get("outro", "").strip(),
         "constraint_prompt": data.get("constraint", "").strip(),
         "rewrite_template": data.get("template", "").strip(),
+    }
+
+
+# BGM 推荐元提示词：引导 LLM 从可用列表中选择最匹配频道的 BGM
+_BGM_RECOMMEND_TEMPLATE = """你是一位专业的电台音乐编辑。请根据频道定位，从可用 BGM 列表中选择最匹配频道的背景音乐。
+
+频道名称：{name}
+频道描述：{description}
+
+可用 BGM 列表（path 是文件路径，name 是 BGM 名称）：
+{bgm_list_json}
+
+选择原则：
+1. BGM 风格要与频道内容定位匹配（如科技频道适合电子/轻音乐，财经频道适合稳重的钢琴曲）
+2. BGM 应为衬底音乐，不喧宾夺主，节奏舒缓
+3. 优先选择预制 BGM（category=预制），其次自定义
+
+输出格式（严格 JSON，仅输出 JSON 本身）：
+{{
+  "path": "选中的 BGM path",
+  "reason": "选择理由（30字以内）"
+}}
+
+禁止：
+- 不要输出 JSON 以外的任何内容
+- 不要编造不在列表中的 BGM
+"""
+
+
+async def recommend_bgm_for_channel(
+    name: str, description: str, bgm_list: list[dict],
+) -> dict:
+    """调用 LLM 为频道推荐最匹配的 BGM。
+
+    Args:
+        name: 频道名称
+        description: 频道描述
+        bgm_list: 可用 BGM 列表（来自 _scan_bgm_files）
+
+    Returns:
+        {path, reason} 推荐结果
+
+    Raises:
+        ValueError: LLM 响应解析失败、预算超限或推荐了不存在的 BGM
+    """
+    allowed, reason = check_budget(service_type="llm")
+    if not allowed:
+        logger.warning("AI 预算超限，跳过 BGM 推荐: %s", reason)
+        raise ValueError(f"AI 预算超限: {reason}")
+
+    # 构造 BGM 列表摘要供 LLM 选择，避免传完整 path 前缀干扰
+    bgm_summary = [
+        {"path": b["path"], "name": b["name"], "category": b["category"]}
+        for b in bgm_list
+    ]
+    prompt = _BGM_RECOMMEND_TEMPLATE.format(
+        name=name,
+        description=description or "无描述",
+        bgm_list_json=json.dumps(bgm_summary, ensure_ascii=False, indent=2),
+    )
+
+    try:
+        resp = await _get_client().chat.completions.create(
+            model=settings.LLM_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=settings.LLM_TIMEOUT_SEC,
+        )
+    except Exception as e:
+        logger.error("BGM 推荐 LLM 调用失败: %s", e)
+        raise ValueError(f"LLM 调用失败: {e}") from e
+
+    usage = getattr(resp, "usage", None)
+    input_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
+    output_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
+    record_call(
+        service_type="llm",
+        model=settings.LLM_MODEL,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
+
+    raw = resp.choices[0].message.content.strip()
+    if raw.startswith("```"):
+        lines = raw.splitlines()
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        raw = "\n".join(lines).strip()
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        logger.error("BGM 推荐 LLM 响应 JSON 解析失败: %s, raw=%s", e, raw[:200])
+        raise ValueError(f"LLM 响应 JSON 解析失败: {e}") from e
+
+    recommended_path = data.get("path", "").strip()
+    # 校验推荐的 path 确实在可用列表中，防止 LLM 幻觉返回不存在的 BGM
+    valid_paths = {b["path"] for b in bgm_list}
+    if recommended_path not in valid_paths:
+        logger.warning("LLM 推荐了不存在的 BGM: %s, 退化为列表第一个", recommended_path)
+        recommended_path = bgm_list[0]["path"] if bgm_list else None
+
+    return {
+        "path": recommended_path,
+        "reason": data.get("reason", "").strip(),
     }

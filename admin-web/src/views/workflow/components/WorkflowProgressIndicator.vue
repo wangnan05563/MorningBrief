@@ -29,6 +29,7 @@
 <script setup>
 import { computed } from 'vue'
 import { ElMessageBox } from '../../../utils/message'
+import { formatTime } from '../../../utils/format'
 
 const props = defineProps({
   // 后端返回的 steps_summary 数组：[{ name, status, finished_at, error }, ...]
@@ -82,7 +83,7 @@ const stepsWithMeta = computed(() => {
     const lightStatus = mapLightStatus(step.status, props.workflowStatus)
     const label = STEP_LABELS[name]
     const finishedText = step.finished_at
-      ? `完成时间：${step.finished_at}`
+      ? `完成时间：${formatTime(step.finished_at)}`
       : '未完成'
     const statusText = step.status === 'pending' && props.workflowStatus === 'cancelled'
       ? '已中断'

@@ -44,7 +44,7 @@ if ($text -notmatch '(?s)pause >nul\r\nexit /b 0') {
     throw "Startup batch must wait for a key press before closing after success"
 }
 
-$smokeDir = Join-Path $env:TEMP ("20-news-bat-smoke-" + [guid]::NewGuid().ToString("N"))
+$smokeDir = Join-Path $env:TEMP ("MorningBrief-bat-smoke-" + [guid]::NewGuid().ToString("N"))
 try {
     New-Item -ItemType Directory -Path $smokeDir | Out-Null
     $smokeBatch = Join-Path $smokeDir "start-service.bat"

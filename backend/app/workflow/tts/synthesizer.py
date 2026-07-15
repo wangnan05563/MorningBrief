@@ -61,7 +61,7 @@ async def synthesize_segment(text: str, voice: str = None) -> bytes:
     TTSRateLimitError 避免无效请求打到外部 API；调用成功后按字符数
     记录用量更新预算计数。
     """
-    allowed, reason = check_budget()
+    allowed, reason = check_budget(service_type="tts")
     if not allowed:
         logger.warning("AI 预算超限，跳过 TTS 调用: %s", reason)
         raise TTSRateLimitError(f"AI 预算超限: {reason}")

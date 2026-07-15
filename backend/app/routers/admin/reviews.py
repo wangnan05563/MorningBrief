@@ -78,4 +78,18 @@ async def handle_action(
             workflow_id=result["workflow_id"],
             review_id=review_id,
         )
+        # 节目发布成功后触发 published 通知，让运维群感知节目已上线
+        # 通知异常不阻塞发布主流程（sender 内部已捕获）
+        try:
+            from app.services.notification import get_notification_sender
+            sender = get_notification_sender()
+            await sender.send_workflow_event(
+                "workflow.published", result["workflow_id"],
+            )
+        except Exception:
+            # 通知失败不影响发布结果，仅记录日志
+            import logging
+            logging.getLogger(__name__).exception(
+                "发布通知发送失败 workflow_id=%s", result.get("workflow_id"),
+            )
     return success(data={"success": True, "episode_id": episode_id})

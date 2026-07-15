@@ -1,6 +1,6 @@
 ﻿# 版本演进
 
-本文档记录 20_News 项目开发技能的版本演进和重要变更。
+本文档记录 MorningBrief 项目开发技能的版本演进和重要变更。
 
 ## v1.0.0 (2026-07-10)
 
@@ -96,7 +96,7 @@
 
 **问题**：开发模式启动后 admin/admin123 登录报"用户名或密码错误"
 
-**根因**：`seed_admin.py` 默认数据库路径硬编码为 `dist/20-news/data/news.db`（打包产物路径），与开发态运行时数据库 `backend/data/news.db` 不一致，导致开发态 `admin_user` 表永远为空
+**根因**：`seed_admin.py` 默认数据库路径硬编码为 `dist/MorningBrief/data/news.db`（打包产物路径），与开发态运行时数据库 `backend/data/news.db` 不一致，导致开发态 `admin_user` 表永远为空
 
 **修复**：
 1. `seed_admin.py` 默认路径改用 `app.paths.resolve_db_path()`，与运行时路径解析保持一致
@@ -190,7 +190,7 @@
 **问题**：
 1. 双击启动服务.bat默认启动 EXE 而非开发模式（优先级顺序错误）
 2. 系统 Python 路径含空格（F:\Program Files\Python3.14\python.exe）导致 Start-Process 路径被截断
-3. 构建打包时旧 EXE 占用 dist\20-news 导致 PyInstaller COLLECT 阶段 PermissionError
+3. 构建打包时旧 EXE 占用 dist\MorningBrief 导致 PyInstaller COLLECT 阶段 PermissionError
 4. FFmpeg 下载安装只提取两个 EXE，缺少配套 DLL 导致运行时 找不到 avdevice-63.dll
 5. 日志仍使用 %s 占位符（旧版），Loguru 实际使用 {}，异常信息被吞
 

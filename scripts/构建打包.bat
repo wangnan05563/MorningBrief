@@ -6,7 +6,7 @@ REM Keep this entry script ASCII-only for reliable cmd.exe parsing.
 cd /d "%~dp0.."
 
 echo ========================================
-echo   20_News EXE Builder
+echo   MorningBrief EXE Builder
 echo ========================================
 echo.
 echo Build steps:
@@ -17,7 +17,7 @@ echo   4. PyInstaller packaging
 echo   5. Copy external resources
 echo   6. Generate installer (Inno Setup, auto-install if missing)
 echo.
-echo Output: dist\20-news\20-news.exe
+echo Output: dist\MorningBrief\MorningBrief.exe
 echo.
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build-exe.ps1" %*
@@ -34,9 +34,9 @@ echo.
 echo ========================================
 echo   Build Complete!
 echo ========================================
-echo   Output dir: dist\20-news\
-echo   EXE:        dist\20-news\20-news.exe
-echo   Installer:  dist\20News-Setup-v*.exe (if Inno Setup enabled)
+echo   Output dir: dist\MorningBrief\
+echo   EXE:        dist\MorningBrief\MorningBrief.exe
+echo   Installer:  dist\MorningBrief-Setup-v*.exe (if Inno Setup enabled)
 echo.
 echo   Notes:
 echo   - V1.2: SQLite embedded + TTLCache, no MySQL/Redis/Docker needed

@@ -1,4 +1,4 @@
-# 20_News 后端代码审查报告
+# MorningBrief 后端代码审查报告
 
 ## 基本信息
 
@@ -159,7 +159,7 @@ pwsh .trae/skills/news-backend-code-review/scripts/auto-scan.ps1
 
 ## 四维度复盘
 
-> 基于本次 20_News 后端代码审查完整过程的复盘，沉淀可复用的工作流模板与判断逻辑。
+> 基于本次 MorningBrief 后端代码审查完整过程的复盘，沉淀可复用的工作流模板与判断逻辑。
 
 ### 维度 1：成功执行任务的完整步骤
 

@@ -12,7 +12,7 @@
 - 配置保存后异步 stop 旧 service：Tailscale 等慢命令可能阻塞 10-30s，
   同步 stop 会导致前端 axios 30s 超时报「配置保存失败」
 
-移植自 17_xianyu 的 tunnel_service.py，将 yaml 配置改为 JSON 配置，适配 20_News 架构。
+移植自 17_xianyu 的 tunnel_service.py，将 yaml 配置改为 JSON 配置，适配 MorningBrief 架构。
 """
 from __future__ import annotations
 

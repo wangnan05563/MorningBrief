@@ -56,10 +56,17 @@ class ChannelService:
         outro_prompt: Optional[str] = None,
         constraint_prompt: Optional[str] = None,
         rewrite_template: Optional[str] = None,
+        bgm_path: Optional[str] = None,
+        bgm_volume: Optional[float] = None,
+        segment_gap_sec: Optional[float] = None,
+        enable_thinking_question: Optional[int] = None,
+        rss_sources: Optional[str] = None,
+        keywords: Optional[str] = None,
     ) -> Channel:
         """新增频道。name 唯一约束，冲突抛 ValueError。
 
-        支持 schedule_time（定时触发）与 4 个提示词字段，均为可选。
+        支持 schedule_time（定时触发）与 4 个提示词字段 + BGM 配置 + 段间静音 + 思考问题开关
+        + RSS 源白名单 + 关键词过滤，均为可选。
         """
         channel = Channel(
             name=name, description=description, is_active=1,
@@ -68,6 +75,12 @@ class ChannelService:
             outro_prompt=outro_prompt,
             constraint_prompt=constraint_prompt,
             rewrite_template=rewrite_template,
+            bgm_path=bgm_path,
+            bgm_volume=bgm_volume,
+            segment_gap_sec=segment_gap_sec,
+            enable_thinking_question=enable_thinking_question,
+            rss_sources=rss_sources,
+            keywords=keywords,
         )
         self.db.add(channel)
         try:
@@ -88,6 +101,12 @@ class ChannelService:
         outro_prompt: Optional[str] = None,
         constraint_prompt: Optional[str] = None,
         rewrite_template: Optional[str] = None,
+        bgm_path: Optional[str] = None,
+        bgm_volume: Optional[float] = None,
+        segment_gap_sec: Optional[float] = None,
+        enable_thinking_question: Optional[int] = None,
+        rss_sources: Optional[str] = None,
+        keywords: Optional[str] = None,
     ) -> Channel:
         """修改频道。显式设置 updated_at（SQLite 不支持 ON UPDATE）。
 
@@ -120,6 +139,18 @@ class ChannelService:
             channel.constraint_prompt = constraint_prompt
         if rewrite_template is not None:
             channel.rewrite_template = rewrite_template
+        if bgm_path is not None:
+            channel.bgm_path = bgm_path
+        if bgm_volume is not None:
+            channel.bgm_volume = bgm_volume
+        if segment_gap_sec is not None:
+            channel.segment_gap_sec = segment_gap_sec
+        if enable_thinking_question is not None:
+            channel.enable_thinking_question = enable_thinking_question
+        if rss_sources is not None:
+            channel.rss_sources = rss_sources
+        if keywords is not None:
+            channel.keywords = keywords
         channel.updated_at = utcnow_naive()
 
         try:

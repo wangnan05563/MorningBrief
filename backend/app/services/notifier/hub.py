@@ -6,7 +6,7 @@
 3. 免打扰时段判定：critical 仍可达，其他静默（计入 suppressed_count）
 
 与 17_xianyu 的差异：
-- 不订阅 EventBus（20_News 的 EventBus 是可选的，Hub 提供直接 send 方法）
+- 不订阅 EventBus（MorningBrief 的 EventBus 是可选的，Hub 提供直接 send 方法）
 - 免打扰逻辑简化为时间区间判定，跨午夜场景用 minutes_since_midnight
 """
 from __future__ import annotations

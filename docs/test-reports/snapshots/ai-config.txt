@@ -1,5 +1,5 @@
-uid=15_0 RootWebArea "20_News 运营后台" url="http://127.0.0.1:8000/ai-config"
-  uid=15_1 StaticText "20_News"
+uid=15_0 RootWebArea "MorningBrief 运营后台" url="http://127.0.0.1:8000/ai-config"
+  uid=15_1 StaticText "MorningBrief"
   uid=15_2 menubar orientation="horizontal"
     uid=15_3 menuitem "内容审核"
     uid=15_4 menuitem "广告素材"

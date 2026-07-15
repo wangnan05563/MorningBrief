@@ -1,8 +1,7 @@
 <template>
   <div class="page-container channel-management">
-    <!-- 工具栏：标题 + 新增按钮（仅 admin 可见） -->
+    <!-- 工具栏：新增按钮（仅 admin 可见），标题由顶部导航栏提供 -->
     <div class="top-bar">
-      <span class="page-title">频道管理</span>
       <el-button v-if="canOperate" type="primary" :icon="Plus" @click="openCreate">新增频道</el-button>
     </div>
 
@@ -28,8 +27,8 @@
             />
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" min-width="170">
-          <template #default="{ row }">{{ row.created_at || '-' }}</template>
+        <el-table-column label="创建时间" min-width="170">
+          <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
         <el-table-column v-if="canOperate" label="操作" width="160">
           <template #default="{ row }">
@@ -90,6 +89,138 @@
             <el-input v-model="form.rewrite_template" type="textarea" :rows="8" placeholder="留空使用默认 rewrite.txt 模板" />
           </el-collapse-item>
         </el-collapse>
+
+        <!-- BGM 设置区：选择预制/上传自定义/AI推荐/试听 -->
+        <el-divider content-position="left">背景音乐（BGM）</el-divider>
+        <el-form-item label="BGM 文件">
+          <div class="bgm-controls">
+            <!-- 下拉选择：预制 + 自定义 BGM 列表 -->
+            <el-select
+              v-model="form.bgm_path"
+              placeholder="选择 BGM（留空使用全局配置）"
+              clearable
+              filterable
+              style="width: 320px"
+              @change="handleBgmChange"
+            >
+              <el-option-group label="预制">
+                <el-option
+                  v-for="b in presetBgmList"
+                  :key="b.path"
+                  :label="`${b.name} (${b.size_kb}KB)`"
+                  :value="b.path"
+                />
+              </el-option-group>
+              <el-option-group label="自定义">
+                <el-option
+                  v-for="b in customBgmList"
+                  :key="b.path"
+                  :label="`${b.name} (${b.size_kb}KB)`"
+                  :value="b.path"
+                />
+              </el-option-group>
+            </el-select>
+            <!-- 试听按钮：选了 BGM 后才显示，用原生 audio 避免组件库依赖 -->
+            <el-button
+              v-if="form.bgm_path"
+              :icon="VideoPlay"
+              @click="handlePreviewBgm"
+            >试听</el-button>
+            <!-- AI 推荐：仅编辑模式可用，调用 LLM 根据频道定位推荐 -->
+            <el-button
+              v-if="editing"
+              type="primary"
+              link
+              :loading="recommendingBgm"
+              @click="handleRecommendBgm"
+            >AI 推荐</el-button>
+            <!-- 上传自定义 BGM -->
+            <el-upload
+              :show-file-list="false"
+              :before-upload="handleBgmBeforeUpload"
+              :http-request="handleBgmUpload"
+              accept=".mp3,.wav,.m4a,.aac,.ogg"
+            >
+              <el-button :icon="Upload" :loading="uploadingBgm">
+                {{ uploadingBgm ? `上传中 ${uploadProgress}%` : '上传 BGM' }}
+              </el-button>
+            </el-upload>
+          </div>
+          <!-- 试听播放器：选中 BGM 时显示，原生 controls 避免组件耦合 -->
+          <audio
+            v-if="form.bgm_path && showAudioPlayer"
+            ref="audioPlayerRef"
+            :src="bgmPreviewUrl"
+            controls
+            style="margin-top: 8px; width: 100%"
+          />
+          <!-- AI 推荐理由：展示 LLM 的选择依据，增强可解释性 -->
+          <div v-if="bgmRecommendReason" class="bgm-reason">
+            AI 推荐理由：{{ bgmRecommendReason }}
+          </div>
+        </el-form-item>
+        <el-form-item label="BGM 音量">
+          <el-slider
+            v-model="form.bgm_volume"
+            :min="0"
+            :max="1"
+            :step="0.05"
+            style="width: 280px"
+          />
+          <span class="form-tip">留空/0.15 为默认，TTS 播报期间垫底音量</span>
+        </el-form-item>
+
+        <!-- 音频节奏区：段间静音 + 思考问题开关 -->
+        <el-divider content-position="left">音频节奏</el-divider>
+        <el-form-item label="段间静音">
+          <el-slider
+            v-model="form.segment_gap_sec"
+            :min="0"
+            :max="3"
+            :step="0.1"
+            style="width: 280px"
+          />
+          <span class="form-tip">TTS 段落之间的停顿时长（秒），BGM 在此时段自然浮现</span>
+        </el-form-item>
+        <el-form-item label="结尾思考">
+          <el-switch
+            v-model="form.enable_thinking_question"
+            :active-value="1"
+            :inactive-value="0"
+          />
+          <span class="form-tip">开启后每段新闻末尾自动追加引发思考的问题</span>
+        </el-form-item>
+
+        <!-- 数据源配置区：RSS 源白名单 + 关键词过滤 -->
+        <el-divider content-position="left">数据源配置</el-divider>
+        <el-form-item label="RSS 源">
+          <el-select
+            v-model="form.rss_sources"
+            multiple
+            filterable
+            collapse-tags
+            collapse-tags-tooltip
+            placeholder="留空使用全部源（全局模式）"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="src in rssSourcesList"
+              :key="src.name"
+              :label="`${src.name}（${src.category_hint}）`"
+              :value="src.name"
+            />
+          </el-select>
+          <span class="form-tip">选择频道专属 RSS 源，仅采集选中源的数据；留空使用全部源</span>
+        </el-form-item>
+        <el-form-item label="关键词过滤">
+          <el-input
+            v-model="form.keywords"
+            type="textarea"
+            :rows="2"
+            placeholder="逗号分隔，如：游戏,主机,PS5,Xbox,任天堂。留空表示不过滤"
+          />
+          <span class="form-tip">标题包含任一关键词的素材才会入库，在正文提取前过滤以节省网络请求</span>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -101,10 +232,14 @@
 
 <script setup>
 defineOptions({ name: 'ChannelManagement' })
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
-import { Plus } from '@element-plus/icons-vue'
-import { listChannels, createChannel, updateChannel, deleteChannel, generateChannelPrompts } from '../../api/channels'
+import { Plus, VideoPlay, Upload } from '@element-plus/icons-vue'
+import {
+  listChannels, createChannel, updateChannel, deleteChannel, generateChannelPrompts,
+  listBgmFiles, uploadBgmFile, recommendChannelBgm, listRssSources,
+} from '../../api/channels'
+import { formatTime } from '../../utils/format'
 
 // 角色控制：直接读 localStorage，operator 隐藏增删改操作
 const role = localStorage.getItem('admin_role') || ''
@@ -124,6 +259,25 @@ const deletingIds = ref(new Set())
 // 提示词折叠面板默认展开第一项
 const promptCollapse = ref(['intro'])
 
+// ===== BGM 相关状态 =====
+// BGM 文件列表（从后端加载），分预制/自定义两组展示
+const bgmList = ref([])
+const presetBgmList = computed(() => bgmList.value.filter((b) => b.category === '预制'))
+const customBgmList = computed(() => bgmList.value.filter((b) => b.category === '自定义'))
+// 试听播放器显隐 + URL
+const showAudioPlayer = ref(false)
+const audioPlayerRef = ref(null)
+// AI 推荐 BGM loading
+const recommendingBgm = ref(false)
+// AI 推荐理由（展示 LLM 选择依据）
+const bgmRecommendReason = ref('')
+// 上传 BGM 状态
+const uploadingBgm = ref(false)
+const uploadProgress = ref(0)
+
+// RSS 源列表（从 rss.yaml 加载，供频道配置选择）
+const rssSourcesList = ref([])
+
 const form = reactive({
   id: null,
   name: '',
@@ -135,11 +289,29 @@ const form = reactive({
   constraint_prompt: '',
   rewrite_template: '',
   auto_generate_prompts: false,
+  // BGM 字段：bgm_path 为相对 data/bgm/ 的路径，空表示用全局配置
+  bgm_path: null,
+  // bgm_volume 为 null 时后端使用全局 BGM_VOLUME
+  bgm_volume: 0.15,
+  // 段间静音时长（秒），null 时后端使用全局 SEGMENT_GAP_SEC
+  segment_gap_sec: 0.5,
+  // 是否在每段新闻末尾追加思考问题（1=开启，0=关闭）
+  enable_thinking_question: 1,
+  // 频道专属 RSS 源（数组，空数组表示使用全部源）
+  rss_sources: [],
+  // 频道关键词过滤（逗号分隔字符串，空表示不过滤）
+  keywords: '',
 })
 
 const rules = {
   name: [{ required: true, message: '请输入频道名称', trigger: 'blur' }],
 }
+
+// BGM 试听 URL：后端 /bgm/ 静态目录直接访问，无需鉴权
+const bgmPreviewUrl = computed(() => {
+  if (!form.bgm_path) return ''
+  return `/bgm/${form.bgm_path}`
+})
 
 async function loadList() {
   loading.value = true
@@ -149,6 +321,24 @@ async function loadList() {
     list.value = Array.isArray(data) ? data : (data.list || [])
   } finally {
     loading.value = false
+  }
+}
+
+async function loadBgmList() {
+  try {
+    const data = await listBgmFiles()
+    bgmList.value = data.list || []
+  } catch {
+    bgmList.value = []
+  }
+}
+
+async function loadRssSources() {
+  try {
+    const data = await listRssSources()
+    rssSourcesList.value = data.sources || []
+  } catch {
+    rssSourcesList.value = []
   }
 }
 
@@ -163,12 +353,22 @@ function resetForm() {
   form.constraint_prompt = ''
   form.rewrite_template = ''
   form.auto_generate_prompts = false
+  form.bgm_path = null
+  form.bgm_volume = 0.15
+  form.segment_gap_sec = 0.5
+  form.enable_thinking_question = 1
+  form.rss_sources = []
+  form.keywords = ''
   promptCollapse.value = ['intro']
+  showAudioPlayer.value = false
+  bgmRecommendReason.value = ''
 }
 
 function openCreate() {
   editing.value = false
   resetForm()
+  loadBgmList()
+  loadRssSources()
   dialogVisible.value = true
 }
 
@@ -184,7 +384,22 @@ function openEdit(row) {
   form.constraint_prompt = row.constraint_prompt || ''
   form.rewrite_template = row.rewrite_template || ''
   form.auto_generate_prompts = false
+  form.bgm_path = row.bgm_path || null
+  form.bgm_volume = row.bgm_volume !== null && row.bgm_volume !== undefined ? row.bgm_volume : 0.15
+  form.segment_gap_sec = row.segment_gap_sec !== null && row.segment_gap_sec !== undefined ? row.segment_gap_sec : 0.5
+  form.enable_thinking_question = row.enable_thinking_question !== null && row.enable_thinking_question !== undefined ? row.enable_thinking_question : 1
+  // RSS 源：后端存储为 JSON 数组字符串，前端解析为数组用于多选绑定
+  try {
+    form.rss_sources = row.rss_sources ? JSON.parse(row.rss_sources) : []
+  } catch {
+    form.rss_sources = []
+  }
+  form.keywords = row.keywords || ''
   promptCollapse.value = ['intro']
+  showAudioPlayer.value = false
+  bgmRecommendReason.value = ''
+  loadBgmList()
+  loadRssSources()
   dialogVisible.value = true
 }
 
@@ -192,8 +407,10 @@ async function handleSubmit() {
   await formRef.value.validate()
   submitting.value = true
   try {
+    // rss_sources 数组序列化为 JSON 字符串存储，空数组序列化为 "[]"
+    const rssSourcesJson = JSON.stringify(form.rss_sources || [])
     if (editing.value) {
-      // 编辑：提交所有提示词字段（空字符串表示清空，后端会判断）
+      // 编辑：提交所有字段（空字符串表示清空，后端会判断）
       await updateChannel(form.id, {
         name: form.name,
         description: form.description,
@@ -203,15 +420,27 @@ async function handleSubmit() {
         outro_prompt: form.outro_prompt,
         constraint_prompt: form.constraint_prompt,
         rewrite_template: form.rewrite_template,
+        bgm_path: form.bgm_path || '',
+        bgm_volume: form.bgm_volume,
+        segment_gap_sec: form.segment_gap_sec,
+        enable_thinking_question: form.enable_thinking_question,
+        rss_sources: rssSourcesJson,
+        keywords: form.keywords || '',
       })
       ElMessage.success('已更新')
     } else {
-      // 新增：仅提交基本信息 + 定时 + AI生成标志，提示词由 AI 生成或留空
+      // 新增：仅提交基本信息 + 定时 + AI生成标志 + BGM + 数据源配置，提示词由 AI 生成或留空
       await createChannel({
         name: form.name,
         description: form.description,
         schedule_time: form.schedule_time || null,
         auto_generate_prompts: form.auto_generate_prompts,
+        bgm_path: form.bgm_path || null,
+        bgm_volume: form.bgm_volume,
+        segment_gap_sec: form.segment_gap_sec,
+        enable_thinking_question: form.enable_thinking_question,
+        rss_sources: rssSourcesJson,
+        keywords: form.keywords || '',
       })
       ElMessage.success('已创建')
     }
@@ -275,6 +504,90 @@ async function handleGeneratePrompts() {
   }
 }
 
+// ===== BGM 操作 =====
+
+function handleBgmChange() {
+  // 切换 BGM 时重置试听播放器和推荐理由
+  showAudioPlayer.value = false
+  bgmRecommendReason.value = ''
+}
+
+function handlePreviewBgm() {
+  // 切换显隐实现"点击试听"交互：已显示则隐藏，未显示则展示并自动播放
+  if (showAudioPlayer.value) {
+    showAudioPlayer.value = false
+    return
+  }
+  showAudioPlayer.value = true
+  // DOM 更新后自动播放，避免用户再点一次
+  setTimeout(() => {
+    if (audioPlayerRef.value) {
+      audioPlayerRef.value.play().catch(() => {
+        // 浏览器自动播放策略可能阻止，忽略错误，用户可手动点击播放
+      })
+    }
+  }, 100)
+}
+
+function handleBgmBeforeUpload(file) {
+  // 客户端预校验：类型 + 大小，避免无效上传浪费带宽
+  const allowedExts = ['.mp3', '.wav', '.m4a', '.aac', '.ogg']
+  const ext = '.' + (file.name.split('.').pop() || '').toLowerCase()
+  if (!allowedExts.includes(ext)) {
+    ElMessage.error(`不支持的格式：${ext}，允许：${allowedExts.join(', ')}`)
+    return false
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    ElMessage.error('文件过大，上限 20MB')
+    return false
+  }
+  return true
+}
+
+async function handleBgmUpload({ file }) {
+  uploadingBgm.value = true
+  uploadProgress.value = 0
+  try {
+    const data = await uploadBgmFile(file, (p) => {
+      uploadProgress.value = p
+    })
+    // 上传成功后自动选中，并刷新 BGM 列表
+    form.bgm_path = data.path
+    ElMessage.success(`BGM「${data.name}」上传成功`)
+    await loadBgmList()
+  } catch (e) {
+    console.warn('BGM 上传失败:', e)
+  } finally {
+    uploadingBgm.value = false
+    uploadProgress.value = 0
+  }
+}
+
+async function handleRecommendBgm() {
+  if (!form.id) return
+  recommendingBgm.value = true
+  try {
+    const data = await recommendChannelBgm(form.id)
+    if (data.path) {
+      form.bgm_path = data.path
+      bgmRecommendReason.value = data.reason || ''
+      // 推荐成功后立即保存到 DB，避免用户忘记点"确认"导致 BGM 配置丢失
+      // 后端 ChannelUpdateRequest 字段均为 Optional，支持部分更新
+      await updateChannel(form.id, {
+        bgm_path: data.path,
+        bgm_volume: form.bgm_volume,
+      })
+      ElMessage.success('AI 已推荐 BGM 并已保存，可试听效果')
+    } else {
+      ElMessage.warning('AI 未能推荐合适的 BGM')
+    }
+  } catch (e) {
+    console.warn('BGM 推荐失败:', e)
+  } finally {
+    recommendingBgm.value = false
+  }
+}
+
 onMounted(() => {
   loadList()
 })
@@ -286,15 +599,8 @@ onMounted(() => {
 .channel-management {
   .top-bar {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     margin-bottom: 16px;
-
-    .page-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: $color-text-primary;
-    }
   }
 
   .text-muted {
@@ -305,6 +611,24 @@ onMounted(() => {
     margin-left: 12px;
     font-size: 12px;
     color: $color-text-secondary;
+  }
+
+  // BGM 控制区：按钮组横向排列，避免换行错乱
+  .bgm-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  // AI 推荐理由：弱化背景突出文本
+  .bgm-reason {
+    margin-top: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: $color-text-secondary;
+    background: rgba(64, 158, 255, 0.08);
+    border-radius: 4px;
   }
 }
 </style>

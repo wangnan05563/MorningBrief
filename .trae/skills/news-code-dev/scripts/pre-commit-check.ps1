@@ -1,11 +1,11 @@
-# 20_News 提交前检查脚本
+# MorningBrief 提交前检查脚本
 # 用法: .\scripts\pre-commit-check.ps1
 
 $ErrorActionPreference = "Stop"
 $startTime = Get-Date
 
 Write-Host "`n========================================" -ForegroundColor Cyan
-Write-Host "  20_News 提交前检查" -ForegroundColor Cyan
+Write-Host "  MorningBrief 提交前检查" -ForegroundColor Cyan
 Write-Host "========================================`n" -ForegroundColor Cyan
 
 $hasError = $false
