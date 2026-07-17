@@ -537,14 +537,6 @@ pwsh .trae/skills/news-frontend-code-review/scripts/auto-scan.ps1
 检查信号：Grep 批量操作无 max_length 前端校验
 修复建议：添加 -if="selectedIds.length <= 100" 禁用按钮 + 确认对话框
 
-### 维度 20：前端参数显示规范化
-
-**为什么**：前端展示的 Edge 语速/音量参数应格式化为用户友好的显示（如 +10% 而非  .1）。
-
-检查信号：Grep 表单绑定值直接显示原始数值
-修复建议：添加计算属性格式化显示值，编辑时转换回原始值
-
-
 ### 维度 21：前端配置键与后端字段一致性
 
 **为什么**：前端表单字段名、路由模型字段名、数据库配置键、Settings 属性四者必须一致或通过明确映射连接。字段不一致会导致前端保存的值在后端被忽略。
@@ -914,3 +906,249 @@ python -u scripts/gen_sitemap.py 2>&1
 
 适用场景：Windows + PowerShell + 前端工具链（含 Python 脚本调用）
 不适用场景：bash/zsh（默认行缓冲）、IDE 内运行（IDE 处理缓冲）、纯 Node.js 前端工具链（无 Python 依赖）
+
+---
+
+## 新增审查维度：表单标签语义与密钥获取入口（对应编码规范 49-50）
+
+> 以下维度来源于 2026-07-17 编码规范 49-50 补充，覆盖表单字段标签语义明确性、密钥获取入口超链接规范化等高频故障场景。配置详见 `config.yaml#review_dimensions` 对应条目（RD-FE-16 ~ RD-FE-17）。
+
+### 维度 50：表单字段标签语义明确性（对应编码规范 49，RD-FE-16）
+
+**为什么**：配置表单中多个密钥类字段（如阿里云 NLS 的 AccessToken / SecretKey / AppKey、OpenAI 的 API Key、COS 的 SecretId / SecretKey）若统一用 `label="API Key"`，用户无法区分到底该填哪个凭证，导致填错位置鉴权失败。标签必须使用字段的具体业务名称（AccessToken / SecretKey / AppKey / SecretId 等），且密钥字段必须提供 placeholder 说明字段含义与获取方式提示。
+
+**判断信号**（grep 模式，见 `config.yaml#review_dimensions[RD-FE-16].rules`）：
+- Grep `el-form-item\s+label="API Key"` 定位使用通用名称 `API Key` 的表单项（规则 R-49-1）
+- Grep `el-form-item\s+label="(API Key|App Key|Secret)"` 检查密钥字段是否提供 placeholder 说明（规则 R-49-2）
+
+**违规示例**：
+```vue
+<!-- ❌ 错误：多个密钥字段都用通用 label="API Key"，用户无法区分 -->
+<el-form-item label="API Key">
+  <el-input v-model="form.access_token" />
+</el-form-item>
+<el-form-item label="API Key">
+  <el-input v-model="form.secret_key" />
+</el-form-item>
+```
+
+**合规示例**：
+```vue
+<!-- ✅ 正确：label 用具体业务名称，placeholder 说明字段含义 -->
+<el-form-item label="AccessToken">
+  <el-input
+    v-model="form.access_token"
+    placeholder="阿里云 NLS 访问令牌，从 NLS 控制台获取"
+  />
+</el-form-item>
+<el-form-item label="SecretKey">
+  <el-input
+    v-model="form.secret_key"
+    placeholder="阿里云 AccessKey Secret，从 RAM 控制台获取"
+  />
+</el-form-item>
+```
+
+**修复建议**：所有密钥类表单字段 label 必须使用字段的具体业务名称（AccessToken / SecretKey / AppKey / SecretId / APIKey 等），禁止用 `API Key` 通用名称；密钥字段必须提供 placeholder 说明字段的具体含义和获取途径提示。标签命名须可泛化到不同服务商，不绑定具体字段名。
+
+适用场景：所有含密钥 / 凭证字段的配置表单（TTS / LLM / COS / 短信 / OSS 等）
+不适用场景：非密钥类普通字段（如名称、描述、开关）
+
+### 维度 51：密钥获取入口超链接规范化（对应编码规范 50，RD-FE-17）
+
+**为什么**：用户在配置表单填写密钥时，如果不知道去哪里获取凭证，需要自行搜索官方控制台入口，体验差且容易找错。所有含密钥字段的配置表单必须提供官方获取入口超链接（`el-link`），指向对应服务商的官方控制台 / 密钥管理页，且必须设置 `target="_blank"` 在新窗口打开，避免离开当前配置页丢失未保存的表单数据。
+
+**判断信号**（grep 模式，见 `config.yaml#review_dimensions[RD-FE-17].rules`）：
+- Grep `el-form-item\s+label=".*(Key|Token|Secret)"` 定位含密钥字段的表单，检查表单内是否有至少一个 `el-link href` 指向官方控制台（规则 R-50-1）
+- Grep `el-link[^>]*href=` 检查 `el-link` 是否设置 `target="_blank"`（规则 R-50-2）
+
+**违规示例**：
+```vue
+<!-- ❌ 错误：密钥字段无获取入口超链接，用户不知道去哪里获取 -->
+<el-form-item label="AccessToken">
+  <el-input v-model="form.access_token" placeholder="请输入 AccessToken" />
+</el-form-item>
+
+<!-- ❌ 错误：有超链接但未在新窗口打开，离开配置页丢失表单 -->
+<el-link href="https://nls-portal.console.aliyun.com/">获取 AccessToken</el-link>
+```
+
+**合规示例**：
+```vue
+<!-- ✅ 正确：提供官方获取入口 + target="_blank" 新窗口打开 -->
+<el-form-item label="AccessToken">
+  <el-input v-model="form.access_token" placeholder="阿里云 NLS 访问令牌" />
+  <el-link
+    type="primary"
+    href="https://nls-portal.console.aliyun.com/applist"
+    target="_blank"
+  >
+    前往阿里云 NLS 控制台获取
+  </el-link>
+</el-form-item>
+```
+
+**修复建议**：含密钥字段的表单必须提供至少一个 `el-link` 指向官方控制台 / 密钥管理页；所有 `el-link` 必须设置 `target="_blank"` 在新窗口打开；链接 URL 须配置驱动（落在 `config.yaml` 或组件常量），禁止硬编码在多个表单中重复。链接入口须可泛化到不同服务商，不绑定特定字段。
+
+适用场景：所有含密钥 / 凭证字段的配置表单
+不适用场景：非密钥类字段（无需提供获取入口）、内部系统无外部控制台的配置
+
+
+---
+
+## 新增审查维度：数据库维护与系统清理前端规范（对应编码规范 56-65 前端侧）
+
+> 以下维度来源于 2026-07-17 数据库维护 + 系统清理模块前端开发复盘，覆盖左右分栏布局、CONFIRM_DELETE 令牌交互、级联预览弹窗、dry_run 开关、审计日志展示等高频前端故障场景。配置详见 `config.yaml#hard_constraints.rules` 对应条目。
+
+### 维度 52：左右分栏布局响应式审查（对应 DatabaseAdmin.vue）
+
+**为什么**：数据库维护页面采用左右分栏布局（左侧表列表，右侧表数据），在小窗口或低分辨率下左侧列表可能挤压右侧数据区域，导致表格无法正常显示。必须配置响应式断点（如 768px 以下切换为上下布局或折叠侧栏）。
+
+**检查信号**：
+- Grep `el-aside` 或 `el-container` 检查是否有响应式断点（`@media` 或 `:xs`/`:sm` 属性）
+- Grep 左右分栏布局是否设置最小宽度（`min-width`）
+
+**违规示例**：
+```vue
+<!-- ❌ 错误：固定宽度无响应式 -->
+<el-container>
+  <el-aside width="200px">表列表</el-aside>
+  <el-main>表数据</el-main>
+</el-container>
+```
+
+**合规示例**：
+```vue
+<!-- ✅ 正确：响应式断点 + 最小宽度 -->
+<el-container>
+  <el-aside :width="isCollapsed ? '64px' : '200px'" class="db-aside">
+    表列表
+  </el-aside>
+  <el-main class="db-main">表数据</el-main>
+</el-container>
+<style>
+@media (max-width: 768px) {
+  .db-aside { width: 100% !important; }
+  .db-main { padding-left: 0; }
+}
+</style>
+```
+
+适用场景：左右分栏布局的后台管理页面（数据库维护、文件管理）
+不适用场景：单栏页面、弹窗内容
+
+### 维度 53：CONFIRM_DELETE 令牌前端交互审查（对应编码规范 58 前端侧）
+
+**为什么**：危险操作（删表/清空/VACUUM）的前端交互不能仅靠 ElMessageBox.confirm（点击确认即可），必须要求用户在输入框中输入特定令牌字符串（如 CONFIRM_DELETE），形成双重确认。ElMessageBox.prompt 可实现此交互。
+
+**检查信号**：
+- Grep 危险操作按钮（删除/清空/VACUUM）的点击处理函数，检查是否使用 `ElMessageBox.prompt` 要求输入令牌
+- Grep `ElMessageBox.confirm` 用于危险操作 → 违规（仅点击确认不够安全）
+
+**违规示例**：
+```javascript
+// ❌ 错误：仅点击确认，无令牌输入
+async function handleDelete() {
+  await ElMessageBox.confirm('确认删除？', '警告', { type: 'warning' })
+  await api.deleteTable(tableName)  // 误点即删除
+}
+```
+
+**合规示例**：
+```javascript
+// ✅ 正确：ElMessageBox.prompt 要求输入令牌
+async function handleDelete() {
+  const { value } = await ElMessageBox.prompt(
+    '请输入 CONFIRM_DELETE 确认删除',
+    '危险操作',
+    { inputPattern: /^CONFIRM_DELETE$/, inputErrorMessage: '令牌不匹配' }
+  )
+  await api.deleteTable(tableName, { confirm_token: value })
+}
+```
+
+适用场景：所有危险操作的前端交互（删除表、清空数据、VACUUM）
+不适用场景：普通增删改查、取消操作
+
+### 维度 54：级联预览弹窗审查（对应编码规范 60 前端侧）
+
+**为什么**：删除主表记录时，前端应先展示级联影响预览（哪些从表记录会被删除/置空），让用户确认后再执行。直接删除不展示影响范围，用户可能误删关联数据。
+
+**检查信号**：
+- Grep 删除操作处理函数，检查是否先调用级联预览 API（如 `/cascade-preview`）
+- Grep 级联预览结果是否在弹窗中展示（受影响的表名 + 记录数）
+
+**违规示例**：
+```javascript
+// ❌ 错误：直接删除，无级联预览
+async function handleDelete(id) {
+  await api.delete(id)  // 用户不知道会级联删除哪些从表
+}
+```
+
+**合规示例**：
+```javascript
+// ✅ 正确：先预览级联影响，再确认删除
+async function handleDelete(id) {
+  const preview = await api.cascadePreview(id)
+  const affected = preview.affected_tables.map(t => `${t.name}: ${t.count}条`).join('\n')
+  await ElMessageBox.confirm(
+    `将级联影响以下数据：\n${affected}\n确认删除？`,
+    '级联删除预览',
+    { type: 'warning' }
+  )
+  await api.delete(id)
+}
+```
+
+适用场景：所有含级联删除的删除操作
+不适用场景：无外键关联的独立记录删除
+
+### 维度 55：dry_run 预览开关审查（对应编码规范 64 前端侧）
+
+**为什么**：系统清理页面必须提供 dry_run 预览开关，让用户先预览将要清理的内容（记录数、占用空间），确认后再执行实际清理。dry_run 开关应为 el-switch 或复选框，默认开启（预览模式），用户手动切换到执行模式。
+
+**检查信号**：
+- Grep 清理页面的提交按钮，检查是否支持 `dry_run` 参数
+- Grep dry_run 开关默认值是否为 `true`（预览优先）
+
+**违规示例**：
+```vue
+<!-- ❌ 错误：直接执行清理，无预览开关 -->
+<el-button type="danger" @click="handleCleanup">执行清理</el-button>
+```
+
+**合规示例**：
+```vue
+<!-- ✅ 正确：dry_run 开关 + 预览/执行两种模式 -->
+<el-switch v-model="dryRun" active-text="预览" inactive-text="执行" />
+<el-button type="warning" @click="handleCleanup">
+  {{ dryRun ? '预览清理' : '确认清理' }}
+</el-button>
+<script setup>
+const dryRun = ref(true)  // 默认预览模式
+async function handleCleanup() {
+  const result = await api.cleanup({ dry_run: dryRun.value })
+  if (dryRun.value) {
+    ElMessage.info(`将清理 ${result.count} 条记录`)
+  } else {
+    ElMessage.success(`已清理 ${result.count} 条记录`)
+  }
+}
+</script>
+```
+
+适用场景：系统清理页面、批量删除操作
+不适用场景：单条记录删除（不需要预览）
+
+### 维度 56：审计日志展示审查（对应编码规范 65 前端侧）
+
+**为什么**：数据库维护和系统清理操作的审计日志应在前端可查看，便于事后追溯。审计日志页面应展示操作类型/表名/记录ID/操作人/时间，支持按时间和操作类型筛选。
+
+**检查信号**：
+- Grep 审计日志页面是否存在（如 AuditLog.vue）
+- Grep 审计日志表格是否包含必要列（action/table_name/record_id/operator/created_at）
+- Grep 审计日志是否支持时间范围筛选
+
+适用场景：数据库维护模块、系统清理模块、所有需审计追溯的功能
+不适用场景：查询操作（SELECT 不需要审计日志）

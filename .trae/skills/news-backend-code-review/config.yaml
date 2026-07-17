@@ -273,6 +273,56 @@ hard_constraints:
     severity: HIGH
     auto_fix: false
     category: channel_field_sync
+  - name: inspector_run_sync_no_connection
+    pattern: run_sync.*inspect\(
+    message: run_sync 回调内使用 inspect() 必须先 .connection() 转换 Session 为 Connection
+    severity: CRITICAL
+    auto_fix: false
+    category: sqlalchemy_inspector
+  - name: main_py_missing_import
+    pattern: (RequestIdMiddleware|setup_logging|register_exception_handlers)
+    message: main.py 中使用的符号必须显式导入，启动前预检 python -c "from app.main import app"
+    severity: CRITICAL
+    auto_fix: false
+    category: main_import
+    scan_files:
+    - backend/app/main.py
+  - name: dangerous_op_no_confirm_token
+    pattern: '@router\.(delete|post).*["''](clear|vacuum|truncate|drop)["'']'
+    message: 危险操作端点必须校验 confirm_token 参数，令牌通过 settings 管理
+    severity: CRITICAL
+    auto_fix: false
+    category: confirm_token
+  - name: vacuum_in_transaction
+    pattern: (?s)async\s+with\s+\w+\.begin\(\).*?VACUUM
+    message: VACUUM 不能在事务内执行，必须用 AUTOCOMMIT 隔离级别
+    severity: CRITICAL
+    auto_fix: false
+    category: vacuum_autocommit
+  - name: in_clause_string_concat
+    pattern: IN\s*\(\s*f["']
+    message: IN 查询禁止字符串拼接，必须用 bindparam(expanding=True)
+    severity: HIGH
+    auto_fix: false
+    category: bindparam_expanding
+  - name: db_admin_no_whitelist
+    pattern: get_columns|get_table_names
+    message: 数据库维护操作必须检查白名单（settings.DB_ADMIN_ALLOWED_TABLES），禁止操作系统表
+    severity: CRITICAL
+    auto_fix: false
+    category: db_admin_whitelist
+  - name: cleanup_no_dry_run
+    pattern: def\s+(cleanup|clear|purge).*\n(?!.*dry_run)
+    message: 清理/删除函数必须支持 dry_run 预览模式
+    severity: HIGH
+    auto_fix: false
+    category: dry_run_preview
+  - name: dml_no_audit_log
+    pattern: db\.delete\(|db\.execute\(delete\(
+    message: DML 操作必须记录审计日志（action/table_name/record_id/operator/created_at）
+    severity: HIGH
+    auto_fix: false
+    category: audit_log_coverage
 checklist:
   layering:
     enabled: true
@@ -500,3 +550,62 @@ config_key_four_way_consistency:
   require_four_way_consistency: true
   allow_legacy_key_map: true
   require_four_way_sync_on_new_config: true
+review_dimensions:
+- id: "RD-16"
+  name: "模板字符串字面花括号转义"
+  description: "Python str.format() 模板中的字面花括号必须双写转义 {{ }}，否则触发 KeyError"
+  severity: "critical"
+  rules:
+  - id: "R-45-1"
+    description: "str.format() 模板中的字面 {xxx} 占位符必须转义为 {{xxx}}"
+    grep_pattern: "\\.format\\(.*\\{[a-z_]+\\}"
+    auto_fix: false
+    false_positive_hints:
+    - "模板中的 {name} {description} 是 format 参数，不算违规"
+  applicable_files:
+  - "*.py"
+  applicable_dirs:
+  - "backend/app/"
+- id: "RD-17"
+  name: "API Key 脱敏值回传检测"
+  description: "接收前端回传的密钥字段时必须判断是否为脱敏值 ****xxxx，若是则回退到已保存的真实密钥"
+  severity: "critical"
+  rules:
+  - id: "R-46-1"
+    description: "test_xxx_connection 函数中接收 api_key 参数时必须同时判断 _is_masked(api_key)"
+    grep_pattern: "def test_.*_connection.*api_key"
+    auto_fix: false
+  applicable_files:
+  - "*.py"
+  applicable_dirs:
+  - "backend/app/services/"
+- id: "RD-18"
+  name: "第三方服务错误码可读化映射"
+  description: "第三方服务（阿里云 NLS/OpenAI/DeepSeek）的错误码必须维护 ERROR_CODE_HINTS 映射表"
+  severity: "major"
+  rules:
+  - id: "R-47-1"
+    description: "第三方 API 响应中的 error_code 必须有映射表转换为可读中文提示"
+    grep_pattern: "error_code.*data\\.get\\(\"error_code\"\\)"
+    auto_fix: false
+  applicable_files:
+  - "*.py"
+  applicable_dirs:
+  - "backend/app/services/"
+- id: "RD-19"
+  name: "Settings 字段四端同步"
+  description: "新增配置项时 Settings 类、ORM 模型、前端表单、服务层 CONFIG_KEY_MAP 必须同步"
+  severity: "critical"
+  rules:
+  - id: "R-48-1"
+    description: "setattr(settings, xxx, value) 中的 xxx 必须在 Settings 类中定义"
+    grep_pattern: "setattr\\(settings,"
+    auto_fix: false
+  - id: "R-48-2"
+    description: "CONFIG_KEY_MAP 的值（Settings 属性名）必须在 Settings 类中存在"
+    grep_pattern: "CONFIG_KEY_MAP"
+    auto_fix: false
+  applicable_files:
+  - "*.py"
+  applicable_dirs:
+  - "backend/app/"

@@ -1,4 +1,4 @@
-﻿# 经验教训与编码规范
+# 经验教训与编码规范
 
 本文档从 MorningBrief 项目实际开发中遇到的问题提炼而成，每条规范均来源于真实踩坑案例。用于补充 [meta-rules.md](meta-rules.md) 的 20 条基础规范，编号从 21 开始。
 
@@ -1014,5 +1014,280 @@ px vite build 确认构建通过
 
 **判断信号**：grep 搜索新增模型名是否在 MODEL_PRICING 中存在
 **正确做法**：修改预设模型时，同时检查并更新定价表
+
+---
+
+## 新增经验教训：AI 服务配置与模板字符串安全（规范 45-50）
+
+### 四维度复盘总览
+
+#### 维度 1：成功执行任务的完整步骤
+
+1. **现象定位** → 查日志确认 500 错误的具体堆栈（KeyError / AttributeError / token invalid）
+2. **代码追踪** → grep 定位到 `channel_prompt_service.py` 的 `.format()` 调用、TTS `test_connection` 函数
+3. **根因分析** → 区分"模板字符串未转义"、"脱敏值回传"、"字段未同步"等不同根因
+4. **修复实施** → 转义字面花括号、添加 `_is_masked()` 判断、新增 `ERROR_CODE_HINTS` 映射表
+5. **配置同步** → Settings 类、ORM 模型、前端表单、`CONFIG_KEY_MAP` 四端核对
+6. **UI 改进** → 字段标签语义化、密钥获取入口超链接
+7. **回归验证** → 重新触发"AI 重新生成"、测试 TTS 连接、保存 AI 配置
+
+**关键教训**：步骤 3（根因分析）必须区分"模板/参数/凭证/字段缺失"四类不同根因，否则会修错方向；步骤 5（四端同步）是配置类 500 错误的最常见修复点。
+
+#### 维度 2：任务执行过程中的不确定性与失败点
+
+| 失败点 | 触发条件 | 影响范围 | 根因 | 修复方式 |
+|--------|----------|----------|------|----------|
+| 模板字符串 KeyError | `.format()` 模板含字面 `{xxx}` 占位符 | 频道"AI 重新生成"500 | 字面花括号未双写转义 | `{{xxx}}` 转义 |
+| TTS 测试连接 token invalid | 前端回传脱敏值 `****5ba0` | TTS 测试连接失败 | 未判断 `_is_masked` | 检测脱敏值并回退已保存真实密钥 |
+| 错误码不可读 | 阿里云 NLS 40000001/40000010/40000004 | 用户无法自助排查 | 缺少错误码映射表 | 维护 `ERROR_CODE_HINTS` |
+| 配置保存 500 | `setattr(settings, "ALIYUN_TTS_APPKEY", v)` | AI 配置保存失败 | Settings 类缺字段 | 四端同步新增字段 |
+| 字段标签歧义 | `label="API Key"` | 用户误填 AccessKey Secret 到 NLS AccessToken | 标签语义模糊 | 改为"NLS AccessToken"等明确名称 |
+| 密钥获取入口缺失 | 配置表单无超链接 | 用户不知在哪里申请 | 缺少官方获取入口 | `el-link target="_blank"` |
+
+#### 维度 3：可抽象的固定流程与判断逻辑
+
+| 模板 | 核心判断信号 | 落地方式 |
+|------|--------------|----------|
+| 模板字符串字面花括号转义 | grep `.format(` 模板含 `{xxx}` 但 xxx 不在参数列表 | 字面花括号双写 `{{xxx}}` |
+| API Key 脱敏值回传检测 | grep `test_xxx_connection` 未判断 `_is_masked` | 检测 `****` 前缀回退真实值 |
+| 第三方服务错误码可读化 | grep 第三方 API `error_code` 直接返回前端 | 维护 `ERROR_CODE_HINTS` 映射表 |
+| Settings 字段四端同步 | grep `setattr(settings,` 引用属性未在 Settings 定义 | 四端同步：Settings + ORM + 前端 + `CONFIG_KEY_MAP` |
+| 表单字段标签语义明确 | grep `el-form-item label="API Key"` 等通用标签 | 改为凭证具体名称 |
+| 密钥获取入口超链接 | grep `el-form-item label.*Key|Token|Secret` 无 `el-link` | `el-link target="_blank"` 直达控制台 |
+
+#### 维度 4：适用场景与不适用场景
+
+| 规范 | 适用场景 | 不适用场景 |
+|------|----------|------------|
+| 规范 45 | str.format() / f-string 的模板字符串 | raw string、不参与 format 的字符串 |
+| 规范 46 | 密钥字段的测试连接、保存配置回传 | 明文密钥输入（用户主动重新输入完整密钥） |
+| 规范 47 | 所有第三方服务调用（LLM/TTS/存储/内容安全） | 内部业务错误码（已有统一错误码体系） |
+| 规范 48 | SQLite 持久化 + Settings 单例热生效的配置项 | 临时变量、一次性配置 |
+| 规范 49 | 含凭证字段的配置表单 | 单一凭证场景（无歧义） |
+| 规范 50 | 所有第三方服务凭证配置表单 | 内部系统凭证（无外部获取入口） |
+
+---
+
+## 规范 45：模板字符串字面花括号转义
+
+**Python str.format() 模板中，字面花括号必须双写转义 {{ }}，否则 str.format() 会把它当作变量去替换，触发 KeyError。**
+
+- **为什么**：str.format() 把所有 `{xxx}` 视为待替换的变量占位符。如果 xxx 是给下游（如 LLM）看的字面占位符而非 Python 变量，str.format() 找不到对应参数就会抛 KeyError，FastAPI 默认转换为 500 错误，业务功能完全不可用。
+- **判断信号**：grep 搜索 `.format(` 调用的模板字符串中含 `{xxx}` 但 xxx 不在 format 参数列表中
+- **适用场景**：所有使用 str.format() / f-string 的模板字符串
+- **不适用场景**：raw string、不参与 format 的字符串
+- **正确做法**：
+  ```python
+  # ✅ 正确：字面花括号双写转义
+  META_PROMPT_TEMPLATE = """
+  你是一个新闻编辑，请基于以下占位符生成稿件：
+  - {{date_placeholder}}：当前日期
+  - {{channel_name}}：频道名称
+
+  当前日期：{actual_date}
+  频道：{actual_channel}
+  """.format(actual_date=today, actual_channel=name)
+  # {{date_placeholder}} 输出为字面字符串 {date_placeholder} 给 LLM 使用
+
+  # ❌ 错误：字面花括号未转义
+  META_PROMPT_TEMPLATE = """
+  你是一个新闻编辑，请基于以下占位符生成稿件：
+  - {date_placeholder}：当前日期  # KeyError: date_placeholder
+
+  当前日期：{actual_date}
+  """.format(actual_date=today)
+  ```
+- **真实案例**：`channel_prompt_service.py` 的元提示词模板中 `{date_placeholder}` 是给 LLM 看的字面占位符（提示 LLM 在稿件中插入该占位符），未转义导致 `str.format()` 抛 `KeyError: 'date_placeholder'`，FastAPI 转换为 500 错误，频道"AI 重新生成"功能完全不可用
+
+## 规范 46：API Key 脱敏值回传检测
+
+**接收前端回传的密钥字段时，必须用 _is_masked() 判断是否为脱敏值（****xxxx 格式），若是则回退到已保存的真实密钥。**
+
+- **为什么**：前端在加载配置时通常会把密钥字段脱敏显示（如 `****5ba0`），用户保存配置时如果未重新输入完整密钥，前端会原样回传脱敏值。后端如果不检测，直接把脱敏值当作真实 token 调用第三方服务，必然报 token invalid / 401，用户误以为密钥填错反复重填无果。
+- **判断信号**：grep 搜索 `test_xxx_connection` 函数中 `if not api_key` 未同时判断 `_is_masked`
+- **适用场景**：所有密钥字段（API Key / Token / Secret）的测试连接、保存配置等回传场景
+- **不适用场景**：明文密钥输入（用户主动重新输入完整密钥）
+- **正确做法**：
+  ```python
+  # ✅ 正确：检测脱敏值并回退到已保存的真实密钥
+  def _is_masked(value: str) -> bool:
+      """判断是否为前端脱敏值（如 ****5ba0）。"""
+      return bool(value) and value.startswith("****") and len(value) < 50
+
+  async def test_tts_connection(api_key: str) -> dict:
+      # 前端回传脱敏值时，从数据库读取真实 token
+      if _is_masked(api_key):
+          api_key = await get_saved_token_from_db("ALIYUN_TTS_TOKEN")
+          if not api_key:
+              return {"ok": False, "msg": "未读取到已保存的 Token，请重新输入"}
+      # 用真实 token 调用阿里云 NLS
+      return await _call_aliyun_nls(api_key)
+
+  # ❌ 错误：直接用前端回传值调用
+  async def test_tts_connection(api_key: str) -> dict:
+      return await _call_aliyun_nls(api_key)  # ****5ba0 直接调 NLS 报 token invalid
+  ```
+- **真实案例**：TTS 测试连接时前端回传脱敏值 `****5ba0`，后端直接当作 NLS AccessToken 调用阿里云 NLS，返回 `40000001 token invalid`，用户误以为密钥填错，反复重填无果。修复后增加 `_is_masked()` 检测，脱敏值自动回退到数据库已保存的真实 Token
+
+## 规范 47：第三方服务错误码可读化映射
+
+**第三方服务（阿里云 NLS / OpenAI / DeepSeek 等）的错误码必须维护 ERROR_CODE_HINTS 映射表，转换为可读中文提示返回给前端。**
+
+- **为什么**：第三方服务的原始错误码（如阿里云 NLS `40000001` / `40000010` / `40000004`）对用户完全不可读，用户无法判断是凭证填错、配额超限还是网络问题。直接返回原始错误码会引发大量"无法定位"的用户咨询。
+- **判断信号**：grep 搜索第三方 API 响应中的 `error_code` / `code` 字段直接返回前端，无映射表
+- **适用场景**：所有第三方服务调用（LLM / TTS / 存储 / 内容安全）
+- **不适用场景**：内部业务错误码（已有统一错误码体系，见 API 契约规范）
+- **正确做法**：
+  ```python
+  # ✅ 正确：维护 ERROR_CODE_HINTS 映射表
+  ALIYUN_NLS_ERROR_HINTS = {
+      "40000001": "token invalid：请确认填写的是 NLS AccessToken，而非 AccessKey Secret",
+      "40000010": "appkey invalid：请确认 NLS AppKey 与 AccessToken 属于同一项目",
+      "40000004": "请求参数错误：请检查 voice / rate / pitch 配置",
+      "40000002": "请求超时：请稍后重试",
+  }
+
+  def _translate_nls_error(error_code: str, raw_msg: str) -> str:
+      hint = ALIYUN_NLS_ERROR_HINTS.get(error_code)
+      if hint:
+          return f"[{error_code}] {hint}"
+      return f"[{error_code}] {raw_msg}"
+
+  # 调用层返回可读提示
+  try:
+      result = await nls_client.synthesize(text)
+  except NLSError as e:
+      return {"ok": False, "msg": _translate_nls_error(e.code, str(e))}
+
+  # ❌ 错误：直接返回原始错误码
+  try:
+      result = await nls_client.synthesize(text)
+  except NLSError as e:
+      return {"ok": False, "msg": f"error_code={e.code}, message={e}"}  # 用户看不懂
+  ```
+- **真实案例**：阿里云 NLS 错误码 `40000001`（token invalid）直接返回前端，用户不知是 NLS AccessToken 字段填错（误填了 AccessKey Secret）。在 `ERROR_CODE_HINTS` 中映射为"请确认填写的是 NLS AccessToken，而非 AccessKey Secret"后，用户可自助排查
+
+## 规范 48：Settings 字段与 ORM/前端/服务层四端同步
+
+**新增配置项时，Settings 类、ORM 模型、前端表单、服务层 CONFIG_KEY_MAP 四端必须同步，任一端缺失都会导致 setattr(settings, ...) 报 AttributeError 或配置无法持久化。**
+
+- **为什么**：项目使用 SQLite 持久化配置 + Settings 单例热生效模式。新增配置项时如果只更新了前端表单和 ORM 模型，但 Settings 类没有该字段，服务层执行 `setattr(settings, "ALIYUN_TTS_APPKEY", value)` 会失败（Pydantic BaseSettings 默认禁止额外属性），导致 500 错误。
+- **判断信号**：grep 搜索 `setattr(settings,` 中引用的属性名是否在 Settings 类定义中存在
+- **适用场景**：所有通过 SQLite 持久化 + Settings 单例热生效的配置项
+- **不适用场景**：临时变量、一次性配置（不持久化）
+- **正确做法**：
+  ```python
+  # ✅ 正确：新增 ALIYUN_TTS_APPKEY 配置项时四端同步
+
+  # 1. Settings 类（app/core/config.py）
+  class Settings(BaseSettings):
+      ALIYUN_TTS_APPKEY: str = ""  # 新增字段
+
+  # 2. ORM 模型（app/models/config.py，如果用键值表则跳过）
+  # 若用键值表，无需新增字段；若用列存储，需 ALTER TABLE
+
+  # 3. 前端表单（admin-web/src/views/ai-config/index.vue）
+  # <el-form-item label="NLS AppKey">
+  #   <el-input v-model="form.aliyun_tts_appkey" />
+  # </el-form-item>
+
+  # 4. 服务层 CONFIG_KEY_MAP（app/services/ai_config_service.py）
+  CONFIG_KEY_MAP = {
+      "aliyun_tts_appkey": "ALIYUN_TTS_APPKEY",  # 前端键 → Settings 属性
+      # ...
+  }
+
+  # 保存时安全 setattr
+  for fe_key, value in form_data.items():
+      settings_key = CONFIG_KEY_MAP.get(fe_key)
+      if settings_key and hasattr(settings, settings_key):
+          setattr(settings, settings_key, value)
+
+  # ❌ 错误：只更新前端和 CONFIG_KEY_MAP，Settings 类缺字段
+  # Settings 类未定义 ALIYUN_TTS_APPKEY
+  setattr(settings, "ALIYUN_TTS_APPKEY", value)  # AttributeError / 500
+  ```
+- **真实案例**：服务层执行 `setattr(settings, "ALIYUN_TTS_APPKEY", value)` 但 Settings 类未定义该字段（Pydantic BaseSettings 禁止额外属性），AI 配置保存接口报 500。修复时需同步在 Settings 类新增 `ALIYUN_TTS_APPKEY: str = ""` 字段，并核对前端表单 / ORM / `CONFIG_KEY_MAP` 三端是否一致
+
+## 规范 49：表单字段标签语义明确性
+
+**表单字段标签必须明确字段含义，禁止使用"API Key"等通用名称混淆不同凭证。**
+
+- **为什么**：同一个第三方服务商通常有多种凭证（如阿里云有 AccessKey ID / AccessKey Secret / NLS AppKey / NLS AccessToken），如果表单标签统一写成"API Key"，用户无法区分该填哪一个，极易误填。误填后测试连接报 token invalid，但用户看不出是字段填错。
+- **判断信号**：grep 搜索 `el-form-item label="API Key"` 等通用标签
+- **适用场景**：所有含凭证字段的配置表单
+- **不适用场景**：单一凭证场景（无歧义）
+- **正确做法**：
+  ```vue
+  <!-- ✅ 正确：标签明确字段具体含义 -->
+  <el-form-item label="NLS AccessToken">
+    <el-input v-model="form.aliyun_tts_token" type="password" show-password />
+    <div class="form-hint">在 NLS 控制台 → 项目管理 → Token 获取</div>
+  </el-form-item>
+
+  <el-form-item label="NLS AppKey">
+    <el-input v-model="form.aliyun_tts_appkey" />
+    <div class="form-hint">在 NLS 控制台 → 项目管理 → AppKey 列获取</div>
+  </el-form-item>
+
+  <el-form-item label="AccessKey ID">
+    <el-input v-model="form.aliyun_access_key_id" />
+  </el-form-item>
+
+  <el-form-item label="AccessKey Secret">
+    <el-input v-model="form.aliyun_access_key_secret" type="password" show-password />
+  </el-form-item>
+
+  <!-- ❌ 错误：标签含义模糊 -->
+  <el-form-item label="API Key">
+    <el-input v-model="form.aliyun_tts_token" />
+    <!-- 用户误填 AccessKey Secret 到 NLS AccessToken 字段 -->
+  </el-form-item>
+  ```
+- **真实案例**：阿里云 NLS 配置表单的"API Key"字段实际应为 NLS AccessToken，用户误把 AccessKey Secret 填入，导致 TTS 测试连接报 `40000001 token invalid`，反复重填无果。改为"NLS AccessToken"并补充获取路径提示后误填率显著下降
+
+## 规范 50：密钥获取入口超链接规范化
+
+**所有配置表单中的密钥字段必须提供官方获取入口超链接（el-link target="_blank"），让用户知道在哪里申请。**
+
+- **为什么**：第三方服务的密钥获取入口分散在不同控制台（阿里云 AccessKey 在 RAM 控制台、NLS AppKey/Token 在 NLS 控制台、OpenAI Key 在 platform.openai.com），用户如果不熟悉控制台导航，根本找不到申请入口，导致配置流程卡住或填入错误凭证。
+- **判断信号**：grep 搜索 `el-form-item label.*Key|Token|Secret` 但对应字段无 `el-link href` 超链接
+- **适用场景**：所有第三方服务凭证配置表单
+- **不适用场景**：内部系统凭证（无外部获取入口）
+- **正确做法**：
+  ```vue
+  <!-- ✅ 正确：表单顶部提供官方获取入口 -->
+  <template>
+    <el-alert type="info" :closable="false">
+      <template #title>
+        阿里云 NLS 凭证获取：
+        <el-link href="https://nls-portal.console.aliyun.com/applist" target="_blank" type="primary">
+          NLS 控制台（AppKey / Token）
+        </el-link>
+        <el-link href="https://ram.console.aliyun.com/manage/ak" target="_blank" type="primary">
+          RAM 控制台（AccessKey）
+        </el-link>
+      </template>
+    </el-alert>
+
+    <el-form :model="form">
+      <el-form-item label="NLS AppKey">
+        <el-input v-model="form.aliyun_tts_appkey" />
+      </el-form-item>
+      <el-form-item label="NLS AccessToken">
+        <el-input v-model="form.aliyun_tts_token" type="password" show-password />
+      </el-form-item>
+    </el-form>
+  </template>
+
+  <!-- ❌ 错误：仅有字段输入框，无获取入口 -->
+  <el-form :model="form">
+    <el-form-item label="NLS AppKey">
+      <el-input v-model="form.aliyun_tts_appkey" />
+      <!-- 用户不知在哪里申请 AppKey -->
+    </el-form-item>
+  </el-form>
+  ```
+- **真实案例**：TTS/LLM 配置页面缺少密钥获取入口超链接，用户不知在哪里申请阿里云 AccessKey 和 NLS AppKey，需要在表单顶部新增控制台直达链接。补充 `el-link target="_blank"` 超链接后，配置完成率明显提升
 
 ---

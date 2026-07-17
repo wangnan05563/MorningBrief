@@ -14,7 +14,7 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
 - 模板：`config.example.yaml`
 - 实际：`config.yaml`（从模板复制后按项目修改）
 
-配置文件分为 15 个区块：
+配置文件分为 19 个区块：
 
 | 区块 | 作用 |
 |------|------|
@@ -28,11 +28,15 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
 | `screenshot` | 截图策略（全页/视口、绝对路径、超时） |
 | `snapshot` | 快照策略（大小阈值、落盘） |
 | `assertions` | 判断逻辑（页面/API/登录成功标准、error 白名单、文本匹配模式） |
-| `issue_classification` | 问题分类（代码缺陷/业务数据/框架行为/环境） |
+| `issue_classification` | 问题分类（代码缺陷/业务数据/框架行为/环境/工具层 bug/数据隔离违规/RSS 源不可达/第三方限流） |
 | `fix_strategies` | 常见问题修复策略表 |
 | `workflow` | 流程控制（自动启停、失败继续、自动修复、回归构建、菜单 fallback） |
 | `report` | 报告输出配置 |
 | `test_priority` | 测试用例优先级分类（P0-P3，控制执行顺序和报告分组） |
+| `rss_source_check` | RSS 源可达性预检（串行验证、内容类型检查、UA 兼容性） |
+| `data_isolation_check` | 频道级数据隔离预检（OR NULL 兜底检测、channel_id 严格过滤） |
+| `powershell_compat_check` | PowerShell Python 脚本调用兼容性检查（-u 参数、2>&1 重定向） |
+| `third_party_service_check` | 第三方转换服务依赖诊断（rsshub/plink 限流、DNS 污染、UA 拒绝） |
 
 ## 测试流程（6 阶段）
 
@@ -701,3 +705,653 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
 22. **真机测试预检**：真机测试前必须执行 `realdevice_check`，确认 APP_HOST=0.0.0.0、AUDIO_BASE_URL 配置正确、域名校验已关闭
 23. **ORM 字段语义验证**：聚合查询前必须确认字段语义（如 PlayLog.duration 是节目总时长 vs PlayProgress.position 是实际收听位置）
 24. **navigateTo 失败降级**：navigateTo 失败时应降级为 reLaunch，避免页面跳转静默失败
+
+## 补充章节：基于频道级隔离与 RSS 源验证复盘的优化（v3，2026-07-17）
+
+本章节基于频道级数据隔离修复、RSS 源端到端验证、PowerShell 工具链兼容性等实战复盘，补充以下内容：
+- 新增配置区块：`rss_source_check`、`data_isolation_check`、`powershell_compat_check`、`third_party_service_check`
+- 新增测试阶段：阶段 10-13
+- 新增判断逻辑：RSS 源可达性诊断、频道级数据隔离、PowerShell 脚本兼容性、第三方服务限流识别
+- 新增问题分类：`data_isolation_violation`、`rss_source_unreachable`、`third_party_rate_limit`
+- 补充修复策略、复盘内容、适用场景、注意事项
+
+### 配置文件新增区块
+
+| 区块 | 作用 |
+|------|------|
+| `rss_source_check` | RSS 源可达性预检（串行验证、内容类型检查、UA 兼容性） |
+| `data_isolation_check` | 频道级数据隔离预检（OR NULL 兜底检测、channel_id 严格过滤） |
+| `powershell_compat_check` | PowerShell Python 脚本调用兼容性检查（-u 参数、2>&1 重定向） |
+| `third_party_service_check` | 第三方转换服务依赖诊断（rsshub/plink 限流、DNS 污染、UA 拒绝） |
+
+### 阶段 10：RSS 源可达性预检
+
+如 `rss_source_check.enabled=true` 且 `check_phase=pre_test`，在阶段 9 之后执行：
+
+```
+1. 读取 rss_source_check.sources_config（如 rss.yaml 路径）
+2. 加载所有 RSS 源配置（name/url/category）
+3. 按 verify_mode 执行验证：
+   - serial（默认）：串行验证，间隔≥interval_sec（默认 3.0s），避免第三方服务限流
+   - parallel：并发验证（仅限原生 RSS，第三方转换服务禁用）
+4. 对每个源执行 diagnose_rss_source：
+   a. HTTP GET 请求（按 ua_config 配置 UA）
+   b. 分类诊断结果：
+      - ok：HTTP 200 + RSS XML + 条目>0
+      - not_rss：HTTP 200 但 Content-Type 为 text/html
+      - zero_entries：HTTP 200 + 0 条目（可能限流，需串行复测）
+      - not_found：HTTP 404（源被封禁或路径错误）
+      - forbidden：HTTP 403（WAF 拦截或 UA 被拒绝）
+      - dns_error：ConnectError（DNS 污染或 TCP 阻断）
+      - timeout：TimeoutException（连接超时）
+5. 如第三方转换服务源（按 third_party_service_check.services 配置识别）验证失败，自动切换串行模式复测
+6. 统计结果：可达源数/失效源数/限流源数
+7. 如失效源数 > max_failure_ratio（默认 0.1），标记测试阻塞
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| 所有源可达（或失效比例 < max_failure_ratio） | PASS |
+| 第三方转换服务源限流（串行复测后恢复） | WARN（标注限流风险） |
+| 原生 RSS 源失效（HTTP 404/DNS 错误） | FAIL（测试阻塞） |
+| 第三方转换服务源持续失效（串行复测仍 0 条目） | FAIL（源被封禁） |
+| 源返回 HTML 而非 RSS（Content-Type: text/html） | FAIL（站点未提供 RSS） |
+
+### 阶段 11：频道级数据隔离预检
+
+如 `data_isolation_check.enabled=true`，在阶段 10 之后执行：
+
+```
+1. 遍历 data_isolation_check.scan_dirs 中每个目录（如 backend/app/services/、backend/app/workflow/）
+2. 对每个 .py 文件，grep 检查：
+   a. or_(.*channel_id.*is_(None))：SQLAlchemy or_ 兜底逻辑
+   b. OR.*channel_id IS NULL：SQL 原生 OR NULL 兜底
+   c. or_.*channel_id：未使用的 or_ 导入残留
+3. 如命中，记录违规：文件路径 + 行号 + 命中模式 + severity
+4. 检查 crawler 0-count 逻辑：
+   a. grep if count == 0 或 if material_count == 0
+   b. 检查后续是否有 OR NULL 兜底查询
+5. 如违规且 severity_on_violation=FAIL，标记测试阻塞
+6. 记录数据隔离检查结果（PASS/WARN/FAIL + 违规清单）
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| 所有查询严格按 channel_id 过滤，无 OR NULL 兜底 | PASS |
+| 全局工作流（channel_id=None）查询用 IS NULL（正常） | PASS |
+| 专门频道查询含 OR channel_id IS NULL 兜底 | FAIL（跨频道污染风险） |
+| crawler 0-count 检查含 OR NULL 兜底 | FAIL（跨频道污染风险） |
+| or_ 导入但未使用（修复后未清理） | WARN（代码整洁性） |
+
+### 阶段 12：PowerShell Python 脚本调用兼容性检查
+
+如 `powershell_compat_check.enabled=true` 且当前环境为 Windows + PowerShell，在阶段 11 之后执行：
+
+```
+1. 遍历 powershell_compat_check.scan_files 中每个文件（如 *.ps1、package.json）
+2. 对 .ps1 文件，grep 检查：
+   a. python script.py（无 -u 参数）→ 违规
+   b. python -u script.py 后无 2>&1 重定向 → 违规
+   c. 因 RemoteException 警告而 exit 1 的逻辑 → 违规（logger.error 是正常日志）
+3. 对 package.json，grep 检查 scripts 字段中 python 调用规范
+4. 如违规且 severity_on_violation=WARN，记录警告
+5. 如违规且 severity_on_violation=FAIL，标记测试阻塞
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| 所有 Python 脚本调用使用 `python -u script.py 2>&1` | PASS |
+| Python 脚本调用无 -u 参数（stdout 缓冲风险） | WARN（输出可能不可见） |
+| Python 脚本调用无 2>&1 重定向（stderr 丢失） | WARN（logger.error 输出丢失） |
+| 因 RemoteException 警告而 exit 1（误判脚本失败） | FAIL（logger.error 是正常日志） |
+
+### 阶段 13：第三方转换服务依赖诊断
+
+如 `third_party_service_check.enabled=true`，在阶段 12 之后执行：
+
+```
+1. 读取 third_party_service_check.services 配置（含 service_name/url_pattern/dns_check/tcp_check 等字段）
+2. 遍历 rss.yaml 中所有源，按 url_pattern 识别依赖第三方服务的源：
+   a. URL 匹配 url_pattern → 依赖对应第三方服务
+   b. 支持多个第三方服务配置（如 rsshub/plink 等，均通过 config.yaml 管理）
+3. 对每个第三方服务执行诊断：
+   a. DNS 解析检查：nslookup <service_domain>（域名从 url_pattern 提取）
+   b. TCP 连接检查：Test-NetConnection <service_domain> -Port 443
+   c. HTTP 可达性检查：GET <service_domain>，检查响应
+4. 分类诊断结果（分类标准通过 config.yaml 的 result_categories 配置）：
+   - dns_polluted：DNS 解析失败（DNS 污染）
+   - tcp_blocked：TCP 连接失败（TCP 阻断）
+   - rate_limited：HTTP 200 但并发时部分源 0 条目（会话级限流）
+   - service_down：服务完全不可达
+   - ok：服务正常
+5. 如第三方服务 dns_polluted 或 tcp_blocked，标记所有依赖该服务的源为失效
+6. 如第三方服务 rate_limited，标注"验证时需串行间隔≥interval_sec"
+7. 生成第三方服务依赖报告：服务名/状态/影响源数/建议
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| 所有第三方服务正常可达 | PASS |
+| 第三方服务限流（串行复测后恢复） | WARN（标注限流风险） |
+| 第三方服务 DNS 污染或 TCP 阻断 | FAIL（所有依赖源失效） |
+| 第三方服务完全不可达 | FAIL（所有依赖源失效） |
+
+### 新增问题分类
+
+在 `issue_classification` 中新增分类：
+
+| 分类 | 含义 | 处理方式 |
+|------|------|----------|
+| data_isolation_violation | 数据隔离违规（如 OR NULL 兜底导致跨频道污染） | 触发代码修复流程，移除兜底逻辑 |
+| rss_source_unreachable | RSS 源不可达（DNS 污染/TCP 阻断/源被封禁） | 报告中标注源名+失效原因+替代方案，不修改代码 |
+| third_party_rate_limit | 第三方服务限流（plink 并发限流假阳性） | 报告中标注服务名+限流特性+串行验证建议 |
+
+**识别流程**：
+1. RSS 源验证返回 dns_error/timeout/not_found → `rss_source_unreachable`
+2. RSS 源验证返回 zero_entries 但串行复测恢复 → `third_party_rate_limit`
+3. 代码扫描发现 OR channel_id IS NULL → `data_isolation_violation`
+
+### 新增修复策略
+
+补充以下修复策略到 `fix_strategies`：
+
+#### FAIL 级（必须修复）
+
+1. **频道级数据隔离违规**：专门频道查询含 OR NULL 兜底 → 移除兜底逻辑，严格按 channel_id 过滤
+2. **RSS 源 DNS 污染**：rsshub.app 等服务被 DNS 污染 → 替换为原生 RSS，避免依赖第三方转换服务
+3. **RSS 源返回 HTML 而非 RSS**：站点未提供 RSS → 移除该源或寻找原生 RSS 替代
+4. **PowerShell 脚本误判 logger.error 为异常**：因 RemoteException 警告而 exit 1 → 理解 stderr 包装机制，不因警告中断
+
+#### WARN 级（可继续测试）
+
+1. **第三方转换服务限流**：plink 并发验证时部分源 0 条目 → 改用串行模式，3s 间隔复测
+2. **PowerShell Python 脚本无 -u 参数**：stdout 缓冲风险 → 添加 -u 参数和 2>&1 重定向
+3. **or_ 导入未使用**：修复后未清理 import 残留 → 移除未使用的 or_ 导入
+4. **RSS 源 UA 被拒绝**：bot UA 访问 Steam 等站点被拒 → 切换为浏览器 UA
+
+### 补充复盘：测试流程的不确定性与失败点
+
+基于本次实战复盘新增的不确定性：
+
+| 不确定性 | 发生场景 | 应对策略 |
+|---------|---------|---------|
+| 频道级 OR NULL 兜底误用 | 专门频道查询含 OR channel_id IS NULL | `data_isolation_check` 扫描所有 services/workflow 目录 |
+| rsshub.app 全站失效 | 大陆环境 DNS 污染 + TCP 阻断 | `third_party_service_check` 诊断第三方服务可达性 |
+| plink 并发限流假阳性 | 验证脚本并发≥5 测试 plink 源 | `rss_source_check.verify_mode=serial` 串行验证 |
+| PowerShell stdout 缓冲 | `python script.py` 输出不可见 | `powershell_compat_check` 检查 -u 参数和 2>&1 重定向 |
+| feedparser HTTP 200+0 条目 | 站点返回 HTML/限流/源被封禁 | `rss_source_check` 分类诊断（not_rss/zero_entries/not_found） |
+| rss.yaml name 变更未同步数据库 | channel.rss_sources JSON 数组存储旧 name | `rss_source_check` 比对 rss.yaml 与数据库 name 一致性 |
+| UA 被站点拒绝 | bot UA 访问 Steam 等站点 | `rss_source_check.ua_config` 配置浏览器 UA |
+| 第三方服务源被封禁 | plink 源返回 404（微信公众号封禁） | `third_party_service_check` 识别 404 并标注替代方案 |
+
+### 补充可抽象的固定流程
+
+**新增固定流程**（适用于所有 RSS 抓取系统 + 多频道系统）：
+
+1. **RSS 源可达性预检流程**：加载 rss.yaml → 串行验证（3s 间隔）→ 分类诊断（ok/not_rss/zero_entries/not_found/dns_error/timeout）→ 统计失效比例 → 生成报告
+2. **频道级数据隔离预检流程**：扫描 services/workflow 目录 → grep OR NULL 兜底 → 检查 crawler 0-count 逻辑 → 记录违规清单
+3. **PowerShell 脚本兼容性检查流程**：扫描 .ps1/package.json → 检查 python -u + 2>&1 → 检查 RemoteException 误判 → 记录警告
+4. **第三方服务依赖诊断流程**：识别依赖第三方服务的源 → DNS/TCP/HTTP 诊断 → 分类（dns_polluted/tcp_blocked/rate_limited/service_down）→ 标注影响源数
+
+**新增固定判断逻辑**：
+
+- RSS 源可达 = HTTP 200 + RSS XML + 条目>0（或串行复测后恢复）
+- 频道级隔离合格 = 专门频道查询无 OR NULL 兜底 + crawler 0-count 无 OR NULL 回退
+- PowerShell 兼容 = Python 脚本调用含 -u + 2>&1 + 不因 RemoteException 中断
+- 第三方服务健康 = DNS 解析成功 + TCP 连接成功 + HTTP 可达（或限流但串行恢复）
+- 数据隔离违规 = grep 命中 `OR.*channel_id IS NULL` 或 `or_(.*channel_id.*is_(None))`
+
+### 补充适用场景
+
+新增适用场景：
+
+- ✅ RSS 抓取系统源可达性预检（串行验证、内容类型检查、UA 兼容性）
+- ✅ 多频道系统数据隔离预检（OR NULL 兜底检测、channel_id 严格过滤）
+- ✅ Windows + PowerShell 工具链兼容性检查（Python 脚本调用规范）
+- ✅ 第三方转换服务依赖诊断（rsshub/plink 限流、DNS 污染、UA 拒绝）
+- ✅ rss.yaml 与数据库配置同步性验证（name 一致性检查）
+
+新增不适用场景：
+
+- ❌ API 接口可达性测试（非 RSS 源，需用 API 测试流程）
+- ❌ 单频道系统数据隔离预检（无 channel_id 字段）
+- ❌ bash/zsh 环境脚本兼容性检查（默认行缓冲，无 -u 需求）
+- ❌ 纯 Node.js 工具链脚本兼容性检查（无 Python 依赖）
+
+### 补充注意事项
+
+25. **RSS 源串行验证**：第三方转换服务（按 `third_party_service_check.services` 配置识别）必须串行验证，间隔≥`rss_source_check.interval_sec`，避免并发限流假阳性
+26. **RSS 源内容类型检查**：HTTP 200 但 0 条目时，必须检查 Content-Type，区分 HTML 响应与 RSS 格式问题
+27. **频道级数据隔离**：专门频道查询禁止 OR NULL 兜底，NULL 素材仅全局工作流可用
+28. **PowerShell Python 脚本调用**：必须用 `python -u script.py 2>&1`，避免 stdout 缓冲和 stderr 丢失
+29. **第三方服务诊断**：第三方转换服务（按 `third_party_service_check.services` 配置）如出现 DNS 污染或 TCP 阻断，所有依赖该服务的源需替换为原生 RSS
+30. **rss.yaml 与数据库同步**：rss.yaml name 变更后必须同步数据库 channel.rss_sources JSON 数组
+31. **UA 兼容性**：部分站点（如 Steam）拒绝 bot UA，需通过 `rss_source_check.ua_config` 配置浏览器 UA
+32. **RemoteException 非异常**：PowerShell 包装 Python logger.error 为 RemoteException 警告是正常行为，不应中断脚本
+
+## 补充章节：基于 AI 服务模块测试经验的优化（v4，2026-07-17）
+
+本章节基于 AI 服务模块（TTS/LLM）测试过程中遇到的异步交互、会话保持、脱敏值回传、错误码可读化等实战问题，补充以下内容：
+- 新增配置区块：`async_interaction`、`session_persistence`、`config_form_testing`、`service_restart_verification`、`ai_service_testing`
+- 新增测试阶段：阶段 14-18
+- 新增判断逻辑：异步交互结果、会话保持、配置表单可用性、脱敏值回传、服务重启验证
+- 补充修复策略、复盘内容、适用场景、注意事项
+
+### 配置文件新增区块
+
+| 区块 | 作用 |
+|------|------|
+| `async_interaction` | 异步交互测试（按钮 disabled/ready 信号、响应超时、轮询间隔） |
+| `session_persistence` | 会话保持测试（重启后登录态失效检测、自动重新登录） |
+| `config_form_testing` | 配置表单可用性测试（脱敏值前缀、模糊标签黑名单、密钥获取链接） |
+| `service_restart_verification` | 服务重启验证（前端构建后重启后端、健康检查重试） |
+| `ai_service_testing` | AI 服务测试扩展（LLM/TTS 测试参数、阿里云 NLS 错误码映射、LLM 预设列表） |
+
+### 阶段 14：异步交互测试
+
+对所有异步按钮（如"测试连接"、"AI 生成"、"批量操作"）执行：
+
+```
+1. 点击异步按钮
+2. 检查按钮是否变为 button_busy_signal（disabled）状态
+3. 轮询等待：
+   - 轮询间隔 = async_interaction.poll_interval_ms
+   - 总超时 = async_interaction.response_timeout_ms
+   - 成功条件：按钮恢复 button_ready_signal（not disabled）
+4. 读取页面快照，检查是否出现结果文本（成功提示/错误提示）
+5. 记录结果
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| 按钮 disabled → 恢复 → 结果文本出现 | PASS |
+| 按钮恢复但无结果文本 | WARN（可能结果渲染慢） |
+| 超时后按钮仍 disabled | FAIL（API 无响应） |
+| 出现错误提示文本 | 按 error 内容分类（business_data / code_defect） |
+
+**适用场景**：所有异步按钮（测试连接、AI 生成、批量操作）
+**不适用场景**：同步按钮（导航、筛选）
+
+### 阶段 15：会话保持测试
+
+如 `session_persistence.relogin_after_restart=true`，在服务重启后执行：
+
+```
+1. 服务重启后访问受保护页面（如 /ai-config）
+2. 检查页面响应是否出现 session_persistence.auth_failure_signals 中的信号：
+   - HTTP 500
+   - "未授权"
+   - "登录已过期"
+3. 如出现失效信号且 session_persistence.auto_relogin=true：
+   a. 从 credentials.admin 读取账号
+   b. 执行阶段 3 登录流程
+4. 重新访问目标页面，验证可访问性
+5. 记录结果
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| 重启后受保护页面可正常访问 | PASS |
+| 出现失效信号 → 自动 relogin → 重新访问成功 | PASS（自动恢复） |
+| 出现失效信号但 auto_relogin=false | FAIL（需手动登录） |
+| 自动 relogin 后仍无法访问 | FAIL（认证服务异常） |
+
+**适用场景**：服务重启、长时间测试后 token 过期
+**不适用场景**：首次测试（无历史登录态）
+
+### 阶段 16：配置表单可用性测试
+
+对所有配置管理页面（AI 服务、TTS、存储配置等）执行：
+
+```
+1. 遍历所有配置表单字段
+2. 检查字段标签是否在 config_form_testing.ambiguous_labels 黑名单中：
+   - "API Key"
+   - "App Key"
+   - "Secret"
+3. 检查密钥字段是否有配套的 el-link 超链接（require_key_acquisition_link）
+4. 检查第三方错误码是否可读化（third_party_error_code_readable）：
+   - 触发测试连接，观察错误提示
+   - 对照 ai_service_testing.aliyun_nls_error_hints 检查错误码是否被翻译
+5. 记录违规清单
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| 所有字段标签具体 + 密钥字段有获取链接 + 错误码可读化 | PASS |
+| 字段标签含模糊词（如 "API Key"） | FAIL（用户易误填） |
+| 密钥字段无获取链接 | WARN（用户不知从哪获取） |
+| 第三方错误码未可读化 | FAIL（用户不知如何修复） |
+
+**适用场景**：所有配置管理页面（AI 服务、TTS、存储配置等）
+**不适用场景**：非配置类页面（列表、详情）
+
+### 阶段 17：脱敏值回传测试
+
+对含密钥字段的测试连接功能执行：
+
+```
+1. 加载配置页面，记录密钥字段值（应为 ****xxxx 脱敏形式）
+2. 不修改密钥字段，直接点击测试连接
+3. 检查后端响应：
+   - 成功：后端识别脱敏值并回退到已保存的真实密钥
+   - 失败：后端将脱敏值当作真实 token，报 token invalid
+4. 修改密钥字段为明文新值，点击测试连接
+5. 检查后端是否使用新明文值（响应应为成功或新值的鉴权失败）
+6. 记录结果
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| 脱敏值测试连接成功（后端回退）+ 明文值测试连接使用新值 | PASS |
+| 脱敏值测试连接报 token invalid | FAIL（后端未识别脱敏值） |
+| 明文值测试连接仍使用旧密钥 | FAIL（后端未更新密钥） |
+
+**适用场景**：所有含密钥字段的测试连接功能
+**不适用场景**：无密钥字段的测试功能
+
+### 阶段 18：服务重启验证测试
+
+如 `service_restart_verification.rebuild_requires_backend_restart=true`，在前端代码变更后执行：
+
+```
+1. 执行前端构建（workflow.build_before_regression.command）
+2. 停止后端服务（service.stop_script）
+3. 启动后端服务（service.start_script）
+4. 轮询健康检查端点：
+   - 最多重试 service_restart_verification.health_check_retries 次
+   - 每次间隔 1 秒
+   - 总超时 = service_restart_verification.ready_timeout_sec
+5. 健康检查通过后访问页面，验证新代码已加载（页面包含新功能文本）
+6. 记录结果
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| 健康检查 200 + 页面包含新功能文本 | PASS |
+| 健康检查 200 但页面仍为旧代码 | FAIL（静态文件挂载缓存） |
+| 健康检查超时 | FAIL（服务启动失败） |
+
+**适用场景**：开发模式下前端代码变更后的验证
+**不适用场景**：exe 模式（需重新打包，非重启）
+
+### 新增修复策略
+
+补充以下修复策略到 `fix_strategies`：
+
+#### FAIL 级（必须修复）
+
+1. **异步按钮结果未出现**：点击后立即读快照 → 增加 `async_interaction.response_timeout_ms` 等待
+2. **服务重启后页面 500**：登录态丢失 → 自动重新登录（`session_persistence.auto_relogin`）
+3. **脱敏值被当作真实 token**：前端回传 ****xxxx → 后端 `_is_masked` 判断 + 回退到真实密钥
+4. **错误码不可读**：阿里云 NLS 40000001 → 添加 `ai_service_testing.aliyun_nls_error_hints` 映射
+5. **字段标签模糊**："API Key" 标签 → 改为 "AccessToken" 等具体名称
+6. **前端构建后未加载新代码**：构建后未重启后端 → 执行 `service_restart_verification` 流程
+
+#### WARN 级（可继续测试）
+
+1. **按钮恢复但无结果文本**：结果渲染慢 → 增加 `response_timeout_ms` 或重新快照
+2. **密钥字段无获取链接**：用户不知从哪获取 → 添加 el-link 超链接指向官方文档
+
+### 补充复盘：测试流程的不确定性与失败点
+
+基于本次 AI 服务模块测试复盘新增的不确定性：
+
+| 不确定性 | 发生场景 | 应对策略 |
+|---------|---------|---------|
+| 异步按钮结果未出现 | 点击后立即读快照 | `async_interaction.response_timeout_ms` 等待 |
+| 服务重启后页面 500 | 服务重启后访问受保护页面 | `session_persistence.auto_relogin` 自动登录 |
+| 脱敏值被当作真实 token | 前端回传 ****xxxx | 后端 `_is_masked` 判断 + 回退 |
+| 错误码不可读 | 阿里云 NLS 40000001 | `ai_service_testing.aliyun_nls_error_hints` 映射 |
+| 字段标签模糊 | "API Key" 标签 | `config_form_testing.ambiguous_labels` 黑名单 |
+| 前端构建后未加载新代码 | 构建后未重启后端 | `service_restart_verification` 重启流程 |
+
+### 补充可抽象的固定流程
+
+**新增固定流程**（适用于所有含异步交互+配置管理的系统）：
+
+1. **异步交互测试流程**：点击 → 检查 disabled → 轮询等待 → 检查 ready → 读快照
+2. **会话保持测试流程**：访问受保护页 → 检测失效信号 → 自动登录 → 重新访问
+3. **配置表单测试流程**：遍历字段 → 检查标签 → 检查链接 → 检查错误码可读化
+4. **脱敏值回传测试流程**：记录脱敏值 → 不修改直接测试 → 检查后端回退 → 修改明文测试
+5. **服务重启验证流程**：构建 → 停止 → 启动 → 健康检查轮询 → 页面验证
+
+**新增固定判断逻辑**：
+
+- 异步交互成功 = 按钮 disabled → 恢复 → 结果文本出现
+- 会话保持成功 = 重启后自动 relogin → 受保护页可访问
+- 配置表单合格 = 标签具体 + 密钥字段有获取链接 + 错误码可读化
+- 脱敏值回传正确 = 脱敏值测试连接成功（后端回退）+ 明文值测试连接使用新值
+- 服务重启验证通过 = 健康检查 200 + 页面包含新功能文本
+
+### 补充适用场景
+
+新增适用场景：
+
+- ✅ 异步按钮交互测试（测试连接、AI 生成、批量操作）
+- ✅ 服务重启后会话恢复验证（自动重新登录）
+- ✅ 配置表单可用性测试（字段标签、密钥获取链接、错误码可读化）
+- ✅ 脱敏值回传测试（密钥字段的安全回退验证）
+- ✅ 前端构建后服务重启验证（开发模式代码变更生效）
+
+新增不适用场景：
+
+- ❌ 同步按钮交互测试（无 disabled/ready 状态变化）
+- ❌ 首次测试的会话保持（无历史登录态）
+- ❌ 无密钥字段的脱敏值测试（无脱敏值回传需求）
+- ❌ exe 模式的服务重启验证（需重新打包）
+
+### 补充注意事项
+
+33. **异步按钮等待响应**：测试连接按钮点击后必须等待 `async_interaction.response_timeout_ms`，否则快照看不到错误提示
+34. **服务重启后重新登录**：服务重启后登录态丢失，需通过 `session_persistence.auto_relogin` 自动重新登录
+35. **脱敏值识别**：前端回传 ****xxxx 脱敏值时，后端必须通过 `_is_masked` 判断并回退到真实密钥
+36. **错误码可读化**：第三方错误码（如阿里云 NLS 40000001）必须通过 `ai_service_testing.aliyun_nls_error_hints` 映射为可读提示
+37. **字段标签具体化**：密钥字段标签禁止使用 "API Key" 等模糊词，应改为 "AccessToken" / "SecretKey" 等具体名称
+38. **前端构建后重启后端**：开发模式下前端构建产物在 admin-web/dist，后端静态文件挂载需重启才生效
+39. **密钥获取链接**：密钥字段必须配套 el-link 超链接，指向官方获取入口
+40. **LLM 预设一致性**：测试时选择的 LLM 预设必须与后端 `LLM_PRESETS` 一致（通过 `ai_service_testing.llm_presets` 管理）
+
+## 四维度复盘总览（基于 AI 服务模块测试经验）
+
+### 维度 1：成功执行任务的完整步骤（AI 服务测试）
+
+1. 健康检查 → 确认服务可用
+2. API 端点测试 → 4 个 AI 服务 API 全部返回 200 + code=0
+3. 页面遍历 → /ai-config 页面包含"AI 服务配置"文本
+4. 预设选择器测试 → 9 个预设全部可选，表单自动填充
+5. 密钥获取链接测试 → 链接指向正确 URL，target=_blank
+6. TTS 字段标签测试 → 标签为"AccessToken"非"API Key"
+7. 异步按钮测试 → 测试连接点击后 disabled → 恢复 → 结果文本出现
+8. 脱敏值回传测试 → 不修改密钥直接测试，后端回退到真实密钥
+9. 错误码可读化测试 → NLS 40000001 显示"请确认填写的是 NLS AccessToken"
+10. Lighthouse 性能审计 → Accessibility/Best Practices/SEO 达标
+
+### 维度 2：不确定性与失败点
+
+| 失败点 | 触发条件 | 影响 | 根因 | 修复 |
+|--------|----------|------|------|------|
+| 异步按钮结果未出现 | 点击后立即读快照 | 看不到错误提示 | 未等待响应 | 增加 `response_timeout_ms` 等待 |
+| 服务重启后页面 500 | 服务重启后访问受保护页面 | 无法测试 | 登录态丢失 | 自动重新登录 |
+| 脱敏值被当作真实 token | 前端回传 ****xxxx | 测试连接报 token invalid | 后端未识别脱敏值 | `_is_masked` 判断 + 回退 |
+| 错误码不可读 | 阿里云 NLS 40000001 | 用户不知如何修复 | 无错误码映射表 | `aliyun_nls_error_hints` 映射 |
+| 字段标签模糊 | "API Key" 标签 | 用户误填 AccessKey Secret | 通用标签无歧义消除 | 改为"AccessToken" |
+| 前端构建后未加载新代码 | 构建后未重启后端 | 测试的还是旧代码 | 静态文件挂载缓存 | 重启后端 |
+
+### 维度 3：可抽象的固定流程
+
+- **异步交互测试流程**：点击 → 检查 disabled → 等待 → 检查 ready → 读快照
+- **会话保持测试流程**：访问受保护页 → 检测失效信号 → 自动登录 → 重新访问
+- **配置表单测试流程**：遍历字段 → 检查标签 → 检查链接 → 检查错误码可读化
+- **服务重启验证流程**：构建 → 停止 → 启动 → 健康检查轮询 → 页面验证
+
+### 维度 4：适用场景与不适用场景
+
+| 流程 | 适用 | 不适用 |
+|------|------|--------|
+| 异步交互测试 | 所有异步按钮 | 同步按钮 |
+| 会话保持测试 | 服务重启、token 过期 | 首次测试 |
+| 配置表单测试 | 配置管理页面 | 列表/详情页 |
+| 脱敏值回传测试 | 含密钥字段的测试连接 | 无密钥字段 |
+| 服务重启验证 | 开发模式前端变更 | exe 模式（需重新打包） |
+
+## 补充章节：基于数据库维护模块测试经验的优化（v5，2026-07-17）
+
+本章节基于数据库维护 + 系统清理模块开发的 18/18 PASS 测试实践，补充以下内容：
+- 新增配置区块：`db_admin_check`、`maintenance_check`、`confirm_token_check`
+- 新增测试阶段：阶段 19
+- 新增判断逻辑：白名单验证、CONFIRM_DELETE 令牌、dry_run 预览、审计日志、VACUUM 预检
+- 补充修复策略、复盘内容、适用场景、注意事项
+
+### 配置文件新增区块
+
+| 区块 | 作用 |
+|------|------|
+| `db_admin_check` | 数据库维护页面预检（白名单表数、表浏览、CRUD、级联删除、导出导入） |
+| `maintenance_check` | 系统清理页面预检（dry_run 预览、VACUUM、过期记录清理、审计日志） |
+| `confirm_token_check` | CONFIRM_DELETE 令牌验证（令牌输入、hmac.compare_digest） |
+
+### 阶段 19：数据库维护模块专项测试
+
+如 `db_admin_check.enabled=true`，在阶段 18 之后执行：
+
+```
+1. 数据库维护页面遍历（db_admin_check.page_path）：
+   a. 导航到数据库维护页面
+   b. 检查页面包含 db_admin_check.expected_text（如"数据库维护"）
+   c. 检查左侧表列表是否加载（白名单表数 == db_admin_check.expected_table_count）
+   d. 点击表名，检查右侧表数据是否加载
+2. CRUD 操作测试：
+   a. 新增记录：填写表单 → 提交 → 检查列表新增一行
+   b. 编辑记录：点击编辑 → 修改字段 → 提交 → 检查字段已更新
+   c. 删除记录：点击删除 → 输入 CONFIRM_DELETE 令牌 → 检查列表减少一行
+3. 级联删除预览测试：
+   a. 选择有外键关联的记录 → 点击删除
+   b. 检查是否弹出级联预览（显示受影响的从表和记录数）
+   c. 确认删除后检查从表记录是否同步处理
+4. 导出导入测试：
+   a. 点击导出 → 检查返回的 JSON/CSV 数据
+   b. 检查导出数据中敏感字段是否脱敏（****）
+   c. 导入数据 → 检查记录是否新增
+5. 系统清理页面测试（maintenance_check.page_path）：
+   a. 导航到系统清理页面
+   b. dry_run 预览：开启预览开关 → 点击执行 → 检查返回预览结果（记录数）
+   c. 实际清理：关闭预览开关 → 输入 CONFIRM_DELETE → 点击执行 → 检查记录已删除
+   d. VACUUM 测试：点击 VACUUM 按钮 → 检查数据库文件大小是否减小
+6. 审计日志验证：
+   a. 查询审计日志 API（confirm_token_check.audit_log_endpoint）
+   b. 检查最近 N 条审计日志是否包含上述操作记录
+   c. 检查审计日志字段完整性（action/table_name/record_id/operator/created_at）
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| 白名单表数匹配 + CRUD 成功 + 级联预览展示 + 导出脱敏 + dry_run 预览 + 审计日志完整 | PASS |
+| 白名单表数不匹配 | FAIL（白名单配置错误） |
+| 敏感字段未脱敏 | FAIL（安全漏洞） |
+| CONFIRM_DELETE 令牌未校验 | FAIL（危险操作无双重确认） |
+| dry_run 预览不生效 | FAIL（清理操作无预览） |
+| 审计日志缺失 | WARN（操作不可追溯） |
+| VACUUM 在事务内执行 | FAIL（OperationalError） |
+
+**新增问题分类**：
+
+| 分类 | 含义 | 处理方式 |
+|------|------|----------|
+| db_admin_violation | 数据库维护安全违规（无白名单/未脱敏/无令牌） | 触发代码修复流程 |
+| maintenance_violation | 系统清理安全违规（无 dry_run/审计缺失） | 触发代码修复流程 |
+
+### 新增修复策略
+
+补充以下修复策略到 `fix_strategies`：
+
+#### FAIL 级（必须修复）
+
+1. **白名单表数不匹配**：db_admin_check 配置的 expected_table_count 与实际不符 → 检查 settings.DB_ADMIN_ALLOWED_TABLES 配置
+2. **敏感字段未脱敏**：导出数据含明文密码 → 补充静态+动态字段名匹配脱敏逻辑
+3. **CONFIRM_DELETE 令牌未校验**：危险操作端点无 confirm_token 参数 → 添加令牌校验 + hmac.compare_digest
+4. **VACUUM 在事务内执行**：OperationalError: cannot VACUUM → 改用 AUTOCOMMIT 隔离级别
+5. **SQLAlchemy Inspector 使用错误**：run_sync 回调直接传 Session → 先 .connection() 转换
+6. **main.py 导入缺失**：NameError: name 'xxx' is not defined → 补充 import 语句 + 启动前预检
+
+#### WARN 级（可继续测试）
+
+1. **审计日志缺失**：DML 操作无审计记录 → 补充 AuditLog 记录
+2. **dry_run 预览不生效**：清理函数不支持 dry_run 参数 → 添加 dry_run 分支
+3. **级联预览未展示**：删除操作无级联影响预览 → 添加级联预览 API 调用
+
+### 补充复盘：测试流程的不确定性与失败点
+
+基于数据库维护模块测试复盘新增的不确定性：
+
+| 不确定性 | 发生场景 | 应对策略 |
+|---------|---------|---------|
+| config.yaml API 路径与后端路由不一致 | 测试审计日志 API 返回 404 | 配置文件路径核对（复数/单数差异） |
+| main.py 导入缺失导致服务启动失败 | NameError 崩溃，日志为空 | 启动前预检 `python -c "from app.main import app"` |
+| SQLAlchemy Inspector 使用陷阱 | 表结构反射返回不完整 | run_sync 回调内先 .connection() 转换 |
+| VACUUM 在事务内执行失败 | OperationalError | 改用 AUTOCOMMIT 隔离级别 |
+| 敏感字段脱敏不完整 | 导出数据含明文密钥 | 静态+动态字段名匹配双重策略 |
+| 后端服务意外停止 | 网络请求 ERR_CONNECTION_REFUSED | 检查服务进程 + 健康检查轮询 |
+
+### 补充可抽象的固定流程
+
+**新增固定流程**（适用于所有数据库维护模块测试）：
+
+1. **数据库维护模块测试流程**：白名单验证 → 表浏览 → CRUD → 级联预览 → 导出脱敏 → 导入 → CONFIRM_DELETE 令牌验证
+2. **系统清理模块测试流程**：dry_run 预览 → 实际清理 → VACUUM 验证 → 审计日志完整性检查
+3. **服务启动预检流程**：config.yaml 路径核对 → main.py 导入完整性 → 健康检查轮询
+
+**新增固定判断逻辑**：
+
+- 数据库维护安全 = 白名单表数匹配 + 敏感字段脱敏 + CONFIRM_DELETE 令牌校验
+- 系统清理安全 = dry_run 预览生效 + 审计日志完整
+- 服务启动成功 = main.py 导入完整 + 健康检查 200
+- SQLAlchemy Inspector 正确 = run_sync 回调内有 .connection() 转换
+- VACUUM 正确执行 = AUTOCOMMIT 隔离级别
+
+### 补充适用场景
+
+新增适用场景：
+
+- ✅ 数据库维护模块测试（表浏览/CRUD/级联/导出导入）
+- ✅ 系统清理模块测试（dry_run 预览/VACUUM/过期清理）
+- ✅ 危险操作双重确认测试（CONFIRM_DELETE 令牌）
+- ✅ 敏感字段脱敏验证（导出数据安全检查）
+- ✅ 审计日志完整性验证（DML 操作可追溯）
+
+新增不适用场景：
+
+- ❌ 分布式数据库测试（需专门的数据库测试工具）
+- ❌ 数据库性能压测（需 JMeter/sysbench）
+- ❌ 数据库迁移测试（需专门的迁移验证工具）
+
+### 补充注意事项
+
+41. **config.yaml 路径核对**：测试前必须核对 config.yaml 中的 API 端点路径与后端路由是否一致（注意单复数差异，如 `/audit-log` vs `/audit-logs`）
+42. **main.py 导入预检**：服务启动前必须执行 `python -c "from app.main import app"` 预检，避免因导入缺失导致服务启动失败
+43. **SQLAlchemy Inspector 验证**：测试表结构反射功能时，必须验证 run_sync 回调内是否先 .connection() 转换 Session 为 Connection
+44. **VACUUM 执行验证**：测试 VACUUM 功能时，必须验证是否在 AUTOCOMMIT 隔离级别执行，禁止在事务内执行
+45. **敏感字段脱敏验证**：测试导出功能时，必须检查 password_hash/token/secret/api_key 等字段是否脱敏为 ****
+46. **CONFIRM_DELETE 令牌验证**：测试危险操作时，必须验证是否要求输入 CONFIRM_DELETE 令牌，且比较使用 hmac.compare_digest
+47. **审计日志完整性**：测试 DML 操作后，必须查询审计日志 API 验证操作记录是否完整（action/table_name/record_id/operator/created_at）
+48. **dry_run 预览优先**：测试清理操作时，必须先测试 dry_run 预览模式，确认预览结果正确后再测试实际清理
