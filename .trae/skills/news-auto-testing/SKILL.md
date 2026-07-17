@@ -485,3 +485,219 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
 14. **优先级执行**：API 测试按 `test_priority.execution_order`（P0→P1→P2→P3）顺序执行，P0 失败阻塞后续低优先级用例
 15. **优先级报告**：如 `test_priority.group_by_priority=true`，报告按优先级分组展示，含各级通过率摘要
 16. **默认优先级**：未标注 `priority` 的测试用例按 `test_priority.default_priority`（默认 P2）归类
+
+## 补充章节：基于实战复盘的优化（v2，2026-07-17）
+
+本章节基于真机测试、工具层 bug 识别、小程序专项检查等实战复盘，补充以下内容：
+- 新增配置区块：`env_isolation_check`、`miniprogram_check`、`tool_bug_signatures`、`realdevice_check`
+- 新增测试阶段：阶段 7-9
+- 新增判断逻辑：环境隔离、页面四件套、事件对称、工具层 bug 识别
+- 新增问题分类：`tool_layer_bug`
+- 补充修复策略、复盘内容、适用场景、注意事项
+
+### 配置文件新增区块
+
+| 区块 | 作用 |
+|------|------|
+| `env_isolation_check` | 环境隔离检查（扫描硬编码 localhost/127.0.0.1） |
+| `miniprogram_check` | 小程序专项检查（页面四件套、事件对称、401 重试防护） |
+| `tool_bug_signatures` | 工具层 bug 特征库（识别开发工具版本 bug） |
+| `realdevice_check` | 真机测试预检（服务暴露、IP 可达性、域名校验） |
+
+### 阶段 7：环境隔离与配置一致性检查
+
+如 `env_isolation_check.enabled=true` 且 `check_phase=pre_test`，在阶段 1 之后执行：
+
+```
+1. 遍历 env_isolation_check.scan_files 中每个文件：
+   a. 读取文件内容
+   b. 检查是否包含 hardcoded_patterns 中的任一模式
+   c. 如命中，记录违规：文件路径 + 命中模式 + expected_source
+2. 检查 .env 中的 required_fields：
+   a. APP_HOST 是否为 0.0.0.0（真机测试必须）
+   b. AUDIO_BASE_URL 是否为 http://<lan_ip>:8000 格式
+3. 如违规且 severity_on_violation=FAIL，标记测试阻塞
+4. 如需自动检测 LAN IP，执行 lan_ip_detect_command
+5. 记录环境隔离检查结果（PASS/WARN/FAIL + 违规清单）
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| 所有文件无硬编码 localhost + .env 字段正确 | PASS |
+| .env 字段值不匹配但无硬编码 | WARN |
+| 代码文件中存在硬编码 localhost | FAIL（真机测试阻塞） |
+
+### 阶段 8：小程序专项预检
+
+如 `miniprogram_check.enabled=true`，在阶段 7 之后执行：
+
+#### 8.1 页面四件套完整性检查
+
+```
+1. 列出 miniprogram_check.root_dir/pages_dir 下所有页面目录
+2. 对每个页面目录，检查 required_extensions 中的文件是否存在
+3. 如缺失，记录违规：页面名 + 缺失文件后缀
+4. 如 severity_on_missing=FAIL，标记测试阻塞
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| 所有页面四件套齐全 | PASS |
+| 缺失 .wxss（样式文件，可降级） | WARN |
+| 缺失 .json/.js/.wxml（核心文件） | FAIL |
+
+#### 8.2 事件绑定对称性检查
+
+```
+1. 遍历 event_binding_check.scan_files 中每个文件
+2. grep bind_prefixes（如 onPlay/onPause）出现的次数和位置
+3. grep 对应的 unbind_prefixes（如 offPlay/offPause）是否出现
+4. 检查 unbind_location（onUnload/onHide）中是否调用了解绑方法
+5. 如绑定未解绑，记录违规：文件 + 方法 + 绑定位置
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| 所有 onXxx 都有对应 offXxx 且在 onUnload/onHide 中调用 | PASS |
+| 有 onXxx 但无 offXxx（可能在 onUnload 中用匿名函数无法检测） | WARN |
+| 明确在 onLoad 绑定但 onUnload 中无解绑代码 | WARN（异步回调堆积风险） |
+
+#### 8.3 401 重试循环防护检查
+
+```
+1. 读取 auth_retry_check.scan_files 中的 api.js
+2. 检查 required_patterns 是否都存在：
+   - _retried 标志（防止单次请求无限重试）
+   - startsWith('/auth/') 排除（防止 /auth/login 401 触发 refreshToken 死循环）
+3. 如缺失，记录违规
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| 同时存在 _retried 标志和 /auth/ 路径排除 | PASS |
+| 缺失任一模式 | FAIL（可能导致 401 无限循环） |
+
+### 阶段 9：真机测试预检
+
+如 `realdevice_check.enabled=true`，在阶段 8 之后执行：
+
+```
+1. 遍历 realdevice_check.preflight_checks 中每个预检项
+2. 按 check 类型执行：
+   - http_get：GET target，检查响应是否为 expected
+   - env_field：读取 .env 中 target 字段，检查值是否匹配 expected
+   - file_pattern：读取 target 文件，检查是否包含 pattern
+   - manual：提示用户手动验证 instruction
+3. 如检查失败且 severity_on_fail=FAIL，标记真机测试阻塞
+4. 记录真机测试预检结果
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| 所有预检项通过 | PASS（可进行真机测试） |
+| manual 项未确认 | WARN（需用户确认） |
+| http_get/env_field/file_pattern 项失败 | FAIL（真机测试阻塞） |
+
+### 新增问题分类：tool_layer_bug
+
+在 `issue_classification` 中新增分类：
+
+| 分类 | 含义 | 处理方式 |
+|------|------|----------|
+| tool_layer_bug | 开发工具版本 bug（如微信开发者工具 3.17.0 webview 路由 bug） | 报告中标注工具名称+受影响版本+修复步骤，不修改代码 |
+
+**识别流程**：
+1. 收集控制台 error/warn 日志
+2. 遍历 `tool_bug_signatures` 中每个特征库
+3. 如日志包含任一 `signature_keywords`，匹配为对应工具 bug
+4. 检查工具版本是否在 `affected_versions` 范围内
+5. 如匹配，归类为 `tool_layer_bug`，输出 `fix_steps`
+
+### 新增修复策略
+
+补充以下修复策略到 `fix_strategies`：
+
+#### FAIL 级（必须修复）
+
+1. **真机测试网络异常**：硬编码 localhost 不可达 → 检查 `env_isolation_check` 违规清单，替换为局域网 IP
+2. **小程序页面跳转失败**：缺 .json 文件 → 检查 `miniprogram_check.page_files_check` 违规清单，补全四件套
+3. **401 重试无限循环**：api.js 缺 _retried 标志或 /auth/ 排除 → 按 `auth_retry_check.required_patterns` 补全
+4. **后端统计字段误用**：用 PlayLog.duration 而非 PlayProgress.position → 验证 ORM 字段语义
+
+#### WARN 级（可继续测试）
+
+1. **微信开发者工具 webview 路由 bug**：3.17.0 灰度版 → 降级基础库至 3.7.x/3.6.0，清缓存，重启
+2. **Edge 最小化自动恢复**：用户配置损坏 → 重命名 User Data 目录重置配置
+3. **事件绑定泄漏**：onLoad 绑定未在 onUnload 解绑 → 补全 offXxx 调用
+4. **navigateTo 失败**：页面 .json 缺失 → 补全 .json 或降级为 reLaunch
+
+### 补充复盘：测试流程的不确定性与失败点
+
+基于本次实战复盘新增的不确定性：
+
+| 不确定性 | 发生场景 | 应对策略 |
+|---------|---------|---------|
+| 工具层 bug 误判为代码 bug | 微信开发者工具 3.17.0 报 webviewId 错误 | `tool_bug_signatures` 特征匹配，归类为 `tool_layer_bug` |
+| localhost 多处硬编码 | 真机测试报网络异常，难以定位所有位置 | `env_isolation_check` 扫描所有配置文件 |
+| 小程序页面文件缺失不报错 | 缺 .json 文件，功能异常但无错误日志 | `page_files_check` 主动检查四件套完整性 |
+| 事件绑定泄漏无即时错误 | onLoad 重复绑定导致回调堆积 | `event_binding_check` 检查 on/off 对称性 |
+| 401 重试无限循环 | /auth/login 返回 401 触发 refreshToken 死循环 | `auth_retry_check` 检查 _retried + /auth/ 排除 |
+| 真机 vs 模拟器差异 | 模拟器可用 localhost，真机不可达 | `realdevice_check` 预检所有真机必需配置 |
+| 后端统计字段语义混淆 | PlayLog.duration vs PlayProgress.position | 代码审查阶段验证 ORM 字段语义 |
+| navigateTo 静默失败 | 缺页面 .json 时跳转无反应 | `page_files_check` 预检 + navigateTo 失败降级 reLaunch |
+
+### 补充可抽象的固定流程
+
+**新增固定流程**（适用于所有小程序+后端项目）：
+
+1. **环境隔离预检流程**：扫描代码硬编码 → 检查 .env 字段 → 检测 LAN IP → 输出违规清单
+2. **小程序专项预检流程**：页面四件套检查 → 事件绑定对称性检查 → 401 重试防护检查
+3. **真机测试预检流程**：服务暴露检查 → IP 可达性验证 → 域名校验关闭确认 → 小程序配置同步
+4. **工具层 bug 识别流程**：日志特征匹配 → 版本范围验证 → 归类为 tool_layer_bug → 输出修复步骤
+
+**新增固定判断逻辑**：
+
+- 环境隔离合格 = 代码无硬编码 localhost + .env 字段正确
+- 页面四件套完整 = 每个页面目录都有 .json/.js/.wxml/.wxss
+- 事件绑定对称 = 每个 onXxx 都有对应 offXxx 且在 onUnload/onHide 调用
+- 401 重试安全 = 存在 _retried 标志 + /auth/ 路径排除
+- 真机预检通过 = http_get + env_field + file_pattern 全部 PASS + manual 项已确认
+- 工具 bug 识别 = 日志匹配 signature_keywords + 版本在 affected_versions 范围内
+
+### 补充适用场景
+
+新增适用场景：
+
+- ✅ 小程序真机测试前预检（环境隔离、IP 可达性、域名校验）
+- ✅ 小程序页面文件完整性自动检查（四件套）
+- ✅ 小程序事件绑定泄漏检测（on/off 对称性）
+- ✅ 401 重试无限循环预防
+- ✅ 开发工具版本 bug 快速识别（微信开发者工具/Edge）
+- ✅ 环境配置一致性验证（前后端 URL 同步）
+
+新增不适用场景：
+
+- ❌ 小程序原生组件单元测试（需 Jest + miniprogram-simulate）
+- ❌ 小程序云函数测试（需云开发测试框架）
+- ❌ 小程序包体积分析（需微信开发者工具内置工具）
+
+### 补充注意事项
+
+17. **环境隔离预检**：真机测试前必须执行 `env_isolation_check`，扫描所有硬编码 localhost
+18. **页面四件套检查**：小程序每个页面必须有 .json/.js/.wxml/.wxss，缺失会导致功能异常
+19. **事件绑定对称性**：onLoad 中的 onXxx 必须在 onUnload 中有对应 offXxx，防止回调堆积
+20. **401 重试防护**：api.js 中 request 函数必须有 _retried 标志 + /auth/ 路径排除，防止无限循环
+21. **工具层 bug 识别**：遇到 webviewId/mainframe 500 等错误，先检查 `tool_bug_signatures` 是否匹配，避免误判为代码 bug
+22. **真机测试预检**：真机测试前必须执行 `realdevice_check`，确认 APP_HOST=0.0.0.0、AUDIO_BASE_URL 配置正确、域名校验已关闭
+23. **ORM 字段语义验证**：聚合查询前必须确认字段语义（如 PlayLog.duration 是节目总时长 vs PlayProgress.position 是实际收听位置）
+24. **navigateTo 失败降级**：navigateTo 失败时应降级为 reLaunch，避免页面跳转静默失败

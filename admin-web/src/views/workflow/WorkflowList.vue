@@ -165,6 +165,7 @@ import { useUserStore } from '../../stores/user'
 import api from '../../api'
 import { listChannels } from '../../api/channels'
 import { subscribe, broadcastLocal } from '../../utils/sse'
+import { cleanupLoadingMasks } from '../../utils/window-guard'
 import { formatTime } from '../../utils/format'
 import WorkflowProgressIndicator from './components/WorkflowProgressIndicator.vue'
 
@@ -382,10 +383,25 @@ function startPollingIfNeeded() {
 // 页面恢复可见时立即刷新：弥补隐藏期间错过的 SSE 事件
 // SSE 在页面隐藏时会断开（sse.js 的 visibilitychange 处理），
 // 恢复可见后重连前的状态变化无法感知，需主动刷新一次
+//
+// 修复遮罩残留：页面最小化时浏览器暂停 CSS transition 和 setTimeout，
+// Element Plus v-loading 指令的 mask 隐藏流程不执行，DOM 永久残留。
+// 之前用 toggle (true→nextTick→false) 修复不可靠：值未变化时 watch 不触发，
+// transitionend 不触发，setTimeout 被 throttle。改为直接调用
+// cleanupLoadingMasks() 强制从 DOM 移除残留 mask，不依赖任何时序。
 function handleVisibilityChange() {
   if (!document.hidden) {
-    loadList()
-    startPollingIfNeeded()
+    // 强制重置 Vue 状态：覆盖残留的 loading=true 情况
+    loading.value = false
+    triggering.value = false
+    deleting.value = false
+    // 直接清理所有残留 mask（包括当前页面外的，保持全局一致性）
+    cleanupLoadingMasks()
+    // rAF 等待浏览器完成一帧渲染后加载新数据，确保 mask 清理后立即重建数据
+    requestAnimationFrame(() => {
+      loadList()
+      startPollingIfNeeded()
+    })
   }
 }
 
@@ -394,6 +410,8 @@ function handleResize() {
 }
 
 onMounted(() => {
+  // 兜底：进入页面时清理可能的残留 mask（来自其他页面的最小化过程）
+  cleanupLoadingMasks()
   // loadList 内部会调用 startPollingIfNeeded，无需在此额外调用
   loadList()
   loadChannels()

@@ -1,4 +1,4 @@
-"""事件总线 - asyncio 实现的进程内事件分发（对标 17_xianyu event_bus.py）。
+﻿"""事件总线 - asyncio 实现的进程内事件分发（对标 17_xianyu event_bus.py）。
 
 设计要点：
 - 基于 asyncio.Queue 异步入队，主循环消费分发到订阅者
@@ -67,7 +67,7 @@ class EventBus:
         同一事件类型可有多个 handler，按订阅顺序执行。
         """
         self._subscribers[event_type].append(handler)
-        logger.debug("订阅 %s → %s", event_type, handler.__name__)
+        logger.trace("订阅 %s → %s", event_type, handler.__name__)
 
     def unsubscribe(self, event_type: str, handler: EventHandler) -> None:
         """取消订阅。"""

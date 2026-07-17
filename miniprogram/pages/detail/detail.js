@@ -1,49 +1,83 @@
 /**
  * 节目详情页：展示节目元数据 + 播放控制 + 稿件懒加载
  *
- * 设计要点：
- * - 稿件体积大，仅在用户点击“查看完整文稿”时加载，首屏更快
- * - 播放状态来自全局 BackgroundAudioManager 单例（app.globalData.player），
- *   通过 player.title 比较确认“当前播放的即本页节目”，避免与其他页面串扰
+ * V1.3 新增：
+ * - 收藏按钮（FR-SUP-02）
+ * - 倍速控制（FR-SUP-06）
+ * - 上一首/下一首（FR-SUP-05）- 依赖播放队列
+ * - 睡眠定时器入口（FR-SUP-08）
+ * - 节目来源展示（FR-SUP-12）- sources 字段
+ * - 埋点（FR-SUP-10）
  */
-const { fetchEpisodeDetail, fetchEpisodeScript } = require('../../services/api');
-const { playEpisode } = require('../../services/audio');
+const { fetchEpisodeDetail, fetchEpisodeScript, checkFavorite, addFavorite, removeFavorite } = require('../../services/api');
+const {
+  playEpisode, playNext, playPrev, getQueue, getQueueIndex,
+  getPlaybackRate, setPlaybackRate,
+  getSleepStatus, startSleepTimer, stopSleepTimer, onSleepChange,
+} = require('../../services/audio');
+const { trackPageView, trackEvent } = require('../../utils/tracker');
+
+const RATE_OPTIONS = [1.0, 1.25, 1.5, 0.75, 2.0];
+const SLEEP_PRESETS = [
+  { label: '关闭', value: 0 },
+  { label: '15 分钟', value: 900 },
+  { label: '30 分钟', value: 1800 },
+  { label: '45 分钟', value: 2700 },
+  { label: '60 分钟', value: 3600 },
+];
 
 Page({
   data: {
     episode: null,
     script: '',            // 稿件全文
-    scriptLoaded: false,   // 稿件是否已加载完成
-    scriptLoading: false,  // 稿件加载中（防重复点击）
+    scriptLoaded: false,
+    scriptLoading: false,
     isPlaying: false,
     currentTime: 0,
     duration: 0,
     currentTimeText: '00:00',
     durationText: '00:00',
-    durationLabel: '',     // 节目元数据时长（“X分钟”），与播放器实际时长区分
-    loading: true,         // 详情加载态
-    error: '',             // 详情加载错误信息
+    durationLabel: '',
+    loading: true,
+    error: '',
+    // V1.3 新增
+    favorited: false,
+    currentRate: 1.0,
+    sources: [],          // 节目来源（稿件加载后填充）
+    hasPrev: false,       // 队列中是否有上一首
+    hasNext: false,       // 队列中是否有下一首
+    sleepActive: false,
+    sleepLabel: '',
   },
 
   onLoad(options) {
+    trackPageView('pages/detail/detail');
     const id = options.id;
     if (!id) {
       this.setData({ loading: false, error: '缺少节目参数' });
       return;
     }
+    this._unsubSleep = onSleepChange((status) => {
+      this.setData({
+        sleepActive: status.active,
+        sleepLabel: status.active ? this.formatSleepLabel(status.remaining) : '',
+      });
+    });
     this.bindPlayerEvents();
     this.loadDetail(id);
+    this.checkFavorited(id);
+    this.refreshQueueState();
+    this.setData({ currentRate: getPlaybackRate() });
   },
 
   onUnload() {
-    // 显式 off 监听器：每次进入页面都会重新 onPlay，若不 off 会累积监听
-    // 导致内存泄漏与多组回调同时 setData 引发 UI 串扰
+    if (this._unsubSleep) this._unsubSleep();
     const player = getApp().globalData.player;
-    if (player && this._onPlay) {
-      player.offPlay(this._onPlay);
-      player.offPause(this._onPause);
-      player.offTimeUpdate(this._onTimeUpdate);
-      player.offEnded(this._onEnded);
+    if (player) {
+      player.offPlay?.(this._onPlay);
+      player.offPause?.(this._onPause);
+      player.offTimeUpdate?.(this._onTimeUpdate);
+      player.offEnded?.(this._onEnded);
     }
     this._onPlay = null;
     this._onPause = null;
@@ -59,7 +93,6 @@ Page({
         loading: false,
         durationLabel: this.formatDuration(episode.duration),
       });
-      // 详情到达后若该节目正在播放，同步进度
       this.syncPlayingState();
     } catch (err) {
       this.setData({ loading: false, error: err.message || '加载失败' });
@@ -67,10 +100,53 @@ Page({
   },
 
   /**
-   * 绑定全局播放器事件以同步本页播放 UI
-   * 全局 player 单例会对所有页面触发事件，
-   * 故每次回调都需校验是否为当前节目
+   * 检查收藏态
    */
+  async checkFavorited(id) {
+    try {
+      const res = await checkFavorite(id);
+      this.setData({ favorited: !!(res && res.favorited) });
+    } catch (err) {
+      this.setData({ favorited: false });
+    }
+  },
+
+  /**
+   * 收藏/取消收藏
+   */
+  async onToggleFavorite() {
+    const ep = this.data.episode;
+    if (!ep) return;
+    try {
+      if (this.data.favorited) {
+        await removeFavorite(ep.id);
+        this.setData({ favorited: false });
+        wx.showToast({ title: '已取消收藏', icon: 'none' });
+        trackEvent('detail', 'unfavorite', 'episode_' + ep.id);
+      } else {
+        await addFavorite(ep.id);
+        this.setData({ favorited: true });
+        wx.showToast({ title: '已收藏', icon: 'success' });
+        trackEvent('detail', 'favorite', 'episode_' + ep.id);
+      }
+    } catch (err) {
+      wx.showToast({ title: err.message || '操作失败', icon: 'none' });
+    }
+  },
+
+  /**
+   * 刷新上一首/下一首可用状态
+   * 根据当前队列索引判断
+   */
+  refreshQueueState() {
+    const idx = getQueueIndex();
+    const queue = getQueue();
+    this.setData({
+      hasPrev: idx > 0,
+      hasNext: idx >= 0 && idx < queue.length - 1,
+    });
+  },
+
   bindPlayerEvents() {
     const player = getApp().globalData.player;
     if (!player) return;
@@ -93,7 +169,9 @@ Page({
       });
     };
     this._onEnded = () => {
+      // 结束后队列索引可能变化，刷新上一首/下一首状态
       this.setData({ isPlaying: false, currentTime: 0, currentTimeText: '00:00' });
+      this.refreshQueueState();
     };
 
     player.onPlay(this._onPlay);
@@ -102,19 +180,12 @@ Page({
     player.onEnded(this._onEnded);
   },
 
-  /**
-   * 判断全局播放器当前播放的是否是本页节目
-   * 依据 player.episodeId（audio.js 在 playEpisode 时已赋值），避免标题重复误判
-   */
   isCurrentEpisode() {
     const player = getApp().globalData.player;
     const ep = this.data.episode;
     return !!(player && ep && player.episodeId != null && player.episodeId === ep.id);
   },
 
-  /**
-   * 详情到达后同步正在播放的进度（如从历史页跳入正在播放的节目）
-   */
   syncPlayingState() {
     const player = getApp().globalData.player;
     if (!player || !this.isCurrentEpisode() || !player.duration) return;
@@ -127,18 +198,13 @@ Page({
     });
   },
 
-  /**
-   * 显式开始播放（节目未在播放时调用）
-   */
   onPlay() {
     const ep = this.data.episode;
     if (!ep) return;
     playEpisode(ep);
+    trackEvent('detail', 'play', 'episode_' + ep.id);
   },
 
-  /**
-   * 播放/暂停切换：同一节目就地切换，否则切到本节目并断点续播
-   */
   onTogglePlay() {
     const player = getApp().globalData.player;
     const ep = this.data.episode;
@@ -147,6 +213,7 @@ Page({
       player.paused ? player.play() : player.pause();
     } else {
       playEpisode(ep);
+      trackEvent('detail', 'play', 'episode_' + ep.id);
     }
   },
 
@@ -159,8 +226,60 @@ Page({
   },
 
   /**
-   * 懒加载稿件：用户点击“查看完整文稿”才请求
-   * scriptLoading 防重复请求，scriptLoaded 防重复加载
+   * 上一首/下一首：依赖 audio.js 队列
+   * 队列未设置时 getQueueIndex 返回 -1，按钮自动隐藏
+   */
+  onPrev() {
+    if (playPrev()) {
+      trackEvent('detail', 'play_prev');
+      // 切换后需刷新本页节目信息：监听 queueIndex 变化或延迟刷新
+      setTimeout(() => this.refreshQueueState(), 100);
+    }
+  },
+
+  onNext() {
+    if (playNext()) {
+      trackEvent('detail', 'play_next');
+      setTimeout(() => this.refreshQueueState(), 100);
+    }
+  },
+
+  /**
+   * 倍速循环切换
+   */
+  onCycleRate() {
+    const current = getPlaybackRate();
+    const idx = RATE_OPTIONS.indexOf(current);
+    const next = RATE_OPTIONS[(idx + 1) % RATE_OPTIONS.length];
+    setPlaybackRate(next);
+    this.setData({ currentRate: next });
+    wx.showToast({ title: next + 'x 倍速', icon: 'none' });
+    trackEvent('detail', 'change_rate', '', next);
+  },
+
+  /**
+   * 睡眠定时器
+   */
+  onSleepTimer() {
+    wx.showActionSheet({
+      itemList: SLEEP_PRESETS.map((p) => p.label),
+      success: (res) => {
+        const preset = SLEEP_PRESETS[res.tapIndex];
+        if (preset.value === 0) {
+          stopSleepTimer();
+          wx.showToast({ title: '已关闭睡眠定时', icon: 'none' });
+        } else {
+          startSleepTimer(preset.value);
+          wx.showToast({ title: '睡眠定时 ' + preset.label, icon: 'none' });
+          trackEvent('detail', 'sleep_timer_on', '', preset.value);
+        }
+      },
+    });
+  },
+
+  /**
+   * 懒加载稿件：用户点击"查看完整文稿"才请求
+   * V1.3：稿件接口返回 sources 字段，展示版权溯源
    */
   async onLoadScript() {
     if (this.data.scriptLoaded || this.data.scriptLoading) return;
@@ -169,13 +288,17 @@ Page({
 
     this.setData({ scriptLoading: true });
     try {
-      // 兼容后端返回纯字符串、{ script } 或 { content } 三种结构
-      // 字段优先级：script（当前后端实际字段）> content（历史兼容）
       const res = await fetchEpisodeScript(ep.id);
       const content = typeof res === 'string'
         ? res
         : (res && (res.script || res.content)) || '';
-      this.setData({ script: content, scriptLoaded: true, scriptLoading: false });
+      const sources = (res && res.sources) || [];
+      this.setData({
+        script: content,
+        scriptLoaded: true,
+        scriptLoading: false,
+        sources,
+      });
     } catch (err) {
       console.error('加载文稿失败:', err);
       this.setData({ scriptLoading: false });
@@ -183,33 +306,36 @@ Page({
     }
   },
 
-  /**
-   * 秒 → "mm:ss"，供进度条两侧展示
-   */
   formatTime(sec) {
     if (!sec || sec < 0 || Number.isNaN(sec)) return '00:00';
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
-    return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
   },
 
-  /**
-   * 秒 → “X小时Y分钟”，用于节目信息卡片展示元数据时长
-   */
   formatDuration(sec) {
     if (!sec || sec < 0 || Number.isNaN(sec)) return '0分钟';
     const m = Math.floor(sec / 60);
-    if (m < 60) return `${m}分钟`;
+    if (m < 60) return m + '分钟';
     const h = Math.floor(m / 60);
     const rest = m % 60;
-    return rest ? `${h}小时${rest}分钟` : `${h}小时`;
+    return rest ? h + '小时' + rest + '分钟' : h + '小时';
+  },
+
+  formatSleepLabel(sec) {
+    if (sec <= 0) return '';
+    const m = Math.floor(sec / 60);
+    if (m < 60) return m + ' 分钟后停止';
+    const h = Math.floor(m / 60);
+    const rest = m % 60;
+    return rest ? h + '小时' + rest + '分钟后停止' : h + '小时后停止';
   },
 
   onShareAppMessage() {
     const ep = this.data.episode || {};
     return {
       title: ep.title || '今日要闻',
-      path: `/pages/detail/detail?id=${ep.id || ''}`,
+      path: '/pages/detail/detail?id=' + (ep.id || ''),
     };
   },
 

@@ -43,16 +43,51 @@ class AdminPayload:
     exp: int = 0
 
 
-def _extract_token(authorization: Optional[str]) -> str:
-    """从 Authorization 头提取 Bearer token。"""
+def _extract_token(authorization: Optional[str]) -> Optional[str]:
+    """从 Authorization 头提取 Bearer token，无 token 时返回 None。"""
     if not authorization or not authorization.startswith("Bearer "):
-        raise AuthError("缺少认证信息")
+        return None
     return authorization.removeprefix("Bearer ").strip()
+
+
+def _extract_token_strict(authorization: Optional[str]) -> str:
+    """从 Authorization 头提取 Bearer token，无 token 时抛出 AuthError。"""
+    token = _extract_token(authorization)
+    if token is None:
+        raise AuthError("缺少认证信息")
+    return token
+
+
+async def get_optional_user(authorization: Optional[str] = Header(None)) -> Optional[UserPayload]:
+    """可选鉴权依赖：有 token 则校验返回，无 token 返回 None。"""
+    token = _extract_token(authorization)
+    if token is None:
+        return None
+    try:
+        payload = decode_token(token)
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.PyJWTError:
+        return None
+
+    if payload.get("type") != "user":
+        return None
+
+    jti = payload.get("jti", "")
+    if await is_in_blacklist(jti):
+        return None
+
+    return UserPayload(
+        user_id=int(payload["sub"]),
+        jti=jti,
+        token_type=payload["type"],
+        exp=int(payload.get("exp", 0)),
+    )
 
 
 async def get_current_user(authorization: Optional[str] = Header(None)) -> UserPayload:
     """C 端鉴权依赖。"""
-    token = _extract_token(authorization)
+    token = _extract_token_strict(authorization)
     try:
         payload = decode_token(token)
     except jwt.ExpiredSignatureError:
@@ -60,7 +95,6 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> UserP
     except jwt.PyJWTError:
         raise AuthError("无效的认证信息")
 
-    # 仅接受 C 端 token
     if payload.get("type") != "user":
         raise AuthError("认证类型错误")
 
@@ -78,7 +112,7 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> UserP
 
 async def get_current_admin(authorization: Optional[str] = Header(None)) -> AdminPayload:
     """B 端鉴权依赖。"""
-    token = _extract_token(authorization)
+    token = _extract_token_strict(authorization)
     try:
         payload = decode_token(token)
     except jwt.ExpiredSignatureError:
@@ -86,7 +120,6 @@ async def get_current_admin(authorization: Optional[str] = Header(None)) -> Admi
     except jwt.PyJWTError:
         raise AuthError("无效的认证信息")
 
-    # 仅接受 B 端 token
     if payload.get("type") != "admin":
         raise AuthError("认证类型错误")
 
@@ -104,7 +137,7 @@ async def get_current_admin(authorization: Optional[str] = Header(None)) -> Admi
     )
 
 
-async def require_admin(admin: AdminPayload = Depends(get_current_admin)) -> AdminPayload:  # NOSONAR
+async def require_admin(admin: AdminPayload = Depends(get_current_admin)) -> AdminPayload:
     """要求 admin 角色（工作流操作、用户管理等高权限接口）。"""
     if admin.role != "admin":
         raise BizPermissionError("需要管理员权限")
@@ -113,4 +146,4 @@ async def require_admin(admin: AdminPayload = Depends(get_current_admin)) -> Adm
 
 # 便捷别名
 require_user = get_current_user
-require_operator = get_current_admin  # operator + admin 均可访问
+require_operator = get_current_admin

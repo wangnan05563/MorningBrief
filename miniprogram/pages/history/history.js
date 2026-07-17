@@ -1,22 +1,59 @@
 /**
  * 历史列表页：分页加载往期节目，点击跳转详情页播放
  *
+ * V1.3 新增：
+ * - 频道过滤（FR-SUP-03）：顶部胶囊切换频道
+ * - 搜索入口（FR-SUP-04）
+ * - 播放队列：点击节目时设置队列，支持自动连播
+ * - 埋点（FR-SUP-10）
+ *
  * 分页：上拉加载更多（onReachBottom）+ 下拉刷新（onPullDownRefresh）
  */
-const { fetchHistory } = require('../../services/api');
+const { fetchHistory, fetchChannels } = require('../../services/api');
+const { setQueue } = require('../../services/audio');
+const { trackPageView, trackEvent } = require('../../utils/tracker');
 
 Page({
   data: {
-    list: [],          // 历史节目列表
-    page: 1,           // 当前页码（下次请求的页）
-    size: 20,          // 每页条数
-    total: 0,          // 总条数
-    loading: false,    // 加载中（防止重复请求）
-    hasMore: true,     // 是否还有更多
+    list: [],
+    page: 1,
+    size: 20,
+    total: 0,
+    loading: false,
+    hasMore: true,
+    // V1.3 新增
+    channels: [],
+    currentChannelId: null,
   },
 
   onLoad() {
+    trackPageView('pages/history/history');
+    this.loadChannels();
     this.loadHistory(true);
+  },
+
+  /**
+   * 加载频道列表
+   */
+  async loadChannels() {
+    try {
+      const res = await fetchChannels();
+      const channels = [{ id: null, name: '全部' }, ...(res.list || [])];
+      this.setData({ channels });
+    } catch (err) {
+      console.log('加载频道列表失败:', err.message);
+    }
+  },
+
+  /**
+   * 切换频道：重新拉取该频道历史
+   */
+  async onSwitchChannel(e) {
+    const channelId = e.currentTarget.dataset.id || null;
+    if (channelId === this.data.currentChannelId) return;
+    this.setData({ currentChannelId: channelId });
+    trackEvent('history', 'switch_channel', '', channelId || 0);
+    await this.loadHistory(true);
   },
 
   /**
@@ -24,22 +61,16 @@ Page({
    * @param {boolean} first - true=重置第1页（下拉刷新/首次），false=加载下一页
    */
   async loadHistory(first) {
-    // 防止重复请求（上拉和下拉同时触发）
     if (this.data.loading) return;
-
-    // 重置第1页：清空列表 + 回到第1页
     if (first) {
       this.setData({ list: [], page: 1, hasMore: true });
     }
-
-    // 非首次且没有更多数据时不再请求
     if (!this.data.hasMore && !first) return;
 
     this.setData({ loading: true });
 
     try {
-      const res = await fetchHistory(this.data.page, this.data.size);
-      // 兼容 list / items 两种返回字段名
+      const res = await fetchHistory(this.data.page, this.data.size, this.data.currentChannelId);
       const items = res.list || res.items || [];
       const newList = first ? items : this.data.list.concat(items);
 
@@ -59,16 +90,10 @@ Page({
     }
   },
 
-  /**
-   * 上拉加载更多
-   */
   onReachBottom() {
     this.loadHistory(false);
   },
 
-  /**
-   * 下拉刷新：重置第1页
-   */
   onPullDownRefresh() {
     this.loadHistory(true).then(() => {
       wx.stopPullDownRefresh();
@@ -76,12 +101,27 @@ Page({
   },
 
   /**
-   * 点击节目跳转详情页播放
+   * 点击节目：设置播放队列（自动连播）+ 跳转详情页
+   * 队列从当前列表当前项开始，便于顺序连播后续节目
    */
   onPlay(e) {
-    const { id } = e.currentTarget.dataset;
+    const { id, index } = e.currentTarget.dataset;
+    const idx = Number(index) || 0;
+    // 设置队列：从点击项开始，后续节目自动连播
+    if (this.data.list.length > 0) {
+      setQueue(this.data.list, idx);
+    }
+    trackEvent('history', 'play', 'episode_' + id);
     wx.navigateTo({
       url: `/pages/detail/detail?id=${id}`,
     });
+  },
+
+  /**
+   * 跳转搜索页
+   */
+  onSearch() {
+    wx.navigateTo({ url: '/pages/search/search' });
+    trackEvent('history', 'tap_search');
   },
 });

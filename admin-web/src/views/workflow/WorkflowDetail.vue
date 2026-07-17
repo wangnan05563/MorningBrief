@@ -365,12 +365,13 @@
  * - stitch → 成品音频（试听/删除）
  * - review → 审核记录（查看/改状态）
  */
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from '../../utils/message'
 import { ArrowLeft, RefreshRight, Plus, Edit, Delete, Refresh } from '@element-plus/icons-vue'
 import api from '../../api'
 import { subscribe } from '../../utils/sse'
+import { cleanupLoadingMasks } from '../../utils/window-guard'
 import { formatTime } from '../../utils/format'
 import {
   listMaterials, getMaterial, createMaterial, updateMaterial, deleteMaterial,
@@ -829,31 +830,25 @@ function startPollingIfNeeded() {
 }
 
 // 页面恢复可见时刷新：弥补隐藏期间错过的 SSE 事件
-// 根因：页面最小化时浏览器暂停 CSS transition，v-loading mask 的 after-leave
-// 回调不触发，DOM 残留；恢复可见时 loading 已是 false，赋值 false 不触发 Vue 更新
-// 修复：强制 toggle（true→nextTick→false）触发 v-loading update 清理残留 mask，
-// 配合 themes.scss 中 .el-loading-mask transition:none 让 mask 移除变为同步操作
+// 根因：页面最小化时浏览器暂停 CSS transition 和 setTimeout，
+// Element Plus v-loading 指令的 mask 隐藏流程不执行，DOM 残留。
+// 之前用 toggle (true→nextTick→false) 修复不可靠：值未变化时 watch 不触发，
+// transitionend 不触发，setTimeout 被 throttle。改为直接调用
+// cleanupLoadingMasks() 强制从 DOM 移除残留 mask，不依赖任何时序。
 function handleVisibilityChange() {
   if (!document.hidden) {
-    // 强制设 true，触发 v-loading 指令 update 钩子（即使之前是 true 也无副作用）
-    loading.value = true
-    materials.value.loading = true
-    audioFiles.value.loading = true
-    script.value.loading = true
-    review.value.loading = true
-    // nextTick 让 Vue 处理 loading=true 的 DOM 更新（创建/复用 mask）
-    nextTick(() => {
-      // 设 false 触发 mask 隐藏（transition 已禁用，同步移除 DOM）
-      loading.value = false
-      materials.value.loading = false
-      audioFiles.value.loading = false
-      script.value.loading = false
-      review.value.loading = false
-      // rAF 等待浏览器完成一次真实 paint 后再加载新数据
-      requestAnimationFrame(() => {
-        loadDetail()
-        startPollingIfNeeded()
-      })
+    // 强制重置所有 loading 状态
+    loading.value = false
+    materials.value.loading = false
+    audioFiles.value.loading = false
+    script.value.loading = false
+    review.value.loading = false
+    // 直接清理所有残留 mask
+    cleanupLoadingMasks()
+    // rAF 等待浏览器完成一帧渲染后加载新数据
+    requestAnimationFrame(() => {
+      loadDetail()
+      startPollingIfNeeded()
     })
   }
 }

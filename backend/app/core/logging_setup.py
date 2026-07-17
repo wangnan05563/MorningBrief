@@ -1,4 +1,4 @@
-"""日志系统配置（loguru + InterceptHandler）
+﻿"""日志系统配置（loguru + InterceptHandler）
 
 对标 17_xianyu 项目的日志设计：
 - 控制台 sink：彩色输出，含日期时间 + request_id + 模块路径
@@ -52,6 +52,20 @@ def _patcher(record) -> None:
     record["extra"]["request_id"] = get_request_id() or "-"
 
 
+
+def _admin_log_filter(record):
+    """Filter: downgrade /admin/ access logs from INFO to DEBUG.
+
+    The admin dashboard polls /queue/stats and /queue/tasks every 5-30s,
+    generating?? INFO-level access logs that drown out real warnings.
+    This filter silently drops INFO logs for /admin/ paths.
+    """
+    if getattr(record.get("level"), "no", 0) == 20 == 20:  # INFO
+        msg = record.get("message", "")
+        if "/admin/" in msg and ("GET /admin/" in msg or "POST /admin/" in msg):
+            return False
+    return True
+
 def setup_logging(log_level: str = "INFO", log_dir: str | Path | None = None) -> None:
     """全局初始化日志系统：控制台（彩色）+ 文件（纯文本滚动）。
 
@@ -93,6 +107,7 @@ def setup_logging(log_level: str = "INFO", log_dir: str | Path | None = None) ->
         log_path.mkdir(parents=True, exist_ok=True)
         logger.add(
             log_path / "MorningBrief_{time:YYYY-MM-DD}.log",
+            filter=_admin_log_filter,
             level="DEBUG",
             format=(
                 "{time:YYYY-MM-DD HH:mm:ss.SSS} | "

@@ -1,0 +1,12 @@
+<!-- 用户协议 -->
+<view class="page-agreement">
+  <view class="agreement-header">
+    <text class="agreement-title">{{title}}</text>
+    <text class="agreement-update">最后更新：2026 年 7 月</text>
+  </view>
+
+  <view class="agreement-section" wx:for="{{sections}}" wx:key="title">
+    <view class="section-title">{{item.title}}</view>
+    <view class="section-content">{{item.content}}</view>
+  </view>
+</view>

@@ -1,4 +1,4 @@
-<!-- 个人中心：用户信息 + 收听统计 + 设置 -->
+<!-- 个人中心：用户信息 + 收听统计 + 功能入口 -->
 <view class="page-profile">
   <!-- 未登录 -->
   <view class="login-wrap" wx:if="{{!userInfo}}">
@@ -21,7 +21,7 @@
       <view class="nickname">{{userInfo.nickname || userInfo.nickName || '听友'}}</view>
     </view>
 
-    <!-- 收听统计 -->
+    <!-- 收听统计：4 项指标，2x2 网格 -->
     <view class="card stat-card">
       <view class="stat-item">
         <view class="stat-num">{{durationLabel}}</view>
@@ -32,18 +32,56 @@
         <view class="stat-num">{{totalListenCount}}</view>
         <view class="stat-label">累计收听期数</view>
       </view>
+      <view class="stat-divider"></view>
+      <view class="stat-item">
+        <view class="stat-num">{{completedCount}}</view>
+        <view class="stat-label">完播期数</view>
+      </view>
+      <view class="stat-divider"></view>
+      <view class="stat-item">
+        <view class="stat-num">{{favoriteCount}}</view>
+        <view class="stat-label">收藏数</view>
+      </view>
     </view>
 
-    <!-- 设置列表 -->
+    <!-- 功能列表 -->
     <view class="card list-card">
-      <view class="list-item" bindtap="onTapSetting" data-key="setting">
+      <view class="list-item" bindtap="onTapSetting" data-key="recent">
+        <text class="list-text">最近播放</text>
+        <text class="list-arrow">›</text>
+      </view>
+      <view class="list-item" bindtap="onTapSetting" data-key="favorites">
+        <text class="list-text">我的收藏</text>
+        <text class="list-arrow">›</text>
+      </view>
+      <view class="list-item" bindtap="onTapSetting" data-key="channels">
+        <text class="list-text">我的频道</text>
+        <text class="list-arrow">›</text>
+      </view>
+      <view class="list-item" bindtap="onTapSetting" data-key="feedback">
+        <text class="list-text">意见反馈</text>
+        <text class="list-arrow">›</text>
+      </view>
+      <view class="list-item" bindtap="onTapSetting" data-key="settings">
         <text class="list-text">播放设置</text>
-        <view class="list-extra">敬请期待</view>
+        <text class="list-arrow">›</text>
       </view>
       <view class="list-item" bindtap="onTapSetting" data-key="about">
         <text class="list-text">关于我们</text>
-        <view class="list-extra">敬请期待</view>
+        <text class="list-arrow">›</text>
       </view>
+      <view class="list-item" bindtap="onTapSetting" data-key="agreement">
+        <text class="list-text">用户协议</text>
+        <text class="list-arrow">›</text>
+      </view>
+      <view class="list-item" bindtap="onTapSetting" data-key="privacy">
+        <text class="list-text">隐私政策</text>
+        <text class="list-arrow">›</text>
+      </view>
+    </view>
+
+    <!-- 退出登录 -->
+    <view class="card list-card">
       <view class="list-item" bindtap="onTapSetting" data-key="logout">
         <text class="list-text logout-text">退出登录</text>
         <text class="list-arrow">›</text>

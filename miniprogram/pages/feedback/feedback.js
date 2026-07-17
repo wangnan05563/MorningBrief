@@ -5,6 +5,7 @@
  */
 const { CONFIG } = require('../../utils/config');
 const { submitFeedback } = require('../../services/api');
+const { trackPageView, trackEvent } = require('../../utils/tracker');
 
 // 内容最小长度：低于此值视为信息不足，难以定位问题
 const MIN_LENGTH = 10;
@@ -19,9 +20,14 @@ Page({
     submitting: false,      // 防止重复提交
   },
 
+  onLoad() {
+    trackPageView('pages/feedback/feedback');
+  },
+
   onCategoryTap(e) {
     const { category } = e.currentTarget.dataset;
     this.setData({ selectedCategory: category });
+    trackEvent('feedback', 'select_category', category);
   },
 
   onContentInput(e) {
@@ -63,6 +69,7 @@ Page({
         content: content.trim(),
         contact: contact.trim(),
       });
+      trackEvent('feedback', 'submit_success', selectedCategory);
       wx.showToast({ title: '反馈已提交，感谢支持', icon: 'success' });
       // 延迟返回，让 success toast 完整展示后再退栈，避免被瞬间覆盖
       setTimeout(() => {

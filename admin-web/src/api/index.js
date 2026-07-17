@@ -48,13 +48,13 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
     if (error.response?.status === 401) {
-      // token 失效：清除本地状态并跳转登录
+      // token 失效：清除本地状态
       localStorage.removeItem('admin_token')
       localStorage.removeItem('admin_username')
       localStorage.removeItem('admin_role')
-      // 页面隐藏时不立即跳转（location.href 会激活最小化窗口）
-      // token 已清除，用户恢复页面后路由守卫会自动跳转到登录页
-      if (globalThis.location.pathname !== '/login') {
+      // 页面隐藏时跳过跳转：location.href 会激活最小化窗口，
+      // 用户恢复后路由守卫基于已清空的 token 自动跳转到登录页，效果一致
+      if (!document.hidden && globalThis.location.pathname !== '/login') {
         globalThis.location.href = '/login'
       }
     } else if (!error.config?.silent) {

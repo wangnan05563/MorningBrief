@@ -1,0 +1,55 @@
+<!-- 最近播放页 -->
+<view class="page-recent">
+  <!-- 空状态 -->
+  <view class="empty-state" wx:if="{{!loading && list.length === 0}}">
+    <text class="empty-icon">🎧</text>
+    <text>还没有播放记录</text>
+    <text class="empty-desc">收听节目后会在这里显示</text>
+  </view>
+
+  <!-- 列表 -->
+  <block wx:else>
+    <view class="recent-list">
+      <view
+        class="card recent-item"
+        wx:for="{{list}}"
+        wx:key="episode_id"
+        data-id="{{item.episode_id}}"
+        data-index="{{index}}"
+        bindtap="onTapItem"
+      >
+        <view class="item-header">
+          <text class="item-date">{{fmt.date(item.played_at)}}</text>
+          <text class="tag tag-mint" wx:if="{{item.completed}}">已听完</text>
+        </view>
+        <text class="item-title">{{item.title}}</text>
+        <view class="item-footer">
+          <text class="item-duration">播放至 {{fmt.time(item.position)}}</text>
+          <view class="play-icon-small">
+            <text class="icon-text">▶</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="load-more" wx:if="{{list.length > 0}}">
+      <text wx:if="{{loading}}">加载中...</text>
+      <text wx:elif="{{!hasMore}}">没有更多了</text>
+    </view>
+  </block>
+</view>
+
+<wxs module="fmt">
+  module.exports = {
+    time: function(s) {
+      s = s || 0;
+      var m = Math.floor(s / 60);
+      var sec = Math.floor(s % 60);
+      return (m < 10 ? '0' + m : m) + ':' + (sec < 10 ? '0' + sec : sec);
+    },
+    date: function(iso) {
+      if (!iso) return '';
+      return iso.length >= 10 ? iso.substring(0, 10) : iso;
+    }
+  };
+</wxs>

@@ -12,15 +12,19 @@
 频率分桶：LLM 与 TTS 各自维护独立的滑动窗口，避免 TTS 密集调用挤占
 LLM 配额导致改写失败。token/费用上限仍为全局共享（每日总预算）。
 
-持久化：每条记录追加到 JSON 文件，服务重启后从文件回填今日记录，
-避免刷新页面/重启服务后预算计数归零被绕过。
+持久化：批量缓冲写盘。record_call 时只追加到内存缓冲区，达到阈值
+（_FLUSH_THRESHOLD 条）或距上次刷盘超过 _FLUSH_INTERVAL_SEC 秒时才写文件，
+避免高频 TTS（60 次/分钟）每秒触发全量 JSON 重写。服务退出/跨日/reset 时
+强制 flush，确保不丢数据。服务重启后从文件回填今日记录，避免预算被绕过。
 
 线程安全：所有可变状态用 threading.Lock 保护，因 LLM/TTS 调用在 asyncio
 事件循环中执行，但记录写入是同步快速操作，用 threading.Lock 足够且避免
-asyncio.Lock 的 await 开销。
+asyncio.Lock 的 await 开销。临界区内无 await/IO 阻塞，协程不会切换，因此
+threading.Lock 在单线程事件循环中不会真正阻塞，仅起内存屏障作用。
 """
 from __future__ import annotations
 
+import atexit
 import json
 import threading
 import time
@@ -55,6 +59,12 @@ class _DailySummary:
     by_service: dict[str, int] = field(default_factory=dict)
 
 
+# 批量持久化参数：高频 TTS（60 次/分钟）下若每条都全量重写 JSON 文件，
+# 文件增长后单次 IO 耗时上升。缓冲 10 条或 30 秒后批量刷盘，可将磁盘
+# 写次数降低一个数量级，同时保证崩溃时最多丢失 30 秒数据（预算软限制可接受）
+_FLUSH_THRESHOLD = 10
+_FLUSH_INTERVAL_SEC = 30
+
 # 全局状态（模块级单例，与 cache.manager 一致的模式）
 _lock = threading.Lock()
 _today_records: list[_UsageRecord] = []
@@ -63,6 +73,9 @@ _today_records: list[_UsageRecord] = []
 _minute_timestamps_by_service: dict[str, list[float]] = {}
 _daily_summary = _DailySummary()
 _last_persist_date: str = ""  # 上次持久化的日期，跨日时清空内存
+# 持久化缓冲区与上次刷盘时间（必须在 _lock 内访问，避免并发竞态）
+_pending_records: list[_UsageRecord] = []
+_last_flush_time: float = 0.0
 
 
 def _today_key() -> str:
@@ -183,6 +196,9 @@ def record_call(
         cost_usd=cost,
     )
 
+    # 批量持久化：锁内只做内存操作 + 判断是否需要刷盘，IO 放锁外避免阻塞
+    global _last_flush_time
+    flush_batch: list[_UsageRecord] | None = None
     with _lock:
         _rollover_if_new_day()
         _today_records.append(record)
@@ -195,8 +211,18 @@ def record_call(
             _daily_summary.by_service.get(service_type, 0) + 1
         )
 
-    # 持久化（同步写，文件小且调用频率受限流控制）
-    _persist_record(record)
+        # 加入缓冲区，达到阈值或间隔后 swap 出待写批次
+        _pending_records.append(record)
+        now = time.time()
+        if (len(_pending_records) >= _FLUSH_THRESHOLD
+                or (now - _last_flush_time) >= _FLUSH_INTERVAL_SEC):
+            flush_batch = _pending_records.copy()
+            _pending_records.clear()
+            _last_flush_time = now
+
+    # 锁外批量写盘，避免磁盘 IO 阻塞其他协程的预算检查
+    if flush_batch:
+        _persist_records(flush_batch)
 
     return {
         "input_tokens": input_tokens,
@@ -305,11 +331,14 @@ def _load_today_from_file(today: str) -> None:
             ).append(record.timestamp)
 
 
-def _persist_record(record: _UsageRecord) -> None:
-    """将单条记录追加到 JSON 文件（对标 17_xianyu _persist_record）。
+def _persist_records(records: list[_UsageRecord]) -> None:
+    """批量将记录追加到 JSON 文件。
 
     保留最近 30 天数据（按条数估算：每天最多 1000 条，30 天 3 万条）。
+    写盘失败时把记录回填到 pending 缓冲区，下次刷盘时重试，避免数据丢失。
     """
+    if not records:
+        return
     file_path = _budget_file_path()
     try:
         data: dict[str, Any] = {"records": []}
@@ -319,33 +348,58 @@ def _persist_record(record: _UsageRecord) -> None:
             except (json.JSONDecodeError, OSError):
                 pass
 
-        data.setdefault("records", []).append({
-            "timestamp": record.timestamp,
-            "service_type": record.service_type,
-            "model": record.model,
-            "input_tokens": record.input_tokens,
-            "output_tokens": record.output_tokens,
-            "char_count": record.char_count,
-            "cost_usd": record.cost_usd,
-        })
+        records_list = data.setdefault("records", [])
+        for r in records:
+            records_list.append({
+                "timestamp": r.timestamp,
+                "service_type": r.service_type,
+                "model": r.model,
+                "input_tokens": r.input_tokens,
+                "output_tokens": r.output_tokens,
+                "char_count": r.char_count,
+                "cost_usd": r.cost_usd,
+            })
 
-        # 保留最近 30 天数据
+        # 保留最近 30 天数据（从头删除，避免 list[-N:] 创建大副本）
         max_records = 30 * 1000
-        if len(data["records"]) > max_records:
-            data["records"] = data["records"][-max_records:]
+        if len(records_list) > max_records:
+            del records_list[: len(records_list) - max_records]
 
         file_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
     except OSError as e:
-        logger.warning("AI 预算记录持久化失败: %s", e)
+        logger.warning("AI 预算记录批量持久化失败（已回填缓冲区待重试）: %s", e)
+        # 写盘失败：把批次回填到 pending，下次 record_call 或 atexit 时重试
+        with _lock:
+            _pending_records[:0] = records
+
+
+def _flush_pending() -> None:
+    """强制刷盘所有 pending 记录（用于跨日/reset/atexit）。
+
+    与 record_call 内的批量触发不同，本函数无条件 flush 全部 pending，
+    确保关键节点（跨日清零、手动重置、进程退出）不丢数据。
+    """
+    with _lock:
+        if not _pending_records:
+            return
+        batch = _pending_records.copy()
+        _pending_records.clear()
+        _last_flush_time = time.time()
+    # 锁外写盘
+    _persist_records(batch)
+
+
+# 进程退出时强制 flush，避免缓冲区数据丢失
+atexit.register(_flush_pending)
 
 
 def reset_budget() -> None:
     """手动重置预算计数（运维应急用，如预算误判需要解锁）。
 
-    清空内存计数与持久化文件中的今日记录。
+    清空内存计数、未刷盘的缓冲区与持久化文件。
     """
     with _lock:
         _today_records.clear()
@@ -354,6 +408,9 @@ def reset_budget() -> None:
         _daily_summary.total_tokens = 0
         _daily_summary.total_cost_usd = 0.0
         _daily_summary.by_service.clear()
+        # 同步清空缓冲区：reset 语义是清除所有预算数据，pending 也属于待清除范围
+        _pending_records.clear()
+        _last_flush_time = 0.0
 
     file_path = _budget_file_path()
     if file_path.exists():

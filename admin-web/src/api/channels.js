@@ -50,3 +50,9 @@ export const recommendChannelBgm = (id) => api.post(`/channels/${id}/recommend-b
 
 /** 列出 rss.yaml 中所有可用的 RSS 源，供频道配置选择 */
 export const listRssSources = () => api.get('/channels/rss/sources')
+
+/**
+ * AI 推荐频道 RSS 源与关键词（根据频道定位从可用源中选择最匹配的子集 + 生成关键词）
+ * LLM 推荐耗时与 BGM 推荐相当，超时设为 60s 与 recommendChannelBgm 保持一致
+ */
+export const recommendChannelSources = (id) => api.post(`/channels/${id}/recommend-sources`, {}, { timeout: 60000 })

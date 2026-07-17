@@ -28,8 +28,16 @@
     <!-- 播放控制卡片 -->
     <view class="card play-card">
       <view class="play-row">
+        <!-- 上一首按钮（队列未设置时隐藏） -->
+        <view class="nav-btn" wx:if="{{hasPrev}}" bindtap="onPrev">
+          <text>⏮</text>
+        </view>
         <view class="play-btn" bindtap="onTogglePlay">
           <text class="play-icon">{{isPlaying ? '⏸' : '▶'}}</text>
+        </view>
+        <!-- 下一首按钮 -->
+        <view class="nav-btn" wx:if="{{hasNext}}" bindtap="onNext">
+          <text>⏭</text>
         </view>
         <view class="play-info">
           <slider
@@ -49,6 +57,22 @@
           </view>
         </view>
       </view>
+
+      <!-- 操作按钮区：倍速 + 收藏 + 睡眠定时器 -->
+      <view class="action-row">
+        <view class="action-chip" bindtap="onCycleRate">
+          <text>{{currentRate}}x</text>
+        </view>
+        <view class="action-chip {{favorited ? 'active' : ''}}" bindtap="onToggleFavorite">
+          <text>{{favorited ? '★' : '☆'}}</text>
+          <text class="chip-label">{{favorited ? '已收藏' : '收藏'}}</text>
+        </view>
+        <view class="action-chip {{sleepActive ? 'active' : ''}}" bindtap="onSleepTimer">
+          <text>{{sleepActive ? '⏰' : '🌙'}}</text>
+          <text class="chip-label" wx:if="{{sleepActive}}">{{sleepLabel}}</text>
+          <text class="chip-label" wx:else>定时</text>
+        </view>
+      </view>
     </view>
 
     <!-- 稿件区域：懒加载 -->
@@ -64,6 +88,20 @@
 
       <!-- 加载完成：展示全文（pre-wrap 保留换行） -->
       <view class="script-body" wx:else>{{script}}</view>
+    </view>
+
+    <!-- 节目来源（版权溯源，仅稿件加载后展示） -->
+    <view class="card sources-card" wx:if="{{scriptLoaded && sources.length > 0}}">
+      <view class="script-header">节目来源</view>
+      <view class="sources-list">
+        <view class="source-item" wx:for="{{sources}}" wx:key="seq">
+          <text class="source-seq">{{item.seq}}</text>
+          <view class="source-info">
+            <text class="source-title">{{item.title}}</text>
+            <text class="source-meta">{{item.source}} · {{item.category}}</text>
+          </view>
+        </view>
+      </view>
     </view>
 
     <!-- 底部操作 -->

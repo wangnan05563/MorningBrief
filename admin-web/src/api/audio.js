@@ -9,6 +9,9 @@
  *
  * blob 错误处理：后端返回 404/500 时 response.data 也是 Blob，
  * 需读取 Blob 文本解析 JSON 错误消息，否则前端只能显示 "Network Error"
+ *
+ * Network Error 处理：当 err.response 为 undefined（连接被重置/传输中断）时，
+ * 浏览器 XHR onerror 返回固定文案 "Network Error"，需给出友好提示并自动重试一次
  */
 import api from '../api'
 
@@ -31,44 +34,68 @@ async function parseBlobError(blob) {
   }
 }
 
+/**
+ * 统一处理 blob 请求错误
+ * - err.response.data 是 Blob：解析 JSON 错误消息（后端返回 404/500 等）
+ * - err.response 为 undefined：网络层错误（连接重置/传输中断），自动重试一次
+ * - 其他：透传原始错误
+ */
+async function handleBlobError(err, retryFn) {
+  const blob = err.response?.data
+  if (blob instanceof Blob) {
+    const msg = await parseBlobError(blob)
+    throw new Error(msg)
+  }
+  // err.response 为 undefined 表示网络层错误（未收到 HTTP 响应）
+  // 浏览器 XHR onerror 固定返回 "Network Error"，需重试或给出友好提示
+  if (!err.response) {
+    if (retryFn) {
+      // 自动重试一次：BaseHTTPMiddleware 对 FileResponse 的缓冲冲突可能导致连接重置
+      return await retryFn()
+    }
+    throw new Error('音频加载失败，请检查网络或服务状态后重试')
+  }
+  throw err
+}
+
 // 列出工作流的音频文件（TTS 片段 + 成品）
 export const listAudioFiles = (workflowId) =>
   api.get(`/workflows/${workflowId}/audio`)
 
 // 获取 TTS 音频 blob URL（供 <audio src> 播放）
 export async function getTtsAudioUrl(workflowId, filename) {
+  const fetch = () => api.get(
+    `/workflows/${workflowId}/audio/tts/${filename}`,
+    BLOB_CONFIG,
+  )
   try {
-    const res = await api.get(
-      `/workflows/${workflowId}/audio/tts/${filename}`,
-      BLOB_CONFIG,
-    )
+    const res = await fetch()
     return URL.createObjectURL(res)
   } catch (err) {
-    // blob 响应的 error.response.data 是 Blob，需解析获取真实错误消息
-    const blob = err.response?.data
-    if (blob instanceof Blob) {
-      const msg = await parseBlobError(blob)
-      throw new Error(msg)
-    }
-    throw err
+    // 网络层错误时重试一次，重试仍失败则由 handleBlobError 抛出友好提示
+    return await handleBlobError(err, async () => {
+      const res = await fetch()
+      return URL.createObjectURL(res)
+    })
   }
 }
 
 // 获取成品音频 blob URL
 export async function getEpisodeAudioUrl(workflowId) {
+  const fetch = () => api.get(
+    `/workflows/${workflowId}/audio/episode`,
+    BLOB_CONFIG,
+  )
   try {
-    const res = await api.get(
-      `/workflows/${workflowId}/audio/episode`,
-      BLOB_CONFIG,
-    )
+    const res = await fetch()
     return URL.createObjectURL(res)
   } catch (err) {
-    const blob = err.response?.data
-    if (blob instanceof Blob) {
-      const msg = await parseBlobError(blob)
-      throw new Error(msg)
-    }
-    throw err
+    // 成品音频较大（10MB+），BaseHTTPMiddleware 缓冲更易导致连接重置
+    // 网络层错误时重试一次，重试仍失败则由 handleBlobError 抛出友好提示
+    return await handleBlobError(err, async () => {
+      const res = await fetch()
+      return URL.createObjectURL(res)
+    })
   }
 }
 

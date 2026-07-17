@@ -40,6 +40,12 @@ from app.routers.health import router as health_router
 from app.routers.api.auth import router as c_auth_router
 from app.routers.api.episodes import router as c_episodes_router
 from app.routers.api.playlogs import router as c_playlogs_router
+from app.routers.api.favorites import router as c_favorites_router
+from app.routers.api.feedbacks import router as c_feedbacks_router
+from app.routers.api.channels import router as c_channels_router
+from app.routers.api.subscriptions import router as c_subscriptions_router
+from app.routers.api.users import router as c_users_router
+
 # B 端路由（运营后台）
 from app.routers.admin.auth import router as b_auth_router
 from app.routers.admin.reviews import router as b_reviews_router
@@ -377,6 +383,12 @@ def create_app() -> FastAPI:
     app.include_router(c_auth_router)
     app.include_router(c_episodes_router)
     app.include_router(c_playlogs_router)
+    app.include_router(c_favorites_router)
+    app.include_router(c_feedbacks_router)
+    app.include_router(c_channels_router)
+    app.include_router(c_subscriptions_router)
+    app.include_router(c_users_router)
+
     # B 端（运营后台）
     app.include_router(b_auth_router)
     app.include_router(b_reviews_router)

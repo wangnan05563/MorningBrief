@@ -1,5 +1,29 @@
 <!-- 首页：今日要闻播放页 -->
 <view class="container">
+  <!-- 顶部工具栏：搜索 + 频道切换 + 睡眠定时器 -->
+  <view class="top-bar" wx:if="{{!loading && episode}}">
+    <view class="top-action" bindtap="onSearch">
+      <text class="action-icon">🔍</text>
+    </view>
+    <scroll-view scroll-x class="channel-bar" wx:if="{{channels.length > 0}}">
+      <view
+        wx:for="{{channels}}"
+        wx:key="id"
+        class="channel-pill {{currentChannelId === item.id ? 'active' : ''}}"
+        data-id="{{item.id}}"
+        bindtap="onSwitchChannel"
+      >{{item.name}}</view>
+    </scroll-view>
+    <view class="top-action" bindtap="onSleepTimer">
+      <text class="action-icon">{{sleepActive ? '⏰' : '🌙'}}</text>
+    </view>
+  </view>
+
+  <!-- 睡眠定时器状态条 -->
+  <view class="sleep-status" wx:if="{{sleepActive}}">
+    <text>{{sleepLabel}}</text>
+  </view>
+
   <!-- 加载中状态 -->
   <view class="loading-mask" wx:if="{{loading}}">
     <text>正在加载今日要闻...</text>
@@ -56,8 +80,15 @@
       </view>
     </view>
 
-    <!-- 查看文稿按钮（蜜桃粉） -->
+    <!-- 操作按钮区：倍速 + 收藏 + 查看文稿 -->
     <view class="action-area">
+      <view class="action-chip" bindtap="onCycleRate">
+        <text>{{currentRate}}x</text>
+      </view>
+      <view class="action-chip {{favorited ? 'active' : ''}}" bindtap="onToggleFavorite">
+        <text>{{favorited ? '★' : '☆'}}</text>
+        <text class="chip-label">{{favorited ? '已收藏' : '收藏'}}</text>
+      </view>
       <button class="btn-secondary" bindtap="onViewScript">查看文稿</button>
     </view>
   </block>

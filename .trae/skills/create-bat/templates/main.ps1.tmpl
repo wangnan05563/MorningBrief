@@ -1,0 +1,117 @@
+﻿#Requires -Version 5.1
+<#
+.SYNOPSIS
+    ${project_name} - ${action_display} 主逻辑
+.DESCRIPTION
+    从 config.json 读取所有参数，执行 ${action_type} 操作。
+    无硬编码路径、版本、依赖。
+#>
+[CmdletBinding()]
+param(
+${ps1_params}
+)
+
+$ErrorActionPreference = "Stop"
+
+# ============================================================
+# 加载配置
+# ============================================================
+
+$Script:ProjectRoot = (Resolve-Path "$PSScriptRoot\${project_root_rel}").Path
+$configFile = Join-Path $ProjectRoot "config.json"
+
+if (Test-Path $configFile) {
+    $Script:Config = Get-Content $configFile -Raw -Encoding UTF8 | ConvertFrom-Json
+} else {
+    Write-Host "[WARN] config.json 不存在，使用默认配置" -ForegroundColor Yellow
+    $Script:Config = $null
+}
+
+$Script:StepPrefix = "[Build]"
+
+function Write-Step { param([string]$Message) Write-Host "$StepPrefix $Message" -ForegroundColor Cyan }
+function Write-Ok    { param([string]$Message) Write-Host "$StepPrefix   [OK] $Message" -ForegroundColor Green }
+function Write-Warn  { param([string]$Message) Write-Host "$StepPrefix   [WARN] $Message" -ForegroundColor Yellow }
+function Write-Err   { param([string]$Message) Write-Host "$StepPrefix   [FAIL] $Message" -ForegroundColor Red }
+
+# ============================================================
+# 工具函数
+# ============================================================
+
+function Find-Tool {
+    param($ToolConfig)
+    $cmd = Get-Command $ToolConfig.name -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    if ($ToolConfig.path_pattern) {
+        if (Test-Path $ToolConfig.path_pattern) { return $ToolConfig.path_pattern }
+    }
+    return $null
+}
+
+function Invoke-With-Fallback {
+    param(
+        [scriptblock]$Primary,
+        [scriptblock[]]$Fallbacks,
+        [string]$Description
+    )
+    try {
+        & $Primary
+        if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq $null) {
+            Write-Ok "$Description（主路径）"
+            return $true
+        }
+    } catch { }
+    for ($i = 0; $i -lt $Fallbacks.Count; $i++) {
+        try {
+            & $Fallbacks[$i]
+            if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq $null) {
+                Write-Ok "$Description（fallback #$($i+1)）"
+                return $true
+            }
+        } catch { }
+    }
+    throw "$Description 所有路径均失败"
+}
+
+# ============================================================
+# 工具链检测
+# ============================================================
+
+${toolchain_detection_block}
+
+# ============================================================
+# ${action_body}
+# ============================================================
+
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  ${project_name} ${action_display}" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "Repo: $ProjectRoot"
+Write-Host "Build: $build_dir"
+Write-Host "Dist: $dist_dir"
+${skip_flags_block}
+Write-Host ""
+
+${pipeline_steps_block}
+
+# ============================================================
+# 产物验证
+# ============================================================
+
+${artifact_validation_block}
+
+# ============================================================
+# 完成
+# ============================================================
+
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Green
+Write-Host "  Build Complete!" -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Green
+Write-Host "  Output: $dist_dir"
+Write-Host "  EXE:   $exe_path" -ForegroundColor Yellow
+Write-Host "========================================" -ForegroundColor Green
+Write-Host ""
+
+return 0

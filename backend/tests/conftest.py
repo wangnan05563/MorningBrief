@@ -188,7 +188,6 @@ async def _clear_cache_manager():
     _cache._cache.clear()
     _cache._counters.clear()
     _cache._counters_ttl.clear()
-    _cache._locks.clear()
     yield
 
 

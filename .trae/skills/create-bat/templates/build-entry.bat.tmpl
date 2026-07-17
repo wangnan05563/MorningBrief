@@ -1,0 +1,35 @@
+@echo off
+cd /d "%~dp0.."
+%chcp_line%
+
+echo ============================================
+echo   %entry_title%
+echo ============================================
+echo.
+echo 构建流程：
+%build_steps_list%
+echo.
+echo 输出：%output_path%
+echo.
+
+%deps_check_block%
+
+%deps_install_block%
+
+%build_command%
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo [ERROR] 构建失败，请查看上方错误信息
+    pause
+    exit /b 1
+)
+
+echo.
+echo ============================================
+echo   构建完成
+echo ============================================
+echo   输出目录：%output_path%
+echo ============================================
+echo.
+%post_action_block%
+exit /b 0

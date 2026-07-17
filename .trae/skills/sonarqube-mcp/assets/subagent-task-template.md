@@ -1,4 +1,4 @@
-# 并行修复子代理任务模板
+﻿# 并行修复子代理任务模板
 
 > 本文件由 SKILL.md Phase 5 与 references/scan-workflow.md 第 7 节共享引用。  
 > 启动子代理时主智能体一次性读取本文件，避免在主上下文常驻模板文本。
@@ -41,3 +41,38 @@
 - 文件组数 > 1 且 `scan.parallel_agents` > 1：启用并行子代理
 - 同一文件内多个 issue：串行处理（避免 Edit 冲突）
 - 子代理分配规则：每个子代理 `scan.files_per_agent` 个文件
+
+## 任务分配格式（压缩 JSON）
+
+> 为减少子代理 prompt 的 token 消耗，issues 列表使用紧凑 JSON 格式：
+
+```json
+{
+  "issues": [
+    {"key":"XXX","rule":"python:S1481","file":"src/api/routes.py","line":42,"severity":"MAJOR","strategy":"auto_fix"},
+    {"key":"YYY","rule":"python:S125","file":"src/services/collector.py","line":15,"severity":"MINOR","strategy":"auto_fix"}
+  ]
+}
+```
+
+> 原格式每个 issue 约 200 tokens，压缩后约 50 tokens，节省 ~75%
+
+## NOSONAR 位置规则（重要）
+
+修复时若需要使用 # NOSONAR 抑制注释，必须按以下步骤确定位置：
+
+1. 查 fix_strategies.json -> nosonar_position_rules 表，按 rule ID 匹配 position
+2. position = "issue_line"      → 在 SonarQube 报告的 issue.line 末梢追加 NOSONAR
+3. position = "first_param_line" → 在函数第一个参数所在行末梢追加 NOSONAR
+4. position = "n/a"             → 该规则不需要 NOSONAR，用其他方式修复
+5. 未找到 rule                  → 用默认规则（issue_line）
+
+注释格式：
+- Python: # NOSONAR
+- TypeScript/JavaScript: // NOSONAR
+- JSX 标签内: /* NOSONAR */
+
+关键限制：
+- NOSONAR 必须大写
+- 必须在 # 或 // 注释中，在 docstring 字符串内不生效
+- SonarQube 不识别 Python # noqa

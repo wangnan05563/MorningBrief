@@ -1183,32 +1183,44 @@ class WorkflowScheduler:
     async def _check_backup_single(self, channel_id: int, today: date) -> None:
         """单频道备播检查：今日 episode 未发布则复用前一日音频。
 
-        频道归属兜底：优先查 channel_id 匹配的 episode，
-        若无则查 channel_id IS NULL 的旧数据（频道功能上线前的历史节目）。
+        频道归属严格匹配：今日检查仅按 channel_id 精确匹配，避免跨频道误判。
+        前一日节目查找优先按 channel_id 精确匹配，无结果时才回退到
+        channel_id IS NULL 的历史节目（频道功能上线前的遗留数据）。
         """
         yesterday = today - timedelta(days=1)
         async with AsyncSessionLocal() as session:
-            # 今日已发布则无需备播（频道归属兜底：channel_id 匹配或 NULL）
+            # 今日已发布则无需备播（严格按 channel_id 匹配，不兜底 NULL）
             result = await session.execute(
                 select(Episode).where(
                     Episode.date == today,
                     Episode.status == EpisodeStatus.published,
-                    (Episode.channel_id == channel_id) | (Episode.channel_id.is_(None)),
+                    Episode.channel_id == channel_id,
                 ).limit(1)
             )
             if result.scalar_one_or_none() is not None:
                 logger.info("频道 %s 备播检查：今日已发布，跳过", channel_id)
                 return
 
-            # 查前一日已发布节目（同样兜底 channel_id NULL）
+            # 查前一日已发布节目：优先精确匹配 channel_id
             result = await session.execute(
                 select(Episode).where(
                     Episode.date == yesterday,
                     Episode.status == EpisodeStatus.published,
-                    (Episode.channel_id == channel_id) | (Episode.channel_id.is_(None)),
+                    Episode.channel_id == channel_id,
                 ).limit(1)
             )
             prev = result.scalar_one_or_none()
+            if prev is None:
+                # 回退到 channel_id IS NULL 的历史节目（频道功能上线前的遗留数据）
+                # 仅用于频道首次上线时的过渡期，多频道场景下不会跨频道误用
+                result = await session.execute(
+                    select(Episode).where(
+                        Episode.date == yesterday,
+                        Episode.status == EpisodeStatus.published,
+                        Episode.channel_id.is_(None),
+                    ).limit(1)
+                )
+                prev = result.scalar_one_or_none()
             if prev is None:
                 await self._alert_operators(
                     f"频道 {channel_id} 备播失败：前一日 {yesterday} 节目不存在，需人工介入"

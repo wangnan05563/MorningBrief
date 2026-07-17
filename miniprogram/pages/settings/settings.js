@@ -1,10 +1,15 @@
 /**
  * 设置：播放设置 + 通知设置 + 缓存管理
  *
- * 所有设置项变更立即写入 localStorage（news_settings），
- * audio.js 通过 getDefaultRate() 读取默认倍速，无需页面间传参。
+ * V1.3：
+ * - 倍速与自动连播变更时同步到 audio.js 全局播放器，立即生效
+ * - 通知设置触发订阅消息授权（一次性模板，用户每次需重新授权）
+ * - 接入埋点
  */
 const STORAGE_KEY_SETTINGS = 'news_settings';
+const { setPlaybackRate, setAutoPlayNext } = require('../../services/audio');
+const { trackPageView, trackEvent } = require('../../utils/tracker');
+const { recordSubscribeMessage } = require('../../services/api');
 
 // 默认设置：用户首次进入时使用，避免空值导致 switch 显示异常
 const DEFAULT_SETTINGS = {
@@ -29,6 +34,7 @@ Page({
   },
 
   onLoad() {
+    trackPageView('pages/settings/settings');
     this.loadSettings();
     this.updateCacheSize();
   },
@@ -62,24 +68,76 @@ Page({
     const rate = this.data.rateOptions[index];
     this.setData({ rateIndex: index, defaultRate: rate });
     this.saveSettings({ defaultRate: rate });
+    // 立即同步到全局播放器（当前正在播放的节目也会即时变速）
+    setPlaybackRate(rate);
+    trackEvent('settings', 'change_rate', '', rate);
   },
 
   onAutoPlayNextChange(e) {
     const value = e.detail.value;
     this.setData({ autoPlayNext: value });
     this.saveSettings({ autoPlayNext: value });
+    // 同步到 audio.js 全局开关（影响 onEnded 自动连播行为）
+    setAutoPlayNext(value);
+    trackEvent('settings', 'change_auto_play_next', '', value ? 1 : 0);
   },
 
   onWifiOnlyChange(e) {
     const value = e.detail.value;
     this.setData({ wifiOnlyAutoPlay: value });
     this.saveSettings({ wifiOnlyAutoPlay: value });
+    trackEvent('settings', 'change_wifi_only', '', value ? 1 : 0);
   },
 
   onNotifyChange(e) {
     const value = e.detail.value;
     this.setData({ notifyNewEpisode: value });
     this.saveSettings({ notifyNewEpisode: value });
+    // 开启通知需请求订阅消息授权（一次性模板）
+    // 模板 ID 由后端配置，此处先占位；用户拒绝授权时回滚开关
+    if (value) {
+      this.requestSubscribeMessage();
+    }
+    trackEvent('settings', 'change_notify', '', value ? 1 : 0);
+  },
+
+  /**
+   * 请求订阅消息授权
+   * 微信一次性订阅消息：每次发送都需要用户重新授权
+   * 模板 ID 通过 wx.requestSubscribeMessage 的 tmplIds 传入
+   */
+  requestSubscribeMessage() {
+    // 模板 ID 应在微信公众平台后台获取并配置在此处
+    // 此处使用占位符，部署时需替换为真实模板 ID
+    const TEMPLATE_ID = '';
+    if (!TEMPLATE_ID) {
+      wx.showToast({ title: '通知模板未配置', icon: 'none' });
+      // 回滚开关
+      this.setData({ notifyNewEpisode: false });
+      this.saveSettings({ notifyNewEpisode: false });
+      return;
+    }
+    wx.requestSubscribeMessage({
+      tmplIds: [TEMPLATE_ID],
+      success: async (res) => {
+        if (res[TEMPLATE_ID] === 'accept') {
+          // 授权成功：记录到后端，后续发布新节目时下发通知
+          try {
+            await recordSubscribeMessage(TEMPLATE_ID);
+          } catch (err) {
+            console.error('记录订阅授权失败:', err);
+          }
+        } else {
+          // 用户拒绝：回滚开关
+          this.setData({ notifyNewEpisode: false });
+          this.saveSettings({ notifyNewEpisode: false });
+        }
+      },
+      fail: () => {
+        this.setData({ notifyNewEpisode: false });
+        this.saveSettings({ notifyNewEpisode: false });
+      },
+    });
   },
 
   /**
@@ -113,6 +171,7 @@ Page({
           });
           this.updateCacheSize();
           wx.showToast({ title: '已清除', icon: 'success' });
+          trackEvent('settings', 'clear_cache');
         } catch (err) {
           console.error('清除缓存失败', err);
           wx.showToast({ title: '清除失败', icon: 'none' });

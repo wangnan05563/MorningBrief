@@ -3,6 +3,7 @@
 仅 admin 角色可访问。
 恢复操作须传 confirm_token 校验，防止误操作覆盖最新数据。
 """
+import hmac
 import logging
 
 from fastapi import APIRouter, Depends
@@ -33,9 +34,15 @@ class RestoreRequest(BaseModel):
 
 
 def _validate_confirm_token(token: str) -> None:
-    """校验危险操作确认令牌。"""
-    if token != CONFIRM_TOKEN:
-        raise ParamError(f"需要 confirm_token={CONFIRM_TOKEN}")
+    """校验危险操作确认令牌。
+
+    空值拒绝执行：DB_ADMIN_CONFIRM_TOKEN 未配置时禁止危险操作。
+    使用 hmac.compare_digest 常量时间比较，防御时序攻击。
+    """
+    if not CONFIRM_TOKEN:
+        raise ParamError("服务器未配置 DB_ADMIN_CONFIRM_TOKEN，危险操作被禁止")
+    if not hmac.compare_digest(token, CONFIRM_TOKEN):
+        raise ParamError("confirm_token 校验失败")
 
 
 # ---- 备份列表 ----

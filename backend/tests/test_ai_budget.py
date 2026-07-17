@@ -113,11 +113,37 @@ def test_persist_and_load_from_file(tmp_path, monkeypatch):
     monkeypatch.setattr(ai_budget, "_budget_file_path", lambda: budget_file)
 
     ai_budget.record_call("llm", "qwen-max", 100, 50)
+    # 批量持久化模式下，record_call 只加入缓冲区，需手动 flush 才写盘
+    ai_budget._flush_pending()
     assert budget_file.exists()
 
     data = json.loads(budget_file.read_text(encoding="utf-8"))
     assert len(data["records"]) == 1
     assert data["records"][0]["input_tokens"] == 100
+
+
+def test_batch_persist_threshold(tmp_path, monkeypatch):
+    """缓冲区达到 _FLUSH_THRESHOLD 时应自动批量刷盘。"""
+    budget_file = tmp_path / "ai_budget.json"
+    monkeypatch.setattr(ai_budget, "_budget_file_path", lambda: budget_file)
+    # 重置缓冲区状态，避免受前面测试影响
+    ai_budget._pending_records.clear()
+    # 设为当前时间避免时间间隔触发 flush（仅测试阈值触发逻辑）
+    ai_budget._last_flush_time = time.time()
+
+    # 写入 threshold - 1 条，不应触发刷盘
+    threshold = ai_budget._FLUSH_THRESHOLD
+    for _ in range(threshold - 1):
+        ai_budget.record_call("llm", "qwen-max", 10, 5)
+    assert not budget_file.exists()
+    assert len(ai_budget._pending_records) == threshold - 1
+
+    # 再写一条达到阈值，应自动刷盘
+    ai_budget.record_call("llm", "qwen-max", 10, 5)
+    assert budget_file.exists()
+    data = json.loads(budget_file.read_text(encoding="utf-8"))
+    assert len(data["records"]) == threshold
+    assert len(ai_budget._pending_records) == 0
 
 
 def test_reset_budget_clears_all():

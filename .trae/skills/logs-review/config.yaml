@@ -1,53 +1,48 @@
-# ===== Logs Review 技能配置（差异化）=====
-# 本文件仅保留与 config.example.yaml 默认值不同的项
-# 未列出的项自动使用 config.example.yaml 默认值
-# 配置优先级：环境变量 > 本文件 > config.example.yaml 默认值
-
-# --- 日志源配置（项目实际日志路径与格式）---
+﻿# ===== Logs Review 鎶€鑳介厤缃紙宸紓鍖栵級=====
+# 鏈枃浠朵粎淇濈暀涓?config.example.yaml 榛樿鍊间笉鍚岀殑椤?# 鏈垪鍑虹殑椤硅嚜鍔ㄤ娇鐢?config.example.yaml 榛樿鍊?# 閰嶇疆浼樺厛绾э細鐜鍙橀噺 > 鏈枃浠?> config.example.yaml 榛樿鍊?
+# --- 鏃ュ織婧愰厤缃紙椤圭洰瀹為檯鏃ュ織璺緞涓庢牸寮忥級---
 logs:
-  # 当前日志文件路径（实际运行的日志文件）
-  current_log: "run.stdout.log"
-  # 基线日志文件路径（首次运行留空，全量模式）
-  baseline_log: ""
-  # severity 识别正则（根据实际日志格式定制）
-  # 格式：2026-07-04 14:06:03.887 | WARNING  | [req=-] | module:function:line - message
+  # 褰撳墠鏃ュ織鏂囦欢璺緞锛堝疄闄呰繍琛岀殑鏃ュ織鏂囦欢锛?  current_log: "run.stdout.log"
+  # 鍩虹嚎鏃ュ織鏂囦欢璺緞锛堥娆¤繍琛岀暀绌猴紝鍏ㄩ噺妯″紡锛?  baseline_log: ""
+  # severity 璇嗗埆姝ｅ垯锛堟牴鎹疄闄呮棩蹇楁牸寮忓畾鍒讹級
+  # 鏍煎紡锛?026-07-04 14:06:03.887 | WARNING  | [req=-] | module:function:line - message
   severity_pattern: "(?P<timestamp>\\d{4}-\\d{2}-\\d{2}.*?\\d{2}:\\d{2}:\\d{2}\\.\\d{3})\\s+\\|\\s+(?P<severity>DEBUG|INFO|WARNING|ERROR|CRITICAL)\\s+\\|\\s+\\[req=(?P<request_id>[^\\]]+)\\]\\s+\\|\\s+(?P<module>[^:]+):(?P<function>[^:]+):(?P<line>\\d+)\\s+-\\s+(?P<message>.*)"
-  # 轮转文件命名模式（用于自动定位最新日志文件）
+  # 杞浆鏂囦欢鍛藉悕妯″紡锛堢敤浜庤嚜鍔ㄥ畾浣嶆渶鏂版棩蹇楁枃浠讹級
   rotate_patterns:
     - "run.stdout\\.\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}_\\d+\\.log"
     - "run.stdout\\.log\\.\\d+"
 
-# --- 日志过滤配置（项目特定去重规则）---
+# --- 鏃ュ織杩囨护閰嶇疆锛堥」鐩壒瀹氬幓閲嶈鍒欙級---
 filter:
-  # 动态字段正则列表（去重时替换为 {*} 占位符）
-  # 在默认基础上新增"详情页\s+\d+"和"req-[\d]+-[\da-f]+"覆盖闲鱼日志特征
+  # 鍔ㄦ€佸瓧娈垫鍒欏垪琛紙鍘婚噸鏃舵浛鎹负 {*} 鍗犱綅绗︼級
+  # 鍦ㄩ粯璁ゅ熀纭€涓婃柊澧?璇︽儏椤礬s+\d+"鍜?req-[\d]+-[\da-f]+"瑕嗙洊闂查奔鏃ュ織鐗瑰緛
   dedup_normalize_patterns:
-    - "详情页\\s+\\d+"
+    - "璇︽儏椤礬\s+\\d+"
     - "task[_=]\\s*[\\w-]+"
     - "\\b\\d{4}-\\d{2}-\\d{2}.*?\\d{2}:\\d{2}:\\d{2}\\b"
     - "\\b[\\da-f]{8,}\\b"
     - "req-[\\d]+-[\\da-f]+"
 
-# --- 副作用识别配置（项目特定 harmful 模式）---
+# --- 鍓綔鐢ㄨ瘑鍒厤缃紙椤圭洰鐗瑰畾 harmful 妯″紡锛?--
 side_effect:
   harmful_patterns:
-    - pattern: "(?i)(cookie.*失效|session.*失效).*(重定向|首页|返回 None)"
-      message: "Cookie失效导致采集失败"
+    - pattern: "(?i)(cookie.*澶辨晥|session.*澶辨晥).*(閲嶅畾鍚憒棣栭〉|杩斿洖 None)"
+      message: "Cookie澶辨晥瀵艰嚧閲囬泦澶辫触"
       type_hint: "state_check"
     - pattern: "(?i)(HTTPException).*status=502.*Failed to collect"
-      message: "采集失败导致API异常"
+      message: "閲囬泦澶辫触瀵艰嚧API寮傚父"
       type_hint: "state_check"
     - pattern: "(?i)(timeout|retry_failed).*(abort|give_up|exhausted)"
-      message: "重试耗尽导致放弃"
+      message: "閲嶈瘯鑰楀敖瀵艰嚧鏀惧純"
       type_hint: "retry_failure"
     - pattern: "(?i)(data\\s*loss|inconsistent|corrupt)"
-      message: "数据一致性风险"
+      message: "鏁版嵁涓€鑷存€ч闄?
       type_hint: "state_check"
 
-# --- 并行修复配置（项目特定依赖组）---
+# --- 骞惰淇閰嶇疆锛堥」鐩壒瀹氫緷璧栫粍锛?--
 parallel:
-  # 跨模块依赖组（同组内的文件必须串行处理，避免状态依赖冲突）
-  # 在默认 scheduler_api 基础上调整：collector_search → collector_detail（项目实际路径）
+  # 璺ㄦā鍧椾緷璧栫粍锛堝悓缁勫唴鐨勬枃浠跺繀椤讳覆琛屽鐞嗭紝閬垮厤鐘舵€佷緷璧栧啿绐侊級
+  # 鍦ㄩ粯璁?scheduler_api 鍩虹涓婅皟鏁达細collector_search 鈫?collector_detail锛堥」鐩疄闄呰矾寰勶級
   dependency_groups:
     - name: "scheduler_api"
       files:
@@ -59,7 +54,25 @@ parallel:
         - "src/xianyu_hunter/modules/collector/core.py"
         - "src/xianyu_hunter/web/routes/api_items.py"
 
-# --- 验证闭环配置（项目特定测试命令）---
+# --- 楠岃瘉闂幆閰嶇疆锛堥」鐩壒瀹氭祴璇曞懡浠わ級---
 verify:
-  # 测试命令（仅后端测试，前端测试另行执行）
+  # 娴嬭瘯鍛戒护锛堜粎鍚庣娴嬭瘯锛屽墠绔祴璇曞彟琛屾墽琛岋級
   test_command: "pytest tests/"
+
+# --- 业务参数（子代理修复时注入，避免硬编码）---
+#
+# 如需自定义业务参数，在此添加。每个参数可附加 _scope 标注适用问题类型：
+#
+#   param_name: value
+#
+#     _scope: ["state_check", "retry_failure"]  # 仅指定类型需要
+#
+#   未标注 _scope 的参数为全局参数，所有子代理均接收。
+#
+# 示例：
+#
+#   session_cooldown_seconds: 300
+#
+#     _scope: ["state_check"]
+#
+# 完整参数说明见 config.example.yaml

@@ -1,0 +1,12 @@
+<!-- 隐私政策 -->
+<view class="page-privacy">
+  <view class="privacy-header">
+    <text class="privacy-title">{{title}}</text>
+    <text class="privacy-update">最后更新：2026 年 7 月</text>
+  </view>
+
+  <view class="privacy-section" wx:for="{{sections}}" wx:key="title">
+    <view class="section-title">{{item.title}}</view>
+    <view class="section-content">{{item.content}}</view>
+  </view>
+</view>
