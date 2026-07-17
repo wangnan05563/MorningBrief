@@ -1062,3 +1062,188 @@ realdevice_check:
       check: "manual"
       instruction: "微信开发者工具 → 详情 → 本地设置 → 勾选'不校验合法域名、web-view、TLS 版本以及 HTTPS 证书检查'"
       severity_on_fail: "FAIL"
+
+# --- 异步交互测试配置 ---
+async_interaction:
+  # 异步按钮点击后等待响应的超时（毫秒）
+  # 为什么：测试连接按钮点击后需等待 API 返回，否则读取快照看不到错误提示
+  response_timeout_ms: 5000
+  # 等待响应的轮询间隔（毫秒）
+  poll_interval_ms: 500
+  # 判断按钮已恢复可点击状态的信号（disabled 属性消失）
+  button_ready_signal: "not disabled"
+  # 异步操作期间按钮的禁用状态信号
+  button_busy_signal: "disabled"
+
+# --- 会话保持配置 ---
+session_persistence:
+  # 服务重启后登录态是否丢失
+  # 为什么：服务重启后 cookie/localStorage 仍在但后端 token 失效，需重新登录
+  relogin_after_restart: true
+  # 检测登录态失效的信号
+  auth_failure_signals:
+    - "HTTP 500"
+    - "未授权"
+    - "登录已过期"
+  # 自动重新登录的账号（从 credentials.admin 复用）
+  auto_relogin: true
+
+# --- 配置表单测试配置 ---
+config_form_testing:
+  # 密钥字段的脱敏前缀
+  # 为什么：测试连接时前端回传 ****xxxx 脱敏值，后端需识别并回退到真实密钥
+  masked_value_prefix: "****"
+  # 字段标签禁用词（含义模糊的通用名称）
+  # 为什么：API Key 标签含义模糊，应改为 AccessToken / SecretKey 等具体名称
+  ambiguous_labels:
+    - "API Key"
+    - "App Key"
+    - "Secret"
+  # 密钥字段必须配套的获取入口超链接
+  require_key_acquisition_link: true
+  # 第三方错误码必须可读化
+  third_party_error_code_readable: true
+
+# --- 服务重启验证配置 ---
+service_restart_verification:
+  # 前端构建后是否需要重启后端
+  # 为什么：开发模式下前端构建产物在 admin-web/dist，后端静态文件挂载需重启才生效
+  rebuild_requires_backend_restart: true
+  # 重启后健康检查重试次数
+  health_check_retries: 30
+  # 重启后等待服务就绪的超时（秒）
+  ready_timeout_sec: 30
+
+# --- AI 服务测试扩展 ---
+ai_service_testing:
+  # LLM 连接测试的最小请求参数
+  llm_test_params:
+    max_tokens: 5
+    timeout_sec: 15
+  # TTS 连接测试的鉴权请求参数
+  tts_test_params:
+    timeout_sec: 15
+  # 阿里云 NLS 错误码可读化映射（与后端 NLS_ERROR_HINTS 一致）
+  aliyun_nls_error_hints:
+    40000001: "请确认填写的是 NLS AccessToken，而非 AccessKey Secret"
+    40000010: "阿里云 NLS 免费试用已过期，请在控制台开通正式服务"
+    40000004: "appkey 无效，请确认是 NLS 项目的 AppKey"
+  # LLM 提供商预设列表（与后端 LLM_PRESETS 一致，用于测试时选择预设）
+  llm_presets:
+    - key: "qwen"
+      label: "通义千问"
+    - key: "openai"
+      label: "OpenAI"
+    - key: "deepseek"
+      label: "DeepSeek"
+    - key: "zhipu"
+      label: "智谱 GLM"
+    - key: "moonshot"
+      label: "Moonshot"
+    - key: "ernie"
+      label: "百度文心"
+    - key: "doubao"
+      label: "字节豆包"
+    - key: "ollama"
+      label: "Ollama 本地"
+    - key: "agnes"
+      label: "Agnes AI"
+
+# --- 数据库维护模块测试配置 ---
+# 数据库维护页面预检（白名单表数、表浏览、CRUD、级联删除、导出导入）
+# 复盘来源：2026-07-17 数据库维护模块 18/18 PASS 测试实践
+db_admin_check:
+  # 是否启用数据库维护模块测试
+  enabled: true
+  # 检查阶段：post_test（在常规测试后执行）
+  check_phase: "post_test"
+  # 页面路径（相对 base_url）
+  page_path: "/maintenance/database-admin"
+  # 页面预期文本（用于确认页面加载成功）
+  expected_text: "数据库维护"
+  # 白名单预期表数（与后端 DB_ADMIN_ALLOWED_TABLES 配置一致）
+  expected_table_count: 16
+  # 测试项配置
+  checks:
+    # 表浏览测试
+    table_browse:
+      enabled: true
+      # 点击表名后检查右侧数据是否加载
+      verify_data_loaded: true
+    # CRUD 操作测试
+    crud:
+      enabled: true
+      # 测试新增/编辑/删除的表（选择安全可测试的表，避免破坏核心数据）
+      test_table: "feedback"
+    # 级联删除预览测试
+    cascade_delete:
+      enabled: true
+      # 检查级联预览弹窗是否显示受影响表和记录数
+      verify_preview_dialog: true
+    # 导出导入测试
+    export_import:
+      enabled: true
+      # 导出格式
+      export_format: "json"
+      # 检查敏感字段是否脱敏
+      verify_sensitive_masked: true
+      # 敏感字段脱敏前缀
+      masked_prefix: "****"
+
+# --- 系统清理模块测试配置 ---
+# 系统清理页面预检（dry_run 预览、VACUUM、过期记录清理、审计日志）
+maintenance_check:
+  # 是否启用系统清理模块测试
+  enabled: true
+  # 检查阶段
+  check_phase: "post_test"
+  # 页面路径
+  page_path: "/maintenance/cleanup"
+  # 页面预期文本
+  expected_text: "系统清理"
+  # 测试项配置
+  checks:
+    # dry_run 预览测试
+    dry_run_preview:
+      enabled: true
+      # 默认是否为预览模式（安全优先）
+      default_dry_run: true
+    # VACUUM 测试
+    vacuum:
+      enabled: true
+      # 检查数据库文件大小是否减小
+      verify_size_reduced: true
+    # 过期记录清理测试
+    expired_cleanup:
+      enabled: true
+      # 清理类型列表（与后端 MAINTENANCE_CLEANUP_TYPES 配置一致）
+      cleanup_types:
+        - "expired_logs"
+        - "orphan_files"
+        - "temp_data"
+    # 审计日志验证
+    audit_log:
+      enabled: true
+      # 检查审计日志字段完整性
+      required_fields:
+        - "action"
+        - "table_name"
+        - "record_id"
+        - "operator"
+        - "created_at"
+
+# --- CONFIRM_DELETE 令牌验证配置 ---
+# 危险操作的令牌双重确认验证（删表/清空/VACUUM）
+confirm_token_check:
+  # 是否启用令牌验证测试
+  enabled: true
+  # 检查阶段
+  check_phase: "post_test"
+  # 令牌字符串（与后端 DB_ADMIN_CONFIRM_TOKEN 配置一致）
+  token_string: "CONFIRM_DELETE"
+  # 审计日志查询端点
+  audit_log_endpoint: "/api/v1/audit-log"
+  # 审计日志查询条数（查询最近 N 条）
+  audit_log_limit: 50
+  # 令牌比较方式验证（后端应使用 hmac.compare_digest）
+  verify_hmac_compare: true

@@ -519,4 +519,207 @@
 - 适用：所有带顶部导航的后台页面
 - 不适用：无顶部导航的独立页面
 
+## 规范 56-65：2026-07-17 数据库维护模块开发复盘新增规范
+
+### 规范 56：SQLAlchemy Inspector run_sync 陷阱
+
+**run_sync 回调参数是 Session 而非 Connection，使用 Inspector 时必须先 .connection() 转换。**
+
+- 为什么：`AsyncSession.run_sync(callback)` 的 callback 参数是同步 `Session` 对象，但 `sqlalchemy.inspect()` 需要的是 `Connection` 对象。直接将 Session 传给 Inspector 会报错或返回不完整结果。
+- 判断信号：grep `run_sync` + `inspect(` 检查回调内是否有 `.connection()` 转换
+- 正确做法：
+  ```python
+  async def get_table_schema(table_name: str):
+      async with AsyncSession() as session:
+          def _inspect(sync_session):
+              # Session → Connection 转换
+              conn = sync_session.connection()
+              inspector = inspect(conn)
+              return inspector.get_columns(table_name)
+          return await session.run_sync(_inspect)
+  ```
+- 错误做法：
+  ```python
+  # ❌ 直接将 Session 传给 Inspector
+  def _inspect(sync_session):
+      inspector = inspect(sync_session)  # 报错或返回不完整
+  ```
+- 适用：动态表结构反射、数据库维护模块、未知表浏览
+- 不适用：已知表结构（应直接用 ORM 模型的 `__table__.columns`）
+
+### 规范 57：main.py 导入完整性
+
+**main.py 中使用到的所有中间件、函数、配置必须显式导入，启动前必须预检。**
+
+- 为什么：main.py 作为应用入口，使用了 RequestIdMiddleware、setup_logging、register_exception_handlers、get_settings 等符号。如果使用了但未导入，服务启动时直接 NameError 崩溃，且日志可能为空（因为 logging 未初始化）。
+- 判断信号：
+  - grep main.py 中使用的符号是否都有对应 `from app.xxx import yyy`
+  - 启动前预检：`python -m py_compile main.py` + `python -c "from app.main import app"`
+- 正确做法：
+  ```python
+  from app.config import get_settings
+  from app.core.exceptions import register_exception_handlers
+  from app.core.logging_setup import setup_logging
+  from app.middleware.request_id import RequestIdMiddleware
+  from app.paths import resolve_admin_dist
+  ```
+- 适用：所有应用入口文件（main.py / launcher.py）
+- 不适用：模块内部文件（Python 导入链会自然检查）
+
+### 规范 58：CONFIRM_DELETE 令牌双重确认
+
+**危险操作（删表/清空/VACUUM）必须要求输入 CONFIRM_DELETE 令牌，令牌通过配置文件管理。**
+
+- 为什么：危险操作一旦执行不可逆。仅靠按钮点击确认不够安全（误点），必须要求用户输入特定令牌字符串（如 `CONFIRM_DELETE`），形成双重确认。令牌值通过配置文件管理，禁止硬编码。
+- 判断信号：grep 危险操作端点（delete/clear/vacuum/truncate）是否检查 `confirm_token` 参数
+- 正确做法：
+  ```python
+  @router.delete("/tables/{table_name}/rows")
+  async def delete_rows(table_name: str, confirm_token: str = Body(...)):
+      if confirm_token != settings.CONFIRM_DELETE_TOKEN:
+          raise BizError("确认令牌不匹配")
+      # 执行删除
+  ```
+- 适用：所有危险操作（删除表、清空数据、VACUUM、DROP、TRUNCATE）
+- 不适用：普通增删改查、只读操作
+
+### 规范 59：敏感字段动态脱敏
+
+**表数据导出时必须脱敏敏感字段，采用静态字段名 + 动态字段名匹配双重策略。**
+
+- 为什么：数据库维护模块导出表数据时，password_hash / token / secret 等字段必须脱敏。但仅靠静态字段名列表无法覆盖动态表（如 ai_config 表的 config_value 字段可能含密钥）。必须同时用字段名匹配（含 password/secret/token/key 的字段名）和值匹配。
+- 判断信号：grep 导出函数是否有脱敏逻辑，是否仅静态字段名匹配
+- 正确做法：
+  ```python
+  SENSITIVE_FIELD_PATTERNS = ["password", "secret", "token", "api_key", "access_key"]
+
+  def mask_sensitive(row: dict) -> dict:
+      for key in row:
+          if any(p in key.lower() for p in SENSITIVE_FIELD_PATTERNS):
+              row[key] = "****"
+      return row
+  ```
+- 适用：表数据导出、数据库维护、日志记录
+- 不适用：内部数据传输（已加密通道）
+
+### 规范 60：应用层级联删除策略
+
+**删除主表记录时必须同步处理从表，级联策略：cascade（删除关联行）+ set_null（置空外键）。**
+
+- 为什么：数据库级 ON DELETE CASCADE 不够灵活（无法区分 cascade 和 set_null 策略），且 SQLite 对外键级联支持有限。应用层级联可以精细控制每张从表的处理方式。
+- 判断信号：grep `db.delete(main)` 后是否有对从表的处理逻辑
+- 正确做法：
+  ```python
+  async def delete_workflow(db, workflow_id):
+      # cascade: 删除关联行
+      await db.execute(delete(Material).where(Material.workflow_id == workflow_id))
+      await db.execute(delete(Script).where(Script.workflow_id == workflow_id))
+      # set_null: 置空外键
+      await db.execute(update(Review).where(Review.workflow_id == workflow_id).values(workflow_id=None))
+      # 删除主表
+      await db.execute(delete(Workflow).where(Workflow.id == workflow_id))
+  ```
+- 适用：需要精细控制级联策略的场景、SQLite 数据库
+- 不适用：简单外键关系（可用数据库级 ON DELETE CASCADE）
+
+### 规范 61：VACUUM AUTOCOMMIT 模式
+
+**SQLite VACUUM 必须在 AUTOCOMMIT 隔离级别执行，禁止在事务内执行。**
+
+- 为什么：VACUUM 是 SQLite 特殊命令，需要重建整个数据库文件，不能在事务内执行。如果在 `async with session.begin()` 事务块内执行 VACUUM，会报 `OperationalError: cannot VACUUM from within a transaction`。
+- 判断信号：grep `VACUUM` 检查是否在 `async with session.begin()` 或 `async with engine.begin()` 事务块内
+- 正确做法：
+  ```python
+  # 方式 1：AUTOCOMMIT 隔离级别
+  async with engine.connect() as conn:
+      await conn.execution_options(isolation_level="AUTOCOMMIT")
+      await conn.execute(text("VACUUM"))
+
+  # 方式 2：VACUUM INTO（不需 AUTOCOMMIT）
+  await session.execute(text("VACUUM INTO :path"), {"path": backup_path})
+  ```
+- 适用：SQLite 数据库压缩、系统清理模块
+- 不适用：MySQL（用 OPTIMIZE TABLE）、PostgreSQL（用 VACUUM，可在事务外执行）
+
+### 规范 62：bindparam expanding IN 列表
+
+**IN 查询的参数列表必须用 bindparam(expanding=True)，禁止字符串拼接。**
+
+- 为什么：SQLAlchemy 异步模式下，IN 查询的参数列表如果用字符串拼接（如 `f"IN ({','.join(ids)})"`），会导致 SQL 注入风险和参数绑定失败。必须用 `bindparam(expanding=True)` 让 SQLAlchemy 自动处理变长参数。
+- 判断信号：grep `IN (` 后跟字符串拼接而非 `bindparam(expanding=True)`
+- 正确做法：
+  ```python
+  from sqlalchemy import bindparam
+
+  stmt = select(Material).where(
+      Material.id.in_(bindparam("ids", expanding=True))
+  )
+  result = await session.execute(stmt, {"ids": id_list})
+  ```
+- 适用：所有 IN 查询参数化
+- 不适用：固定列表 IN 查询（如 `IN (1, 2, 3)`，但仍建议参数化）
+
+### 规范 63：数据库维护白名单机制
+
+**数据库维护操作必须基于白名单（允许操作的表清单），白名单通过配置文件管理。**
+
+- 为什么：数据库维护模块如果允许操作所有表，可能误操作系统表（sqlite_sequence、sqlite_master）或敏感表。必须维护一个白名单，只允许操作白名单内的表。白名单通过配置文件管理，禁止硬编码。
+- 判断信号：grep 表操作是否检查白名单
+- 正确做法：
+  ```python
+  # 配置文件
+  DB_ADMIN_ALLOWED_TABLES = ["workflow", "material", "script", "review", ...]
+
+  # 服务层
+  def _validate_table(table_name: str):
+      if table_name not in settings.DB_ADMIN_ALLOWED_TABLES:
+          raise BizError(f"表 {table_name} 不在白名单内")
+  ```
+- 适用：数据库管理后台、表 CRUD 操作
+- 不适用：ORM 模型直接操作（已通过模型定义隔离）
+
+### 规范 64：dry_run 预览模式
+
+**清理/删除类操作必须提供 dry_run 预览模式，预览模式下不执行实际操作。**
+
+- 为什么：清理/删除操作不可逆，用户需要先预览将要清理的内容（哪些记录、多少条、占用多少空间），确认后再执行。dry_run 模式返回预览结果但不执行实际删除。
+- 判断信号：grep 清理/删除函数是否支持 `dry_run` 参数
+- 正确做法：
+  ```python
+  async def cleanup_expired_logs(db, days: int, dry_run: bool = False):
+      stmt = select(Log).where(Log.created_at < utcnow_naive() - timedelta(days=days))
+      logs = (await db.execute(stmt)).scalars().all()
+      if dry_run:
+          return {"count": len(logs), "preview": [log.id for log in logs[:10]]}
+      for log in logs:
+          await db.delete(log)
+  ```
+- 适用：清理/删除类操作（过期记录、日志、缓存）
+- 不适用：普通增删改查（不需要预览）
+
+### 规范 65：审计日志完整覆盖
+
+**所有 DML 操作和清理操作必须记录审计日志，包含操作类型/表名/记录 ID/操作人/时间戳。**
+
+- 为什么：数据库维护和系统清理操作需要可追溯。审计日志记录谁在什么时间对哪张表的哪些记录做了什么操作，便于事后审计和问题排查。
+- 判断信号：grep `db.delete`/`db.execute(delete(...))` 后是否有 `audit_log` 记录
+- 正确做法：
+  ```python
+  async def _log_audit(db, action: str, table: str, record_id: str, user: str):
+      audit = AuditLog(
+          action=action,  # create/update/delete/vacuum/cleanup
+          table_name=table,
+          record_id=str(record_id),
+          operator=user,
+          created_at=utcnow_naive(),
+      )
+      db.add(audit)
+
+  async def delete_row(db, table_name, row_id, user):
+      await db.execute(delete(...))
+      await _log_audit(db, "delete", table_name, row_id, user)
+  ```
+- 适用：所有 DML 操作和清理操作
+- 不适用：查询操作（SELECT 不需要审计）
+
 

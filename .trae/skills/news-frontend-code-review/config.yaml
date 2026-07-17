@@ -1,4 +1,4 @@
-scope:
+﻿scope:
   include_paths:
   - admin-web/src/**/*.vue
   - admin-web/src/**/*.js
@@ -184,6 +184,36 @@ hard_constraints:
     severity: HIGH
     auto_fix: false
     category: channel_control_align
+  - name: responsive_split_layout_required
+    pattern: el-aside\s+width="200px"
+    message: 左右分栏布局必须有响应式断点（@media 或 :xs/:sm），禁止固定宽度无响应式
+    severity: MEDIUM
+    auto_fix: false
+    category: responsive_layout
+  - name: danger_op_must_use_prompt
+    pattern: ElMessageBox\.confirm.*删除|ElMessageBox\.confirm.*清空|ElMessageBox\.confirm.*VACUUM
+    message: 危险操作（删除/清空/VACUUM）必须使用 ElMessageBox.prompt 要求输入 CONFIRM_DELETE 令牌，禁止仅用 ElMessageBox.confirm
+    severity: CRITICAL
+    auto_fix: false
+    category: danger_op_confirm_token
+  - name: cascade_preview_before_delete
+    pattern: api\.delete\(|api\.deleteTable\(
+    message: 含外键关联的删除操作必须先调用级联预览 API（cascade-preview），展示受影响表名和记录数后再执行删除
+    severity: HIGH
+    auto_fix: false
+    category: cascade_preview
+  - name: cleanup_must_support_dry_run
+    pattern: api\.cleanup\(
+    message: 系统清理页面必须支持 dry_run 参数，默认开启预览模式，用户手动切换到执行模式
+    severity: HIGH
+    auto_fix: false
+    category: dry_run_preview
+  - name: audit_log_page_required
+    pattern: AuditLog|audit-log
+    message: 数据库维护和系统清理模块必须有审计日志页面，展示 action/table_name/record_id/operator/created_at 列，支持时间范围筛选
+    severity: MEDIUM
+    auto_fix: false
+    category: audit_log
   block_on_violation: true
 abstraction_thresholds:
   inline_style_repeat: 3
@@ -372,3 +402,38 @@ page_load_preset_matching:
   enabled: true
   require_preset_match_after_load: true
   match_field: base_url
+review_dimensions:
+- id: "RD-FE-16"
+  name: "表单字段标签语义明确性"
+  description: "表单字段标签必须明确字段含义，避免使用 API Key 等通用名称混淆不同凭证"
+  severity: "major"
+  rules:
+  - id: "R-49-1"
+    description: "el-form-item label 禁止使用通用名称 API Key（应改为 AccessToken / SecretKey / AppKey 等具体名称）"
+    grep_pattern: "el-form-item\\s+label=\"API Key\""
+    auto_fix: false
+  - id: "R-49-2"
+    description: "密钥字段必须提供 placeholder 说明字段的具体含义"
+    grep_pattern: "el-form-item\\s+label=\"(API Key|App Key|Secret)\""
+    auto_fix: false
+  applicable_files:
+  - "*.vue"
+  applicable_dirs:
+  - "admin-web/src/"
+- id: "RD-FE-17"
+  name: "密钥获取入口超链接规范化"
+  description: "所有配置表单中的密钥字段必须提供官方获取入口超链接"
+  severity: "minor"
+  rules:
+  - id: "R-50-1"
+    description: "含密钥字段的表单必须有至少一个 el-link href 指向官方控制台"
+    grep_pattern: "el-form-item\\s+label=\".*(Key|Token|Secret)\""
+    auto_fix: false
+  - id: "R-50-2"
+    description: "el-link 必须设置 target=\"_blank\" 在新窗口打开"
+    grep_pattern: "el-link[^>]*href="
+    auto_fix: false
+  applicable_files:
+  - "*.vue"
+  applicable_dirs:
+  - "admin-web/src/"

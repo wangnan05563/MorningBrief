@@ -18,11 +18,11 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 | 维度 | 内容 |
 |------|------|
 | 产品定位 | AI 驱动的播客新闻分发平台 |
-| 后端技术 | Python 3.11 + FastAPI + SQLAlchemy 2.0 + aiomysql + Redis + APScheduler |
+| 后端技术 | Python 3.12 + FastAPI + SQLAlchemy 2.0 + aiosqlite + TTLCache + APScheduler |
 | 前端技术 | Vue 3 + Element Plus + Vite + Pinia |
 | 小程序 | 微信小程序原生（JS/WXML/WXSS） |
 | AI 服务 | 通义千问 LLM + 阿里云 TTS + 腾讯云 COS |
-| 部署方式 | Docker Compose（nginx/app/mysql/redis） |
+| 部署方式 | 单机 exe（PyInstaller 6.x）/ 开发模式（venv → 系统 Python） |
 | 核心链路 | RSS/搜索抓取 → LLM 改写 → TTS 合成 → 音频拼接 → 审核发布 → 小程序播放 |
 
 ## 技术栈速查
@@ -170,6 +170,17 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 | 54 | 原生 RSS 优先原则 | RSS 源配置 | rss.yaml 优先使用 rsshub.app 第三方转换而非原生 RSS | HIGH |
 | 55 | 频道级配置与素材同步 | 频道 RSS 源变更 | 修改 rss.yaml name 后未同步数据库 channel.rss_sources JSON | HIGH |
 
+| 56 | SQLAlchemy Inspector run_sync 陷阱 | 动态表结构反射/数据库维护模块 | `run_sync` 回调内使用 `inspect(` 但无 `.connection()` 转换 | CRITICAL |
+| 57 | main.py 导入完整性 | 服务启动/中间件注册 | main.py 中使用 `RequestIdMiddleware`/`setup_logging` 等符号但无对应 import | CRITICAL |
+| 58 | CONFIRM_DELETE 令牌双重确认 | 危险操作（删表/清空/VACUUM） | 危险操作端点未校验 `confirm_token` 参数 | CRITICAL |
+| 59 | 敏感字段动态脱敏 | 表数据导出/数据库维护 | 导出函数无脱敏逻辑，或仅静态字段名匹配 | HIGH |
+| 60 | 应用层级联删除策略 | 删除主表记录 | `db.delete(main)` 后无对从表的 cascade/set_null 处理 | CRITICAL |
+| 61 | VACUUM AUTOCOMMIT 模式 | SQLite 压缩/系统清理 | `VACUUM` 在 `async with session.begin()` 事务块内 | CRITICAL |
+| 62 | bindparam expanding IN 列表 | IN 查询参数化 | `IN (` 后跟字符串拼接而非 `bindparam(expanding=True)` | HIGH |
+| 63 | 数据库维护白名单机制 | 数据库管理后台 | 表操作未检查白名单（允许操作的表清单） | CRITICAL |
+| 64 | dry_run 预览模式 | 清理/删除类操作 | 清理函数不支持 `dry_run=True` 参数 | HIGH |
+| 65 | 审计日志完整覆盖 | 所有 DML 和清理操作 | `db.delete`/`db.execute(delete(...))` 后无 `audit_log` 记录 | HIGH |
+
 **状态分类**：CRITICAL（必须遵守）/ HIGH（强烈建议）/ MEDIUM（建议）/ LOW（可选）/ INFO（参考）
 
 ## 四维度复盘
@@ -193,7 +204,7 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 
 **做得好的**：
 - 类型注解覆盖全面，便于 mypy/ruff 静态检查
-- 异步规范统一（async/await + httpx.AsyncClient + aiomysql）
+- 异步规范统一（async/await + httpx.AsyncClient + aiosqlite）
 - 错误分类清晰（AuthError/BusinessError/SystemError），前端解析方便
 - 日志规范统一（结构化日志 + traceback 保留）
 
@@ -357,6 +368,55 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 
 **适用场景**：频道级 RSS 源配置管理
 **不适用场景**：全局 RSS 源（不按频道隔离）
+
+### 维度 7：数据库维护模块开发与测试（2026-07-17 复盘）
+
+> 以下复盘基于数据库维护 + 系统清理模块开发与 news-auto-testing 18/18 PASS 测试实践。
+
+**成功执行任务的完整步骤**：
+
+1. 需求确认（AskUserQuestion 明确 4 项决策：功能范围/表浏览范围/权限控制/危险操作策略）
+2. 参考已有项目（17_xianyu）的设计模式
+3. 后端开发：AuditLog 模型 → db_admin_service（白名单/反射/CRUD/级联/脱敏/审计）→ maintenance_service（dry_run/VACUUM/过期清理）→ 路由层 → 配置项
+4. 前端开发：API 封装 → DatabaseAdmin.vue（左右分栏）→ Maintenance.vue（dry_run 预览）→ 路由注册
+5. 测试（news-auto-testing）：配置路径核对 → 服务启动预检 → 6 阶段测试 18/18 PASS
+
+**不确定性与失败点**：
+
+| 失败点 | 根因 | 修复方式 | 对应规范 |
+|--------|------|----------|----------|
+| config.yaml 审计日志路径错误 | `/audit-logs`（复数）与后端 `/audit-log`（单数）不一致 | 修正配置文件 | 63 白名单 |
+| main.py RequestIdMiddleware 未定义 | 既有代码使用但未导入 | 添加 `from app.middleware.request_id import RequestIdMiddleware` | 57 导入完整性 |
+| main.py setup_logging 未定义 | 既有代码使用但未导入 | 添加 `from app.core.logging_setup import setup_logging` | 57 导入完整性 |
+| SQLAlchemy Inspector 使用陷阱 | `run_sync` 回调参数是 Session 而非 Connection | 回调内先 `session.connection()` 获取 Connection 再传给 Inspector | 56 run_sync 陷阱 |
+| VACUUM 操作失败 | 在事务内执行 VACUUM | 使用 AUTOCOMMIT 隔离级别或 `VACUUM INTO` | 61 VACUUM 模式 |
+| 敏感字段脱敏不完整 | 静态字段名匹配无法覆盖 ai_config 等动态表 | 静态字段名 + 动态字段名匹配（含 password/secret/token/key） | 59 动态脱敏 |
+
+**可抽象的固定流程**：
+
+1. **数据库维护模块开发流程**：白名单机制（配置驱动）→ 动态反射表结构（Inspector + run_sync + .connection()）→ CRUD 操作（bindparam expanding）→ 应用层级联删除（cascade + set_null）→ 敏感字段动态脱敏 → 审计日志记录 → CONFIRM_DELETE 令牌双重确认
+2. **系统清理模块开发流程**：dry_run 预览模式 → VACUUM AUTOCOMMIT → 过期记录清理（基于时间戳）→ 日志/缓存清理 → 审计日志记录
+3. **测试预检流程**：配置文件路径核对（API 端点路径与后端路由一致）→ main.py 导入完整性检查（py_compile + import）→ 服务健康检查（轮询）→ 专项测试
+
+**固定判断逻辑**：
+
+- 数据库维护安全 = 表在白名单 + 敏感字段脱敏 + CONFIRM_DELETE 令牌
+- 系统清理安全 = dry_run 预览 + 审计日志记录
+- SQLAlchemy Inspector 正确使用 = `run_sync` 回调中先 `.connection()` 转换 Session 为 Connection
+- VACUUM 正确执行 = AUTOCOMMIT 隔离级别（禁止在事务内）
+- main.py 启动成功 = 所有使用到的中间件/函数都已显式导入
+
+**适用场景与不适用场景**：
+
+| 流程 | 适用场景 | 不适用场景 |
+|------|---------|-----------|
+| 数据库维护模块 | SQLite/MySQL 单机应用、需要可视化表管理的后台 | 分布式数据库、云数据库（已有原生管理工具） |
+| 系统清理模块 | 长期运行的服务、SQLite 数据库、日志/缓存累积场景 | 内存数据库、无持久化数据的服务 |
+| CONFIRM_DELETE 令牌 | 所有危险操作（删除表、清空数据、VACUUM） | 普通增删改查、只读操作 |
+| SQLAlchemy Inspector 反射 | 动态表结构查询、未知表浏览 | 已知表结构（应直接用 ORM 模型） |
+| VACUUM AUTOCOMMIT | SQLite 数据库压缩 | MySQL（用 OPTIMIZE TABLE）、PostgreSQL（用 VACUUM） |
+| 应用层级联删除 | 需要精细控制级联策略的场景 | 简单外键关系（可用数据库级 ON DELETE CASCADE） |
+| 敏感字段动态脱敏 | 表结构动态变化的场景 | 固定表结构（可用静态字段名匹配） |
 
 ### 附录：20_News 编码规范与部署标准
 

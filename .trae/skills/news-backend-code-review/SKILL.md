@@ -1192,3 +1192,246 @@ CRAWLER_UA = settings.CRAWLER_USER_AGENT or 'Mozilla/5.0 ...'  # 浏览器 UA �
 
 适用场景：所有 RSS 抓取系统、爬虫数据源验证、第三方转换服务依赖诊断
 不适用场景：API 接口验证（JSON 响应）、内部服务（无 DNS/限流问题）
+
+---
+
+## 新增审查维度：模板字符串转义与密钥处理（对应编码规范 45-48）
+
+> 以下维度来源于 2026-07-17 编码规范 45-48 补充，覆盖模板字符串花括号转义、API Key 脱敏值回传、第三方服务错误码可读化映射、Settings 字段四端同步等高频故障场景。配置详见 `config.yaml#review_dimensions` 对应条目（RD-16 ~ RD-19）。
+
+### 维度 59：模板字符串字面花括号转义（对应编码规范 45，RD-16）
+
+**为什么**：Python `str.format()` 模板中，`{xxx}` 会被当作占位符尝试用 `format()` 参数替换。如果模板内容本身需要输出字面花括号（如 SQL JSON 函数 `JSON_EXTRACT(data, '$.{field}')`、HTTP 响应体示例 `{"code": 0}`），未转义的字面 `{xxx}` 会触发 `KeyError` 或 `IndexError`，导致服务崩溃。字面花括号必须双写转义为 `{{xxx}}`，`format()` 才会输出单层 `{xxx}`。
+
+**判断信号**（grep 模式，见 `config.yaml#review_dimensions[RD-16].rules[0].grep_pattern`）：
+- Grep `\.format\(.*\{[a-z_]+\}` 定位 `.format()` 调用附近含 `{xxx}` 字面占位符的字符串
+- 误报提示：模板中的 `{name}` `{description}` 若是 format 参数则不算违规（见 `false_positive_hints`）
+
+**违规示例**：
+```python
+# ❌ 错误：字面 {field} 未转义，format() 尝试替换触发 KeyError
+template = "JSON_EXTRACT(data, '$.{field}')".format(field=col)
+# ❌ 错误：字面 {code} 未转义
+body = '{"code": 0}'.format(code=0)
+```
+
+**合规示例**：
+```python
+# ✅ 正确：字面花括号双写转义 {{field}}，format() 输出单层 {field}
+template = "JSON_EXTRACT(data, '$.{{field}}')".format(field=col)
+# ✅ 正确：字面花括号双写转义
+body = '{{"code": 0}}'.format()
+```
+
+**修复建议**：所有走 `str.format()` 的模板字符串中，凡是需要原样输出 `{` `}` 的位置，一律双写为 `{{` `}}`；若模板无需任何参数替换，改用普通字符串而非 `.format()`。
+
+适用场景：所有使用 `str.format()` / `.format_map()` 的 Python 字符串模板
+不适用场景：f-string（`f"{var}"` 本身就是占位符）、`string.Template`（用 `$var` 语法）
+
+### 维度 60：API Key 脱敏值回传检测（对应编码规范 46，RD-17）
+
+**为什么**：前端展示已保存的密钥时通常会脱敏为 `****xxxx`（仅保留后 4 位）。用户在未修改密钥的情况下点击"测试连接"时，前端会把脱敏值原样回传后端。如果后端 `test_xxx_connection(api_key=...)` 直接用脱敏值调用第三方 API，必然鉴权失败，用户误以为密钥错误。后端必须判断入参是否为脱敏值，若是则回退到已持久化的真实密钥。
+
+**判断信号**（grep 模式，见 `config.yaml#review_dimensions[RD-17].rules[0].grep_pattern`）：
+- Grep `def test_.*_connection.*api_key` 定位测试连接函数
+- 检查函数体内是否调用 `_is_masked(api_key)` 或类似脱敏值判断，若否则违规
+
+**违规示例**：
+```python
+# ❌ 错误：直接用前端回传的脱敏值调用第三方 API，鉴权失败
+async def test_tts_connection(api_key: str) -> bool:
+    client = TTSClient(api_key=api_key)  # api_key 可能是 ****xxxx
+    return await client.ping()
+```
+
+**合规示例**：
+```python
+# ✅ 正确：判断脱敏值，回退到已保存的真实密钥
+async def test_tts_connection(api_key: str, config_id: int) -> bool:
+    if _is_masked(api_key):
+        # 前端回传的是脱敏值，回退到数据库已保存的真实密钥
+        api_key = await _load_saved_api_key(config_id)
+    client = TTSClient(api_key=api_key)
+    return await client.ping()
+```
+
+**修复建议**：所有接收前端密钥字段的测试连接 / 保存接口，必须先 `_is_masked()` 判断，脱敏值则从数据库回退到真实值；`_is_masked` 实现须可泛化（匹配 `****` 前缀 + 任意后缀），不绑定具体服务商。
+
+适用场景：所有接收前端回传密钥的后端测试连接 / 校验接口
+不适用场景：首次录入密钥（前端必传真实值，无需回退）
+
+### 维度 61：第三方服务错误码可读化映射（对应编码规范 47，RD-18）
+
+**为什么**：第三方服务（阿里云 NLS / OpenAI / DeepSeek 等）返回的错误码是裸字符串或数字（如 `NlsHttp400`、`invalid_api_key`、`40001`），直接抛给前端用户无法理解，运营无法定位问题。后端必须维护 `ERROR_CODE_HINTS` 映射表，将第三方错误码转换为可读中文提示，未命中映射时回退到通用提示并记录原始错误码日志。
+
+**判断信号**（grep 模式，见 `config.yaml#review_dimensions[RD-18].rules[0].grep_pattern`）：
+- Grep `error_code.*data\.get\("error_code"\)` 定位直接透传第三方错误码的位置
+- 检查同模块是否存在 `ERROR_CODE_HINTS` 映射表，若否则违规
+
+**违规示例**：
+```python
+# ❌ 错误：直接透传第三方错误码，前端用户无法理解
+async def call_tts(payload):
+    data = await client.post(...)
+    if data.get("error_code"):
+        raise BizError(f"TTS 失败：{data.get('error_code')}")  # 裸码 NlsHttp400
+```
+
+**合规示例**：
+```python
+# ✅ 正确：维护 ERROR_CODE_HINTS 映射表，转换为可读中文提示
+ERROR_CODE_HINTS = {
+    "NlsHttp400": "阿里云 NLS 请求参数错误，请检查 AppKey / Token",
+    "NlsAuthFailed": "阿里云 NLS 鉴权失败，请检查 AccessKey",
+    "invalid_api_key": "OpenAI API Key 无效，请重新填写",
+}
+
+async def call_tts(payload):
+    data = await client.post(...)
+    code = data.get("error_code")
+    if code:
+        hint = ERROR_CODE_HINTS.get(code, "第三方服务调用失败")
+        logger.warning("第三方服务错误码: %s", code)  # 记录原始码便于排查
+        raise BizError(f"{hint}（错误码：{code}）")
+```
+
+**修复建议**：每接入一个第三方服务必须同步建立 `ERROR_CODE_HINTS` 字典；映射表须配置驱动（落在 `config.yaml` 或服务模块顶部常量），禁止散落在业务分支；未命中映射时记录原始错误码日志并回退通用提示。
+
+适用场景：所有调用第三方 API（LLM / TTS / COS / 短信 / OCR 等）的后端服务
+不适用场景：内部模块错误码（已在业务异常体系中定义）
+
+### 维度 62：Settings 字段四端同步（对应编码规范 48，RD-19）
+
+**为什么**：新增配置项时，`Settings` 类（`core/config.py`）、ORM 模型（`models/`）、前端表单字段、服务层 `CONFIG_KEY_MAP` 必须同步。任一端缺失会导致：①`setattr(settings, xxx, value)` 写入未定义属性 → Pydantic Settings 校验失败或静默丢弃；②`CONFIG_KEY_MAP` 值指向不存在的 Settings 属性 → 配置无法生效；③前端表单字段名与 Settings 属性不一致 → 保存的值被忽略。这与维度 17 / 28（配置键一致性）互补，本维度聚焦"新增配置时四端同步"的增量检查。
+
+**判断信号**（grep 模式，见 `config.yaml#review_dimensions[RD-19].rules`）：
+- Grep `setattr\(settings,` 定位动态写入 settings 的位置，检查第二参数是否在 `Settings` 类中定义（规则 R-48-1）
+- Grep `CONFIG_KEY_MAP` 定位配置键映射表，检查所有值（Settings 属性名）是否在 `Settings` 类中存在（规则 R-48-2）
+
+**违规示例**：
+```python
+# ❌ 错误：setattr 写入 Settings 类未定义的属性，Pydantic 静默丢弃
+setattr(settings, "tts_volume_new", value)  # Settings 类无 tts_volume_new 字段
+
+# ❌ 错误：CONFIG_KEY_MAP 值指向不存在的 Settings 属性
+CONFIG_KEY_MAP = {
+    "tts_volume": "tts_vol",  # Settings 类无 tts_vol，应为 tts_volume
+}
+```
+
+**合规示例**：
+```python
+# ✅ 正确：Settings 类先定义字段，再被 setattr / CONFIG_KEY_MAP 引用
+class Settings(BaseSettings):
+    tts_volume: float = 0.8  # 先在 Settings 类定义
+
+# setattr 引用的属性已在 Settings 类定义
+setattr(settings, "tts_volume", value)
+
+# CONFIG_KEY_MAP 值与 Settings 属性名一致
+CONFIG_KEY_MAP = {
+    "tts_volume": "tts_volume",  # 与 Settings.tts_volume 一致
+}
+```
+
+**修复建议**：新增配置项时按四端同步清单逐项检查：①`Settings` 类定义字段 ②ORM 模型 / 配置表新增列 ③前端表单新增控件且字段名与 Settings 属性一致 ④服务层 `CONFIG_KEY_MAP` 新增映射且值指向已定义的 Settings 属性。PR review 时 reviewer 必须对照 `Settings` 类源文件验证 `setattr` 与 `CONFIG_KEY_MAP` 引用的属性存在。
+
+适用场景：所有动态写入 settings 的配置管理接口、所有维护 CONFIG_KEY_MAP 的服务层
+不适用场景：只读配置（不涉及 setattr / CONFIG_KEY_MAP）
+
+
+---
+
+## 新增审查维度：数据库维护模块开发规范（对应编码规范 56-65）
+
+> 以下维度来源于 2026-07-17 数据库维护 + 系统清理模块开发复盘。配置详见 `config.yaml#hard_constraints.rules`。
+
+### 维度 63：SQLAlchemy Inspector run_sync 陷阱（对应编码规范 56）
+
+**为什么**：`run_sync` 回调参数是 Session 而非 Connection，`inspect()` 需要 Connection。直接传 Session 会报错或返回不完整。
+
+**检查信号**：Grep `run_sync` + `inspect(` 检查回调内是否有 `.connection()` 转换
+
+适用场景：动态表结构反射、数据库维护模块
+不适用场景：已知表结构（应直接用 ORM 模型）
+
+### 维度 64：main.py 导入完整性（对应编码规范 57）
+
+**为什么**：main.py 使用了 `RequestIdMiddleware`/`setup_logging` 等符号但未导入，启动时 NameError 崩溃。
+
+**检查信号**：Grep main.py 中使用的符号是否都有对应 import；预检 `python -c "from app.main import app"`
+
+适用场景：所有应用入口文件
+不适用场景：模块内部文件
+
+### 维度 65：CONFIRM_DELETE 令牌双重确认（对应编码规范 58）
+
+**为什么**：危险操作不可逆，仅靠按钮确认不够安全，必须输入令牌字符串。令牌通过配置文件管理。
+
+**检查信号**：Grep 危险操作端点是否检查 `confirm_token`；比较应用 `hmac.compare_digest`
+
+适用场景：所有危险操作（删表/清空/VACUUM/DROP）
+不适用场景：普通增删改查
+
+### 维度 66：敏感字段动态脱敏（对应编码规范 59）
+
+**为什么**：仅静态字段名匹配无法覆盖动态表（如 `ai_config.config_value`），必须同时用字段名模式匹配。
+
+**检查信号**：Grep 导出函数脱敏逻辑是否仅静态字段名匹配
+
+适用场景：表数据导出、数据库维护
+不适用场景：内部数据传输
+
+### 维度 67：应用层级联删除策略（对应编码规范 60）
+
+**为什么**：数据库级 CASCADE 不够灵活，应用层级联可精细控制 cascade + set_null。
+
+**检查信号**：Grep `db.execute(delete(Model))` 后是否有对从表的处理逻辑
+
+适用场景：需要精细控制级联策略、SQLite
+不适用场景：简单外键关系（可用数据库级 CASCADE）
+
+### 维度 68：VACUUM AUTOCOMMIT 模式（对应编码规范 61）
+
+**为什么**：VACUUM 不能在事务内执行，会报 `OperationalError: cannot VACUUM from within a transaction`。
+
+**检查信号**：Grep `VACUUM` 是否在事务块内；检查是否设置 AUTOCOMMIT 隔离级别
+
+适用场景：SQLite 压缩、系统清理
+不适用场景：MySQL（用 OPTIMIZE TABLE）
+
+### 维度 69：bindparam expanding IN 列表（对应编码规范 62）
+
+**为什么**：IN 查询字符串拼接有 SQL 注入风险，必须用 `bindparam(expanding=True)`。
+
+**检查信号**：Grep `IN (` 后跟字符串拼接；Grep `','.join(ids)` 用于 IN 查询
+
+适用场景：所有 IN 查询参数化
+不适用场景：固定列表 IN 查询
+
+### 维度 70：数据库维护白名单机制（对应编码规范 63）
+
+**为什么**：允许操作所有表可能误操作系统表，必须维护白名单，通过配置文件管理。
+
+**检查信号**：Grep 表操作是否检查白名单；白名单是否硬编码
+
+适用场景：数据库管理后台
+不适用场景：ORM 模型直接操作
+
+### 维度 71：dry_run 预览模式（对应编码规范 64）
+
+**为什么**：清理/删除操作不可逆，用户需要先预览将要清理的内容。
+
+**检查信号**：Grep 清理函数是否支持 `dry_run` 参数
+
+适用场景：清理/删除类操作
+不适用场景：普通增删改查
+
+### 维度 72：审计日志完整覆盖（对应编码规范 65）
+
+**为什么**：数据库维护和清理操作需要可追溯，审计日志记录操作类型/表名/记录ID/操作人/时间。
+
+**检查信号**：Grep `db.delete` 后是否有 `audit_log` 记录
+
+适用场景：所有 DML 操作和清理操作
+不适用场景：查询操作（SELECT 不需要审计）
