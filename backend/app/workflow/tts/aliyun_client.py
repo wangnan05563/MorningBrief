@@ -16,28 +16,15 @@ from typing import Optional
 import httpx
 
 from app.config import get_settings
+from app.workflow.tts.base_provider import (
+    TTSError,
+    TTSRateLimitError,
+    TTSTimeoutError,
+    TTSServiceError,
+)
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-
-# ===== 异常定义 =====
-# 异常分层便于 tenacity 精准判断是否重试：可重试错误继承 TTSError，
-# 不可重试错误直接抛 TTSError，调用方按需处理
-class TTSError(Exception):
-    """TTS 流程兜底异常基类。"""
-
-
-class TTSRateLimitError(TTSError):
-    """API 限流（HTTP 429），退避后重试。"""
-
-
-class TTSTimeoutError(TTSError):
-    """请求超时，重试。"""
-
-
-class TTSServiceError(TTSError):
-    """服务端 5xx 或连接异常，重试。"""
 
 
 class AliyunSpeechClient:

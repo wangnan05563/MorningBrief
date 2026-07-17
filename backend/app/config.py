@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     APP_HOST: str = "127.0.0.1"          # V1.2：单机部署仅监听本地
     APP_PORT: int = 8000
     APP_TIMEZONE: str = "Asia/Shanghai"
+    # 初始 admin 密码：为空时启动自动生成随机密码并打印到日志，避免硬编码弱密码
+    ADMIN_INITIAL_PASSWORD: str = ""
+    # 音频/封面等静态资源的对外访问基础 URL
+    # 留空时回退到 http://localhost:8000（仅开发工具可用）
+    # 真机测试需设为电脑局域网 IP，如 http://10.232.253.113:8000
+    AUDIO_BASE_URL: str = ""
 
     # ---- SQLite 数据库（V1.2 替代 MySQL） ----
     # 路径策略：开发态用相对路径 ./data/news.db；
@@ -175,7 +181,8 @@ class Settings(BaseSettings):
 
     # ---- 数据库维护模块（V1.2 新增，对标 17_xianyu db_admin） ----
     # 危险操作确认令牌：删除/批量删除/导入须传此值，防止误操作
-    DB_ADMIN_CONFIRM_TOKEN: str = "CONFIRM_DELETE"
+    # 默认空字符串，空值时拒绝执行危险操作（须配置后才能使用 db_admin 危险操作）
+    DB_ADMIN_CONFIRM_TOKEN: str = ""
     # 单次查询/批量删除行数上限，防止全表扫描 OOM
     DB_ADMIN_MAX_PAGE_SIZE: int = 1000
     # 单次导入行数上限，防止大文件解析阻塞事件循环

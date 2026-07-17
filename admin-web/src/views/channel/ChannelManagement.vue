@@ -155,7 +155,7 @@
             style="margin-top: 8px; width: 100%"
           />
           <!-- AI 推荐理由：展示 LLM 的选择依据，增强可解释性 -->
-          <div v-if="bgmRecommendReason" class="bgm-reason">
+          <div v-if="bgmRecommendReason" class="recommend-reason">
             AI 推荐理由：{{ bgmRecommendReason }}
           </div>
         </el-form-item>
@@ -192,7 +192,18 @@
         </el-form-item>
 
         <!-- 数据源配置区：RSS 源白名单 + 关键词过滤 -->
-        <el-divider content-position="left">数据源配置</el-divider>
+        <el-divider content-position="left">
+          <span>数据源配置</span>
+          <!-- AI 推荐：仅编辑模式可用，与 BGM 推荐按钮风格保持一致 -->
+          <el-button
+            v-if="editing"
+            type="primary"
+            link
+            :loading="recommendingSources"
+            @click="handleRecommendSources"
+            style="margin-left: 12px"
+          >AI 推荐</el-button>
+        </el-divider>
         <el-form-item label="RSS 源">
           <el-select
             v-model="form.rss_sources"
@@ -220,6 +231,10 @@
             placeholder="逗号分隔，如：游戏,主机,PS5,Xbox,任天堂。留空表示不过滤"
           />
           <span class="form-tip">标题包含任一关键词的素材才会入库，在正文提取前过滤以节省网络请求</span>
+          <!-- AI 推荐理由：展示 LLM 的选择依据，增强可解释性，复用通用 recommend-reason 类 -->
+          <div v-if="sourcesRecommendReason" class="recommend-reason">
+            AI 推荐理由：{{ sourcesRecommendReason }}
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -237,7 +252,7 @@ import { ElMessage, ElMessageBox } from '../../utils/message'
 import { Plus, VideoPlay, Upload } from '@element-plus/icons-vue'
 import {
   listChannels, createChannel, updateChannel, deleteChannel, generateChannelPrompts,
-  listBgmFiles, uploadBgmFile, recommendChannelBgm, listRssSources,
+  listBgmFiles, uploadBgmFile, recommendChannelBgm, listRssSources, recommendChannelSources,
 } from '../../api/channels'
 import { formatTime } from '../../utils/format'
 
@@ -277,6 +292,10 @@ const uploadProgress = ref(0)
 
 // RSS 源列表（从 rss.yaml 加载，供频道配置选择）
 const rssSourcesList = ref([])
+// AI 推荐 RSS 源 + 关键词 loading
+const recommendingSources = ref(false)
+// AI 推荐理由（展示 LLM 选择依据）
+const sourcesRecommendReason = ref('')
 
 const form = reactive({
   id: null,
@@ -362,6 +381,7 @@ function resetForm() {
   promptCollapse.value = ['intro']
   showAudioPlayer.value = false
   bgmRecommendReason.value = ''
+  sourcesRecommendReason.value = ''
 }
 
 function openCreate() {
@@ -398,6 +418,7 @@ function openEdit(row) {
   promptCollapse.value = ['intro']
   showAudioPlayer.value = false
   bgmRecommendReason.value = ''
+  sourcesRecommendReason.value = ''
   loadBgmList()
   loadRssSources()
   dialogVisible.value = true
@@ -588,6 +609,43 @@ async function handleRecommendBgm() {
   }
 }
 
+// ===== RSS 源 + 关键词推荐 =====
+
+async function handleRecommendSources() {
+  if (!form.id) return
+  recommendingSources.value = true
+  try {
+    const data = await recommendChannelSources(form.id)
+    const recommendedSources = Array.isArray(data.rss_sources) ? data.rss_sources : []
+    const recommendedKeywords = data.keywords || ''
+    // 推荐结果可能为空（LLM 全部幻觉时），此时仅展示理由但不清空用户已有配置
+    // 避免误覆盖用户手动配置，与 BGM 推荐的"有结果才覆盖"策略保持一致
+    if (recommendedSources.length === 0 && !recommendedKeywords) {
+      sourcesRecommendReason.value = data.reason || ''
+      ElMessage.warning('AI 未能推荐合适的 RSS 源与关键词')
+      return
+    }
+    // rss_sources 为空数组表示"走全局模式"（使用全部源），与 keywords 配套使用：
+    // 即便 LLM 仅推荐了关键词未推荐源，也按"全部源 + 关键词过滤"组合生效
+    form.rss_sources = recommendedSources
+    form.keywords = recommendedKeywords
+    sourcesRecommendReason.value = data.reason || ''
+    // 推荐成功后立即保存到 DB，与 BGM 推荐保持一致行为
+    // rss_sources 需序列化为 JSON 字符串，与 handleSubmit 中的格式保持一致
+    await updateChannel(form.id, {
+      rss_sources: JSON.stringify(recommendedSources),
+      keywords: recommendedKeywords,
+    })
+    ElMessage.success('AI 已推荐 RSS 源与关键词并已保存')
+  } catch (e) {
+    console.warn('RSS 源推荐失败:', e)
+    // 失败时清空推荐理由，避免残留上次成功推荐的结果造成用户误解
+    sourcesRecommendReason.value = ''
+  } finally {
+    recommendingSources.value = false
+  }
+}
+
 onMounted(() => {
   loadList()
 })
@@ -621,8 +679,8 @@ onMounted(() => {
     flex-wrap: wrap;
   }
 
-  // AI 推荐理由：弱化背景突出文本
-  .bgm-reason {
+  // AI 推荐理由：弱化背景突出文本，BGM/RSS 推荐共用此类
+  .recommend-reason {
     margin-top: 8px;
     padding: 6px 10px;
     font-size: 12px;

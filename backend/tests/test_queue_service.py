@@ -35,6 +35,7 @@ from app.models.channel import Channel
 from app.models.workflow import (
     WorkflowSource,
     WorkflowStatus,
+    WorkflowStepName,
 )
 from app.services.channel_service import ChannelService
 from app.services.queue_service import QueueService
@@ -97,6 +98,7 @@ def _reset_scheduler(monkeypatch):
     from app.services.workflow_scheduler import workflow_scheduler
     # 保存原始方法引用（部分测试会 AsyncMock 替换，yield 后还原）
     orig_trigger = workflow_scheduler.trigger_workflow
+    orig_retry_workflow = workflow_scheduler.retry_workflow
     orig_get_db_max_seq = workflow_scheduler._get_db_max_seq
     orig_check_backup_single = workflow_scheduler._check_backup_single
 
@@ -109,6 +111,7 @@ def _reset_scheduler(monkeypatch):
     yield
     # 还原被 mock 的方法，防止泄漏到后续测试
     workflow_scheduler.trigger_workflow = orig_trigger
+    workflow_scheduler.retry_workflow = orig_retry_workflow
     workflow_scheduler._get_db_max_seq = orig_get_db_max_seq
     workflow_scheduler._check_backup_single = orig_check_backup_single
 
@@ -331,7 +334,11 @@ async def test_update_priority(db_session, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_retry_task(db_session, monkeypatch):
-    """重试 failed 任务：调用 scheduler.trigger_workflow 重新入队。"""
+    """重试 failed 任务：无 failed 步骤时兜底从 crawl 全量重跑，保留原 ID。
+
+    当前实现调用 retry_workflow 断点续跑（而非 trigger_workflow 新建），
+    无 failed 步骤记录时兜底从 crawl 重跑，返回原 workflow_id。
+    """
     from app.services.workflow_scheduler import workflow_scheduler
 
     wf = Workflow(
@@ -346,16 +353,19 @@ async def test_retry_task(db_session, monkeypatch):
     await db_session.commit()
 
     _patch_sessionlocal(monkeypatch, db_session)
-    workflow_scheduler.trigger_workflow = AsyncMock(return_value="wf-retry-1-new")
+    # retry_workflow 保留原 workflow_id，断点续跑而非新建工作流
+    workflow_scheduler.retry_workflow = AsyncMock(return_value="wf-retry-1")
 
     svc = QueueService(db_session)
     new_id = await svc.retry_task("wf-retry-1")
 
-    assert new_id == "wf-retry-1-new"
-    workflow_scheduler.trigger_workflow.assert_awaited_once()
-    call_kwargs = workflow_scheduler.trigger_workflow.call_args
-    assert call_kwargs.kwargs["source"] == "manual"
-    assert call_kwargs.kwargs["priority"] == 5
+    # 返回原 ID（断点续跑语义，非新建工作流）
+    assert new_id == "wf-retry-1"
+    workflow_scheduler.retry_workflow.assert_awaited_once()
+    call_kwargs = workflow_scheduler.retry_workflow.call_args
+    # 无 failed 步骤记录时兜底从 crawl 全量重跑
+    assert call_kwargs.kwargs["from_step"] == WorkflowStepName.crawl.value
+    assert call_kwargs.kwargs["triggered_by"] == "queue_retry"
 
 
 # ---------------------------------------------------------------------------

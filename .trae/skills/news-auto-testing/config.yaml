@@ -908,3 +908,157 @@ test_priority:
   group_by_priority: true
   # 优先级执行顺序（P0 最先执行）
   execution_order: ["P0", "P1", "P2", "P3"]
+
+# --- 环境隔离检查 ---
+# 扫描代码中硬编码的 localhost/127.0.0.1，确保真机测试可达
+env_isolation_check:
+  # 是否启用环境隔离检查
+  enabled: true
+  # 检查阶段：pre_test（测试前预检）/ post_test（测试后验证）
+  check_phase: "pre_test"
+  # 需要扫描的文件清单（相对项目根目录）
+  scan_files:
+    - path: "miniprogram/services/api.js"
+      # 硬编码值模式（出现即告警）
+      hardcoded_patterns:
+        - "http://127.0.0.1"
+        - "http://localhost"
+        - "http://0.0.0.0"
+      # 期望来源（说明应从何处读取）
+      expected_source: "应通过配置文件或环境变量读取"
+    - path: "backend/app/services/content_service.py"
+      hardcoded_patterns:
+        - "http://localhost:8000"
+        - "http://127.0.0.1:8000"
+      expected_source: "应从 settings.AUDIO_BASE_URL 读取"
+    - path: "backend/.env"
+      # .env 中检查关键字段
+      required_fields:
+        APP_HOST: "0.0.0.0"
+        AUDIO_BASE_URL: "http://<lan_ip>:8000"
+  # LAN IP 自动检测命令（Windows PowerShell）
+  lan_ip_detect_command: "ipconfig | Select-String 'IPv4'"
+  # 严重级别：FAIL（真机测试必须修复）/ WARN（仅模拟器测试可忽略）
+  severity_on_violation: "FAIL"
+  # 修复建议
+  fix_suggestion: "将所有硬编码 localhost/127.0.0.1 替换为局域网 IP，并通过配置文件管理"
+
+# --- 小程序专项检查 ---
+# 微信小程序页面文件完整性、事件绑定对称性检查
+miniprogram_check:
+  # 是否启用小程序专项检查
+  enabled: true
+  # 检查阶段
+  check_phase: "pre_test"
+  # 小程序根目录（相对项目根目录）
+  root_dir: "miniprogram"
+  # 页面四件套检查（每个页面必须有 .json/.js/.wxml/.wxss）
+  page_files_check:
+    enabled: true
+    # 页面目录（相对 miniprogram root_dir）
+    pages_dir: "pages"
+    # 必需文件后缀
+    required_extensions: [".json", ".js", ".wxml", ".wxss"]
+    # 缺失文件严重级别
+    severity_on_missing: "FAIL"
+  # 事件绑定对称性检查（onXxx 必须有对应 offXxx）
+  event_binding_check:
+    enabled: true
+    # 需要检查的页面文件（相对 miniprogram root_dir）
+    scan_files:
+      - "pages/index/index.js"
+      - "pages/detail/detail.js"
+      - "pages/profile/profile.js"
+      - "pages/history/history.js"
+    # 绑定方法前缀
+    bind_prefixes: ["onPlay", "onPause", "onTimeUpdate", "onEnded", "onError", "onNext", "onPrev"]
+    # 解绑方法前缀（与 bind_prefixes 一一对应）
+    unbind_prefixes: ["offPlay", "offPause", "offTimeUpdate", "offEnded", "offError", "offNext", "offPrev"]
+    # 解绑位置（onUnload / onHide）
+    unbind_location: ["onUnload", "onHide"]
+    # 严重级别
+    severity_on_asymmetry: "WARN"
+  # 401 重试循环防护检查
+  auth_retry_check:
+    enabled: true
+    # 检查 api.js 中 request 函数是否有重试保护
+    scan_files:
+      - "services/api.js"
+    # 必须存在的代码模式（任一缺失即告警）
+    required_patterns:
+      - "_retried"
+      - "startsWith('/auth/')"
+    severity_on_missing: "FAIL"
+
+# --- 工具层 bug 特征库 ---
+# 识别开发工具版本 bug，避免误判为代码缺陷
+tool_bug_signatures:
+  # 微信开发者工具 webview 路由 bug（3.17.0 灰度版）
+  - name: "WeChat DevTools webview routing bug"
+    tool: "wechat_devtools"
+    # 受影响版本（正则）
+    affected_versions: ["3.17.0"]
+    version_pattern: '3\.17\.\d+'
+    # 日志特征关键词（任一匹配即判定为工具层 bug）
+    signature_keywords:
+      - "routeDone with a webviewId"
+      - "appservice/mainframe"
+      - "mainframe 500"
+    # 处理策略
+    action: "downgrade_or_clear_cache"
+    # 修复步骤
+    fix_steps:
+      - "降级调试基础库至稳定版（3.7.x 或 3.6.0）"
+      - "清除开发者工具所有缓存（文件/数据/编译/网络/存储）"
+      - "重启开发者工具"
+      - "如仍无效，重装开发者工具"
+    severity: "WARN"
+    issue_class: "tool_layer_bug"
+  # Edge 浏览器最小化自动恢复 bug
+  - name: "Edge minimize auto-restore bug"
+    tool: "edge"
+    signature_keywords:
+      - "window immediately restored after minimize"
+    action: "reset_user_profile"
+    fix_steps:
+      - "关闭所有 Edge 窗口"
+      - "重命名 %LOCALAPPDATA%\\Microsoft\\Edge\\User Data 为 User Data Backup"
+      - "重启 Edge 重新生成用户配置"
+    severity: "WARN"
+    issue_class: "tool_layer_bug"
+
+# --- 真机测试预检 ---
+# 真机测试前的环境预检项（仅真机测试时启用）
+realdevice_check:
+  # 是否启用真机测试预检（默认关闭，真机测试时手动开启）
+  enabled: false
+  # 预检项清单
+  preflight_checks:
+    - name: "后端服务局域网可达性"
+      check: "http_get"
+      target: "${AUDIO_BASE_URL}/docs"
+      expected: "HTTP 200"
+      severity_on_fail: "FAIL"
+    - name: "后端 APP_HOST 配置"
+      check: "env_field"
+      target: "backend/.env:APP_HOST"
+      expected: "0.0.0.0"
+      severity_on_fail: "FAIL"
+    - name: "AUDIO_BASE_URL 配置"
+      check: "env_field"
+      target: "backend/.env:AUDIO_BASE_URL"
+      expected: "http://<lan_ip>:8000"
+      severity_on_fail: "FAIL"
+    - name: "小程序 BASE_URL 配置"
+      check: "file_pattern"
+      target: "miniprogram/services/api.js"
+      pattern: "BASE_URL.*http://<lan_ip>:8000"
+      severity_on_fail: "FAIL"
+    - name: "手机与电脑同 WiFi"
+      check: "manual"
+      instruction: "确保手机和电脑连接同一 WiFi 网络"
+      severity_on_fail: "FAIL"
+    - name: "开发者工具域名校验关闭"
+      check: "manual"
+      instruction: "微信开发者工具 → 详情 → 本地设置 → 勾选'不校验合法域名、web-view、TLS 版本以及 HTTPS 证书检查'"
+      severity_on_fail: "FAIL"

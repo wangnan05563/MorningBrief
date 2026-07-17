@@ -1,5 +1,21 @@
 <!-- 历史列表页 -->
 <view class="container">
+  <!-- 顶部工具栏：搜索 + 频道切换 -->
+  <view class="top-bar">
+    <view class="top-action" bindtap="onSearch">
+      <text class="action-icon">🔍</text>
+    </view>
+    <scroll-view scroll-x class="channel-bar" wx:if="{{channels.length > 0}}">
+      <view
+        wx:for="{{channels}}"
+        wx:key="id"
+        class="channel-pill {{currentChannelId === item.id ? 'active' : ''}}"
+        data-id="{{item.id}}"
+        bindtap="onSwitchChannel"
+      >{{item.name}}</view>
+    </scroll-view>
+  </view>
+
   <!-- 空状态 -->
   <view class="empty-state" wx:if="{{!loading && list.length === 0}}">
     <text class="empty-icon">📰</text>
@@ -14,6 +30,7 @@
         wx:for="{{list}}"
         wx:key="id"
         data-id="{{item.id}}"
+        data-index="{{index}}"
         bindtap="onPlay"
       >
         <!-- 顶部：日期 + 分类标签（薄荷青/蜜桃粉交替） -->

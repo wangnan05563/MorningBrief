@@ -1,0 +1,292 @@
+{
+  "_comment": "Karpathy-Wiki 项目的 create-bat 配置示例。所有参数可覆盖，删除 _comment 即可投入使用。",
+  "project": {
+    "name": "Karpathy-Wiki",
+    "version": "0.1.0",
+    "version_source": "package_json",
+    "description": "Karpathy AI + Obsidian 知识库"
+  },
+  "encoding": {
+    "bat_encoding": "GBK",
+    "ps1_encoding": "UTF-8_BOM",
+    "force_crlf": true,
+    "chcp_codepage": 936
+  },
+  "entries": [
+    {
+      "name": "build-exe",
+      "type": "build",
+      "bat_file": "构建打包",
+      "ps1_file": "build-exe",
+      "window_style": "Normal",
+      "post_action": "pause",
+      "exit_code_propagation": true,
+      "import_meta_compat": true,
+      "pre_build_cleanup": true,
+      "steps": [
+        {
+          "name": "检查依赖",
+          "command": "${toolchain.detected_tools}"
+        },
+        {
+          "name": "构建 @wiki/harness",
+          "command": "pnpm --filter @wiki/harness build"
+        },
+        {
+          "name": "构建 SPA",
+          "command": "pnpm -r build",
+          "skip_flag": "-SkipSPA",
+          "on_fail": "stop"
+        },
+        {
+          "name": "esbuild 打包",
+          "command": "esbuild --format=cjs",
+          "format": "cjs",
+          "import_meta_compat": true
+        },
+        {
+          "name": "pkg 打包 exe",
+          "command": "pkg . --targets node24-win-x64"
+        },
+        {
+          "name": "复制外置资源",
+          "command": "copy resources"
+        },
+        {
+          "name": "制作安装包",
+          "command": "iscc installer.iss",
+          "on_fail": "warn"
+        }
+      ]
+    },
+    {
+      "name": "start",
+      "type": "start",
+      "bat_file": "启动服务",
+      "ps1_file": "start",
+      "window_style": "Normal",
+      "post_action": "pause"
+    },
+    {
+      "name": "stop",
+      "type": "stop",
+      "bat_file": "停止服务",
+      "ps1_file": "stop",
+      "window_style": "Normal",
+      "post_action": "pause"
+    }
+  ],
+  "toolchain": {
+    "install_commands": [
+      "pnpm install"
+    ],
+    "fallback_chain": [
+      "dist\\\\karpathy-wiki\\\\karpathy-wiki.exe",
+      "node dist\\\\bundle.cjs"
+    ],
+    "detected_tools": [
+      {
+        "name": "node",
+        "min_version": "18.0.0"
+      },
+      {
+        "name": "pnpm",
+        "min_version": "8.0.0"
+      },
+      {
+        "name": "esbuild",
+        "min_version": "0.20.0"
+      },
+      {
+        "name": "pkg",
+        "min_version": "6.0.0"
+      },
+      {
+        "name": "nasm",
+        "min_version": "2.0.0"
+      },
+      {
+        "name": "iscc",
+        "path_pattern": "C:\\\\Program Files (x86)\\\\Inno Setup 6\\\\ISCC.exe"
+      }
+    ],
+    "auto_install": {
+      "method": "winget",
+      "packages": [
+        {
+          "name": "Inno Setup",
+          "winget_id": "JRSoftware.InnoSetup",
+          "download_url": "https://jrsoftware.org/download.php/is.exe"
+        }
+      ]
+    }
+  },
+  "deploy": {
+    "mode": "dev",
+    "installer": {
+      "enabled": true,
+      "type": "inno_setup",
+      "iss_file": "installer.iss",
+      "output_dir": "dist",
+      "architecture": "x64compatible",
+      "languages": [
+        {
+          "name": "english",
+          "messages_file": "compiler:Default.isl"
+        }
+      ]
+    }
+  },
+  "diagnoses": [
+    {
+      "name": "构建后窗口直接关闭",
+      "pattern": "构建失败",
+      "category": "build_control_flow",
+      "severity": "fatal",
+      "fix": "检查 .bat 中 pkg_cmd run build 调用前是否有 call 关键字",
+      "steps": [
+        "搜索 %PKG_CMD% run build 行",
+        "确认行首是否有 call",
+        "添加 call 并重新测试"
+      ]
+    },
+    {
+      "name": "编码乱码",
+      "pattern": "script is not recognized",
+      "category": "encoding",
+      "fix": "检查文件编码与 chcp 是否匹配",
+      "steps": [
+        "读取报错文件前 3 字节检查 BOM",
+        "检查文件编码 vs chcp 是否匹配",
+        "修复为 GBK + chcp 936 + 无 BOM + CRLF"
+      ]
+    },
+    {
+      "name": "窗口闪退",
+      "pattern": "窗口立即关闭",
+      "category": "window_visibility",
+      "fix": ".bat 末尾添加 pause >nul + exit /b 0",
+      "steps": [
+        "检查 .bat 末尾是否有 pause >nul + exit /b 0",
+        "检查 .ps1 WindowStyle 是否为 Hidden"
+      ]
+    },
+    {
+      "name": "依赖冲突",
+      "pattern": "requires",
+      "category": "dependency",
+      "fix": "解析版本约束，更新安装命令添加版本限制",
+      "steps": [
+        "解析约束方向",
+        "查询当前版本",
+        "在安装命令中添加版本约束"
+      ]
+    },
+    {
+      "name": "CJS 打包 import.meta 为空",
+      "pattern": "empty-import-meta",
+      "category": "bundle_format",
+      "fix": "添加 __dirname 优先回退逻辑：typeof __dirname === 'string' ? __dirname : fileURLToPath(import.meta.url)",
+      "steps": [
+        "搜索 import.meta.url 使用点",
+        "添加 __dirname 回退",
+        "添加 --log-override:empty-import-meta=silent"
+      ]
+    },
+    {
+      "name": "Inno Setup 语言文件缺失",
+      "pattern": "Couldn't open include file",
+      "category": "installer_failure",
+      "fix": "仅注册系统实际安装的语言文件，移除不存在的 .isl 引用",
+      "steps": [
+        "列出 Languages/ 目录中的 .isl 文件",
+        "从 installer.iss 移除不存在的语言注册",
+        "更新 deploy.installer.languages 配置"
+      ]
+    },
+    {
+      "name": "子命令退出码未传播",
+      "pattern": "Exit status",
+      "category": "exit_code_propagation",
+      "fix": "每个子步骤后检查 $LASTEXITCODE 并使用 throw 而非 Write-Warn",
+      "steps": [
+        "搜索 Write-Warn 替代 throw 的位置",
+        "改为 throw \"${step_name} 失败（退出码 $LASTEXITCODE）\"",
+        "验证构建失败时 exit code 非 0"
+      ]
+    },
+    {
+      "name": "Inno Setup 架构标识弃用",
+      "pattern": "is deprecated",
+      "category": "installer_failure",
+      "fix": "将 ArchitecturesAllowed/ArchitecturesInstallIn64BitMode 从 x64 改为 x64compatible",
+      "steps": [
+        "搜索 installer.iss 中的 x64",
+        "替换为 x64compatible",
+        "重新编译验证无警告"
+      ]
+    }
+  ],
+  "build_pipeline": {
+    "steps": [
+      {
+        "id": "deps",
+        "name": "检查依赖",
+        "command": "node --version && pnpm --version"
+      },
+      {
+        "id": "harness",
+        "name": "构建 @wiki/harness",
+        "command": "pnpm --filter @wiki/harness build"
+      },
+      {
+        "id": "spa",
+        "name": "构建 SPA",
+        "command": "pnpm -r build",
+        "skip_flag": "-SkipSPA",
+        "on_fail": "stop"
+      },
+      {
+        "id": "esbuild",
+        "name": "esbuild 打包",
+        "command": "esbuild --bundle --platform=node --format=cjs --outfile=${build_dir}/bundle.cjs",
+        "format": "cjs",
+        "import_meta_compat": true,
+        "depends_on": "harness"
+      },
+      {
+        "id": "pkg",
+        "name": "pkg 打包 exe",
+        "command": "pkg . --targets node24-win-x64 --out-dir=${dist_dir}",
+        "depends_on": "esbuild"
+      },
+      {
+        "id": "copy_resources",
+        "name": "复制外置资源",
+        "command": "copy resources",
+        "depends_on": "pkg"
+      },
+      {
+        "id": "installer",
+        "name": "制作安装包",
+        "command": "iscc installer.iss",
+        "on_fail": "warn",
+        "depends_on": "copy_resources"
+      }
+    ],
+    "artifacts": [
+      {
+        "name": "exe",
+        "source": "${dist_dir}/karpathy-wiki/karpathy-wiki.exe",
+        "destination": "${dist_dir}/karpathy-wiki/karpathy-wiki.exe",
+        "required": true
+      },
+      {
+        "name": "setup",
+        "source": "${dist_dir}/KarpathyWiki-Setup-v*.exe",
+        "destination": "${dist_dir}/KarpathyWiki-Setup-v*.exe",
+        "required": false
+      }
+    ]
+  }
+}

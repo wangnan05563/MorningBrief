@@ -5,6 +5,7 @@
  * 便于后续构建脚本统一注入，无需改动页面代码。
  */
 const app = getApp();
+const { trackPageView, trackEvent } = require('../../utils/tracker');
 
 Page({
   data: {
@@ -24,6 +25,7 @@ Page({
   },
 
   onLoad() {
+    trackPageView('pages/about/about');
     // 从全局数据读取版本信息，构建脚本注入时无需改页面
     const { version, buildDate } = app.globalData;
     this.setData({
@@ -40,6 +42,7 @@ Page({
       data: this.data.contact,
       success: () => {
         wx.showToast({ title: '邮箱已复制', icon: 'success' });
+        trackEvent('about', 'copy_contact');
       },
     });
   },

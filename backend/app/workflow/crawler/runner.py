@@ -11,29 +11,19 @@
 import asyncio
 import json
 import logging
-from pathlib import Path
 from typing import Optional
-
-import yaml
 
 from app.core.simhash import compute
 from app.core.timeutil import utcnow_naive
 from app.database import AsyncSessionLocal
 from app.models import Material, Channel
 from app.models.material import MaterialSourceType, MaterialStatus
+from app.services.rss_source_service import load_rss_sources
 from app.workflow.crawler.article_parser import extract as extract_article
 from app.workflow.crawler.dedup import add_to_dedup, is_duplicate
 from app.workflow.crawler.rss_spider import RSSSpider
 
 logger = logging.getLogger(__name__)
-
-SOURCES_DIR = Path(__file__).parent / "sources"
-
-
-def _load_yaml(path: Path) -> dict:
-    """加载 YAML 配置（同步文件读取，调用频率低无需异步化）。"""
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
 
 
 async def _extract_content(entry: dict) -> dict:
@@ -186,9 +176,10 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
     # channel_id 为 None 或频道未配置时返回空列表，回退到全局模式
     rss_sources_filter, keywords_filter = await _load_channel_filter(channel_id)
 
-    # 加载 RSS 配置（lists.yaml 预留给未来列表页爬虫扩展，当前仅 RSS）
-    rss_config = _load_yaml(SOURCES_DIR / "rss.yaml")
-    all_sources = rss_config.get("sources", [])
+    # 加载 RSS 配置：复用 rss_source_service 统一加载逻辑
+    # load_rss_sources 返回完整源配置（含 url/authority/qps），
+    # RSSSpider 实际只使用 url 字段，qps 为预留配置当前未实现限速
+    all_sources = load_rss_sources()
 
     # 频道级数据源白名单过滤：rss_sources_filter 非空时仅保留白名单中的源
     # 为空时使用全部源（兼容未配置 rss_sources 的频道/全局模式）
@@ -285,28 +276,37 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
     # 场景：RSS 源未更新/dedup 表锁死重复 URL，但 material 表已有历史 pending 素材
     # rewriter 通过 FALLBACK_DAYS 回溯可选取这些素材，crawl 步骤不应中断工作流
     # 仅当 material 表完全无 pending 素材时才报错（首次运行/数据库重置/RSS 全不可达）
-    # 频道模式下按 channel_id 过滤 pending 素材，确保回溯选取的也是本频道素材
     if material_count == 0:
         from sqlalchemy import select, func
         async with AsyncSessionLocal() as check_session:
             pending_stmt = select(func.count(Material.id)).where(
                 Material.status == MaterialStatus.pending
             )
-            # 频道模式下只统计本频道的 pending 素材
-            # 避免其他频道素材被本频道 rewriter 误选（频道级隔离）
+            # 频道模式下仅统计本频道 pending 素材，不再 OR channel_id IS NULL
+            # 历史遗留 NULL 素材绕过频道 rss_sources 白名单与 keywords 过滤，
+            # 让专门频道消费会造成跨频道污染（曾导致主机游戏频道混入 36氪素材）。
+            # 与 rewriter._fetch_materials 保持一致：专门频道 RSS 不可达时
+            # 显式失败由运维介入，而非用不相关内容掩盖问题。
             if channel_id is not None:
                 pending_stmt = pending_stmt.where(Material.channel_id == channel_id)
             pending_count = await check_session.scalar(pending_stmt)
         if pending_count == 0:
+            channel_hint = (
+                f"频道 channel_id={channel_id} 内" if channel_id is not None else "全局"
+            )
             raise RuntimeError(
                 f"爬虫未爬取到任何素材（{len(sources)} 个源，"
-                f"{len(all_entries)} 条原始条目），且无历史 pending 素材可用，"
-                f"请检查 RSS 源配置与网络连通性"
+                f"{len(all_entries)} 条原始条目），且{channel_hint}无历史 pending 素材可用，"
+                f"请检查该频道 rss_sources 配置是否正确、RSS 源是否可达，"
+                f"或确认关键词过滤是否过严"
             )
+        channel_hint = (
+            f"频道 channel_id={channel_id} " if channel_id is not None else "全局"
+        )
         logger.info(
-            "爬虫入库 0 条新素材，但 material 表已有 %d 条 pending，"
+            "爬虫入库 0 条新素材，但%smaterial 表已有 %d 条 pending，"
             "rewriter 将通过回溯机制选取",
-            pending_count,
+            channel_hint, pending_count,
         )
 
     return {"material_count": material_count, "workflow_id": workflow_id}

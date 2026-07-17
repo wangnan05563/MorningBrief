@@ -295,6 +295,14 @@ async def delete_channel(
 
 # 允许的 BGM 音频扩展名（白名单，避免上传可执行文件）
 _BGM_ALLOWED_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg"}
+# content_type 白名单：与扩展名白名单对齐，双重校验防止伪造扩展名上传非音频文件
+_BGM_ALLOWED_CONTENT_TYPES = {
+    ".mp3": {"audio/mpeg", "audio/mp3"},
+    ".wav": {"audio/wav", "audio/x-wav", "audio/wave"},
+    ".m4a": {"audio/mp4", "audio/x-m4a", "audio/m4a"},
+    ".aac": {"audio/aac", "audio/x-aac"},
+    ".ogg": {"audio/ogg", "application/ogg"},
+}
 # BGM 文件大小上限：20MB（BGM 通常 3-5MB，20MB 足够覆盖长曲）
 _BGM_MAX_SIZE = 20 * 1024 * 1024
 
@@ -358,6 +366,15 @@ async def upload_bgm(
         return error(
             code=400,
             message=f"不支持的音频格式：{ext}，允许：{', '.join(_BGM_ALLOWED_EXTS)}",
+        )
+
+    # content_type 双重校验：防止伪造扩展名上传非音频文件
+    received_ct = (file.content_type or "").lower()
+    allowed_cts = _BGM_ALLOWED_CONTENT_TYPES.get(ext, set())
+    if received_ct and allowed_cts and received_ct not in allowed_cts:
+        return error(
+            code=400,
+            message=f"文件 content_type 与扩展名不匹配：{received_ct} vs {ext}",
         )
 
     custom_dir = resolve_bgm_dir() / "custom"
@@ -424,24 +441,8 @@ async def list_rss_sources(
 
     admin + operator 均可查看。返回源名称、品类、权威度，前端用于多选下拉。
     """
-    import yaml
-    from pathlib import Path as PathLib
-
-    rss_path = PathLib(__file__).parent.parent.parent / "workflow" / "crawler" / "sources" / "rss.yaml"
-    if not rss_path.exists():
-        return success(data={"sources": []})
-
-    with open(rss_path, "r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-
-    sources = [
-        {
-            "name": s.get("name", ""),
-            "category_hint": s.get("category_hint", ""),
-            "authority": s.get("authority", 0.5),
-        }
-        for s in config.get("sources", [])
-    ]
+    from app.services.rss_source_service import load_rss_sources_summary
+    sources = load_rss_sources_summary()
     return success(data={"sources": sources})
 
 
@@ -469,6 +470,40 @@ async def recommend_bgm(
         from app.services.channel_prompt_service import recommend_bgm_for_channel
         recommendation = await recommend_bgm_for_channel(
             channel.name, channel.description or "", bgm_list,
+        )
+    except ValueError as e:
+        return error(code=400, message=str(e))
+
+    return success(data=recommendation)
+
+
+@router.post("/{channel_id}/recommend-sources")
+async def recommend_sources(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """AI 推荐频道 RSS 源与关键词。仅 admin。
+
+    根据频道 name + description + 可用 RSS 源列表，调用 LLM 推荐最匹配的源子集与关键词。
+    LLM 仅返回推荐结果，不修改频道记录，前端确认后再保存。
+    与 recommend-bgm 路由结构保持一致，便于后续扩展为多字段联合推荐。
+    """
+    svc = ChannelService(db)
+    channel = await svc.get_channel(channel_id)
+    if channel is None:
+        return error(code=404, message="频道不存在")
+
+    # 复用 rss_source_service 统一加载逻辑，避免路径拼接散落多处
+    from app.services.rss_source_service import load_rss_sources_summary
+    rss_list = load_rss_sources_summary()
+    if not rss_list:
+        return error(code=400, message="无可用 RSS 源，请先在 rss.yaml 中配置")
+
+    try:
+        from app.services.channel_prompt_service import recommend_rss_keywords_for_channel
+        recommendation = await recommend_rss_keywords_for_channel(
+            channel.name, channel.description or "", rss_list,
         )
     except ValueError as e:
         return error(code=400, message=str(e))

@@ -7,6 +7,7 @@
 import asyncio
 import logging
 import re
+import time
 import uuid
 
 from sqlalchemy import select
@@ -15,7 +16,6 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
     retry_if_exception_type,
-    before_sleep_log,
 )
 
 from app.config import get_settings
@@ -39,15 +39,68 @@ from app.workflow.tts.uploader import upload_to_cos
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+# TTS 并发上限：与 LLM 模块对齐，避免瞬间打爆 TTS API 频率限制
+# 阿里云 NLS / 腾讯云 TTS 均有 RPM 限制，10 段同时发起 + tenacity 重试会超限
+_TTS_CONCURRENCY_LIMIT = 3
+_tts_semaphore: asyncio.Semaphore | None = None
+
+
+def _get_tts_semaphore() -> asyncio.Semaphore:
+    """延迟初始化 TTS 信号量，避免在模块加载时创建事件循环依赖。"""
+    global _tts_semaphore
+    if _tts_semaphore is None:
+        _tts_semaphore = asyncio.Semaphore(_TTS_CONCURRENCY_LIMIT)
+    return _tts_semaphore
+
+
+async def _wait_for_tts_rate_limit_slot(timeout: float = 65) -> bool:
+    """等待 TTS 频率预算有空位（频率超限时的恢复策略）。
+
+    与 LLM 模块的 _wait_for_rate_limit_slot 对齐：
+    60s 滑动窗口内的旧记录会随时间过期，轮询 check_budget 直到通过或超时。
+    避免 tenacity 短退避（1-2s）导致的"全部失败"连锁反应。
+
+    Returns:
+        True 如果等到空位；False 如果超时或遇到不可恢复的预算超限（token/费用）
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        allowed, reason = check_budget(service_type="tts")
+        if allowed:
+            return True
+        if "频率超限" not in reason:
+            # token/费用超限不可恢复，无需等待
+            return False
+        await asyncio.sleep(3)
+    return False
+
+
 # tenacity 重试装饰器（LLD 7.5）
 # 异常类型从 base_provider 导入，保证所有 provider 抛出的可重试异常都能被识别
+def _log_tts_retry(retry_state):
+    """tenacity before_sleep 回调：重试前记录 warning 日志。
+
+    替代 tenacity.before_sleep_log，因为后者依赖标准库 logging 接口，
+    与项目其他模块使用的 loguru logger 不兼容，会导致日志格式不一致。
+    """
+    exc = retry_state.outcome.exception() if retry_state.outcome else None
+    next_sleep = float(retry_state.next_sleep) if hasattr(retry_state, 'next_sleep') else 0
+    logger.warning(
+        "TTS 调用重试 attempt=%d wait=%.1fs exc=%s: %s",
+        retry_state.attempt_number,
+        next_sleep,
+        type(exc).__name__ if exc else 'None',
+        str(exc)[:200] if exc else '',
+    )
+
+
 tts_retry = retry(
     stop=stop_after_attempt(settings.TTS_RETRY_ATTEMPTS),
     wait=wait_exponential(min=1, max=10, multiplier=1),
     retry=retry_if_exception_type(
         (TTSRateLimitError, TTSTimeoutError, TTSServiceError)
     ),
-    before_sleep=before_sleep_log(logger, logging.WARNING),
+    before_sleep=_log_tts_retry,
     reraise=True,
 )
 
@@ -56,33 +109,49 @@ tts_retry = retry(
 async def synthesize_segment(text: str, voice: str = None) -> bytes:
     """合成单段文本（tenacity 自动重试可重试错误）。
 
+    并发控制：通过 Semaphore 限制并发数为 3，避免瞬间打爆 TTS API 频率限制。
+    频率超限时主动等待 60s 滑动窗口滑过，而非立即抛错（对齐 LLM 模块设计）。
+
     通过工厂获取当前配置的 TTS Provider 实例，上层无需感知具体厂商。
     预算控制：调用前检查三重预算（token/费用/频率），超限直接抛
     TTSRateLimitError 避免无效请求打到外部 API；调用成功后按字符数
     记录用量更新预算计数。
     """
+    # 预算检查：超限时不发起请求（避免外部 API 计费）
     allowed, reason = check_budget(service_type="tts")
     if not allowed:
-        logger.warning("AI 预算超限，跳过 TTS 调用: %s", reason)
-        raise TTSRateLimitError(f"AI 预算超限: {reason}")
+        if "频率超限" in reason:
+            # 频率超限：等待 60s 滑动窗口滑过后重试，而非立即抛错
+            # tenacity 短退避（1-2s）无法突破 60s 频率窗口，立即抛错会导致
+            # 10 段并发全部失败（tenacity 3 次重试均在窗口内，全部被拦截）
+            logger.warning("TTS 频率超限，等待滑动窗口滑过后重试: %s", reason)
+            if not await _wait_for_tts_rate_limit_slot(timeout=65):
+                raise TTSRateLimitError(f"AI 预算超限(不可重试): {reason}")
+        else:
+            # token/费用超限：不可恢复，立即失败
+            logger.warning("AI 预算超限(不可重试)，跳过 TTS 调用: %s", reason)
+            raise TTSRateLimitError(f"AI 预算超限(不可重试): {reason}")
 
-    # 工厂模式：按 settings.TTS_PROVIDER 动态选择阿里云/Edge/腾讯云
-    provider = get_tts_provider()
-    audio = await provider.synthesize(
-        text,
-        voice=voice,
-        format=settings.ALIYUN_TTS_FORMAT,
-        sample_rate=settings.ALIYUN_TTS_SAMPLE_RATE,
-    )
+    # Semaphore 并发控制：限制同时发起的 TTS 请求数
+    sem = _get_tts_semaphore()
+    async with sem:
+        # 工厂模式：按 settings.TTS_PROVIDER 动态选择阿里云/Edge/腾讯云
+        provider = get_tts_provider()
+        audio = await provider.synthesize(
+            text,
+            voice=voice,
+            format=settings.ALIYUN_TTS_FORMAT,
+            sample_rate=settings.ALIYUN_TTS_SAMPLE_RATE,
+        )
 
-    # 调用成功后记录用量（按字符数计费）
-    record_call(
-        service_type="tts",
-        model=settings.ALIYUN_TTS_VOICE,
-        char_count=len(text),
-    )
+        # 调用成功后记录用量（按字符数计费）
+        record_call(
+            service_type="tts",
+            model=settings.ALIYUN_TTS_VOICE,
+            char_count=len(text),
+        )
 
-    return audio
+        return audio
 
 
 # 凭证脱敏正则：捕获组 1 为键名（token/secret/key/... + 分隔符），值为 \S+

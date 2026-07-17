@@ -3,8 +3,8 @@ name: "news-frontend-code-review"
 description: "对 MorningBrief 项目前端代码（admin-web/src/ 下 Vue 3/Element Plus 文件 + miniprogram/ 下微信小程序文件）进行全面评审与逻辑审查，覆盖组件规范、状态管理、API 契约、路由设计、类型安全、性能、可访问性、前后端字段契约、小程序生命周期、音频播放管理等维度。当用户要求'审查/检查/走查/把关/review/评估/看看对不对/规范不规范'前端 Vue/JS 代码、'.vue/.js 文件修改'、'迭代发布前前端走查'，或提到'前端评审/frontend review/Vue 代码审查/小程序代码审查'时调用。仅审查前端文件；纯后端 .py 文件审查请改用 news-backend-code-review。"
 whenToUse: "需要审查 MorningBrief 前端代码（admin-web/src/ 下 .vue/.js 文件 + miniprogram/ 下 .js/.wxml/.wxss 文件）是否符合项目规范"
 triggers: "前端代码 走查/审查/审核/把关/review/检查/评估 | .vue/.js 文件 修改/变更/迭代 走查 | 迭代发布前 前端 代码 走查 | 这段前端代码 写得对不对/规范不规范 | Vue/小程序 代码 review | 页面/组件/Store/路由 代码 审查"
-version: "1.6.0"
-updated: "2026-07-15"
+version: "1.7.0"
+updated: "2026-07-17"
 config: "config.yaml"
 scripts: "scripts/auto-scan.ps1"
 template: "templates/report-template.md"
@@ -12,7 +12,7 @@ template: "templates/report-template.md"
 
 # MorningBrief 前端代码审查
 
-对 MorningBrief 项目前端代码进行全面的代码评审及逻辑审查，覆盖**运营后台（admin-web/，Vue 3 + Element Plus + Vite + Pinia）**与**微信小程序（miniprogram/，原生小程序）**两套前端代码。评审涵盖 **36 个维度**：目录结构、命名规范、Vue 3 组件规范、Element Plus 规范、Pinia 状态管理、API 调用规范、路由设计、前后端字段契约、小程序生命周期、小程序音频播放管理、小程序 API 层、性能、可访问性、代码质量、错误处理。
+对 MorningBrief 项目前端代码进行全面的代码评审及逻辑审查，覆盖**运营后台（admin-web/，Vue 3 + Element Plus + Vite + Pinia）**与**微信小程序（miniprogram/，原生小程序）**两套前端代码。评审涵盖 **49 个维度**：目录结构、命名规范、Vue 3 组件规范、Element Plus 规范、Pinia 状态管理、API 调用规范、路由设计、前后端字段契约、小程序生命周期、小程序音频播放管理、小程序 API 层、性能、可访问性、代码质量、错误处理、频道级配置同步、前端验证脚本兼容性。
 
 ## 配置驱动
 
@@ -433,6 +433,41 @@ function request(options) {
 | 环境化 BASE_URL | 多环境部署（开发/测试/生产）| 单环境内部工具 |
 | onCanplay 自清理 | 一次性事件监听（seek 后即 off） | 持续监听（如 onTimeUpdate 需要持续触发） |
 
+### 维度 5（补充）：频道级配置同步与脚本兼容性复盘（2026-07-17）
+
+**成功执行任务的完整步骤（补充）**：
+
+1. **问题定位**：后端 rss.yaml 源 name 变更后，前端 ChannelManagement.vue 的 rss_sources 多选下拉框选项未同步
+2. **根因分析**：前端选项来源为硬编码或旧 API，未动态获取 rss.yaml 最新源列表
+3. **代码修复**：改为从 API 动态获取 RSS 源列表，确保前后端配置同步
+4. **字段契约对齐**：确认前端 rss_sources 提交格式为 JSON 数组字符串，与后端 channel.rss_sources 存储格式一致
+5. **验证脚本兼容性**：前端构建脚本中 Python 脚本调用改用 `python -u script.py 2>&1` 避免 PowerShell stdout 缓冲
+
+**任务执行中的不确定性与失败点（补充）**：
+
+| 失败点 | 触发条件 | 影响范围 | 根因 | 修复方式 |
+|--------|----------|----------|------|----------|
+| 前端 RSS 源选项硬编码 | ChannelManagement.vue 中 el-select 选项硬编码 | rss.yaml 变更后前端不同步，用户配置无效源 | 选项未动态获取 | 改为从 API 动态获取源列表 |
+| 前端 rss_sources 格式不一致 | 前端提交数组，后端期望 JSON 字符串 | 后端解析失败，rss_sources 存储为 null | 前后端字段格式契约未对齐 | 前端提交时 JSON.stringify，回显时 JSON.parse |
+| 前端验证脚本输出不可见 | PowerShell 调用 `python script.py` 无 -u | 脚本"卡住"误判 | stdout 块缓冲未刷新 | `python -u script.py 2>&1` |
+| 前端脚本误判 logger.error 为异常 | PowerShell 包装 stderr 为 RemoteException | 脚本被误中断 | 未区分日志输出与真实异常 | 理解 RemoteException 是正常包装，不中断 |
+
+**可抽象的固定流程与判断逻辑（补充）**：
+
+| 模板 | 核心判断信号 | 落地配置节点 |
+|------|--------------|--------------|
+| 前端配置动态获取检查 | Grep `el-select` 中 RSS 源选项硬编码而非 API 动态获取 | `hard_constraints.rules.frontend_config_dynamic_fetch` |
+| 前后端字段格式契约检查 | Grep 前端 rss_sources 提交格式与后端存储格式不一致 | `field_contract_frontend.rss_sources_format` |
+| 前端 PowerShell Python 调用检查 | Grep `package.json` 或 `.ps1` 中 `python script.py` 无 `-u` 或 `2>&1` | `hard_constraints.rules.frontend_powershell_python_unbuffered` |
+
+**适用场景与不适用场景（补充）**：
+
+| 模板 | 适用场景 | 不适用场景 |
+|------|----------|------------|
+| 前端配置动态获取检查 | 频道级配置管理页面、前后端配置同步场景 | 全局配置（无频道隔离）、无配置页面项目 |
+| 前后端字段格式契约检查 | JSON 数组字符串字段（rss_sources/keywords 等） | 简单字符串/数值字段（无格式转换） |
+| 前端 PowerShell Python 调用检查 | Windows + PowerShell + 前端工具链（含 Python） | bash/zsh、纯 Node.js 前端工具链 |
+
 ---
 
 ## 审查流程
@@ -701,3 +736,181 @@ pwsh .trae/skills/news-frontend-code-review/scripts/auto-scan.ps1
 
 
 
+
+---
+
+## 新增审查维度：环境隔离与页面完整性
+
+> 以下维度来源于 2026-07-17 真机测试与小程序迭代复盘，覆盖环境隔离、页面四件套、事件绑定对称性、工具层 bug 识别等高频故障场景。配置详见 `config.yaml#hard_constraints.rules` 对应条目。
+
+### 维度 42：环境隔离与 BASE_URL 配置化
+
+**为什么**：小程序真机测试时，手机访问不到电脑的 localhost/127.0.0.1（这两个地址在手机上指向手机自己）。如果 BASE_URL 硬编码 localhost，会导致真机所有 API 请求"网络异常"，容易被误判为"音频过大"等问题。
+
+检查信号：Grep `BASE_URL.*localhost\|BASE_URL.*127\.0\.0\.1` 在 miniprogram/services/ 下硬编码单一环境
+修复建议：按 `__wxConfig.envVersion` 切换 BASE_URL，开发环境用电脑局域网 IP
+适用场景：小程序 + 后端服务架构、前后端分离项目
+不适用场景：纯前端 SPA（无后端）、单机内部工具
+
+### 维度 43：小程序页面四件套完整性
+
+**为什么**：小程序页面由 .json/.js/.wxml/.wxss 四件套组成，缺一会导致编译错误或样式失效。历史问题：index/detail/profile 三个核心页面 .json 缺失，导致默认配置无 navigationBarTitleText；history.wxss 缺 top-bar/channel-pill 样式定义，导致频道胶囊垂直堆叠显示丑陋。
+
+检查信号：
+- Glob 检查 `miniprogram/pages/*/*.json` 是否每个页面都有对应 .json
+- Grep 检查 .wxml 中使用的 CSS 类是否在对应 .wxss 中定义
+
+修复建议：新建页面必须同步创建 .json/.js/.wxml/.wxss 四个文件；.wxml 中用到的所有 CSS 类必须在对应 .wxss 中定义
+适用场景：微信小程序原生开发、uni-app
+不适用场景：React/Vue SPA（单文件组件）
+
+### 维度 44：事件绑定对称性（on/off 配对）
+
+**为什么**：小程序全局 player 的 onPlay/onPause/onTimeUpdate/onEnded 等监听器如果在 onLoad 注册但 onUnload 未 off，reLaunch 后 onLoad 重复绑定会导致回调叠加，UI 串扰（如多个 setData 竞争）。
+
+检查信号：
+- Grep `player.on\w+\(` 或 `audioManager.on\w+\(` 后检查 onUnload 是否有对应 `off\w+`
+- Grep `this._onPlay = ` 检查回调是否保存为实例属性（用于精确 off）
+
+修复建议：
+- 所有 onXxx 监听器必须有对应 offXxx 解绑
+- 回调必须保存为实例属性（this._onXxx），禁止匿名函数（无法精确 off）
+- onUnload 中必须 off 所有监听器，并清除引用
+适用场景：小程序 Page/Component、Node.js EventEmitter、浏览器 addEventListener
+不适用场景：一次性 Promise、async/await（自动清理）
+
+### 维度 45：navigateTo 失败降级
+
+**为什么**：wx.navigateTo 在页面栈满 10 层或目标页面未注册时会静默失败，无 toast、无日志，用户感知为"点击无反应"。
+
+检查信号：Grep `wx.navigateTo` 后无 `fail` 回调
+修复建议：navigateTo 失败时降级为 reLaunch，并 console.warn 输出原因便于排查
+适用场景：所有小程序页面跳转
+不适用场景：tabBar 页面切换（用 wx.switchTab）
+
+### 维度 46：工具层 bug 识别
+
+**为什么**：微信开发者工具基础库 3.17.0 灰度版的 webview bug（`routeDone with a webviewId N is not found`）和 `appservice/mainframe 500` 被误判为代码问题，浪费修复时间。工具层 bug 无法通过代码修复，必须先排工具层后查代码层。
+
+检查信号：
+- 错误信息含 `system error` / `webviewId` / `appservice` / `mainframe` → 工具层
+- 错误仅在特定环境（开发者工具/真机/特定基础库版本）出现 → 工具层
+
+修复建议：
+- 工具层 bug：降基础库版本 + 清缓存 + 重启工具 + 兜底重装
+- 代码层 bug：现象采集 → 代码定位 → 根因假设 → 验证 → 修复 → 测试
+- 防御性代码仍需实施（navigateTo 降级 reLaunch、off 用可选链），但不是根治
+适用场景：所有依赖开发工具的项目
+不适用场景：纯命令行项目（无 IDE 依赖）
+
+---
+
+## 新增审查维度：401 重试与 API 调用健壮性
+
+### 维度 47：401 重试无限循环防护
+
+**为什么**：API 请求 401 时自动 refreshToken 后重试原请求，但如果原请求就是 /auth/login（登录接口本身返回 401），会形成 login → 401 → refreshToken → login → 401 → ... 无限递归。即使不是登录接口，token 仍无效时也会无限重试。
+
+检查信号：Grep `request` 函数中 401 处理逻辑无 `_retried` 标记或无 `url.startsWith('/auth/')` 排除
+修复建议：
+- 排除 /auth/ 前缀请求触发 401 重试（登录接口本身不重试）
+- 用 `_retried` 标记最多重试一次，防止 token 仍无效时无限递归
+适用场景：所有带 token 刷新机制的 API 封装
+不适用场景：无 token 刷新的简单 API 调用
+
+---
+
+## 新增审查维度：频道级配置同步与脚本兼容性
+
+> 以下维度来源于 2026-07-17 频道级数据隔离修复与 RSS 源端到端验证复盘，覆盖前端配置文件与后端数据源同步、前端验证脚本 PowerShell 兼容性等高频故障场景。配置详见 `config.yaml#hard_constraints.rules` 对应条目。
+
+### 维度 48：前端频道配置与后端数据源同步
+
+**为什么**：后端 rss.yaml 中的源 name 变更后，前端频道管理页面（ChannelManagement.vue）的 rss_sources 多选下拉框选项必须同步更新。如果前端仍从旧 API 获取源列表，或硬编码了源 name，会导致用户配置的 rss_sources 在后端 crawler 按 name 匹配时找不到源，返回 0 条素材。这是前后端配置不同步的典型问题。
+
+**检查信号**：
+- Grep `ChannelManagement.vue` 中 rss_sources 多选下拉框，检查选项来源是否为动态 API（如 `/admin/api/v1/rss-sources`）而非硬编码
+- Grep 前端代码中硬编码的 RSS 源 name（如 `'少数派'`、`'36氪'`），应改为从 API 动态获取
+- Grep 前端频道表单提交时，rss_sources 字段是否为 JSON 数组字符串（与后端 `channel.rss_sources` 存储格式一致）
+
+**修复建议**：
+```vue
+<!-- ❌ 反模式：硬编码 RSS 源选项 -->
+<el-select v-model="channelForm.rss_sources" multiple>
+  <el-option label="少数派" value="少数派" />
+  <el-option label="36氪" value="36氪" />
+  <!-- 硬编码，rss.yaml 变更后不同步 -->
+</el-select>
+
+<!-- ✅ 正确：从 API 动态获取 RSS 源列表 -->
+<el-select v-model="channelForm.rss_sources" multiple placeholder="不选则使用全部源">
+  <el-option
+    v-for="source in availableRssSources"
+    :key="source.name"
+    :label="`${source.name} (${source.category})`"
+    :value="source.name"
+  />
+</el-select>
+
+<script setup>
+import { ref, onMounted } from 'vue'
+import { fetchRssSources } from '@/api/channel'
+
+const availableRssSources = ref([])
+
+onMounted(async () => {
+  // 从后端 API 动态获取 rss.yaml 中的源列表
+  const data = await fetchRssSources()
+  availableRssSources.value = data.sources
+})
+</script>
+```
+
+**前后端字段契约**：
+- 前端 `channelForm.rss_sources` 提交时必须为 JSON 数组字符串（如 `'["少数派","极客公园"]'`）
+- 后端 `channel.rss_sources` 字段存储格式为 JSON 数组字符串
+- 前端回显时必须 `JSON.parse(channel.rss_sources)` 转为数组
+
+适用场景：频道级 RSS 源配置管理、前后端配置同步场景
+不适用场景：全局 RSS 源（不按频道隔离）、无配置页面的项目
+
+### 维度 49：前端验证脚本 PowerShell 兼容性
+
+**为什么**：前端开发流程中可能调用 Python 脚本（如构建脚本、验证脚本、数据迁移脚本）。PowerShell 调用 Python 脚本时，stdout 默认是块缓冲，脚本输出在缓冲区满或脚本退出前不可见，导致长时间运行的脚本看起来"卡住"。同时 Python 的 logger.error 写入 stderr，PowerShell 会包装为 RemoteException 警告，但脚本继续执行。前端开发者可能误判脚本失败而中断。
+
+**检查信号**：
+- Grep 前端 `package.json` 的 scripts 中 `python script.py`（无 -u 参数）
+- Grep 前端构建脚本（如 `build.ps1`）中 `python script.py` 后无 `2>&1` 重定向
+- Grep 前端开发文档中因 RemoteException 警告而误判脚本失败的说明
+
+**修复建议**：
+```json
+// package.json scripts 规范
+{
+  "scripts": {
+    // ❌ 反模式：stdout 缓冲导致输出不可见
+    "verify": "python scripts/verify.py",
+
+    // ✅ 正确：-u 禁用缓冲 + 2>&1 捕获 stderr
+    "verify": "python -u scripts/verify.py 2>&1"
+  }
+}
+```
+
+```powershell
+# 前端构建脚本规范（build.ps1）
+# ❌ 反模式
+python scripts/gen_sitemap.py
+
+# ✅ 正确
+python -u scripts/gen_sitemap.py 2>&1
+```
+
+**注意事项**：
+- `python -u` 禁用 stdout 缓冲，确保输出实时可见
+- `2>&1` 将 stderr 重定向到 stdout，捕获 logger.error 输出
+- PowerShell 包装 stderr 为 RemoteException 警告是正常行为，不应因警告中断脚本
+- 仅适用于 Windows + PowerShell 环境，bash/zsh 默认行缓冲无需此处理
+
+适用场景：Windows + PowerShell + 前端工具链（含 Python 脚本调用）
+不适用场景：bash/zsh（默认行缓冲）、IDE 内运行（IDE 处理缓冲）、纯 Node.js 前端工具链（无 Python 依赖）

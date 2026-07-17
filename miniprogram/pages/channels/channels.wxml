@@ -1,0 +1,42 @@
+<!-- 频道管理页 -->
+<view class="page-channels">
+  <!-- 加载中 -->
+  <view class="loading-mask" wx:if="{{loading}}">
+    <text>加载中...</text>
+  </view>
+
+  <!-- 空状态 -->
+  <view class="empty-state" wx:elif="{{channels.length === 0}}">
+    <text class="empty-icon">📻</text>
+    <text>暂无可用频道</text>
+  </view>
+
+  <!-- 频道列表 -->
+  <block wx:else>
+    <view class="channel-list">
+      <view
+        class="card channel-item"
+        wx:for="{{channels}}"
+        wx:key="id"
+        data-id="{{item.id}}"
+        data-index="{{index}}"
+      >
+        <!-- 频道信息：点击切换到该频道 -->
+        <view class="channel-info" data-id="{{item.id}}" bindtap="onTapChannel">
+          <view class="channel-name">{{item.name}}</view>
+          <view class="channel-desc">{{item.description || '精彩内容，等你来听'}}</view>
+        </view>
+
+        <!-- 订阅按钮：点击订阅/取消订阅，不触发卡片跳转 -->
+        <view
+          class="subscribe-btn {{item.is_subscribed ? 'subscribed' : ''}}"
+          data-id="{{item.id}}"
+          data-index="{{index}}"
+          catchtap="onToggleSubscribe"
+        >
+          <text>{{item.is_subscribed ? '已订阅' : '订阅'}}</text>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

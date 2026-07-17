@@ -204,6 +204,37 @@ function _installHooks() {
   }
 }
 
+/**
+ * 强制清理残留的 v-loading 遮罩
+ *
+ * 触发场景：浏览器最小化期间，CSS transition 与 setTimeout 被冻结，
+ * Element Plus v-loading 指令的 mask 隐藏流程不执行，DOM 永久残留。
+ * 仅靠 Vue 状态 toggle 不可靠（值未变化时 watch 不触发；transitionend
+ * 不会触发；setTimeout 仍被 throttle 到 1s 间隔）。
+ *
+ * 为什么用 document.querySelectorAll 而不是限定范围：
+ *   - keep-alive 路由下的组件可能挂载到 body 直接子节点，限定范围会漏；
+ *   - 残留 mask 本就属于异常状态，强制清理后用户操作会触发新的 mask；
+ *   - 在页面已可见时清理无副作用，组件下次 loading 会重新创建。
+ *
+ * @returns {number} 清理的 mask 数量（用于日志诊断）
+ */
+function _cleanupStaleLoadingMasks() {
+  // 使用 :not([data-keep]) 选择器为未来保留扩展点：标记 [data-keep] 的 mask 不清理
+  const masks = document.querySelectorAll('.el-loading-mask:not([data-keep])')
+  let removed = 0
+  masks.forEach((mask) => {
+    if (mask.parentNode) {
+      mask.parentNode.removeChild(mask)
+      removed++
+    }
+  })
+  if (removed > 0) {
+    console.debug(`[window-guard] 清理残留 loading mask: ${removed} 个`)
+  }
+  return removed
+}
+
 function _onVisibilityChange() {
   if (document.hidden) {
     // 页面隐藏：hooks 自动生效（_shouldBlock 返回 true）
@@ -219,6 +250,11 @@ function _onVisibilityChange() {
       }, 2000)
       console.debug('[window-guard] 页面恢复，启动 2s 保护期')
     }
+    // 兜底清理残留 mask：双 rAF 确保浏览器完成首帧渲染后再清理，
+    // 避免清理动作与 Vue 响应式更新产生竞争
+    requestAnimationFrame(() => {
+      requestAnimationFrame(_cleanupStaleLoadingMasks)
+    })
   }
 }
 
@@ -242,4 +278,16 @@ document.addEventListener('visibilitychange', _onVisibilityChange)
 // 模块加载时立即安装 hooks（确保在所有其他代码之前）
 _installHooks()
 
-export { _shouldBlock as shouldBlock }
+/**
+ * 对外暴露：强制清理所有残留的 v-loading mask
+ *
+ * 适用场景：
+ *   - 组件内部在 visibilitychange 之外的其他时机需要清理（如路由切换、定时器触发）
+ *   - 不想监听 visibilitychange 又需要立即清理
+ *   - 测试时验证清理逻辑
+ */
+function cleanupLoadingMasks() {
+  return _cleanupStaleLoadingMasks()
+}
+
+export { _shouldBlock as shouldBlock, cleanupLoadingMasks }

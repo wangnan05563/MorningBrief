@@ -307,7 +307,11 @@ async def test_batch_delete_removes_all_related_records(db_session):
 
 @pytest.mark.asyncio
 async def test_batch_delete_multiple_workflows(db_session):
-    """批量删除多个工作流时每个工作流的关联数据均被清除。"""
+    """批量删除多个工作流时每个工作流的关联数据均被清除，素材保留重置为 pending。
+
+    素材是"原材料"不随工作流删除而丢失：重置为 pending + workflow_id=None，
+    重跑工作流时 rewrite 可直接复用，crawler_dedup 也保留避免重复爬取。
+    """
     await _create_full_chain(db_session, wid="wf-batch-a", episode_date=date(2026, 7, 8))
     await _create_full_chain(db_session, wid="wf-batch-b", episode_date=date(2026, 7, 9))
 
@@ -319,7 +323,12 @@ async def test_batch_delete_multiple_workflows(db_session):
     assert (await db_session.execute(select(Workflow))).all() == []
     assert (await db_session.execute(select(WorkflowStep))).all() == []
     assert (await db_session.execute(select(Script))).all() == []
-    assert (await db_session.execute(select(Material))).all() == []
+    # 素材保留并重置为 pending + workflow_id=None（设计决策：原材料可复用）
+    materials = (await db_session.execute(select(Material))).all()
+    assert len(materials) == 2
+    for (m,) in materials:
+        assert m.status == MaterialStatus.pending.value
+        assert m.workflow_id is None
     assert (await db_session.execute(select(Review))).all() == []
     assert (await db_session.execute(select(Episode))).all() == []
     assert (await db_session.execute(select(PlayLog))).all() == []

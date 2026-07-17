@@ -10,6 +10,7 @@
 """
 import asyncio
 import json
+import re
 import time
 from collections import defaultdict
 from datetime import date, datetime, timedelta
@@ -387,11 +388,11 @@ async def _call_llm(prompt: str) -> str:
             # 10 条并发全部失败（tenacity 3 次重试均在窗口内，全部被拦截）
             logger.warning("频率超限，等待滑动窗口滑过后重试: %s", reason)
             if not await _wait_for_rate_limit_slot(timeout=65):
-                raise LLMServiceError(f"AI 预算超限: {reason}")
+                raise LLMAuthError(f"AI 预算超限(不可重试): {reason}")
         else:
             # token/费用超限：不可恢复，立即失败
-            logger.warning("AI 预算超限，跳过 LLM 调用: %s", reason)
-            raise LLMServiceError(f"AI 预算超限: {reason}")
+            logger.warning("AI 预算超限(不可重试)，跳过 LLM 调用: %s", reason)
+            raise LLMAuthError(f"AI 预算超限(不可重试): {reason}")
 
     try:
         resp = await _get_client().chat.completions.create(
@@ -780,8 +781,14 @@ async def _fetch_materials(date_str: str, channel_id: int = None) -> list[dict]:
     status=pending 确保不重复消费已被选题的素材。
     回溯阈值取 SELECT_MIN_N 而非 0：RSS 源稀疏日即使爬到 1-2 条，
     也常不足 MIN_VALID_SEGMENTS=3，提前回溯避免工作流必然失败。
-    channel_id 非空时按频道过滤，确保各频道素材互不交叉（频道级隔离）；
-    为空时查询全部 pending 素材（兼容全局模式/历史遗留数据 channel_id IS NULL）。
+    channel_id 非空时严格按本频道过滤，确保各频道素材互不交叉；
+    为空时（全局工作流）查询全部 pending 素材。
+
+    重要：已配置 rss_sources/keywords 的专门频道不再回退到 channel_id IS NULL 的
+    历史遗留素材。历史遗留素材未经过频道 RSS 白名单和关键词过滤，混入会绕过
+    频道级数据隔离（曾导致"主机游戏"频道消费 36氪/人民网等非游戏素材的 bug）。
+    专门频道 RSS 不可达时让工作流显式失败，由运维介入修复源配置，
+    而非用不相关内容掩盖问题。
     """
     async with AsyncSessionLocal() as session:
         day = date.fromisoformat(date_str)
@@ -793,8 +800,9 @@ async def _fetch_materials(date_str: str, channel_id: int = None) -> list[dict]:
             Material.crawled_at >= start,
             Material.crawled_at <= end,
         )
-        # 频道级素材隔离：channel_id 非空时仅查本频道素材
-        # 历史遗留素材（channel_id IS NULL）只在全局模式下可用
+        # 频道级严格隔离：channel_id 非空时仅查本频道素材，不再 OR channel_id IS NULL
+        # 历史遗留 NULL 素材只允许被全局工作流（channel_id=None）消费，
+        # 避免绕过专门频道的 rss_sources 白名单与 keywords 过滤造成跨频道污染
         if channel_id is not None:
             stmt = stmt.where(Material.channel_id == channel_id)
         result = await session.execute(stmt)
@@ -813,7 +821,8 @@ async def _fetch_materials(date_str: str, channel_id: int = None) -> list[dict]:
                 Material.crawled_at >= fb_start,
                 Material.crawled_at < start,
             )
-            # 回溯也按频道过滤，保持隔离一致性
+            # 回溯也按本频道严格过滤，不回退 NULL 历史遗留素材，保持与当日查询一致
+            # 历史遗留 NULL 素材绕过频道 rss_sources/keywords 过滤，混入会造成跨频道污染
             if channel_id is not None:
                 fb_stmt = fb_stmt.where(Material.channel_id == channel_id)
             fb_stmt = fb_stmt.order_by(Material.crawled_at.desc())
@@ -853,7 +862,8 @@ async def _fetch_channel_prompts(channel_id: int) -> dict:
         channel_id: 频道 ID
 
     Returns:
-        {intro_prompt, outro_prompt, constraint_prompt, rewrite_template, enable_thinking_question}
+        {name, description, intro_prompt, outro_prompt, constraint_prompt,
+         rewrite_template, enable_thinking_question}
         频道不存在或字段为空时对应值为 None
     """
     from app.models import Channel
@@ -861,6 +871,8 @@ async def _fetch_channel_prompts(channel_id: int) -> dict:
         ch = await session.get(Channel, channel_id)
         if ch is None:
             return {
+                "name": None,
+                "description": None,
                 "intro_prompt": None,
                 "outro_prompt": None,
                 "constraint_prompt": None,
@@ -868,6 +880,8 @@ async def _fetch_channel_prompts(channel_id: int) -> dict:
                 "enable_thinking_question": None,
             }
         return {
+            "name": ch.name,
+            "description": ch.description,
             "intro_prompt": ch.intro_prompt,
             "outro_prompt": ch.outro_prompt,
             "constraint_prompt": ch.constraint_prompt,
@@ -875,6 +889,90 @@ async def _fetch_channel_prompts(channel_id: int) -> dict:
             # None=默认开启，0=关闭，1=开启；统一转为 bool
             "enable_thinking_question": ch.enable_thinking_question != 0,
         }
+
+
+async def _filter_materials_by_relevance(
+    materials: list[dict], channel_name: str, channel_description: str
+) -> list[dict]:
+    """AI 相关性筛选：批量判断素材是否与频道主题相关。
+
+    作为关键词过滤的第二道防线，处理关键词无法覆盖的语义相关性。
+    批量调用 LLM（一次传全部素材的 title+summary），返回相关素材 ID 列表。
+    筛选失败时降级为全部保留（不阻断工作流），仅记录 warning。
+
+    Args:
+        materials: 待筛选的素材列表（dict 含 id/title/summary）
+        channel_name: 频道名称（如"娱乐焦点"）
+        channel_description: 频道描述（如"影视、音乐、明星动态与文娱产业资讯"）
+
+    Returns:
+        相关素材列表（原 dict 列表的子集）
+    """
+    if not materials or not channel_name:
+        return materials
+
+    # 构造批量筛选 prompt：一次调用判断所有素材，节省 AI 预算
+    # 使用 content 前 100 字作为摘要（_fetch_materials 返回的 dict 无 summary 字段）
+    items_text = "\n".join(
+        f"[{i}] 标题：{m['title']}\n    摘要：{(m.get('content') or '')[:100]}"
+        for i, m in enumerate(materials)
+    )
+
+    prompt = f"""你是新闻频道内容审核员。请判断以下素材是否与频道主题相关。
+
+频道名称：{channel_name}
+频道描述：{channel_description or ''}
+
+待审核素材：
+{items_text}
+
+请仅返回相关素材的序号（方括号中的数字），以 JSON 数组格式输出。
+判断标准：素材核心内容应与频道主题直接相关，边缘关联不算。
+仅输出 JSON 数组本身，不要任何解释。
+
+示例输出：[0, 2, 5]"""
+
+    try:
+        resp = await _call_llm(prompt)
+        # 解析 LLM 返回的相关序号
+        # 提取 JSON 数组（LLM 可能包裹在 markdown 中）
+        match = re.search(r'\[[\d\s,]*\]', resp)
+        if not match:
+            logger.warning("AI 相关性筛选返回格式异常，降级全部保留: %s", resp[:200])
+            return materials
+
+        raw_indices = json.loads(match.group())
+        # 保序去重 + 类型检查 + 越界过滤：LLM 可能返回重复序号或非整数值
+        seen = set()
+        relevant = []
+        for i in raw_indices:
+            if isinstance(i, int) and 0 <= i < len(materials) and i not in seen:
+                seen.add(i)
+                relevant.append(materials[i])
+
+        if len(relevant) < len(materials):
+            skipped_titles = [
+                m["title"][:40] for i, m in enumerate(materials) if i not in seen
+            ]
+            logger.info(
+                "AI 相关性筛选：%d → %d 条（筛除 %d 条不相关：%s）",
+                len(materials), len(relevant), len(materials) - len(relevant),
+                skipped_titles,
+            )
+
+        # 筛选后不足 SELECT_MIN_N 时保留全部（降级策略，不阻断工作流）
+        if len(relevant) < SELECT_MIN_N:
+            logger.warning(
+                "AI 筛选后仅 %d 条 <%d，降级保留全部素材",
+                len(relevant), SELECT_MIN_N,
+            )
+            return materials
+
+        return relevant
+    except Exception as e:
+        # AI 筛选失败时降级为全部保留，不阻断工作流
+        logger.warning("AI 相关性筛选异常，降级全部保留: %s", e)
+        return materials
 
 
 async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> dict:
@@ -955,6 +1053,17 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
     # 2. 选题：按品类分组，每品类选 1-2 篇热度最高
     selected = _select_top_materials(materials, top_n=SELECT_TOP_N)
     logger.info("选题 %d 条（按热度排序）", len(selected))
+
+    # 2.3 AI 相关性筛选：批量判断选题素材是否与频道主题相关
+    # 作为关键词过滤的第二道防线，处理关键词无法覆盖的语义相关性
+    # 筛选失败时降级为全部保留（不阻断工作流）
+    if channel_prompts and channel_prompts.get("name"):
+        selected = await _filter_materials_by_relevance(
+            selected,
+            channel_prompts["name"],
+            channel_prompts.get("description") or "",
+        )
+        logger.info("AI 相关性筛选后剩余 %d 条", len(selected))
 
     # 2.5 关联素材到当前工作流并标记为 selected
     # 回溯选取的历史素材 workflow_id 可能为 NULL，需更新为当前工作流

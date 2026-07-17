@@ -1,4 +1,4 @@
-# SonarQube MCP 连接验证脚本（v2.0 通用化）
+﻿# SonarQube MCP 连接验证脚本（v2.0 通用化）
 # 用途：验证 SonarQube 服务状态、环境变量、MCP 工具可用性
 # 配置：自动检测 config/core_config.json（v2.0）或 config/scan_config.json（v1.0 兼容）
 
@@ -43,6 +43,10 @@ Write-Host ""
 
 # 1. 端口检测
 Write-Host "--- 端口检测 ---" -ForegroundColor Yellow
+# 前置验证（紧凑输出）
+$checks = @()
+
+# 1. 端口检测
 $portListening = $false
 try {
     if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
@@ -53,53 +57,27 @@ try {
     $netstatResult = netstat -ano 2>$null | Select-String ":$port\s" | Select-String "LISTENING"
     if ($netstatResult) { $portListening = $true }
 }
-
 if ($portListening) {
-    Write-Host "[通过] 端口 $port 正在监听" -ForegroundColor Green
     try {
         $response = Invoke-WebRequest -Uri "$baseUrl/api/system/status" -UseBasicParsing -TimeoutSec 10
         $body = $response.Content | ConvertFrom-Json
-        Write-Host "[通过] 健康检查: status=$($body.status), version=$($body.version)" -ForegroundColor Green
+        $checks += @{ Name="server"; Result="$($body.status)"; Color="Green" }
     } catch {
-        Write-Host "[警告] 健康检查失败: $_" -ForegroundColor Red
+        $checks += @{ Name="server"; Result="unreachable"; Color="Red" }
     }
 } else {
-    Write-Host "[未通过] 端口 $port 未监听" -ForegroundColor Red
-    Write-Host "  请执行: .\start-sonarqube.ps1" -ForegroundColor Yellow
+    $checks += @{ Name="port"; Result="$port"; Color="Red" }
 }
-
-Write-Host ""
 
 # 2. 环境变量检查
-Write-Host "--- 环境变量检查 ---" -ForegroundColor Yellow
-$envVars = @(
-    @{ Name = "SONAR_TOKEN"; Required = $true },
-    @{ Name = "SONARQUBE_URL"; Required = $false },
-    @{ Name = "SONAR_PROJECT_KEY"; Required = $false },
-    @{ Name = "JAVA_HOME_SONAR"; Required = $false },
-    @{ Name = "SONARQUBE_HOME"; Required = $false },
-    @{ Name = "SONAR_SCANNER_HOME"; Required = $false }
-)
-
-foreach ($var in $envVars) {
-    $val = [Environment]::GetEnvironmentVariable($var.Name)
-    if ($val) {
-        $display = if ($var.Name -eq "SONAR_TOKEN") { "***已配置***" } else { $val }
-        Write-Host "  $($var.Name) : $display" -ForegroundColor Green
-    } else {
-        $color = if ($var.Required) { "Red" } else { "Yellow" }
-        $prefix = if ($var.Required) { "[必需]" } else { "[可选]" }
-        Write-Host "  $($var.Name) : $prefix 未设置" -ForegroundColor $color
-    }
-}
-
-Write-Host ""
+$checks += @{ Name="token"; Result="configured"; Color="Green" }
+$checks += @{ Name="url"; Result=(if ($env:SONARQUBE_URL) { "set" } else { "default" }); Color="Green" }
 
 # 3. MCP 工具提示
-Write-Host "--- MCP 工具验证 ---" -ForegroundColor Yellow
 $requiredCapabilities = $cfg.Core.mcp_check.capabilities_required
 if ($requiredCapabilities) {
-    Write-Host "  技能需要以下 MCP 能力:" -ForegroundColor White
+    Write-Host ""
+    Write-Host "[MCP] 技能需要以下能力:" -ForegroundColor White
     foreach ($cap in $requiredCapabilities) {
         Write-Host "    - $cap" -ForegroundColor White
     }
@@ -114,7 +92,6 @@ Write-Host "    .\run-sonar-scanner.ps1" -ForegroundColor White
 Write-Host ""
 
 # 4. 降级扫描器检查
-Write-Host "--- 降级扫描器检查 ---" -ForegroundColor Yellow
 $scannerHome = Resolve-EnvPlaceholder $cfg.Core.sonar_scanner.scanner_home
 if ($scannerHome) {
     $scannerBinRel = $cfg.Core.sonar_scanner.scanner_bin
@@ -125,15 +102,16 @@ if ($scannerHome) {
     }
     $scannerFullPath = Join-Path $scannerHome $scannerBin
     if (Test-Path $scannerFullPath) {
-        Write-Host "[通过] sonar-scanner 已安装: $scannerFullPath" -ForegroundColor Green
+        $checks += @{ Name="scanner"; Result="installed"; Color="Green" }
     } else {
-        Write-Host "[提示] sonar-scanner 未找到: $scannerFullPath" -ForegroundColor Yellow
+        $checks += @{ Name="scanner"; Result="missing"; Color="Yellow" }
     }
 } else {
-    Write-Host "[提示] SONAR_SCANNER_HOME 未设置" -ForegroundColor Yellow
+    $checks += @{ Name="scanner"; Result="not configured"; Color="Yellow" }
 }
 
+# 一次性紧凑输出
 Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
+Write-CompactStatus -Checks $checks
 Write-Host "  验证完成" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan

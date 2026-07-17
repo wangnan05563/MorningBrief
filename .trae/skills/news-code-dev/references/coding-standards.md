@@ -1003,3 +1003,281 @@ assert MIN_DURATION_SEC <= duration <= MAX_DURATION_SEC
   3. 异常日志必须包含 exc_info=True 以记录 traceback
 - 运行环境验证：日志格式应与源码版本一致，不一致说明运行的是旧构建产物
 
+
+---
+
+## 规范 35：环境隔离与静态资源 URL 配置化
+
+**为什么**：开发态用 localhost/127.0.0.1，真机测试时手机访问不到电脑（127.0.0.1 指向手机自己），生产用域名。如果硬编码 localhost，会导致真机测试"网络异常"误判为"音频过大"等问题，浪费排查时间。
+
+**判断信号**：
+- grep 搜索 `'http://localhost` 或 `'http://127.0.0.1` 硬编码在业务代码（非配置文件、非 .env）
+- grep 搜索 `audio_url` / `cover_url` 拼接逻辑中含硬编码 host
+- 后端 `app.host` 配置为 `127.0.0.1` 但期望真机访问
+
+**正确做法**：
+```python
+# 后端：所有对外 URL 通过 settings 配置项管理
+from app.config import get_settings
+
+class ContentService:
+    @staticmethod
+    def _episode_to_dict(episode: Episode) -> dict:
+        # 从配置读取 base URL，未配置时回退 localhost（仅开发工具可用）
+        base = get_settings().AUDIO_BASE_URL or 'http://localhost:8000'
+        audio_url = episode.audio_url
+        if audio_url and audio_url.startswith('/audio/') and not audio_url.startswith('http'):
+            audio_url = base + audio_url
+        return {"audio_url": audio_url, ...}
+
+# config.py 新增配置项
+class Settings(BaseSettings):
+    AUDIO_BASE_URL: str = ""  # 留空回退 localhost，真机测试设为电脑局域网 IP
+```
+
+```javascript
+// 前端：BASE_URL 按环境切换，禁止硬编码单一环境
+const BASE_URL = (typeof __wxConfig !== 'undefined' && __wxConfig.envVersion === 'release')
+  ? 'https://api.example.com/api/v1'  // 生产环境
+  : 'http://10.232.253.113:8000/api/v1';  // 开发环境（真机测试用电脑局域网 IP）
+```
+
+**环境地址选择规则**：
+
+| 场景 | 后端 APP_HOST | AUDIO_BASE_URL | 前端 BASE_URL |
+|------|---------------|----------------|---------------|
+| 开发者工具调试 | 127.0.0.1 | 留空（回退 localhost） | http://localhost:8000 |
+| 真机测试 | 0.0.0.0 | http://<电脑局域网IP>:8000 | http://<电脑局域网IP>:8000 |
+| 生产部署 | 0.0.0.0 | https://<公网域名> | https://<公网域名> |
+
+**规则**：
+- 后端 `APP_HOST=0.0.0.0` 才能让局域网/公网访问，`127.0.0.1` 仅本机
+- 所有静态资源 URL（音频/封面/上传文件）通过 `AUDIO_BASE_URL` 配置项管理
+- 前端 BASE_URL 按 `__wxConfig.envVersion` 切换，禁止硬编码单一环境
+- IP 变化时只需修改 `.env` 和前端 BASE_URL 两处
+
+**适用场景**：小程序 + 后端服务架构、前后端分离项目
+**不适用场景**：纯前端 SPA（无后端）、单机内部工具
+
+---
+
+## 规范 36：小程序页面四件套完整性
+
+**为什么**：小程序页面由 .json/.js/.wxml/.wxss 四件套组成，缺一会导致编译错误或样式失效。历史问题：index/detail/profile 三个核心页面 .json 缺失，导致默认配置无 navigationBarTitleText；history.wxss 缺 top-bar/channel-pill 样式定义，导致频道胶囊垂直堆叠显示丑陋。
+
+**判断信号**：
+- 用 Glob 检查 `miniprogram/pages/*/*.json` 是否每个页面都有对应 .json
+- 用 Grep 检查 .wxml 中使用的 CSS 类是否在对应 .wxss 中定义
+- 检查 app.json pages 数组中每个路径是否都有四件套
+
+**正确做法**：
+```
+// 新建页面时必须同步创建四件套
+pages/
+  new-page/
+    new-page.json    // 页面配置（标题/下拉刷新/组件注册）
+    new-page.js      // 页面逻辑（onLoad/onShow/onUnload）
+    new-page.wxml    // 页面结构
+    new-page.wxss    // 页面样式（所有 wxml 用到的类必须在此定义）
+
+// new-page.json 最小配置
+{
+  "navigationBarTitleText": "页面标题",
+  "enablePullDownRefresh": false
+}
+```
+
+**规则**：
+- 新建页面必须同步创建 .json/.js/.wxml/.wxss 四个文件
+- .wxml 中用到的所有 CSS 类必须在对应 .wxss 中定义（或 app.wxss 全局定义）
+- app.json pages 数组必须包含新页面路径
+- 自定义组件在页面 .json 的 usingComponents 中注册后才能在 .wxml 中使用
+
+**适用场景**：微信小程序原生开发、uni-app
+**不适用场景**：React/Vue SPA（单文件组件）
+
+---
+
+## 规范 37：事件绑定对称性（on/off 配对）
+
+**为什么**：小程序全局 player 的 onPlay/onPause/onTimeUpdate/onEnded 等监听器如果在 onLoad 注册但 onUnload 未 off，reLaunch 后 onLoad 重复绑定会导致回调叠加，UI 串扰（如多个 setData 竞争）。
+
+**判断信号**：
+- grep 搜索 `player.on\w+\(` 或 `audioManager.on\w+\(` 后检查 onUnload 是否有对应 `off\w+`
+- grep 搜索 `this._onPlay = ` 检查回调是否保存为实例属性（用于精确 off）
+
+**正确做法**：
+```javascript
+Page({
+  onLoad() {
+    this.bindPlayerEvents();
+  },
+  bindPlayerEvents() {
+    const player = getApp().globalData.player;
+    if (!player) return;
+    // 回调保存为实例属性，供 onUnload 精确解绑
+    this._onPlay = () => { this.setData({ isPlaying: true }); };
+    this._onPause = () => { this.setData({ isPlaying: false }); };
+    this._onTimeUpdate = () => {
+      this.setData({
+        currentTime: Math.floor(player.currentTime),
+        duration: Math.floor(player.duration),
+      });
+    };
+    this._onEnded = () => { this.setData({ isPlaying: false, currentTime: 0 }); };
+    player.onPlay(this._onPlay);
+    player.onPause(this._onPause);
+    player.onTimeUpdate(this._onTimeUpdate);
+    player.onEnded(this._onEnded);
+  },
+  onUnload() {
+    const player = getApp().globalData.player;
+    if (player) {
+      // 必须精确 off 同一引用，不能 off 匿名函数
+      player.offPlay?.(this._onPlay);
+      player.offPause?.(this._onPause);
+      player.offTimeUpdate?.(this._onTimeUpdate);
+      player.offEnded?.(this._onEnded);
+    }
+    // 清除引用避免内存泄漏
+    this._onPlay = null;
+    this._onPause = null;
+    this._onTimeUpdate = null;
+    this._onEnded = null;
+  },
+});
+```
+
+**规则**：
+- 所有 onXxx 监听器必须有对应 offXxx 解绑
+- 回调必须保存为实例属性（this._onXxx），禁止匿名函数（无法精确 off）
+- onUnload 中必须 off 所有监听器，并清除引用
+- 一次性事件（如 onCanplay seek 后即 off）必须自清理
+
+**适用场景**：小程序 Page/Component、Node.js EventEmitter、浏览器 addEventListener
+**不适用场景**：一次性 Promise、async/await（自动清理）
+
+---
+
+## 规范 38：模型字段名验证（禁止凭记忆假设）
+
+**为什么**：历史问题：content_service.py 中写了 `Workflow.workflow_id == workflow_id`，但 Workflow 模型主键字段名是 `id`（comment="workflow_id"），导致查询永远返回 None。凭记忆假设字段名是高频错误源。
+
+**判断信号**：
+- 代码中出现 `Model.field_name` 但未先 Read 模型定义文件确认
+- PR review 时发现字段访问未对照模型源文件
+- 查询条件 `where(Model.xxx == value)` 中 xxx 字段名拼写错误
+
+**正确做法**：
+```python
+# ❌ 错误：凭记忆假设字段名
+async def publish_episode(self, workflow_id: str):
+    wf = await self.db.execute(
+        select(Workflow.channel_id).where(Workflow.workflow_id == workflow_id)  # 字段名错误
+    )
+
+# ✅ 正确：先 Read 模型定义确认字段名
+# Read backend/app/models/workflow.py
+# 确认 class Workflow: id = mapped_column(...)  # comment="workflow_id"
+async def publish_episode(self, workflow_id: str):
+    # 主键字段名为 id（comment 标注为 workflow_id），不是 workflow_id
+    wf = await self.db.execute(
+        select(Workflow.channel_id).where(Workflow.id == workflow_id)
+    )
+```
+
+**规则**：
+- 编写涉及模型字段访问的代码前，必须先 Read 模型定义文件
+- PR review 时，reviewer 必须对照模型源文件验证字段名
+- 字段名有歧义时（如 id vs workflow_id），以模型定义为准，comment 仅作参考
+- ORM 模型的 `__table__.columns` 是字段名的唯一可信源
+
+**适用场景**：所有 ORM（SQLAlchemy/Django ORM/Tortoise）
+**不适用场景**：原生 SQL（字段名在 SQL 中可见）
+
+---
+
+## 规范 39：统计口径校验（聚合查询前确认字段语义）
+
+**为什么**：历史问题：用户收听统计用 `sum(PlayLog.duration)` 计算累计收听时长，但 `PlayLog.duration` 是节目总时长（每条日志记录节目时长），不是实际收听时长。结果"9 分钟"实际是"9 个节目总时长之和"，严重偏高。应改用 `PlayProgress.position`（每用户每节目一条 upsert 记录，position 是最后播放位置）。
+
+**判断信号**：
+- 聚合查询 `sum(field)` / `count(field)` 前未确认 field 的语义
+- 统计结果与业务预期不符（如"累计收听 9 分钟"但用户只听了 3 分钟）
+- 用日志表（PlayLog）做统计而非状态表（PlayProgress）
+
+**正确做法**：
+```python
+# ❌ 错误：用 PlayLog.duration 统计收听时长
+# PlayLog.duration 是节目总时长，sum(duration) = 节目总时长之和，严重偏高
+total_seconds = await db.execute(
+    select(func.sum(PlayLog.duration)).where(PlayLog.user_id == user_id)
+)
+
+# ✅ 正确：用 PlayProgress.position 统计收听时长
+# PlayProgress 每用户每节目一条 upsert 记录，position 是最后播放位置
+total_seconds = await db.execute(
+    select(func.coalesce(func.sum(PlayProgress.position), 0))
+    .where(PlayProgress.user_id == user_id)
+)
+```
+
+**字段语义对照表**：
+
+| 表 | 字段 | 语义 | 适用统计场景 |
+|----|------|------|--------------|
+| PlayLog | duration | 节目总时长（每条日志） | 播放次数统计、节目热度 |
+| PlayLog | position | 播放位置（每条日志） | 历史播放位置追踪 |
+| PlayProgress | position | 最后播放位置（upsert 单条） | 累计收听时长、断点续播 |
+| PlayProgress | completed | 是否完播（0/1） | 完播率统计 |
+
+**规则**：
+- 聚合查询（sum/count/avg）前必须确认字段的业务语义
+- 日志表（append-only）用于次数/热度统计，状态表（upsert）用于累计/当前值统计
+- 统计结果与业务预期偏差 >20% 时必须复核字段语义
+- 新增统计接口必须字段语义对照表
+
+**适用场景**：所有数据库聚合查询、统计接口、报表
+**不适用场景**：单条记录查询（字段语义直接可见）
+
+---
+
+## 规范 40：工具层与代码层 bug 分离原则
+
+**为什么**：历史问题：微信开发者工具基础库 3.17.0 灰度版的 webview bug（`routeDone with a webviewId N is not found`）和 `appservice/mainframe 500` 被误判为代码问题，浪费修复时间。工具层 bug 无法通过代码修复，必须先排工具层后查代码层。
+
+**判断信号**：
+- 错误信息含 `system error` / `webviewId` / `appservice` / `mainframe` → 工具层
+- 错误信息含 `SyntaxError` / `TypeError` / `KeyError` / `ImportError` → 代码层
+- 错误仅在特定环境（开发者工具/真机/特定基础库版本）出现 → 工具层
+- 错误在所有环境一致出现 → 代码层
+
+**处理流程**：
+```
+1. 错误分类：先判断是工具层还是代码层
+   - 工具层信号：system error / webviewId / appservice / 环境特定
+   - 代码层信号：语法/类型/逻辑错误 / 全环境复现
+
+2. 工具层 bug 处理：
+   a. 降基础库版本（灰度版 → 稳定版）
+   b. 清除工具缓存（菜单：工具 → 清除缓存 → 全选）
+   c. 彻底重启工具（任务栏右键退出，非关窗口）
+   d. 兜底：卸载重装工具（重置 profile，类似 Edge user data 损坏案例）
+
+3. 代码层 bug 处理：
+   a. 现象采集 → 代码定位 → 根因假设 → 验证假设 → 修复 → 测试验证
+   b. 每个修复遵循：语法检查 → 测试套件 → 路由注册冒烟
+
+4. 防御性代码（工具层 bug 的代码侧缓解）：
+   - navigateTo 失败时降级为 reLaunch（避免页面栈满静默失败）
+   - 播放器事件 off 时用可选链（player.offPlay?.(cb)）兼容 API 差异
+```
+
+**规则**：
+- 遇到 `system error` / `webviewId` / `appservice` 类错误，先排工具层（降版本+清缓存+重启）
+- 工具层 bug 的代码侧缓解措施仍需实施（防御性编程），但不是根治
+- 代码层 bug 必须修复根因，不能仅靠工具层规避
+- 已知工具层 bug（如 Edge 浏览器最小化自动恢复、开发者工具 webview 路由错误）记录到项目 memory
+
+**适用场景**：所有依赖开发工具的项目（微信开发者工具、VS Code、IDEA 等）
+**不适用场景**：纯命令行项目（无 IDE 依赖）

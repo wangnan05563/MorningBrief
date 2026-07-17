@@ -1,7 +1,7 @@
----
+﻿---
 name: "sonarqube-mcp"
-description: "通用 SonarQube 代码质量闭环：扫描→分类→并行修复→验证→报告。适用于任何有 SonarQube 服务的项目（Python/TypeScript/Java/Go）。调用时机：用户要求修复 SonarQube 问题、代码质量检测、扫描问题修复、代码质量问题闭环处理，或提到 'sonarqube'、'sonar'、'代码扫描修复'、'代码检测' 等关键词时。"
-whenToUse: "编码/开发/缺陷修复后调用、用户要求代码质量检查、CI/CD 质量门禁验证、提交前扫描、技术债清理、用户想要分析 SonarQube 规则或误报、用户想要修复特定严重级别的问题、用户请求提交前或推送前的质量反馈"
+description: "通用 SonarQube 代码质量闭环：扫描→分类→并行修复→验证→报告。适用于任何有 SonarQube 服务的项目（Python/TypeScript/Java/Go）。"
+whenToUse: "编码/开发/缺陷修复后调用、用户要求代码质量检查、CI/CD 质量门禁验证、提交前扫描、技术债清理"
 triggers:
   - "sonar/sonarqube/sonarcloud/质量门禁/代码质量"
   - "增量/全量/代码/sonar 扫描"
@@ -18,62 +18,30 @@ triggers:
 
 # SonarQube MCP 技能（v2.1 通用化 + 弹性恢复）
 
-通用 SonarQube 代码质量闭环技能，对 SonarQube 扫描出的所有问题进行**服务器检测→ES 弹性预检→连接验证→扫描→分类→并行修复→NOSONAR 位置校验→报告**的完整修复流程。支持任意项目 + 任意语言 + 任意框架组合，内置 ES read-only 锁自愈、CE 报告轮询、NOSONAR 位置校验三大弹性机制。
+通用 SonarQube 代码质量闭环技能，对 SonarQube 扫描出的所有问题进行**服务器检测→ES弹性预检→连接验证→扫描→分类→并行修复→NOSONAR位置校验→报告**的完整修复流程。支持任意项目 + 任意语言 + 任意框架组合，内置 ES read-only 锁自愈、CE 报告轮询、NOSONAR 位置校验三大弹性机制。
 
 ## 复盘声明（v2.1 沉淀）
-
 > 本节内容基于 2026-07-07 一次完整闭环实战（336 → 0 OPEN，4 轮扫描-修复循环）沉淀。
+> 完整复盘与历史案例详见 [CHANGELOG.md](CHANGELOG.md)。
 
-### 成功执行任务的完整步骤
+### 12 阶段流程
+1. **Phase -1** 服务器检测与启动 → 2. **Phase -0.5** ES 弹性预检 → 3. **Phase 0** 前置检查（5 项预检 + 失败恢复映射） → 4. **Phase 1** MCP 可用性检测与降级 → 5. **Phase 2** 功能模块代码定位 → 6. **Phase 3** 质量门禁检查 → 7. **Phase 4** 问题扫描（分页/过滤/排序） → 8. **Phase 4.5** CE 报告轮询 → 9. **Phase 5** 并行修复（含 NOSONAR 位置判断） → 10. **Phase 6** 验证（重扫+测试+NOSONAR校验+硬约束+收敛判断） → 11. **Phase 7** 报告 → 12. **Phase 8** 问题状态管理（需用户确认）
 
-1. **Phase -1**：SonarQube 服务器检测与启动
-2. **Phase -0.5**：Elasticsearch 弹性预检与解锁（防 CE 报告 FAILED）
-3. **Phase 0**：前置检查（5 项预检 + 失败恢复动作映射）
-4. **Phase 1**：MCP 可用性检测与降级处理
-5. **Phase 2**：功能模块代码定位
-6. **Phase 3**：质量门禁检查
-7. **Phase 4**：问题扫描（含分页/过滤/排序）
-8. **Phase 4.5**：Compute Engine 报告轮询（防读取旧数据）
-9. **Phase 5**：并行修复（含 NOSONAR 位置判断）
-10. **Phase 6**：验证（重扫 + 测试 + NOSONAR 位置校验 + 硬约束 + 收敛判断）
-11. **Phase 7**：报告
-12. **Phase 8**：问题状态管理（需用户确认）
+| 失败场景 | 恢复动作 | 重试 |
+|----------|----------|------|
+| ES flood_stage → 锁定 | `unlock_es_and_persist_watermark` | ✅ |
+| CE 报告 FAILED | `check_es_read_only_block` → 解锁重试 | ✅ |
+| NOSONAR 位置错误 | `reposition_nosonar`（按规则表查表） | ✅ |
+| Java 版本不匹配 | 提示设置 `JAVA_HOME_SONAR` | ❌ |
+| SCM blame 缺失 | `warn_only`（不阻塞） | ❌ |
+| sonar-scanner 路径错误 | 环境变量 + 配置占位符解析 | — |
 
-### 任务执行过程中的不确定性与失败点
-
-| 失败点 | 不确定性 | 配置化恢复动作 |
-|--------|---------|---------------|
-| 磁盘超 flood_stage → ES 锁定 | 开发机磁盘紧张时高发 | `unlock_es_and_persist_watermark` |
-| CE 报告处理 FAILED | 报告上传后异步处理可能失败 | `check_es_read_only_block` + 重试 |
-| NOSONAR 位置错误 | 不同规则报的物理行不同 | `reposition_nosonar`（按位置规则表查表） |
-| Java 版本不匹配 | SonarQube 26 需 Java 17+ | `guide_set_java_home`（不重试） |
-| SCM blame 缺失 | 44+ 文件时出现 | `warn_only`（不阻塞） |
-| sonar-scanner 路径错误 | 跨平台路径差异 | 通过环境变量 + 配置占位符解析 |
-
-### 可抽象的固定流程与判断逻辑
-
-1. **预检 → 失败映射 → 恢复动作**：`precheck.checks` × `failure_recovery.mappings` 配置驱动，所有失败场景可枚举
-2. **修复策略分类**：`fix_strategies.json` 三档（auto_fix / manual_review / skip），按 rule ID 查表
-3. **NOSONAR 位置规则**：`nosonar_position_rules` 9 条规则，按 rule ID 查表确定物理行（issue_line / first_param_line / def_line）
-4. **收敛判断**：`scan.max_scan_iterations` × `scan.target_open_count` 双重控制，避免无限循环
-5. **配置占位符**：`${ENV:VAR|default}` 统一占位符语法，运行时解析
-
-### 适用场景与不适用场景
-
-**适用**：
-- 中大型项目（> 500 行）持续维护
-- 多语言/多框架组合项目
-- 本地或自建 SonarQube 服务（含 ES 弹性需求）
-- CI/CD 质量门禁集成
-- 大规模代码质量清零（如 336 → 0）
-
-**不适用**：
-- 极小型脚本/原型项目（< 500 行）
-- 一次性 MVP（无持续维护需求）
-- 高度依赖代码生成器的项目（生成代码噪声过高）
-- 紧急热修复（全量扫描太慢）
-- 未部署 SonarQube 服务且无降级能力的环境
-- SonarCloud SaaS（ES 由 SonarSource 托管，无需 ES 解锁）
+### 关键判断逻辑
+1. **预检 → 失败映射 → 恢复**：`precheck.checks` × `failure_recovery.mappings` 配置驱动
+2. **修复策略**：`fix_strategies.json` 三档（auto_fix / manual_review / skip），按 rule ID 查表
+3. **NOSONAR 位置**：`nosonar_position_rules` 9 条规则，按 rule ID 查表（issue_line / first_param_line / n/a）
+4. **收敛判断**：`scan.max_scan_iterations` × `scan.target_open_count` 双重控制
+5. **配置占位符**：`${ENV:VAR|default}` 统一语法，运行时解析
 
 ## 适用场景
 
@@ -93,265 +61,171 @@ triggers:
 - 极小型脚本/原型项目（< 500 行）
 - 一次性 MVP（无持续维护需求）
 - 高度依赖代码生成器的项目（生成代码噪声过高）
-- 紧急热修复（全量扫描太慢，应直接针对性修复）
+- 紧急热修复（全量扫描太慢）
 - 未部署 SonarQube 服务且无降级能力的环境
-- SonarCloud SaaS（ES 由 SonarSource 托管，ES 解锁流程不适用，但其他流程仍可用）
+- SonarCloud SaaS（ES 由 SonarSource 托管，无需 ES 解锁）
 
 ## Skill 职责
 
-1. **服务器检测与启动**：跨平台自动检测/启动 SonarQube 服务
-2. **ES 弹性预检**：扫描前检测并解除 ES read-only 锁，持久化 watermark 阈值
-3. **连接验证**：MCP 工具 + HTTP API 双通道验证
-4. **代码定位**：根据功能模块自动定位文件
-5. **质量门禁检查**：验证项目是否通过质量门禁
-6. **问题扫描**：按严重级别/类型/规则扫描
-7. **CE 报告轮询**：等待 Compute Engine 处理完成，避免读取旧数据
-8. **问题分类**：自动识别误报（基于框架模式库）
-9. **并行修复**：按文件分组并行执行（Task 工具），含 NOSONAR 位置判断
-10. **修复验证**：重新扫描 + 测试运行 + NOSONAR 位置校验 + 硬约束检查 + 收敛判断
-11. **报告生成**：标准化 Markdown 报告
+| 职责 | 说明 |
+|------|------|
+| 服务器检测 | 检测 SonarQube 服务状态，自动启动（如需） |
+| 弹性预检 | 检测 ES 磁盘水位，自动解锁 read-only 索引 |
+| 连接验证 | 验证端口、环境变量、MCP 工具可用性、扫描器 |
+| 问题扫描 | 调用 MCP 或降级方案扫描项目，分页获取所有 OPEN 问题 |
+| 问题分类 | 按质量维度（SECURITY/RELIABILITY/MAINTAINABILITY）分类 |
+| 修复策略 | 按 rule ID 查 `fix_strategies.json` 确定修复策略 |
+| 并行修复 | 按文件分组启动子代理，同文件串行防冲突 |
+| NOSONAR 校验 | 修复后验证 NOSONAR 位置是否正确 |
+| 质量门禁 | 检查 Quality Gate 状态 |
+| 报告生成 | 生成 Markdown 报告（含动态压缩） |
 
 ## 配置文件分层（v2.1 核心架构）
 
-> **关键设计**：技能本身不包含任何项目特定配置，所有配置都通过分层文件管理。所有可变参数（端口/路径/阈值/动作）均通过配置文件管理，无硬编码。
+| 层级 | 文件 | 用途 |
+|------|------|------|
+| 核心配置 | `config/core_config.json` | 服务器连接/ES弹性/预检/扫描/过滤/验证/失败恢复（所有项目复用） |
+| 修复策略 | `config/fix_strategies.json` | 30+ 规则修复模板 + NOSONAR 位置规则表（v2.2.0） |
+| 框架模式 | `config/framework_patterns.json` | 6 大框架误报模式库（FastAPI/React/Vue/Django/Spring/Express） |
+| 硬约束 | `config/hard_constraints/core.json` | 通用安全规则（14 条） |
+| 业务约束 | `config/hard_constraints/business/*.json` | 项目特定业务规则（如 Xianyu） |
+| 项目配置 | `config/project_config.json` | 项目特定配置（模块/语言/框架/测试命令） |
 
-```
-config/
-├── core_config.json                    # 通用配置（与项目无关，v2.1.0）
-│   ├── sonarqube_server               # 服务器连接（host/port/java_home/启动超时）
-│   ├── es_resilience                  # ES 弹性配置（端口/watermark/解锁 API/配置文件路径）★ v2.1 新增
-│   ├── precheck                       # 环境预检（5 项检查 + on_failure 动作映射）★ v2.1 新增
-│   ├── sonar_scanner                  # 降级扫描器（路径/超时）
-│   ├── mcp_check                      # MCP 能力要求
-│   ├── scan                           # 扫描参数（严重级别/分页/并行数/迭代上限/收敛目标）
-│   ├── report_polling                 # CE 报告轮询（端点/间隔/最大尝试数/终态）★ v2.1 新增
-│   ├── priority                       # 修复优先级（severity_order/type_order）
-│   ├── filters                        # 通用过滤（路径/规则/严重级别）
-│   ├── verify                         # 修复后验证（rescan/test/fail_on_new/nosonar 校验）
-│   ├── nosonar_validation             # NOSONAR 位置校验（开关/位置规则源/常见错误）★ v2.1 新增
-│   ├── failure_recovery               # 失败场景→恢复动作映射表（8 个场景）★ v2.1 新增
-│   ├── report                         # 报告输出
-│   └── environment_variables           # 环境变量说明
-│
-├── project_config.json                # 项目特定配置（Xianyu 业务配置）
-│   ├── project                        # 项目信息（key/name/base_path）
-│   ├── modules                        # 模块路径与层级（backend/frontend）
-│   ├── verify.test_commands           # 分模块测试命令（backend/frontend）
-│   └── framework_extensions           # 项目启用的框架（fastapi_decorators/react_patterns）
-│
-├── fix_strategies.json                # 修复策略表 + NOSONAR 位置规则（v2.2.0）
-│   ├── strategies.auto_fix            # 可自动修复的规则（45+ 条）
-│   ├── strategies.manual_review       # 需人工审查的规则（10 条）
-│   ├── strategies.skip                # 已知误报（4 条）
-│   └── nosonar_position_rules         # NOSONAR 抑制注释位置规则表（9 条）★ v2.2 新增
-│
-├── framework_patterns.json            # 框架模式库（多框架支持）
-│   ├── fastapi                        # 装饰器 + 已知误报
-│   ├── react                          # Hooks + 已知误报
-│   ├── vue/django/spring/express      # 其他框架
-│   └── selection_logic                # 框架自动识别逻辑
-│
-└── hard_constraints/                  # 硬约束（分通用 + 业务两层）
-    ├── core.json                      # 通用安全规则（任何项目都该有）
-    │   ├── no_hardcoded_credentials
-    │   ├── no_sql_injection
-    │   ├── no_command_injection
-    │   ├── no_dangerously_set_inner_html
-    │   ├── secure_random_for_secrets
-    │   └── ...
-    └── business/                      # 项目特有硬约束
-        └── xianyu.json                # Xianyu 特有（WebView2/HF_ENDPOINT/HMAC）
-```
+> v1.0 `config/scan_config.json` 已标记 deprecated，脚本自动检测并 fallback。
 
 ## 快速开始
 
-### 1. 准备配置
-
-```bash
-# 复制核心配置（v2.0 已内置）
-# 复制项目配置模板
-cp examples/xianyu-hunter/config/project_config.json my-project/config/
-
-# 修改 project_config.json 适配你的项目
-```
-
-### 2. 设置环境变量
-
+### 1. 配置环境变量
 ```powershell
-# 必需
-$env:SONAR_TOKEN = "squ_xxxxxxxx"
-
-# 可选
-$env:SONARQUBE_URL = "http://localhost:9000"
-$env:SONARQUBE_PORT = "9000"
-$env:SONARQUBE_HOME = "D:\tools\sonarqube"
-$env:JAVA_HOME_SONAR = "D:\tools\jdk17"
-$env:SONAR_PROJECT_KEY = "my_project"
-$env:SONAR_ES_PORT = "9001"              # ES REST API 端口（默认 9001，v2.1 新增）
-$env:SONAR_SCANNER_HOME = "D:\tools\sonar-scanner"
-$env:SONAR_MCP_SERVER_NAME = "mcp_sonarqube"
-$env:SONAR_JAVA_MIN_VERSION = "17"
+$env:SONAR_TOKEN = "squ_xxxxxxxxxxxxxxxxxx"
+$env:SONARQUBE_URL = "http://localhost"  # 可选
+$env:SONARQUBE_PORT = "9000"             # 可选
+$env:SONAR_PROJECT_KEY = "xianyu_hunter" # 可选
 ```
 
-### 3. 验证环境
-
+### 2. 验证连接
 ```powershell
 .\scripts\verify-connection.ps1
 ```
 
-### 4. 触发扫描
-
-**MCP 模式**（推荐）：
-```
-调用 Search-SonarIssues -Projects "my_project" -Severities "BLOCKER","CRITICAL"
-```
-
-**降级模式**（MCP 不可用）：
+### 3. 执行扫描
 ```powershell
 .\scripts\run-sonar-scanner.ps1
 ```
 
-### 5. 并行修复
-
-```
-按 fix_strategies.json 配置自动处理：
-- auto_fix  → 子代理直接执行
-- manual_review → 输出建议给用户决策
-- skip → 标记为误报
-```
-
-### 6. 验证 + 报告
-
-```
-重扫对比 → 运行测试 → 硬约束检查 → 生成 reports/sonar-fix-report-YYYYMMDD.md
-```
+### 4. 查看报告
+报告自动生成在 `docs/sonar-reports/sonar-fix-report-YYYYMMDD-HHmmss.md`
 
 ## 工作流（8 阶段闭环 + 弹性预检）
 
-> **执行原则**：智能体按当前 Phase 按需 Read 对应 reference 文档。详细步骤见 [references/scan-workflow.md](references/scan-workflow.md)。
+### Phase -1：SonarQube 服务器检测与启动
+- 调用 `start-sonarqube.ps1` 检测服务状态
+- 如未运行，自动启动（跨平台适配）
+- 健康检查端点：`/api/system/status`
+- 超时：`core_config.json -> sonarqube_server.startup_timeout_seconds`
 
-### Phase -1: Server Detection（服务器检测与启动）
+### Phase -0.5：Elasticsearch 弹性预检
+> v2.1 新增。开发机磁盘紧张时 ES 自动锁定索引，导致 CE 报告 FAILED。
+- 检测磁盘水位：`core_config.json -> es_resilience.watermark`
+- 如触发 flood_stage，自动解锁 ES 索引 + 持久化 watermark
+- API 端口：`core_config.json -> es_resilience.es_api_port`（默认 9001）
+- 自动解锁：`core_config.json -> es_resilience.auto_unlock_on_failure`
 
-- 自动检测 SonarQube 服务状态（`start-sonarqube.ps1 -StatusOnly`）
-- 未运行则自动启动（`start-sonarqube.ps1`）
-- 失败时按 `failure_recovery.mappings[server_status]` 恢复
+### Phase 0：前置检查
+5 项预检（端口/Java/磁盘/ES状态/配置），失败时按 `failure_recovery.mappings` 自动恢复。
 
-### Phase -0.5: ES Resilience（ES 弹性预检与解锁）★ v2.1 新增
+### Phase 1：MCP 可用检测
+- 如 MCP 工具不可用，自动降级到 `scripts/run-sonar-scanner.ps1`
+- 降级方案同样支持全部 12 阶段流程
 
-- 读取 `core_config.json -> es_resilience` 配置
-- 检测 ES 索引是否被 `read_only_allow_delete` 锁定
-- 若被锁，按 `unlock_apis` 解除锁 + 持久化 watermark 阈值（防重启后再触发）
-- 不适用 SonarCloud SaaS（自动跳过）
+### Phase 2：功能模块代码定位
+- 从 `project_config.json -> modules` 读取模块定义
+- 按 `framework_patterns.json` 识别误报模式
+- 支持增量扫描（按功能关键词或路径）
 
-### Phase 0: Pre-flight（前置检查）
+### Phase 3：质量门禁检查
+- 调用 `/api/qualitygates/project_status` 检查 Quality Gate
+- 阈值配置：`core_config.json -> scan.quality_gate`
 
-- 执行 `precheck.checks` 中 5 项检查（server_status / java_version / disk_space / es_read_only_block / sonar_token）
-- 任一失败时按 `failure_recovery.mappings` 查找恢复动作并执行
-- 凭据必须从环境变量读取，禁止硬编码
+### Phase 4：问题扫描
+- 调用 MCP 工具或 API 获取所有 OPEN 问题
+- 分页处理：`core_config.json -> scan.page_size`
+- 过滤：按严重级别/类型/文件路径
+- 排序：按 `core_config.json -> priority` 权重
 
-### Phase 1: Verification（MCP 可用性检测与降级）
+### Phase 4.5：Compute Engine 报告轮询
+> v2.1 新增。sonar-scanner 上传报告后 CE 异步处理。
+- 轮询间隔：`core_config.json -> report_polling.poll_interval_seconds`
+- 最大尝试：`core_config.json -> report_polling.max_attempts`
+- 终态：SUCCESS / FAILED / CANCELED
+- FAILED 时触发 `failure_recovery.mappings[report_processing_failed]`
 
-- 检测 MCP 工具可用性
-- MCP 不可用时降级到 `scripts/run-sonar-scanner.ps1`
-- 降级方案限制：无法使用 `analyze_code_snippet` / `change_sonar_issue_status`
+### Phase 5：并行修复
+- 按文件分组，每组启动一个子代理
+- 同文件内多个 issue 串行处理（防 Edit 冲突）
+- 每个子代理分配 `core_config.json -> scan.files_per_agent` 个文件
+- 修复策略从 `fix_strategies.json` 查表确定
 
-### Phase 2: Scan & Triage（扫描与分类）
+### Phase 6：验证
+1. **重扫**：调用 `/api/ce/create` 重新扫描修复后的代码
+2. **测试**：执行 `project_config.json -> verify.test_command`
+3. **NOSONAR 校验**：如 OPEN 数未下降，按 `nosonar_position_rules` 重新定位
+4. **硬约束检查**：扫描 `hard_constraints/core.json` 中的所有 pattern
+5. **收敛判断**：如达到 `scan.max_scan_iterations` 或 `scan.target_open_count`，终止循环
 
-- 调用 `Search-SonarIssuesAll` 全量拉取问题（含分页处理）
-- 按 `priority.severity_order` × `priority.type_order` 排序
-- 应用 `filters`（ignore_paths/ignore_rules/ignore_severity_in_tests）
-- 按文件分组（用于并行修复）
+### Phase 7：报告
+- 生成 Markdown 报告，保存到 `core_config.json -> report.output_dir`
+- 报告模板：`assets/report-template.md`
+- 动态生成规则见下文
 
-### Phase 2.5: CE Report Polling（Compute Engine 报告轮询）★ v2.1 新增
-
-- 仅降级方案需要：sonar-scanner 上传报告后，CE 异步处理
-- 按 `report_polling` 节点配置轮询 `/api/ce/task?id=xxx`
-- FAILED 时按 `failure_recovery.mappings[report_processing_failed]` 恢复（通常为 ES 锁）
-
-### Phase 3: Classification（问题分类）
-
-- 加载 `framework_patterns.json`（根据 `project_config.json -> modules.frameworks`）
-- 自动识别框架误报（FastAPI 装饰器、React Hook 依赖等）
-- 匹配 `fix_strategies.json` 的 auto_fix/manual_review/skip
-
-### Phase 4: Parallel Fix（并行修复）
-
-- 子代理数：`scan.parallel_agents`
-- 每个子代理处理 `scan.files_per_agent` 个文件
-- 同一文件内 issue 串行处理（避免 Edit 冲突）
-- 子代理 prompt 模板：`assets/subagent-task-template.md`
-- **NOSONAR 位置判断**：使用 NOSONAR 抑制时，按 `fix_strategies.json -> nosonar_position_rules` 查表确定物理行
-
-### Phase 5: Verify & Report（验证与报告）
-
-- 重新扫描（`verify.rescan_after_fix`）
-- **NOSONAR 位置校验**（`verify.validate_nosonar_position`）：若 OPEN 数未下降，按 `nosonar_validation` 检查位置错误并重放置
-- 运行测试（`project_config.json -> verify.test_commands` 分模块执行）
-- 硬约束合规性检查（`hard_constraints/core.json` + `hard_constraints/business/*.json`）
-- **收敛判断**：未达 `scan.target_open_count` 且未超 `scan.max_scan_iterations` 时回到 Phase 2
-- 生成报告：`assets/report-template.md` → `report.output_dir`
+### Phase 8：问题状态管理
+- 对确认误报的问题，调用 `change_sonar_issue_status(issueKey, "falsepositive", comment)`
+- 对可接受债务的问题，调用 `change_sonar_issue_status(issueKey, "accept", comment)`
+- 需用户确认后才执行状态变更
 
 ## 前置要求
 
-### 必需
-
-1. **SonarQube 服务**：可访问的 SonarQube 实例（本地或 SonarCloud）
-2. **SONAR_TOKEN 环境变量**：在 SonarQube Web 界面生成 Global Analysis Token
-3. **配置文件**：
-   - `config/core_config.json`（v2.0 已内置）
-   - `config/project_config.json`（需根据项目定制）
-   - `config/fix_strategies.json`（v2.0 已内置）
-   - `config/framework_patterns.json`（v2.0 已内置）
-
-### 可选
-
-4. **sonar-scanner**（降级方案需要）
-5. **MCP 工具**（推荐，效率更高）
-6. **JDK**（自动启动 SonarQube 需要）
+- SonarQube 服务（本地/云端/SonarCloud）
+- SONAR_TOKEN 环境变量
+- sonar-scanner（MCP 不可用时作为降级方案）
+- Java 17+（SonarQube 26 需要）
+- 项目代码已检出到工作目录
 
 ## 关键设计原则
 
-1. **零硬编码**：所有项目参数（端口/路径/阈值/动作）通过配置文件管理，技能本身不含业务参数，所有可变值通过 `${ENV:VAR|default}` 占位符解析
-2. **配置分层**：核心通用（core）+ 项目特定（project）+ 业务规则（business）
-3. **跨平台**：Windows/Linux/macOS 自动适配
-4. **降级保障**：MCP 不可用时自动降级到 sonar-scanner
-5. **向后兼容**：旧版 `config/scan_config.json` 自动 fallback
-6. **硬约束强制**：通用安全规则（core.json）+ 业务规则（business/*.json）双重保护
-7. **框架感知**：通过 `framework_patterns.json` 自动识别 FastAPI/React 等常见框架的误报
-8. **修复策略可配置**：按 rule ID 配置 auto_fix/manual_review/skip
-9. **不自动变更问题状态**：标记 falsepositive/accept 前必须用户确认
-10. **增量扫描**：只扫描新增/修改的文件，不重复扫描全量代码
-11. **ES 弹性自愈**：扫描前检测 ES read-only 锁并自动解锁 + 持久化 watermark（v2.1 新增）
-12. **NOSONAR 位置查表**：使用 NOSONAR 抑制时按 `nosonar_position_rules` 表查物理行，避免位置错误导致重扫无变化（v2.1 新增）
-13. **收敛控制**：`max_scan_iterations` × `target_open_count` 双重控制，避免无限循环（v2.1 新增）
-14. **失败映射配置化**：所有失败场景与恢复动作在 `failure_recovery.mappings` 中配置，无硬编码（v2.1 新增）
+1. **配置驱动**：所有参数通过配置文件管理，无硬编码
+2. **环境隔离**：凭据从环境变量读取，不写入配置文件
+3. **降级容错**：MCP 不可用时自动降级到命令行方案
+4. **弹性恢复**：失败时按映射表自动恢复，不阻塞流程
+5. **跨平台**：支持 Windows/Linux/macOS，自动适配路径和命令
+6. **渐进式**：支持增量扫描和模块化配置
 
 ## 自动化脚本
 
-| 脚本 | 用途 |
-|------|------|
-| `scripts/detect-platform.ps1` | 平台检测（Windows/Linux/macOS），输出工具可用性 |
-| `scripts/invoke-api.ps1` | API 抽象层，封装所有 SonarQube HTTP API 调用 |
-| `scripts/start-sonarqube.ps1` | 跨平台服务器检测与启动（-StatusOnly / -ForceRestart） |
-| `scripts/verify-connection.ps1` | MCP + 环境变量连接验证 |
-| `scripts/run-sonar-scanner.ps1` | MCP 不可用时的降级扫描方案 |
-| `scripts/generate-scan-scope.ps1` | 扫描范围自动生成（按关键词与模块） |
+| 脚本 | 用途 | 入口 |
+|------|------|------|
+| `scripts/start-sonarqube.ps1` | 服务器检测与启动 | `.\scripts\start-sonarqube.ps1` |
+| `scripts/verify-connection.ps1` | 连接验证（端口/环境变量/MCP/扫描器） | `.\scripts\verify-connection.ps1` |
+| `scripts/run-sonar-scanner.ps1` | 降级扫描器 | `.\scripts\run-sonar-scanner.ps1` |
+| `scripts/generate-scan-scope.ps1` | 扫描范围生成 | `.\scripts\generate-scan-scope.ps1 -Keyword "xxx"` |
+| `scripts/invoke-api.ps1` | API 抽象层 | `.\scripts\invoke-api.ps1; Invoke-SonarApi -Endpoint ...` |
+| `scripts/detect-platform.ps1` | 平台检测 | `.\scripts\detect-platform.ps1; Get-Platform` |
 
 ## 模板文件
 
 | 模板 | 用途 |
 |------|------|
-| `assets/subagent-task-template.md` | 并行修复子代理任务模板 |
-| `assets/report-template.md` | 标准化扫描报告模板 |
-| `assets/issue-tracker-template.md` | 问题跟踪记录模板 |
+| [assets/report-template.md](assets/report-template.md) | 扫描报告模板（含动态生成规则） |
+| [assets/issue-tracker-template.md](assets/issue-tracker-template.md) | 问题追踪记录模板 |
+| [assets/subagent-task-template.md](assets/subagent-task-template.md) | 并行修复子代理任务模板 |
 
 ## 示例项目
 
-| 示例 | 说明 |
+| 项目 | 说明 |
 |------|------|
-| `examples/xianyu-hunter/` | Xianyu Hunter 完整配置（FastAPI + React） |
-| `examples/basic-python/` | 最小 Python 项目示例（仅启用 core 硬约束） |
-| `examples/react-frontend/` | 纯 React 前端项目示例 |
+| [examples/xianyu-hunter/](examples/xianyu-hunter/) | Xianyu Hunter（FastAPI + React，完整配置） |
+| [examples/basic-python/](examples/basic-python/) | 最简 Python 项目配置 |
+| [examples/react-frontend/](examples/react-frontend/) | 纯前端 React 项目配置 |
 
 ## 参考文档
 
@@ -361,6 +235,51 @@ $env:SONAR_JAVA_MIN_VERSION = "17"
 | [references/issue-classification.md](references/issue-classification.md) | 问题分类与判断标准（按质量维度 + 框架） |
 | [references/rule-overrides.md](references/rule-overrides.md) | 规则豁免与误报处理 |
 | [references/nosonar-positioning.md](references/nosonar-positioning.md) | NOSONAR 抑制注释位置规则单一可信源（v2.1 新增，9 条规则 + 5 个常见错误 + 修复示例） |
+
+## 上下文加载规则（Token 优化）
+
+> 以下规则指导智能体在不同阶段加载哪些参考文档，避免全量加载到初始上下文窗口。
+
+| 阶段 | 加载内容 | 跳过内容 |
+|------|----------|----------|
+| Phase -1 ~ 1 | SKILL.md + core_config.json | references/ 目录 |
+| Phase 2 ~ 3 | + framework_patterns.json（按项目模块） | fix_strategies.json 全文 |
+| Phase 4 | + issue-classification.md | nosonar-positioning.md |
+| Phase 4.5 | + report_polling 配置 | 其他 |
+| Phase 5 | + fix_strategies.json（仅 active_rules）+ nosonar-positioning.md | scan-workflow.md 全文 |
+| Phase 6 | + hard_constraints/core.json | 其他 |
+| Phase 7 | + report-template.md（条件化） | 其他 |
+| Phase 8 | 按需加载 | 其他 |
+
+### fix_strategies.json 子集加载
+Phase 5 修复时，仅加载与当前扫描结果相关的规则：
+1. 从扫描结果中提取涉及的 rule ID 集合
+2. 从 fix_strategies.json 中仅提取这些 rule 对应的策略条目
+3. 将子集注入子代理 prompt
+
+示例：若扫描结果涉及 python:S1481, python:S125, typescript:S6488
+则 fix_strategies.json 加载内容从 528 行缩减至 ~30 行。
+
+## 报告动态生成规则（Token 优化）
+
+> 报告只输出有实际内容的部分，空表格和未触发的检查项不生成。
+
+### 生成规则
+1. **质量门禁**：所有指标达标时，输出一行摘要；仅当有未达标项时展开详细表格
+2. **问题统计**：仅输出有实际数据的严重级别和维度
+3. **问题详情**：BLOCKER/CRITICAL 级别单独成节；MINOR/INFO 合并为一节
+4. **硬约束合规**：全部通过时输出 `✅ 硬约束: N/N 通过`；有违规时展开检查表
+5. **修复建议**：使用紧凑格式（规则ID + 文件:行 + 级别 + 策略 + 状态）
+6. **修复结果**：仅输出实际修复/跳过的问题，不输出空表格
+
+### 紧凑格式示例
+| # | 规则 | 文件:行 | 级别 | 策略 | 状态 |
+|---|------|---------|------|------|------|
+| 1 | python:S1481 | src/api/routes.py:42 | MAJOR | auto_fix | ✅ 已修复 |
+| 2 | python:S125 | src/services/collector.py:15 | MINOR | auto_fix | ✅ 已修复 |
+| 3 | typescript:S6488 | frontend/App.tsx:23 | MAJOR | manual_review | ⏳ 待审核 |
+
+**总计**：修复 2/3，待审 1/3，跳过 0/3
 
 ## 配置文件
 

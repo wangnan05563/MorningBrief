@@ -66,7 +66,7 @@ async function refreshToken() {
 }
 
 /**
- * 登出（调后端写 Redis 黑名单）
+ * 登出（调后端注销 token，V1.2 起后端用 SQLite TTLCache 替代 Redis 黑名单）
  */
 async function logout() {
   const token = getToken();

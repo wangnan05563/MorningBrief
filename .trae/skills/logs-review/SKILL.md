@@ -1,4 +1,4 @@
----
+﻿---
 name: Logs Review
 description: 对后台服务运行时日志进行增量分析，识别 WARNING/ERROR 背后的真问题与噪声，按问题类型匹配修复策略，并行实施修复后验证闭环。所有业务参数通过 `config.yaml` 管理，技能本身不含任何硬编码值。se when cleaning up project workspaces, removing garbage files, organizing scattered scripts, or establishing file classification standards. Triggers on requests like "clean up the workspace", "organize the project structure", "centralize scripts into scripts/ directory", "remove junk files", or "建立文件分类标准". Config-driven, parameterized, no hardcoded paths.
 ---
@@ -8,7 +8,7 @@ description: 对后台服务运行时日志进行增量分析，识别 WARNING/E
 
 **触发关键词**：`日志分析`、`日志优化`、`warning 排查`、`日志噪声`、`增量日志`、`log review`、`日志治理`、`WARNING 修复`、`ERROR 排查`
 
-**不适用场景**：一次性脚本/批处理任务、紧急热修复（除非启用 `fast_mode`）、日志格式完全非结构化、完全无测试覆盖（除非 `verify.run_tests=false`）、实时日志流（ELK/Kafka）、同步/异步方法签名问题（应由 `sonarqube-mcp` 或后端代码评审技能覆盖）、测试 Mock 类型不匹配（应由后端代码评审技能覆盖）、微服务多日志源（当前仅支持单文件）。
+**不适用场景**：一次性脚本/批处理任务、紧急热修复（除非启用 ast_mode）、日志格式完全非结构化、完全无测试覆盖（除非 erify.run_tests=false）、实时日志流（ELK/Kafka）、微服务多日志源（当前仅支持单文件）。
 
 ## 前置要求
 
@@ -17,30 +17,32 @@ description: 对后台服务运行时日志进行增量分析，识别 WARNING/E
 3. **配置文件**：`.trae/skills/logs-review/config.yaml`（首次使用从 config.example.yaml 复制）
 4. **测试命令**：可选的测试命令（verify.test_command），用于验证闭环
 
+
+## 启动协议（分阶加载，按需消耗 token）
+
+**核心原则**：根据场景复杂度分 3 个加载层级，简单场景只需读取 ~500 tokens，完整配置加载 ~2,700 tokens。
+
+| 层级 | 加载内容 | 适用场景 | 预估 token |
+|------|----------|----------|-----------|
+| **L1 基础** | 仅读取 config.yaml 中的 logs.current_log、ilter.severities | 快速查看日志中的 WARNING/ERROR | ~500 |
+| **L2 完整** | L1 + 读取 config.example.yaml 全部配置说明 | 首次配置或需调整高级参数 | ~2,700 |
+| **L3 专家** | L2 + 读取 CONFIG_REFERENCE.md 详细约束 | 自定义副作用模式、并行策略等 | ~3,100 |
+
+**自动选择逻辑**：
+- 用户未指定层级时：根据日志文件大小自动选择（<1MB → L1，1-10MB → L2，>10MB 或含基线 → L3）
+- 用户可通过 `config.yaml` 中 `mode` 字段显式指定：`auto`（默认）/ `l1` / `l2` / `l3`
+- 显式指定优先于自动选择
+
+**配置加载优先级**：环境变量 > config.yaml > config.example.yaml 默认值 > 技能内置默认值。
+
 ## 配置驱动
 
-**核心原则**：所有业务参数通过 `config.yaml` 管理，技能本身不含任何硬编码值。
 
-配置文件位置：`.trae/skills/logs-review/config.yaml`。首次使用时，从同目录的 `config.example.yaml` 复制并按项目实际情况修改。
+配置文件位置：.trae/skills/logs-review/config.yaml。首次使用时，从同目录的 config.example.yaml 复制并按项目实际情况修改。
 
-**config.yaml 采用差异化配置**：仅保留与默认值不同的项，未列出的项自动使用 `config.example.yaml` 默认值。**配置优先级**：环境变量 > config.yaml > config.example.yaml 默认值。
+**config.yaml 采用差异化配置**：仅保留与默认值不同的项，未列出的项自动使用 config.example.yaml 默认值。
 
-配置项分为 12 大类：
-
-| 配置类 | 职责 | 关键参数 |
-|--------|------|----------|
-| `logs` | 日志源 | current_log, baseline_log, log_format, encoding, rotate_policy, severity_pattern, rotate_patterns, encoding_fallback |
-| `filter` | 日志过滤 | severities, ignore_patterns, ignore_modules, deduplicate, dedup_normalize_patterns |
-| `side_effect` | 副作用识别 | harmful_patterns, harmless_patterns, performance_patterns, default_priority_by_severity |
-| `classify` | 分类归因 | by_module, by_severity, frequency_threshold, time_window_minutes, auto_downgrade_high_freq_noise |
-| `strategies` | 修复策略 | 按 4 大问题类型映射策略（warning_noise/state_check/retry_failure/performance） |
-| `parallel` | 并行修复 | enabled, agents, files_per_agent, same_file_serial, serial_threshold, dependency_groups |
-| `verify` | 验证闭环 | recheck_logs, run_tests, test_command, isolate_preexisting_failures, fail_on_new_warnings, check_test_side_effects, test_side_effect_patterns, test_timeout_seconds, trigger_code_review |
-| `report` | 报告生成 | output_dir, include_unfixed, format, redact_patterns, detail_level |
-| `hard_constraints` | 硬约束检查 | rules（可扩展的规则列表，每条含 name/pattern/message/severity）, scan_scope |
-| `business_params` | 业务参数 | 注入子代理修复 prompt，避免硬编码到代码（冷却时长、重试次数等） |
-| `fast_mode` | 紧急模式 | enabled, skip_phases, max_fix, disable_parallel |
-| `baseline` | 基线管理 | update_policy, update_interval_hours, snapshot_dir, max_snapshots |
+**配置总览**：12 大类配置项详见 [config.example.yaml](config.example.yaml)，完整字段说明与约束条件见 [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md)。
 
 **环境变量覆盖规则**：所有配置项均可通过环境变量覆盖，规则：`LOGS_REVIEW_<SECTION>_<KEY>`（全大写，下划线分隔）。嵌套字段用双下划线：`LOGS_REVIEW_PARALLEL__SERIAL_THRESHOLD`。列表项用索引：`LOGS_REVIEW_FILTER__SEVERITIES__0=ERROR`。布尔值用 `1`/`0` 或 `true`/`false`。
 
@@ -185,13 +187,17 @@ description: 对后台服务运行时日志进行增量分析，识别 WARNING/E
 修复以下日志问题（issues JSON）：
 <issues JSON>
 
+参数注入规则：仅注入与本问题 type_hint 匹配的 business_params（按 _scope 筛选）。
+例如：type_hint=state_check 的子代理仅接收 _scope 包含 state_check 的参数。
+未标注 _scope 的参数视为全局参数，所有子代理均接收。
+
 要求：Read 上下文（重点看 issue.line 附近）→ 分析根因 → Edit 修复 → 返回 JSON
-返回格式：{"fixed":[{"issue_id":"...","file":"...","method":"...","status":"fixed"}],"skipped":[{"issue_id":"...","reason":"..."}]}
+返回格式：{"fixed":[{"issue_id":"..."}],"skipped":[{"issue_id":"..."}]}
 
 原则：
 - 只修改必要部分，不顺便修改旁边的代码
 - 注释解释"为什么"而非"做什么"
-- 业务参数（冷却时长、重试次数等）从 config 读取，不硬编码
+- 业务参数从 config 读取，不硬编码
 ```
 
 ### Phase 5: 验证报告（Verify & Report）
@@ -222,6 +228,25 @@ description: 对后台服务运行时日志进行增量分析，识别 WARNING/E
 - `detailed`（默认）：完整 7 节报告（日志摘要、修复清单、未修复项、硬约束合规性、验证结果、凭据安全检查、基线快照状态）
 
 报告文件名格式：`logs-review-report-YYYYMMDD-HHmmss.md`
+
+**结构化输出模板**（按 `report.detail_level` 控制）：
+
+- `summary`：
+  ```
+  ## Logs Review Summary
+  - Issues found: N (high: n1, medium: n2, low: n3)
+  - Fixed: N | Skipped: N
+  - Tests: PASS/FAIL (N passed, N failed)
+  - New warnings after fix: Y/N
+  - Hard constraints: PASS/FAIL (N violations)
+  ```
+
+- `detailed`（默认）：在 summary 基础上追加 7 节完整内容（日志摘要、修复清单、未修复项、硬约束合规性、验证结果、凭据安全检查、基线快照状态）
+
+**输出压缩规则**：
+- 分类报告使用表格格式，不使用段落叙述
+- 验证报告中日志差异仅展示**新增/消失条目**，不展示全量日志
+- 测试结果仅报告**失败用例**和**变化统计**，不罗列全部通过用例
 
 ## 核心判断逻辑
 
@@ -254,6 +279,25 @@ description: 对后台服务运行时日志进行增量分析，识别 WARNING/E
 - `fast_mode.disable_parallel=true` 时：强制串行
 
 ### 5. 修复策略匹配判断
+
+### 5.5 子代理参数作用域筛选
+**目的**：避免向子代理注入无关的 business_params，降低 prompt token 消耗。
+
+**规则**：
+1. 每个 business_params 项可附加 `_scope` 字段，标注适用的问题类型（数组）
+2. 子代理仅接收与其负责问题的 `type_hint` 匹配的参数字段
+3. 未标注 `_scope` 的参数视为全局参数，所有子代理均接收
+4. 示例：
+   ```yaml
+   business_params:
+     session_cooldown_seconds: 300
+       _scope: ["state_check"]       # 仅状态检查类问题需要
+     fetch_max_retries: 1
+       _scope: ["retry_failure"]      # 仅重试类问题需要
+     embedding_batch_size: 32
+       _scope: ["performance"]        # 仅性能类问题需要
+     log_prefix: "hunter"            # 无 _scope → 全局参数，所有子代理接收
+   ```
 按问题类型从 `strategies` 配置中查找策略。策略为 `skip` 时不修复，仅记录到报告。`custom` 策略从 config 读取 `prompt` 字段作为子代理指令。
 
 ### 6. 验证闭环判断
@@ -264,19 +308,70 @@ description: 对后台服务运行时日志进行增量分析，识别 WARNING/E
 - 预存失败：记录但不阻塞，输出到报告供后续处理
 - 测试副作用命中：报告但不终止，建议用户检查同步/异步签名、Mock 类型、校验副作用
 
-## 失败恢复机制
 
-1. **当前日志文件不存在**：终止，输出配置指南
-2. **基线日志缺失**：降级为全量模式，不终止
-3. **配置文件缺失**：使用 `config.example.yaml` 默认值降级运行，输出警告提示用户创建 config.yaml
-4. **子代理超时**：终止超时子代理，主代理接管其剩余任务
-5. **Edit 冲突**：子代理串行处理同一文件内的多个问题
-6. **验证失败**：输出 diff 供用户决策，不自动回滚
-7. **测试预存失败**：隔离记录，不阻塞本次优化合并
-8. **测试命令执行失败**（非测试失败，如命令本身错误）：报告但不终止，建议用户检查 `verify.test_command`
-9. **日志文件编码错误**：按 `logs.encoding_fallback` 列表尝试 fallback 编码，全部失败则终止
-10. **子代理返回格式错误**：主代理解析失败的子代理结果，记录原始返回并跳过该子代理的修复
 
+### 核心判断逻辑流程图
+
+#### 1. 噪声 vs 真问题
+```
+频率 > frequency_threshold ─┬─ 命中 harmless_patterns → 噪声（降级）
+                             ├─ 命中 harmful_patterns → 真问题（保持 high）
+                             └─ 未命中 → 按 auto_downgrade_high_freq_noise 决定
+```
+
+#### 2. 副作用识别
+```
+日志 message ──→ 匹配 harmful_patterns ──→ 真问题（优先级 high）
+            ├──→ 匹配 harmless_patterns ──→ 噪声（优先级 low）
+            ├──→ 匹配 performance_patterns ──→ 性能问题（优先级 medium）
+            └──→ 未匹配 ──→ default_priority_by_severity[severity]
+```
+
+#### 3. 并行拆分
+```
+问题总数 ≤ serial_threshold ──→ 主代理串行
+问题总数 > serial_threshold ──→ 按文件分组
+    ├── 不同文件 + 无依赖 ──→ 并行（最多 agents 个子代理）
+    ├── 同文件 ──→ 串行
+    └── 同 dependency_group ──→ 串行
+```
+
+#### 4. 修复策略匹配
+```
+问题类型 ──→ strategies[type] ──→ skip（仅记录）
+                          ├──→ merge_logs / reduce_frequency（噪声类）
+                          ├──→ add_precondition / add_cooldown（状态类）
+                          ├──→ add_retry / add_backoff（重试类）
+                          ├──→ add_timer / add_batch / add_cache（性能类）
+                          └──→ custom（从 config.strategies[type].prompt 读取指令）
+```
+
+#### 5. 验证闭环
+```
+修复完成 ──→ 文件数=0 ──→ 仅运行测试
+          ├──→ 文件数>0 ──→ 重新采集日志
+          │              ├──→ 有新 WARNING ──→ 修复或回滚
+          │              └──→ 无新 WARNING ──→ 通过
+          └──→ 测试失败
+                     ├──→ isolate_preexisting_failures=true ──→ 区分新增/预存
+                     └──→ block_on_violation=true ──→ 硬约束违规则阻断
+```
+## 失败恢复机制（通用原则）
+
+**核心原则**：仅关键节点（当前日志缺失、硬约束违规则阻断）终止流程，其余情况降级或报告。
+
+| 场景 | 行为 |
+|------|------|
+| 当前日志文件不存在 | 终止，输出配置指南 |
+| 基线日志缺失 | 降级为全量模式，不终止 |
+| 配置文件缺失 | 使用默认值降级运行，输出警告 |
+| 子代理超时 | 终止超时子代理，主代理接管剩余任务 |
+| Edit 冲突 | 子代理串行处理同一文件内的多个问题 |
+| 验证失败 | 输出 diff 供用户决策，不自动回滚 |
+| 测试预存失败 | 隔离记录，不阻塞本次优化合并 |
+| 测试命令执行失败 | 报告但不终止，建议检查 `verify.test_command` |
+| 日志编码错误 | 按 `encoding_fallback` 尝试，全部失败则终止 |
+| 子代理返回格式错误 | 主代理解析失败结果，记录原始返回并跳过 |
 ## 安全注意事项
 
 1. **凭据**：日志文件可能包含敏感信息（token、用户 ID），报告生成时需脱敏
@@ -287,7 +382,21 @@ description: 对后台服务运行时日志进行增量分析，识别 WARNING/E
 
 ## 与现有工具的关系
 
-- **sonarqube-mcp**：基于静态扫描的代码质量修复；本技能基于运行时日志的动态问题修复。两者正交，可组合使用
-- **后端/前端代码评审技能**：用于修复后的代码评审。`verify.trigger_code_review=true` 时本技能修复完成后会建议触发评审
-- **协作流程**：日志修复 → code-review 评审 → 评审发现 Critical 则回滚或修复 → 评审通过则合并
-- **Task 工具**：用于启动并行修复子代理
+- **sonarqube-mcp**：静态扫描修复；本技能为运行时日志修复。两者正交可组合。
+- **代码评审技能**：`verify.trigger_code_review=true` 时修复完成后建议触发评审。
+- **Task 工具**：启动并行修复子代理。
+## 适用场景与限制
+
+### 适用场景
+- 后台服务的 WARNING/ERROR 日志增量分析
+- 识别高频噪声日志并降噪
+- 定位状态一致性、重试耗尽、性能瓶颈等真问题
+- 并行修复后验证闭环（日志重采集 + 测试）
+- 单文件日志分析（同一服务实例的输出）
+
+### 不适用场景
+- 实时日志流（ELK/Kibana/Grafana Loki）
+- 微服务多日志源跨文件关联分析
+- 日志格式完全非结构化（无时间戳、无级别标识）
+- 前端浏览器控制台日志
+- 需要修改数据库 schema 或基础设施配置的变更

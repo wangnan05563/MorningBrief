@@ -1,0 +1,7 @@
+﻿python : RSS 源 澎湃新闻 抓取失败: 
+At line:15 char:4965
++ ... modules\@vscode\ripgrep\bin'; python _verify_rss_yaml.py 2>&1 | Tee-O ...
++                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (RSS 源 澎湃新闻 抓取失败: :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

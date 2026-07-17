@@ -3,8 +3,8 @@ name: "news-backend-code-review"
 description: "对 MorningBrief 项目后端代码（backend/app/ 下 Python/FastAPI/SQLAlchemy 文件）进行全面评审与逻辑审查，覆盖分层架构、异步并发、数据库规约、安全、性能、错误处理、配置驱动、前后端字段契约、工作流编排、缓存一致性等维度。当用户要求'审查/检查/走查/把关/review/评估/看看对不对/规范不规范'后端 Python 代码、'.py 文件修改'、'迭代发布前后端走查'，或提到'后端评审/backend review/Python 代码审查/FastAPI 评审/SQLAlchemy 评审'时调用。仅审查后端 .py 文件；纯前端文件审查请改用 news-frontend-code-review。"
 whenToUse: "需要审查 MorningBrief 后端代码（backend/app/ 下 .py 文件）是否符合项目规范"
 triggers: "后端代码 走查/审查/审核/把关/review/检查/评估 | .py 文件 修改/变更/迭代 走查 | 迭代发布前 后端 代码 走查 | 这段后端代码 写得对不对/规范不规范 | 路由/服务/模型/工作流 代码 审查"
-version: "1.5.0"
-updated: "2026-07-15"
+version: "1.6.0"
+updated: "2026-07-17"
 config: "config.yaml"
 scripts: "scripts/auto-scan.ps1"
 template: "templates/report-template.md"
@@ -14,7 +14,7 @@ template: "templates/report-template.md"
 
 ## 简介
 
-本技能对 MorningBrief 项目后端代码（`backend/app/**/*.py`）进行系统性评审与逻辑审查，覆盖 **38 个维度**：分层架构、命名规范、类型注解、FastAPI 规范、SQLAlchemy 2.0 规范、异步并发、Redis 缓存规约、安全、错误处理、配置驱动、工作流编排、前后端字段契约、日志规范、性能、可测试性。
+本技能对 MorningBrief 项目后端代码（`backend/app/**/*.py`）进行系统性评审与逻辑审查，覆盖 **58 个维度**：分层架构、命名规范、类型注解、FastAPI 规范、SQLAlchemy 2.0 规范、异步并发、Redis 缓存规约、安全、错误处理、配置驱动、工作流编排、前后端字段契约、日志规范、性能、可测试性、频道级数据隔离、RSS 源配置管理、第三方服务依赖诊断、PowerShell 工具链兼容性。
 
 适用技术栈：FastAPI + SQLAlchemy 2.0 async + aiomysql（或 aiosqlite）+ Redis（或 TTLCache 进程内缓存）+ APScheduler + httpx + COS + 阿里云 TTS + 通义千问 LLM。
 
@@ -486,6 +486,53 @@ except Exception as e:
 | 裸 SQL 注入检查 | 用 SQLAlchemy `text()` 的项目 | 纯 ORM 查询、纯参数化查询 |
 | print 语句检查 | 所有生产项目 | 一次性脚本、debug 临时调试 |
 
+### 维度 5（补充）：频道级数据隔离与 RSS 源管理复盘（2026-07-17）
+
+**成功执行任务的完整步骤**：
+
+1. **问题定位**：用户报告主机游戏频道（channel_id=9）工作流产出 36氪/人民网内容
+2. **根因分析**：Grep 搜索 `OR channel_id IS NULL` 定位到 `rewriter._fetch_materials` 和 `crawler` 的 0-count 检查
+3. **代码修复**：移除 `or_(Material.channel_id == channel_id, Material.channel_id.is_(None))` 兜底，专门频道严格按 channel_id 过滤
+4. **RSS 源替换**：识别 rsshub.app 在大陆被 DNS 污染，4 个游戏源全部失效，替换为原生 RSS（机核/触乐/17173）
+5. **端到端验证**：编写验证脚本，串行执行（3s 间隔）避免 plink 限流，5 轮探测扩展到 62 源
+6. **配置同步**：rss.yaml name 变更后同步数据库 `channel.rss_sources` JSON 数组
+
+**任务执行中的不确定性与失败点（补充）**：
+
+| 失败点 | 触发条件 | 影响范围 | 根因 | 修复方式 |
+|--------|----------|----------|------|----------|
+| 频道级 OR NULL 兜底 | `rewriter._fetch_materials` 用 `or_(channel_id == x, channel_id IS NULL)` | 专门频道消费 NULL 历史素材，跨频道污染 | 历史兜底逻辑未考虑专门频道场景 | 移除 OR NULL，专门频道严格过滤 |
+| rsshub.app 全站失效 | 所有 rsshub.app 源返回 ConnectError | 4 个游戏源全部不可达 | rsshub.app 公共实例在大陆被 DNS 污染 + TCP 阻断 | 替换为原生 RSS（机核/触乐/17173） |
+| plink 并发限流假阳性 | 验证脚本并发≥5 测试 plink 源 | 12 个 plink 源返回 0 条目（假阳性） | plink.anyfeeder.com 会话级限流 | 改用串行模式，3s 间隔全部恢复 |
+| PowerShell stdout 缓冲 | `python script.py` 在 PowerShell 中输出不可见 | 验证脚本"卡住"误判 | stdout 块缓冲未刷新 | `python -u script.py 2>&1` |
+| feedparser HTTP 200+0 条目 | 站点返回 HTML 而非 RSS | 误判为 RSS 格式错误 | 站点未提供 RSS，返回网页 | 检查 Content-Type 和前 200 字符 |
+| rss.yaml name 变更未同步数据库 | channel.rss_sources JSON 数组存储旧 name | crawler 按 name 匹配找不到源 | 配置文件与数据库不同步 | 同步脚本 `python -m app.scripts.sync_rss_sources` |
+| 4 个 plink 源持续失效 | 联合早报-国际/财新网/新智元/果壳网多次测试 0 条目 | 4 源无法使用 | 微信公众号被封禁，plink 无法获取 | 从 rss.yaml 移除，替换为联合早报-中港台 |
+| Edit 工具字符串匹配失败 | 文件内容与预期不符 | Edit 失败需重试 | 文件内容已被修改但缓存未更新 | 改用 Write 完整重写文件 |
+| 中国国家地理误删 | 移除果壳网时误删 | 可达源丢失 | Edit 操作误伤相邻条目 | 立即恢复该条目 |
+
+**可抽象的固定流程与判断逻辑（补充）**：
+
+| 模板 | 核心判断信号 | 落地配置节点 |
+|------|--------------|--------------|
+| 频道级数据隔离检查 | Grep `OR.*channel_id IS NULL` 或 `or_\(.*channel_id` | `hard_constraints.rules.channel_isolation_no_null_fallback` |
+| RSS 源配置同步检查 | Grep rss.yaml name 变更后无 `sync_rss_sources` 调用 | `hard_constraints.rules.rss_source_db_sync` |
+| 第三方转换服务标注检查 | Grep rss.yaml 含 `rsshub.app\|plink.anyfeeder` 无风险标注 | `hard_constraints.rules.third_party_rss_annotation` |
+| PowerShell Python 调用检查 | Grep `.ps1` 中 `python script.py` 无 `-u` 或 `2>&1` | `hard_constraints.rules.powershell_python_unbuffered` |
+| RSS 源可达性诊断检查 | Grep 验证脚本中 0 条目直接标记失效无 Content-Type 检查 | `hard_constraints.rules.rss_reachability_diagnosis` |
+| 并发验证限流检查 | Grep 验证脚本中 `asyncio.gather` 测试第三方转换服务 | `hard_constraints.rules.no_concurrent_third_party_verify` |
+
+**适用场景与不适用场景（补充）**：
+
+| 模板 | 适用场景 | 不适用场景 |
+|------|----------|------------|
+| 频道级数据隔离检查 | 多频道/多租户系统 | 单频道系统、全局工作流 |
+| RSS 源配置同步检查 | 频道级 RSS 配置管理 | 全局 RSS（不按频道隔离） |
+| 第三方转换服务标注检查 | 依赖 rsshub/plink 的项目 | 全部使用原生 RSS 的项目 |
+| PowerShell Python 调用检查 | Windows + PowerShell 工具链 | bash/zsh、IDE、生产服务 |
+| RSS 源可达性诊断检查 | 所有 RSS 抓取系统 | API 接口验证（JSON 响应） |
+| 并发验证限流检查 | 第三方转换服务验证 | 原生 RSS 验证、生产 crawler |
+
 ## 附录：配置节点速查
 
 | 配置节点 | 用途 | 对应维度 |
@@ -500,6 +547,9 @@ except Exception as e:
 | `coding_standards` | 编码规范阈值 | 3, 5, 14 |
 | `verify` | 验证配置（py_compile / pytest） | 全部 |
 | `report` | 报告生成配置 | 全部 |
+| `channel_isolation` | 频道级数据隔离配置（channel_id 严格过滤、NULL 兜底禁用） | 54 |
+| `rss_source_management` | RSS 源配置管理（rss.yaml 同步、第三方服务标注、可达性诊断） | 55, 56, 58 |
+| `powershell_compat` | PowerShell 工具链兼容性（Python 调用规范、stderr 捕获） | 57 |
 
 
 ---
@@ -802,3 +852,343 @@ FastAPI 按定义顺序匹配路由，静态路由必须在动态路由之前定
 
 
 
+
+---
+
+## 新增审查维度：模型字段验证与统计口径
+
+> 以下维度来源于 2026-07-17 后端 API 复盘，覆盖模型字段名验证、统计口径校验、静态资源 URL 配置化等高频故障场景。配置详见 `config.yaml#hard_constraints.rules` 对应条目。
+
+### 维度 50：模型字段名验证（禁止凭记忆假设）
+
+**为什么**：content_service.py 中曾写 `Workflow.workflow_id == workflow_id`，但 Workflow 模型主键字段名是 `id`（comment="workflow_id"），导致查询永远返回 None。凭记忆假设字段名是高频错误源，ORM 字段名必须以模型定义文件为准。
+
+检查信号：
+- 代码中出现 `Model.field_name` 但未先 Read 模型定义文件确认
+- 查询条件 `where(Model.xxx == value)` 中 xxx 字段名拼写错误
+- 字段名有歧义时（如 id vs workflow_id），以模型定义为准，comment 仅作参考
+
+修复建议：
+- 编写涉及模型字段访问的代码前，必须先 Read 模型定义文件
+- PR review 时，reviewer 必须对照模型源文件验证字段名
+- ORM 模型的 `__table__.columns` 是字段名的唯一可信源
+适用场景：所有 ORM（SQLAlchemy/Django ORM/Tortoise）
+不适用场景：原生 SQL（字段名在 SQL 中可见）
+
+### 维度 51：统计口径校验（聚合查询前确认字段语义）
+
+**为什么**：用户收听统计曾用 `sum(PlayLog.duration)` 计算累计收听时长，但 PlayLog.duration 是节目总时长（每条日志记录节目时长），不是实际收听时长。结果"9 分钟"实际是"9 个节目总时长之和"，严重偏高。应改用 PlayProgress.position（每用户每节目一条 upsert 记录，position 是最后播放位置）。
+
+检查信号：
+- 聚合查询 `sum(field)` / `count(field)` 前未确认 field 的语义
+- 统计结果与业务预期不符（如"累计收听 9 分钟"但用户只听了 3 分钟）
+- 用日志表（PlayLog）做统计而非状态表（PlayProgress）
+
+修复建议：
+- 聚合查询前必须确认字段的业务语义
+- 日志表（append-only）用于次数/热度统计，状态表（upsert）用于累计/当前值统计
+- 统计结果与业务预期偏差 >20% 时必须复核字段语义
+
+**字段语义对照表**：
+
+| 表 | 字段 | 语义 | 适用统计场景 |
+|----|------|------|--------------|
+| PlayLog | duration | 节目总时长（每条日志） | 播放次数统计、节目热度 |
+| PlayLog | position | 播放位置（每条日志） | 历史播放位置追踪 |
+| PlayProgress | position | 最后播放位置（upsert 单条） | 累计收听时长、断点续播 |
+| PlayProgress | completed | 是否完播（0/1） | 完播率统计 |
+
+适用场景：所有数据库聚合查询、统计接口、报表
+不适用场景：单条记录查询（字段语义直接可见）
+
+### 维度 52：静态资源 URL 配置化
+
+**为什么**：后端 _episode_to_dict 曾硬编码 `http://localhost:8000` + audio_url，导致真机测试时小程序播放器访问不到音频（localhost 在手机上指向手机自己）。所有对外 URL 必须通过 settings 配置项管理，禁止硬编码 host。
+
+检查信号：
+- Grep `'http://localhost` 或 `'http://127.0.0.1` 硬编码在业务代码（非配置文件、非 .env）
+- Grep `audio_url` / `cover_url` 拼接逻辑中含硬编码 host
+- 后端 `app.host` 配置为 `127.0.0.1` 但期望真机访问
+
+修复建议：
+```python
+# 后端：所有对外 URL 通过 settings 配置项管理
+from app.config import get_settings
+
+base = get_settings().AUDIO_BASE_URL or 'http://localhost:8000'
+audio_url = base + audio_url  # 从配置读取，未配置时回退 localhost
+```
+
+环境地址选择规则：
+
+| 场景 | 后端 APP_HOST | AUDIO_BASE_URL |
+|------|---------------|----------------|
+| 开发者工具调试 | 127.0.0.1 | 留空（回退 localhost） |
+| 真机测试 | 0.0.0.0 | http://<电脑局域网IP>:8000 |
+| 生产部署 | 0.0.0.0 | https://<公网域名> |
+
+适用场景：小程序 + 后端服务架构、前后端分离项目
+不适用场景：纯前端 SPA（无后端）、单机内部工具
+
+### 维度 53：Favorite.user_id 字段类型一致性
+
+**为什么**：Favorite 模型的 user_id 字段存储的是 openid 字符串（历史对齐 SCF/COS），而 User 模型的主键是 int 类型的 id。统计用户收藏数时需要先查 User.openid 再查 Favorite.user_id，直接用 user_id 关联 User.id 会导致类型不匹配查询为空。
+
+检查信号：
+- Grep `Favorite.user_id == User.id` 直接关联（类型不匹配）
+- Grep 统计收藏数时未先查 User.openid
+
+修复建议：
+```python
+# 正确：先查 User.openid，再用 openid 查 Favorite
+user_result = await db.execute(select(User.openid).where(User.id == user_id))
+openid = user_result.scalar_one_or_none()
+if openid:
+    fav_count = await db.execute(
+        select(func.count(Favorite.id)).where(Favorite.user_id == openid)
+    )
+```
+
+适用场景：历史遗留的 user_id 类型不一致（openid 字符串 vs int id）
+不适用场景：新项目统一用 int user_id
+
+---
+
+## 新增审查维度：频道级数据隔离与 RSS 源管理
+
+> 以下维度来源于 2026-07-17 频道级数据隔离修复与 RSS 源端到端验证复盘，覆盖频道级数据隔离、RSS 源配置管理、第三方服务依赖诊断、PowerShell 工具链兼容性等高频故障场景。配置详见 `config.yaml#hard_constraints.rules` 对应条目。
+
+### 维度 54：频道级数据隔离严格性（禁止 OR NULL 兜底）
+
+**为什么**：多频道场景下，专门频道（channel_id 非空）配置了自己的 rss_sources 和 keywords，期望只抓取和消费本频道素材。如果查询时用 `OR channel_id IS NULL` 兜底，当专门频道的 RSS 源全部失败时，会消费 NULL 历史遗留素材（如 36氪/人民网），导致跨频道内容污染——主机游戏频道出现科技资讯，破坏内容专业性。
+
+**检查信号**：
+- Grep `OR.*channel_id IS NULL` 或 `or_(.*channel_id.*is_(None))` 在 services/ 或 workflow/ 目录
+- Grep `or_\(.*channel_id` 检查是否有 SQLAlchemy `or_` 兜底逻辑
+- Grep `or_` 导入但未使用（修复后未清理 import 残留）
+
+**修复建议**：
+```python
+# ❌ 反模式：专门频道 OR NULL 兜底，导致跨频道污染
+stmt = select(Material).where(
+    Material.status == 'pending',
+    or_(
+        Material.channel_id == channel_id,
+        Material.channel_id.is_(None),  # 历史遗留 NULL 素材
+    )
+)
+
+# ✅ 正确：专门频道严格过滤，NULL 仅全局工作流可用
+if channel_id is not None:
+    stmt = select(Material).where(
+        Material.status == 'pending',
+        Material.channel_id == channel_id,  # 严格过滤，无兜底
+    )
+else:
+    stmt = select(Material).where(
+        Material.status == 'pending',
+        Material.channel_id.is_(None),  # 全局工作流仅查 NULL
+    )
+```
+
+**crawler 0-count 检查同步**：
+```python
+# ❌ 反模式：crawler 0 条时 OR NULL 兜底
+count = await db.scalar(select(func.count(Material.id)).where(
+    Material.channel_id == channel_id
+))
+if count == 0:
+    # 回退查 NULL 素材 → 跨频道污染
+    count = await db.scalar(select(func.count(Material.id)).where(
+        or_(Material.channel_id == channel_id, Material.channel_id.is_(None))
+    ))
+
+# ✅ 正确：专门频道 0 条时显式报错，不兜底
+if count == 0 and channel_id is not None:
+    raise RuntimeError(f"频道 {channel_id} 无可用素材，请检查 RSS 源配置")
+```
+
+适用场景：多频道/多租户数据隔离系统、专门频道（如主机游戏/科技/财经）内容隔离
+不适用场景：单频道系统（无 channel_id 字段）、全局工作流（channel_id=None）
+
+### 维度 55：RSS 源配置与频道数据同步
+
+**为什么**：rss.yaml 中的源 name 变更后，数据库 `channel.rss_sources`（JSON 数组）字段仍存储旧 name，导致 crawler 按 name 匹配时找不到源，返回 0 条素材。这是配置文件与数据库不同步的典型问题。同时，rss.yaml 新增源后未更新频道配置，导致新源不被任何频道使用。
+
+**检查信号**：
+- Grep rss.yaml 中源 name 变更记录，检查是否有数据库同步脚本调用
+- Grep `channel.rss_sources` 读取逻辑，检查是否对 name 做了有效性校验（如 name 在 rss.yaml 中存在）
+- Grep 数据库 `channel.rss_sources` JSON 数组中的 name，与 rss.yaml 比对
+
+**修复建议**：
+```python
+# 配置同步脚本：读取 rss.yaml，更新所有频道的 rss_sources
+# python -m app.scripts.sync_rss_sources
+import json
+from app.workflow.crawler.sources.rss_loader import load_rss_sources
+
+def sync_channel_rss_sources(db_session):
+    """同步 rss.yaml 与数据库 channel.rss_sources"""
+    yaml_sources = load_rss_sources()
+    yaml_names = {s['name'] for s in yaml_sources}
+
+    channels = db_session.execute(select(Channel)).scalars().all()
+    for ch in channels:
+        if not ch.rss_sources:
+            continue
+        current_names = set(json.loads(ch.rss_sources))
+        # 过滤掉 rss.yaml 中已不存在的 name
+        valid_names = current_names & yaml_names
+        if valid_names != current_names:
+            ch.rss_sources = json.dumps(sorted(valid_names))
+            logger.warning(f"频道 {ch.id} rss_sources 已同步：移除 {current_names - valid_names}")
+    db_session.commit()
+```
+
+适用场景：频道级 RSS 源配置管理、rss.yaml 变更后数据库同步
+不适用场景：全局 RSS 源（不按频道隔离）
+
+### 维度 56：第三方转换服务依赖诊断
+
+**为什么**：第三方 RSS 转换服务（rsshub.app、plink.anyfeeder.com）作为中间层，引入额外故障点：(1) DNS 污染（rsshub.app 在大陆被 DNS 污染 + TCP 阻断）；(2) 会话级限流（plink 并发≥5 时部分源返回 0 条目）；(3) 微信公众号封禁（plink 源返回 404）。代码中如果直接依赖第三方服务而不做诊断，故障时难以定位根因。
+
+**检查信号**：
+- Grep rss.yaml 中源 URL 含 `rsshub.app`，未标注"第三方转换，有限流风险"
+- Grep crawler 抓取逻辑，无第三方服务故障诊断（如 DNS 解析失败、TCP 连接超时、HTTP 404 分类）
+- Grep feedparser 解析结果为 0 条目时，未检查响应内容类型（Content-Type）和前 200 字符
+
+**修复建议**：
+```python
+# RSS 源配置规范：第三方转换服务必须标注
+# rss.yaml
+- name: 少数派
+  url: https://plink.anyfeeder.com/sspai
+  category: 科技
+  # 第三方转换服务，有限流风险，并发验证时需串行间隔≥3s
+
+# crawler 故障诊断：HTTP 200 但 0 条目需分类
+async def fetch_with_diagnosis(url: str) -> list:
+    try:
+        resp = await client.get(url, timeout=10)
+        if resp.status_code == 200:
+            content_type = resp.headers.get('content-type', '')
+            if 'text/html' in content_type:
+                logger.warning(f"{url} 返回 HTML 而非 RSS，站点可能未提供 RSS")
+                return []
+            # feedparser 解析
+            feed = feedparser.parse(resp.text)
+            if len(feed.entries) == 0:
+                logger.warning(f"{url} HTTP 200 但 0 条目，可能限流或源被封禁")
+            return feed.entries
+        elif resp.status_code == 404:
+            logger.error(f"{url} 404，第三方转换服务源可能被封禁")
+            return []
+    except httpx.ConnectError as e:
+        logger.error(f"{url} 连接失败，可能 DNS 污染或 TCP 阻断: {e}")
+        return []
+    except httpx.TimeoutException:
+        logger.error(f"{url} 超时，可能网络问题或服务不可达")
+        return []
+```
+
+适用场景：依赖第三方转换服务（rsshub/plink 等）的 RSS 抓取系统、爬虫数据源管理
+不适用场景：原生 RSS 源（无第三方依赖）、内部 API（无 DNS/限流问题）
+
+### 维度 57：PowerShell Python 脚本调用兼容性
+
+**为什么**：PowerShell 调用 Python 脚本时，stdout 默认是块缓冲（非行缓冲）。脚本输出在缓冲区满或脚本退出前不可见，导致长时间运行的脚本看起来"卡住"。同时 Python 的 logger.error 写入 stderr，PowerShell 会包装为 RemoteException 警告，但脚本继续执行。开发者可能误判脚本失败而中断。
+
+**检查信号**：
+- Grep 项目脚本（.ps1）中 `python script.py`（无 -u 参数）
+- Grep 项目脚本中 `python script.py` 后无 `2>&1` 重定向
+- Grep 项目脚本中因 RemoteException 警告而 `exit 1` 的逻辑（logger.error 是正常日志，不应中断）
+
+**修复建议**：
+```powershell
+# ❌ 反模式：stdout 缓冲导致输出不可见
+python _verify_rss.py
+
+# ❌ 反模式：stderr 未捕获，logger.error 输出丢失
+python -u _verify_rss.py
+
+# ✅ 正确：-u 禁用缓冲 + 2>&1 捕获 stderr
+python -u _verify_rss.py 2>&1
+
+# ✅ 正确：区分 logger.error（正常日志）和真实异常
+python -u _verify_rss.py 2>&1 | ForEach-Object {
+    if ($_ -match '^ERROR') {
+        Write-Host $_ -ForegroundColor Yellow  # logger.error 正常输出
+    } elseif ($_ -match 'RemoteException') {
+        Write-Host $_ -ForegroundColor Yellow  # PowerShell 包装的 stderr
+    } else {
+        Write-Host $_
+    }
+}
+```
+
+适用场景：Windows + PowerShell + Python 工具链、验证脚本、运维脚本
+不适用场景：bash/zsh（默认行缓冲）、IDE 内运行（IDE 处理缓冲）、生产服务（不通过 PowerShell 调用）
+
+### 维度 58：RSS 源可达性验证流程规范
+
+**为什么**：RSS 源可达性验证时，HTTP 200 但 0 条目不一定是 RSS 格式问题。可能原因：(1) 站点返回 HTML 页面（非 RSS）；(2) WAF 拦截；(3) 第三方转换服务限流；(4) 微信公众号被封禁；(5) UA 被拒绝（如 Steam 拒绝 bot UA）。直接判定"RSS 格式错误"会误导修复方向，浪费排查时间。
+
+**检查信号**：
+- Grep 验证脚本中 feedparser 返回 0 条目时直接标记"失效"，未检查响应内容类型
+- Grep crawler 中 UA 配置，检查是否使用了 bot UA（如 `MorningBriefBot`）访问拒绝 bot 的站点
+- Grep 验证脚本中使用 `asyncio.gather` 并发测试第三方转换服务（限流假阳性）
+
+**修复建议**：
+```python
+# RSS 源可达性诊断流程
+async def diagnose_rss_source(url: str, ua: str = None) -> dict:
+    """诊断 RSS 源可达性，返回分类结果"""
+    headers = {'User-Agent': ua or 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+
+    try:
+        resp = await client.get(url, headers=headers, timeout=10, follow_redirects=True)
+    except httpx.ConnectError:
+        return {'status': 'dns_error', 'reason': 'DNS 解析失败或 TCP 阻断'}
+    except httpx.TimeoutException:
+        return {'status': 'timeout', 'reason': '连接超时'}
+
+    if resp.status_code == 404:
+        return {'status': 'not_found', 'reason': '源被封禁或路径错误'}
+    if resp.status_code == 403:
+        return {'status': 'forbidden', 'reason': 'WAF 拦截或 UA 被拒绝'}
+
+    if resp.status_code == 200:
+        content_type = resp.headers.get('content-type', '')
+        if 'text/html' in content_type:
+            return {'status': 'not_rss', 'reason': '站点返回 HTML 而非 RSS'}
+
+        feed = feedparser.parse(resp.text)
+        if len(feed.entries) == 0:
+            # HTTP 200 + 0 条目：可能是限流，需串行复测
+            return {'status': 'zero_entries', 'reason': '可能限流或源被封禁，需串行复测'}
+
+        return {'status': 'ok', 'reason': f'可达，{len(feed.entries)} 条目'}
+
+    return {'status': 'http_error', 'reason': f'HTTP {resp.status_code}'}
+
+# 验证脚本必须串行执行第三方转换服务（避免限流假阳性）
+async def verify_sources_serially(sources: list, interval_sec: float = 3.0):
+    """串行验证 RSS 源，间隔≥3s 避免第三方服务限流"""
+    results = []
+    for src in sources:
+        result = await diagnose_rss_source(src['url'])
+        results.append({**src, **result})
+        await asyncio.sleep(interval_sec)  # 强制间隔
+    return results
+```
+
+**UA 兼容性检查**：
+部分站点（如 Steam）拒绝 bot UA，需用浏览器 UA：
+```python
+# crawler UA 配置应可切换
+CRAWLER_UA = settings.CRAWLER_USER_AGENT or 'Mozilla/5.0 ...'  # 浏览器 UA 作为默认
+# Steam 等站点需浏览器 UA，bot UA（如 MorningBriefBot）会被拒绝
+```
+
+适用场景：所有 RSS 抓取系统、爬虫数据源验证、第三方转换服务依赖诊断
+不适用场景：API 接口验证（JSON 响应）、内部服务（无 DNS/限流问题）

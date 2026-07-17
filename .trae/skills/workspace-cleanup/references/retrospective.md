@@ -1,149 +1,109 @@
-# 工作空间清理复盘分析（2026-07-05 更新）
-
-> 基于对一个实际项目 5 轮工作空间清理迭代的深度复盘，提炼通用经验。
->
-> 第五轮复盘（2026-07-05）新增：PowerShell 语法陷阱、后台进程持续创建文件、
-> 异常文件名处理、配置缺失时的模式推断等场景。
-
+﻿# 宸ヤ綔绌洪棿娓呯悊澶嶇洏鍒嗘瀽锛?026-07-05 鏇存柊锛?
+> 鍩轰簬瀵逛竴涓疄闄呴」鐩?5 杞伐浣滅┖闂存竻鐞嗚凯浠ｇ殑娣卞害澶嶇洏锛屾彁鐐奸€氱敤缁忛獙銆?>
+> 绗簲杞鐩橈紙2026-07-05锛夋柊澧烇細PowerShell 璇硶闄烽槺銆佸悗鍙拌繘绋嬫寔缁垱寤烘枃浠躲€?> 寮傚父鏂囦欢鍚嶅鐞嗐€侀厤缃己澶辨椂鐨勬ā寮忔帹鏂瓑鍦烘櫙銆?
 ---
 
-## 维度一：成功执行任务的完整步骤
+## 缁村害涓€锛氭垚鍔熸墽琛屼换鍔＄殑瀹屾暣姝ラ
 
-### 1.1 整体节奏
+### 1.1 鏁翠綋鑺傚
 
-5 轮迭代逐步发现新问题，证明这是一个**周期性维护任务**而非一次性清理。
-
-| 轮次 | 起始文件数 | 结束文件数 | 触发因素 |
+5 杞凯浠ｉ€愭鍙戠幇鏂伴棶棰橈紝璇佹槑杩欐槸涓€涓?*鍛ㄦ湡鎬х淮鎶や换鍔?*鑰岄潪涓€娆℃€ф竻鐞嗐€?
+| 杞 | 璧峰鏂囦欢鏁?| 缁撴潫鏂囦欢鏁?| 瑙﹀彂鍥犵礌 |
 |---|---|---|---|
-| 第一轮 | ~50 | ~32 | 用户初次请求清理 |
-| 第二轮 | ~32 | 18 | 启动脚本统一 |
-| 第三轮 | 18 | 18（确认无新增） | 主动复查 |
-| 第四轮 | 32 | 14 | 服务运行中持续产生运行产物 |
-| 第五轮 | 119 | 15（14 白名单 + 1 异常重建） | 配置驱动系统化清理，引入 6 阶段闭环 |
+| 绗竴杞?| ~50 | ~32 | 鐢ㄦ埛鍒濇璇锋眰娓呯悊 |
+| 绗簩杞?| ~32 | 18 | 鍚姩鑴氭湰缁熶竴 |
+| 绗笁杞?| 18 | 18锛堢‘璁ゆ棤鏂板锛?| 涓诲姩澶嶆煡 |
+| 绗洓杞?| 32 | 14 | 鏈嶅姟杩愯涓寔缁骇鐢熻繍琛屼骇鐗?|
+| 绗簲杞?| 119 | 15锛?4 鐧藉悕鍗?+ 1 寮傚父閲嶅缓锛?| 閰嶇疆椹卞姩绯荤粺鍖栨竻鐞嗭紝寮曞叆 6 闃舵闂幆 |
 
-### 1.2 每轮通用 6 步流程
+### 1.2 姣忚疆閫氱敤 6 姝ユ祦绋?
+1. **渚﹀療闃舵锛圧econ锛?*锛氱敤 LS/Glob 鍒楀嚭鏍圭洰褰曘€佸瓙鐩綍鏂囦欢娓呭崟
+2. **褰掔被闃舵锛圕lassify锛?*锛氬缓绔?鏍圭洰褰曞厑璁告竻鍗?妯″瀷
+3. **褰卞搷璇勪及锛圛mpact锛?*锛氭鏌ユ湇鍔＄姸鎬侊紙PID + 绔彛锛夊喅瀹氭槸鍚﹀仠姝?4. **鎵ц闃舵锛圗xecute锛?*锛氭寜"鍒犻櫎/绉诲姩/淇濈暀"涓夋。澶勭悊
+5. **楠岃瘉闃舵锛圴erify锛?*锛氶€氳繃瀵煎叆鏍稿績妯″潡纭鏈牬鍧忓簲鐢?6. **褰掓。闃舵锛圓rchive锛?*锛氭洿鏂拌鑼冩枃妗?+ 寮哄寲 .gitignore
 
-1. **侦察阶段（Recon）**：用 LS/Glob 列出根目录、子目录文件清单
-2. **归类阶段（Classify）**：建立"根目录允许清单"模型
-3. **影响评估（Impact）**：检查服务状态（PID + 端口）决定是否停止
-4. **执行阶段（Execute）**：按"删除/移动/保留"三档处理
-5. **验证阶段（Verify）**：通过导入核心模块确认未破坏应用
-6. **归档阶段（Archive）**：更新规范文档 + 强化 .gitignore
+### 1.3 鍏抽敭鎶€鏈偣
 
-### 1.3 关键技术点
-
-- **Get-FileHash 去重**：先比对同名文件 hash 避免误删唯一副本
-- **停止服务前置**：服务运行中会持有文件句柄导致删除失败或生成新产物
-- **批量先于精细**：先一次性删除明显垃圾，再处理边界情况
-- **导入验证兜底**：`import xianyu_hunter` 作为最便宜的回归测试
-- **文档同步更新**：每次清理都在 `directory-structure.md` 留变更记录
-
+- **Get-FileHash 鍘婚噸**锛氬厛姣斿鍚屽悕鏂囦欢 hash 閬垮厤璇垹鍞竴鍓湰
+- **鍋滄鏈嶅姟鍓嶇疆**锛氭湇鍔¤繍琛屼腑浼氭寔鏈夋枃浠跺彞鏌勫鑷村垹闄ゅけ璐ユ垨鐢熸垚鏂颁骇鐗?- **鎵归噺鍏堜簬绮剧粏**锛氬厛涓€娆℃€у垹闄ゆ槑鏄惧瀮鍦撅紝鍐嶅鐞嗚竟鐣屾儏鍐?- **瀵煎叆楠岃瘉鍏滃簳**锛歚import xianyu_hunter` 浣滀负鏈€渚垮疁鐨勫洖褰掓祴璇?- **鏂囨。鍚屾鏇存柊**锛氭瘡娆℃竻鐞嗛兘鍦?`directory-structure.md` 鐣欏彉鏇磋褰?
 ---
 
-## 维度二：任务执行过程中的不确定性与失败点
+## 缁村害浜岋細浠诲姟鎵ц杩囩▼涓殑涓嶇‘瀹氭€т笌澶辫触鐐?
+### 2.1 涓嶇‘瀹氱偣
 
-### 2.1 不确定点
-
-| 不确定点 | 触发场景 | 处置 |
+| 涓嶇‘瀹氱偣 | 瑙﹀彂鍦烘櫙 | 澶勭疆 |
 |---|---|---|
-| 根目录某文件是否该保留 | `.env` 含敏感配置 vs 误命名为 `.env` 的垃圾 | 读取前几行判断是否为真实环境变量 |
-| 服务是否在运行 | 已知应用在跑，但 PID 文件可能已失效 | 双验证：PID 文件 + netstat 端口监听 |
-| 文件删除后是否可恢复 | 用户未明确"清理"是否允许删除 | 优先 Move 到 scripts/，无法归类再 Delete |
-| `.scannerwork/` 等大目录 | 体积 6-16 MB，但删除会影响 IDE 缓存 | 列入 gitignore，下次自动忽略 |
+| 鏍圭洰褰曟煇鏂囦欢鏄惁璇ヤ繚鐣?| `.env` 鍚晱鎰熼厤缃?vs 璇懡鍚嶄负 `.env` 鐨勫瀮鍦?| 璇诲彇鍓嶅嚑琛屽垽鏂槸鍚︿负鐪熷疄鐜鍙橀噺 |
+| 鏈嶅姟鏄惁鍦ㄨ繍琛?| 宸茬煡搴旂敤鍦ㄨ窇锛屼絾 PID 鏂囦欢鍙兘宸插け鏁?| 鍙岄獙璇侊細PID 鏂囦欢 + netstat 绔彛鐩戝惉 |
+| 鏂囦欢鍒犻櫎鍚庢槸鍚﹀彲鎭㈠ | 鐢ㄦ埛鏈槑纭?娓呯悊"鏄惁鍏佽鍒犻櫎 | 浼樺厛 Move 鍒?scripts/锛屾棤娉曞綊绫诲啀 Delete |
+| `.scannerwork/` 绛夊ぇ鐩綍 | 浣撶Н 6-16 MB锛屼絾鍒犻櫎浼氬奖鍝?IDE 缂撳瓨 | 鍒楀叆 gitignore锛屼笅娆¤嚜鍔ㄥ拷鐣?|
 
-### 2.2 失败点
+### 2.2 澶辫触鐐?
+1. **閲嶅悕鏂囦欢琚鍒?*锛氭牴鐩綍涓?`docs/04-绯荤粺缁存姢/sonar-reports/` 涓嬫湁鍚屽悕 SonarQube 鎶ュ憡锛岀鍥涜疆鎵嶉€氳繃 Get-FileHash 姣斿鍙戠幇鍐椾綑銆?2. **鏈嶅姟杩愯涓寔缁骇鐢熸柊鍨冨溇**锛氭竻鐞嗗悗鏍圭洰褰曟枃浠舵暟浠?14 娑ㄥ埌 32锛屽洜涓烘湇鍔″湪璺戜笖鏃?.gitignore 鎷︽埅銆?3. **闈欓粯鍚姩.vbs 鎵句笉鍒?launcher**锛氱涓€杞皢 `闈欓粯鍚姩.vbs` 绉昏蛋锛屼絾鏍圭洰褰曞寘瑁呭櫒纭紪鐮佷簡鐩稿璺緞锛岃皟鐢ㄥけ璐ャ€?4. **`.pre-commit-config.yaml` 鎷︽埅瑙勫垯涓嶅叏**锛氱涓夎疆鎵嶈ˉ鍏?`sonar-results/` 瑙勫垯銆?5. **璇噸瀹氬悜浜х墿鍙嶅鍑虹幇**锛歚<project_name>`銆乣<project_name>frontend` 鏄?PowerShell `command > filename` 閿欒杈撳叆浜х敓鐨勶紝姣忔娓呯悊瀹岃繕浼氬啀鐢熴€?
+### 2.3 椋庨櫓鎺у埗缁忛獙
 
-1. **重名文件被误删**：根目录与 `docs/04-系统维护/sonar-reports/` 下有同名 SonarQube 报告，第四轮才通过 Get-FileHash 比对发现冗余。
-2. **服务运行中持续产生新垃圾**：清理后根目录文件数从 14 涨到 32，因为服务在跑且无 .gitignore 拦截。
-3. **静默启动.vbs 找不到 launcher**：第一轮将 `静默启动.vbs` 移走，但根目录包装器硬编码了相对路径，调用失败。
-4. **`.pre-commit-config.yaml` 拦截规则不全**：第三轮才补充 `sonar-results/` 规则。
-5. **误重定向产物反复出现**：`<project_name>`、`<project_name>frontend` 是 PowerShell `command > filename` 错误输入产生的，每次清理完还会再生。
-
-### 2.3 风险控制经验
-
-- **永不大规模批量删除**：先打印清单 + 人工确认，再执行
-- **删除前先备份 hash 表**：把所有"将删"文件的 path+hash+size 写入 `cleanup-YYYYMMDD.log`
-- **核心模块导入作为最后一道闸**：任何清理后都跑 `python -c "import <core_module>"`
-- **服务运行中只删不重要的**：服务运行时只删除重定向产物和测试输出，移动/结构变更先停服务
+- **姘镐笉澶ц妯℃壒閲忓垹闄?*锛氬厛鎵撳嵃娓呭崟 + 浜哄伐纭锛屽啀鎵ц
+- **鍒犻櫎鍓嶅厛澶囦唤 hash 琛?*锛氭妸鎵€鏈?灏嗗垹"鏂囦欢鐨?path+hash+size 鍐欏叆 `cleanup-YYYYMMDD.log`
+- **鏍稿績妯″潡瀵煎叆浣滀负鏈€鍚庝竴閬撻椄**锛氫换浣曟竻鐞嗗悗閮借窇 `python -c "import <core_module>"`
+- **鏈嶅姟杩愯涓彧鍒犱笉閲嶈鐨?*锛氭湇鍔¤繍琛屾椂鍙垹闄ら噸瀹氬悜浜х墿鍜屾祴璇曡緭鍑猴紝绉诲姩/缁撴瀯鍙樻洿鍏堝仠鏈嶅姟
 
 ---
 
-## 维度三：可抽象的固定流程与判断逻辑
+## 缁村害涓夛細鍙娊璞＄殑鍥哄畾娴佺▼涓庡垽鏂€昏緫
 
-### 3.1 固定 6 阶段流程
-
-```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  Phase 1    │───▶│  Phase 2    │───▶│  Phase 3    │
-│  Recon      │    │  Classify   │    │  Impact     │
-│  扫描       │    │  归类       │    │  影响评估   │
-└─────────────┘    └─────────────┘    └─────────────┘
-       │                                    │
-       │                                    ▼
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  Phase 6    │◀───│  Phase 5    │◀───│  Phase 4    │
-│  Archive    │    │  Verify     │    │  Execute    │
-│  归档       │    │  验证       │    │  执行       │
-└─────────────┘    └─────────────┘    └─────────────┘
-```
-
-### 3.2 可抽象的判断逻辑
-
-**判断一：文件是否属于"垃圾"？**
+### 3.1 鍥哄畾 6 闃舵娴佺▼
 
 ```
-文件 X 是垃圾 ⟺
-  ∃ pattern ∈ garbage_patterns: match(X.name, pattern)
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?   鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?   鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹? Phase 1    鈹傗攢鈹€鈹€鈻垛攤  Phase 2    鈹傗攢鈹€鈹€鈻垛攤  Phase 3    鈹?鈹? Recon      鈹?   鈹? Classify   鈹?   鈹? Impact     鈹?鈹? 鎵弿       鈹?   鈹? 褰掔被       鈹?   鈹? 褰卞搷璇勪及   鈹?鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?   鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?   鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?       鈹?                                   鈹?       鈹?                                   鈻?鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?   鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?   鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹? Phase 6    鈹傗梹鈹€鈹€鈹€鈹? Phase 5    鈹傗梹鈹€鈹€鈹€鈹? Phase 4    鈹?鈹? Archive    鈹?   鈹? Verify     鈹?   鈹? Execute    鈹?鈹? 褰掓。       鈹?   鈹? 楠岃瘉       鈹?   鈹? 鎵ц       鈹?鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?   鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?   鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?```
+
+### 3.2 鍙娊璞＄殑鍒ゆ柇閫昏緫
+
+**鍒ゆ柇涓€锛氭枃浠舵槸鍚﹀睘浜?鍨冨溇"锛?*
+
+```
+鏂囦欢 X 鏄瀮鍦?鉄?  鈭?pattern 鈭?garbage_patterns: match(X.name, pattern)
   OR
-  X.path == workspace_root AND X.ext ∉ allowed_extensions
+  X.path == workspace_root AND X.ext 鈭?allowed_extensions
   OR
-  X.path == workspace_root AND X.name 不在 allowed_root_files 清单
+  X.path == workspace_root AND X.name 涓嶅湪 allowed_root_files 娓呭崟
 ```
 
-**判断二：文件是否属于"脚本"？**
+**鍒ゆ柇浜岋細鏂囦欢鏄惁灞炰簬"鑴氭湰"锛?*
 
 ```
-文件 X 是脚本 ⟺
-  X.ext ∈ { .py, .ps1, .bat, .sh, .js, .vbs }
+鏂囦欢 X 鏄剼鏈?鉄?  X.ext 鈭?{ .py, .ps1, .bat, .sh, .js, .vbs }
   AND
-  X.path 不是已知代码目录（src/、frontend/src/、tests/）
-  AND
-  X 不是配置/数据文件（按 content sniff 排除）
-```
+  X.path 涓嶆槸宸茬煡浠ｇ爜鐩綍锛坰rc/銆乫rontend/src/銆乼ests/锛?  AND
+  X 涓嶆槸閰嶇疆/鏁版嵁鏂囦欢锛堟寜 content sniff 鎺掗櫎锛?```
 
-**判断三：服务是否在运行？**
+**鍒ゆ柇涓夛細鏈嶅姟鏄惁鍦ㄨ繍琛岋紵**
 
 ```
-服务在运行 ⟺
-  ∃ pid_file ∈ service_indicators.pid_files: exists(pid_file)
+鏈嶅姟鍦ㄨ繍琛?鉄?  鈭?pid_file 鈭?service_indicators.pid_files: exists(pid_file)
   OR
-  ∃ port ∈ service_indicators.ports: port_in_listen(port)
+  鈭?port 鈭?service_indicators.ports: port_in_listen(port)
 ```
 
-**判断四：操作是否安全？**
+**鍒ゆ柇鍥涳細鎿嶄綔鏄惁瀹夊叏锛?*
 
 ```
-操作 O 对文件 X 安全 ⟺
-  X 在 backup_log 中存在 hash 记录
+鎿嶄綔 O 瀵规枃浠?X 瀹夊叏 鉄?  X 鍦?backup_log 涓瓨鍦?hash 璁板綍
   AND
   service_running == false
   AND
-  (O == Delete) ⟹ X 在垃圾/重定向产物名单
-  (O == Move) ⟹ 目标目录存在且可写
-```
+  (O == Delete) 鉄?X 鍦ㄥ瀮鍦?閲嶅畾鍚戜骇鐗╁悕鍗?  (O == Move) 鉄?鐩爣鐩綍瀛樺湪涓斿彲鍐?```
 
-### 3.3 可参数化的配置
-
+### 3.3 鍙弬鏁板寲鐨勯厤缃?
 ```yaml
-# cleanup-config.yaml 示例
+# cleanup-config.yaml 绀轰緥
 workspace:
-  root: "."                    # 工作空间根（相对或绝对路径）
-  script_dir: "scripts"        # 脚本集中目录
-  docs_dir: "docs"             # 文档目录
+  root: "."                    # 宸ヤ綔绌洪棿鏍癸紙鐩稿鎴栫粷瀵硅矾寰勶級
+  script_dir: "scripts"        # 鑴氭湰闆嗕腑鐩綍
+  docs_dir: "docs"             # 鏂囨。鐩綍
 
 root_allowlist:
   extensions: [".md", ".yaml", ".yml", ".toml", ".txt", ".gitignore", ".env", ".example", ".properties"]
-  files:                       # 显式允许的根目录文件
+  files:                       # 鏄惧紡鍏佽鐨勬牴鐩綍鏂囦欢
     - "README.md"
     - "CHANGELOG.md"
     - "VERSIONING.md"
@@ -188,274 +148,139 @@ safety:
 
 ---
 
-## 维度四：该流程和判断逻辑的适用场景与不适用场景
+## 缁村害鍥涳細璇ユ祦绋嬪拰鍒ゆ柇閫昏緫鐨勯€傜敤鍦烘櫙涓庝笉閫傜敤鍦烘櫙
 
-### 4.1 适用场景
+### 4.1 閫傜敤鍦烘櫙
 
-| 场景 | 适用度 | 备注 |
+| 鍦烘櫙 | 閫傜敤搴?| 澶囨敞 |
 |---|---|---|
-| 长期维护的 Python/Node 项目 | ⭐⭐⭐⭐⭐ | 默认配置已覆盖主流技术栈 |
-| 重定向/调试产生的根目录污染 | ⭐⭐⭐⭐⭐ | 直接套用 `garbage_patterns` |
-| 脚本文件散落各子目录 | ⭐⭐⭐⭐⭐ | 按 `script_extensions` 集中即可 |
-| 服务运行中持续产生运行产物 | ⭐⭐⭐⭐ | 需先停服务 |
-| 周期性预防性维护 | ⭐⭐⭐⭐⭐ | 建议纳入 CI 或周维护脚本 |
-| 多技术栈混合项目 | ⭐⭐⭐⭐ | 调整 `root_allowlist.extensions` 即可 |
-| 含 Docker/Compose 配置的项目 | ⭐⭐⭐⭐⭐ | 已在默认清单 |
+| 闀挎湡缁存姢鐨?Python/Node 椤圭洰 | 猸愨瓙猸愨瓙猸?| 榛樿閰嶇疆宸茶鐩栦富娴佹妧鏈爤 |
+| 閲嶅畾鍚?璋冭瘯浜х敓鐨勬牴鐩綍姹℃煋 | 猸愨瓙猸愨瓙猸?| 鐩存帴濂楃敤 `garbage_patterns` |
+| 鑴氭湰鏂囦欢鏁ｈ惤鍚勫瓙鐩綍 | 猸愨瓙猸愨瓙猸?| 鎸?`script_extensions` 闆嗕腑鍗冲彲 |
+| 鏈嶅姟杩愯涓寔缁骇鐢熻繍琛屼骇鐗?| 猸愨瓙猸愨瓙 | 闇€鍏堝仠鏈嶅姟 |
+| 鍛ㄦ湡鎬ч闃叉€х淮鎶?| 猸愨瓙猸愨瓙猸?| 寤鸿绾冲叆 CI 鎴栧懆缁存姢鑴氭湰 |
+| 澶氭妧鏈爤娣峰悎椤圭洰 | 猸愨瓙猸愨瓙 | 璋冩暣 `root_allowlist.extensions` 鍗冲彲 |
+| 鍚?Docker/Compose 閰嶇疆鐨勯」鐩?| 猸愨瓙猸愨瓙猸?| 宸插湪榛樿娓呭崟 |
 
-### 4.2 不适用场景
+### 4.2 涓嶉€傜敤鍦烘櫙
 
-| 场景 | 不适用原因 | 替代方案 |
+| 鍦烘櫙 | 涓嶉€傜敤鍘熷洜 | 鏇夸唬鏂规 |
 |---|---|---|
-| 全新空仓库 | 无根目录污染，无需清理 | 跳过本 skill |
-| Monorepo 单一包项目 | 硬编码根目录假设会误判 | 改为 per-package 模式 |
-| 包含大量二进制资源 | 脚本扩展名规则不适用 | 增加 binary_extensions 规则 |
-| 服务不能停的 7×24 业务 | Phase 3 影响评估的"先停服务"原则无法执行 | 改造为"软删除"模式（重命名加 .trash 后缀） |
-| 团队规模 > 20 人的公共仓库 | 个人清理习惯可能与其他成员冲突 | 改为 PR 流程而非本地清理 |
-| macOS/Linux-only 项目 | 脚本基于 PowerShell 语法 | 提供 bash 版本或用跨平台命令 |
-| 大型构建产物（GB 级别） | 误删构建产物会导致重新构建 | 强制 require explicit confirmation |
-| 受版本控制保护的目录（vendor/、node_modules/） | 物理删除会破坏包完整性 | 仅做 .gitignore 强化，不实际删除 |
+| 鍏ㄦ柊绌轰粨搴?| 鏃犳牴鐩綍姹℃煋锛屾棤闇€娓呯悊 | 璺宠繃鏈?skill |
+| Monorepo 鍗曚竴鍖呴」鐩?| 纭紪鐮佹牴鐩綍鍋囪浼氳鍒?| 鏀逛负 per-package 妯″紡 |
+| 鍖呭惈澶ч噺浜岃繘鍒惰祫婧?| 鑴氭湰鎵╁睍鍚嶈鍒欎笉閫傜敤 | 澧炲姞 binary_extensions 瑙勫垯 |
+| 鏈嶅姟涓嶈兘鍋滅殑 7脳24 涓氬姟 | Phase 3 褰卞搷璇勪及鐨?鍏堝仠鏈嶅姟"鍘熷垯鏃犳硶鎵ц | 鏀归€犱负"杞垹闄?妯″紡锛堥噸鍛藉悕鍔?.trash 鍚庣紑锛?|
+| 鍥㈤槦瑙勬ā > 20 浜虹殑鍏叡浠撳簱 | 涓汉娓呯悊涔犳儻鍙兘涓庡叾浠栨垚鍛樺啿绐?| 鏀逛负 PR 娴佺▼鑰岄潪鏈湴娓呯悊 |
+| macOS/Linux-only 椤圭洰 | 鑴氭湰鍩轰簬 PowerShell 璇硶 | 鎻愪緵 bash 鐗堟湰鎴栫敤璺ㄥ钩鍙板懡浠?|
+| 澶у瀷鏋勫缓浜х墿锛圙B 绾у埆锛?| 璇垹鏋勫缓浜х墿浼氬鑷撮噸鏂版瀯寤?| 寮哄埗 require explicit confirmation |
+| 鍙楃増鏈帶鍒朵繚鎶ょ殑鐩綍锛坴endor/銆乶ode_modules/锛?| 鐗╃悊鍒犻櫎浼氱牬鍧忓寘瀹屾暣鎬?| 浠呭仛 .gitignore 寮哄寲锛屼笉瀹為檯鍒犻櫎 |
 
-### 4.3 边界与降级策略
+### 4.3 杈圭晫涓庨檷绾х瓥鐣?
+- **鏈嶅姟涓嶈兘鍋?*锛氳烦杩?Phase 4 涓殑 Move锛屼粎鍋?Delete锛堟寜 trash 妯″紡锛?- **閰嶇疆缂哄け**锛氬洖閫€鍒伴粯璁?`cleanup-config.example.yaml` 骞舵彁绀虹敤鎴疯鐩?- **鏍稿績妯″潡瀵煎叆澶辫触**锛氫腑姝㈠綊妗ｏ紙Phase 6锛夛紝鎻愮ず鐢ㄦ埛浜哄伐浠嬪叆
+- **鏍圭洰褰曟枃浠舵暟 > 50**锛氬厛 dry-run锛堜粎鎵撳嵃璁″垝锛屼笉瀹為檯鎵ц锛?
+---
 
-- **服务不能停**：跳过 Phase 4 中的 Move，仅做 Delete（按 trash 模式）
-- **配置缺失**：回退到默认 `cleanup-config.example.yaml` 并提示用户覆盖
-- **核心模块导入失败**：中止归档（Phase 6），提示用户人工介入
-- **根目录文件数 > 50**：先 dry-run（仅打印计划，不实际执行）
+## 浜斻€佺浜旇疆娓呯悊澶嶇洏锛?026-07-05锛?
+### 5.1 鏈疆鐗硅壊
+
+鏈疆棣栨閲囩敤 `workspace-cleanup` 鎶€鑳界殑瀹屾暣 6 闃舵闂幆娴佺▼锛?閰嶇疆椹卞姩 + hash 澶囦唤 + 楠岃瘉褰掓。锛屾槸鍘嗚疆涓渶瑙勮寖鐨勪竴娆°€?
+**娓呯悊瑙勬ā锛?*
+- 鏍圭洰褰曪細119 鈫?15 鏂囦欢锛堝垹闄?~118 涓級
+- frontend锛?0 鈫?9 鏂囦欢锛堝垹闄?~21 涓級
+- 缂撳瓨鐩綍锛? 涓紙`.scannerwork/` + `.pytest_cache/` + `sonar-results/`锛?- 閲婃斁绌洪棿锛殈42 MB
+
+### 5.2 鏂板彂鐜扮殑涓嶇‘瀹氭€т笌澶辫触鐐?
+#### 5.2.1 宸ュ叿灞傞檺鍒?
+| 澶辫触鐐?| 瑙﹀彂鍦烘櫙 | 褰卞搷 | 瑙ｅ喅鏂规 |
+|---|---|---|---|
+| LS 杈撳嚭鎴柇 | 椤圭洰鏂囦欢鏁?> 40000 瀛楃闄愬埗 | 鏃犳硶鑾峰彇瀹屾暣鏂囦欢娓呭崟 | 鏀圭敤 PowerShell `Get-ChildItem -File` + 绱у噾鏍煎紡 |
+| Glob `*.py` 鏃犺繑鍥?| 宸ュ叿琛屼负涓庨鏈熶笉绗?| 娴垂涓€杞帰娴?| 鐩存帴鐢?PowerShell 鍒楁枃浠讹紝涓嶄緷璧?Glob |
+
+#### 5.2.2 PowerShell 璇硶闄烽槺锛堟柊澧烇級
+
+| 闄烽槺 | 閿欒浠ｇ爜 | 閿欒淇℃伅 | 淇 |
+|---|---|---|---|
+| 椹卞姩鍣ㄥ紩鐢?| `"Port $port: not listening"` | `Variable reference is not valid. ':' was followed by a valid variable name` | 鏀圭敤 `${port}: not listening` |
+| 鍝堝笇琛?strict mode | `$stats.Errors++` | `PropertyNotFound` | 鏀圭敤绠€鍗曞彉閲?`$script:errorCount++` |
+| 寮傚父鏂囦欢鍚?| `Join-Path $root "not enabled*"` | 璺緞瑙ｆ瀽澶辫触 | 鐢?`Get-ChildItem + Where-Object` 鍖归厤 |
+
+**缁忛獙鏁欒锛?* PowerShell 鍝堝笇琛ㄥ湪 strict mode 涓嬪睘鎬ч€掑浼氭姤閿欙紝
+搴斾娇鐢?`[PSCustomObject]@{}` 鎴栫畝鍗曞彉閲忋€傛墍鏈?`$var:` 鍚庤窡闈炲彉閲忓悕瀛楃鐨勫満鏅?閮介渶鐢?`${var}` 鍖呰９銆?
+#### 5.2.3 鏈嶅姟妫€娴嬬洸鍖猴紙鏂板锛?
+| 鐩插尯 | 瀹為檯鍦烘櫙 | 妫€娴嬬粨鏋?| 淇 |
+|---|---|---|---|
+| PID 鏂囦欢缂哄け | 鏈嶅姟鍦ㄨ繍琛屼絾鏈啓 PID 鏂囦欢 | 璇垽涓?鏈嶅姟鏈繍琛? | 澧炲姞绔彛 + 杩涚▼鍚?+ 鏂囦欢鍗犵敤涓夐噸妫€娴?|
+| 鏂囦欢琚崰鐢?| `run.stdout.log` 琚湇鍔℃寔鏈?| hash 璁＄畻澶辫触 | 鏂囦欢鍗犵敤浣滀负鏈嶅姟杩愯鐨勯棿鎺ヨ瘉鎹?|
+
+**缁忛獙鏁欒锛?* PID 鏂囦欢涓嶅彲闈狅紙鍙兘缂哄け鎴栨畫鐣欙級锛屽繀椤诲閲嶈瘉鎹厹搴曘€?閰嶇疆涓柊澧?`file_occupancy_probes` 浣滀负绗洓閬撴娴嬨€?
+#### 5.2.4 鍚庡彴杩涚▼鎸佺画鍒涘缓鏂囦欢锛堟柊澧烇級
+
+**鐜拌薄锛?* 娓呯悊杩囩▼涓彂鐜版柊鏂囦欢琚寔缁垱寤猴細
+- `compare_*.ps1` / `do_git_commit.ps1` / `integrate_*.ps1`锛坰kill 闆嗘垚鑴氭湰锛?- `ubprocess; r=subprocess.run([...])`锛圥owerShell 璇噸瀹氬悜浜х墿锛岃閲嶅缓 3 娆★級
+
+**鍘熷洜锛?* 骞跺彂鐨?AI 浼氳瘽鎴栧悗鍙拌剼鏈湪鎵ц git diff 鎿嶄綔锛屼骇鐢熻閲嶅畾鍚戜骇鐗┿€?
+**褰卞搷锛?* 娓呯悊"澶嶅彂"锛屾牴鐩綍鏂囦欢鏁版棤娉曠ǔ瀹氫笅闄嶃€?
+**瑙ｅ喅鏂规锛?*
+1. 鏂板 `stability_check` 閰嶇疆鍧楋紝鍒犻櫎鍚庣瓑寰?N 绉掑鎵?2. 鍖归厤 `recurrence_patterns` 鍒ゆ柇鏄惁涓哄凡鐭ュ悗鍙拌繘绋嬩骇鐗?3. 鎸?`recurrence_action`锛坵arn/stop/soft_delete锛夌瓥鐣ュ鐞?4. 瓒呰繃 `max_recurrence` 寮哄埗鍋滄锛屾彁绀虹敤鎴锋帓鏌ュ悗鍙拌繘绋?
+#### 5.2.5 閰嶇疆瑕嗙洊鐩插尯锛堟柊澧烇級
+
+**鐜拌薄锛?* example 閰嶇疆鏈鐩栦互涓嬫柊鍨嬭皟璇曚骇鐗╋細
+- skill 闆嗘垚鑴氭湰锛坄compare_*.ps1` / `do_git_commit.ps1` 绛夛級
+- git 璋冭瘯鑴氭湰锛坄git_menu_history.py` / `git_show_output.txt` 绛夛級
+- 楠岃瘉鑴氭湰锛坄verify_*.py` / `verify_*.txt` 绛夛級
+
+**瑙ｅ喅鏂规锛?*
+1. 鎵╁睍 `garbage_patterns` 鏂板 `skill_debug_artifacts` 绫诲埆
+2. 鏂板 `detection` 閰嶇疆鍧楋紝鏀寔鍩轰簬鏂囦欢鍚嶇壒寰佺殑妯″紡鎺ㄦ柇
+3. 鎺ㄦ柇妯″紡鑷姩鍔犲叆 .gitignore 闃叉澶嶅彂
+
+### 5.3 鏂板鐨勯檷绾х瓥鐣?
+| 鍦烘櫙 | 闄嶇骇绛栫暐 | 閰嶇疆椤?|
+|---|---|---|
+| 閰嶇疆缂哄け | 鍥為€€鍒?example + 妯″紡鎺ㄦ柇 | `detection.enabled: true` |
+| PID 鏂囦欢缂哄け | 绔彛 + 杩涚▼鍚?+ 鏂囦欢鍗犵敤涓夐噸妫€娴?| `service_indicators.file_occupancy_probes` |
+| 鍚庡彴杩涚▼鎸佺画鍒涘缓鏂囦欢 | 绋冲畾鎬ф鏌?+ 澶嶅彂澶勭悊 | `stability_check.*` |
+| 寮傚父鏂囦欢鍚?| Get-ChildItem + Where-Object 鍖归厤 | `safety.special_filename_handling: "safe"` |
+| 鏈嶅姟涓嶈兘鍋?| 杞垹闄わ紙閲嶅懡鍚?.trash 鍚庣紑锛?| `safety.soft_delete_suffix` |
+| 璺ㄥ钩鍙?| 閰嶇疆涓殑鍛戒护鍙樹綋 | `platform.commands.{windows/linux/macos}` |
+
+### 5.4 绗簲杞竻鐞嗙殑鍏抽敭鎶€鏈偣
+
+- **閰嶇疆椹卞姩绯荤粺鍖?*锛氭墍鏈夎鍒欓€氳繃 YAML 閰嶇疆绠＄悊锛岄浂纭紪鐮?- **hash 澶囦唤瀹屾暣鎬?*锛?25 涓枃浠?SHA256 澶囦唤鑷?`logs/cleanup-20260705-000340.log`
+- **鏈嶅姟鍋滄鍓嶇疆**锛氭娴嬪埌绔彛 8000 鐩戝惉鍚庡仠姝㈡湇鍔★紙PID 33540锛?- **姣忔壒鍒犻櫎鍚庨獙璇?*锛氬強鏃跺彂鐜板垹闄よ剼鏈け鏁堥棶棰?- **妯″紡鎺ㄦ柇鍏滃簳**锛氳瘑鍒厤缃湭瑕嗙洊鐨勬柊鍨嬭皟璇曚骇鐗?- **绋冲畾鎬ф鏌?*锛氬彂鐜板悗鍙拌繘绋嬫寔缁垱寤烘枃浠剁殑闂
+- **褰掓。涓変欢濂?*锛?gitignore + .pre-commit + changelog 鍚屾鏇存柊
+
+### 5.5 閫傜敤鍦烘櫙鏇存柊
+
+#### 鏂板涓嶉€傜敤鍦烘櫙
+
+| 鍦烘櫙 | 涓嶉€傜敤鍘熷洜 | 鏇夸唬鏂规 |
+|---|---|---|
+| 鏈夊苟鍙?AI 浼氳瘽鐨勯」鐩?| 鍚庡彴杩涚▼鎸佺画鍒涘缓鏂囦欢锛屾竻鐞?澶嶅彂" | 鍏堟帓鏌ュ苟鍋滄鎵€鏈夊悗鍙颁細璇濓紝鍐嶆墽琛屾竻鐞?|
+| 閰嶇疆鏈鐩栫殑鏂板瀷璋冭瘯浜х墿 | garbage_patterns 鏃犳硶绌蜂妇鎵€鏈夋ā寮?| 鍚敤 `detection` 妯″紡鎺ㄦ柇 |
+| 鏂囦欢鍚嶅惈鐗规畩瀛楃鐨勮閲嶅畾鍚戜骇鐗?| 鐩存帴璺緞瀛楃涓插け璐?| 浣跨敤 `safe` 妯″紡锛圙et-ChildItem 鍖归厤锛?|
+
+#### 鏂板寮哄寲閫傜敤鍦烘櫙
+
+| 鍦烘櫙 | 寮哄寲鑳藉姏 | 閰嶇疆椤?|
+|---|---|---|
+| 鏈嶅姟杩愯浣嗘棤 PID 鏂囦欢 | 鏂囦欢鍗犵敤鎺㈡祴鍏滃簳 | `file_occupancy_probes` |
+| 璺ㄥ钩鍙伴」鐩?| 閰嶇疆涓殑鍛戒护鍙樹綋 | `platform.commands.*` |
+| 鏂板瀷璋冭瘯浜х墿 | 妯″紡鎺ㄦ柇 + 鑷姩鍔犲叆 .gitignore | `detection.*` |
 
 ---
 
-## 五、第五轮清理复盘（2026-07-05）
+## 六、PowerShell 最佳实践
 
-### 5.1 本轮特色
+> 本节内容与 [decisions.md](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/.trae/skills/workspace-cleanup/references/decisions.md) Section 6 完全重复，请查阅 decisions.md 获取完整代码示例。
 
-本轮首次采用 `workspace-cleanup` 技能的完整 6 阶段闭环流程，
-配置驱动 + hash 备份 + 验证归档，是历轮中最规范的一次。
-
-**清理规模：**
-- 根目录：119 → 15 文件（删除 ~118 个）
-- frontend：30 → 9 文件（删除 ~21 个）
-- 缓存目录：3 个（`.scannerwork/` + `.pytest_cache/` + `sonar-results/`）
-- 释放空间：~42 MB
-
-### 5.2 新发现的不确定性与失败点
-
-#### 5.2.1 工具层限制
-
-| 失败点 | 触发场景 | 影响 | 解决方案 |
-|---|---|---|---|
-| LS 输出截断 | 项目文件数 > 40000 字符限制 | 无法获取完整文件清单 | 改用 PowerShell `Get-ChildItem -File` + 紧凑格式 |
-| Glob `*.py` 无返回 | 工具行为与预期不符 | 浪费一轮探测 | 直接用 PowerShell 列文件，不依赖 Glob |
-
-#### 5.2.2 PowerShell 语法陷阱（新增）
-
-| 陷阱 | 错误代码 | 错误信息 | 修正 |
-|---|---|---|---|
-| 驱动器引用 | `"Port $port: not listening"` | `Variable reference is not valid. ':' was followed by a valid variable name` | 改用 `${port}: not listening` |
-| 哈希表 strict mode | `$stats.Errors++` | `PropertyNotFound` | 改用简单变量 `$script:errorCount++` |
-| 异常文件名 | `Join-Path $root "not enabled*"` | 路径解析失败 | 用 `Get-ChildItem + Where-Object` 匹配 |
-
-**经验教训：** PowerShell 哈希表在 strict mode 下属性递增会报错，
-应使用 `[PSCustomObject]@{}` 或简单变量。所有 `$var:` 后跟非变量名字符的场景
-都需用 `${var}` 包裹。
-
-#### 5.2.3 服务检测盲区（新增）
-
-| 盲区 | 实际场景 | 检测结果 | 修正 |
-|---|---|---|---|
-| PID 文件缺失 | 服务在运行但未写 PID 文件 | 误判为"服务未运行" | 增加端口 + 进程名 + 文件占用三重检测 |
-| 文件被占用 | `run.stdout.log` 被服务持有 | hash 计算失败 | 文件占用作为服务运行的间接证据 |
-
-**经验教训：** PID 文件不可靠（可能缺失或残留），必须多重证据兜底。
-配置中新增 `file_occupancy_probes` 作为第四道检测。
-
-#### 5.2.4 后台进程持续创建文件（新增）
-
-**现象：** 清理过程中发现新文件被持续创建：
-- `compare_*.ps1` / `do_git_commit.ps1` / `integrate_*.ps1`（skill 集成脚本）
-- `ubprocess; r=subprocess.run([...])`（PowerShell 误重定向产物，被重建 3 次）
-
-**原因：** 并发的 AI 会话或后台脚本在执行 git diff 操作，产生误重定向产物。
-
-**影响：** 清理"复发"，根目录文件数无法稳定下降。
-
-**解决方案：**
-1. 新增 `stability_check` 配置块，删除后等待 N 秒复扫
-2. 匹配 `recurrence_patterns` 判断是否为已知后台进程产物
-3. 按 `recurrence_action`（warn/stop/soft_delete）策略处理
-4. 超过 `max_recurrence` 强制停止，提示用户排查后台进程
-
-#### 5.2.5 配置覆盖盲区（新增）
-
-**现象：** example 配置未覆盖以下新型调试产物：
-- skill 集成脚本（`compare_*.ps1` / `do_git_commit.ps1` 等）
-- git 调试脚本（`git_menu_history.py` / `git_show_output.txt` 等）
-- 验证脚本（`verify_*.py` / `verify_*.txt` 等）
-
-**解决方案：**
-1. 扩展 `garbage_patterns` 新增 `skill_debug_artifacts` 类别
-2. 新增 `detection` 配置块，支持基于文件名特征的模式推断
-3. 推断模式自动加入 .gitignore 防止复发
-
-### 5.3 新增的降级策略
-
-| 场景 | 降级策略 | 配置项 |
-|---|---|---|
-| 配置缺失 | 回退到 example + 模式推断 | `detection.enabled: true` |
-| PID 文件缺失 | 端口 + 进程名 + 文件占用三重检测 | `service_indicators.file_occupancy_probes` |
-| 后台进程持续创建文件 | 稳定性检查 + 复发处理 | `stability_check.*` |
-| 异常文件名 | Get-ChildItem + Where-Object 匹配 | `safety.special_filename_handling: "safe"` |
-| 服务不能停 | 软删除（重命名 .trash 后缀） | `safety.soft_delete_suffix` |
-| 跨平台 | 配置中的命令变体 | `platform.commands.{windows/linux/macos}` |
-
-### 5.4 第五轮清理的关键技术点
-
-- **配置驱动系统化**：所有规则通过 YAML 配置管理，零硬编码
-- **hash 备份完整性**：125 个文件 SHA256 备份至 `logs/cleanup-20260705-000340.log`
-- **服务停止前置**：检测到端口 8000 监听后停止服务（PID 33540）
-- **每批删除后验证**：及时发现删除脚本失效问题
-- **模式推断兜底**：识别配置未覆盖的新型调试产物
-- **稳定性检查**：发现后台进程持续创建文件的问题
-- **归档三件套**：.gitignore + .pre-commit + changelog 同步更新
-
-### 5.5 适用场景更新
-
-#### 新增不适用场景
-
-| 场景 | 不适用原因 | 替代方案 |
-|---|---|---|
-| 有并发 AI 会话的项目 | 后台进程持续创建文件，清理"复发" | 先排查并停止所有后台会话，再执行清理 |
-| 配置未覆盖的新型调试产物 | garbage_patterns 无法穷举所有模式 | 启用 `detection` 模式推断 |
-| 文件名含特殊字符的误重定向产物 | 直接路径字符串失败 | 使用 `safe` 模式（Get-ChildItem 匹配） |
-
-#### 新增强化适用场景
-
-| 场景 | 强化能力 | 配置项 |
-|---|---|---|
-| 服务运行但无 PID 文件 | 文件占用探测兜底 | `file_occupancy_probes` |
-| 跨平台项目 | 配置中的命令变体 | `platform.commands.*` |
-| 新型调试产物 | 模式推断 + 自动加入 .gitignore | `detection.*` |
+**要点回顾：** 变量引用陷阱（${var}）、哈希表 strict mode（[PSCustomObject]）、异常文件名（Get-ChildItem | Where-Object）、文件占用检测（[System.IO.File]::Open()）、跨平台命令选择（platform.commands）。
 
 ---
 
-## 六、PowerShell 脚本陷阱与最佳实践（新增）
+## 七、配置降级策略
 
-### 6.1 变量引用陷阱
+> 本节内容与 [decisions.md](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/.trae/skills/workspace-cleanup/references/decisions.md) Section 7 完全重复，请查阅 decisions.md 获取完整表格。
 
-```powershell
-# ❌ 错误：$port: 被解析为驱动器引用
-"Port $port: not listening"
+**要点回顾：** 加载优先级（用户配置 > 示例 > STOP）、不完整配置的降级策略、模式推断置信度阈值（1.0/0.9/0.8/0.7/<0.7）。推断模式是配置缺失时的兜底，不能替代完整配置。
 
-# ✅ 正确：用 ${} 包裹变量名
-"Port ${port}: not listening"
-```
-
-### 6.2 哈希表 strict mode 陷阱
-
-```powershell
-# ❌ 错误：strict mode 下属性递增报错 PropertyNotFound
-$stats = @{ Deleted=0; Errors=0 }
-$stats.Errors++  # 报错
-
-# ✅ 正确方案 1：用简单变量
-$deletedCount = 0
-$errorCount = 0
-$deletedCount++
-
-# ✅ 正确方案 2：用 [PSCustomObject]
-$stats = [PSCustomObject]@{ Deleted=0; Errors=0 }
-$stats.Errors++  # 正常工作
-```
-
-### 6.3 异常文件名处理
-
-```powershell
-# ❌ 错误：直接路径字符串在含特殊字符时失败
-$p = Join-Path $root "not enabled, try to fix it now."
-Remove-Item $p  # 可能失败
-
-# ✅ 正确：Get-ChildItem + Where-Object 匹配
-$odd = Get-ChildItem -Path $root -File | Where-Object { $_.Name -like "not enabled*" }
-if ($odd) { Remove-Item -LiteralPath $odd.FullName -Force }
-```
-
-### 6.4 文件占用检测
-
-```powershell
-# ✅ 检测文件是否被进程持有
-function Test-FileLocked {
-  param([string]$Path)
-  try {
-    $stream = [System.IO.File]::Open($Path, 'Open', 'Read', 'None')
-    $stream.Close()
-    return $false  # 未被锁定
-  } catch {
-    return $true   # 被锁定
-  }
-}
-
-# 用法：作为服务运行的间接证据
-if (Test-FileLocked "run.stdout.log") {
-  "服务可能正在运行（run.stdout.log 被占用）"
-}
-```
-
-### 6.5 跨平台命令选择
-
-```powershell
-# 根据平台选择命令
-$platform = if ($IsWindows) { "windows" }
-            elseif ($IsLinux) { "linux" }
-            elseif ($IsMacOS) { "macos" }
-            else { "windows" }  # 默认 Windows
-
-$venvPython = switch ($platform) {
-  "windows" { ".venv/Scripts/python.exe" }
-  "linux"   { ".venv/bin/python" }
-  "macos"   { ".venv/bin/python" }
-}
-```
-
----
-
-## 七、配置缺失时的降级策略（新增）
-
-### 7.1 配置加载优先级
-
-```
-1. 用户 cleanup-config.yaml（优先级最高）
-       │ 缺失
-       ▼
-2. examples/cleanup-config.example.yaml（fallback）
-       │ 仍缺失
-       ▼
-3. STOP，要求用户提供配置
-```
-
-### 7.2 配置不完整时的降级
-
-| 缺失配置 | 降级策略 | 影响 |
-|---|---|---|
-| `garbage_patterns` 部分类别 | 启用 `detection` 模式推断 | 覆盖面降低，需用户确认 |
-| `service_indicators.file_occupancy_probes` | 仅用 PID + 端口 + 进程名检测 | 服务检测盲区增大 |
-| `stability_check` | 跳过稳定性检查 | 无法检测后台进程复发 |
-| `platform.commands` | 默认 Windows 命令 | 跨平台兼容性降低 |
-| `detection` | 不进行模式推断 | 仅清理配置明确列出的垃圾 |
-
-### 7.3 模式推断的置信度阈值
-
-```yaml
-detection:
-  enabled: true
-  infer_confidence_threshold: 0.7  # 低于此值仅标记，不自动删除
-```
-
-| 置信度 | 来源 | 处理 |
-|---|---|---|
-| 1.0 | 多源同时匹配 | 自动删除 |
-| 0.9 | name_patterns 匹配 | 自动删除 |
-| 0.8 | prefix_indicators 匹配 | 自动删除 |
-| 0.7 | name_keywords 匹配 | 标记为"疑似垃圾"，需用户确认 |
-| < 0.7 | 不匹配 | 保留 |
-
-**经验教训：** 模式推断是配置缺失时的兜底，不能替代完整配置。
-每次清理后应将推断模式补回 `garbage_patterns`，逐步完善配置。

@@ -56,6 +56,9 @@ from app.models.queue_config import QueueConfig
 # 用户互动表（收藏与反馈）
 from app.models.favorite import Favorite
 from app.models.feedback import Feedback
+# V1.3 新增：订阅消息授权记录 + 频道订阅关系
+from app.models.subscription import Subscription
+from app.models.channel_subscription import ChannelSubscription
 # 数据库维护与系统清理模块（V1.2 新增）
 from app.models.audit_log import AuditLog
 # 通知模块（钉钉消息通知，含模板与发送日志）
@@ -98,6 +101,9 @@ __all__ = [
     # 用户互动表
     "Favorite",
     "Feedback",
+    # V1.3 订阅相关
+    "Subscription",
+    "ChannelSubscription",
     # 数据库维护与系统清理模块
     "AuditLog",
     # 通知模块

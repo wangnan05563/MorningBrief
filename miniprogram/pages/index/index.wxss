@@ -5,6 +5,71 @@
   padding-bottom: 40rpx;
 }
 
+/* === 顶部工具栏：搜索 + 频道胶囊 + 睡眠定时器 === */
+.top-bar {
+  display: flex;
+  align-items: center;
+  padding: 16rpx 24rpx;
+  background: #FFFFFF;
+  border-bottom: 2rpx solid #F0F4F2;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.top-action {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: #F0F4F2;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.top-action:active {
+  background: #E6F4F1;
+}
+
+.action-icon {
+  font-size: 32rpx;
+}
+
+.channel-bar {
+  flex: 1;
+  white-space: nowrap;
+  margin: 0 16rpx;
+  height: 64rpx;
+}
+
+.channel-pill {
+  display: inline-block;
+  padding: 12rpx 28rpx;
+  margin-right: 16rpx;
+  border-radius: 32rpx;
+  font-size: 26rpx;
+  color: #A0AEC0;
+  background: #F0F4F2;
+  transition: all 0.2s ease;
+  line-height: 40rpx;
+}
+
+.channel-pill.active {
+  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  color: #FFFFFF;
+  box-shadow: 0 4rpx 12rpx rgba(126, 206, 193, 0.3);
+}
+
+/* === 睡眠定时器状态条 === */
+.sleep-status {
+  text-align: center;
+  padding: 16rpx 24rpx;
+  background: linear-gradient(135deg, #FFF0F4, #E8F5F2);
+  color: #FF6B8A;
+  font-size: 24rpx;
+}
+
 /* === 问候语卡片：薄荷青到蜜桃粉极浅渐变 === */
 .greeting-card {
   margin: 24rpx;

@@ -58,6 +58,7 @@ async def trigger_workflow(
 async def get_workflow(
     workflow_id: str,
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_localhost),
 ):
     """查询工作流状态。"""
     svc = WorkflowService(db)

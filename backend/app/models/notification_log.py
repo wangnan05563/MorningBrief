@@ -40,7 +40,7 @@ class NotificationLog(Base):
         Text, default="", comment="JSON 字符串，渲染时的上下文变量",
     )
     workflow_id: Mapped[str] = mapped_column(
-        String(32), default="", nullable=False, comment="关联工作流 ID",
+        String(64), default="", nullable=False, comment="关联工作流 ID",
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False,

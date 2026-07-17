@@ -114,3 +114,19 @@ def resolve_admin_dist() -> Path | None:
     # 开发态：项目根目录下的 admin-web/dist（vite 构建产物）
     dev_dist = app_root.parent / "admin-web" / "dist"
     return dev_dist if dev_dist.exists() else None
+
+
+def resolve_rss_sources_path() -> Path:
+    """RSS 源配置文件路径（rss.yaml，只读资源）。
+
+    rss.yaml 为只读资源，打包态随 PyInstaller datas 打入 _MEIPASS，
+    开发态位于 backend/app/workflow/crawler/sources/rss.yaml。
+    与 resolve_bgm_dir 等可写数据路径不同：可写数据走 exe 同级目录，
+    只读资源走打包目录，避免升级时 rss.yaml 被旧版本覆盖。
+    """
+    if is_frozen():
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            return Path(meipass) / "app" / "workflow" / "crawler" / "sources" / "rss.yaml"
+    # 开发态：app/paths.py 的上两级 = backend/
+    return get_app_root() / "app" / "workflow" / "crawler" / "sources" / "rss.yaml"

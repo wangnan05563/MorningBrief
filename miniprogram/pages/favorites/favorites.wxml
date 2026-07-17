@@ -10,31 +10,28 @@
     wx:elif="{{list.length === 0}}"
     icon="♡"
     title="还没有收藏的节目"
+    description="在节目详情页点击收藏即可在此查看"
   ></empty-state>
 
   <!-- 收藏列表 -->
   <block wx:else>
     <view class="fav-list">
       <view
-        class="card fav-item {{item._unavailable ? 'item-unavailable' : ''}}"
+        class="card fav-item {{!item.available ? 'item-unavailable' : ''}}"
         wx:for="{{list}}"
-        wx:key="id"
-        data-id="{{item.id}}"
+        wx:key="episode_id"
+        data-id="{{item.episode_id}}"
         data-title="{{item.title}}"
         bindtap="onTapItem"
         bindlongpress="onLongPressItem"
       >
-        <!-- 顶部：收藏时间 + 分类标签（薄荷青/蜜桃粉交替） -->
+        <!-- 顶部：收藏时间 -->
         <view class="item-header">
           <text class="item-date">收藏于 {{fmt.date(item.favorited_at)}}</text>
-          <text
-            wx:if="{{item.categories && item.categories.length}}"
-            class="tag {{index % 2 === 0 ? 'tag-mint' : 'tag-pink'}}"
-          >{{item.categories[0]}}</text>
         </view>
 
         <!-- 标题 -->
-        <text class="item-title">{{item.title}}</text>
+        <text class="item-title">{{item.title || '节目信息加载失败'}}</text>
 
         <!-- 底部：时长 + 播放图标 -->
         <view class="item-footer">

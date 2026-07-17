@@ -2,15 +2,16 @@
 
 设计要点：
 1. 用 cachetools.TTLCache 实现带过期的键值缓存，覆盖原 Redis 大部分场景
-2. 互斥锁用 asyncio.Lock + dict 模拟 Redis SET NX（工作流并发控制）
-3. 原子计数用 asyncio.Lock + int 模拟 Redis INCR（workflow 序号生成）
-4. Redis Bitmap/Set/List 等特殊结构改用 SQLite 表实现（见 dedup.py、stats_service.py）
+2. 原子计数用 asyncio.Lock + int 模拟 Redis INCR（workflow 序号生成）
+3. Redis Bitmap/Set/List 等特殊结构改用 SQLite 表实现（见 dedup.py、stats_service.py）
 
 不支持的 Redis 操作（已改造为其他方案）：
 - BITCOUNT/SETBIT → SQLite COUNT(DISTINCT user_id) 聚合
 - SADD/SISMEMBER/SSCAN → SQLite crawler_dedup 表
 - LPUSH/LRANGE/LTRIM → COS 对象 + APScheduler 聚合
 - EVAL (Lua 脚本) → 不再需要
+- SET NX EX（互斥锁）→ 工作流并发控制改用 WorkflowScheduler._trigger_lock
+  （asyncio.Lock 单进程互斥已足够，无需分布式锁语义）
 
 存储格式：所有键值统一存 (value, expire_at) 元组，get 时检查过期。
 cachetools.TTLCache 自身有过期机制，元组 expire_at 作为冗余兜底，
@@ -41,9 +42,6 @@ class CacheManager:
         # TTLCache 的 ttl 仅作为兜底过期，单 key 自定义 TTL 由元组 expire_at 管理
         self._cache: TTLCache = TTLCache(maxsize=maxsize, ttl=default_ttl)
         self._default_ttl = default_ttl
-        # 互斥锁池：key -> asyncio.Lock，模拟 Redis SET NX
-        self._locks: dict[str, asyncio.Lock] = {}
-        self._locks_guard = asyncio.Lock()
         # 计数器池：key -> int，模拟 Redis INCR
         self._counters: dict[str, int] = {}
         self._counters_ttl: dict[str, float] = {}
@@ -98,56 +96,6 @@ class CacheManager:
         """检查键是否存在且未过期（与 Redis EXISTS 一致）。"""
         value = await self.get(key)
         return value is not None
-
-    # ---- 互斥锁（替代 Redis SET NX EX） ----
-
-    async def acquire_lock(
-        self, key: str, value: str, ttl_sec: int
-    ) -> bool:
-        """尝试获取互斥锁，成功返回 True（与 Redis SET NX EX 一致）。
-
-        Args:
-            key: 锁键名
-            value: 锁持有者标识（如 workflow_id），用于释放时校验
-            ttl_sec: 锁超时秒数，防止持有人崩溃导致死锁
-
-        Returns:
-            True 表示获取成功，False 表示已被持有
-        """
-        async with self._locks_guard:
-            lock = self._locks.get(key)
-            if lock is None:
-                lock = asyncio.Lock()
-                self._locks[key] = lock
-
-        # asyncio.Lock 是非重入的，try_acquire 模拟 SET NX
-        # 用 _cache 存储 lock 的持有者与过期时间，避免同一协程误判
-        lock_key = f"__lock__:{key}"
-        cached = self._cache.get(lock_key)
-        now = time.monotonic()
-        if cached is not None:
-            try:
-                _, expire_at = cached
-                if now < expire_at:
-                    return False  # 锁未过期，获取失败
-            except (TypeError, ValueError):
-                pass
-
-        # 锁已过期或不存在，获取之
-        self._cache[lock_key] = (value, now + ttl_sec)
-        return True
-
-    async def release_lock(self, key: str, value: str) -> None:  # NOSONAR
-        """释放互斥锁，仅当 value 匹配时释放（避免误删他人锁）。"""
-        lock_key = f"__lock__:{key}"
-        cached = self._cache.get(lock_key)
-        if cached is not None:
-            try:
-                holder, _ = cached
-                if holder == value:
-                    self._cache.pop(lock_key, None)
-            except (TypeError, ValueError):
-                pass
 
     # ---- 原子计数（替代 Redis INCR + EXPIRE） ----
 

@@ -1,0 +1,5 @@
+{
+  "navigationBarTitleText": "最近播放",
+  "enablePullDownRefresh": true,
+  "backgroundTextStyle": "dark"
+}

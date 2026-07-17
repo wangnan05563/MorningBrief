@@ -211,8 +211,8 @@ class NotificationSender:
             return {
                 "status": status,
                 "message": error_msg or "发送成功",
-                "success": success_count,
-                "failed": failed_count,
+                "success": 1 if notify_result.success else 0,
+                "failed": 0 if notify_result.success else 1,
             }
 
     async def send_test(self) -> dict[str, Any]:

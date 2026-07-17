@@ -1,128 +1,107 @@
-# ===== Logs Review 技能配置示例 =====
-# 首次使用：复制本文件为 config.yaml 并按项目实际情况修改
-# 所有业务参数均在此文件管理，技能本身不含硬编码值
-# 配置优先级：环境变量 > config.yaml > 本文件默认值
-
-# --- 日志源配置 ---
+﻿# ===== Logs Review 鎶€鑳介厤缃ず渚?=====
+# 棣栨浣跨敤锛氬鍒舵湰鏂囦欢涓?config.yaml 骞舵寜椤圭洰瀹為檯鎯呭喌淇敼
+# 鎵€鏈変笟鍔″弬鏁板潎鍦ㄦ鏂囦欢绠＄悊锛屾妧鑳芥湰韬笉鍚‖缂栫爜鍊?# 閰嶇疆浼樺厛绾э細鐜鍙橀噺 > config.yaml > 鏈枃浠堕粯璁ゅ€?
+# --- 鏃ュ織婧愰厤缃?---
 logs:
-  # 当前日志文件路径（必填，按项目实际日志文件名修改）
-  current_log: "logs/app.log"
-  # 基线日志文件路径（用于增量对比，留空则全量模式）
+  # 褰撳墠鏃ュ織鏂囦欢璺緞锛堝繀濉紝鎸夐」鐩疄闄呮棩蹇楁枃浠跺悕淇敼锛?  current_log: "logs/app.log"
+  # 鍩虹嚎鏃ュ織鏂囦欢璺緞锛堢敤浜庡閲忓姣旓紝鐣欑┖鍒欏叏閲忔ā寮忥級
   baseline_log: "logs/app.baseline.log"
-  # 日志格式：structured（JSON）| plaintext | mixed
+  # 鏃ュ織鏍煎紡锛歴tructured锛圝SON锛墊 plaintext | mixed
   log_format: "mixed"
-  # 日志文件编码
+  # 鏃ュ織鏂囦欢缂栫爜
   encoding: "utf-8"
-  # 日志轮转策略：用于自动定位最新日志文件
-  # none（无轮转）| size（按大小）| time（按时间）| numbered（编号）
+  # 鏃ュ織杞浆绛栫暐锛氱敤浜庤嚜鍔ㄥ畾浣嶆渶鏂版棩蹇楁枃浠?  # none锛堟棤杞浆锛墊 size锛堟寜澶у皬锛墊 time锛堟寜鏃堕棿锛墊 numbered锛堢紪鍙凤級
   rotate_policy: "size"
-  # severity 识别正则（log_format=plaintext/mixed 时使用）
-  # 必须包含命名分组：timestamp, severity, module, message
-  # log_format=structured 时此项忽略（从 JSON 字段 severity_field 读取）
-  severity_pattern: "(?P<timestamp>\\d{4}-\\d{2}-\\d{2}.*?)\\s+(?P<severity>WARNING|ERROR|CRITICAL)\\s+(?P<module>[^:]+):\\s+(?P<message>.*)"
-  # structured 日志的 severity 字段名
-  severity_field: "severity"
-  # 轮转文件命名模式（用于自动定位最新日志文件，按优先级匹配）
-  # 按项目实际轮转规则调整，以下为常见模式示例
-  rotate_patterns:
-    - "app.log.\\d+"        # app.log.1, app.log.2（numbered）
-    - "app.\\d+.log"        # app.1.log, app.2.log（numbered 变体）
-    - "app-\\d{8}.log"      # app-20260703.log（time 按天）
-    - "app.log.\\d{8}"      # app.log.20260703（time 变体）
-  # 编码 fallback 列表（主编码失败时按序尝试）
+  # severity 璇嗗埆姝ｅ垯锛坙og_format=plaintext/mixed 鏃朵娇鐢級
+  # 蹇呴』鍖呭惈鍛藉悕鍒嗙粍锛歵imestamp, severity, module, message
+  # log_format=structured 鏃舵椤瑰拷鐣ワ紙浠?JSON 瀛楁 severity_field 璇诲彇锛?  severity_pattern: "(?P<timestamp>\\d{4}-\\d{2}-\\d{2}.*?)\\s+(?P<severity>WARNING|ERROR|CRITICAL)\\s+(?P<module>[^:]+):\\s+(?P<message>.*)"
+  # structured 鏃ュ織鐨?severity 瀛楁鍚?  severity_field: "severity"
+  # 杞浆鏂囦欢鍛藉悕妯″紡锛堢敤浜庤嚜鍔ㄥ畾浣嶆渶鏂版棩蹇楁枃浠讹紝鎸変紭鍏堢骇鍖归厤锛?  # 鎸夐」鐩疄闄呰疆杞鍒欒皟鏁达紝浠ヤ笅涓哄父瑙佹ā寮忕ず渚?  rotate_patterns:
+    - "app.log.\\d+"        # app.log.1, app.log.2锛坣umbered锛?    - "app.\\d+.log"        # app.1.log, app.2.log锛坣umbered 鍙樹綋锛?    - "app-\\d{8}.log"      # app-20260703.log锛坱ime 鎸夊ぉ锛?    - "app.log.\\d{8}"      # app.log.20260703锛坱ime 鍙樹綋锛?  # 缂栫爜 fallback 鍒楄〃锛堜富缂栫爜澶辫触鏃舵寜搴忓皾璇曪級
   encoding_fallback:
     - "utf-8"
     - "gbk"
     - "latin-1"
 
-# --- 日志过滤配置 ---
+# --- 鏃ュ織杩囨护閰嶇疆 ---
 filter:
-  # 关注的 severity 列表（按项目日志格式调整）
-  severities:
+  # 鍏虫敞鐨?severity 鍒楄〃锛堟寜椤圭洰鏃ュ織鏍煎紡璋冩暣锛?  severities:
     - WARNING
     - ERROR
     - CRITICAL
-  # 忽略的日志 message 正则列表（命中则跳过）
-  ignore_patterns:
+  # 蹇界暐鐨勬棩蹇?message 姝ｅ垯鍒楄〃锛堝懡涓垯璺宠繃锛?  ignore_patterns:
     - "DeprecationWarning"
     - "PerformanceWarning"
-  # 忽略的模块名列表（按日志中的 module 字段匹配）
-  ignore_modules: []
-  # 是否按 message 模板去重（保留出现次数）
-  # 去重时会将动态字段（task_id、时间戳、数字）替换为占位符后再聚合
+  # 蹇界暐鐨勬ā鍧楀悕鍒楄〃锛堟寜鏃ュ織涓殑 module 瀛楁鍖归厤锛?  ignore_modules: []
+  # 鏄惁鎸?message 妯℃澘鍘婚噸锛堜繚鐣欏嚭鐜版鏁帮級
+  # 鍘婚噸鏃朵細灏嗗姩鎬佸瓧娈碉紙task_id銆佹椂闂存埑銆佹暟瀛楋級鏇挎崲涓哄崰浣嶇鍚庡啀鑱氬悎
   deduplicate: true
-  # 动态字段正则列表（去重时替换为 {*} 占位符）
-  # 用于把 "task=abc123" 和 "task=def456" 视为同一模板
+  # 鍔ㄦ€佸瓧娈垫鍒欏垪琛紙鍘婚噸鏃舵浛鎹负 {*} 鍗犱綅绗︼級
+  # 鐢ㄤ簬鎶?"task=abc123" 鍜?"task=def456" 瑙嗕负鍚屼竴妯℃澘
   dedup_normalize_patterns:
     - "task[_=]\\s*[\\w-]+"
     - "\\b\\d{4}-\\d{2}-\\d{2}.*?\\d{2}:\\d{2}:\\d{2}\\b"
     - "\\b[\\da-f]{8,}\\b"
 
-# --- 副作用识别配置（区分噪声与真问题）---
-# 通过 message 内容匹配判断日志是否有实际业务副作用
-# 命中 harmful → 真问题（优先级 high）；命中 harmless → 噪声（优先级 low）
-side_effect:
-  # 有副作用的 message 模式（命中则视为真问题而非噪声）
-  harmful_patterns:
+# --- 鍓綔鐢ㄨ瘑鍒厤缃紙鍖哄垎鍣０涓庣湡闂锛?--
+# 閫氳繃 message 鍐呭鍖归厤鍒ゆ柇鏃ュ織鏄惁鏈夊疄闄呬笟鍔″壇浣滅敤
+# 鍛戒腑 harmful 鈫?鐪熼棶棰橈紙浼樺厛绾?high锛夛紱鍛戒腑 harmless 鈫?鍣０锛堜紭鍏堢骇 low锛?side_effect:
+  # 鏈夊壇浣滅敤鐨?message 妯″紡锛堝懡涓垯瑙嗕负鐪熼棶棰樿€岄潪鍣０锛?  harmful_patterns:
     - pattern: "(?i)(expired|invalid|failed).*(pause|break|stop|abort)"
-      message: "状态失效导致业务中断"
+      message: "鐘舵€佸け鏁堝鑷翠笟鍔′腑鏂?
       type_hint: "state_check"
     - pattern: "(?i)(timeout|retry_failed).*(abort|give_up|exhausted)"
-      message: "重试耗尽导致放弃"
+      message: "閲嶈瘯鑰楀敖瀵艰嚧鏀惧純"
       type_hint: "retry_failure"
     - pattern: "(?i)(data\\s*loss|inconsistent|corrupt)"
-      message: "数据一致性风险"
+      message: "鏁版嵁涓€鑷存€ч闄?
       type_hint: "state_check"
-  # 无副作用的 message 模式（视为噪声）
+  # 鏃犲壇浣滅敤鐨?message 妯″紡锛堣涓哄櫔澹帮級
   harmless_patterns:
     - pattern: "(?i)(deprecated|warning).*(continue|skip|ignore)"
-      message: "告警但流程继续"
+      message: "鍛婅浣嗘祦绋嬬户缁?
       type_hint: "warning_noise"
     - pattern: "(?i)(retrying|retry_attempt).*(succeed|ok)"
-      message: "重试后成功"
+      message: "閲嶈瘯鍚庢垚鍔?
       type_hint: "warning_noise"
-  # 性能问题的 message 模式（需包含数值阈值）
+  # 鎬ц兘闂鐨?message 妯″紡锛堥渶鍖呭惈鏁板€奸槇鍊硷級
   performance_patterns:
     - pattern: "(?i)(slow|elapsed|duration|took).*?(\\d+)\\s*ms"
       threshold_ms: 1000
       type_hint: "performance"
     - pattern: "(?i)(batch|bulk).*(missing|absent|none)"
-      message: "缺少批处理"
+      message: "缂哄皯鎵瑰鐞?
       type_hint: "performance"
-  # 未命中任何模式时的默认优先级（按 severity 映射）
-  default_priority_by_severity:
+  # 鏈懡涓换浣曟ā寮忔椂鐨勯粯璁や紭鍏堢骇锛堟寜 severity 鏄犲皠锛?  default_priority_by_severity:
     CRITICAL: "high"
     ERROR: "high"
     WARNING: "medium"
 
-# --- 分类归因配置 ---
+# --- 鍒嗙被褰掑洜閰嶇疆 ---
 classify:
-  # 是否按模块分组
-  by_module: true
-  # 是否按 severity 排序
+  # 鏄惁鎸夋ā鍧楀垎缁?  by_module: true
+  # 鏄惁鎸?severity 鎺掑簭
   by_severity: true
-  # 高频阈值：出现次数超过此值视为高频问题
-  frequency_threshold: 5
-  # 频率统计时间窗口（分钟）
+  # 楂橀闃堝€硷細鍑虹幇娆℃暟瓒呰繃姝ゅ€艰涓洪珮棰戦棶棰?  frequency_threshold: 5
+  # 棰戠巼缁熻鏃堕棿绐楀彛锛堝垎閽燂級
   time_window_minutes: 30
-  # 高频但无副作用时自动降级为噪声的策略
-  # true: 高频 + 未命中 harmful_patterns → warning_noise
-  # false: 高频仍按原类型处理
-  auto_downgrade_high_freq_noise: true
+  # 楂橀浣嗘棤鍓綔鐢ㄦ椂鑷姩闄嶇骇涓哄櫔澹扮殑绛栫暐
+  # true: 楂橀 + 鏈懡涓?harmful_patterns 鈫?warning_noise
+  # false: 楂橀浠嶆寜鍘熺被鍨嬪鐞?  auto_downgrade_high_freq_noise: true
 
-# --- 修复策略映射（按 4 大问题类型）---
-# 策略可选：
-#   warning_noise:  merge_logs（合并日志）| reduce_frequency（降低频率）| skip
-#   state_check:    add_precondition（增加前置检查）| add_cooldown（增加冷却）| skip
-#   retry_failure:  add_retry（增加重试）| add_backoff（退避重试）| skip
-#   performance:    add_timing（增加计时）| batch_process（批处理）| add_cache（缓存）| skip
-#   custom:         从 custom_prompts 读取指令
+# --- 淇绛栫暐鏄犲皠锛堟寜 4 澶ч棶棰樼被鍨嬶級---
+# 绛栫暐鍙€夛細
+# warning_noise:  merge_logs锛堝悎骞舵棩蹇楋級| reduce_frequency锛堥檷浣庨鐜囷級| skip
+# state_check:    add_precondition锛堝鍔犲墠缃鏌ワ級| add_cooldown锛堝鍔犲喎鍗达級| skip
+# retry_failure:  add_retry锛堝鍔犻噸璇曪級| add_backoff锛堥€€閬块噸璇曪級| skip
+# performance:    add_timing锛堝鍔犺鏃讹級| batch_process锛堟壒澶勭悊锛墊 add_cache锛堢紦瀛橈級| skip
+# custom:         浠?custom_prompts 璇诲彇鎸囦护
 strategies:
   warning_noise: reduce_frequency
   state_check: add_precondition
   retry_failure: add_retry
   performance: add_timing
-  # 自定义策略指令（当上述策略为 custom 时使用）
+  # 鑷畾涔夌瓥鐣ユ寚浠わ紙褰撲笂杩扮瓥鐣ヤ负 custom 鏃朵娇鐢級
   custom_prompts:
     - type: "warning_noise"
       prompt: ""
@@ -133,24 +112,17 @@ strategies:
     - type: "performance"
       prompt: ""
 
-# --- 并行修复配置 ---
+# --- 骞惰淇閰嶇疆 ---
 parallel:
-  # 是否启用并行子代理
-  enabled: true
-  # 子代理数量（CI 环境建议降低为 2）
-  agents: 4
-  # 每个子代理处理的文件数
-  files_per_agent: 5
-  # 同一文件内多个问题是否串行处理（避免 Edit 冲突）
-  same_file_serial: true
-  # 单次运行最大修复数（避免一次修复太多导致冲突）
+  # 鏄惁鍚敤骞惰瀛愪唬鐞?  enabled: true
+  # 瀛愪唬鐞嗘暟閲忥紙CI 鐜寤鸿闄嶄綆涓?2锛?  agents: 4
+  # 姣忎釜瀛愪唬鐞嗗鐞嗙殑鏂囦欢鏁?  files_per_agent: 5
+  # 鍚屼竴鏂囦欢鍐呭涓棶棰樻槸鍚︿覆琛屽鐞嗭紙閬垮厤 Edit 鍐茬獊锛?  same_file_serial: true
+  # 鍗曟杩愯鏈€澶т慨澶嶆暟锛堥伩鍏嶄竴娆′慨澶嶅お澶氬鑷村啿绐侊級
   max_fix_per_run: 30
-  # 串行阈值：问题数 <= 此值时主代理串行处理（避免子代理启动开销）
-  # 历史经验：7 个问题串行处理比 4 个子代理并行更高效
-  serial_threshold: 5
-  # 跨模块依赖组（同组内的文件必须串行处理，避免状态依赖冲突）
-  # 按项目实际依赖关系填写，以下为示例结构
-  dependency_groups:
+  # 涓茶闃堝€硷細闂鏁?<= 姝ゅ€兼椂涓讳唬鐞嗕覆琛屽鐞嗭紙閬垮厤瀛愪唬鐞嗗惎鍔ㄥ紑閿€锛?  # 鍘嗗彶缁忛獙锛? 涓棶棰樹覆琛屽鐞嗘瘮 4 涓瓙浠ｇ悊骞惰鏇撮珮鏁?  serial_threshold: 5
+  # 璺ㄦā鍧椾緷璧栫粍锛堝悓缁勫唴鐨勬枃浠跺繀椤讳覆琛屽鐞嗭紝閬垮厤鐘舵€佷緷璧栧啿绐侊級
+  # 鎸夐」鐩疄闄呬緷璧栧叧绯诲～鍐欙紝浠ヤ笅涓虹ず渚嬬粨鏋?  dependency_groups:
     - name: "scheduler_api"
       files:
         - "src/<package>/modules/scheduler.py"
@@ -164,51 +136,39 @@ parallel:
         - "src/<package>/modules/chatbot/kb_manager.py"
         - "src/<package>/modules/local_embedding.py"
 
-# --- 验证闭环配置 ---
+# --- 楠岃瘉闂幆閰嶇疆 ---
 verify:
-  # 修复后是否重新采集日志验证
-  recheck_logs: true
-  # 重新采集前的冷却时间（秒，让服务产生新日志）
+  # 淇鍚庢槸鍚﹂噸鏂伴噰闆嗘棩蹇楅獙璇?  recheck_logs: true
+  # 閲嶆柊閲囬泦鍓嶇殑鍐峰嵈鏃堕棿锛堢锛岃鏈嶅姟浜х敓鏂版棩蹇楋級
   cooldown_seconds: 300
-  # 修复后是否运行测试
-  run_tests: true
-  # 测试命令（PowerShell 用 ; 分隔，不支持 &&）
-  test_command: "pytest tests/ ; npm --prefix frontend test"
-  # 是否隔离预存测试失败（只关注新增失败）
-  isolate_preexisting_failures: true
-  # 发现新 WARNING 时是否失败
-  fail_on_new_warnings: true
-  # 测试副作用检查：修复是否引入新的测试失败模式
-  # 历史教训：P0-① Cookie 校验导致测试 ResumeBlockedError、FakeDedup async 掩盖 await 同步方法 bug
+  # 淇鍚庢槸鍚﹁繍琛屾祴璇?  run_tests: true
+  # 娴嬭瘯鍛戒护锛圥owerShell 鐢?; 鍒嗛殧锛屼笉鏀寔 &&锛?  test_command: "pytest tests/ ; npm --prefix frontend test"
+  # 鏄惁闅旂棰勫瓨娴嬭瘯澶辫触锛堝彧鍏虫敞鏂板澶辫触锛?  isolate_preexisting_failures: true
+  # 鍙戠幇鏂?WARNING 鏃舵槸鍚﹀け璐?  fail_on_new_warnings: true
+  # 娴嬭瘯鍓綔鐢ㄦ鏌ワ細淇鏄惁寮曞叆鏂扮殑娴嬭瘯澶辫触妯″紡
+  # 鍘嗗彶鏁欒锛歅0-鈶?Cookie 鏍￠獙瀵艰嚧娴嬭瘯 ResumeBlockedError銆丗akeDedup async 鎺╃洊 await 鍚屾鏂规硶 bug
   check_test_side_effects: true
-  # 测试副作用模式（命中则报告"修复可能引入测试副作用"）
-  test_side_effect_patterns:
+  # 娴嬭瘯鍓綔鐢ㄦā寮忥紙鍛戒腑鍒欐姤鍛?淇鍙兘寮曞叆娴嬭瘯鍓綔鐢?锛?  test_side_effect_patterns:
     - "ResumeBlockedError"
     - "TypeError.*coroutine.*has no"
     - "RuntimeError.*loop closed"
     - "coroutine.*was never awaited"
     - "unexpected keyword argument"
-  # 测试命令执行超时（秒，超时则报告但不终止）
-  test_timeout_seconds: 600
-  # 代码评审验证：修复后是否触发 backend/frontend code-review 技能
-  # true: 修复后建议用户触发 code-review 技能
-  # false: 仅依赖测试和日志重采集验证
-  trigger_code_review: true
+  # 娴嬭瘯鍛戒护鎵ц瓒呮椂锛堢锛岃秴鏃跺垯鎶ュ憡浣嗕笉缁堟锛?  test_timeout_seconds: 600
+  # 浠ｇ爜璇勫楠岃瘉锛氫慨澶嶅悗鏄惁瑙﹀彂 backend/frontend code-review 鎶€鑳?  # true: 淇鍚庡缓璁敤鎴疯Е鍙?code-review 鎶€鑳?  # false: 浠呬緷璧栨祴璇曞拰鏃ュ織閲嶉噰闆嗛獙璇?  trigger_code_review: true
 
-# --- 报告配置 ---
+# --- 鎶ュ憡閰嶇疆 ---
 report:
-  # 报告输出目录
+  # 鎶ュ憡杈撳嚭鐩綍
   output_dir: "docs/logs-reports/"
-  # 是否包含未修复项
+  # 鏄惁鍖呭惈鏈慨澶嶉」
   include_unfixed: true
-  # 报告格式
+  # 鎶ュ憡鏍煎紡
   format: "markdown"
-  # 报告详细程度：summary（精简，仅修复清单+验证结果+硬约束）| detailed（完整 7 节报告）
-  # summary 适合常规迭代场景节省 token；detailed 适合发布前质量门禁
-  detail_level: "detailed"
-  # 脱敏字段规则（正则匹配并替换为指定内容）
-  # 报告生成时对日志摘要和修复内容应用这些规则
-  redact_patterns:
+  # 鎶ュ憡璇︾粏绋嬪害锛歴ummary锛堢簿绠€锛屼粎淇娓呭崟+楠岃瘉缁撴灉+纭害鏉燂級| detailed锛堝畬鏁?7 鑺傛姤鍛婏級
+  # summary 閫傚悎甯歌杩唬鍦烘櫙鑺傜渷 token锛沝etailed 閫傚悎鍙戝竷鍓嶈川閲忛棬绂?  detail_level: "detailed"
+  # 鑴辨晱瀛楁瑙勫垯锛堟鍒欏尮閰嶅苟鏇挎崲涓烘寚瀹氬唴瀹癸級
+  # 鎶ュ憡鐢熸垚鏃跺鏃ュ織鎽樿鍜屼慨澶嶅唴瀹瑰簲鐢ㄨ繖浜涜鍒?  redact_patterns:
     - pattern: "(?i)(token|password|secret|api_key|send_key)\\s*[:=]\\s*\\S+"
       replacement: "\\1=***"
     - pattern: "\\b[\\da-f]{32,}\\b"
@@ -218,94 +178,87 @@ report:
     - pattern: "(?i)bearer\\s+[\\w.]+"
       replacement: "bearer ***"
 
-# --- 硬约束检查（可扩展）---
-# 每条规则会按 scan_scope 决定的范围扫描，违规会写入报告
-hard_constraints:
-  # 扫描范围：modified_only（仅扫描 Phase 4 修改过的文件，节省 token）| full（扫描整个代码库）
-  # modified_only 适合常规迭代；full 适合发布前全面检查
-  scan_scope: "modified_only"
+# --- 纭害鏉熸鏌ワ紙鍙墿灞曪級---
+# 姣忔潯瑙勫垯浼氭寜 scan_scope 鍐冲畾鐨勮寖鍥存壂鎻忥紝杩濊浼氬啓鍏ユ姤鍛?hard_constraints:
+  # 鎵弿鑼冨洿锛歮odified_only锛堜粎鎵弿 Phase 4 淇敼杩囩殑鏂囦欢锛岃妭鐪?token锛墊 full锛堟壂鎻忔暣涓唬鐮佸簱锛?  # modified_only 閫傚悎甯歌杩唬锛沠ull 閫傚悎鍙戝竷鍓嶅叏闈㈡鏌?  scan_scope: "modified_only"
   rules:
     - name: "no_hardcoded_credentials"
       pattern: "(password|secret|token|api_key|access_key)\\s*[:=]\\s*['\"][^'\"]{8,}['\"]"
-      message: "检测到硬编码凭据，请从环境变量或 .env 文件读取"
+      message: "妫€娴嬪埌纭紪鐮佸嚟鎹紝璇蜂粠鐜鍙橀噺鎴?.env 鏂囦欢璇诲彇"
       severity: CRITICAL
     - name: "no_hardcoded_cooldown"
       pattern: "(cooldown|sleep|wait)\\s*[:=]\\s*\\d+"
-      message: "冷却时长应从 config 读取，不硬编码"
+      message: "鍐峰嵈鏃堕暱搴斾粠 config 璇诲彇锛屼笉纭紪鐮?
       severity: MAJOR
     - name: "no_hardcoded_retry_count"
       pattern: "(max_retries|retry_count|retries)\\s*[:=]\\s*\\d+"
-      message: "重试次数应从 config 读取，不硬编码"
+      message: "閲嶈瘯娆℃暟搴斾粠 config 璇诲彇锛屼笉纭紪鐮?
       severity: MAJOR
     - name: "hmac_compare_digest"
       pattern: "==\\s*['\"]?[a-z_]*token"
-      message: "token 比较应使用 hmac.compare_digest() 防止时序攻击"
+      message: "token 姣旇緝搴斾娇鐢?hmac.compare_digest() 闃叉鏃跺簭鏀诲嚮"
       severity: CRITICAL
-  # 硬约束违规时是否阻止合并
+  # 纭害鏉熻繚瑙勬椂鏄惁闃绘鍚堝苟
   block_on_violation: true
 
 # --- 业务参数（供子代理修复时引用，避免硬编码到代码中）---
 # 这些参数会被注入到子代理的修复 prompt 中
-# 按项目实际业务参数填写，以下为常见示例
 business_params:
   # 会话过期后的冷却时长（秒）
   session_cooldown_seconds: 300
+    _scope: ["state_check"]  # 仅状态检查类问题需要
   # 外部资源获取重试次数（如 cookie/token 刷新）
   fetch_max_retries: 1
+    _scope: ["retry_failure"]  # 仅重试类问题需要
   # 外部资源获取重试间隔（毫秒）
   fetch_retry_delay_ms: 1000
+    _scope: ["retry_failure"]  # 仅重试类问题需要
   # 业务告警最小间隔（秒）
   business_alert_min_interval_seconds: 300
+    _scope: ["warning_noise"]  # 仅噪声类问题需要
   # 批量 embedding 的批次大小
   embedding_batch_size: 32
-  # 可重试的 HTTP 状态码
+    _scope: ["performance"]  # 仅性能类问题需要
+  # 可重试的 HTTP 状态码（全局参数，所有子代理接收）
   retryable_http_statuses:
     - 410
     - 441
     - 502
-  # 不可重试的 HTTP 状态码
+  # 不可重试的 HTTP 状态码（全局参数）
   non_retryable_http_statuses:
     - 403
     - 440
     - 503
 
-# --- 紧急快速修复模式 ---
-# 适用于线上故障/紧急热修复场景，跳过详细分类和方案设计
-# 启用方式：config 中设 enabled=true 或环境变量 LOGS_REVIEW_FAST_MODE=1
+# --- 绱ф€ュ揩閫熶慨澶嶆ā寮?---
+# 閫傜敤浜庣嚎涓婃晠闅?绱ф€ョ儹淇鍦烘櫙锛岃烦杩囪缁嗗垎绫诲拰鏂规璁捐
+# 鍚敤鏂瑰紡锛歝onfig 涓 enabled=true 鎴栫幆澧冨彉閲?LOGS_REVIEW_FAST_MODE=1
 fast_mode:
   enabled: false
-  # 快速模式跳过的阶段（仅保留 Extract + Fix + Verify）
-  skip_phases:
-    - "classify"  # 跳过详细分类，仅按 severity 排序
-    - "plan"      # 跳过方案设计，直接按 severity 高低修复
-  # 快速模式的最大修复数（避免一次修复太多导致冲突）
+  # 蹇€熸ā寮忚烦杩囩殑闃舵锛堜粎淇濈暀 Extract + Fix + Verify锛?  skip_phases:
+    - "classify"  # 璺宠繃璇︾粏鍒嗙被锛屼粎鎸?severity 鎺掑簭
+    - "plan"      # 璺宠繃鏂规璁捐锛岀洿鎺ユ寜 severity 楂樹綆淇
+  # 蹇€熸ā寮忕殑鏈€澶т慨澶嶆暟锛堥伩鍏嶄竴娆′慨澶嶅お澶氬鑷村啿绐侊級
   max_fix: 3
-  # 快速模式是否禁用并行（紧急场景单线程更可控）
+  # 蹇€熸ā寮忔槸鍚︾鐢ㄥ苟琛岋紙绱ф€ュ満鏅崟绾跨▼鏇村彲鎺э級
   disable_parallel: true
 
-# --- 基线快照管理 ---
-# 控制基线日志的更新策略，确保增量对比的有效性
-baseline:
-  # 更新策略：manual | post_release | periodic
-  # manual: 用户手动维护（默认）
-  # post_release: 每次发布后自动复制 current_log 为 baseline
-  # periodic: 按 update_interval_hours 定期更新
+# --- 鍩虹嚎蹇収绠＄悊 ---
+# 鎺у埗鍩虹嚎鏃ュ織鐨勬洿鏂扮瓥鐣ワ紝纭繚澧為噺瀵规瘮鐨勬湁鏁堟€?baseline:
+  # 鏇存柊绛栫暐锛歮anual | post_release | periodic
+  # manual: 鐢ㄦ埛鎵嬪姩缁存姢锛堥粯璁わ級
+  # post_release: 姣忔鍙戝竷鍚庤嚜鍔ㄥ鍒?current_log 涓?baseline
+  # periodic: 鎸?update_interval_hours 瀹氭湡鏇存柊
   update_policy: "manual"
-  # update_policy=periodic 时的更新间隔（小时）
+  # update_policy=periodic 鏃剁殑鏇存柊闂撮殧锛堝皬鏃讹級
   update_interval_hours: 24
-  # 基线快照存放目录（post_release/periodic 模式使用）
-  snapshot_dir: "logs/baselines/"
-  # 快照保留数量（超过则删除最旧的）
-  max_snapshots: 7
+  # 鍩虹嚎蹇収瀛樻斁鐩綍锛坧ost_release/periodic 妯″紡浣跨敤锛?  snapshot_dir: "logs/baselines/"
+  # 蹇収淇濈暀鏁伴噺锛堣秴杩囧垯鍒犻櫎鏈€鏃х殑锛?  max_snapshots: 7
 
-# --- 环境变量覆盖规则 ---
-# 所有配置项均可通过环境变量覆盖，规则：LOGS_REVIEW_<SECTION>_<KEY>（全大写）
-# 嵌套字段用双下划线：LOGS_REVIEW_PARALLEL__SERIAL_THRESHOLD
-# 环境变量优先级 > config.yaml > config.example.yaml 默认值
-#
-# 常用环境变量示例：
-# LOGS_REVIEW_LOGS__CURRENT_LOG: 覆盖 logs.current_log
-# LOGS_REVIEW_LOGS__BASELINE_LOG: 覆盖 logs.baseline_log
-# LOGS_REVIEW_VERIFY__COOLDOWN_SECONDS: 覆盖 verify.cooldown_seconds
-# LOGS_REVIEW_FAST_MODE: 1 启用快速模式
-# LOGS_REVIEW_PARALLEL__AGENTS: 覆盖 parallel.agents
+# --- 鐜鍙橀噺瑕嗙洊瑙勫垯 ---
+# 鎵€鏈夐厤缃」鍧囧彲閫氳繃鐜鍙橀噺瑕嗙洊锛岃鍒欙細LOGS_REVIEW_<SECTION>_<KEY>锛堝叏澶у啓锛?# 宓屽瀛楁鐢ㄥ弻涓嬪垝绾匡細LOGS_REVIEW_PARALLEL__SERIAL_THRESHOLD
+# 鐜鍙橀噺浼樺厛绾?> config.yaml > config.example.yaml 榛樿鍊?#
+# 甯哥敤鐜鍙橀噺绀轰緥锛?# LOGS_REVIEW_LOGS__CURRENT_LOG: 瑕嗙洊 logs.current_log
+# LOGS_REVIEW_LOGS__BASELINE_LOG: 瑕嗙洊 logs.baseline_log
+# LOGS_REVIEW_VERIFY__COOLDOWN_SECONDS: 瑕嗙洊 verify.cooldown_seconds
+# LOGS_REVIEW_FAST_MODE: 1 鍚敤蹇€熸ā寮?# LOGS_REVIEW_PARALLEL__AGENTS: 瑕嗙洊 parallel.agents
