@@ -1,4 +1,4 @@
-﻿# ===== MorningBrief 前端代码审查技能配置示例 v1.0.0 =====
+# ===== MorningBrief 前端代码审查技能配置示例 v1.0.0 =====
 # 本文件为配置模板，复制为 config.yaml 后按项目实际情况修改
 # 所有评审规则、硬约束、项目规范均通过本文件管理，技能本身不含硬编码值
 # 完整审查维度对照见 SKILL.md（15 维度）
@@ -477,4 +477,77 @@ batch_operations:
     require_page_correction: true
     # 修正逻辑：剩余记录 < 当前页时回退
     fallback_to_previous_page: true
+
+# === 2026-07-18 新增：SonarQube 迭代闭环复盘审查配置 ===
+sonarqube_checklist:
+  unused_imports:
+    enabled: true
+    linter: "eslint"
+    rules:
+      - "no-unused-vars"
+      - "@typescript-eslint/no-unused-vars"
+    severity: warning
+  import_organization:
+    enabled: true
+    groups: ["builtin", "external", "internal"]
+    enforce_alphabetical: true
+    require_blank_line_between_groups: true
+    linter_rules:
+      - "import/order"
+      - "import/newline-after-import"
+    severity: suggestion
+  dom_api_modernization:
+    enabled: true
+    deprecated_apis:
+      - pattern: "removeChild"
+        replacement: "remove()"
+      - pattern: "appendChild"
+        replacement: "append()"
+      - pattern: "className ="
+        replacement: "classList.add/remove/toggle"
+      - pattern: "getAttribute('data-"
+        replacement: "dataset"
+    severity: warning
+  empty_catch:
+    enabled: true
+    require_user_notification: true
+    require_error_logging: true
+    require_explicit_comment_when_ignored: true
+    severity: warning
+
+# SonarQube 规则号 → 审查维度映射（用于报告展示）
+sonarqube_mapping:
+  S1128:
+    dimension: 57
+    standard: S55
+    meta_rule: R70
+    severity: warning
+    fix_hint: "删除未使用 import"
+  S3863:
+    dimension: 58
+    standard: S57
+    meta_rule: R72
+    severity: suggestion
+    fix_hint: "使用 eslint-plugin-import 自动排序"
+  S7762:
+    dimension: 59
+    standard: S58
+    meta_rule: R73
+    severity: warning
+    fix_hint: "替换为现代 DOM API"
+  S2486:
+    dimension: 60
+    standard: S59
+    meta_rule: R74
+    severity: warning
+    fix_hint: "添加用户提示 + 错误日志"
+
+# 修复优先级矩阵
+fix_priority_matrix:
+  blocker: "block_release"
+  critical: "block_release"
+  major: "fix_before_release"
+  warning: "fix_next_iteration"
+  suggestion: "log_only"
+  info: "log_only"
 

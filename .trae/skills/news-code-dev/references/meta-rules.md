@@ -722,4 +722,313 @@
 - 适用：所有 DML 操作和清理操作
 - 不适用：查询操作（SELECT 不需要审计）
 
+## 规范 66-75：2026-07-18 SonarQube 迭代闭环复盘新增规范
+
+> 以下规范来源于 2026-07-18 SonarQube MCP 扫描 + 问题修复迭代闭环（23 个 OPEN 问题→0）+ Playwright E2E 12/12 PASS + pytest 单元测试 146/146 PASS 的完整复盘。
+
+### 规范 66：认知复杂度阈值治理
+
+**函数 cognitive_complexity ≤ 15，超阈值必须抽取辅助函数或重构为数据驱动。**
+
+- 为什么：SonarQube 默认 cognitive_complexity 阈值 15。复杂度超阈值函数可读性差、难以测试、易引入缺陷。本次迭代发现 `tunnel_providers.py`、`maintenance_service.py`、`db_admin_service.py` 等函数均因 if/elif 链嵌套过深超标。
+- 阈值参数（通过 project-config.json 配置）：
+  - `max_function_lines`: 50（函数行数上限）
+  - `max_nesting`: 3（嵌套层级上限）
+  - `max_cognitive_complexity`: 15（与 SonarQube 一致）
+- 判断信号：
+  - grep `^    if` 在同一函数内连续出现 4 次以上
+  - ruff `C901` 警告
+  - SonarQube `cognitive_complexity` issue
+- 正确做法：
+  ```python
+  # 抽取辅助函数
+  def _validate_tunnel_config(config: dict) -> list[str]:
+      errors = []
+      if not config.get('provider'):
+          errors.append('provider required')
+      if not config.get('token'):
+          errors.append('token required')
+      return errors
+
+  def create_tunnel(config: dict) -> Tunnel:
+      errors = _validate_tunnel_config(config)  # 抽取后复杂度降低
+      if errors:
+          raise ValidationError(errors)
+      # 主逻辑
+  ```
+- 错误做法：保持长函数 + 嵌套 if/elif
+- 适用：业务逻辑复杂的 service/workflow 层
+- 不适用：纯数据声明的 models 层、配置常量文件
+
+### 规范 67：async 函数必须含 await
+
+**`async def` 函数体内必须至少有一个 `await` 表达式，否则转为同步函数。**
+
+- 为什么：SonarQube S7503 规则。`async def` 内无 `await` 会误导调用者认为该函数有 IO 操作可并发执行，实际是同步阻塞。本次迭代发现 `secrets.py` 中 `async def mask_secret()` 函数体内无 await，徒增事件循环开销。
+- 判断信号：
+  - grep `async def` 后 50 行内无 `await` 关键字
+  - SonarQube S7503 issue
+- 正确做法：
+  ```python
+  # 方式 1：转同步函数
+  def mask_secret(value: str) -> str:
+      if not value:
+          return ''
+      return value[:4] + '*' * (len(value) - 8) + value[-4:]
+
+  # 方式 2：补充 await 调用（如确有异步操作）
+  async def fetch_secret(key: str) -> str:
+      value = await cache.get(key)  # 必须有 await
+      return mask_secret(value)
+  ```
+- 例外：事件回调、`asyncio.create_task` 包装的 fire-and-forget 任务（需注释说明）
+- 适用：所有 async 函数
+- 不适用：事件回调函数（如 `async def on_event()` 注册回调）
+
+### 规范 68：正则表达式捕获组优化
+
+**正则表达式中未使用的捕获组必须改为非捕获组 `(?:...)`，仅保留需 `group()` 提取的捕获组。**
+
+- 为什么：SonarQube S6395 规则。捕获组 `(...)` 比 `(?:...)` 慢（需分配内存记录匹配内容），且未使用的捕获组会误导维护者认为该子串会被提取。本次迭代发现 `secrets.py` 中多处 `re.match(r'(prefix)(.*)')` 仅用 `group(0)` 但定义了多个捕获组。
+- 判断信号：
+  - grep `re.match` / `re.sub` / `re.compile` 中含 `(...)` 但后续无 `group(1)`/`group(2)` 等提取
+  - SonarQube S6395 issue
+- 正确做法：
+  ```python
+  # ✅ 使用非捕获组
+  match = re.match(r'(?:prefix)(.*)', value)
+  if match:
+      return match.group(1)  # 仅提取需要的组
+
+  # ❌ 使用捕获组但未提取
+  match = re.match(r'(prefix)(.*)', value)  # 浪费内存
+  ```
+- 适用：所有使用 `re` 模块的代码
+- 不适用：需要 `group(N)` 提取子串的场景（必须用捕获组）
+
+### 规范 69：list() 调用必要性检测
+
+**`list(iterable)` 仅在需要索引访问或多次迭代时使用，单一 `for` 循环直接迭代可迭代对象。**
+
+- 为什么：SonarQube S7504 规则。`list(dict.keys())` 在 Python 3 中 dict.keys() 已是可迭代视图，无需转 list 即可迭代。`list()` 转换浪费内存（一次性加载所有元素到列表）。本次迭代发现 `ai_config_service.py` 中 `for key in list(config.keys())` 多余转换。
+- 判断信号：
+  - grep `for \w+ in list\(` 模式
+  - SonarQube S7504 issue
+- 正确做法：
+  ```python
+  # ✅ 直接迭代
+  for key in config.keys():  # 或 for key in config:
+      process(key)
+
+  # ❌ 多余 list() 转换
+  for key in list(config.keys()):
+      process(key)
+  ```
+- 例外：需在迭代中修改 dict（迭代时增删 key 需先转 list 避免运行时错误）
+- 适用：所有 `for` 循环代码
+- 不适用：需索引访问 `lst[0]`、需多次迭代、迭代中修改集合
+
+### 规范 70：未使用变量与参数检测
+
+**变量、参数、导入声明后必须使用，禁止死代码。**
+
+- 为什么：SonarQube S1481（未使用局部变量）/ S1128（未使用导入）。未使用的代码增加维护负担、误导维护者认为该变量/导入有用途、增加打包体积。本次迭代发现 `workflow_scheduler.py`、`maintenance_service.py` 中多处未使用 import 和局部变量。
+- 判断信号：
+  - ruff F841（未使用变量）/ F401（未使用导入）
+  - pylint W0612 / W0611
+  - SonarQube S1481 / S1128 issue
+- 正确做法：直接删除未使用声明
+  ```python
+  # ❌ 未使用
+  import os  # 未使用
+  from typing import Optional  # 未使用
+
+  def foo():
+      unused_var = 42  # 未使用
+      return "hello"
+
+  # ✅ 删除后
+  def foo():
+      return "hello"
+  ```
+- 例外：协议要求的接口参数（如 `__init__(self, unused_param)` 协议签名）需用 `_unused_param` 前缀
+- 适用：所有 Python 代码
+- 不适用：协议接口、抽象基类、`__all__` 导出列表
+
+### 规范 71：数据驱动重构模式
+
+**同一函数内 ≥3 个 elif 判断同一变量时，必须重构为 `list[tuple]` + 循环。**
+
+- 为什么：if/elif 链超过 3 个分支时，复杂度线性增长，难以维护和扩展。数据驱动重构将判断条件与处理逻辑解耦，新增分支只需追加 tuple，不需修改主流程。本次迭代发现 `tunnel_providers.py` 中按 provider 类型分发逻辑有 5 个 elif 分支。
+- 判断信号：
+  - 同一函数内 ≥3 个 `elif` 判断同一变量
+  - 函数行数 >50 且含 ≥3 个 elif
+- 正确做法：
+  ```python
+  # ✅ 数据驱动
+  PROVIDER_HANDLERS: list[tuple[str, Callable]] = [
+      ('ngrok', create_ngrok_tunnel),
+      ('cloudflare', create_cloudflare_tunnel),
+      ('frp', create_frp_tunnel),
+      ('localtunnel', create_localtunnel),
+  ]
+
+  def create_tunnel(provider: str, config: dict) -> Tunnel:
+      for name, handler in PROVIDER_HANDLERS:
+          if provider == name:
+              return handler(config)
+      raise ValueError(f'Unknown provider: {provider}')
+
+  # ❌ if/elif 链
+  def create_tunnel(provider: str, config: dict) -> Tunnel:
+      if provider == 'ngrok':
+          return create_ngrok_tunnel(config)
+      elif provider == 'cloudflare':
+          return create_cloudflare_tunnel(config)
+      elif provider == 'frp':
+          return create_frp_tunnel(config)
+      elif provider == 'localtunnel':
+          return create_localtunnel(config)
+      raise ValueError(f'Unknown provider: {provider}')
+  ```
+- 适用：分支数 ≥3 且处理逻辑相似的函数
+- 不适用：分支逻辑差异大、仅 1-2 个分支、性能敏感场景（每次循环遍历开销）
+
+### 规范 72：import 语句组织规范
+
+**import 语句分三组（标准库→第三方库→项目内），每组内字母序排列。**
+
+- 为什么：SonarQube S3863 规则。统一的 import 组织提升可读性、便于排查依赖来源、降低合并冲突概率。本次迭代发现 `DatabaseAdmin.vue`、`Maintenance.vue`、`Tunnel.vue` 中 import 顺序混乱。
+- 判断信号：
+  - eslint `import/order` 警告
+  - isort `I001` 警告
+  - SonarQube S3863 issue
+- 正确做法：
+  ```python
+  # Python
+  # 1. 标准库
+  import os
+  import sys
+  from typing import Optional
+
+  # 2. 第三方库
+  from fastapi import FastAPI
+  from sqlalchemy import select
+
+  # 3. 项目内
+  from app.core.config import settings
+  from app.models.workflow import Workflow
+  ```
+
+  ```vue
+  <!-- Vue SFC -->
+  <script setup lang="ts">
+  // 1. Vue 内置
+  import { ref, computed, onMounted } from 'vue'
+  import type { PropType } from 'vue'
+
+  // 2. 第三方库
+  import { ElMessage, ElMessageBox } from 'element-plus'
+  import axios from 'axios'
+
+  // 3. 项目内
+  import { getWorkflowList } from '@/api/workflow'
+  import type { WorkflowItem } from '@/types/workflow'
+  </script>
+  ```
+- 适用：所有 Python 与前端代码
+- 不适用：无（强制规范）
+
+### 规范 73：DOM API 现代化规范
+
+**优先使用现代 DOM API，废弃 API 必须替换。**
+
+- 为什么：SonarQube S7762 规则。现代 DOM API 更简洁、性能更好、跨浏览器兼容性更佳。本次迭代发现前端代码中 `removeChild`、`className` 字符串拼接等废弃写法。
+- 判断信号：
+  - grep `removeChild(`
+  - grep `parentNode.appendChild`
+  - grep `className =` 后跟字符串拼接
+- 正确做法：
+  ```javascript
+  // ✅ 现代 API
+  element.remove()
+  parent.append(child)
+  element.classList.add('class1', 'class2')
+  element.classList.remove('class1')
+  element.dataset.userId = '123'  // 替代 getAttribute('data-user-id')
+
+  // ❌ 废弃 API
+  parent.removeChild(element)
+  parent.appendChild(child)
+  element.className = 'class1 class2'
+  element.getAttribute('data-user-id')
+  ```
+- 适用：所有前端 JavaScript/TypeScript 代码
+- 不适用：需兼容 IE11 的项目（本项目仅支持现代浏览器，无此约束）
+
+### 规范 74：空 except 块禁止规范
+
+**except 块禁止为空或仅 `pass`，必须包含日志记录或显式注释说明为何忽略异常。**
+
+- 为什么：SonarQube S2486 规则。空 except 块会吞掉异常，导致问题难以排查。本次迭代发现 `db_admin_service.py`、`ai_config_service.py` 中多处 `except Exception: pass`。
+- 判断信号：
+  - grep `except[\\s\\w]*:[\\s\\n]{1,3}pass`
+  - grep `except[\\s\\w]*:[\\s\\n]{1,3}\\}`
+  - SonarQube S2486 issue
+- 正确做法：
+  ```python
+  # ✅ 记录日志
+  try:
+      risky_operation()
+  except Exception as e:
+      logger.exception(f'Failed to risky operation: {e}')
+      # 或 logger.warning(f'Ignore expected error: {e}')
+
+  # ✅ 显式注释（仅限确知可忽略的异常）
+  try:
+      cache.clear()
+  except Exception:
+      pass  # 缓存清理失败不影响主流程，下次启动会自动重建
+
+  # ❌ 空 except 块
+  try:
+      risky_operation()
+  except Exception:
+      pass  # 异常被吞，问题无法排查
+  ```
+- 适用：所有 Python 与前端 try/catch 代码
+- 不适用：协议要求的静默失败（需注释说明）
+
+### 规范 75：SonarQube 扫描闭环规范
+
+**发版前必须执行完整 SonarQube 扫描-修复-回归闭环，二次扫描 OPEN=0 且无新增问题方可发版。**
+
+- 为什么：本次迭代通过 SonarQube MCP 扫描发现 23 个 OPEN 问题，单次修复后二次扫描又出现新问题（修复引入新缺陷），证明必须执行回归扫描验证。仅修复首次扫描问题不足以保证质量。
+- 闭环流程（7 步）：
+  1. 启动扫描：`sonar-scanner` 命令（路径与 token 走环境变量）
+  2. 等待分析完成：轮询 `tasks/search` API status=SUCCESS
+  3. 拉取问题：`issues/search` API + `componentKeys=` 过滤
+  4. 问题分类（按 severity）：
+     - BLOCKER/CRITICAL → 必须修复（P0）
+     - MAJOR → 应修复（P1）
+     - MINOR → 建议修复（P2）
+     - INFO → 记录即可（P3）
+  5. 按问题类型应用修复模式（参考规范 66-74）
+  6. 单元测试验证：`pytest --asyncio-mode=auto`
+  7. 二次扫描回归：验证 OPEN=0 且无新增问题
+- 配置参数（全部走 project-config.json#sonarqube）：
+  - `scanner_path_env_var`: SONAR_SCANNER_HOME
+  - `token_env_var`: SONAR_TOKEN
+  - `project_key`: 项目标识
+  - `sources`: 扫描范围
+  - `exclusions`: 排除路径
+  - `severity_must_fix`: 必修级别列表
+  - `max_regression_retries`: 最大回归重试次数（默认 3）
+- 判断逻辑：
+  - 二次扫描 OPEN 数量减少 → 继续验证
+  - 二次扫描 OPEN 数量持平或增加 → 触发回滚检查（修复方式错误）
+  - 二次扫描出现新问题 → 修复引入新缺陷，需重新修复
+- 适用：所有发版前完整验证
+- 不适用：热修复（hotfix）的快速验证、未集成 SonarQube 的项目
+
 

@@ -1247,3 +1247,70 @@ confirm_token_check:
   audit_log_limit: 50
   # 令牌比较方式验证（后端应使用 hmac.compare_digest）
   verify_hmac_compare: true
+
+# === 2026-07-18 新增：SonarQube 迭代闭环复盘测试配置 ===
+service_mode_detection:
+  enabled: true
+  patterns:
+    dev:
+      - "python -m uvicorn"
+      - "python app/main.py"
+      - "python -m app.main"
+    exe:
+      - ".exe"
+    docker:
+      - "docker run"
+      - "docker compose"
+  warn_on_unbuilt_changes: true
+  unbuilt_change_patterns:
+    - "backend/app/**/*.py"
+    - "admin-web/src/**/*.{vue,js,ts}"
+  rebuild_command: "构建打包.bat"
+
+# API 登录协议适配（覆盖 credentials.admin 默认值）
+login_protocol:
+  default_content_type: "json"  # form | json
+  fallback_to_form: false
+  require_content_type_header: true
+
+# 路由路径预验证
+route_verification:
+  enabled: true
+  router_files:
+    - "backend/app/routers/api/auth.py"
+    - "backend/app/routers/admin/ads.py"
+    - "backend/app/routers/internal/workflow.py"
+  expected_prefixes:
+    auth: "/api/auth"
+    ads: "/api/admin/ads"
+    workflow: "/api/internal"
+  require_strict_match: true
+  allow_suffix_only: false
+
+# SonarQube 二次扫描回归
+sonarqube_regression:
+  enabled: true
+  scanner_command: "sonar-scanner -Dsonar.projectKey=20_News -Dsonar.sources=backend/app,admin-web/src"
+  token_env_var: "SONAR_TOKEN"
+  scanner_path_env_var: "SONAR_SCANNER_HOME"
+  task_search_endpoint: "http://localhost:9000/api/ce/tasks?component=20_News"
+  issues_search_endpoint: "http://localhost:9000/api/issues/search?componentKeys=20_News"
+  max_new_issues: 0
+  max_wait_seconds: 300
+  severity_must_fix:
+    - "BLOCKER"
+    - "CRITICAL"
+  severity_should_fix:
+    - "MAJOR"
+  max_regression_retries: 3
+
+# 三层测试验证（对应 news-code-dev S60 规范）
+three_tier_testing:
+  enabled: true
+  unit_test_command: "pytest --asyncio-mode=auto"
+  integration_test_command: "pytest tests/integration/"
+  e2e_test_command: "python scripts/with_server.py -- python e2e_test.py"
+  min_unit_coverage: 0.70
+  require_integration_test: true
+  require_e2e_test: true
+  e2e_p0_must_pass: true

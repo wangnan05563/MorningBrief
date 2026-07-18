@@ -1,6 +1,9 @@
 ---
 name: "news-auto-testing"
 description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MCP 对 Web 应用做全面功能/性能/API 测试。当用户要求'测试前端/全面测试/系统测试/回归测试'或提到 'news-auto-testing / 前端测试' 时调用。"
+version: "6"
+updated: "2026-07-18"
+config: "config.yaml"
 ---
 
 # 前端自动化测试
@@ -14,7 +17,7 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
 - 模板：`config.example.yaml`
 - 实际：`config.yaml`（从模板复制后按项目修改）
 
-配置文件分为 19 个区块：
+配置文件分为 23 个区块：
 
 | 区块 | 作用 |
 |------|------|
@@ -37,8 +40,12 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
 | `data_isolation_check` | 频道级数据隔离预检（OR NULL 兜底检测、channel_id 严格过滤） |
 | `powershell_compat_check` | PowerShell Python 脚本调用兼容性检查（-u 参数、2>&1 重定向） |
 | `third_party_service_check` | 第三方转换服务依赖诊断（rsshub/plink 限流、DNS 污染、UA 拒绝） |
+| `service_mode_detection` | 服务模式自动检测（dev/exe/docker 模式识别 + 未构建变更警告） |
+| `login_protocol` | API 登录协议自动适配（form/json Content-Type 切换） |
+| `route_verification` | 路由路径预验证（APIRouter prefix 与 api_endpoints 声明一致性） |
+| `sonarqube_regression` | SonarQube 二次扫描回归（OPEN 问题 diff + BLOCKER/CRITICAL 守门） |
 
-## 测试流程（6 阶段）
+## 测试流程（6 核心 + 17 辅助 = 23 阶段）
 
 ### 阶段 1：环境预检
 
@@ -1355,3 +1362,160 @@ description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MC
 46. **CONFIRM_DELETE 令牌验证**：测试危险操作时，必须验证是否要求输入 CONFIRM_DELETE 令牌，且比较使用 hmac.compare_digest
 47. **审计日志完整性**：测试 DML 操作后，必须查询审计日志 API 验证操作记录是否完整（action/table_name/record_id/operator/created_at）
 48. **dry_run 预览优先**：测试清理操作时，必须先测试 dry_run 预览模式，确认预览结果正确后再测试实际清理
+
+## 阶段 20-23：2026-07-18 SonarQube 迭代闭环复盘新增测试阶段
+
+> 以下阶段来源于 2026-07-18 webapp-testing 12/12 PASS + SonarQube 扫描闭环复盘。所有参数通过 config.yaml 管理，禁止硬编码业务值。
+
+### 阶段 20：服务模式自动检测
+
+**为什么**：项目支持 dev 和 exe 两种运行模式，代码修改后行为差异显著（dev 即时生效，exe 需重新构建），测试前必须确认当前模式以避免"修改了代码但测试还是旧逻辑"的假阳性。
+
+**流程**：
+1. 读取 `service.start_script` 命令字符串
+2. 按 `service_mode_detection.patterns` 关键词匹配模式：
+   - 含 `python -m uvicorn` / `python app/main.py` / `python -m app.main` → dev 模式
+   - 含 `.exe` 后缀 → exe 模式
+   - 含 `docker run` / `docker compose` → docker 模式
+3. 如检测到 exe 模式且代码有未构建的变更（git diff 含 `backend/app/**/*.py` 或 `admin-web/src/**/*.{vue,js,ts}`）：
+   - 输出 WARN 提示需重新构建
+   - 按 `service_mode_detection.rebuild_command` 给出重建命令
+4. 记录当前模式到测试报告
+
+**判断逻辑**：
+- dev 模式 + 代码变更 → 测试可继续
+- exe 模式 + 代码变更 → WARN 提示重建
+- exe 模式 + 无代码变更 → 测试可继续
+
+**配置项**（`config.yaml#service_mode_detection`）：
+```yaml
+service_mode_detection:
+  enabled: true
+  patterns:
+    dev: ["python -m uvicorn", "python app/main.py", "python -m app.main"]
+    exe: [".exe"]
+    docker: ["docker run", "docker compose"]
+  warn_on_unbuilt_changes: true
+  unbuilt_change_patterns:
+    - "backend/app/**/*.py"
+    - "admin-web/src/**/*.{vue,js,ts}"
+  rebuild_command: "构建打包.bat"
+```
+
+### 阶段 21：API 登录协议自动适配
+
+**为什么**：本项目登录接口要求 `Content-Type: application/json`，而旧版测试脚本默认用 `application/x-www-form-urlencoded`，导致登录失败返回 422。测试前需按配置确认协议。
+
+**流程**：
+1. 读取 `credentials.admin.login_content_type`（form | json）
+2. 按协议类型准备请求体：
+   - form: `data={'username': '...', 'password': '...'}`
+   - json: `data=json.dumps({...}), headers={'Content-Type': 'application/json'}`
+3. 调用 Playwright `page.request.post(login_endpoint, ...)` 或 `Invoke-RestMethod`
+4. 解析响应中的 token（按 `credentials.admin.token_path`）
+5. 后续 API 测试在 Authorization 头注入 `Bearer <token>`
+
+**PowerShell 注意**：
+- form 模式可用 `Invoke-RestMethod -ContentType "application/x-www-form-urlencoded"`
+- json 模式必须 `Invoke-RestMethod -ContentType "application/json" -Body $json`
+- 禁止用 `curl.exe -d '{"k":"v"}'`（PowerShell 引号转义问题）
+
+**配置项**（`config.yaml#credentials.admin`）：
+```yaml
+credentials:
+  admin:
+    login_content_type: "json"  # form | json
+    login_endpoint: "/api/auth/login"
+    username_selector: "input[placeholder*=用户]"
+    password_selector: "input[type=password]"
+    submit_selector: "button[type=submit]"
+    token_path: "data.token"
+```
+
+### 阶段 22：路由路径预验证
+
+**为什么**：测试脚本中硬编码的 API 路径（如 `/api/auth/login`）可能与后端实际路由前缀不一致，导致 404 假阳性。需启动时验证。
+
+**流程**：
+1. 读取 `route_verification.router_files` 列表
+2. 对每个文件用 grep 提取 `APIRouter(prefix=...)` 声明
+3. 构建 `{router_name: prefix}` 映射表
+4. 与 `api_endpoints` 中声明的路径前缀对比
+5. 不一致时 → FAIL 并列出差异
+
+**判断逻辑**：
+- 所有路径与实际路由前缀一致 → PASS
+- 路径不一致 → FAIL 并报告差异详情
+- 路由文件缺失 → WARN（跳过验证）
+
+**配置项**（`config.yaml#route_verification`）：
+```yaml
+route_verification:
+  enabled: true
+  router_files:
+    - "backend/app/routers/api/auth.py"
+    - "backend/app/routers/admin/ads.py"
+    - "backend/app/routers/internal/workflow.py"
+  expected_prefixes:
+    auth: "/api/auth"
+    ads: "/api/admin/ads"
+    workflow: "/api/internal"
+  require_strict_match: true
+  allow_suffix_only: false
+```
+
+### 阶段 23：SonarQube 二次扫描回归
+
+**为什么**：测试通过不代表代码质量达标。需在测试后触发 SonarQube 扫描，验证修复未引入新问题，形成"测试→代码质量"闭环。本次迭代中首次扫描发现 23 个 OPEN 问题，修复后二次扫描又出现新问题（修复引入新缺陷），证明必须执行回归扫描。
+
+**流程**（7 步 SQ-Loop 模式）：
+1. 读取 `sonarqube_regression.scanner_command` 命令
+2. 执行扫描命令（路径与 token 走环境变量 `SONAR_SCANNER_HOME`/`SONAR_TOKEN`）
+3. 等待扫描完成：轮询 `tasks/search` API status=SUCCESS，超时 `max_wait_seconds`
+4. 拉取 OPEN 问题列表：调用 `issues/search` API + `componentKeys=` 过滤
+5. 与上次扫描的 OPEN 集合 diff，识别新增问题
+6. 判断：
+   - `new_issues > max_new_issues` → FAIL
+   - OPEN 数量减少或持平 → PASS
+   - 出现 BLOCKER/CRITICAL 新问题 → FAIL（即使总数减少）
+7. 报告中展示前 10 个 OPEN 问题 + 全部新增问题
+
+**判断逻辑**：
+- 二次扫描 OPEN 数量减少 → 继续验证
+- 二次扫描 OPEN 数量持平或增加 → 触发回滚检查（修复方式错误）
+- 二次扫描出现新问题 → 修复引入新缺陷，需重新修复
+- 超过 `max_regression_retries`（默认 3）→ 报告失败
+
+**配置项**（`config.yaml#sonarqube_regression`）：
+```yaml
+sonarqube_regression:
+  enabled: true
+  scanner_command: "sonar-scanner -Dsonar.projectKey=20_News -Dsonar.sources=backend/app,admin-web/src"
+  token_env_var: "SONAR_TOKEN"
+  scanner_path_env_var: "SONAR_SCANNER_HOME"
+  task_search_endpoint: "http://localhost:9000/api/ce/tasks?component=20_News"
+  issues_search_endpoint: "http://localhost:9000/api/issues/search?componentKeys=20_News"
+  max_new_issues: 0
+  max_wait_seconds: 300
+  severity_must_fix: ["BLOCKER", "CRITICAL"]
+  severity_should_fix: ["MAJOR"]
+  max_regression_retries: 3
+```
+
+## 报告模板新增区块
+
+阶段 6 报告生成时，新增 4 个报告区块：
+1. **服务模式检测结果**：显示当前模式 + 未构建变更警告
+2. **API 登录协议**：显示使用的 Content-Type（form/json）
+3. **路由路径验证**：显示路径一致性检查结果（通过数/失败数/差异详情）
+4. **SonarQube 回归扫描**：显示 OPEN 问题数 + 新增问题数 + 严重级别分布 + 前 10 个问题列表
+
+## 测试流程优化总结
+
+新增 4 个阶段后，完整测试流程从 19 阶段扩展到 23 阶段，覆盖：
+- 服务模式检测（阶段 20）
+- API 登录协议适配（阶段 21）
+- 路由路径预验证（阶段 22）
+- SonarQube 二次扫描回归（阶段 23）
+
+所有新增阶段均可通过 `enabled: false` 禁用，不影响原有流程。

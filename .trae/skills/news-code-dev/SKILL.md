@@ -3,8 +3,8 @@ name: "news-code-dev"
 description: "MorningBrief 项目的标准化开发技能，覆盖后端(FastAPI/SQLAlchemy)、前端(Vue 3/Element Plus/小程序)、工作流编排(LLM/TTS)、测试、优化和缺陷修复。同时包含 20_News 项目编码规范与部署标准（数据库初始化、多模式部署、环境配置、安全认证、前后端交互）。当用户要求'开发新功能/添加接口/修改代码/修复bug/重构/优化性能/写测试/部署排查'时调用。"
 whenToUse: "需要开发新功能、修复缺陷、优化代码或编写测试时使用"
 triggers: "开发新功能/添加接口/修改代码/修复bug/重构/优化性能/写测试/部署排查 | 开发/实现/添加/修改/修复/优化/重构/部署 | 后端/前端/小程序/工作流/测试/数据库 开发 | 这段代码怎么写/怎么改/怎么优化/怎么部署"
-version: "1.9.0"
-updated: "2026-07-17"
+version: "2.0.0"
+updated: "2026-07-18"
 config: "config/project-config.json"
 ---
 
@@ -180,6 +180,16 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 | 63 | 数据库维护白名单机制 | 数据库管理后台 | 表操作未检查白名单（允许操作的表清单） | CRITICAL |
 | 64 | dry_run 预览模式 | 清理/删除类操作 | 清理函数不支持 `dry_run=True` 参数 | HIGH |
 | 65 | 审计日志完整覆盖 | 所有 DML 和清理操作 | `db.delete`/`db.execute(delete(...))` 后无 `audit_log` 记录 | HIGH |
+| 66 | 认知复杂度阈值治理 | service/workflow 层复杂函数 | 函数行数>50 且嵌套>3 层；ruff C901 警告 | CRITICAL |
+| 67 | async 函数必须含 await | 所有 async 函数 | `async def` 后 50 行内无 `await`；SonarQube S7503 | CRITICAL |
+| 68 | 正则表达式捕获组优化 | 所有 re 模块代码 | `re.match` 中 `(...)` 后续无 `group(N)`；SonarQube S6395 | HIGH |
+| 69 | list() 调用必要性检测 | for 循环代码 | `for x in list(...)` 模式；SonarQube S7504 | MEDIUM |
+| 70 | 未使用变量/参数/导入检测 | 所有 Python/前端代码 | ruff F841/F401；SonarQube S1481/S1128 | HIGH |
+| 71 | 数据驱动重构模式 | ≥3 个 elif 判断同一变量 | 同一函数内 ≥3 个 elif；函数行数>50 | HIGH |
+| 72 | import 语句组织规范 | 所有 Python/前端代码 | eslint `import/order`；isort I001；SonarQube S3863 | MEDIUM |
+| 73 | DOM API 现代化规范 | 前端 JS/TS 代码 | `removeChild(`/`appendChild(`/`className =`；SonarQube S7762 | HIGH |
+| 74 | 空 except 块禁止规范 | 所有 try/except 代码 | `except: pass` 或空 except 块；SonarQube S2486 | HIGH |
+| 75 | SonarQube 扫描闭环规范 | 发版前完整验证 | 二次扫描 OPEN>0 或有新增问题 | CRITICAL |
 
 **状态分类**：CRITICAL（必须遵守）/ HIGH（强烈建议）/ MEDIUM（建议）/ LOW（可选）/ INFO（参考）
 
@@ -417,6 +427,71 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 | VACUUM AUTOCOMMIT | SQLite 数据库压缩 | MySQL（用 OPTIMIZE TABLE）、PostgreSQL（用 VACUUM） |
 | 应用层级联删除 | 需要精细控制级联策略的场景 | 简单外键关系（可用数据库级 ON DELETE CASCADE） |
 | 敏感字段动态脱敏 | 表结构动态变化的场景 | 固定表结构（可用静态字段名匹配） |
+
+### 维度 8：SonarQube 迭代闭环与三层测试验证（2026-07-18 复盘）
+
+> 以下复盘基于 2026-07-18 SonarQube MCP 扫描（23 个 OPEN 问题→0）+ pytest 146 单元测试 + Playwright E2E 12/12 PASS 的完整迭代闭环。
+
+**成功执行任务的完整步骤**（7 步 SQ-Loop 模式）：
+
+1. 启动 SonarQube MCP 扫描：配置 projectKey/sources/exclusions
+2. 等待分析完成：轮询 `tasks/search` API status=SUCCESS
+3. 拉取问题：通过 `issues/search` API 获取 23 个 OPEN 问题
+4. 问题分类（按 severity）：BLOCKER/CRITICAL → P0 必修；MAJOR → P1 应修；MINOR → P2 建议；INFO → P3 记录
+5. 按问题类型应用修复模式：
+   - 认知复杂度超标 → 抽取辅助函数（如 `_validate_tunnel_config`）
+   - 冗余正则组 → 改为非捕获组 `(?:...)`
+   - 未使用导入/变量 → 直接删除
+   - async-no-await → 转同步函数（如 `async def mask_secret` → `def mask_secret`）
+   - DOM API 废弃 → 替换为新 API（`removeChild` → `remove`）
+   - 空 catch 块 → 添加 logger.exception 或显式注释
+   - if/elif 链 → 数据驱动重构（`list[tuple]` + 循环）
+6. 单元测试验证：`pytest --asyncio-mode=auto` → 146 PASS
+7. 二次扫描回归：验证 OPEN 问题数 = 0，且无新增问题
+
+**Playwright E2E 验证（12/12 PASS）**：
+- API 健康检查 + 登录功能 + 内容审核 + 广告素材 + 统计 + 工作流 + 数据库维护 + 系统清理 + AI 配置 + 内网穿透 + 7 个 GET API 端点
+
+**不确定性与失败点**：
+
+| 失败点 | 根因 | 修复方式 | 对应规范 |
+|--------|------|----------|----------|
+| SonarQube scanner 路径错误 | SONAR_SCANNER_HOME 环境变量未配置 | 配置环境变量或使用 MCP 包装的扫描命令 | 75 SQ 闭环 |
+| SONAR_TOKEN 缺失 | Token 未生成或未配置 | 在 SonarQube 控制台生成 token 并配置环境变量 | 75 SQ 闭环 |
+| 单次修复后二次扫描出现新问题 | 修复方式引入新缺陷（如改 async 为 sync 后调用方未同步更新） | 二次扫描回归验证；max_regression_retries 控制 | 75 SQ 闭环 |
+| exe 模式 vs 开发模式行为差异 | exe 模式下代码修改不生效，需重新构建 | 测试前确认当前模式；exe 模式触发重新构建 | 60 三层测试 |
+| API 登录协议错误 | 测试脚本默认 form-urlencoded，但后端要 JSON | 用 JSON body + `Content-Type: application/json` | 60 三层测试 |
+| 路由路径错误 | 测试脚本硬编码路径与实际路由前缀不一致 | 启动时验证路由前缀与实际一致 | 60 三层测试 |
+
+**可抽象的固定流程**：
+
+1. **SonarQube 迭代闭环**（SQ-Loop 模式）：扫描 → 等待 → 拉取问题 → 分类 → 修复 → 单元测试 → 二次扫描回归（详见规范 75）
+2. **认知复杂度治理**：检测 → 定位热点 → 抽取辅助函数 / 数据驱动重构 → 验证复杂度 ≤ 15（详见规范 66）
+3. **数据驱动重构模式**：识别 if/elif 链 → 提取 `list[tuple]` → 循环匹配 → 配置化（详见规范 71）
+4. **三层测试验证**：单元测试 → 集成测试 → E2E 测试 → SQ 二次扫描（详见规范 60）
+
+**适用场景与不适用场景**：
+
+| 流程 | 适用场景 | 不适用场景 |
+|------|---------|------------|
+| SQ-Loop 闭环 | 发版前完整验证；已集成 SonarQube 的项目 | 热修复（hotfix）；未集成 SQ 的项目 |
+| 认知复杂度治理 | 业务逻辑复杂的 service/workflow 层 | 纯数据声明的 models 层；配置常量文件 |
+| 数据驱动重构 | 分支数 ≥3 且处理逻辑相似的函数 | 分支逻辑差异大；仅 1-2 个分支 |
+| 三层测试验证 | 中大型项目（≥10 个 API 端点）的发版前验证 | 小型项目（<5 个端点）；hotfix |
+
+**新增编码规范**（S51-S60 + R66-R75）：
+- S51/R66：认知复杂度阈值治理
+- S52/R67：async 函数必须含 await
+- S53/R68：正则表达式捕获组优化
+- S54/R69：list() 调用必要性检测
+- S55/R70：未使用变量、参数与导入检测
+- S56/R71：数据驱动重构模式
+- S57/R72：import 语句组织规范
+- S58/R73：DOM API 现代化规范
+- S59/R74：空 except 块禁止规范
+- S60/R75：SonarQube 扫描闭环规范 + 三层测试验证规范
+
+**配置驱动原则**：所有新规范的阈值参数（max_function_lines/max_nesting/max_cognitive_complexity/min_elif_count/min_unit_coverage 等）均通过 `project-config.json#coding_standards`、`project-config.json#sonarqube`、`project-config.json#testing` 配置，不同项目可调整阈值不需修改技能代码。
 
 ### 附录：20_News 编码规范与部署标准
 

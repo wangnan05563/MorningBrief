@@ -238,3 +238,23 @@ pwsh .trae/skills/news-frontend-code-review/scripts/auto-scan.ps1
 - [ ] 现有违规检测不失效（回归测试通过）
 - [ ] SKILL.md 的 15 维度与本变更一致
 - [ ] auto-scan.ps1 的检查项与本变更一致
+
+## SonarQube 规则映射
+
+| SQ 规则 | 审查维度 | 编码规范 | 元规范 | 严重级别 | 修复建议 |
+|---------|---------|---------|--------|---------|----------|
+| S1128 | 维度 57 | S55 | R70 | 警告 | 删除未使用 import |
+| S3863 | 维度 58 | S57 | R72 | 建议 | 使用 eslint-plugin-import 自动排序 |
+| S7762 | 维度 59 | S58 | R73 | 警告 | 替换为现代 DOM API |
+| S2486 | 维度 60 | S59 | R74 | 警告 | 添加用户提示 + 错误日志 |
+
+## 修复优先级矩阵
+
+| 问题严重级别 | 处理策略 | 阻塞发版 |
+|------------|---------|----------|
+| 阻塞 (blocker) | block_release | ✓ |
+| 严重 (critical) | block_release | ✓ |
+| 主要 (major) | fix_before_release | ✗（但发版前必须修复） |
+| 警告 (warning) | fix_next_iteration | ✗ |
+| 建议 (suggestion) | log_only | ✗ |
+| 信息 (info) | log_only | ✗ |
