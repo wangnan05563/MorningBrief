@@ -1,67 +1,153 @@
+# ═══════════════════════════════════════════
 # Node.js 依赖与构建产物
+# ═══════════════════════════════════════════
 node_modules/
 dist/
 build/
 .npm/
 .pnpm-store/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
+# ═══════════════════════════════════════════
 # Python 缓存与字节码
+# ═══════════════════════════════════════════
 __pycache__/
 *.py[cod]
-*$py.class
+*.class
 *.so
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
 
+# ═══════════════════════════════════════════
 # 虚拟环境
+# ═══════════════════════════════════════════
 .venv/
 .venv-build/
 venv/
 env/
 ENV/
 
+# ═══════════════════════════════════════════
 # 环境变量与密钥（仅保留 .env.example 模板）
+# ═══════════════════════════════════════════
 .env
 .env.local
 .env.*.local
 *.key
 *.pem
 
+# ═══════════════════════════════════════════
 # 日志与运行时数据
+# ═══════════════════════════════════════════
 *.log
 logs/
 *.pid
 *.seed
+debug.log
 
-# IDE 与编辑器
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# 操作系统
-.DS_Store
-Thumbs.db
-
-# Python 构建产物
-*.egg-info/
-
-# PyInstaller / Inno Setup 构建产物
-installer.iss
-*.spec.bak
-
-# 数据库与缓存数据
+# ═══════════════════════════════════════════
+# 数据库临时文件
+# ═══════════════════════════════════════════
+*.db-shm
+*.db-wal
+*.db.malformed.bak
 *.db
 *.sqlite
 *.rdb
 
-# ---------- 清理技能自动生成规则 ----------
-# SonarQube 扫描缓存目录
-.scannerwork/
-# Playwright 测试报告与结果产物
+# ═══════════════════════════════════════════
+# IDE 与编辑器
+# ═══════════════════════════════════════════
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*.pydevproject
+*.project
+.settings/
+
+# ═══════════════════════════════════════════
+# 操作系统
+# ═══════════════════════════════════════════
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ═══════════════════════════════════════════
+# Python 构建产物
+# ═══════════════════════════════════════════
+*.egg-info/
+*.egg
+MANIFEST
+
+# ═══════════════════════════════════════════
+# PyInstaller / Inno Setup 构建产物
+# ═══════════════════════════════════════════
+*.spec.bak
+installer.iss
+
+# ═══════════════════════════════════════════
+# 测试报告与结果
+# ═══════════════════════════════════════════
 admin-web/playwright-report/
 admin-web/test-results/
-# 空目录遗留防护
-doc/
-# IDE 运行配置
-.run/
-# data数据目录
+*.test.log
+coverage/
+.nyc_output/
+
+# ═══════════════════════════════════════════
+# SonarQube 扫描缓存
+# ═══════════════════════════════════════════
+.scannerwork/
+.sonar/
+sonar-project.properties.bak
+
+# ═══════════════════════════════════════════
+# Serverless Framework (SCF)
+# ═══════════════════════════════════════════
+scf/__pycache__/
+serverless.yml.bak
+serverless.config.json
+
+# ═══════════════════════════════════════════
+# 备份与临时文件
+# ═══════════════════════════════════════════
+*.bak
+*.tmp
+*.temp
+backup/
+*.backup
+
+# ═══════════════════════════════════════════
+# 文档与截图（按需保留）
+# ═══════════════════════════════════════════
+docs/screenshots/
+docs/lighthouse/
+docs/test-reports/
+docs/snapshots/
+docs/*.png
+docs/*.jpg
+docs/*.jpeg
+docs/report.html
+docs/report.json
+docs/trace.json
+
+# ═══════════════════════════════════════════
+# FFmpeg 相关
+# ═══════════════════════════════════════════
+backend/ffmpeg/
+
+# ═══════════════════════════════════════════
+# 特定项目忽略
+# ═══════════════════════════════════════════
 backend/data/audio_cache/*
+backend/data/*.db
+backend/data/*.db-shm
+backend/data/*.db-wal
+backend/data/*.malformed.bak

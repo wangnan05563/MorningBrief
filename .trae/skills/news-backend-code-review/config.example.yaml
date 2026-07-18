@@ -1,4 +1,4 @@
-﻿# ===== MorningBrief 后端代码审查技能配置 v1.0.0（详细注释版）=====
+# ===== MorningBrief 后端代码审查技能配置 v1.0.0（详细注释版）=====
 # 首次使用：复制本文件为 config.yaml 并按项目实际情况修改
 # 所有评审规则、硬约束、阈值、白名单均通过本文件管理，技能本身不含硬编码值
 # 完整审查维度对照见 SKILL.md（15 维度）
@@ -673,5 +673,89 @@ batch_operations:
       severity: CRITICAL
       auto_fix: false
       category: dependency_extraction
+
+# === 2026-07-18 新增：SonarQube 迭代闭环复盘审查配置 ===
+sonarqube_checklist:
+  complexity:
+    enabled: true
+    max_function_lines: 50
+    max_nesting: 3
+    max_cognitive_complexity: 15
+  async_await:
+    enabled: true
+    require_await_in_async: true
+    exceptions:
+      - "event_callback"
+      - "fire_and_forget_task"
+  regex:
+    enabled: true
+    prefer_non_capturing_group: true
+  unused_code:
+    enabled: true
+    check_variables: true
+    check_imports: true
+    ruff_rules:
+      - "F841"
+      - "F401"
+  data_driven_refactor:
+    enabled: true
+    min_elif_count: 3
+  empty_catch:
+    enabled: true
+    require_log_or_comment: true
+
+# SonarQube 规则号 → 审查维度映射（用于报告展示）
+sonarqube_mapping:
+  S7503:
+    dimension: 74
+    standard: S52
+    meta_rule: R67
+    severity: blocker
+    fix_hint: "转同步函数或补充 await 调用"
+  S6395:
+    dimension: 75
+    standard: S53
+    meta_rule: R68
+    severity: warning
+    fix_hint: "改用非捕获组 (?:...)"
+  S7504:
+    dimension: 76
+    standard: S54
+    meta_rule: R69
+    severity: warning
+    fix_hint: "去掉多余 list() 转换"
+  S1481:
+    dimension: 77
+    standard: S55
+    meta_rule: R70
+    severity: blocker
+    fix_hint: "删除未使用变量/参数"
+  S1128:
+    dimension: 78
+    standard: S55
+    meta_rule: R70
+    severity: warning
+    fix_hint: "删除未使用 import"
+  S2486:
+    dimension: 80
+    standard: S59
+    meta_rule: R74
+    severity: warning
+    fix_hint: "添加 logger.exception 或显式注释"
+  cognitive_complexity:
+    dimension: 73
+    standard: S51
+    meta_rule: R66
+    severity: blocker
+    fix_hint: "抽取辅助函数或数据驱动重构"
+
+# 修复优先级矩阵
+fix_priority_matrix:
+  blocker: "block_release"      # 阻塞级 → 阻止发布
+  critical: "block_release"      # 严重级 → 阻止发布
+  major: "fix_before_release"    # 主要级 → 发版前修复
+  warning: "fix_next_iteration"  # 警告级 → 下迭代修复
+  minor: "log_only"             # 次要级 → 仅记录
+  info: "log_only"              # 信息级 → 仅记录
 
 

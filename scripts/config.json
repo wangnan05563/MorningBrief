@@ -1,0 +1,15 @@
+{
+  "_comment": "20_News 脚本配置文件：所有可变参数集中管理，避免硬编码",
+  "tools": {
+    "node": {
+      "_comment": "Node.js 查找配置：按 search_paths 顺序 fallback，找到 node.exe 后 npm.cmd/npx.cmd 从同目录推导",
+      "search_paths": [
+        "D:\\code\\nodejs24\\node.exe",
+        "C:\\Program Files\\nodejs\\node.exe",
+        "C:\\Program Files (x86)\\nodejs\\node.exe"
+      ],
+      "min_version": [18, 0],
+      "_min_version_comment": "vite 5 需要 Node 18+，推荐 20+"
+    }
+  }
+}

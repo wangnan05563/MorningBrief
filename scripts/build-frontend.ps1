@@ -38,30 +38,72 @@ Write-Host ""
 # ---------- 检查 Node.js ----------
 Write-Step "[1/4] 检查 Node.js 环境"
 
-$npmCmd = $null
-if (Get-Command npm -ErrorAction SilentlyContinue) {
-    $npmCmd = 'npm'
-} elseif (Test-Path 'D:\code\nodejs24\npm.cmd') {
-    $npmCmd = 'D:\code\nodejs24\npm.cmd'
+# Node.js 查找：config.json 配置路径 → PATH 中的 node → 常见安装路径
+# 找到 node.exe 后 npm.cmd/npx.cmd 从同目录推导，避免 node 与 npm 版本不一致
+$Script:ConfigPath = Join-Path $PSScriptRoot "config.json"
+$nodeExe = $null
+$npmCmd  = $null
+
+# 1. 从 config.json 读取 search_paths
+$configPaths = @()
+if (Test-Path $ConfigPath) {
+    try {
+        $cfg = Get-Content $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($cfg.tools.node.search_paths) { $configPaths = @($cfg.tools.node.search_paths) }
+    } catch {
+        Write-Host "  [WARN] config.json 解析失败，跳过配置路径: $_" -ForegroundColor Yellow
+    }
 }
 
-if (-not $npmCmd) {
-    Write-Host "[ERROR] 未检测到 npm，请安装 Node.js 18+ 后重试" -ForegroundColor Red
+# 2. 汇总查找路径：config 路径优先，PATH 中的 node 次之，常见安装路径兜底
+$candidates = @()
+$candidates += $configPaths
+$pathNode = (Get-Command node -ErrorAction SilentlyContinue).Source
+if ($pathNode) { $candidates += $pathNode }
+$candidates += @(
+    "C:\Program Files\nodejs\node.exe",
+    "C:\Program Files (x86)\nodejs\node.exe"
+)
+
+# 3. 按顺序探测，找到第一个可用的 node.exe
+foreach ($p in $candidates) {
+    if ($p -and (Test-Path $p)) {
+        $nodeExe = $p
+        break
+    }
+}
+
+if (-not $nodeExe) {
+    Write-Host "[ERROR] 未检测到 Node.js，请安装 Node.js 18+ 后重试" -ForegroundColor Red
     Write-Host "  下载地址: https://nodejs.org/" -ForegroundColor Gray
+    Write-Host "  或编辑 scripts\config.json 的 tools.node.search_paths 指定 node.exe 路径" -ForegroundColor Gray
     exit 1
 }
 
-# Node 版本检测：vite 5 + ??= 运算符需要 Node 18+
-$nodeVersion = (node --version 2>$null) -replace '[v\n\r]', ''
+# 4. npm.cmd/npx.cmd 与 node.exe 同目录（Node.js Windows 安装包的标准布局）
+$nodeDir = Split-Path $nodeExe -Parent
+$npmPath = Join-Path $nodeDir "npm.cmd"
+if (Test-Path $npmPath) {
+    $npmCmd = $npmPath
+} elseif (Get-Command npm -ErrorAction SilentlyContinue) {
+    # 兜底：PATH 中的 npm（可能版本不一致，但优于无）
+    $npmCmd = 'npm'
+} else {
+    Write-Host "[ERROR] 找到 node.exe ($nodeExe) 但同目录无 npm.cmd，请检查 Node.js 安装" -ForegroundColor Red
+    exit 1
+}
+
+# 5. 版本检测：vite 5 + ??= 运算符需要 Node 18+
+$nodeVersion = (& $nodeExe --version 2>$null) -replace '[v\n\r]', ''
 if ($nodeVersion) {
     $nodeMajor = [int]($nodeVersion.Split('.')[0])
     if ($nodeMajor -lt 18) {
         Write-Host "[ERROR] Node $nodeVersion 版本过低，vite 5 需要 Node 18+" -ForegroundColor Red
         exit 1
     }
-    Write-OK "Node 版本：$nodeVersion"
+    Write-OK "Node 版本：$nodeVersion ($nodeExe)"
 } else {
-    Write-Host "[ERROR] 未检测到 Node.js" -ForegroundColor Red
+    Write-Host "[ERROR] 无法获取 Node.js 版本: $nodeExe" -ForegroundColor Red
     exit 1
 }
 
@@ -131,9 +173,15 @@ if (Test-Path $DistDir) {
 # ---------- 构建前端 ----------
 Write-Step "[4/4] 执行 vite build"
 
+# 绕过 npm run build，直接用 node.exe 执行 vite.js
+# npm 在执行 npm run 时可能用旧版 node（npm 内部维护的 node 路径或 script-shell 配置），
+# 导致 vite 加载 ESM 模块时报 ??= 语法错误（旧版 Node 不支持 ES2021 语法）
+# 直接用已验证版本的 $nodeExe 执行，确保 Node 版本正确
 Push-Location $FrontendDir
 try {
-    & $npmCmd run build
+    $viteJs = Join-Path $FrontendDir "node_modules\vite\bin\vite.js"
+    if (-not (Test-Path $viteJs)) { throw "vite.js 不存在: $viteJs（请先运行 npm install）" }
+    & $nodeExe $viteJs build
     if ($LASTEXITCODE -ne 0) { throw "vite build 失败" }
 } finally {
     Pop-Location

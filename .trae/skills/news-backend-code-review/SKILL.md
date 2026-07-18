@@ -3,8 +3,8 @@ name: "news-backend-code-review"
 description: "对 MorningBrief 项目后端代码（backend/app/ 下 Python/FastAPI/SQLAlchemy 文件）进行全面评审与逻辑审查，覆盖分层架构、异步并发、数据库规约、安全、性能、错误处理、配置驱动、前后端字段契约、工作流编排、缓存一致性等维度。当用户要求'审查/检查/走查/把关/review/评估/看看对不对/规范不规范'后端 Python 代码、'.py 文件修改'、'迭代发布前后端走查'，或提到'后端评审/backend review/Python 代码审查/FastAPI 评审/SQLAlchemy 评审'时调用。仅审查后端 .py 文件；纯前端文件审查请改用 news-frontend-code-review。"
 whenToUse: "需要审查 MorningBrief 后端代码（backend/app/ 下 .py 文件）是否符合项目规范"
 triggers: "后端代码 走查/审查/审核/把关/review/检查/评估 | .py 文件 修改/变更/迭代 走查 | 迭代发布前 后端 代码 走查 | 这段后端代码 写得对不对/规范不规范 | 路由/服务/模型/工作流 代码 审查"
-version: "1.6.0"
-updated: "2026-07-17"
+version: "1.7.0"
+updated: "2026-07-18"
 config: "config.yaml"
 scripts: "scripts/auto-scan.ps1"
 template: "templates/report-template.md"
@@ -14,7 +14,7 @@ template: "templates/report-template.md"
 
 ## 简介
 
-本技能对 MorningBrief 项目后端代码（`backend/app/**/*.py`）进行系统性评审与逻辑审查，覆盖 **58 个维度**：分层架构、命名规范、类型注解、FastAPI 规范、SQLAlchemy 2.0 规范、异步并发、Redis 缓存规约、安全、错误处理、配置驱动、工作流编排、前后端字段契约、日志规范、性能、可测试性、频道级数据隔离、RSS 源配置管理、第三方服务依赖诊断、PowerShell 工具链兼容性。
+本技能对 MorningBrief 项目后端代码（`backend/app/**/*.py`）进行系统性评审与逻辑审查，覆盖 **80 个维度**：分层架构、命名规范、类型注解、FastAPI 规范、SQLAlchemy 2.0 规范、异步并发、Redis 缓存规约、安全、错误处理、配置驱动、工作流编排、前后端字段契约、日志规范、性能、可测试性、频道级数据隔离、RSS 源配置管理、第三方服务依赖诊断、PowerShell 工具链兼容性。
 
 适用技术栈：FastAPI + SQLAlchemy 2.0 async + aiomysql（或 aiosqlite）+ Redis（或 TTLCache 进程内缓存）+ APScheduler + httpx + COS + 阿里云 TTS + 通义千问 LLM。
 
@@ -1435,3 +1435,217 @@ CONFIG_KEY_MAP = {
 
 适用场景：所有 DML 操作和清理操作
 不适用场景：查询操作（SELECT 不需要审计）
+
+## 维度 73-80：2026-07-18 SonarQube 迭代闭环复盘新增审查维度
+
+> 以下维度来源于 2026-07-18 SonarQube MCP 扫描 + 问题修复迭代闭环（23 个 OPEN 问题→0）复盘，对应 news-code-dev 编码规范 S51-S60 和元规范 R66-R75。所有阈值通过 config.yaml#sonarqube_checklist 管理。
+
+### 维度 73：认知复杂度治理（对应 news-code-dev S51/R66）
+
+- 【强制】函数 cognitive_complexity ≤ `sonarqube_checklist.complexity.max_cognitive_complexity`（默认 15，与 SonarQube 一致）
+- 【强制】函数行数 ≤ `sonarqube_checklist.complexity.max_function_lines`（默认 50）
+- 【强制】嵌套层级 ≤ `sonarqube_checklist.complexity.max_nesting`（默认 3）
+- 超阈值必须抽取辅助函数（`_validate_xxx` / `_build_xxx`）或重构为数据驱动（见维度 79）
+
+**判断信号**：
+- grep `^    if` 在同一函数内连续出现 4 次以上
+- ruff `C901` 警告
+- SonarQube `cognitive_complexity` issue
+- 函数行数 >50 且含 ≥3 层嵌套
+
+**严重级别**：阻塞（critical）
+
+**修复建议**：抽取辅助函数或重构为数据驱动（`list[tuple]` + 循环）
+
+**示例**：
+```python
+# ❌ 反模式：嵌套 if/elif 链导致复杂度超标
+async def create_tunnel(config: dict) -> Tunnel:
+    if config.get('provider') == 'ngrok':
+        if config.get('token'):
+            if config.get('port'):
+                # 3 层嵌套...
+                pass
+
+# ✅ 正确：抽取辅助函数
+def _validate_tunnel_config(config: dict) -> list[str]:
+    errors = []
+    if not config.get('provider'):
+        errors.append('provider required')
+    return errors
+
+async def create_tunnel(config: dict) -> Tunnel:
+    errors = _validate_tunnel_config(config)
+    if errors:
+        raise ValidationError(errors)
+```
+
+### 维度 74：async/await 语义验证（对应 news-code-dev S52/R67，SonarQube S7503）
+
+- 【强制】`async def` 函数体内必须至少有一个 `await` 表达式
+- 无 await 的 async 函数必须转为同步函数（去除 async 关键字）
+- 例外：事件回调、`asyncio.create_task` 包装的 fire-and-forget 任务（需注释说明）
+
+**判断信号**：
+- grep `async def` 后 50 行内无 `await` 关键字
+- SonarQube S7503 issue
+
+**严重级别**：阻塞
+
+**修复建议**：
+```python
+# ❌ 错误：async 无 await
+async def mask_secret(value: str) -> str:
+    return value[:4] + '*' * (len(value) - 8) + value[-4:]
+
+# ✅ 正确：转同步函数
+def mask_secret(value: str) -> str:
+    return value[:4] + '*' * (len(value) - 8) + value[-4:]
+
+# ✅ 或补充 await（如确有异步操作）
+async def fetch_secret(key: str) -> str:
+    value = await cache.get(key)
+    return mask_secret(value)
+```
+
+### 维度 75：正则表达式优化（对应 news-code-dev S53/R68，SonarQube S6395）
+
+- 【强制】正则表达式中未使用的捕获组必须改为非捕获组 `(?:...)`
+- 仅保留需 `group(N)` 提取的捕获组
+- 验证：`re.match`/`re.sub`/`re.compile` 中含 `(...)` 但后续无 `group(N)` 提取 → 违规
+
+**判断信号**：
+- grep `re\.(match|sub|compile).*\([^)]*\([^)]*\)` 后无 `group(`
+- SonarQube S6395 issue
+
+**严重级别**：警告
+
+**修复建议**：将 `(xxx)` 改为 `(?:xxx)`
+
+### 维度 76：list() 调用必要性检测（对应 news-code-dev S54/R69，SonarQube S7504）
+
+- 【警告】`list(iterable)` 仅在需要索引访问或多次迭代时使用
+- 单一 `for` 循环直接迭代可迭代对象，去掉 list() 包装
+- 例外：迭代中修改 dict 需先转 list 避免运行时错误
+
+**判断信号**：
+- grep `for \w+ in list\(` 模式
+- SonarQube S7504 issue
+
+**严重级别**：警告
+
+**修复建议**：去掉多余的 list() 转换
+
+### 维度 77：未使用变量/参数检测（对应 news-code-dev S55/R70，SonarQube S1481）
+
+- 【强制】变量、参数声明后必须使用
+- 【强制】协议要求的接口参数需用 `_unused_param` 前缀
+- 例外：抽象基类、`__all__` 导出列表
+
+**判断信号**：
+- ruff F841（未使用变量）
+- pylint W0612（未使用参数）
+- SonarQube S1481 issue
+
+**严重级别**：阻塞
+
+**修复建议**：直接删除未使用声明
+
+### 维度 78：未使用导入检测（对应 news-code-dev S55/R70，SonarQube S1128）
+
+- 【强制】import 语句后必须使用
+- 【强制】import 语句分三组（标准库→第三方库→项目内），每组字母序（详见维度 72/S3863）
+
+**判断信号**：
+- ruff F401（未使用导入）
+- pylint W0611
+- SonarQube S1128 issue
+
+**严重级别**：警告
+
+**修复建议**：删除未使用 import
+
+### 维度 79：数据驱动重构建议（对应 news-code-dev S56/R71）
+
+- 【建议】同一函数内 ≥ `sonarqube_checklist.data_driven_refactor.min_elif_count`（默认 3）个 elif 判断同一变量时，重构为 `list[tuple]` + 循环
+- 修复后复杂度自动下降，且新增分支只需追加 tuple
+
+**判断信号**：
+- 同一函数内 ≥3 个 `elif` 判断同一变量
+- 函数行数 >50 且含 ≥3 个 elif
+- grep `elif \w+ ==` 在同一函数内出现 3 次以上
+
+**严重级别**：建议
+
+**修复建议**：重构为 `RULES: list[tuple[str, Callable]]` + for 循环
+
+**示例**：
+```python
+# ❌ 反模式：5 个 elif 判断 provider
+def create_tunnel(provider: str, config: dict) -> Tunnel:
+    if provider == 'ngrok':
+        return create_ngrok_tunnel(config)
+    elif provider == 'cloudflare':
+        return create_cloudflare_tunnel(config)
+    # ... 3 more elif
+
+# ✅ 正确：数据驱动重构
+PROVIDER_HANDLERS: list[tuple[str, Callable]] = [
+    ('ngrok', create_ngrok_tunnel),
+    ('cloudflare', create_cloudflare_tunnel),
+]
+def create_tunnel(provider: str, config: dict) -> Tunnel:
+    for name, handler in PROVIDER_HANDLERS:
+        if provider == name:
+            return handler(config)
+    raise ValueError(f'Unknown provider: {provider}')
+```
+
+### 维度 80：空 except 块检测（对应 news-code-dev S59/R74，SonarQube S2486）
+
+- 【强制】except 块禁止为空或仅 `pass`
+- 必须包含 logger.exception/warning 或显式注释说明为何忽略异常
+- 例外：协议要求的静默失败需注释说明（如 `# noqa: intended-empty`）
+
+**判断信号**：
+- grep `except[\s\w]*:[\s\n]{1,3}pass`
+- grep `except[\s\w]*:[\s\n]{1,3}\}`
+- SonarQube S2486 issue
+
+**严重级别**：警告
+
+**修复建议**：添加 logger.exception 或显式注释
+
+**示例**：
+```python
+# ❌ 反模式：空 except 块
+try:
+    risky_operation()
+except Exception:
+    pass  # 异常被吞，问题无法排查
+
+# ✅ 正确：记录日志
+try:
+    risky_operation()
+except Exception as e:
+    logger.exception(f'Failed to risky operation: {e}')
+
+# ✅ 正确：显式注释（仅限确知可忽略）
+try:
+    cache.clear()
+except Exception:
+    pass  # 缓存清理失败不影响主流程，下次启动会自动重建
+```
+
+## SonarQube 规则号交叉引用表
+
+| SonarQube 规则 | 审查维度 | news-code-dev 规范 | news-code-dev 元规范 | 严重级别 | 修复建议 |
+|---------------|---------|-------------------|---------------------|---------|----------|
+| S7503 | 维度 74 | S52 | R67 | 阻塞 | 转同步函数或补充 await |
+| S6395 | 维度 75 | S53 | R68 | 警告 | 改用非捕获组 `(?:...)` |
+| S7504 | 维度 76 | S54 | R69 | 警告 | 去掉多余 list() 转换 |
+| S1481 | 维度 77 | S55 | R70 | 阻塞 | 删除未使用变量/参数 |
+| S1128 | 维度 78 | S55 | R70 | 警告 | 删除未使用导入 |
+| S2486 | 维度 80 | S59 | R74 | 警告 | 添加日志或注释 |
+| cognitive_complexity | 维度 73 | S51 | R66 | 阻塞 | 抽取辅助函数或数据驱动重构 |
+| - | 维度 79 | S56 | R71 | 建议 | 重构为 list[tuple] + 循环 |

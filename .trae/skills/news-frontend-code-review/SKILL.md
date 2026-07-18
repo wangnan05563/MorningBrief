@@ -3,8 +3,8 @@ name: "news-frontend-code-review"
 description: "对 MorningBrief 项目前端代码（admin-web/src/ 下 Vue 3/Element Plus 文件 + miniprogram/ 下微信小程序文件）进行全面评审与逻辑审查，覆盖组件规范、状态管理、API 契约、路由设计、类型安全、性能、可访问性、前后端字段契约、小程序生命周期、音频播放管理等维度。当用户要求'审查/检查/走查/把关/review/评估/看看对不对/规范不规范'前端 Vue/JS 代码、'.vue/.js 文件修改'、'迭代发布前前端走查'，或提到'前端评审/frontend review/Vue 代码审查/小程序代码审查'时调用。仅审查前端文件；纯后端 .py 文件审查请改用 news-backend-code-review。"
 whenToUse: "需要审查 MorningBrief 前端代码（admin-web/src/ 下 .vue/.js 文件 + miniprogram/ 下 .js/.wxml/.wxss 文件）是否符合项目规范"
 triggers: "前端代码 走查/审查/审核/把关/review/检查/评估 | .vue/.js 文件 修改/变更/迭代 走查 | 迭代发布前 前端 代码 走查 | 这段前端代码 写得对不对/规范不规范 | Vue/小程序 代码 review | 页面/组件/Store/路由 代码 审查"
-version: "1.7.0"
-updated: "2026-07-17"
+version: "1.8.0"
+updated: "2026-07-18"
 config: "config.yaml"
 scripts: "scripts/auto-scan.ps1"
 template: "templates/report-template.md"
@@ -12,7 +12,7 @@ template: "templates/report-template.md"
 
 # MorningBrief 前端代码审查
 
-对 MorningBrief 项目前端代码进行全面的代码评审及逻辑审查，覆盖**运营后台（admin-web/，Vue 3 + Element Plus + Vite + Pinia）**与**微信小程序（miniprogram/，原生小程序）**两套前端代码。评审涵盖 **49 个维度**：目录结构、命名规范、Vue 3 组件规范、Element Plus 规范、Pinia 状态管理、API 调用规范、路由设计、前后端字段契约、小程序生命周期、小程序音频播放管理、小程序 API 层、性能、可访问性、代码质量、错误处理、频道级配置同步、前端验证脚本兼容性。
+对 MorningBrief 项目前端代码进行全面的代码评审及逻辑审查，覆盖**运营后台（admin-web/，Vue 3 + Element Plus + Vite + Pinia）**与**微信小程序（miniprogram/，原生小程序）**两套前端代码。评审涵盖 **60 个维度**：目录结构、命名规范、Vue 3 组件规范、Element Plus 规范、Pinia 状态管理、API 调用规范、路由设计、前后端字段契约、小程序生命周期、小程序音频播放管理、小程序 API 层、性能、可访问性、代码质量、错误处理、频道级配置同步、前端验证脚本兼容性、SonarQube 迭代闭环复盘（未使用导入、import 组织、DOM API 现代化、空 catch 块）。
 
 ## 配置驱动
 
@@ -1152,3 +1152,174 @@ async function handleCleanup() {
 
 适用场景：数据库维护模块、系统清理模块、所有需审计追溯的功能
 不适用场景：查询操作（SELECT 不需要审计日志）
+
+## 维度 57-60：2026-07-18 SonarQube 迭代闭环复盘新增审查维度
+
+> 以下维度来源于 2026-07-18 SonarQube MCP 扫描 + 问题修复迭代闭环（23 个 OPEN 问题→0）复盘，对应 news-code-dev 编码规范 S55/S57/S58/S59 和元规范 R70/R72/R73/R74。所有阈值通过 config.yaml#sonarqube_checklist 管理。
+
+### 维度 57：未使用导入检测（对应 news-code-dev S55/R70，SonarQube S1128）
+
+- 【强制】Vue SFC `<script setup>` 中的 import 必须被使用
+- 【强制】import 语句删除前确认未在 template 中使用（`v-model`/`v-on` 等隐式引用）
+- 例外：类型导入（`import type`）可能仅用于类型注解
+
+**判断信号**：
+- eslint `no-unused-vars` 警告
+- eslint `@typescript-eslint/no-unused-vars` 警告
+- SonarQube S1128 issue
+- grep `<script setup>` 内 `import` 后续无对应引用
+
+**严重级别**：警告
+
+**修复建议**：删除未使用 import
+
+**示例**：
+```vue
+<script setup lang="ts">
+// ❌ 未使用
+import { unusedFunction } from '@/utils'  // 模板和 script 中都未使用
+import type { UnusedType } from '@/types'  // 仅未使用的类型注解
+
+// ✅ 正确：删除未使用 import
+import { usedFunction } from '@/utils'
+import type { UsedType } from '@/types'
+
+const data = ref<UsedType>({})
+usedFunction(data)
+</script>
+```
+
+### 维度 58：import 语句组织（对应 news-code-dev S57/R72，SonarQube S3863）
+
+- 【强制】import 语句分三组：标准库/Vue 内置 → 第三方库 → 项目内
+- 【强制】每组内按字母序排列
+- 【强制】组与组之间用空行分隔
+- 使用 eslint-plugin-import 的 `import/order` 规则自动校验
+
+**判断信号**：
+- eslint `import/order` 警告
+- eslint `import/newline-after-import` 警告
+- SonarQube S3863 issue
+- grep `<script setup>` 后第一行非标准库 import
+
+**严重级别**：建议
+
+**修复建议**：使用 eslint-plugin-import 自动排序
+
+**示例**：
+```vue
+<script setup lang="ts">
+// ❌ 错误：顺序混乱
+import { getWorkflowList } from '@/api/workflow'  // 项目内
+import { ref, computed } from 'vue'               // Vue 内置
+import axios from 'axios'                          // 第三方
+import { ElMessage } from 'element-plus'           // 第三方
+import type { WorkflowItem } from '@/types'         // 项目内
+
+// ✅ 正确：分组 + 字母序
+import { computed, ref } from 'vue'                // 1. Vue 内置
+import type { PropType } from 'vue'
+
+import { ElMessage, ElMessageBox } from 'element-plus'  // 2. 第三方库
+import axios from 'axios'
+
+import { getWorkflowList } from '@/api/workflow'   // 3. 项目内
+import type { WorkflowItem } from '@/types/workflow'
+</script>
+```
+
+### 维度 59：DOM API 现代化（对应 news-code-dev S58/R73，SonarQube S7762）
+
+- 【强制】优先使用现代 DOM API
+- 【强制】废弃 API 必须替换：
+  - `removeChild(el)` → `el.remove()`
+  - `parent.appendChild(child)` → `parent.append(child)`
+  - `el.className = 'a b'` → `el.classList.add('a', 'b')`
+  - `el.getAttribute('data-xxx')` → `el.dataset.xxx`
+- 例外：需兼容 IE11 的项目（本项目仅支持现代浏览器，无此约束）
+
+**判断信号**：
+- grep `removeChild(`
+- grep `parentNode.appendChild` / `parent.appendChild`
+- grep `\.className\s*=` 后跟字符串
+- grep `getAttribute\(['"]data-`
+- SonarQube S7762 issue
+
+**严重级别**：警告
+
+**修复建议**：替换为现代 DOM API
+
+**示例**：
+```javascript
+// ❌ 废弃 API
+element.parentNode.removeChild(element)
+container.appendChild(newElement)
+element.className = 'active highlighted'
+const userId = element.getAttribute('data-user-id')
+
+// ✅ 现代 API
+element.remove()
+container.append(newElement)
+element.classList.add('active', 'highlighted')
+const userId = element.dataset.userId
+```
+
+### 维度 60：空 catch 块检测（对应 news-code-dev S59/R74，SonarQube S2486）
+
+- 【强制】try/catch 中的 catch 块禁止为空或仅 `console.error`
+- 必须包含：
+  - 用户提示（`ElMessage.error('操作失败')`）
+  - 错误日志（`console.error` + 上下文信息）
+  - 或显式注释说明为何忽略
+- 例外：协议要求的静默失败需注释说明
+
+**判断信号**：
+- grep `catch\s*\([^)]*\)\s*\{\s*\}` 空 catch 块
+- grep `catch\s*\([^)]*\)\s*\{\s*console\.error\s*\([^)]*\)\s*\}` 仅 console.error
+- SonarQube S2486 issue
+
+**严重级别**：警告
+
+**修复建议**：添加用户提示 + 错误日志
+
+**示例**：
+```javascript
+// ❌ 空 catch 块（异常被吞）
+try {
+  await saveConfig()
+} catch (e) {
+  // 无任何处理
+}
+
+// ❌ 仅 console.error（用户无感知）
+try {
+  await saveConfig()
+} catch (e) {
+  console.error(e)
+}
+
+// ✅ 正确：用户提示 + 错误日志
+try {
+  await saveConfig()
+  ElMessage.success('保存成功')
+} catch (e) {
+  console.error('保存配置失败:', e)
+  ElMessage.error('保存失败，请稍后重试')
+}
+
+// ✅ 正确：显式注释（仅限确知可忽略）
+try {
+  localStorage.removeItem('temp_cache')
+} catch (e) {
+  // localStorage 不可用时忽略（隐私模式），不影响主流程
+}
+```
+
+## SonarQube 规则号交叉引用表
+
+| SonarQube 规则 | 审查维度 | news-code-dev 规范 | news-code-dev 元规范 | 严重级别 | 修复建议 |
+|---------------|---------|-------------------|---------------------|---------|----------|
+| S1128 | 维度 57 | S55 | R70 | 警告 | 删除未使用 import |
+| S3863 | 维度 58 | S57 | R72 | 建议 | 使用 eslint-plugin-import 自动排序 |
+| S7762 | 维度 59 | S58 | R73 | 警告 | 替换为现代 DOM API |
+| S2486 | 维度 60 | S59 | R74 | 警告 | 添加用户提示 + 错误日志 |

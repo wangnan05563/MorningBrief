@@ -88,5 +88,57 @@
         "sqlalchemy_2_0_style": true,
         "model_name_official_source": true,
         "pricing_table_sync": true
+    },
+    "coding_standards": {
+        "complexity": {
+            "max_function_lines": 50,
+            "max_nesting": 3,
+            "max_cognitive_complexity": 15
+        },
+        "async_rules": {
+            "require_await_in_async": true,
+            "exceptions": ["event_callback", "fire_and_forget_task"]
+        },
+        "regex": {
+            "prefer_non_capturing_group": true
+        },
+        "unused_code": {
+            "check_variables": true,
+            "check_imports": true,
+            "ruff_rules": ["F841", "F401"]
+        },
+        "data_driven_refactor": {
+            "min_elif_count": 3
+        },
+        "empty_catch": {
+            "require_log_or_comment": true
+        },
+        "import_organization": {
+            "groups": ["stdlib", "third_party", "internal"],
+            "enforce_alphabetical": true
+        },
+        "dom_api_modernization": {
+            "deprecated_apis": ["removeChild", "appendChild", "className", "getAttribute"]
+        }
+    },
+    "sonarqube": {
+        "scanner_path_env_var": "SONAR_SCANNER_HOME",
+        "token_env_var": "SONAR_TOKEN",
+        "project_key": "20_News",
+        "sources": "backend/app,admin-web/src",
+        "exclusions": "**/__pycache__/**,**/node_modules/**,**/dist/**",
+        "severity_must_fix": ["BLOCKER", "CRITICAL"],
+        "severity_should_fix": ["MAJOR"],
+        "severity_record_only": ["MINOR", "INFO"],
+        "max_regression_retries": 3
+    },
+    "testing": {
+        "min_unit_coverage": 0.70,
+        "require_integration_test": true,
+        "require_e2e_test": true,
+        "e2e_p0_must_pass": true,
+        "unit_test_command": "pytest --asyncio-mode=auto",
+        "integration_test_command": "pytest tests/integration/",
+        "e2e_test_command": "python scripts/with_server.py -- python e2e_test.py"
     }
 }

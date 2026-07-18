@@ -1,4 +1,4 @@
-﻿# 版本演进
+# 版本演进
 
 本文档记录 MorningBrief 项目开发技能的版本演进和重要变更。
 
@@ -228,3 +228,64 @@
 - 后端：新增维度 33-38（启动脚本安全/构建并发/日志格式/运行环境一致性/共享构建依赖）
 - 前端：新增维度 34-36（FFmpeg 依赖完整性/安装进度与超时/安装后自动检测）
 - 项目配置：新增 shared_build_dll_dependency / loguru_placeholder_format / start_process_path_safety 硬约束
+
+## v2.0.0 (2026-07-18)
+
+### SonarQube 迭代闭环与三层测试验证规范
+
+**背景**：基于 2026-07-18 完整的 SonarQube MCP 扫描 + 问题修复迭代闭环（23 个 OPEN→0）+ Playwright E2E 12/12 PASS + pytest 单元测试 146/146 PASS 的复盘，系统性地提炼编码规范与可复用流程，预防同类问题再次发生。
+
+**新增编码规范（10 条，S51-S60）**：
+- S51：认知复杂度阈值治理（cognitive_complexity ≤ 15）
+- S52：async 函数必须含 await（SonarQube S7503）
+- S53：正则表达式捕获组优化（SonarQube S6395）
+- S54：list() 调用必要性检测（SonarQube S7504）
+- S55：未使用变量、参数与导入检测（SonarQube S1481/S1128）
+- S56：数据驱动重构模式（≥3 个 elif 重构为 list[tuple] + 循环）
+- S57：import 语句组织规范（SonarQube S3863）
+- S58：DOM API 现代化规范（SonarQube S7762）
+- S59：SonarQube 扫描闭环规范（7 步 SQ-Loop 模式）
+- S60：三层测试验证规范（unit + integration + E2E + SQ 回归）
+
+**新增元规范（10 条，R66-R75）**：
+- R66：认知复杂度阈值治理（CRITICAL）
+- R67：async 函数必须含 await（CRITICAL）
+- R68：正则表达式捕获组优化（HIGH）
+- R69：list() 调用必要性检测（MEDIUM）
+- R70：未使用变量/参数/导入检测（HIGH）
+- R71：数据驱动重构模式（HIGH）
+- R72：import 语句组织规范（MEDIUM）
+- R73：DOM API 现代化规范（HIGH）
+- R74：空 except 块禁止规范（HIGH）
+- R75：SonarQube 扫描闭环规范（CRITICAL）
+
+**可抽象的 4 类固定流程**：
+1. **SonarQube 迭代闭环（SQ-Loop 模式）**：扫描→等待→拉取问题→分类→修复→单元测试→二次扫描回归
+2. **认知复杂度治理**：检测→定位热点→抽取辅助函数/数据驱动重构→验证复杂度
+3. **数据驱动重构**：识别 if/elif 链→提取 list[tuple]→循环匹配→配置化
+4. **三层测试验证**：单元测试→集成测试→E2E 测试→SQ 二次扫描
+
+**project-config.json 新增配置节**：
+- `coding_standards.complexity`：复杂度阈值参数（max_function_lines/max_nesting/max_cognitive_complexity）
+- `coding_standards.async_rules`：async/await 规则与例外
+- `coding_standards.regex`：正则优化规则
+- `coding_standards.unused_code`：未使用代码检测规则
+- `coding_standards.data_driven_refactor`：数据驱动重构阈值
+- `coding_standards.empty_catch`：空 except 块规则
+- `coding_standards.import_organization`：import 组织规则
+- `coding_standards.dom_api_modernization`：DOM API 现代化规则
+- `sonarqube`：SonarQube 扫描配置（环境变量/projectKey/sources/exclusions/severity/max_regression_retries）
+- `testing`：三层测试配置（min_unit_coverage/require_integration_test/require_e2e_test/e2e_p0_must_pass/命令）
+
+**配置驱动原则**：所有新规范的阈值参数均通过 project-config.json 管理，不同项目可调整阈值不需修改技能代码。
+
+**适用场景与不适用场景**：
+- SQ-Loop 闭环：适用于发版前完整验证；不适用于 hotfix
+- 认知复杂度治理：适用于 service/workflow 层；不适用于 models 层
+- 数据驱动重构：适用于 ≥3 个相似 elif 分支；不适用于逻辑差异大或仅 1-2 个分支
+- 三层测试验证：适用于中大型项目；不适用于小型项目（<5 个端点）
+
+**跨技能同步更新**：
+- news-backend-code-review v1.6.0 → v1.7.0：新增 8 个审查维度（73-80）
+- news-frontend-code-review v1.7.0 → v1.8.0：新增 4 个审查维度（57-60）
+- news-auto-testing v5 → v6：新增 4 个测试阶段（20-23）

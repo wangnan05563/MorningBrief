@@ -109,10 +109,50 @@ $Script:DataDir      = Join-Path $ProjectRoot "data"
 $Script:EnvFile      = Join-Path $ProjectRoot "backend\.env"
 $Script:EnvExample   = Join-Path $ProjectRoot "backend\.env.example"
 $Script:Requirements = Join-Path $ProjectRoot "backend\requirements.txt"
+$Script:ConfigPath   = Join-Path $PSScriptRoot "config.json"
 
 # Node.js 版本门槛：vite 5 需要 Node 18+，推荐 20+
+# 默认值，可被 config.json 的 tools.node.min_version 覆盖
 $Script:NodeMinMajor = 18
 $Script:NodeMinMinor = 0
+
+# 从 config.json 加载 Node.js 配置（search_paths + min_version）
+# 失败时静默降级到默认值，不阻断脚本
+$Script:NodeSearchPaths = @()
+if (Test-Path $ConfigPath) {
+    try {
+        $cfg = Get-Content $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($cfg.tools.node.search_paths) {
+            $Script:NodeSearchPaths = @($cfg.tools.node.search_paths)
+        }
+        if ($cfg.tools.node.min_version) {
+            $mv = $cfg.tools.node.min_version
+            if ($mv.Count -ge 2) {
+                $Script:NodeMinMajor = [int]$mv[0]
+                $Script:NodeMinMinor = [int]$mv[1]
+            }
+        }
+    } catch {
+        Write-Host "  [WARN] config.json 解析失败，使用默认配置: $_" -ForegroundColor Yellow
+    }
+}
+
+# 统一的 Node.js 查找函数：config 路径 → PATH → 常见安装路径
+# 返回 node.exe 完整路径，找不到返回 $null
+function Find-NodeExe {
+    $candidates = @()
+    $candidates += $Script:NodeSearchPaths
+    $pathNode = (Get-Command node -ErrorAction SilentlyContinue).Source
+    if ($pathNode) { $candidates += $pathNode }
+    $candidates += @(
+        "C:\Program Files\nodejs\node.exe",
+        "C:\Program Files (x86)\nodejs\node.exe"
+    )
+    foreach ($p in $candidates) {
+        if ($p -and (Test-Path $p)) { return $p }
+    }
+    return $null
+}
 
 # ============================================================
 # 主流程
@@ -142,23 +182,23 @@ if ($SkipSystem) {
 
     # --- Node.js ---
     # 仅前端 admin-web 构建需要，后端为单机 exe 不依赖 Node.js
-    $nodeExe = $null
-    if (Test-CommandAvailable 'node') {
-        $ver = Get-NodeVersion 'node'
+    # 查找链：config.json 配置路径 → PATH 中的 node → 常见安装路径
+    $nodeExe = Find-NodeExe
+    if ($nodeExe) {
+        $ver = Get-NodeVersion $nodeExe
         if ($ver -and (Test-VersionSatisfy $ver $NodeMinMajor $NodeMinMinor)) {
-            $nodeExe = 'node'
+            Write-OK "Node.js 已就绪: $nodeExe ($($ver.Major).$($ver.Minor).$($ver.Patch))"
         } else {
-            Write-Warn "检测到 Node.js $($ver.Major).$($ver.Minor)，但需要 >= $NodeMinMajor.$NodeMinMinor"
+            Write-Warn "检测到 Node.js $($ver.Major).$($ver.Minor) ($nodeExe)，但需要 >= $NodeMinMajor.$NodeMinMinor"
+            $nodeExe = $null
         }
     }
 
-    if ($nodeExe) {
-        $ver = Get-NodeVersion $nodeExe
-        Write-OK "Node.js 已就绪: $nodeExe ($($ver.Major).$($ver.Minor).$($ver.Patch))"
-    } else {
+    if (-not $nodeExe) {
         Write-Warn "未找到 Node.js >= $NodeMinMajor.$NodeMinMinor（前端构建需要，后端不受影响）"
+        Write-Host "  可编辑 scripts\config.json 的 tools.node.search_paths 指定 node.exe 路径" -ForegroundColor Gray
         if (Test-CommandAvailable 'winget') {
-            Write-Host "  可通过 winget 安装: winget install OpenJS.NodeJS.LTS" -ForegroundColor Gray
+            Write-Host "  或通过 winget 安装: winget install OpenJS.NodeJS.LTS" -ForegroundColor Gray
         }
     }
 }
@@ -215,12 +255,18 @@ if ($SkipFrontend) {
 } else {
     Write-Step "[5/6] 安装前端依赖（admin-web）"
 
+    # npm 查找：优先从已检测的 node.exe 同目录推导，避免版本不一致
     $npmCmd = $null
-    if (Test-CommandAvailable 'npm') { $npmCmd = 'npm' }
-    elseif (Test-Path 'D:\code\nodejs24\npm.cmd') { $npmCmd = 'D:\code\nodejs24\npm.cmd' }
+    $foundNode = Find-NodeExe
+    if ($foundNode) {
+        $npmInSameDir = Join-Path (Split-Path $foundNode -Parent) "npm.cmd"
+        if (Test-Path $npmInSameDir) { $npmCmd = $npmInSameDir }
+    }
+    if (-not $npmCmd -and (Test-CommandAvailable 'npm')) { $npmCmd = 'npm' }
 
     if (-not $npmCmd) {
         Write-Warn "找不到 npm，跳过前端依赖安装。请安装 Node.js 18+ 后重跑（可加 -SkipSystem）"
+        Write-Host "  或编辑 scripts\config.json 的 tools.node.search_paths 指定 node.exe 路径" -ForegroundColor Gray
     } elseif (-not (Test-Path $FrontendDir)) {
         Write-Warn "admin-web 目录不存在，跳过"
     } else {
