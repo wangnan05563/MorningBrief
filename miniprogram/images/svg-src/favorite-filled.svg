@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 收藏图标（已选中态）：心形填充，蜜桃粉色
+     图标来源：Tabler Icons (MIT License) - heart-filled -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <path
+    d="M 12 20.5 L 4.5 13.5 C 2 11 2 7.5 4.5 5.5 C 7 3.5 10 4 12 6.5 C 14 4 17 3.5 19.5 5.5 C 22 7.5 22 11 19.5 13.5 Z"
+    fill="#FF6B8A" stroke="#FF6B8A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

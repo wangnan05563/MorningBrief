@@ -16,7 +16,8 @@
 }
 
 .login-icon {
-  font-size: 100rpx;
+  width: 120rpx;
+  height: 120rpx;
   margin-bottom: 24rpx;
 }
 
@@ -118,8 +119,161 @@
   color: #A0AEC0;
 }
 
+/* 列表项右箭头：PNG 图标，弱化色 */
 .list-arrow {
-  font-size: 40rpx;
-  color: #CBD5E0;
-  line-height: 1;
+  width: 32rpx;
+  height: 32rpx;
+}
+
+/* "完善资料"提示：资料缺失时显示在昵称下方，引导用户主动设置头像昵称 */
+.edit-profile-tip {
+  margin-top: 16rpx;
+  padding: 10rpx 28rpx;
+  border-radius: 32rpx;
+  background: rgba(255, 255, 255, 0.85);
+  color: #5BA89B;
+  font-size: 24rpx;
+  font-weight: 500;
+  box-shadow: 0 2rpx 8rpx rgba(126, 206, 193, 0.2);
+  transition: all 0.2s ease;
+}
+
+.edit-profile-tip:active {
+  background: rgba(255, 255, 255, 1);
+  transform: scale(0.96);
+}
+
+/* "随时编辑资料" 入口：与列表风格一致 */
+.edit-anytime {
+  padding: 0 32rpx;
+}
+
+.edit-anytime-row {
+  padding: 32rpx 0;
+}
+
+/* 完善资料弹窗：遮罩 + 居中卡片 */
+.edit-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(45, 55, 72, 0.5);
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.edit-modal {
+  width: 600rpx;
+  background: #FFFFFF;
+  border-radius: 32rpx;
+  padding: 48rpx 40rpx 40rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.2);
+}
+
+.edit-modal-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #2D3748;
+  margin-bottom: 32rpx;
+}
+
+/* 头像选择按钮：覆盖 button 默认样式 */
+.edit-avatar-btn {
+  width: 200rpx;
+  height: 200rpx;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  border: none !important;
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: visible;
+}
+
+.edit-avatar-btn::after {
+  border: none !important;
+}
+
+.edit-avatar {
+  width: 200rpx;
+  height: 200rpx;
+  border-radius: 50%;
+  background: #F0F4F2;
+  border: 4rpx solid #7ECEC1;
+}
+
+.edit-avatar-tip {
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  color: #5BA89B;
+  text-align: center;
+}
+
+/* 昵称输入行 */
+.edit-nickname-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  margin-top: 32rpx;
+  padding: 20rpx 24rpx;
+  background: #F0F4F2;
+  border-radius: 16rpx;
+}
+
+.edit-nickname-label {
+  font-size: 28rpx;
+  color: #4A5568;
+  flex-shrink: 0;
+  margin-right: 16rpx;
+}
+
+.edit-nickname-input {
+  flex: 1;
+  font-size: 28rpx;
+  color: #2D3748;
+  background: transparent;
+}
+
+/* 操作按钮组 */
+.edit-actions {
+  width: 100%;
+  display: flex;
+  gap: 20rpx;
+  margin-top: 40rpx;
+}
+
+.edit-btn {
+  flex: 1;
+  text-align: center;
+  padding: 24rpx 0;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.edit-btn:active {
+  transform: scale(0.97);
+}
+
+.edit-btn-cancel {
+  background: #F0F4F2;
+  color: #5BA89B;
+}
+
+.edit-btn-confirm {
+  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  color: #FFFFFF;
+  box-shadow: 0 4rpx 12rpx rgba(126, 206, 193, 0.3);
 }

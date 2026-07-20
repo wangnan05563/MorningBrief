@@ -190,6 +190,16 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 | 73 | DOM API 现代化规范 | 前端 JS/TS 代码 | `removeChild(`/`appendChild(`/`className =`；SonarQube S7762 | HIGH |
 | 74 | 空 except 块禁止规范 | 所有 try/except 代码 | `except: pass` 或空 except 块；SonarQube S2486 | HIGH |
 | 75 | SonarQube 扫描闭环规范 | 发版前完整验证 | 二次扫描 OPEN>0 或有新增问题 | CRITICAL |
+| 76 | 含非 ASCII 字符的 URL 必须 encodeURI | 小程序资源 URL | `audioManager.src =` 后无 `encodeURI`；URL 含中文 | CRITICAL |
+| 77 | iOS 倍速切换必须 pause+play+seek | 小程序音频倍速 | `audioManager.playbackRate =` 后无 `pause()` | HIGH |
+| 78 | onTimeUpdate 必须 setData 节流 | 小程序高频回调 | `onTimeUpdate` 内每次 `setData` 无时间戳判断 | HIGH |
+| 79 | 异步上报必须有 in-progress 防重叠标志 | 进度上报/埋点 | `reportProgress` 函数无 `if (progressReporting) return` | HIGH |
+| 80 | seek 必须用 pendingSeek 标志位 | 小程序 audioManager.seek | `onCanplay.*=>.*seek\(` 自清理模式 | HIGH |
+| 81 | 倍速/音量等 setter 必须 lastApplied 缓存 | 高频 setter | `audioManager.playbackRate =` 在 onTimeUpdate 内 | MEDIUM |
+| 82 | 列表页与详情页布局必须分离 | 列表-详情页场景 | 列表页内 `<block wx:else>` 内嵌播放卡片 | HIGH |
+| 83 | 频道/筛选切换必须清空关联状态 | 频道/tab 切换 | `currentChannelId =` 后无清 `script`/`segments`/`comments` | HIGH |
+| 84 | 跳转播放详情前必须 resumePlay 恢复 | 浮动按钮/历史页跳转 | `wx.navigateTo.*detail` 前无 `resumePlay()` | HIGH |
+| 85 | 数据结构变更时 cache_key 加版本后缀 | 结构化缓存 | `cache_key = f"...:{episode_id}"` 无 `:v{n}` 后缀 | HIGH |
 
 **状态分类**：CRITICAL（必须遵守）/ HIGH（强烈建议）/ MEDIUM（建议）/ LOW（可选）/ INFO（参考）
 
@@ -492,6 +502,68 @@ AI 驱动的播客新闻分发平台标准化开发技能。
 - S60/R75：SonarQube 扫描闭环规范 + 三层测试验证规范
 
 **配置驱动原则**：所有新规范的阈值参数（max_function_lines/max_nesting/max_cognitive_complexity/min_elif_count/min_unit_coverage 等）均通过 `project-config.json#coding_standards`、`project-config.json#sonarqube`、`project-config.json#testing` 配置，不同项目可调整阈值不需修改技能代码。
+
+### 维度 9：小程序播放与跨端数据流复盘（2026-07-20 复盘）
+
+> 以下复盘基于 2026-07-20 微信小程序「今日要闻」迭代修复完整过程：11 类播放与 UI 问题闭环修复。
+
+**成功执行任务的完整步骤**（MiniApp-Play-Loop 模式）：
+
+1. **现象采集**：用户反馈多个独立症状（卡顿/标题不更新/按钮状态/倍速/布局/图片/URL 失败），按页面+操作步骤分类记录
+2. **日志分析**：通过微信开发者工具 console + tracker 事件 + audio.js 日志定位触发时机
+3. **根因定位**：每类问题独立定位根因（4 处防重叠缺失、放宽判断条件、缓存版本、URL 编码、布局统一等）
+4. **方案设计**：按"修复+防回归"原则设计修复方案，配套提取可复用规范
+5. **代码修复**：精确编辑（只改必要部分，不顺带重构）
+6. **真机验证**：iOS + Android 双端验证（iOS 是 URL 编码问题的唯一可重现端）
+7. **规范提炼**：将修复模式抽象为元规范 R76-R85，配套配置参数化
+
+**不确定性与失败点**（11 类问题根因表）：
+
+| 失败点 | 触发条件 | 影响范围 | 根因 | 修复方式 | 对应规范 |
+|--------|----------|----------|------|----------|----------|
+| 图标 PNG 缺失 500 | playlist.png/script.png 不存在 | 列表页/详情页图标裂图 | 资源文件未同步 | 替换为 Unicode 字符（≡/☰/↕）+ .chip-icon-text 样式 | - |
+| 队列 wx:key 重复 | 队列含同 id 节目 | 控制台警告，渲染异常 | wx:key="id" 在重复项场景失效 | 改为 wx:key="index" | - |
+| 播放卡顿（4 处） | 高频回调未防重叠 | UI 抖动、进度跳变 | 进度上报重叠+seek 重复+倍速重复写入+onTimeUpdate 频繁 setData | progressReporting 标志+pendingSeek 标志+lastAppliedRate 缓存+800ms 节流 | R78/R79/R80/R81 |
+| 上/下首标题不更新 | onPrev/onNext 仅刷新队列 | 切歌后详情页仍显示旧节目 | 未重载新节目详情 | getCurrentEpisode() 取新节目后 loadDetail | R83 |
+| 浮动按钮跳转不播放 | onTap 仅 navigateTo | 用户需手动点播放 | 未恢复播放状态 | 新增 resumePlay() 函数在跳转前调用 | R84 |
+| 布局不统一 | 首页内嵌播放卡片 | 单频道/列表两套布局 | 列表页内嵌详情组件 | 统一为列表模式 + navigateTo 跳转 | R82 |
+| 继续播放按钮状态不变 | syncPlayingState 条件过严 | 暂停态按钮不切换 | `!player.duration` 条件+`isCurrentEpisode()` 严格匹配 | 移除条件、放宽匹配 | R83 |
+| 倍速不生效 | 直接写入 playbackRate | iOS 上不重新缓冲 | iOS 底层不主动重应用倍速 | 恢复 pause+play+seek 强制重新缓冲 | R77 |
+| 切换 tab 详情不刷新 | initData 未清文稿状态 | 旧文稿残留 | 频道切换未清关联字段 | force=true 时清空 script/segments/comments | R83 |
+| 文稿图片不显示 | segments 无 cover_url | 文稿图片空白 | 后端未注入关联资源字段 | 注入 material.cover_url + cache_key 加 v2 | R85 |
+| 背景图不显示 | bgCoverUrl 仅在 onLoadScript 设置 | 详情页无背景 | 未在 loadDetail 设置 | loadDetail 中用 episode.cover_url 设置 | R83 |
+| 中文 URL 静默失败 | audio_url 含「国际视野」 | iOS 不触发任何回调 | URL 未 encodeURI | audioManager.src = encodeURI(url) | R76 |
+
+**可抽象的固定流程**（4 个模板）：
+
+1. **MiniApp-Play-Loop**（小程序播放问题修复流程）：现象采集 → 日志分析 → 根因定位 → 方案设计 → 代码修复 → iOS+Android 双端验证 → 规范提炼
+2. **高频回调防重叠四件套**：onTimeUpdate 节流 + 异步上报 in-progress 标志 + seek 用 pendingSeek 标志 + setter 用 lastApplied 缓存（详见规范 78-81）
+3. **布局统一三步法**：列表模式统一 + navigateTo 跳转详情 + 频道切换清空关联状态（详见规范 82-83）
+4. **跨端兼容验证流程**：iOS 真机 + Android 真机 + 微信开发者工具三端验证（iOS 是 URL 编码、倍速切换、BackgroundAudio 行为差异的唯一可重现端）
+
+**适用场景与不适用场景**：
+
+| 流程 | 适用场景 | 不适用场景 |
+|------|---------|------------|
+| MiniApp-Play-Loop | 微信小程序音频/视频播放问题修复 | Web 端 HTML5 audio（无 BackgroundAudioManager 限制） |
+| 高频回调防重叠四件套 | 小程序 audioManager 高频事件；类似 onScroll/onTouchMove | 低频事件（onPlay/onPause）；同步操作 |
+| 布局统一三步法 | 列表-详情页场景；多频道切换 | 单一详情场景；纯列表刷新 |
+| 跨端兼容验证 | iOS/Android 行为差异场景（URL 编码、倍速、缓冲） | 纯 Web 端；服务端逻辑 |
+
+**新增编码规范**（S61-S70 + R76-R85）：
+- S61/R76：含非 ASCII 字符的 URL 必须 encodeURI
+- S62/R77：iOS 倍速切换必须 pause+play+seek
+- S63/R78：onTimeUpdate 必须 setData 节流
+- S64/R79：异步上报必须有 in-progress 防重叠标志
+- S65/R80：seek 必须用 pendingSeek 标志位
+- S66/R81：倍速/音量等 setter 必须 lastApplied 缓存
+- S67/R82：列表页与详情页布局必须分离
+- S68/R83：频道/筛选切换必须清空关联状态
+- S69/R84：跳转播放详情前必须 resumePlay 恢复
+- S70/R85：数据结构变更时 cache_key 加版本后缀
+
+**配置驱动原则**：所有新规范的阈值参数均通过 `project-config.json#miniprogram_playback`（rate_switch/time_update_throttle/progress_report/seek/cached_setters）、`project-config.json#miniprogram_layout`、`project-config.json#miniprogram_state_clear`、`project-config.json#miniprogram_navigation`、`project-config.json#url_safety`、`project-config.json#cache_versioning` 配置管理，不同项目可调整阈值不需修改技能代码。
+
 
 ### 附录：20_News 编码规范与部署标准
 

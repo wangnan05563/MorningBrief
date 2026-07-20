@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 收音机图标：用于"我的频道"空状态装饰，品牌色
+     图标来源：Tabler Icons (MIT License) - device-tv -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect x="10" y="20" width="44" height="30" rx="4" fill="none" stroke="#7ECEC1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="20" y1="14" x2="40" y2="20" stroke="#7ECEC1" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="22" cy="34" r="3" fill="#7ECEC1"/>
+  <line x1="32" y1="32" x2="46" y2="32" stroke="#7ECEC1" stroke-width="2" stroke-linecap="round"/>
+  <line x1="32" y1="40" x2="46" y2="40" stroke="#7ECEC1" stroke-width="2" stroke-linecap="round"/>
+</svg>

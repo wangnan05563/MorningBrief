@@ -54,3 +54,6 @@ class Material(Base):
     # 素材归属频道 ID：crawler 入库时按采集频道写入，rewriter 选题时按频道过滤
     # 为空表示历史遗留数据（未关联频道），rewriter 回退到全局素材池
     channel_id: Mapped[Optional[int]] = mapped_column(Integer, comment="素材归属频道 ID")
+    # 封面图 URL：article_parser 从 og:image 提取，小程序文稿页按段展示
+    # 仅存原站 URL 不下载，避免爬虫耗时与存储成本；原站删图时小程序自然降级为纯文本
+    cover_url: Mapped[Optional[str]] = mapped_column(String(512), comment="封面图 URL（og:image）")

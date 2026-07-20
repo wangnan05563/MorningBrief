@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 暂停图标：实心双竖条，白色（用于彩色背景按钮上）
+     图标来源：Tabler Icons (MIT License) - player-pause-filled -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <rect x="6" y="5" width="4" height="14" rx="1" fill="#FFFFFF"/>
+  <rect x="14" y="5" width="4" height="14" rx="1" fill="#FFFFFF"/>
+</svg>

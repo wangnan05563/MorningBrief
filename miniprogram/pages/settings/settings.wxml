@@ -6,7 +6,7 @@
     <view class="list-item">
       <text class="list-text">默认播放倍速</text>
       <picker class="list-picker" mode="selector" range="{{rateOptions}}" value="{{rateIndex}}" bindchange="onRateChange">
-        <view class="list-extra">{{rateOptions[rateIndex]}}x <text class="list-arrow">›</text></view>
+        <view class="list-extra">{{rateOptions[rateIndex]}}x <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" /></view>
       </picker>
     </view>
     <view class="list-item">
@@ -33,7 +33,7 @@
   <view class="card list-card">
     <view class="list-item" bindtap="onClearCache">
       <text class="list-text">清除缓存</text>
-      <view class="list-extra">{{cacheSize}} <text class="list-arrow">›</text></view>
+      <view class="list-extra">{{cacheSize}} <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" /></view>
     </view>
   </view>
 </view>

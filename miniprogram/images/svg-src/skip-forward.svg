@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 下一首图标：三角形 + 竖条，白色（用于浅背景按钮上）
+     图标来源：Tabler Icons (MIT License) - player-skip-forward -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <rect x="16.5" y="5" width="2.5" height="14" rx="0.5" fill="#5BA89B"/>
+  <path d="M 5 5 L 15.5 12 L 5 19 Z" fill="#5BA89B"/>
+</svg>

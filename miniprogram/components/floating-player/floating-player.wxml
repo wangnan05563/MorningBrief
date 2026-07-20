@@ -1,0 +1,13 @@
+<!--
+  浮动播放按钮：右下角圆形按钮，仅当 currentEpisode 存在时显示
+  显示当前节目标题（截断），点击跳转详情页继续播放
+-->
+<view class="floating-player" wx:if="{{visible}}" bindtap="onTap">
+  <view class="fp-icon-wrap">
+    <image class="fp-icon" src="{{isPlaying ? '/images/icons/pause.png' : '/images/icons/play.png'}}" mode="aspectFit" />
+  </view>
+  <view class="fp-info">
+    <text class="fp-label">正在播放</text>
+    <text class="fp-title">{{episode.title || '点击继续收听'}}</text>
+  </view>
+</view>

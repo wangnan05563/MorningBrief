@@ -42,6 +42,7 @@ from app.routers.api.episodes import router as c_episodes_router
 from app.routers.api.playlogs import router as c_playlogs_router
 from app.routers.api.favorites import router as c_favorites_router
 from app.routers.api.feedbacks import router as c_feedbacks_router
+from app.routers.api.comments import router as c_comments_router
 from app.routers.api.channels import router as c_channels_router
 from app.routers.api.subscriptions import router as c_subscriptions_router
 from app.routers.api.users import router as c_users_router
@@ -62,6 +63,8 @@ from app.routers.admin.audio import router as b_audio_router
 from app.routers.admin.system import router as b_system_router
 from app.routers.admin.events import router as b_events_router
 from app.routers.admin.feedbacks import router as b_feedbacks_router
+# 关于页面（系统元信息 + 检查更新）
+from app.routers.admin.about import router as b_about_router
 # 数据库维护与系统清理模块（仅 admin）
 from app.routers.admin.db_admin import router as b_db_admin_router
 from app.routers.admin.maintenance import router as b_maintenance_router
@@ -385,6 +388,7 @@ def create_app() -> FastAPI:
     app.include_router(c_playlogs_router)
     app.include_router(c_favorites_router)
     app.include_router(c_feedbacks_router)
+    app.include_router(c_comments_router)
     app.include_router(c_channels_router)
     app.include_router(c_subscriptions_router)
     app.include_router(c_users_router)
@@ -410,6 +414,8 @@ def create_app() -> FastAPI:
     app.include_router(b_backup_router)
     # 通知管理（钉钉消息通知）
     app.include_router(b_notification_router)
+    # 关于页面（系统元信息 + 检查更新）
+    app.include_router(b_about_router)
     # 内部（工作流调度）
     app.include_router(internal_workflow_router)
 

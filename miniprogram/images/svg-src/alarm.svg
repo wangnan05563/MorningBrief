@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 闹钟图标：用于睡眠定时器激活态，蜜桃粉色（强调激活状态）
+     图标来源：Tabler Icons (MIT License) - alarm -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <circle cx="12" cy="13" r="7" fill="none" stroke="#FF6B8A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="12 9 12 13 15 15" fill="none" stroke="#FF6B8A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="5" y1="4" x2="3" y2="6" stroke="#FF6B8A" stroke-width="2" stroke-linecap="round"/>
+  <line x1="19" y1="4" x2="21" y2="6" stroke="#FF6B8A" stroke-width="2" stroke-linecap="round"/>
+</svg>

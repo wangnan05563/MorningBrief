@@ -1,7 +1,7 @@
 <!-- 可复用播放器：圆形播放按钮 + 进度条 + 时间 -->
 <view class="audio-player">
   <view class="play-btn" bindtap="onTogglePlay">
-    <text class="play-icon">{{isPlaying ? '⏸' : '▶'}}</text>
+    <image class="play-icon" src="{{isPlaying ? '/images/icons/pause.png' : '/images/icons/play.png'}}" mode="aspectFit" />
   </view>
 
   <view class="player-info">

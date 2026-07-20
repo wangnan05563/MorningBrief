@@ -84,3 +84,16 @@ page {
   font-size: 80rpx;
   margin-bottom: 20rpx;
 }
+
+/* PNG 图标版空状态：与 emoji 视觉重量匹配 */
+.empty-state .empty-icon-img {
+  width: 120rpx;
+  height: 120rpx;
+  margin-bottom: 20rpx;
+}
+
+/* === 通用图标尺寸：覆盖列表项时长图标等场景 === */
+.duration-icon {
+  width: 24rpx;
+  height: 24rpx;
+}

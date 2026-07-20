@@ -1,0 +1,58 @@
+/* 浮动播放按钮：固定在右下角，避开 tabBar */
+.floating-player {
+  position: fixed;
+  right: 24rpx;
+  bottom: 180rpx;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  max-width: 480rpx;
+  padding: 12rpx 24rpx 12rpx 12rpx;
+  border-radius: 56rpx;
+  background: linear-gradient(135deg, rgba(126, 206, 193, 0.95), rgba(91, 168, 155, 0.95));
+  box-shadow: 0 8rpx 24rpx rgba(91, 168, 155, 0.35);
+  overflow: hidden;
+}
+
+.floating-player:active {
+  transform: scale(0.96);
+}
+
+.fp-icon-wrap {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.fp-icon {
+  width: 32rpx;
+  height: 32rpx;
+}
+
+.fp-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2rpx;
+}
+
+.fp-label {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.fp-title {
+  font-size: 24rpx;
+  color: #FFFFFF;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -36,11 +36,16 @@ async def get_history(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     channel_id: int | None = Query(None, description="频道 ID，为空则返回全部"),
+    sort_order: str | None = Query(
+        None,
+        regex="^(asc|desc)$",
+        description="排序方向：asc=日期正序（最旧在前）/ desc=倒序（最新在前，默认）",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
-    """历史列表分页：支持按频道过滤。"""
+    """历史列表分页：支持按频道过滤与日期排序（任务7）。"""
     svc = ContentService(db)
-    data = await svc.get_history(page, size, channel_id=channel_id)
+    data = await svc.get_history(page, size, channel_id=channel_id, sort_order=sort_order)
     return success(data=data)
 
 

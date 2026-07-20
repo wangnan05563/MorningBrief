@@ -1519,3 +1519,224 @@ sonarqube_regression:
 - SonarQube 二次扫描回归（阶段 23）
 
 所有新增阶段均可通过 `enabled: false` 禁用，不影响原有流程。
+
+## 补充章节：基于小程序播放与跨端数据流复盘的优化（v6，2026-07-20）
+
+> 以下阶段来源于 2026-07-20 微信小程序「今日要闻」迭代修复完整复盘：覆盖播放卡顿、倍速不生效、URL 静默失败、布局不统一、缓存版本缺失等 11 类问题的测试经验。所有阈值通过 `config.yaml#miniprogram_playback_test`、`config.yaml#url_safety_test`、`config.yaml#cache_version_test` 配置管理。
+
+### 阶段 24：小程序 URL 编码安全性预检
+
+**配置节点**：`config.yaml#url_safety_test`
+
+**触发条件**：`url_safety_test.enabled: true` 且扫描范围包含 `miniprogram/**/*.js`
+
+```
+1. 扫描所有小程序 .js 文件中的资源 URL 赋值：
+   - audioManager.src =
+   - <image src>（wxml）
+   - wx.downloadFile({ url: ... })
+   - <web-view src>
+2. 对每个 URL 赋值点检查：
+   a. URL 字面量含非 ASCII 字符（中文字符）→ FAIL：未编码
+   b. URL 变量赋值前无 encodeURI() 包裹 → WARN：可能未编码
+   c. 使用 encodeURIComponent() 编码 URL → FAIL：破坏 URL 结构
+3. 检查后端返回的 URL 字段（如 audio_url、cover_url）是否在生成时已编码：
+   - 调用后端 API 拉取一个 episode 对象
+   - 检查 audio_url 是否含未编码的中文字符
+4. 记录违规位置 + 修复建议
+```
+
+**判断逻辑**：
+
+| 检查项 | 严重级别 | 失败动作 |
+|--------|---------|---------|
+| URL 字面量含中文未编码 | FAIL | 阻塞测试，要求修复后重测 |
+| URL 变量赋值前无 encodeURI | WARN | 记录但不阻塞，建议修复 |
+| 使用 encodeURIComponent 编码 URL | FAIL | 阻塞测试（会破坏 URL 结构） |
+| 后端返回的 URL 含未编码中文 | WARN | 提示后端修复 |
+
+**配置示例**：
+```yaml
+url_safety_test:
+  enabled: true
+  scan_dirs:
+    - miniprogram/**/*.js
+    - miniprogram/**/*.wxml
+  url_assignment_patterns:
+    - "audioManager\\.src\\s*="
+    - "src\\s*=\\s*[\"']http"
+    - "wx\\.downloadFile\\(.*?url:"
+    - "web-view.*src"
+  require_encode_function: "encodeURI"
+  forbidden_encode_function: "encodeURIComponent"
+  non_ascii_pattern: "[\\u4e00-\\u9fa5]"
+  backend_url_fields_to_check:
+    - audio_url
+    - cover_url
+    - source_url
+```
+
+### 阶段 25：高频回调节流与防重叠验证
+
+**配置节点**：`config.yaml#miniprogram_playback_test.throttle_check`
+
+**触发条件**：`miniprogram_playback_test.enabled: true` 且 `throttle_check.enabled: true`
+
+```
+1. 静态扫描小程序 onTimeUpdate 回调：
+   - 检查回调内是否含时间戳节流逻辑（lastTimeUpdate 模式）
+   - 检查回调内 setData 调用频率（通过代码静态分析估算）
+2. 静态扫描异步上报函数（reportProgress、reportEvent、reportStats）：
+   - 检查函数内是否含 if (progressReporting) return 防重叠判断
+   - 检查函数内是否含 try/finally 清标志逻辑
+3. 静态扫描 seek 操作：
+   - 检查是否使用 pendingSeek 标志位模式（推荐）
+   - 检查是否使用 onCanplay+offCanplay 自清理模式（已废弃）
+4. 静态扫描高频 setter（playbackRate、volume）：
+   - 检查是否含 lastApplied 缓存判断
+5. 动态验证（如配置了真机调试）：
+   - 播放音频 30 秒，监控 console 日志中 setData 调用频率
+   - 实际触发节流间隔（默认 800ms）vs 配置阈值对比
+```
+
+**判断逻辑**：
+
+| 检查项 | 严重级别 | 失败动作 |
+|--------|---------|---------|
+| onTimeUpdate 回调无时间戳节流 | WARN | 建议修复 |
+| 异步上报无 in-progress 标志 | WARN | 建议修复 |
+| seek 使用 onCanplay 自清理模式 | WARN | 建议改为 pendingSeek 模式 |
+| 高频 setter 无 lastApplied 缓存 | INFO | 仅记录 |
+| 动态验证 setData 频率 > 2 次/秒 | WARN | 建议加大节流间隔 |
+
+**配置示例**：
+```yaml
+miniprogram_playback_test:
+  enabled: true
+  throttle_check:
+    enabled: true
+    update_interval_ms: 800
+    max_setdata_per_sec: 2
+    require_in_progress_flag: true
+    require_pending_seek_pattern: true
+    forbid_oncanplay_self_cleanup: true
+    require_last_applied_cache: true
+    cached_fields:
+      - playbackRate
+      - volume
+  scan_dirs:
+    - miniprogram/services/audio.js
+    - miniprogram/pages/detail/detail.js
+```
+
+### 阶段 26：iOS/Android 双端播放兼容性验证
+
+**配置节点**：`config.yaml#miniprogram_playback_test.cross_platform_check`
+
+**触发条件**：`miniprogram_playback_test.enabled: true` 且 `cross_platform_check.enabled: true` 且配置了真机调试账号
+
+```
+1. 检查 setPlaybackRate 函数实现：
+   - 是否包含 pause+play+seek 强制重新缓冲逻辑（iOS 必需）
+   - 是否仅在 !audioManager.paused && currentTime > 0 时触发
+2. 检查 resumePlay 函数导出：
+   - services/audio.js 是否导出 resumePlay 函数
+   - 浮动按钮/历史页 onTap 内是否调用 resumePlay 后再 navigateTo
+3. 真机验证（如配置了 iOS + Android 设备）：
+   a. iOS 设备：播放含中文 channel_slug 的音频，验证 onPlay/onCanplay 是否触发
+   b. Android 设备：同上验证（应正常播放）
+   c. iOS 设备：切换倍速，验证进度条/声音是否同步变化
+   d. iOS 设备：跳转到详情页，验证是否自动播放（resumePlay 生效）
+4. 检查列表页与详情页布局分离：
+   - 列表页（pages/index/、pages/history/）禁止内嵌 <player-card> 组件
+   - 列表项 onTapEpisode 内必须 wx.navigateTo 跳转
+5. 检查频道切换状态清理：
+   - initData(force=true) 时必须清空 script/segments/comments/bgCoverUrl
+```
+
+**判断逻辑**：
+
+| 检查项 | 严重级别 | 失败动作 |
+|--------|---------|---------|
+| setPlaybackRate 无 pause+play+seek | FAIL | 阻塞测试（iOS 倍速不生效） |
+| services/audio.js 未导出 resumePlay | FAIL | 阻塞测试（跳转后不播放） |
+| 列表页内嵌播放卡片 | WARN | 建议重构为 navigateTo 跳转 |
+| 频道切换未清关联状态 | WARN | 建议修复（数据串台） |
+| iOS 真机含中文 URL 不触发 onPlay | FAIL | 阻塞测试（要求 encodeURI） |
+| iOS 真机切换倍速不生效 | FAIL | 阻塞测试（要求 pause+play+seek） |
+
+**配置示例**：
+```yaml
+miniprogram_playback_test:
+  cross_platform_check:
+    enabled: true
+    ios_device_required: true
+    android_device_required: false  # Android 可选（行为与配置一致）
+    require_pause_play_seek_for_rate: true
+    require_resume_play_export: true
+    forbid_inline_player_card: true
+    require_state_clear_on_channel_switch: true
+    clear_fields_expected:
+      - script
+      - segments
+      - comments
+      - commentsTotal
+      - bgCoverUrl
+    test_episodes_with_chinese_slug: true
+```
+
+## 阶段 24-26 配置节点速查
+
+| 阶段 | 配置节点 | 关键参数 |
+|------|---------|----------|
+| 24 URL 编码预检 | `url_safety_test` | `scan_dirs`、`url_assignment_patterns`、`require_encode_function`、`forbidden_encode_function`、`non_ascii_pattern`、`backend_url_fields_to_check` |
+| 25 高频回调节流验证 | `miniprogram_playback_test.throttle_check` | `update_interval_ms`、`max_setdata_per_sec`、`require_in_progress_flag`、`require_pending_seek_pattern`、`forbid_oncanplay_self_cleanup`、`require_last_applied_cache`、`cached_fields` |
+| 26 iOS/Android 双端兼容 | `miniprogram_playback_test.cross_platform_check` | `ios_device_required`、`android_device_required`、`require_pause_play_seek_for_rate`、`require_resume_play_export`、`forbid_inline_player_card`、`require_state_clear_on_channel_switch`、`clear_fields_expected`、`test_episodes_with_chinese_slug` |
+
+## 阶段 24-26 复盘：测试流程的抽象与适用场景
+
+### 维度 1：成功执行任务的完整步骤
+
+本次小程序测试扩展在静态扫描 + 动态验证两个层面闭环，关键成功路径：
+
+1. **静态扫描**：用 Grep 工具扫描小程序代码中的反模式（URL 未编码、回调未节流、上报无标志位等）
+2. **配置驱动**：通过 `config.yaml#miniprogram_playback_test` 配置开启的检查项与阈值
+3. **动态验证**（如配置真机）：实际播放音频触发回调，监控 console 日志验证行为
+4. **跨端对比**：iOS + Android 真机验证行为差异（iOS 是 URL 编码、倍速切换差异的唯一可重现端）
+5. **报告生成**：按严重级别分类输出，FAIL 阻塞测试，WARN 建议修复
+
+### 维度 2：任务执行过程中的不确定性与失败点
+
+| 失败点 | 触发条件 | 影响范围 | 根因 | 修复方式 |
+|--------|----------|----------|------|----------|
+| URL 编码违规未检出 | 静态扫描仅检查字面量，未检查变量赋值 | iOS 静默失败未发现 | 扫描模式单一 | 增加变量赋值前的 encodeURI 检查（阶段 24） |
+| 高频回调未节流未检出 | 静态扫描无法判断运行时频率 | UI 卡顿未发现 | 缺少动态验证 | 增加动态监控 setData 频率（阶段 25 步骤 5） |
+| iOS 倍速不生效未检出 | 仅在 Android 测试 | iOS 用户反馈倍速失效 | 测试覆盖端不全 | 强制要求 iOS 真机验证（阶段 26） |
+| 列表页内嵌播放卡片未检出 | 仅看渲染效果，未审 wxml 结构 | 布局不统一未发现 | 缺少结构性检查 | 增加 wxml 结构扫描（阶段 26 步骤 4） |
+| 频道切换状态残留未检出 | 仅测试单频道场景 | 数据串台未发现 | 测试场景不全 | 增加多频道切换测试场景（阶段 26 步骤 5） |
+
+### 维度 3：可抽象的固定流程与判断逻辑
+
+| 模板 | 对应阶段 | 核心判断信号 | 落地配置节点 |
+|------|----------|--------------|--------------|
+| URL 编码安全性预检 | 阶段 24 | grep `audioManager\.src\s*=\s*[^e]` 在小程序代码中 | `url_safety_test` |
+| 高频回调节流验证 | 阶段 25 | grep `onTimeUpdate.*=>.*setData` 无时间戳判断 | `miniprogram_playback_test.throttle_check` |
+| iOS/Android 双端兼容 | 阶段 26 | grep `setPlaybackRate` 无 `pause\(\)` 调用 | `miniprogram_playback_test.cross_platform_check` |
+
+### 维度 4：适用场景与不适用场景
+
+| 流程 | 适用场景 | 不适用场景 |
+|------|---------|------------|
+| URL 编码预检 | 小程序含中文资源路径；后端动态生成 URL | 纯 ASCII 路径；后端已编码 URL |
+| 高频回调节流验证 | 小程序 audioManager；类似 onScroll/onTouchMove | 低频事件（onPlay/onPause）；Web 端 |
+| iOS/Android 双端兼容 | 微信小程序音频/视频功能；跨端行为差异场景 | 纯 Web 端；服务端逻辑；无音频功能的小程序 |
+
+## 测试流程优化总结（v6 更新）
+
+新增 3 个阶段后，完整测试流程从 23 阶段扩展到 26 阶段，覆盖：
+- URL 编码安全性预检（阶段 24）
+- 高频回调节流与防重叠验证（阶段 25）
+- iOS/Android 双端播放兼容性验证（阶段 26）
+
+所有新增阶段均可通过 `enabled: false` 禁用，不影响原有流程。
+

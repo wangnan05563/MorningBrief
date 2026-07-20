@@ -8,16 +8,28 @@
         <img v-else src="/favicon.svg" alt="logo" class="logo-img" />
       </div>
       <el-menu
+        ref="menuRef"
         :default-active="activeMenu"
         :collapse="collapsed"
         :router="true"
+        :unique-opened="true"
         class="sidebar-menu"
       >
-        <template v-for="route in menuRoutes" :key="route.path">
-          <el-menu-item :index="'/' + route.path">
-            <el-icon><component :is="route.meta.icon" /></el-icon>
-            <template #title>{{ route.meta.title }}</template>
-          </el-menu-item>
+        <template v-for="group in menuGroups" :key="group.name">
+          <el-sub-menu :index="group.name">
+            <template #title>
+              <el-icon><component :is="group.icon" /></el-icon>
+              <span>{{ group.name }}</span>
+            </template>
+            <el-menu-item
+              v-for="item in group.items"
+              :key="item.path"
+              :index="'/' + item.path"
+            >
+              <el-icon><component :is="item.meta.icon" /></el-icon>
+              <template #title>{{ item.meta.title }}</template>
+            </el-menu-item>
+          </el-sub-menu>
         </template>
       </el-menu>
     </el-aside>
@@ -69,7 +81,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useThemeStore } from '../stores/theme'
@@ -97,10 +109,36 @@ const collapsed = ref(false)
 const username = computed(() => userStore.username || '用户')
 const role = computed(() => userStore.role)
 
-// 从路由配置提取菜单项（过滤 hidden 的路由如详情页）
-const menuRoutes = computed(() => {
+// 菜单 ref：用于路由变化时调用 open() 自动展开当前分组
+const menuRef = ref()
+
+// 菜单分组配置：顺序决定侧栏展示顺序，icon 为分组图标组件名
+const groupConfig = [
+  { name: '内容运营', icon: 'Document' },
+  { name: '广告管理', icon: 'PictureFilled' },
+  { name: '数据分析', icon: 'DataLine' },
+  { name: 'AI 自动化', icon: 'Monitor' },
+  { name: '系统配置', icon: 'Setting' },
+  { name: '维护工具', icon: 'Tools' },
+  { name: '帮助', icon: 'QuestionFilled' },
+]
+
+// 从路由配置提取菜单项并按 group 分组
+// 同时根据用户角色过滤（requireRole=admin 的项仅管理员可见）
+const menuGroups = computed(() => {
   const mainRoute = router.options.routes.find((r) => r.path === '/')
-  return mainRoute.children.filter((r) => !r.meta?.hidden)
+  const role = userStore.role
+  const visible = mainRoute.children.filter((r) => {
+    if (r.meta?.hidden) return false
+    if (r.meta?.requireRole === 'admin' && role !== 'admin') return false
+    return true
+  })
+  return groupConfig
+    .map((g) => ({
+      ...g,
+      items: visible.filter((r) => r.meta?.group === g.name),
+    }))
+    .filter((g) => g.items.length > 0)
 })
 
 const activeMenu = computed(() => {
@@ -109,6 +147,28 @@ const activeMenu = computed(() => {
   if (path.startsWith('/review/')) return '/review'
   if (path.startsWith('/workflows/')) return '/workflows'
   return path
+})
+
+// 当前激活菜单项所在的分组名（用于路由变化时自动展开）
+const activeGroup = computed(() => {
+  const active = activeMenu.value
+  for (const g of menuGroups.value) {
+    if (g.items.some((i) => '/' + i.path === active)) {
+      return g.name
+    }
+  }
+  return null
+})
+
+// 路由变化时自动展开当前分组（el-menu 的 default-openeds 仅初始化生效，需手动 open）
+watch(activeGroup, (g) => {
+  if (g && menuRef.value) menuRef.value.open(g)
+})
+
+onMounted(() => {
+  if (activeGroup.value && menuRef.value) {
+    menuRef.value.open(activeGroup.value)
+  }
 })
 
 const currentTitle = computed(() => route.meta.title || '')
@@ -161,6 +221,18 @@ async function handleCommand(command) {
   border-right: none;
   background: transparent;
 
+  // 分组标题：与菜单项一致的圆角和高度
+  :deep(.el-sub-menu__title) {
+    border-radius: $radius-sm;
+    margin: 4px 8px;
+    height: 44px;
+    line-height: 44px;
+
+    &:hover {
+      background: var(--color-primary-light);
+    }
+  }
+
   :deep(.el-menu-item) {
     border-radius: $radius-sm;
     margin: 4px 8px;
@@ -175,6 +247,14 @@ async function handleCommand(command) {
 
     &:hover {
       background: var(--color-primary-light);
+    }
+  }
+
+  // 折叠态：el-sub-menu 收缩为图标，popup 子菜单需保留圆角样式
+  &.el-menu--collapse {
+    :deep(.el-sub-menu__title) {
+      margin: 4px auto;
+      border-radius: $radius-sm;
     }
   }
 }

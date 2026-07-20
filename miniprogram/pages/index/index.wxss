@@ -17,6 +17,256 @@
   z-index: 10;
 }
 
+/* === 任务3：续播卡片 === */
+.continue-card {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(135deg, #FFF1F5 0%, #F0F9F6 100%);
+  border: 2rpx solid #FFD3E0;
+  margin: 24rpx;
+  padding: 24rpx 28rpx;
+}
+
+.continue-icon-wrap {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  background: #5BA89B;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 20rpx;
+}
+
+.continue-icon {
+  width: 32rpx;
+  height: 32rpx;
+}
+
+.continue-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.continue-label {
+  font-size: 22rpx;
+  color: #FF6B8A;
+  font-weight: 500;
+  margin-bottom: 4rpx;
+}
+
+.continue-title {
+  font-size: 30rpx;
+  color: #2D3748;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.continue-meta {
+  font-size: 22rpx;
+  color: #A0AEC0;
+  margin-top: 4rpx;
+}
+
+.continue-arrow {
+  width: 32rpx;
+  height: 32rpx;
+  margin-left: 12rpx;
+}
+
+/* === 任务3：节目列表行 === */
+.episode-row-card {
+  display: flex;
+  align-items: center;
+  padding: 24rpx;
+  margin: 16rpx 24rpx;
+}
+
+.row-cover {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 20rpx;
+  background: linear-gradient(135deg, #FFE4ED 0%, #E0F4F1 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+  margin-right: 20rpx;
+  padding: 8rpx;
+}
+
+.row-cover-channel {
+  font-size: 22rpx;
+  color: #5BA89B;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.row-cover-date {
+  font-size: 20rpx;
+  color: #A0AEC0;
+  margin-top: 6rpx;
+}
+
+.row-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-right: 16rpx;
+}
+
+.row-title {
+  font-size: 28rpx;
+  color: #2D3748;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 10rpx;
+}
+
+.row-stats {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.row-stat {
+  display: flex;
+  align-items: center;
+}
+
+.row-stat-icon {
+  width: 24rpx;
+  height: 24rpx;
+  margin-right: 6rpx;
+  opacity: 0.6;
+}
+
+.row-stat text {
+  font-size: 22rpx;
+  color: #A0AEC0;
+}
+
+.row-play {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: #5BA89B;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.row-play:active {
+  background: #4A8A7E;
+  transform: scale(0.95);
+}
+
+.row-play-icon {
+  width: 36rpx;
+  height: 36rpx;
+  margin-left: 4rpx;
+  filter: brightness(0) invert(1);
+}
+
+/* === 任务5：带封面背景的播放卡片 === */
+.player-card.with-cover {
+  background-blend-mode: lighten;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  min-height: 540rpx;
+  position: relative;
+}
+
+.player-card.with-cover::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 24rpx;
+  pointer-events: none;
+}
+
+.player-card.with-cover > view {
+  position: relative;
+  z-index: 1;
+}
+
+/* === 任务4：文稿区 === */
+.script-card {
+  margin-top: 8rpx;
+}
+
+.script-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #2D3748;
+  margin-bottom: 20rpx;
+}
+
+.script-action {
+  font-size: 24rpx;
+  color: #5BA89B;
+  font-weight: 400;
+}
+
+.script-content {
+  display: block;
+  font-size: 28rpx;
+  color: #4A5568;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.script-segment {
+  margin-bottom: 24rpx;
+  padding: 20rpx 24rpx;
+  background: #F9FDFB;
+  border-radius: 16rpx;
+  border-left: 6rpx solid #7ECEC1;
+}
+
+.seg-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #2D3748;
+  margin-bottom: 12rpx;
+}
+
+/* 分段封面图：圆角不抢戏 */
+.seg-cover {
+  width: 100%;
+  height: 240rpx;
+  border-radius: 12rpx;
+  margin-bottom: 12rpx;
+  background: #F0F4F2;
+}
+
+.seg-content {
+  display: block;
+  font-size: 26rpx;
+  color: #4A5568;
+  line-height: 1.7;
+}
+
 .top-action {
   width: 64rpx;
   height: 64rpx;
@@ -33,7 +283,8 @@
 }
 
 .action-icon {
-  font-size: 32rpx;
+  width: 36rpx;
+  height: 36rpx;
 }
 
 .channel-bar {
@@ -132,6 +383,28 @@
   align-items: center;
 }
 
+/* 播放错误提示条：蜜桃粉淡背景 + 警示色文字，与 detail 页风格一致 */
+.play-error-tip {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 16rpx 20rpx;
+  margin-bottom: 20rpx;
+  border-radius: 16rpx;
+  background: #FFF0F4;
+  font-size: 24rpx;
+  color: #FF6B8A;
+  line-height: 1.5;
+}
+
+.play-error-tip .error-icon {
+  width: 32rpx;
+  height: 32rpx;
+  margin-right: 10rpx;
+  flex-shrink: 0;
+}
+
 /* 大圆形播放按钮：120rpx，薄荷青渐变 + 柔和阴影 */
 .play-btn {
   width: 120rpx;
@@ -151,11 +424,10 @@
   opacity: 0.9;
 }
 
-/* 三角形字符左轻右重，需微调左偏移以视觉居中 */
+/* 播放/暂停图标：白色实心，居中对齐（image 标签自动居中无需左偏移） */
 .play-icon {
-  font-size: 48rpx;
-  color: #FFFFFF;
-  margin-left: 6rpx;
+  width: 48rpx;
+  height: 48rpx;
 }
 
 /* 进度条 */
@@ -177,6 +449,41 @@
 .action-area {
   padding: 0 24rpx;
   margin-top: 16rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+/* 操作芯片：图标 + 文字横向排列，激活态使用品牌色背景 */
+.action-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  height: 80rpx;
+  padding: 0 32rpx;
+  border-radius: 40rpx;
+  background: #F0F4F2;
+  color: #5BA89B;
+  font-size: 28rpx;
+  transition: all 0.2s ease;
+}
+
+.action-chip.active {
+  background: linear-gradient(135deg, #FFD3E0, #FF9AA2);
+  color: #FFFFFF;
+}
+
+.chip-icon {
+  width: 32rpx;
+  height: 32rpx;
+}
+
+/* 文字图标：当无 PNG 图标时用 Unicode 字符替代，与 .chip-icon 同尺寸 */
+.chip-icon-text {
+  font-size: 32rpx;
+  line-height: 1;
+  color: inherit;
 }
 
 .action-area .btn-secondary {

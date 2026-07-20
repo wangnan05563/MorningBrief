@@ -1,1 +1,8 @@
 /* pages/search/search.wxss */
+
+/* 搜索框右侧放大镜图标：与输入框同色，弱化以避免抢眼 */
+.search-icon {
+  width: 32rpx;
+  height: 32rpx;
+  flex-shrink: 0;
+}

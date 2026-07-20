@@ -10,7 +10,7 @@
       confirm-type="search"
       bindinput="onInput"
     />
-    <text class="search-icon">🔍</text>
+    <image class="search-icon" src="/images/icons/search.png" mode="aspectFit" />
   </view>
 
   <!-- 搜索历史（无关键词时展示） -->
@@ -34,7 +34,7 @@
 
   <!-- 空状态 -->
   <view class="empty-state" wx:elif="{{!loading && keyword && results.length === 0}}">
-    <text class="empty-icon">🔍</text>
+    <image class="empty-icon-img" src="/images/icons/search.png" mode="aspectFit" />
     <text>未找到相关节目</text>
   </view>
 
@@ -54,7 +54,10 @@
         </view>
         <text class="item-title">{{item.title}}</text>
         <view class="item-footer">
-          <text class="item-duration">⏱ {{fmt.time(item.duration)}}</text>
+          <view class="item-duration">
+            <image class="duration-icon" src="/images/icons/duration.png" mode="aspectFit" />
+            <text>{{fmt.time(item.duration)}}</text>
+          </view>
         </view>
       </view>
     </view>

@@ -56,6 +56,8 @@ from app.models.queue_config import QueueConfig
 # 用户互动表（收藏与反馈）
 from app.models.favorite import Favorite
 from app.models.feedback import Feedback
+# 任务8：评论与点赞
+from app.models.comment import Comment, CommentLike
 # V1.3 新增：订阅消息授权记录 + 频道订阅关系
 from app.models.subscription import Subscription
 from app.models.channel_subscription import ChannelSubscription
@@ -101,6 +103,9 @@ __all__ = [
     # 用户互动表
     "Favorite",
     "Feedback",
+    # 任务8：评论与点赞
+    "Comment",
+    "CommentLike",
     # V1.3 订阅相关
     "Subscription",
     "ChannelSubscription",

@@ -8,7 +8,7 @@
 
   <!-- 空状态 -->
   <view class="empty-state" wx:if="{{queue.length === 0}}">
-    <text class="empty-icon">🎵</text>
+    <image class="empty-icon-img" src="/images/icons/music.png" mode="aspectFit" />
     <text>播放队列为空</text>
     <text class="empty-desc">在历史列表中点击节目即可加入队列</text>
   </view>
@@ -19,12 +19,12 @@
       <view
         class="card queue-item {{index === currentIndex ? 'current' : ''}}"
         wx:for="{{queue}}"
-        wx:key="id"
+        wx:key="index"
         data-index="{{index}}"
         bindtap="onTapItem"
       >
         <view class="item-index">
-          <text wx:if="{{index === currentIndex}}" class="playing-icon">▶</text>
+          <image wx:if="{{index === currentIndex}}" class="playing-icon" src="/images/icons/play-mini.png" mode="aspectFit" />
           <text wx:else>{{index + 1}}</text>
         </view>
         <view class="item-info">

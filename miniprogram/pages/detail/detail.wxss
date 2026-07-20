@@ -35,12 +35,34 @@
 }
 
 .duration-icon {
+  width: 28rpx;
+  height: 28rpx;
   margin-right: 8rpx;
 }
 
 /* 播放控制卡片 */
 .play-card {
   padding: 36rpx 32rpx;
+}
+
+/* 播放错误提示条：蜜桃粉淡背景 + 警示色文字，柔和不刺眼 */
+.play-error-tip {
+  display: flex;
+  align-items: center;
+  padding: 16rpx 20rpx;
+  margin-bottom: 20rpx;
+  border-radius: 16rpx;
+  background: #FFF0F4;
+  font-size: 24rpx;
+  color: #FF6B8A;
+  line-height: 1.5;
+}
+
+.error-icon {
+  width: 32rpx;
+  height: 32rpx;
+  margin-right: 10rpx;
+  flex-shrink: 0;
 }
 
 .play-row {
@@ -62,9 +84,29 @@
 }
 
 .play-icon {
-  color: #FFFFFF;
-  font-size: 44rpx;
-  line-height: 1;
+  width: 44rpx;
+  height: 44rpx;
+}
+
+/* 上一首/下一首导航按钮 */
+.nav-btn {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F0F4F2;
+  flex-shrink: 0;
+}
+
+.nav-btn:active {
+  background: #E6F4F1;
+}
+
+.nav-icon {
+  width: 36rpx;
+  height: 36rpx;
 }
 
 .play-info {
@@ -102,7 +144,7 @@
 
 .script-entry {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 20rpx 0;
 }
 
@@ -118,6 +160,67 @@
   line-height: 1.8;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* 稿件分段块：每段独立卡片感，段间留白 */
+.seg-block {
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #EDF2F7;
+}
+.seg-block:last-child {
+  border-bottom: none;
+}
+
+/* 段封面图：宽度自适应，圆角与卡片风格一致 */
+.seg-cover {
+  width: 100%;
+  border-radius: 16rpx;
+  margin-bottom: 16rpx;
+  background: #F7FAFC;
+}
+
+/* 段标题：与开场白/正文段统一字号，强调时使用 */
+.seg-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #2D3748;
+  margin-bottom: 12rpx;
+  line-height: 1.5;
+}
+
+/* 段正文：保留换行，行高宽松便于阅读 */
+.seg-content {
+  font-size: 28rpx;
+  color: #4A5568;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* === 节目来源：标题可点击跳转原站 === */
+.source-title-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8rpx;
+}
+
+/* 可点击的标题：薄荷青主色 + 下划线，明确视觉反馈 */
+.source-link {
+  color: #5BA89B;
+  text-decoration: underline;
+  flex: 1;
+}
+
+.source-link:active {
+  opacity: 0.6;
+}
+
+/* 外链图标：小号淡色，与标题同行 */
+.source-link-icon {
+  font-size: 24rpx;
+  color: #A0AEC0;
+  margin-left: 8rpx;
+  flex-shrink: 0;
 }
 
 /* 底部操作 */
@@ -141,4 +244,264 @@
 /* 重置小程序 button 默认描边，贴合全局按钮风格 */
 .footer-btn::after {
   border: none;
+}
+
+/* === 操作按钮区：倍速 + 收藏 + 睡眠定时器 === */
+.action-row {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 24rpx;
+  gap: 16rpx;
+}
+
+/* 操作芯片：图标 + 文字横向排列，激活态使用品牌色背景 */
+.action-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  flex: 1;
+  height: 80rpx;
+  padding: 0 24rpx;
+  border-radius: 40rpx;
+  background: #F0F4F2;
+  color: #5BA89B;
+  font-size: 26rpx;
+  transition: all 0.2s ease;
+}
+
+.action-chip.active {
+  background: linear-gradient(135deg, #FFD3E0, #FF9AA2);
+  color: #FFFFFF;
+}
+
+.chip-icon {
+  width: 32rpx;
+  height: 32rpx;
+}
+
+/* 文字图标：当无 PNG 图标时用 Unicode 字符替代，与 .chip-icon 同尺寸 */
+.chip-icon-text {
+  font-size: 32rpx;
+  line-height: 1;
+  color: inherit;
+}
+
+.chip-label {
+  font-size: 26rpx;
+}
+
+/* === 任务10：背景虚化层 === */
+/* 固定定位 + 高斯模糊，淡色滤镜柔化避免抢戏 */
+.bg-blur-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.bg-blur-img {
+  width: 100%;
+  height: 100%;
+  filter: blur(48rpx) saturate(1.2);
+  opacity: 0.5;
+  transform: scale(1.2);
+}
+
+/* 半透明白色蒙版，进一步降低对比度提升正文可读性 */
+.bg-blur-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(249, 253, 251, 0.85), rgba(255, 245, 247, 0.8));
+}
+
+/* 内容层在背景之上：所有直接子元素都提升 z-index
+ * 注意 wxml 中 <block> 不渲染为 DOM，其内的 .card 仍是 .page-detail 的直接子元素 */
+.page-detail > .card,
+.page-detail > .loading-mask,
+.page-detail > .empty-state {
+  position: relative;
+  z-index: 1;
+}
+
+/* === 任务8：评论区 === */
+.comment-card {
+  padding: 32rpx;
+}
+
+.comment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.comment-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #2D3748;
+}
+
+.comment-count {
+  font-size: 24rpx;
+  color: #A0AEC0;
+}
+
+/* 评论输入框 + 发送按钮 */
+.comment-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+  padding: 16rpx;
+  background: #F7FAFC;
+  border-radius: 16rpx;
+}
+
+.comment-input {
+  flex: 1;
+  min-height: 60rpx;
+  padding: 12rpx 16rpx;
+  font-size: 28rpx;
+  line-height: 1.5;
+  color: #2D3748;
+  background: #FFFFFF;
+  border-radius: 12rpx;
+}
+
+.comment-submit {
+  flex-shrink: 0;
+  padding: 14rpx 28rpx;
+  border-radius: 28rpx;
+  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  color: #FFFFFF;
+  font-size: 26rpx;
+  font-weight: 500;
+}
+
+.comment-submit.disabled {
+  opacity: 0.5;
+}
+
+.comment-submit:active {
+  opacity: 0.85;
+}
+
+/* 评论列表 */
+.comment-list {
+  margin-top: 8rpx;
+}
+
+.comment-item {
+  display: flex;
+  gap: 16rpx;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #EDF2F7;
+}
+
+.comment-item:last-child {
+  border-bottom: none;
+}
+
+/* 头像：左列固定大小 */
+.comment-avatar {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  background: #F0F4F2;
+  flex-shrink: 0;
+}
+
+/* 中间：名称 + 日期，width 自适应不被挤压 */
+.comment-meta-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex-shrink: 0;
+  max-width: 220rpx;
+  overflow: hidden;
+}
+
+.comment-user {
+  font-size: 24rpx;
+  color: #5BA89B;
+  font-weight: 500;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.comment-date {
+  font-size: 20rpx;
+  color: #A0AEC0;
+  white-space: nowrap;
+  margin-top: 4rpx;
+}
+
+/* 右侧：评论内容 + 点赞 */
+.comment-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.comment-content {
+  font-size: 28rpx;
+  color: #2D3748;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.comment-like {
+  align-self: flex-end;
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 24rpx;
+  background: #FFF0F4;
+}
+
+.comment-like:active {
+  opacity: 0.7;
+}
+
+.like-icon {
+  width: 28rpx;
+  height: 28rpx;
+}
+
+.like-count {
+  font-size: 24rpx;
+  color: #A0AEC0;
+}
+
+.like-count.liked {
+  color: #FF6B8A;
+  font-weight: 500;
+}
+
+.comment-empty {
+  padding: 60rpx 0;
+  text-align: center;
+  font-size: 26rpx;
+  color: #A0AEC0;
+}
+
+.comment-loading {
+  padding: 24rpx 0;
+  text-align: center;
+  font-size: 24rpx;
+  color: #A0AEC0;
 }

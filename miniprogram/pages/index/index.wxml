@@ -1,9 +1,9 @@
 <!-- 首页：今日要闻播放页 -->
 <view class="container">
   <!-- 顶部工具栏：搜索 + 频道切换 + 睡眠定时器 -->
-  <view class="top-bar" wx:if="{{!loading && episode}}">
+  <view class="top-bar" wx:if="{{!loading}}">
     <view class="top-action" bindtap="onSearch">
-      <text class="action-icon">🔍</text>
+      <image class="action-icon" src="/images/icons/search.png" mode="aspectFit" />
     </view>
     <scroll-view scroll-x class="channel-bar" wx:if="{{channels.length > 0}}">
       <view
@@ -15,7 +15,7 @@
       >{{item.name}}</view>
     </scroll-view>
     <view class="top-action" bindtap="onSleepTimer">
-      <text class="action-icon">{{sleepActive ? '⏰' : '🌙'}}</text>
+      <image class="action-icon" src="{{sleepActive ? '/images/icons/alarm.png' : '/images/icons/moon.png'}}" mode="aspectFit" />
     </view>
   </view>
 
@@ -29,68 +29,64 @@
     <text>正在加载今日要闻...</text>
   </view>
 
-  <!-- 空状态/错误状态：节目未发布或加载失败 -->
-  <view class="empty-state" wx:elif="{{!episode}}">
-    <text class="empty-icon">🎧</text>
-    <text>{{error || '今日节目暂未上线'}}</text>
-  </view>
-
-  <!-- 正常内容 -->
-  <block wx:else>
-    <!-- 顶部问候语卡片：薄荷青到蜜桃粉极浅渐变 -->
-    <view class="greeting-card">
-      <text class="greeting-title">早安，今日要闻已上线</text>
-      <text class="greeting-subtitle">用心聆听，开启美好一天</text>
+  <!-- === 今日节目列表（统一布局，点击跳转 detail 页） === -->
+  <block wx:elif="{{!loading}}">
+    <view class="greeting-card" wx:if="{{todayList.length > 0}}">
+      <text class="greeting-title">今日共 {{todayList.length}} 个频道已更新</text>
+      <text class="greeting-subtitle">{{todayDateText}} · 挑选你感兴趣的频道收听</text>
     </view>
 
-    <!-- 节目信息卡片 -->
-    <view class="card episode-card">
-      <view class="episode-meta">
-        <text class="episode-date">{{episode.date}}</text>
-        <text class="tag tag-mint">{{episode.categories[0]}}</text>
+    <!-- 继续播放：展示上次播放过的频道与进度（任务3续播） -->
+    <view class="card continue-card" wx:if="{{lastPlayedEpisode}}" bindtap="onTapContinue">
+      <view class="continue-icon-wrap">
+        <image class="continue-icon" src="{{(isPlaying && currentEpisodeId === lastPlayedEpisode.id) ? '/images/icons/pause.png' : '/images/icons/play-mini.png'}}" mode="aspectFit" />
       </view>
-      <text class="episode-title">{{episode.title}}</text>
-      <text class="episode-duration">时长 {{fmt.time(episode.duration)}}</text>
+      <view class="continue-info">
+        <text class="continue-label">继续播放</text>
+        <text class="continue-title">{{lastPlayedEpisode.title || '上次的节目'}}</text>
+        <text class="continue-meta" wx:if="{{lastPlayedEpisode.channel_name}}">{{lastPlayedEpisode.channel_name}} · 已播 {{fmt.time(lastPlayedEpisode.currentTime)}}</text>
+        <text class="continue-meta" wx:else>已播 {{fmt.time(lastPlayedEpisode.currentTime)}}</text>
+      </view>
+      <image class="continue-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
     </view>
 
-    <!-- 播放控制卡片 -->
-    <view class="card player-card">
-      <!-- 大圆形播放按钮 -->
-      <view class="play-btn" bindtap="onTogglePlay">
-        <text class="play-icon">{{isPlaying ? '⏸' : '▶'}}</text>
+    <!-- 节目列表：每频道一行 + 播放量/时长小图标 -->
+    <view
+      class="card episode-row-card"
+      wx:for="{{todayList}}"
+      wx:key="id"
+      data-id="{{item.id}}"
+      bindtap="onTapEpisode"
+    >
+      <view class="row-cover">
+        <text class="row-cover-channel">{{item.channel_name || '节目'}}</text>
+        <text class="row-cover-date">{{item.date_label || ''}}</text>
       </view>
-
-      <!-- 进度条 -->
-      <slider
-        class="progress-slider"
-        min="0"
-        max="{{duration}}"
-        value="{{currentTime}}"
-        activeColor="#7ECEC1"
-        backgroundColor="#E8F5F2"
-        block-size="20"
-        block-color="#7ECEC1"
-        bindchange="onSeek"
-      />
-
-      <!-- 时间显示（mm:ss） -->
-      <view class="time-display">
-        <text>{{fmt.time(currentTime)}}</text>
-        <text>{{fmt.time(duration)}}</text>
+      <view class="row-main">
+        <text class="row-title">{{item.title || (item.date_label + ' · ' + (item.channel_name || '节目'))}}</text>
+        <view class="row-stats">
+          <view class="row-stat">
+            <image class="row-stat-icon" src="/images/icons/play-mini.png" mode="aspectFit" />
+            <text>{{item.play_count || 0}} 播放</text>
+          </view>
+          <view class="row-stat">
+            <image class="row-stat-icon" src="/images/icons/duration.png" mode="aspectFit" />
+            <text>{{item.duration_label || '00:00'}}</text>
+          </view>
+        </view>
+      </view>
+      <view class="row-play" data-id="{{item.id}}" catchtap="onPlayEpisode">
+        <image class="row-play-icon" src="{{(isPlaying && currentEpisodeId === item.id) ? '/images/icons/pause.png' : '/images/icons/play.png'}}" mode="aspectFit" />
       </view>
     </view>
 
-    <!-- 操作按钮区：倍速 + 收藏 + 查看文稿 -->
-    <view class="action-area">
-      <view class="action-chip" bindtap="onCycleRate">
-        <text>{{currentRate}}x</text>
-      </view>
-      <view class="action-chip {{favorited ? 'active' : ''}}" bindtap="onToggleFavorite">
-        <text>{{favorited ? '★' : '☆'}}</text>
-        <text class="chip-label">{{favorited ? '已收藏' : '收藏'}}</text>
-      </view>
-      <button class="btn-secondary" bindtap="onViewScript">查看文稿</button>
-    </view>
+    <empty-state
+      wx:if="{{todayList.length === 0}}"
+      icon="/images/icons/headphones.png"
+      icon-type="image"
+      title="{{error || '今日节目暂未上线'}}"
+      description="节目通常每天上午更新，下拉刷新试试或稍后再来看看～"
+    ></empty-state>
   </block>
 </view>
 
@@ -105,3 +101,6 @@
     }
   };
 </wxs>
+
+<!-- 任务9：全局浮动播放按钮，当有正在播放的节目时显示 -->
+<floating-player />

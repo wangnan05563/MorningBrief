@@ -37,38 +37,51 @@ App({
     currentChannelId: null,   // 当前选中的频道 ID（多频道切换用，null 表示全部）
   },
 
+  /**
+   * 启动就绪 Promise：onLaunch 内完成登录与预加载后 resolve
+   *
+   * 为什么需要这个：
+   * 小程序框架不会 await App.onLaunch，页面 onLoad 可能在登录完成前执行，
+   * 导致需鉴权的请求（如 /playlogs/recent）拿到空 token 触发 401。
+   * 页面 onLoad 中 await getApp().readyPromise 可确保登录完成后才发请求。
+   */
+  readyPromise: null,
+
   async onLaunch() {
-    // 1. 检查小程序更新（冷启动时，仅 release 模式生效）
-    this.checkUpdate();
+    this.readyPromise = (async () => {
+      // 1. 检查小程序更新（冷启动时，仅 release 模式生效）
+      this.checkUpdate();
 
-    // 2. 静默登录（无需用户点击，失败时不阻断启动）
-    try {
-      const { token, user } = await login();
-      this.globalData.token = token;
-      this.globalData.userInfo = user;
-      console.log('登录成功');
-    } catch (err) {
-      console.log('登录未执行（可忽略，不影响播放）:', err.message);
-    }
+      // 2. 静默登录（无需用户点击，失败时不阻断启动）
+      try {
+        const { token, user } = await login();
+        this.globalData.token = token;
+        this.globalData.userInfo = user;
+        console.log('登录成功');
+      } catch (err) {
+        console.log('登录未执行（可忽略，不影响播放）:', err.message);
+      }
 
-    // 3. 初始化全局播放器（单例，所有页面共享）
-    this.globalData.player = initPlayer();
+      // 3. 初始化全局播放器（单例，所有页面共享）
+      this.globalData.player = initPlayer();
 
-    // 4. 预加载今日节目元数据（不含稿件，首屏加速）
-    try {
-      this.globalData.todayEpisode = await fetchTodayEpisode();
-      console.log('预加载今日节目成功:', this.globalData.todayEpisode?.title);
-    } catch (err) {
-      console.log('预加载今日节目失败:', err.message);
-    }
+      // 4. 预加载今日节目元数据（不含稿件，首屏加速）
+      try {
+        this.globalData.todayEpisode = await fetchTodayEpisode();
+        console.log('预加载今日节目成功:', this.globalData.todayEpisode?.title);
+      } catch (err) {
+        console.log('预加载今日节目失败:', err.message);
+      }
 
-    // 5. 监听网络变化（弱网时进度上报降频）
-    wx.onNetworkStatusChange((res) => {
-      this.globalData.networkType = res.networkType;
-    });
+      // 5. 监听网络变化（弱网时进度上报降频）
+      wx.onNetworkStatusChange((res) => {
+        this.globalData.networkType = res.networkType;
+      });
 
-    // 6. 隐私授权检查：__usePrivacyCheck__ 开启后，调用涉及用户信息的 API 前需先同意
-    this.checkPrivacy();
+      // 6. 隐私授权检查：__usePrivacyCheck__ 开启后，调用涉及用户信息的 API 前需先同意
+      this.checkPrivacy();
+    })();
+    return this.readyPromise;
   },
 
   /**

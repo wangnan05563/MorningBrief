@@ -1649,3 +1649,130 @@ except Exception:
 | S2486 | 维度 80 | S59 | R74 | 警告 | 添加日志或注释 |
 | cognitive_complexity | 维度 73 | S51 | R66 | 阻塞 | 抽取辅助函数或数据驱动重构 |
 | - | 维度 79 | S56 | R71 | 建议 | 重构为 list[tuple] + 循环 |
+
+## 维度 81-83：2026-07-20 小程序播放与跨端数据流复盘新增审查维度（后端侧）
+
+> 以下维度来源于 2026-07-20 微信小程序「今日要闻」迭代修复完整复盘，对应 news-code-dev 编码规范 S70 和元规范 R85。所有阈值通过 `config.yaml#cache_versioning`、`config.yaml#segments_data_completeness`、`config.yaml#response_field_priority` 配置管理。
+
+### 维度 81：数据结构变更时 cache_key 版本后缀（对应 news-code-dev S70/R85）
+
+- 【强制】当缓存的数据结构发生变更（新增/删除/重命名字段、嵌套结构调整）时，cache_key 必须追加版本后缀（如 `:v2`、`:_v3`），禁止沿用旧 key
+- 【强制】版本号从 2 开始（v1 隐含为初版），每次结构变更必须 bump 一次版本
+- 【强制】版本号变更后必须在代码注释中说明本次变更的字段（如 `# v2: 新增 cover_url 字段`）
+- 【推荐】版本后缀格式通过 `config.yaml#cache_versioning.version_suffix_format` 配置（默认 `:v{n}`）
+- 配置节点：`config.yaml#cache_versioning`
+
+**判断信号**：
+- grep `cache_key\s*=\s*f["'].*:\{` 使用变量插值但无版本字段
+- grep `cache_key\s*=\s*f["']script:detail:` 无 `:v\d+` 后缀
+- 数据结构新增字段（如 segments 新增 `cover_url`）后 cache_key 未变更
+- 字段重命名（如 `category` → `categories`）后 cache_key 未变更
+
+**严重级别**：HIGH（旧缓存命中导致字段缺失或类型错误，前端显示空白）
+
+**修复建议**：
+```python
+# ✅ 正确：数据结构变更时 bump 版本
+# v1: segments = [{"seq": 1, "title": "..."}]
+# v2: segments = [{"seq": 1, "title": "...", "cover_url": "..."}]  → 加 v2
+cache_key = f"script:detail:v2:{episode_id}"  # v2 失效旧缓存
+# 注释说明：v2 新增 cover_url 字段
+
+# ❌ 错误：沿用旧 key，旧缓存命中导致 cover_url 缺失
+cache_key = f"script:detail:{episode_id}"  # 旧缓存无 cover_url 字段
+```
+
+**示例（content_service.py）**：
+```python
+# 维度 81 检测点：cache_key 必须含版本号
+cache_key = f"script:detail:v2:{episode_id}"  # ✅
+# cache_key = f"script:detail:{episode_id}"  # ❌ 无版本号
+
+# 版本变更说明（推荐）：
+# v1: 初版 segments 结构
+# v2: 2026-07-20 新增 cover_url 字段（material.cover_url 注入）
+# v3: 待定（下次结构变更时 bump）
+```
+
+### 维度 82：segments 数据完整性注入（对应 news-code-dev S70/R85 关联）
+
+- 【强制】后端返回 segments 时必须注入关联资源字段（如 `cover_url`、`source`、`category`），不能仅返回 segment 自身字段
+- 【强制】segment 的 `cover_url` 必须从关联的 `material_ids` 中取第一个有 `cover_url` 的 material 注入
+- 【强制】material_ids 为空或所有 material 都无 cover_url 时，segment 不强加 `cover_url` 字段（前端按 undefined 处理）
+- 【推荐】注入字段列表通过 `config.yaml#segments_data_completeness.inject_fields` 配置
+- 配置节点：`config.yaml#segments_data_completeness`
+
+**判断信号**：
+- grep `segments\.append\(` 在 content_service.py 中无 `cover_url` 注入
+- grep `enriched_seg\s*=\s*dict\(seg\)` 后无 `if seg_cover:` 注入逻辑
+- API 返回的 segments 字段缺失前端期望的 `cover_url`/`source`/`category`
+
+**严重级别**：HIGH（前端文稿图片不显示）
+
+**修复建议**：
+```python
+# ✅ 正确：遍历 segments 注入关联资源字段
+enriched_segments = []
+for seg in segments:
+    if not isinstance(seg, dict):
+        enriched_segments.append(seg)
+        continue
+    seq = seg.get("seq")
+    material_ids = seg.get("material_ids") or []
+    seg_cover = None
+    for mid in material_ids:
+        mat = materials_map.get(mid)
+        if mat:
+            sources.append({
+                "seq": seq, "title": mat.title, "url": mat.url,
+                "category": mat.category, "source": mat.source,
+                "cover_url": mat.cover_url,
+            })
+            if not seg_cover and mat.cover_url:
+                seg_cover = mat.cover_url  # 取第一个有 cover_url 的 material
+    enriched_seg = dict(seg)
+    if seg_cover:
+        enriched_seg["cover_url"] = seg_cover  # 注入到 segment
+    enriched_segments.append(enriched_seg)
+
+# ❌ 错误：仅返回 segment 自身字段
+enriched_segments = list(segments)  # 无 cover_url 注入
+```
+
+### 维度 83：响应字段优先级与背景图设置（对应 news-code-dev S68/R83 关联）
+
+- 【强制】API 响应中应包含可用的背景图字段（如 `cover_url`），供前端在列表/详情页通用展示
+- 【强制】`episode` 对象的 `cover_url` 字段必须从 `cover_url`（节目级）→ `channel.cover_url`（频道级）→ 默认值 优先级取值
+- 【强制】禁止仅在加载详情时设置 `cover_url`（如 `onLoadScript`），应在 `loadDetail` 中即设置
+- 【推荐】优先级链通过 `config.yaml#response_field_priority.cover_url_chain` 配置
+- 配置节点：`config.yaml#response_field_priority`
+
+**判断信号**：
+- grep `cover_url\s*=\s*None` 在 episode 序列化时未取频道级 cover_url 兜底
+- API 返回的 episode 对象无 `cover_url` 字段或值为 None 但 channel 有 cover_url
+
+**严重级别**：MEDIUM（背景图不显示，用户体验差）
+
+**修复建议**：
+```python
+# ✅ 正确：多级 fallback
+def _resolve_episode_cover(episode: Episode, channel: Channel | None) -> str | None:
+    """按优先级解析 episode 背景图"""
+    if episode.cover_url:
+        return episode.cover_url
+    if channel and channel.cover_url:
+        return channel.cover_url
+    return None  # 前端按 undefined 处理，显示默认背景
+
+# ❌ 错误：仅返回 episode.cover_url，无 fallback
+return {"cover_url": episode.cover_url}  # None 时前端无背景图
+```
+
+## 维度 81-83 配置节点速查
+
+| 维度 | 配置节点 | 关键参数 |
+|------|---------|----------|
+| 81 cache_key 版本后缀 | `cache_versioning` | `require_version_suffix_on_schema_change`、`version_suffix_format`、`bump_on_fields` |
+| 82 segments 数据完整性 | `segments_data_completeness` | `inject_fields`、`fallback_to_first_material_cover` |
+| 83 响应字段优先级 | `response_field_priority` | `cover_url_chain`、`require_fallback_to_channel` |
+

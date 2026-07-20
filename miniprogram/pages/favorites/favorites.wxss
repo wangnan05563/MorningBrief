@@ -62,8 +62,16 @@
 }
 
 .item-duration {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
   font-size: 24rpx;
   color: #A0AEC0;
+}
+
+.duration-icon {
+  width: 24rpx;
+  height: 24rpx;
 }
 
 /* 播放图标：圆形薄荷青背景，与历史页一致 */
@@ -78,11 +86,10 @@
   box-shadow: 0 4rpx 12rpx rgba(126, 206, 193, 0.3);
 }
 
-/* 三角形字符左轻右重，需微调以视觉居中 */
+/* 列表项小播放图标：白色三角 */
 .icon-text {
-  font-size: 24rpx;
-  color: #FFFFFF;
-  margin-left: 4rpx;
+  width: 24rpx;
+  height: 24rpx;
 }
 
 /* === 底部操作提示 === */

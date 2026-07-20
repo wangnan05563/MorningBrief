@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- tabBar "历史" 未选中态：浅灰背景 + 灰色时钟图标 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect x="2" y="2" width="60" height="60" rx="16" ry="16" fill="#F0F4F2"/>
+  <g stroke="#A0AEC0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <circle cx="32" cy="32" r="14"/>
+    <polyline points="32 22 32 32 40 36"/>
+  </g>
+</svg>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 搜索图标：放大镜，灰色（用于浅背景）
+     图标来源：Tabler Icons (MIT License) - search -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="#5BA89B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="15.5" y1="15.5" x2="20" y2="20" stroke="#5BA89B" stroke-width="2" stroke-linecap="round"/>
+</svg>

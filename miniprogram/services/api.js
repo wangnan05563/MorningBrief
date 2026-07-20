@@ -1,4 +1,4 @@
-﻿/**
+/**
  * API 封装：token 注入、401 自动重登、统一响应格式处理
  *
  * 所有接口均返回 Promise，成功时 resolve(data)，失败时 reject(Error)
@@ -9,25 +9,19 @@
 const IS_RELEASE = typeof __wxConfig !== 'undefined' && __wxConfig.envVersion === 'release';
 
 /**
- * 获取开发环境后端地址：自动检测本机局域网 IP
- * - 小程序运行时通过 wx.getSystemInfoSync().ip 获取设备/模拟器 IP
- * - 若 IP 无效则回退到 127.0.0.1（仅模拟器可用）
+ * 开发环境后端地址。
+ *
+ * 历史实现曾尝试通过 wx.getSystemInfoSync().ip 自动检测局域网 IP，
+ * 但新版基础库已废弃该 API（拆分为 getDeviceInfo/getWindowInfo/getAppBaseInfo 等，
+ * 均不再暴露 ip 字段），自动检测实际上拿不到有效 IP。
+ *
+ * 真机调试时请在下方常量中手动填入电脑局域网 IP（与后端 .env 的 AUDIO_BASE_URL 保持一致）。
  */
-function getDevApiBaseUrl() {
-  if (typeof __wxConfig === 'undefined') return 'http://127.0.0.1:8000/api/v1';
-  try {
-    const sys = wx.getSystemInfoSync();
-    const deviceIP = sys.ip || '';
-    if (deviceIP && deviceIP !== '0.0.0.0' && deviceIP !== '127.0.0.1') {
-      return 'http://' + deviceIP + ':8000/api/v1';
-    }
-  } catch (e) { /* ignore */ }
-  return 'http://127.0.0.1:8000/api/v1';
-}
+const DEV_API_BASE_URL = 'http://192.168.1.65:8000/api/v1';
 
 const BASE_URL = IS_RELEASE
   ? 'https://api.example.com/api/v1'  // 生产环境域名（部署时替换）
-  : getDevApiBaseUrl();  // 开发环境（自动获取本机局域网 IP）
+  : DEV_API_BASE_URL;  // 开发环境（真机调试时改为局域网 IP，如 http://192.168.x.x:8000/api/v1）
 
 /**
  * 统一请求函数
@@ -94,12 +88,16 @@ const fetchEpisodeDetail = (id) => request({ url: '/episodes/' + id });
 /** 节目稿件（懒加载） */
 const fetchEpisodeScript = (id) => request({ url: '/episodes/' + id + '/script' });
 
-/** 历史列表分页。channel_id 可选，用于按频道过滤 */
-const fetchHistory = (page, size = 20, channelId) =>
-  request({
-    url: '/episodes/history',
-    data: channelId ? { page, size, channel_id: channelId } : { page, size },
-  });
+/**
+ * 历史列表分页。channel_id 可选，用于按频道过滤
+ * 任务7：sort_order 可选 'desc'（默认）/ 'asc'，控制日期正序/倒序
+ */
+const fetchHistory = (page, size = 20, channelId, sortOrder) => {
+  const data = { page, size };
+  if (channelId) data.channel_id = channelId;
+  if (sortOrder) data.sort_order = sortOrder;
+  return request({ url: '/episodes/history', data });
+};
 
 /** 节目搜索（按标题模糊匹配） */
 const searchEpisodes = (keyword, page = 1, size = 20) =>
@@ -142,6 +140,24 @@ const checkFavorite = (episodeId) =>
 const submitFeedback = (data) =>
   request({ url: '/feedbacks', method: 'POST', data });
 
+// === 评论接口（任务8） ===
+
+/** 获取节目评论列表 */
+const fetchComments = (episodeId) =>
+  request({ url: '/comments', data: { episode_id: episodeId } }).catch(() => ({ list: [], total: 0 }));
+
+/** 发布评论 */
+const postComment = (data) =>
+  request({ url: '/comments', method: 'POST', data });
+
+/** 点赞评论（幂等） */
+const likeComment = (commentId) =>
+  request({ url: '/comments/' + commentId + '/like', method: 'POST' });
+
+/** 取消点赞（幂等） */
+const unlikeComment = (commentId) =>
+  request({ url: '/comments/' + commentId + '/like', method: 'DELETE' });
+
 // === 频道接口 ===
 
 /** 获取已启用频道列表（带 is_subscribed 字段） */
@@ -176,6 +192,7 @@ const updateUserProfile = (data) =>
 
 module.exports = {
   request,
+  BASE_URL,
   // 节目
   fetchTodayEpisode,
   fetchEpisodeDetail,
@@ -193,6 +210,11 @@ module.exports = {
   checkFavorite,
   // 反馈
   submitFeedback,
+  // 评论
+  fetchComments,
+  postComment,
+  likeComment,
+  unlikeComment,
   // 频道
   fetchChannels,
   // 订阅
