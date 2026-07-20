@@ -1323,3 +1323,280 @@ try {
 | S3863 | 维度 58 | S57 | R72 | 建议 | 使用 eslint-plugin-import 自动排序 |
 | S7762 | 维度 59 | S58 | R73 | 警告 | 替换为现代 DOM API |
 | S2486 | 维度 60 | S59 | R74 | 警告 | 添加用户提示 + 错误日志 |
+
+## 维度 61-68：2026-07-20 小程序播放与跨端数据流复盘新增审查维度
+
+> 以下维度来源于 2026-07-20 微信小程序「今日要闻」迭代修复完整复盘，对应 news-code-dev 编码规范 S61-S70 和元规范 R76-R85。所有阈值通过 `config.yaml#miniprogram_playback_safety`、`config.yaml#miniprogram_layout_separation`、`config.yaml#miniprogram_state_isolation`、`config.yaml#miniprogram_navigation_safety`、`config.yaml#url_safety_check` 配置管理。
+
+### 维度 61：URL 编码安全性（对应 news-code-dev S61/R76）
+
+- 【强制】小程序中所有资源 URL（`audioManager.src`、`<image src>`、`wx.downloadFile`、`<web-view src>`）含非 ASCII 字符时必须 `encodeURI()` 编码后再赋值
+- 【强制】后端返回的 URL 字段（如 `audio_url`、`cover_url`）含 `channel_slug` 等可能含中文的变量时，前端必须二次确认编码
+- 【强制】禁止用 `encodeURIComponent` 全编码（会破坏 URL 的 `/` 与 `:` 结构语义）
+- 例外：纯 ASCII 路径（如 `/audio/episodes/20260720/news.mp3`）可豁免
+- 配置节点：`config.yaml#url_safety_check`
+
+**判断信号**：
+- grep `audioManager\.src\s*=\s*[^e]` 在小程序代码中（赋值非 encodeURI 开头）
+- grep `\.src\s*=\s*['"]http[^'"]*[\u4e00-\u9fa5]` URL 含中文字符
+- grep `encodeURIComponent\(` 用于 URL 编码（应改为 encodeURI）
+
+**严重级别**：CRITICAL（iOS 静默失败，难以排查）
+
+**修复建议**：
+```javascript
+// ✅ 正确：encodeURI 编码
+audioManager.src = encodeURI(episode.audio_url);
+
+// ❌ 错误：直接赋值裸 URL
+audioManager.src = episode.audio_url;
+
+// ❌ 错误：用 encodeURIComponent 破坏 URL 结构
+audioManager.src = encodeURIComponent(episode.audio_url);
+```
+
+### 维度 62：iOS 倍速切换重新缓冲（对应 news-code-dev S62/R77）
+
+- 【强制】iOS 微信小程序中 `setPlaybackRate` 函数体内必须包含 `pause() → setTimeout → play() → setTimeout → seek(原位置)` 流程
+- 【强制】仅在 `!audioManager.paused && audioManager.currentTime > 0` 时触发重新缓冲（避免暂停态或初始态无意义执行）
+- 【强制】pause 延时（默认 100ms）与 play-seek 延时（默认 200ms）通过 `config.yaml#miniprogram_playback_safety.rate_switch` 配置
+- 例外：Android 微信写入即生效，可跳过重新缓冲流程
+- 配置节点：`config.yaml#miniprogram_playback_safety.rate_switch`
+
+**判断信号**：
+- grep `setPlaybackRate` 函数体内仅一行 `audioManager.playbackRate = rate`
+- grep `audioManager\.playbackRate\s*=` 后无 `audioManager.pause()` 调用
+
+**严重级别**：HIGH（用户体验差，但功能仍可用）
+
+**修复建议**：
+```javascript
+function setPlaybackRate(rate) {
+  audioManager.playbackRate = rate;  // 立即写入（Android 即时生效）
+  // iOS 必须强制重新缓冲
+  if (!audioManager.paused && audioManager.currentTime > 0) {
+    const pos = audioManager.currentTime;
+    audioManager.pause();
+    setTimeout(() => {
+      audioManager.play();
+      setTimeout(() => audioManager.seek(pos), 200);
+    }, 100);
+  }
+}
+```
+
+### 维度 63：onTimeUpdate 节流规范（对应 news-code-dev S63/R78）
+
+- 【强制】`audioManager.onTimeUpdate` 回调内 `setData` 必须用时间戳节流，节流间隔 ≥ `update_interval_ms`（默认 800ms）
+- 【强制】暂停、seek、ended 等关键时刻必须强制更新一次 setData（避免最终态偏差）
+- 【推荐】节流间隔通过 `config.yaml#miniprogram_playback_safety.time_update_throttle.update_interval_ms` 配置
+- 配置节点：`config.yaml#miniprogram_playback_safety.time_update_throttle`
+
+**判断信号**：
+- grep `onTimeUpdate\s*\(\s*\(\)\s*=>\s*{` 后直接 `setData` 无时间戳判断
+- 同一页面 setData 调用频率 > 2 次/秒
+
+**严重级别**：HIGH（UI 卡顿，影响用户体验）
+
+**修复建议**：
+```javascript
+let lastTimeUpdate = 0;
+audioManager.onTimeUpdate(() => {
+  const now = Date.now();
+  if (now - lastTimeUpdate < 800) return;  // 节流
+  lastTimeUpdate = now;
+  this.setData({ currentTime: Math.floor(audioManager.currentTime) });
+});
+```
+
+### 维度 64：异步上报防重叠标志（对应 news-code-dev S64/R79）
+
+- 【强制】异步上报函数（`reportProgress`、`reportEvent`、`reportStats`）必须用模块级 `progressReporting`/`reporting` 标志位包裹
+- 【强制】标志位必须在 `finally` 块中清除（失败也清，避免死锁）
+- 【推荐】标志位 TTL 兜底（默认 10000ms），防止异常未清
+- 配置节点：`config.yaml#miniprogram_playback_safety.progress_report`
+
+**判断信号**：
+- grep `async function report\w+` 后无 `if (reporting) return` 判断
+- grep `await fetch.*progress` 无 `try/finally` 包裹
+- grep `progressReporting\s*=` 后无 `finally\s*{\s*progressReporting\s*=\s*false` 清标志
+
+**严重级别**：HIGH（弱网下进度跳变，数据准确性问题）
+
+**修复建议**：
+```javascript
+let progressReporting = false;
+async function reportProgress(episodeId, position) {
+  if (progressReporting) return;  // 防重叠
+  progressReporting = true;
+  try {
+    await fetch(`${BASE_URL}/playlogs/progress`, { method: 'POST', body: JSON.stringify({ episode_id: episodeId, position }) });
+  } catch (e) {
+    console.warn('[audio] reportProgress failed:', e);
+  } finally {
+    progressReporting = false;  // 必须清，失败也清
+  }
+}
+```
+
+### 维度 65：seek 操作 pendingSeek 标志位（对应 news-code-dev S65/R80）
+
+- 【强制】小程序 `audioManager.seek()` 必须用模块级 `pendingSeek` 标志位记录目标位置，在 `onTimeUpdate` 中检测并应用
+- 【强制】禁止在 `onCanplay` 回调中 seek 后 `offCanplay`（回调累积+时机不可控）
+- 【推荐】标志位 TTL 兜底（默认 5000ms），防止异常未清
+- 配置节点：`config.yaml#miniprogram_playback_safety.seek`
+
+**判断信号**：
+- grep `onCanplay.*=>.*seek\(` 在 playEpisode 函数内（自清理模式）
+- grep `audioManager\.offCanplay` 在 onCanplay 回调内
+- 缺少模块级 `let pendingSeek = null` 声明
+
+**严重级别**：HIGH（seek 行为不稳定，可能造成二次 seek）
+
+**修复建议**：
+```javascript
+let pendingSeek = null;
+
+function seekTo(position) {
+  pendingSeek = position;  // 仅记录，不立即应用
+}
+
+audioManager.onTimeUpdate(() => {
+  if (pendingSeek !== null && Math.abs(audioManager.currentTime - pendingSeek) > 1) {
+    const target = pendingSeek;
+    pendingSeek = null;  // 先清再 seek，防止 onTimeUpdate 重复触发
+    audioManager.seek(target);
+  }
+});
+```
+
+### 维度 66：高频 setter lastApplied 缓存（对应 news-code-dev S66/R81）
+
+- 【强制】`playbackRate`/`volume` 等高频 setter 必须用模块级 `lastAppliedRate`/`lastAppliedVolume` 缓存上次应用值
+- 【强制】新值与缓存差值 < `equality_epsilon`（默认 0.001）时跳过写入
+- 【推荐】需要缓存的字段列表通过 `config.yaml#miniprogram_playback_safety.cached_setters.cached_fields` 配置
+- 配置节点：`config.yaml#miniprogram_playback_safety.cached_setters`
+
+**判断信号**：
+- grep `audioManager\.playbackRate\s*=\s*` 在 onTimeUpdate 或高频回调内
+- 同一函数内多次赋值同一字段（如 `setPlaybackRate` 内多次 `playbackRate = `）
+
+**严重级别**：MEDIUM（性能问题，不影响功能）
+
+**修复建议**：
+```javascript
+let lastAppliedRate = 1.0;
+function setPlaybackRate(rate) {
+  if (Math.abs(rate - lastAppliedRate) < 0.001) return;  // 值未变跳过
+  lastAppliedRate = rate;
+  audioManager.playbackRate = rate;
+  // ... iOS pause+play+seek 逻辑（维度 62）
+}
+```
+
+### 维度 67：列表页与详情页布局分离（对应 news-code-dev S67/R82）
+
+- 【强制】列表页（首页/历史页）禁止内嵌完整播放卡片组件
+- 【强制】列表项点击必须 `wx.navigateTo` 跳转到详情页，禁止直接 `playEpisode` 在列表内播放
+- 【强制】详情页（`pages/detail/detail`）作为统一播放详情入口，所有跳转入口集中指向此页
+- 例外：列表项内可以显示"正在播放"图标作为状态指示（不展开为完整播放卡片）
+- 配置节点：`config.yaml#miniprogram_layout_separation`
+
+**判断信号**：
+- grep `<block wx:else>` 在列表页内（单频道模式分支）
+- grep `playEpisode` 在列表页 `onTapEpisode` 内（直接播放而非跳转）
+- grep `<player-card` 或 `<audio-player` 在 `pages/index/` 或 `pages/history/` 内
+
+**严重级别**：HIGH（布局不统一，状态管理复杂）
+
+**修复建议**：
+```javascript
+// ✅ 列表页：点击跳转到详情页
+onTapEpisode(e) {
+  const id = e.currentTarget.dataset.id;
+  wx.navigateTo({ url: '/pages/detail/detail?id=' + id });
+}
+
+// ❌ 列表页内嵌播放卡片
+<block wx:if="{{singleChannelMode}}">
+  <player-card episode="{{episode}}" />
+</block>
+```
+
+### 维度 68：频道/筛选切换状态隔离（对应 news-code-dev S68/R83）
+
+- 【强制】频道切换、筛选条件变更时必须清空所有关联状态字段（`episode`、`script`、`segments`、`comments`、`commentsTotal`、`bgCoverUrl`、`scriptLoaded`、`scriptLoading`、`showScript`）
+- 【强制】`force=true` 时必须先清空再 fetch（避免旧数据闪现）
+- 【推荐】需要清空的字段列表通过 `config.yaml#miniprogram_state_isolation.clear_fields_on_channel_switch` 配置
+- 配置节点：`config.yaml#miniprogram_state_isolation`
+
+**判断信号**：
+- grep `currentChannelId\s*=` 后 `setData` 仅清 `todayList` 不清 `script`/`segments`/`comments`
+- grep `onChannelChange\|onFilterChange` 内 `setData` 字段不完整
+- 切换频道后立即点击列表项，详情页显示旧频道文稿
+
+**严重级别**：HIGH（数据串台，用户体验差）
+
+**修复建议**：
+```javascript
+async initData(force) {
+  if (force) {
+    this.setData({
+      showScript: false, scriptLoaded: false,
+      scriptLoading: false, script: '', segments: [],
+      episode: null, comments: [], commentsTotal: 0,
+      bgCoverUrl: '',
+    });
+  }
+  // 再 fetch 新数据
+}
+```
+
+### 维度 69：跳转详情页前恢复播放（对应 news-code-dev S69/R84）
+
+- 【强制】从浮动按钮、历史列表、继续播放入口跳转到详情页前必须调用 `resumePlay()` 恢复播放状态
+- 【强制】`resumePlay()` 函数必须导出在 `services/audio.js`，供多页面复用
+- 【推荐】仅在 `audioManager.paused` 时才恢复，避免打断正在播放
+- 配置节点：`config.yaml#miniprogram_navigation_safety`
+
+**判断信号**：
+- grep `wx\.navigateTo.*detail\?id=` 前无 `resumePlay\(\)` 调用
+- grep `onTapContinue\|onTapFloatingPlayer\|onTapHistory` 内无 `resumePlay`
+- `services/audio.js` 未导出 `resumePlay` 函数
+
+**严重级别**：HIGH（用户感知"点了但没反应"，需点两次）
+
+**修复建议**：
+```javascript
+// services/audio.js 导出 resumePlay
+function resumePlay() {
+  if (!audioManager || !currentEpisode) return false;
+  if (audioManager.paused) {
+    try { audioManager.play(); return true; } catch (e) { return false; }
+  }
+  return false;
+}
+module.exports = { ..., resumePlay };
+
+// 浮动按钮 onTap
+const { getCurrentEpisode, resumePlay } = require('../../services/audio');
+onTap() {
+  resumePlay();  // 必须先恢复
+  wx.navigateTo({ url: '/pages/detail/detail?id=' + ep.id });
+}
+```
+
+## 维度 61-69 配置节点速查
+
+| 维度 | 配置节点 | 关键参数 |
+|------|---------|----------|
+| 61 URL 编码 | `url_safety_check` | `require_encode_for_non_ascii`、`allowed_unencoded_patterns`、`encoding_function` |
+| 62 倍速切换 | `miniprogram_playback_safety.rate_switch` | `pause_delay_ms`、`play_delay_ms`、`seek_back_guard_ms`、`apply_method` |
+| 63 onTimeUpdate 节流 | `miniprogram_playback_safety.time_update_throttle` | `update_interval_ms`、`force_update_on_pause`、`force_update_on_seek` |
+| 64 异步上报防重叠 | `miniprogram_playback_safety.progress_report` | `require_in_progress_flag`、`flag_clear_on_failure`、`flag_clear_timeout_ms` |
+| 65 seek pendingSeek | `miniprogram_playback_safety.seek` | `use_pending_flag`、`flag_ttl_ms`、`apply_on_event` |
+| 66 setter 缓存 | `miniprogram_playback_safety.cached_setters` | `cached_fields`、`equality_epsilon` |
+| 67 布局分离 | `miniprogram_layout_separation` | `forbid_inline_player_card`、`list_item_action`、`detail_page_route` |
+| 68 状态隔离 | `miniprogram_state_isolation` | `clear_fields_on_channel_switch`、`clear_before_fetch` |
+| 69 跳转恢复播放 | `miniprogram_navigation_safety` | `require_resume_before_navigate`、`resume_only_if_paused`、`resume_method` |
+

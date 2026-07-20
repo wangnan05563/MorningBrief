@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 右箭头图标：用于列表项右侧指示，灰色
+     图标来源：Tabler Icons (MIT License) - chevron-right -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <polyline points="9 6 16 12 9 18" fill="none" stroke="#A0AEC0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

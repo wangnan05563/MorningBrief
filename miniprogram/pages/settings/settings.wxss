@@ -41,9 +41,8 @@
 
 .list-arrow {
   margin-left: 8rpx;
-  font-size: 36rpx;
-  color: #CBD5E0;
-  line-height: 1;
+  width: 24rpx;
+  height: 24rpx;
 }
 
 .list-picker {

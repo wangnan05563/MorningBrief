@@ -594,3 +594,60 @@ three_tier_testing:
   require_integration_test: true
   require_e2e_test: true
   e2e_p0_must_pass: true
+
+# === 2026-07-20 新增：小程序播放与跨端数据流复盘测试配置 ===
+# 对应 SKILL.md 阶段 24-26，详见各阶段说明
+
+# 阶段 24：小程序 URL 编码安全性预检（对应 news-code-dev R76）
+url_safety_test:
+  enabled: true
+  scan_dirs:
+    - "miniprogram/**/*.js"
+    - "miniprogram/**/*.wxml"
+  url_assignment_patterns:
+    - "audioManager\\.src\\s*="
+    - "src\\s*=\\s*[\"']http"
+    - "wx\\.downloadFile\\(.*?url:"
+    - "web-view.*src"
+  require_encode_function: "encodeURI"
+  forbidden_encode_function: "encodeURIComponent"
+  non_ascii_pattern: "[\\u4e00-\\u9fa5]"
+  backend_url_fields_to_check:
+    - "audio_url"
+    - "cover_url"
+    - "source_url"
+
+# 阶段 25 + 26：小程序播放安全测试（节流验证 + 跨端兼容验证）
+miniprogram_playback_test:
+  enabled: true
+  # 阶段 25：高频回调节流与防重叠验证（对应 news-code-dev R78-R81）
+  throttle_check:
+    enabled: true
+    update_interval_ms: 800
+    max_setdata_per_sec: 2
+    require_in_progress_flag: true
+    require_pending_seek_pattern: true
+    forbid_oncanplay_self_cleanup: true
+    require_last_applied_cache: true
+    cached_fields:
+      - "playbackRate"
+      - "volume"
+    scan_dirs:
+      - "miniprogram/services/audio.js"
+      - "miniprogram/pages/detail/detail.js"
+  # 阶段 26：iOS/Android 双端播放兼容性验证（对应 news-code-dev R77/R82-R84）
+  cross_platform_check:
+    enabled: true
+    ios_device_required: true
+    android_device_required: false  # Android 可选（行为与配置一致）
+    require_pause_play_seek_for_rate: true
+    require_resume_play_export: true
+    forbid_inline_player_card: true
+    require_state_clear_on_channel_switch: true
+    clear_fields_expected:
+      - "script"
+      - "segments"
+      - "comments"
+      - "commentsTotal"
+      - "bgCoverUrl"
+    test_episodes_with_chinese_slug: true

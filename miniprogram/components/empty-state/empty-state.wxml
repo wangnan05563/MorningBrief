@@ -1,6 +1,10 @@
 <!-- 空状态：图标 + 标题 + 可选描述 -->
+<!-- icon-type=image 时使用 image 标签渲染 PNG 图标；否则按 emoji 字符渲染 -->
 <view class="empty-state">
-  <text class="empty-icon" wx:if="{{icon}}">{{icon}}</text>
+  <block wx:if="{{icon}}">
+    <image wx:if="{{iconType === 'image'}}" class="empty-icon-img" src="{{icon}}" mode="aspectFit" />
+    <text wx:else class="empty-icon">{{icon}}</text>
+  </block>
   <text class="empty-title" wx:if="{{title}}">{{title}}</text>
   <text class="empty-desc" wx:if="{{description}}">{{description}}</text>
 </view>

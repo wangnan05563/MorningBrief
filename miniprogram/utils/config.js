@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 全局配置中心：集中管理 API、COS、分页、音频、反馈等可调参数
  *
  * 设计原因：原 api.js 内硬编码 BASE_URL，audio/profile 等页面各自维护魔法数；
@@ -7,33 +7,14 @@
  * 使用方式：const { CONFIG } = require('../utils/config'); 或通过 globalData.config 访问
  */
 
-// 按编译环境切换 API 域名：release 为正式版，其余走开发环境
-// 与 api.js 中原逻辑保持一致，迁移后 api.js 可改为引用此处
-const IS_RELEASE = typeof __wxConfig !== 'undefined' && __wxConfig.envVersion === 'release';
-
-/**
- * 获取开发环境后端地址：自动检测本机局域网 IP
- * - 小程序运行时通过 wx.getSystemInfoSync().ip 获取设备/模拟器 IP
- * - 若 IP 无效则回退到 127.0.0.1
- */
-function getDevApiBaseUrl() {
-  if (typeof __wxConfig === 'undefined') return 'http://127.0.0.1:8000/api/v1';
-  try {
-    const sys = wx.getSystemInfoSync();
-    const deviceIP = sys.ip || '';
-    if (deviceIP && deviceIP !== '0.0.0.0' && deviceIP !== '127.0.0.1') {
-      return 'http://' + deviceIP + ':8000/api/v1';
-    }
-  } catch (e) { /* ignore */ }
-  return 'http://127.0.0.1:8000/api/v1';
-}
+// 引用 api.js 的 BASE_URL，避免两处重复维护开发环境地址
+// 真机调试时改 api.js 一处即可，此处自动同步
+const { BASE_URL } = require('../services/api');
 
 const CONFIG = {
-  // API 基础地址：与 api.js 中 BASE_URL 逻辑一致，便于后续 api.js 改为引用此处
-  apiBaseUrl: IS_RELEASE
-    ? 'https://api.example.com/api/v1'  // 生产环境域名（部署时替换）
-    : getDevApiBaseUrl(),   // 开发环境（自动获取本机局域网 IP）
-  
+  // API 基础地址：直接引用 api.js 的 BASE_URL，避免双源维护漂移
+  apiBaseUrl: BASE_URL,
+
   // COS 公开访问基础 URL：用于拼接图片/音频等静态资源公开访问地址
   // 当前项目尚未接入 COS，先用占位符，接入后替换为实际桶域名
   cosBaseUrl: 'https://cos.example.com',

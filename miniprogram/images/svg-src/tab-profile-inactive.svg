@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- tabBar "我的" 未选中态：浅灰背景 + 灰色用户图标 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect x="2" y="2" width="60" height="60" rx="16" ry="16" fill="#F0F4F2"/>
+  <g stroke="#A0AEC0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <circle cx="32" cy="26" r="8"/>
+    <path d="M 18 48 Q 18 38 32 38 Q 46 38 46 48"/>
+  </g>
+</svg>

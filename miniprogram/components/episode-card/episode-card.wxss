@@ -55,6 +55,8 @@
 }
 
 .duration-icon {
+  width: 24rpx;
+  height: 24rpx;
   margin-right: 8rpx;
 }
 

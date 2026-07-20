@@ -1031,4 +1031,360 @@
 - 适用：所有发版前完整验证
 - 不适用：热修复（hotfix）的快速验证、未集成 SonarQube 的项目
 
+## 规范 76-85：2026-07-20 小程序播放与跨端数据流复盘新增规范
+
+> 以下规范来源于 2026-07-20 微信小程序「今日要闻」迭代修复完整复盘：覆盖播放卡顿、上下首切换标题不刷新、继续播放按钮状态不同步、倍速不生效、tab 切换详情不刷新、文稿图片缺失、背景图缺失、中文 URL 静默失败等 11 类问题。所有阈值通过 `project-config.json#miniprogram_playback`、`project-config.json#cache_versioning`、`project-config.json#url_safety` 配置管理。
+
+### 规范 76：含非 ASCII 字符的 URL 必须 encodeURI
+
+**小程序/浏览器中含中文或特殊字符的资源 URL 必须用 `encodeURI()` 编码后再赋值给 `src`/`href`，禁止直接拼接裸 URL。**
+
+- 为什么：iOS 微信底层 AVPlayer 对含中文（如 `国际视野`）的 URL 不会触发任何回调（onPlay/onCanplay/onError 全部静默），表现为进度条不动、播放按钮不切换、控制台无错误日志，难以排查。Android 端可正常播放造成"假性跨端兼容"错觉。本次迭代 `channel_slug` 含中文时 `audio_url` 在 iOS 上静默失败。
+- 阈值参数（通过 `project-config.json#url_safety` 配置）：
+  - `require_encode_for_non_ascii`: true（强制编码开关）
+  - `allowed_unencoded_patterns`: ["^https?://[a-zA-Z0-9.-]+(?::\\d+)?/[a-zA-Z0-9._/-]*$"]（仅纯 ASCII 路径豁免）
+  - `encoding_function`: "encodeURI"（使用 encodeURI 保留 URL 结构语义，禁止 encodeURIComponent 全编码会破坏 / 与 :）
+- 判断信号：
+  - grep `audioManager\.src\s*=\s*[^e]` 或 `\.src\s*=\s*['"]http[^'"]*[\u4e00-\u9fa5]` 在小程序代码中
+  - URL 字符串中含 `[\u4e00-\u9fa5]` 中文字符未编码
+- 正确做法：
+  ```javascript
+  // ✅ 编码后再赋值
+  audioManager.src = encodeURI(episode.audio_url);
+  // ✅ 或在生成 URL 时就编码（推荐：后端生成时即编码）
+  // 后端: audio_url = f"/audio/episodes/{date}/{quote(channel_slug)}.mp3"
+  //       → 已编码为 %E5%9B%BD%E9%99%85%E8%A7%86%E9%87%8E
+  ```
+- 错误做法：
+  ```javascript
+  // ❌ 直接赋值裸 URL
+  audioManager.src = episode.audio_url;  // 含中文时 iOS 静默失败
+  ```
+- 适用：所有小程序 `audioManager.src`、`<image src>`、`wx.downloadFile`、`<web-view src>` 资源 URL
+- 不适用：纯 ASCII 路径（如 `/audio/episodes/20260720/news.mp3`）；后端已编码的 URL
+
+### 规范 77：iOS 倍速切换必须 pause+play+seek 强制重新缓冲
+
+**iOS 微信中播放状态下切换 `audioManager.playbackRate` 不会立即生效，必须 `pause() → 延时 → play() → 延时 → seek(原位置)` 强制底层缓冲重应用新倍速。**
+
+- 为什么：iOS 微信 BackgroundAudioManager 的 `playbackRate` setter 不会主动重新缓冲当前流，倍速仅在下次 play 时生效。直接写入后用户感知"倍速没变"，反复点击触发 UI 抖动。Android 端写入即生效造成跨端表现不一致。
+- 阈值参数（通过 `project-config.json#miniprogram_playback.rate_switch` 配置）：
+  - `pause_delay_ms`: 100（pause 后等待底层状态切换）
+  - `play_delay_ms`: 200（play 后等待缓冲就绪再 seek）
+  - `seek_back_guard_ms`: 50（seek 位置回退容差，防止位置漂移）
+  - `apply_method`: "pause_play_seek"（强制重新缓冲模式）
+- 判断信号：
+  - grep `audioManager\.playbackRate\s*=` 后无 `pause()` 调用
+  - grep `setPlaybackRate` 函数体内仅一行赋值
+- 正确做法：
+  ```javascript
+  function setPlaybackRate(rate) {
+    audioManager.playbackRate = rate;  // 立即写入（Android 即时生效）
+    // iOS 需强制重新缓冲
+    if (!audioManager.paused && audioManager.currentTime > 0) {
+      const pos = audioManager.currentTime;
+      audioManager.pause();
+      setTimeout(() => {
+        audioManager.play();
+        setTimeout(() => audioManager.seek(pos), 200);
+      }, 100);
+    }
+  }
+  ```
+- 错误做法：
+  ```javascript
+  // ❌ 直接写入，iOS 上不生效
+  function setPlaybackRate(rate) {
+    audioManager.playbackRate = rate;
+  }
+  ```
+- 适用：iOS 微信小程序音频倍速切换；同样适用 iOS Safari HTMLAudioElement
+- 不适用：Android 微信（写入即生效）；非音频播放场景
+
+### 规范 78：onTimeUpdate 必须 setData 节流
+
+**小程序 `audioManager.onTimeUpdate` 回调触发频率可达 4-10 次/秒，必须用时间戳节流（≥`update_interval_ms`）后才能 `setData`，禁止每次回调都 setData。**
+
+- 为什么：onTimeUpdate 每秒触发多次，每次 `setData` 触发渲染层通信，频繁通信导致：
+  1. UI 卡顿（进度条抖动、按钮延迟响应）
+  2. 通信信道拥堵（其他 setData 排队等待）
+  3. 电量消耗加快
+  本次迭代未节流时出现进度条卡顿，节流到 800ms 后流畅。
+- 阈值参数（通过 `project-config.json#miniprogram_playback.time_update_throttle` 配置）：
+  - `update_interval_ms`: 800（节流间隔，默认 800ms）
+  - `force_update_on_pause`: true（暂停时强制更新一次，避免最终态偏差）
+  - `force_update_on_seek`: true（seek 后强制更新一次）
+- 判断信号：
+  - grep `onTimeUpdate.*=>\s*{[^}]*setData` 无时间戳判断
+  - 同一页面 setData 调用频率 > 2 次/秒
+- 正确做法：
+  ```javascript
+  let lastTimeUpdate = 0;
+  audioManager.onTimeUpdate(() => {
+    const now = Date.now();
+    if (now - lastTimeUpdate < 800) return;  // 节流
+    lastTimeUpdate = now;
+    this.setData({ currentTime: Math.floor(audioManager.currentTime) });
+  });
+  ```
+- 错误做法：
+  ```javascript
+  // ❌ 每次回调都 setData
+  audioManager.onTimeUpdate(() => {
+    this.setData({ currentTime: Math.floor(audioManager.currentTime) });
+  });
+  ```
+- 适用：所有小程序 `onTimeUpdate` 回调；类似高频事件（onScroll、onTouchMove）
+- 不适用：低频事件（onPlay、onPause、onEnded）；非 setData 的纯逻辑处理
+
+### 规范 79：异步上报必须有 in-progress 防重叠标志
+
+**异步上报（进度上报、埋点上报）必须用模块级 `progressReporting`/`reporting` 标志位包裹，未完成的上报未返回前禁止发起下一次，防止请求重叠与数据覆盖。**
+
+- 为什么：onTimeUpdate 触发上报时，若网络慢于节流间隔，多次 `fetch` 并发返回顺序不确定，后发起的请求可能覆盖先发起的进度（造成进度回退）。本次迭代进度上报未加标志位时，弱网下出现进度跳变。
+- 阈值参数（通过 `project-config.json#miniprogram_playback.progress_report` 配置）：
+  - `require_in_progress_flag`: true（强制标志位）
+  - `flag_clear_on_failure`: true（失败也清标志，避免死锁）
+  - `flag_clear_timeout_ms`: 10000（兜底超时清标志，防止异常未清）
+- 判断信号：
+  - grep `reportPlayProgress\|fetch.*progress` 无前置 `if (progressReporting) return` 判断
+  - 同一上报函数内无 `try/finally` 清标志
+- 正确做法：
+  ```javascript
+  let progressReporting = false;
+  async function reportProgress(episodeId, position) {
+    if (progressReporting) return;  // 防重叠
+    progressReporting = true;
+    try {
+      await fetch(`${BASE_URL}/playlogs/progress`, { method: 'POST', body: JSON.stringify({ episode_id: episodeId, position }) });
+    } catch (e) {
+      console.warn('[audio] reportProgress failed:', e);
+    } finally {
+      progressReporting = false;  // 必须清，失败也清
+    }
+  }
+  ```
+- 错误做法：
+  ```javascript
+  // ❌ 无防重叠，弱网下并发请求覆盖进度
+  async function reportProgress(episodeId, position) {
+    await fetch(`${BASE_URL}/playlogs/progress`, { method: 'POST', body: JSON.stringify({ episode_id: episodeId, position }) });
+  }
+  ```
+- 适用：所有异步上报（进度/埋点/统计）；写操作幂等性要求高的场景
+- 不适用：读操作（无副作用可重复）；同步操作
+
+### 规范 80：seek 必须用 pendingSeek 标志位替代 onCanplay 注册
+
+**小程序 seek 操作必须用 `pendingSeek` 模块级标志位记录目标位置，在 onTimeUpdate 中检测并应用，禁止在 onCanplay 回调中 seek 后再 offCanplay（回调累积+时机不可控）。**
+
+- 为什么：onCanplay 触发时机不稳定（首次播放、seek 后、network 切换都可能触发），在 onCanplay 中 seek 后 offCanplay 会导致：
+  1. 监听器累积（每次 playEpisode 注册一次，未及时 off）
+  2. 时机不可控（onCanplay 可能在 seek 已应用后才触发，造成二次 seek）
+  3. 多页面共享 player 时回调串扰
+  本次迭代用 `pendingSeek` 标志位后，seek 行为稳定。
+- 阈值参数（通过 `project-config.json#miniprogram_playback.seek` 配置）：
+  - `use_pending_flag`: true（强制用标志位）
+  - `flag_ttl_ms`: 5000（标志位 TTL，超时自动清，防止异常未清）
+  - `apply_on_event`: "onTimeUpdate"（在 onTimeUpdate 中应用，时机稳定）
+- 判断信号：
+  - grep `onCanplay.*=>.*seek\(` 在 playEpisode 函数内
+  - grep `audioManager\.offCanplay` 在 onCanplay 回调内（自清理模式）
+- 正确做法：
+  ```javascript
+  let pendingSeek = null;
+
+  function seekTo(position) {
+    pendingSeek = position;  // 仅记录，不立即应用
+  }
+
+  audioManager.onTimeUpdate(() => {
+    if (pendingSeek !== null && Math.abs(audioManager.currentTime - pendingSeek) > 1) {
+      const target = pendingSeek;
+      pendingSeek = null;  // 先清再 seek，防止 onTimeUpdate 重复触发
+      audioManager.seek(target);
+    }
+  });
+  ```
+- 错误做法：
+  ```javascript
+  // ❌ onCanplay 中 seek 后 offCanplay（回调累积+时机不可控）
+  function seekTo(position) {
+    const onCanplay = () => {
+      audioManager.seek(position);
+      audioManager.offCanplay?.(onCanplay);
+    };
+    audioManager.onCanplay(onCanplay);
+  }
+  ```
+- 适用：所有小程序 audioManager.seek；类似需要在就绪后应用的操作
+- 不适用：同步可立即应用的操作（如设置音量）
+
+### 规范 81：倍速/音量等 setter 必须用 lastApplied 缓存避免重复写入
+
+**`playbackRate`/`volume` 等高频 setter 必须用模块级 `lastAppliedRate`/`lastAppliedVolume` 缓存上次应用值，新值与缓存相同时跳过写入，避免重复触发底层状态切换。**
+
+- 为什么：每次 `audioManager.playbackRate = 1.0` 都会触发底层重新评估播放管线，即使值未变。在 onTimeUpdate 等高频回调中反复设置同一倍速会引发：
+  1. 底层状态机抖动（可能触发不必要的缓冲）
+  2. UI 状态切换闪烁
+  3. iOS 上偶尔触发未公开的二次缓冲
+  本次迭代未缓存时，倍速按钮点击多次后出现卡顿。
+- 阈值参数（通过 `project-config.json#miniprogram_playback.cached_setters` 配置）：
+  - `cached_fields`: ["playbackRate", "volume"]（需要缓存的字段列表）
+  - `equality_epsilon`: 0.001（浮点数相等的容差）
+- 判断信号：
+  - grep `audioManager\.playbackRate\s*=\s*` 在 onTimeUpdate 或高频回调内
+  - 同一函数内多次赋值同一字段
+- 正确做法：
+  ```javascript
+  let lastAppliedRate = 1.0;
+  function setPlaybackRate(rate) {
+    if (Math.abs(rate - lastAppliedRate) < 0.001) return;  // 值未变跳过
+    lastAppliedRate = rate;
+    audioManager.playbackRate = rate;
+    // ... iOS pause+play+seek 逻辑（规范 77）
+  }
+  ```
+- 错误做法：
+  ```javascript
+  // ❌ 每次都写入，即使值未变
+  function setPlaybackRate(rate) {
+    audioManager.playbackRate = rate;
+  }
+  ```
+- 适用：所有高频 setter（playbackRate/volume/playbackQuality）；其他需幂等的操作
+- 不适用：值本身就会变的场景（如 currentTime）
+
+### 规范 82：列表页与详情页布局必须分离
+
+**列表页（首页/历史页）与详情页（播放详情页）必须分页面承载，禁止在列表页内嵌完整播放卡片组件。列表项点击必须 `wx.navigateTo` 跳转到详情页。**
+
+- 为什么：列表页内嵌播放卡片导致：
+  1. 单频道模式与列表模式两套布局（不一致，需维护两套样式）
+  2. 列表项播放时状态管理复杂（需维护"当前播放项"高亮）
+  3. 频道切换时内嵌卡片状态残留（如文稿、评论未清）
+  4. 详情页与列表页风格不统一（用户感知割裂）
+  本次迭代统一为"列表模式 + navigateTo 跳转详情页"后，布局清晰、状态隔离。
+- 阈值参数（通过 `project-config.json#miniprogram_layout` 配置）：
+  - `forbid_inline_player_card`: true（禁止内嵌播放卡片）
+  - `list_item_action`: "navigateTo"（点击行为）
+  - `detail_page_route`: "/pages/detail/detail"（详情页路由模板）
+- 判断信号：
+  - grep `<block wx:else>` 在列表页内（单频道模式分支）
+  - grep `playEpisode` 在列表页 `onTapEpisode` 内（直接播放而非跳转）
+- 正确做法：
+  ```javascript
+  // ✅ 列表页：点击跳转到详情页
+  onTapEpisode(e) {
+    const id = e.currentTarget.dataset.id;
+    wx.navigateTo({ url: '/pages/detail/detail?id=' + id });
+  }
+  ```
+- 错误做法：
+  ```javascript
+  // ❌ 列表页内嵌播放卡片（单频道模式）
+  <block wx:if="{{singleChannelMode}}">
+    <player-card episode="{{episode}}" />
+  </block>
+  <block wx:else>
+    <view wx:for="{{todayList}}">...</view>
+  </block>
+  ```
+- 适用：所有列表-详情页场景（节目列表、商品列表、文章列表）
+- 不适用：单一详情场景（如设置页只有一个表单）
+
+### 规范 83：频道/筛选切换必须清空关联状态
+
+**频道切换、筛选条件变更时，必须清空与原筛选关联的所有状态（episode、script、segments、comments、bgCoverUrl 等），禁止仅清主数据不清关联数据。**
+
+- 为什么：切换频道时若仅清 `todayList` 不清 `script`/`segments`/`comments`，用户看到新频道列表但点击列表项时详情页仍显示旧频道文稿，造成"数据串台"。本次迭代未清关联状态时出现"切换频道后文稿图片不更新"。
+- 阈值参数（通过 `project-config.json#miniprogram_state_clear` 配置）：
+  - `clear_fields_on_channel_switch`: ["episode", "script", "segments", "comments", "commentsTotal", "bgCoverUrl", "scriptLoaded", "scriptLoading", "showScript"]
+  - `clear_before_fetch`: true（fetch 前先清，避免旧数据闪现）
+- 判断信号：
+  - grep `currentChannelId\s*=` 后无 `setData.*script.*:.*''` 清理
+  - 频道切换函数内 `setData` 仅清列表不清详情字段
+- 正确做法：
+  ```javascript
+  async initData(force) {
+    if (force) {
+      this.setData({
+        showScript: false, scriptLoaded: false,
+        scriptLoading: false, script: '', segments: [],  // 清文稿
+        episode: null, comments: [], commentsTotal: 0,   // 清详情
+        bgCoverUrl: '',  // 清背景图
+      });
+    }
+    // 再 fetch 新数据
+  }
+  ```
+- 错误做法：
+  ```javascript
+  // ❌ 仅清列表不清详情
+  async switchChannel(channelId) {
+    this.setData({ todayList: [] });  // 不清 script/segments/comments
+    const data = await fetchTodayEpisode(channelId);
+    this.setData({ todayList: data });
+  }
+  ```
+- 适用：所有筛选/频道切换场景；分页切换；tab 切换
+- 不适用：纯列表刷新（不切换上下文）
+
+### 规范 84：跳转播放详情前必须调用 resumePlay 恢复播放
+
+**从浮动按钮、历史列表、继续播放入口等跳转到播放详情页时，必须先调用 `resumePlay()` 恢复播放状态，再 `wx.navigateTo`，禁止仅 navigateTo 不恢复播放（用户感知"点了但没反应"）。**
+
+- 为什么：若 player 处于暂停状态，仅 navigateTo 后详情页按钮显示"暂停"图标（实际是暂停态），用户需点两次才能播放。本次迭代历史页"正在播放"按钮点击后跳转但不播放，用户反复点击。
+- 阈值参数（通过 `project-config.json#miniprogram_navigation` 配置）：
+  - `require_resume_before_navigate`: true（强制恢复）
+  - `resume_only_if_paused`: true（仅在暂停态才恢复，避免打断正在播放）
+  - `resume_method`: "resumePlay"（统一的恢复播放函数名）
+- 判断信号：
+  - grep `wx\.navigateTo.*detail\?id=` 前无 `resumePlay\(\)` 调用
+  - grep `wx\.navigateTo.*detail\?id=` 在 onTapContinue/onTapFloatingPlayer 内
+- 正确做法：
+  ```javascript
+  // ✅ 先恢复播放再跳转
+  onTap() {
+    resumePlay();  // 恢复播放（仅暂停态才生效）
+    wx.navigateTo({ url: '/pages/detail/detail?id=' + ep.id });
+  }
+  ```
+- 错误做法：
+  ```javascript
+  // ❌ 仅跳转不恢复
+  onTap() {
+    wx.navigateTo({ url: '/pages/detail/detail?id=' + ep.id });
+  }
+  ```
+- 适用：所有跳转到播放详情页的入口（浮动按钮、历史列表、继续播放）
+- 不适用：首次播放（player 尚未初始化）；用户明确选择"仅查看不播放"
+
+### 规范 85：数据结构变更时 cache_key 必须加版本后缀
+
+**当缓存的数据结构发生变更（新增/删除/重命名字段、嵌套结构调整）时，cache_key 必须追加版本后缀（如 `:v2`、`:_v3`），禁止沿用旧 key（旧缓存会被反序列化为新结构导致字段缺失或类型错误）。**
+
+- 为什么：cache-aside 模式下，旧 key 的缓存 TTL 未过期时仍会被命中，但反序列化后字段缺失（如新增 `cover_url` 字段时旧缓存无此字段，前端显示空图）。本次迭代 `segments` 注入 `cover_url` 后未加版本后缀，旧缓存命中导致图片不显示，调试 30 分钟才定位。
+- 阈值参数（通过 `project-config.json#cache_versioning` 配置）：
+  - `require_version_suffix_on_schema_change`: true（强制）
+  - `version_suffix_format`: ":v{n}"（后缀格式，n 从 2 开始）
+  - `bump_on_fields`: ["add", "remove", "rename"]（哪些变更触发 bump）
+- 判断信号：
+  - grep `cache_key\s*=\s*f["'].*:\{` 使用变量插值但无版本字段
+  - 数据结构新增字段后 cache_key 未变更
+- 正确做法：
+  ```python
+  # ✅ 数据结构变更时 bump 版本
+  # v1: segments = [{"seq": 1, "title": "..."}]
+  # v2: segments = [{"seq": 1, "title": "...", "cover_url": "..."}]  → 加 v2
+  cache_key = f"script:detail:v2:{episode_id}"  # v2 失效旧缓存
+  ```
+- 错误做法：
+  ```python
+  # ❌ 沿用旧 key，旧缓存命中导致 cover_url 缺失
+  cache_key = f"script:detail:{episode_id}"  # 旧缓存无 cover_url 字段
+  ```
+- 适用：所有结构化缓存（dict/list 对象）；前后端字段变更场景
+- 不适用：纯标量缓存（如 `count:5`）；TTL 短（< 60s）的临时缓存
+
 

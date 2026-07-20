@@ -582,6 +582,8 @@ async def _rewrite_one(
         "estimated_duration": data.get("estimated_duration", 90),
         "source_url": data.get("source_url", material["url"]),
         "material_id": material["id"],
+        # 封面图透传到 segment，小程序文稿页按段展示
+        "cover_url": material.get("cover_url"),
     }
 
 
@@ -744,6 +746,8 @@ def _assemble_script(
                 "start_sec": current_sec,
                 "end_sec": current_sec + duration,
                 "material_ids": [seg["material_id"]],
+                # 封面图：小程序文稿页每段顶部展示，无图时小程序自然降级
+                "cover_url": seg.get("cover_url"),
             }
         )
         current_sec += duration
@@ -850,6 +854,8 @@ async def _fetch_materials(date_str: str, channel_id: int = None) -> list[dict]:
                 "published_at": r.published_at,
                 "category": r.category,
                 "workflow_id": r.workflow_id,
+                # 封面图透传到 segment，小程序文稿页按段展示
+                "cover_url": r.cover_url,
             }
             for r in rows
         ]
@@ -1033,19 +1039,25 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
 
     if not materials:
         # 查询 material 表诊断信息，帮助定位根因
+        # 按 channel_id 过滤统计，避免全局数字误导（不同频道素材互不交叉，
+        # 全局 pending 数与当前频道无关，会误导用户以为有素材可用）
         # 场景：爬虫从未成功、RSS 源全部不可达、数据库被重置、素材状态被批量修改
         async with AsyncSessionLocal() as session:
-            total_count = await session.scalar(select(func.count(Material.id)))
-            status_rows = (
-                await session.execute(
-                    select(Material.status, func.count(Material.id))
-                    .group_by(Material.status)
-                )
-            ).all()
+            total_stmt = select(func.count(Material.id))
+            status_stmt = (
+                select(Material.status, func.count(Material.id))
+                .group_by(Material.status)
+            )
+            if channel_id is not None:
+                total_stmt = total_stmt.where(Material.channel_id == channel_id)
+                status_stmt = status_stmt.where(Material.channel_id == channel_id)
+            total_count = await session.scalar(total_stmt)
+            status_rows = (await session.execute(status_stmt)).all()
             status_dist = dict(status_rows) if status_rows else {}
+        channel_hint = f"频道 channel_id={channel_id} " if channel_id is not None else "全局"
         raise LLMError(
             f"当日 {date_str} 无 pending 素材（回溯 {FALLBACK_DAYS} 天亦无），"
-            f"无法改写。material 表共 {total_count} 条，"
+            f"无法改写。{channel_hint}material 表共 {total_count} 条，"
             f"状态分布: {status_dist or '空表'}。"
             f"请检查爬虫是否正常运行、RSS 源配置是否可达"
         )
@@ -1141,6 +1153,28 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
     if len(segments) < MIN_VALID_SEGMENTS:
         # 错误聚合：若多数失败属同一类型，透传根因异常而非笼统报"段数不足"
         # 避免掩盖真实问题（如全部 LLMAuthError 应明确报鉴权失败）
+        # 回滚素材状态：改写前已把素材标记为 selected，段数不足抛错后 _run_step
+        # 会重试（最多3次），但 _fetch_materials 只查 pending，不回滚会导致重试时
+        # 查不到素材，错误从"段数不足"变为"无 pending 素材"，掩盖真实根因
+        if selected_ids:
+            try:
+                async with AsyncSessionLocal() as session:
+                    await session.execute(
+                        update(Material)
+                        .where(Material.id.in_(selected_ids))
+                        .values(status=MaterialStatus.pending.value)
+                    )
+                    await session.commit()
+                logger.warning(
+                    "段数不足，已回滚 %d 条素材状态为 pending workflow_id=%s",
+                    len(selected_ids), workflow_id,
+                )
+            except Exception as rollback_err:
+                # 回滚失败不影响原错误抛出，仅记录日志便于运维定位
+                logger.error(
+                    "回滚素材状态失败 workflow_id=%s: %s",
+                    workflow_id, rollback_err,
+                )
         raise _build_aggregated_error(segments, failure_details)
 
     # 4.5 限制最终段数，避免选题数增加后节目时长过长

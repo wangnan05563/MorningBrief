@@ -13,7 +13,8 @@
     "pages/channels/channels",
     "pages/recent/recent",
     "pages/agreement/agreement",
-    "pages/privacy/privacy"
+    "pages/privacy/privacy",
+    "pages/webview/webview"
   ],
   "window": {
     "backgroundTextStyle": "light",
@@ -22,27 +23,28 @@
     "navigationBarTextStyle": "black"
   },
   "tabBar": {
-    "color": "#999999",
-    "selectedColor": "#FF9AA2",
+    "color": "#A0AEC0",
+    "selectedColor": "#5BA89B",
     "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
     "list": [
       {
         "pagePath": "pages/index/index",
         "text": "今日",
-        "iconPath": "images/icon-small.png",
-        "selectedIconPath": "images/icon-medium.png"
+        "iconPath": "images/icons/tab-today-inactive.png",
+        "selectedIconPath": "images/icons/tab-today-active.png"
       },
       {
         "pagePath": "pages/history/history",
         "text": "历史",
-        "iconPath": "images/icon-small.png",
-        "selectedIconPath": "images/icon-medium.png"
+        "iconPath": "images/icons/tab-history-inactive.png",
+        "selectedIconPath": "images/icons/tab-history-active.png"
       },
       {
         "pagePath": "pages/profile/profile",
         "text": "我的",
-        "iconPath": "images/icon-small.png",
-        "selectedIconPath": "images/icon-medium.png"
+        "iconPath": "images/icons/tab-profile-inactive.png",
+        "selectedIconPath": "images/icons/tab-profile-active.png"
       }
     ]
   },
@@ -50,5 +52,8 @@
     "audio"
   ],
   "sitemapLocation": "sitemap.json",
-  "__usePrivacyCheck__": true
+  "__usePrivacyCheck__": true,
+  "usingComponents": {
+    "floating-player": "/components/floating-player/floating-player"
+  }
 }

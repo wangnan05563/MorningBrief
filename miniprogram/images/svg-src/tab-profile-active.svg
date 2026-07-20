@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- tabBar "我的" 选中态：圆角方形薄荷青到蜜桃粉渐变背景 + 白色用户图标
+     图标来源：Tabler Icons (MIT License) - user 图标 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bgProfile" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#B5EAD7"/>
+      <stop offset="100%" stop-color="#7ECEC1"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" ry="16" fill="url(#bgProfile)"/>
+  <g stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <circle cx="32" cy="26" r="8"/>
+    <path d="M 18 48 Q 18 38 32 38 Q 46 38 46 48"/>
+  </g>
+</svg>

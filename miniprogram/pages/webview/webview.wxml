@@ -1,0 +1,17 @@
+<!--
+  外链容器页：用 web-view 加载节目来源原文
+  业务域名需在微信公众平台后台配置；开发时勾选"不校验业务域名"可临时跳过校验
+  加载失败时显示"复制链接"按钮作为 fallback，让用户在浏览器中打开
+-->
+<view class="page-webview">
+  <web-view wx:if="{{url}}" src="{{url}}" binderror="onError" bindload="onWebviewLoad" />
+  <view class="webview-fallback" wx:if="{{error}}">
+    <text class="fallback-title">无法在小程序内打开此链接</text>
+    <text class="fallback-desc">链接可能未加入业务域名白名单，请复制到浏览器打开</text>
+    <view class="fallback-url">{{url}}</view>
+    <view class="fallback-actions">
+      <button class="btn-primary" bindtap="onCopy">复制链接</button>
+      <button class="btn-secondary" bindtap="onBack">返回</button>
+    </view>
+  </view>
+</view>

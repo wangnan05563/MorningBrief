@@ -14,7 +14,8 @@
 }
 
 .app-logo {
-  font-size: 100rpx;
+  width: 120rpx;
+  height: 120rpx;
   margin-bottom: 20rpx;
 }
 
@@ -64,15 +65,15 @@
   border-bottom: none;
 }
 
+/* 功能图标：PNG 圆角方形，浅薄荷背景烘托 */
 .feature-icon {
-  width: 64rpx;
-  height: 64rpx;
-  line-height: 64rpx;
-  text-align: center;
-  font-size: 40rpx;
+  width: 48rpx;
+  height: 48rpx;
+  margin-right: 24rpx;
+  padding: 16rpx;
   background: #F0F9F7;
   border-radius: 16rpx;
-  margin-right: 24rpx;
+  flex-shrink: 0;
 }
 
 .feature-info {

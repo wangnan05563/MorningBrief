@@ -51,6 +51,9 @@ async def _extract_content(entry: dict) -> dict:
         "source": entry.get("source", ""),
         "category_hint": entry.get("category_hint"),
         "published_at": entry.get("published_at") or article.get("publish_time"),
+        # 封面图由 article_parser 从 og:image 提取，透传到 Material 入库
+        # 无封面图时为 None，小程序文稿页降级为纯文本展示
+        "cover_url": article.get("cover_url"),
     }
 
 
@@ -82,6 +85,7 @@ async def _insert_material(prepared: dict, workflow_id: str, session, channel_id
         workflow_id=workflow_id,
         channel_id=channel_id,
         crawled_at=utcnow_naive(),
+        cover_url=prepared.get("cover_url"),
     )
     session.add(material)
     await session.flush()

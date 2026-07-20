@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 报纸图标：用于"今日要闻"空状态装饰，品牌色
+     图标来源：Tabler Icons (MIT License) - newspaper -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect x="10" y="14" width="44" height="36" rx="3" fill="none" stroke="#7ECEC1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="18" y1="22" x2="36" y2="22" stroke="#7ECEC1" stroke-width="3" stroke-linecap="round"/>
+  <line x1="18" y1="30" x2="46" y2="30" stroke="#7ECEC1" stroke-width="2" stroke-linecap="round"/>
+  <line x1="18" y1="36" x2="46" y2="36" stroke="#7ECEC1" stroke-width="2" stroke-linecap="round"/>
+  <line x1="18" y1="42" x2="34" y2="42" stroke="#7ECEC1" stroke-width="2" stroke-linecap="round"/>
+</svg>

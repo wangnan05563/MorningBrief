@@ -1,1 +1,14 @@
 /* pages/queue/queue.wxss */
+
+/* 队列空状态描述 */
+.empty-desc {
+  font-size: 24rpx;
+  color: #CBD5E0;
+  margin-top: 12rpx;
+}
+
+/* 当前播放项的小播放图标 */
+.playing-icon {
+  width: 24rpx;
+  height: 24rpx;
+}

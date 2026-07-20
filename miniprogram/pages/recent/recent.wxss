@@ -1,1 +1,35 @@
 /* pages/recent/recent.wxss */
+
+/* 列表项小播放图标：圆形薄荷青背景 + 白色三角 */
+.play-icon-small {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 4rpx 12rpx rgba(126, 206, 193, 0.3);
+}
+
+.icon-text {
+  width: 24rpx;
+  height: 24rpx;
+}
+
+.item-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.item-duration {
+  font-size: 24rpx;
+  color: #A0AEC0;
+}
+
+.empty-desc {
+  font-size: 24rpx;
+  color: #CBD5E0;
+  margin-top: 12rpx;
+}

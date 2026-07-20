@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 耳机图标：用于空状态/未登录装饰，品牌色
+     图标来源：Tabler Icons (MIT License) - headphones -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <path
+    d="M 12 36 C 12 22 22 12 32 12 C 42 12 52 22 52 36"
+    fill="none" stroke="#7ECEC1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="10" y="36" width="8" height="14" rx="3" fill="#7ECEC1"/>
+  <rect x="46" y="36" width="8" height="14" rx="3" fill="#7ECEC1"/>
+</svg>

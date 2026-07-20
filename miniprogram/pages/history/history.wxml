@@ -3,7 +3,7 @@
   <!-- 顶部工具栏：搜索 + 频道切换 -->
   <view class="top-bar">
     <view class="top-action" bindtap="onSearch">
-      <text class="action-icon">🔍</text>
+      <image class="action-icon" src="/images/icons/search.png" mode="aspectFit" />
     </view>
     <scroll-view scroll-x class="channel-bar" wx:if="{{channels.length > 0}}">
       <view
@@ -16,40 +16,64 @@
     </scroll-view>
   </view>
 
+  <!-- 任务6+7：继续播放 + 排序按钮 + 列表按钮（与今日页同款风格：左继续播放，右工具） -->
+  <view class="history-action-bar">
+    <view class="continue-card-mini" wx:if="{{lastPlayedEpisode}}" bindtap="onTapContinue">
+      <image class="continue-icon" src="/images/icons/play-mini.png" mode="aspectFit" />
+      <view class="continue-info">
+        <text class="continue-label">继续播放</text>
+        <text class="continue-title">{{lastPlayedEpisode.title || '上次的节目'}}</text>
+      </view>
+      <image class="continue-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
+    </view>
+    <view class="history-tools">
+      <view class="tool-chip" bindtap="onToggleSort">
+        <text>{{sortOrder === 'desc' ? '最新优先' : '最早优先'}}</text>
+        <text class="tool-icon-text">↕</text>
+      </view>
+      <view class="tool-chip" bindtap="onOpenQueue">
+        <text class="tool-icon-text">☰</text>
+        <text>列表</text>
+      </view>
+    </view>
+  </view>
+
   <!-- 空状态 -->
   <view class="empty-state" wx:if="{{!loading && list.length === 0}}">
-    <text class="empty-icon">📰</text>
+    <image class="empty-icon-img" src="/images/icons/newspaper.png" mode="aspectFit" />
     <text>暂无历史节目</text>
   </view>
 
-  <!-- 节目列表 -->
+  <!-- 节目列表：与今日页完全一致的行式卡片（左侧彩色封面 + 中间标题+统计 + 右侧播放按钮） -->
   <block wx:else>
     <view class="history-list">
       <view
-        class="card history-item"
+        class="card episode-row-card"
         wx:for="{{list}}"
         wx:key="id"
         data-id="{{item.id}}"
         data-index="{{index}}"
         bindtap="onPlay"
       >
-        <!-- 顶部：日期 + 分类标签（薄荷青/蜜桃粉交替） -->
-        <view class="item-header">
-          <text class="item-date">{{item.date}}</text>
-          <text class="tag {{index % 2 === 0 ? 'tag-mint' : 'tag-pink'}}">
-            {{item.categories[0]}}
-          </text>
+        <view class="row-cover">
+          <text class="row-cover-channel">{{item.channel_name || '节目'}}</text>
+          <text class="row-cover-date">{{item.date_label || ''}}</text>
         </view>
-
-        <!-- 标题 -->
-        <text class="item-title">{{item.title}}</text>
-
-        <!-- 底部：时长 + 播放图标 -->
-        <view class="item-footer">
-          <text class="item-duration">⏱ {{fmt.time(item.duration)}}</text>
-          <view class="play-icon-small">
-            <text class="icon-text">▶</text>
+        <view class="row-main">
+          <text class="row-title">{{item.title || (item.date_label + ' · ' + (item.channel_name || '节目'))}}</text>
+          <view class="row-stats">
+            <view class="row-stat">
+              <image class="row-stat-icon" src="/images/icons/play-mini.png" mode="aspectFit" />
+              <text>{{item.play_count || 0}} 播放</text>
+            </view>
+            <view class="row-stat">
+              <image class="row-stat-icon" src="/images/icons/duration.png" mode="aspectFit" />
+              <text>{{item.duration_label || '00:00'}}</text>
+            </view>
           </view>
+        </view>
+        <view class="row-play" data-id="{{item.id}}" data-index="{{index}}" catchtap="onPlay">
+          <image class="row-play-icon" src="/images/icons/play.png" mode="aspectFit" />
         </view>
       </view>
     </view>
@@ -62,14 +86,5 @@
   </block>
 </view>
 
-<!-- WXS：时间格式化（mm:ss） -->
-<wxs module="fmt">
-  module.exports = {
-    time: function(s) {
-      s = s || 0;
-      var m = Math.floor(s / 60);
-      var sec = Math.floor(s % 60);
-      return (m < 10 ? '0' + m : m) + ':' + (sec < 10 ? '0' + sec : sec);
-    }
-  };
-</wxs>
+<!-- 任务9：全局浮动播放按钮 -->
+<floating-player />

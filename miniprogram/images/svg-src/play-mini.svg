@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 小播放图标：用于列表项右侧播放按钮，白色实心三角（用于品牌色背景上）
+     图标来源：Tabler Icons (MIT License) - player-play-filled -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <path d="M 7 4 L 19 12 L 7 20 Z" fill="#FFFFFF"/>
+</svg>

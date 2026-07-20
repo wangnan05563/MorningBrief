@@ -3,7 +3,7 @@
   <!-- 未登录 -->
   <view class="login-wrap" wx:if="{{!userInfo}}">
     <view class="card login-card">
-      <view class="login-icon">🎧</view>
+      <image class="login-icon" src="/images/icons/headphones.png" mode="aspectFit" />
       <view class="login-tip">登录后查看你的收听记录</view>
       <view class="btn-primary login-btn" bindtap="onLogin">点击登录</view>
     </view>
@@ -48,35 +48,35 @@
     <view class="card list-card">
       <view class="list-item" bindtap="onTapSetting" data-key="recent">
         <text class="list-text">最近播放</text>
-        <text class="list-arrow">›</text>
+        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
       </view>
       <view class="list-item" bindtap="onTapSetting" data-key="favorites">
         <text class="list-text">我的收藏</text>
-        <text class="list-arrow">›</text>
+        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
       </view>
       <view class="list-item" bindtap="onTapSetting" data-key="channels">
         <text class="list-text">我的频道</text>
-        <text class="list-arrow">›</text>
+        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
       </view>
       <view class="list-item" bindtap="onTapSetting" data-key="feedback">
         <text class="list-text">意见反馈</text>
-        <text class="list-arrow">›</text>
+        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
       </view>
       <view class="list-item" bindtap="onTapSetting" data-key="settings">
         <text class="list-text">播放设置</text>
-        <text class="list-arrow">›</text>
+        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
       </view>
       <view class="list-item" bindtap="onTapSetting" data-key="about">
         <text class="list-text">关于我们</text>
-        <text class="list-arrow">›</text>
+        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
       </view>
       <view class="list-item" bindtap="onTapSetting" data-key="agreement">
         <text class="list-text">用户协议</text>
-        <text class="list-arrow">›</text>
+        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
       </view>
       <view class="list-item" bindtap="onTapSetting" data-key="privacy">
         <text class="list-text">隐私政策</text>
-        <text class="list-arrow">›</text>
+        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
       </view>
     </view>
 
@@ -84,8 +84,60 @@
     <view class="card list-card">
       <view class="list-item" bindtap="onTapSetting" data-key="logout">
         <text class="list-text logout-text">退出登录</text>
-        <text class="list-arrow">›</text>
+        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
+      </view>
+    </view>
+
+    <!-- "随时完善资料"入口（资料已完整时仍可点击更新） -->
+    <view class="card edit-anytime" bindtap="onTapEditProfile">
+      <view class="list-item edit-anytime-row">
+        <text class="list-text">编辑个人资料</text>
+        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
       </view>
     </view>
   </block>
+
+  <!-- 完善资料弹窗：用 button chooseAvatar + input nickname 主动获取资料（适配 2.27+ 基础库） -->
+  <view class="edit-modal-mask" wx:if="{{showEditProfile}}" bindtap="onCloseEditProfile">
+    <view class="edit-modal" catchtap="">
+      <view class="edit-modal-title">完善个人资料</view>
+
+      <!-- 头像选择：button open-type="chooseAvatar"（微信原生支持） -->
+      <button
+        class="edit-avatar-btn"
+        open-type="chooseAvatar"
+        bindchooseavatar="onChooseAvatar"
+        hover-class="none"
+      >
+        <image
+          class="edit-avatar"
+          src="{{editAvatar || userInfo.avatar || userInfo.avatar_url || '/images/icons/headphones.png'}}"
+          mode="aspectFill"
+        />
+        <text class="edit-avatar-tip">点击选择头像</text>
+      </button>
+
+      <!-- 昵称输入：input type="nickname"（微信原生支持，调起微信昵称） -->
+      <view class="edit-nickname-row">
+        <text class="edit-nickname-label">昵称</text>
+        <input
+          class="edit-nickname-input"
+          type="nickname"
+          placeholder="请输入昵称"
+          value="{{editNickname}}"
+          bindinput="onInputNickname"
+          bindblur="onInputNickname"
+        />
+      </view>
+
+      <!-- 操作按钮 -->
+      <view class="edit-actions">
+        <view class="edit-btn edit-btn-cancel" bindtap="onCloseEditProfile">取消</view>
+        <view class="edit-btn edit-btn-confirm" bindtap="onConfirmEditProfile">保存</view>
+      </view>
+    </view>
+  </view>
 </view>
+
+<!-- 任务9：全局浮动播放按钮 -->
+<floating-player />

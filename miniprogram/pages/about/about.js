@@ -13,12 +13,13 @@ Page({
     buildDate: '',
     description: '用耳朵听新闻，让信息获取更轻松。',
     // 功能列表：图标 + 标题 + 描述，wxml 通过 wx:for 渲染
+    // 图标使用 PNG 资源（来自 Tabler Icons 开源库），避免 emoji 跨平台渲染不一致
     features: [
-      { icon: '📰', title: '每日要闻', desc: '精选每日重要新闻' },
-      { icon: '🎙️', title: 'AI 播报', desc: '自然语音合成播报' },
-      { icon: '⏱️', title: '断点续播', desc: '自动记录上次进度' },
-      { icon: '⚡', title: '倍速播放', desc: '支持多种倍速切换' },
-      { icon: '📥', title: '离线收听', desc: '下载后无网络也能听' },
+      { icon: '/images/icons/newspaper.png', title: '每日要闻', desc: '精选每日重要新闻' },
+      { icon: '/images/icons/headphones.png', title: 'AI 播报', desc: '自然语音合成播报' },
+      { icon: '/images/icons/duration.png', title: '断点续播', desc: '自动记录上次进度' },
+      { icon: '/images/icons/play.png', title: '倍速播放', desc: '支持多种倍速切换' },
+      { icon: '/images/icons/play-mini.png', title: '离线收听', desc: '下载后无网络也能听' },
     ],
     author: 'MorningBrief 团队',
     contact: 'support@MorningBrief.example.com',

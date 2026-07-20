@@ -693,3 +693,47 @@ fix_priority_matrix:
   warning: "fix_next_iteration"  # 警告级 → 下迭代修复
   minor: "log_only"             # 次要级 → 仅记录
   info: "log_only"              # 信息级 → 仅记录
+
+# === 2026-07-20 新增：小程序播放与跨端数据流复盘审查配置（后端侧）===
+# 对应 news-code-dev 元规范 R85，详见 SKILL.md 维度 81-83
+
+# 维度 81：数据结构变更时 cache_key 版本后缀（对应 R85）
+cache_versioning:
+  enabled: true
+  require_version_suffix_on_schema_change: true
+  version_suffix_format: ":v{n}"
+  version_start: 2
+  bump_on_fields:
+    - add
+    - remove
+    - rename
+  scan_cache_keys:
+    - "script:detail"
+    - "episode:today"
+    - "playlog:user"
+  require_comment_on_bump: true
+
+# 维度 82：segments 数据完整性注入（对应 R85 关联）
+segments_data_completeness:
+  enabled: true
+  inject_fields:
+    - cover_url
+    - source
+    - category
+  fallback_to_first_material_cover: true
+  scan_files:
+    - "backend/app/services/content_service.py"
+  require_enriched_segments_pattern: "enriched_seg\\[\"cover_url\"\\]"
+
+# 维度 83：响应字段优先级与背景图设置（对应 R83 关联）
+response_field_priority:
+  enabled: true
+  cover_url_chain:
+    - "episode.cover_url"
+    - "channel.cover_url"
+    - "null"
+  require_fallback_to_channel: true
+  scan_serialization_points:
+    - "def.*serialize.*episode"
+    - "def.*to_dict.*episode"
+    - "Episode.*response"

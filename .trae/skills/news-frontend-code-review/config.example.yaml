@@ -551,3 +551,92 @@ fix_priority_matrix:
   suggestion: "log_only"
   info: "log_only"
 
+# === 2026-07-20 新增：小程序播放与跨端数据流复盘审查配置 ===
+# 对应 news-code-dev 元规范 R76-R85，详见 SKILL.md 维度 61-69
+
+# 维度 61：URL 编码安全性（对应 R76）
+url_safety_check:
+  enabled: true
+  require_encode_for_non_ascii: true
+  allowed_unencoded_patterns:
+    - "^https?://[a-zA-Z0-9.-]+(?::\\d+)?/[a-zA-Z0-9._/-]*$"
+  encoding_function: "encodeURI"
+  forbidden_encoding_function: "encodeURIComponent"
+  non_ascii_pattern: "[\\u4e00-\\u9fa5]"
+  scan_targets:
+    - "audioManager.src"
+    - "<image src>"
+    - "wx.downloadFile"
+    - "<web-view src>"
+
+# 维度 62-66：小程序播放安全（对应 R77-R81）
+miniprogram_playback_safety:
+  enabled: true
+  rate_switch:
+    apply_method: "pause_play_seek"
+    pause_delay_ms: 100
+    play_delay_ms: 200
+    seek_back_guard_ms: 50
+    require_condition: "!audioManager.paused && audioManager.currentTime > 0"
+  time_update_throttle:
+    update_interval_ms: 800
+    force_update_on_pause: true
+    force_update_on_seek: true
+    max_setdata_per_sec: 2
+  progress_report:
+    require_in_progress_flag: true
+    flag_clear_on_failure: true
+    flag_clear_timeout_ms: 10000
+  seek:
+    use_pending_flag: true
+    forbid_oncanplay_self_cleanup: true
+    flag_ttl_ms: 5000
+    apply_on_event: "onTimeUpdate"
+  cached_setters:
+    cached_fields:
+      - playbackRate
+      - volume
+    equality_epsilon: 0.001
+
+# 维度 67：列表页与详情页布局分离（对应 R82）
+miniprogram_layout_separation:
+  enabled: true
+  forbid_inline_player_card: true
+  list_item_action: "navigateTo"
+  detail_page_route: "/pages/detail/detail"
+  scan_list_pages:
+    - "miniprogram/pages/index/"
+    - "miniprogram/pages/history/"
+  forbidden_components:
+    - "<player-card"
+    - "<audio-player"
+
+# 维度 68：频道/筛选切换状态隔离（对应 R83）
+miniprogram_state_isolation:
+  enabled: true
+  clear_before_fetch: true
+  clear_fields_on_channel_switch:
+    - episode
+    - script
+    - segments
+    - comments
+    - commentsTotal
+    - bgCoverUrl
+    - scriptLoaded
+    - scriptLoading
+    - showScript
+
+# 维度 69：跳转详情页前恢复播放（对应 R84）
+miniprogram_navigation_safety:
+  enabled: true
+  require_resume_before_navigate: true
+  resume_only_if_paused: true
+  resume_method: "resumePlay"
+  resume_export_location: "services/audio.js"
+  scan_entry_points:
+    - "onTapContinue"
+    - "onTapFloatingPlayer"
+    - "onTapHistory"
+    - "onTapEpisode"
+
+

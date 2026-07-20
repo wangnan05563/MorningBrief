@@ -7,7 +7,7 @@
 
   <!-- 空状态 -->
   <view class="empty-state" wx:elif="{{channels.length === 0}}">
-    <text class="empty-icon">📻</text>
+    <image class="empty-icon-img" src="/images/icons/radio.png" mode="aspectFit" />
     <text>暂无可用频道</text>
   </view>
 

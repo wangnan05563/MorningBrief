@@ -1,0 +1,71 @@
+/* 外链容器页样式 */
+.page-webview {
+  width: 100%;
+  height: 100vh;
+}
+
+web-view {
+  width: 100%;
+  height: 100vh;
+}
+
+/* 加载失败的 fallback 界面：居中卡片风格 */
+.webview-fallback {
+  padding: 80rpx 48rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.fallback-title {
+  font-size: 32rpx;
+  color: #2D3748;
+  font-weight: 600;
+  margin-bottom: 16rpx;
+}
+
+.fallback-desc {
+  font-size: 26rpx;
+  color: #A0AEC0;
+  text-align: center;
+  margin-bottom: 32rpx;
+  line-height: 1.6;
+}
+
+.fallback-url {
+  width: 100%;
+  padding: 24rpx 32rpx;
+  background: #F7FAFC;
+  border-radius: 16rpx;
+  font-size: 24rpx;
+  color: #5BA89B;
+  word-break: break-all;
+  margin-bottom: 48rpx;
+  user-select: text;
+}
+
+.fallback-actions {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 16rpx;
+}
+
+.fallback-actions .btn-primary,
+.fallback-actions .btn-secondary {
+  width: 100%;
+  border: none;
+  font-size: 30rpx;
+  padding: 24rpx 0;
+  border-radius: 48rpx;
+}
+
+.fallback-actions .btn-primary {
+  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  color: #FFFFFF;
+}
+
+.fallback-actions .btn-secondary {
+  background: #E6F4F1;
+  color: #5BA89B;
+}
