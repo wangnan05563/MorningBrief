@@ -14,3 +14,12 @@ export const getReview = (id) => api.get(`/reviews/${id}`)
 // 审核操作：approve/reject/replace
 export const handleReviewAction = (id, action, reason = null, segmentId = null) =>
   api.post(`/reviews/${id}/action`, { action, reason, segment_id: segmentId })
+
+// 批量审核操作：仅支持 approve / reject
+// 返回 { succeeded, failed, skipped, published, publish_failed, total }
+export const batchHandleReviewAction = (reviewIds, action, reason = null) =>
+  api.post('/reviews/batch-action', {
+    review_ids: reviewIds,
+    action,
+    reason,
+  })

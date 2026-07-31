@@ -285,6 +285,151 @@ Page({
 })
 ```
 
+### 多页面共享状态同步
+
+**为什么**：多 Tab 页面共享同一份用户偏好/筛选状态时，状态可能被其他页面（如设置页）修改。若 `onShow` 仅依赖 `data` 镜像或时间戳单信号，会出现切换 Tab 后残留旧数据或漏刷新的情况。必须从权威源（`localData`/`globalData`）直接读取最新值，并采用"时间戳 + 内容"双校验判断是否需要刷新。
+
+```javascript
+// ✅ 正确：onShow 从权威源同步 + 时间戳/内容双校验
+const localData = require('../../services/local-data')
+
+Page({
+  onShow() {
+    const latestIds = localData.getPreferredChannels()  // 直接读权威源
+    const app = getApp()
+    // 时间戳变化 OR 内容不一致，任一满足即刷新
+    const changedByTs = this._lastPreferredTs
+      && this._lastPreferredTs !== app.globalData.preferredChannelsChanged
+    const changedByContent = JSON.stringify(this.data.preferredIds)
+      !== JSON.stringify(latestIds)
+    if (changedByTs || changedByContent) {
+      this.setData({ preferredIds: latestIds })
+    }
+    if (this.data.isPreferredMode) {
+      this.loadPreferred()  // 处于偏爱模式则强制重新加载
+    }
+    this._lastPreferredTs = app.globalData.preferredChannelsChanged
+  },
+
+  async loadPreferred() {
+    // 在数据加载入口再次从 localData 读取，避免 onShow 与 setData 之间的异步窗口
+    const preferredIds = localData.getPreferredChannels()
+    if (preferredIds.length === 0) {
+      // 空状态必须显式标记，避免残留旧数据
+      this.setData({ todayList: [], preferredEmpty: true, loading: false })
+      getApp().globalData.todayList = []  // globalData 与 data 同步清空
+      return
+    }
+    // ...加载并过滤数据
+  }
+})
+
+// ❌ 错误：仅用时间戳判断，普通 Tab 切换不更新时间戳导致漏刷新
+Page({
+  onShow() {
+    // 普通切 Tab 时 preferredChannelsChanged 不变，不会触发刷新
+    if (this._lastPreferredTs !== getApp().globalData.preferredChannelsChanged) {
+      this.loadPreferred()
+    }
+  }
+})
+```
+
+**规则**：
+- 跨页面共享的状态（用户偏好、筛选条件、登录态等）在 `onShow` 必须从权威源重新读取
+- 变更检测采用"时间戳 OR 内容比对"双校验，单信号检测会漏掉 Tab 切换场景
+- 在数据加载函数入口再次读取权威源，规避 `setData` 异步窗口
+- 清空 `data` 时同步清空 `globalData` 中的镜像，避免其他页面读到残留数据
+- 适用：跨页面共享的用户偏好、筛选条件、登录态；不适用：页面私有状态、单次加载的静态数据
+
+### 过滤模式防御性二次过滤
+
+**为什么**：上游（API/缓存）可能返回未过滤的全量数据，若下游渲染层不再过滤，会展示不应出现的内容。即使接口承诺过滤，下游也必须按当前过滤条件二次校验，防御性编程避免上游契约变更导致的问题。
+
+```javascript
+// ✅ 正确：在数据应用层按当前过滤模式二次过滤
+Page({
+  _applyTodayData(data) {
+    let list = Array.isArray(data) ? data : []
+    // 即使上游返回已过滤，下游按当前模式再次过滤
+    if (this.data.currentChannelId === 'preferred' && list.length > 0) {
+      const preferredIds = localData.getPreferredChannels()
+      if (preferredIds.length > 0) {
+        const idSet = new Set(preferredIds)
+        list = list.filter(ep => idSet.has(ep.channel_id))
+      } else {
+        list = []  // 偏爱为空则结果必为空
+      }
+    }
+    this.setData({ todayList: list.map(ep => this._enrichEpisode(ep)) })
+  }
+})
+
+// ❌ 错误：信任上游已过滤，下游不再校验
+Page({
+  _applyTodayData(data) {
+    // 若上游因缓存/预渲染返回全量数据，偏爱模式下会展示所有频道
+    this.setData({ todayList: data })
+  }
+})
+```
+
+**规则**：
+- 列表渲染层必须按当前过滤条件（频道/分类/偏好）二次校验数据
+- 过滤条件为空时，结果必须显式置空，不能保留旧数据
+- 过滤逻辑应从权威源读取过滤条件，不依赖 `data` 镜像
+- 适用：按用户偏好/权限/频道过滤的列表展示；不适用：单一来源已保证过滤且契约稳定的场景
+
+### 空状态显式标记
+
+**为什么**：空状态（如未设置偏好、搜索无结果）若不显式标记，UI 会残留上一次的数据，导致"切 Tab 后又能看到已清空的内容"。每次数据加载必须显式设置 `xxxEmpty` 标志，wxml 通过该标志显示引导提示。
+
+```javascript
+// ✅ 正确：每次加载显式设置空状态标志
+Page({
+  async loadPreferred() {
+    const preferredIds = localData.getPreferredChannels()
+    if (preferredIds.length === 0) {
+      this.setData({
+        todayList: [],
+        preferredEmpty: true,   // 显式标记空状态
+        loading: false,
+      })
+      return
+    }
+    const filtered = await this._fetchAndFilter(preferredIds)
+    this.setData({
+      todayList: filtered,
+      preferredEmpty: filtered.length === 0,  // 过滤后为空也标记
+      loading: false,
+    })
+  }
+})
+
+// ❌ 错误：未显式重置 preferredEmpty，切 Tab 后残留 true/false
+Page({
+  async loadPreferred() {
+    // 未设置 preferredEmpty，wxml 无法判断是"未加载"还是"空数据"
+    const list = await fetchData()
+    this.setData({ todayList: list })
+  }
+})
+```
+
+```xml
+<!-- wxml 通过 preferredEmpty 显示引导提示 -->
+<view wx:if="{{isPreferredMode && preferredEmpty}}" class="preferred-empty-card">
+  <view>还没有偏爱频道</view>
+  <view bindtap="onTapPreferredSettings">去设置偏爱频道</view>
+</view>
+```
+
+**规则**：
+- 每个可能为空的状态（列表、详情、计数）必须有对应的 `xxxEmpty` 标志
+- 数据加载函数必须在所有分支（未设置、加载失败、过滤后为空）显式设置该标志
+- wxml 通过 `wx:if="{{xxxEmpty}}"` 显示引导提示，而非依赖列表长度判断
+- 适用：可能为空且影响 UI 展示的状态；不适用：始终有默认值或 fallback 的状态
+
 ### 音频管理
 
 **为什么**：音频播放是小程序的核心功能，需要正确处理后台播放和跨页面状态。
@@ -1917,6 +2062,163 @@ element.getAttribute('data-user-id')
 
 ---
 
+## 外部服务降级规范
+
+### 规范 127：外部服务降级本地存储模式
+
+**为什么**：COS/OSS/S3 等外部对象存储在生产环境可能因配置缺失、凭证失效、网络不可达等原因不可用。若代码直接 raise 会导致整个工作流失败，已生成的 TTS 音频浪费。必须实现优雅降级到本地文件系统，保证业务连续性。
+
+**适用场景**：生产环境 COS 降级、开发环境无 COS、COS 配置缺失容错
+**不适用场景**：纯本地开发环境（无需 COS 配置检测）、已配置 COS 的稳定生产环境
+
+**规则**：
+1. 所有外部对象存储上传操作必须实现 `is_xxx_configured()` 单一真相源检测函数
+2. 未配置时降级到本地 `data/<service>_cache/` 目录，键名保持与 COS Key 一致
+3. 必须挂载对应的静态目录路由（如 `/audio/<key>`），且挂载顺序在 SPA fallback 之前
+4. URL 生成函数必须感知存储模式：COS 模式返回完整 URL，本地模式返回 `/audio/<key>` 相对路径
+5. 下游消费者（如 ffmpeg download_file）必须支持本地 `/audio/` 前缀检测，使用 `shutil.copyfile` 而非 httpx 下载
+6. 降级模式必须记录 INFO 日志：`External COS not configured, fallback to local storage`
+
+**判断信号**：
+- `cos_client.put_object` 后无 try/except 或无 fallback 分支 → 违规
+- `if is_cos_configured():` 后无 else 分支 → 违规
+- 多处重复 `if settings.COS_SECRET_ID:` 判断 → 违规（应复用 `is_cos_configured()`）
+- 外部存储上传失败直接 raise 而非降级 → 违规
+
+**示例**：
+
+```python
+# ❌ 反模式：多处重复判断 + 无降级
+async def upload_audio(content: bytes, key: str) -> str:
+    if settings.COS_SECRET_ID and settings.COS_SECRET_KEY:
+        cos_client.put_object(Bucket=settings.COS_BUCKET, Key=key, Body=content)
+        return f"https://{settings.COS_BUCKET}.cos.{settings.COS_REGION}.myqcloud.com/{key}"
+    raise RuntimeError("COS not configured")  # 直接失败，业务中断
+
+# ✅ 正确：单一真相源 + 本地降级
+from app.core.config import is_cos_configured
+
+async def upload_audio(content: bytes, key: str) -> str:
+    if is_cos_configured():
+        try:
+            cos_client.put_object(Bucket=settings.COS_BUCKET, Key=key, Body=content)
+            return f"https://{settings.COS_BUCKET}.cos.{settings.COS_REGION}.myqcloud.com/{key}"
+        except Exception as e:
+            logger.warning(f"COS upload failed, fallback to local: {e}")
+    # 降级到本地存储
+    local_dir = Path(settings.LOCAL_AUDIO_CACHE_DIR)  # data/audio_cache/
+    local_dir.mkdir(parents=True, exist_ok=True)
+    (local_dir / key).write_bytes(content)
+    logger.info("External COS not configured, fallback to local storage")
+    return f"/audio/{key}"  # 相对路径，由 StaticFiles 挂载提供
+```
+
+**配置驱动**：所有阈值通过 `project-config.json#external_storage_fallback` 管理（single_truth_source_fn/local_dir/static_mount_point/downstream_prefixes）。
+
+### 规范 128：Windows asyncio ConnectionResetError 异常过滤
+
+**为什么**：Windows 平台 FastAPI/uvicorn 服务，浏览器 audio 标签或客户端提前关闭连接时，`ProactorBasePipeTransport._call_connection_lost` 会抛出 `ConnectionResetError [WinError 10054]`。这是 Python + Windows 的已知行为，非业务 bug，但会污染日志，干扰真实问题定位。必须在事件循环异常处理器中过滤此类已知行为。
+
+**适用场景**：Windows 平台部署、客户端连接频繁断开（如浏览器 audio 标签）
+**不适用场景**：Linux/macOS（select/epoll 无此问题）、服务端长连接
+
+**规则**：
+1. Windows 平台必须在事件循环异常处理器中过滤 ProactorBasePipeTransport 相关的 ConnectionResetError
+2. 过滤逻辑应通过配置开关控制：`asyncio.suppress_connection_reset: true`
+3. 必须区分业务异常（保留堆栈）和平台已知行为（仅 DEBUG 日志）
+4. 异常过滤清单必须配置驱动：`asyncio.ignored_exceptions: ["ConnectionResetError"]`
+5. 不适用于 Linux/macOS（select/epoll 无此问题）
+
+**判断信号**：
+- 日志中重复出现 `Exception in callback _ProactorBasePipeTransport._call_connection_lost` → 违规
+- `ConnectionResetError: [WinError 10054]` 频繁出现 → 违规
+- 无自定义异常处理器过滤此类已知行为 → 违规
+
+**示例**：
+
+```python
+# ❌ 反模式：无异常过滤，日志被污染
+import asyncio
+loop = asyncio.get_event_loop()
+# 默认异常处理器会打印完整 traceback 到 stderr
+
+# ✅ 正确：配置驱动过滤平台已知行为
+import sys
+from app.core.config import settings
+
+def _on_loop_exception(loop, context):
+    exc = context.get('exception')
+    handle = context.get('handle', '')
+    # 配置驱动过滤清单
+    for rule in settings.ASYNCIO_IGNORED_EXCEPTIONS:
+        if (isinstance(exc, getattr(__builtins__, rule['exception_type'], object))
+                and rule['transport_class'] in str(handle)):
+            logger.debug(f"Ignored platform exception: {rule['exception_type']}")
+            return
+    loop.default_exception_handler(context)
+
+if sys.platform == 'win32' and settings.ASYNCIO_SUPPRESS_CONNECTION_RESET:
+    loop.set_exception_handler(_on_loop_exception)
+```
+
+**配置驱动**：所有阈值通过 `project-config.json#asyncio_exception_filter` 管理（enabled_platforms/ignored_exceptions/handler_priority）。
+
+### 规范 129：本地路径 URL 约定
+
+**为什么**：外部存储降级模式或本地开发模式下，下游服务（如 ffmpeg、TTS 拼接器）需要通过 URL 访问本地文件。若用 httpx 自回路请求本机服务（`http://localhost:8000/audio/...`）会造成性能损耗和死锁风险。必须约定本地路径 URL 前缀，下游函数优先检测本地前缀，命中则直接文件拷贝。
+
+**适用场景**：外部存储降级模式、本地开发联调、CI 测试环境
+**不适用场景**：已配置 COS 的生产环境、跨主机访问场景
+
+**规则**：
+1. 本地降级模式下，URL 必须使用 `/audio/<key>` 相对路径约定
+2. `/audio/<key>` 映射到 `data/audio_cache/<key>` 物理路径
+3. 下游 `download_file` 函数必须优先检测本地路径前缀（`/audio/`），命中则用 `shutil.copyfile` 直接拷贝
+4. 禁止通过 httpx 自回路请求本机服务下载文件（性能损耗 + 死锁风险）
+5. 路径前缀清单必须配置驱动：`local_storage.url_prefixes: ["/audio/"]`
+
+**判断信号**：
+- `download_file(url)` 函数无 `url.startswith('/audio/')` 分支 → 违规
+- 本地文件访问使用 `httpx.get('http://localhost:*/audio/...')` 自回路请求 → 违规
+- 文件路径硬编码绝对路径 → 违规
+
+**示例**：
+
+```python
+# ❌ 反模式：自回路请求本机服务下载本地文件
+async def download_file(url: str, dest: str) -> None:
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url)  # 如果 url 是 http://localhost:8000/audio/xxx，性能极差
+        with open(dest, 'wb') as f:
+            f.write(resp.content)
+
+# ✅ 正确：优先检测本地前缀，命中则直接拷贝
+import shutil
+from pathlib import Path
+
+async def download_file(url: str, dest: str) -> None:
+    # 配置驱动的本地前缀清单
+    for prefix_config in settings.LOCAL_PATH_PREFIXES:
+        prefix = prefix_config['prefix']
+        physical_dir = Path(prefix_config['physical_dir'])
+        if url.startswith(prefix):
+            # 本地文件直接拷贝，避免 httpx 自回路
+            key = url[len(prefix):]
+            src = physical_dir / key
+            shutil.copyfile(str(src), dest)
+            return
+    # 远程文件走 httpx
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        with open(dest, 'wb') as f:
+            f.write(resp.content)
+```
+
+**配置驱动**：所有阈值通过 `project-config.json#local_path_url` 管理（url_prefixes/forbidden_patterns/required_prefix_detection）。
+
+---
+
 ## 规范 60：三层测试验证规范
 
 **所有代码变更必须通过单元测试 + 集成测试 + E2E 测试三层验证，外加 SonarQube 二次扫描回归。**
@@ -1959,3 +2261,1058 @@ element.getAttribute('data-user-id')
 
 **适用场景**：中大型项目（≥10 个 API 端点）的发版前完整验证
 **不适用场景**：热修复（hotfix）的快速验证、小型项目（<5 个端点）
+
+---
+
+## 规范 61-65：2026-07-21 跨项目模块迁移与测试执行复盘新增规范
+
+> 以下规范来源于参考 17_xianyu 项目实现"关于/帮助"模块的完整复盘，对应 meta-rules.md 规范 86-90。所有阈值通过 `project-config.json#cross_project_migration`、`project-config.json#frontend_nested_paths`、`project-config.json#icon_migration`、`project-config.json#cache_test_isolation`、`project-config.json#python_env_test` 配置管理。
+
+### 规范 61：跨项目模块迁移 7 步法
+
+**参考式跨项目模块迁移必须完整执行 7 个步骤，禁止跳过任一步骤。**
+
+**为什么**：跨项目迁移时，参考项目的架构、技术栈、约定可能与目标项目不一致。直接复制代码会导致路径错误、图标不存在、构建失败等问题。
+
+**7 步流程**：
+1. 需求确认 → 明确迁移目标、范围、验收标准
+2. 架构对齐 → 对比目录结构、技术栈、依赖库、命名约定、路径风格
+3. 后端开发 → 按目标项目分层架构（routers → services → models → core）实现
+4. 前端开发 → 按目标项目目录结构实现，校验相对路径
+5. 测试编写 → 编写单元测试（后端）+ 测试用例（前端）
+6. 测试执行 → 运行 pytest + vite build，确保测试通过且构建成功
+7. 构建验证 → 实际启动服务/打开页面验证功能可用
+
+**配置参数**（通过 `project-config.json#cross_project_migration` 配置）：
+```json
+{
+  "cross_project_migration": {
+    "required_steps": ["requirement_confirm", "architecture_align", "backend_dev", "frontend_dev", "test_write", "test_execute", "build_verify"],
+    "architecture_align_checklist": ["目录结构对齐", "技术栈对齐", "依赖库对齐", "命名约定对齐", "路径风格对齐"],
+    "build_verify_required": true,
+    "test_execute_required": true
+  }
+}
+```
+
+**判断信号**：跨项目迁移任务跳过架构对齐步骤；迁移后未执行 vite build / py_compile 验证
+**适用场景**：所有参考式跨项目模块迁移
+**不适用场景**：从零开发（无参考项目）、纯配置迁移（无代码）
+
+### 规范 62：前端嵌套目录相对路径校验
+
+**Vue 项目采用 `views/<module>/<Page>.vue` 嵌套目录结构时，SCSS `@use` 和 JS `import` 的相对路径必须按嵌套层级计算。**
+
+**为什么**：扁平目录（views/Page.vue）用 `@use '../styles/'`，嵌套目录（views/about/About.vue）需用 `@use '../../styles/'`。照搬扁平目录路径会导致 vite build 报错。
+
+**配置参数**（通过 `project-config.json#frontend_nested_paths` 配置）：
+```json
+{
+  "frontend_nested_paths": {
+    "nested_dir_pattern": "views/<module>/<Page>.vue",
+    "parent_level_required": 2,
+    "path_types_to_check": ["scss_use", "js_import", "ts_import", "vue_import"],
+    "build_verify_required": true
+  }
+}
+```
+
+**正确做法**：
+```vue
+<!-- views/about/About.vue 嵌套目录 -->
+<style lang="scss">
+@use '../../styles/variables.scss' as *;  // 两级 ../
+</style>
+<script setup>
+import { someUtil } from '../../utils/someUtil'  // 两级 ../
+</script>
+```
+
+**判断信号**：grep `@use '\.\./styles/'` 在 `views/<module>/*.vue` 文件中（应为 `../../styles/`）
+**适用场景**：所有 `views/<module>/<Page>.vue` 嵌套目录结构
+**不适用场景**：扁平目录结构、绝对路径（@/）
+
+### 规范 63：UI 图标跨库迁移存在性验证
+
+**从参考项目迁移 UI 图标到目标项目时，必须验证图标在目标 UI 库中存在。**
+
+**为什么**：React 图标库（lucide-react）与 Vue 图标库（@element-plus/icons-vue）覆盖范围差异较大，照搬图标名会导致 vite build 报错 "X is not exported by"。
+
+**配置参数**（通过 `project-config.json#icon_migration` 配置）：
+```json
+{
+  "icon_migration": {
+    "target_icon_library": "@element-plus/icons-vue",
+    "verify_command": "node -e \"const icons = require('@element-plus/icons-vue'); console.log(Object.keys(icons))\"",
+    "fallback_icon": "MagicStick",
+    "verify_before_build": true
+  }
+}
+```
+
+**正确做法**：
+```javascript
+// 迁移前先验证图标存在性
+// node -e "const icons = require('@element-plus/icons-vue'); console.log(Object.keys(icons))"
+import { MagicStick } from '@element-plus/icons-vue'  // Rocket 不存在，替换为 MagicStick
+```
+
+**判断信号**：grep `from '@element-plus/icons-vue'` 后跟参考项目特有图标名
+**适用场景**：所有跨 UI 库图标迁移
+**不适用场景**：同 UI 库内的图标调整、自定义 SVG 图标
+
+### 规范 64：模块级单例缓存的测试隔离
+
+**进程内模块级单例缓存的单元测试，必须通过 `_reset_cache_for_test()` 显式清理函数重置缓存。**
+
+**为什么**：模块级单例在进程生命周期内只初始化一次，pytest 多个测试用例共享同一进程，前一个用例修改的缓存状态会影响后一个用例，导致测试结果与执行顺序相关。
+
+**配置参数**（通过 `project-config.json#cache_test_isolation` 配置）：
+```json
+{
+  "cache_test_isolation": {
+    "require_reset_function": true,
+    "reset_function_naming": "_reset_cache_for_test",
+    "reset_in_fixture": true,
+    "cache_types_to_reset": ["TTLCache", "dict_module_level", "lru_cache", "functools.cache"]
+  }
+}
+```
+
+**正确做法**：
+```python
+# app/core/cache.py
+from cachetools import TTLCache
+_cache: TTLCache = TTLCache(maxsize=100, ttl=300)
+
+def _reset_cache_for_test() -> None:
+    """测试专用：重置模块级缓存，确保用例间隔离。"""
+    _cache.clear()
+
+# tests/test_cache.py
+@pytest.fixture(autouse=True)
+def reset_cache():
+    _reset_cache_for_test()
+    yield
+```
+
+**判断信号**：测试用例依赖执行顺序；测试模块级单例的代码无 `_reset_cache_for_test()` 调用
+**适用场景**：所有进程内缓存模块（TTLCache / dict 模块级单例 / lru_cache / functools.cache）
+**不适用场景**：函数局部变量、数据库状态（用事务回滚隔离）
+
+### 规范 65：多版本 Python 环境下的测试执行
+
+**Windows + 多 Python 版本共存时，执行 pytest 必须显式指定 Python 解释器完整路径。**
+
+**为什么**：Trae 内置 Python 可能优先于系统 Python，但其不含 pytest 等开发依赖。直接 `python -m pytest` 会报 `No module named pytest`，但 `python --version` 显示正常版本号，误导排查方向。
+
+**配置参数**（通过 `project-config.json#python_env_test` 配置）：
+```json
+{
+  "python_env_test": {
+    "require_explicit_python_path": true,
+    "system_python_path": "F:\\Program Files\\Python3.14\\python.exe",
+    "required_test_deps": ["pytest", "pytest-asyncio", "aiosqlite"],
+    "verify_command": "python -c \"import pytest; print(pytest.__version__)\""
+  }
+}
+```
+
+**正确做法**：
+```powershell
+# 显式指定系统 Python 完整路径
+& "F:\Program Files\Python3.14\python.exe" -m pytest tests/ -v
+# 先验证 pytest 已安装
+& "F:\Program Files\Python3.14\python.exe" -c "import pytest; print(pytest.__version__)"
+```
+
+**判断信号**：`python -m pytest` 报 `No module named pytest` 但 `python --version` 正常
+**适用场景**：Windows + 多 Python 版本共存环境
+**不适用场景**：Linux/Mac 单版本 Python 环境、虚拟环境（venv 已激活）
+
+---
+
+## 规范 66-75：2026-07-21 综合复盘新增规范
+
+> 以下规范来源于 2026-07-21 图片爬虫功能开发、工作流多步骤失败修复、P0/P1 改进实施、菜单分组功能开发、PWA 图标生成、监控告警、批量回填脚本等综合复盘，对应 meta-rules.md 规范 91-100。所有阈值通过 `project-config.json#image_crawl`、`project-config.json#workflow_orchestration`、`project-config.json#frontend_menu_grouping`、`project-config.json#pwa_icon_generation`、`project-config.json#monitoring_thresholds`、`project-config.json#backfill_script` 配置管理。
+
+---
+
+## 规范 66：图片封面三级 fallback 提取
+
+**文章封面图提取必须实现 og:image → article <img> → 页面首个非装饰 <img> 三级 fallback，禁止仅依赖单一来源。**
+
+**为什么**：文章封面图来源多样且不稳定。og:image 缺失（部分站点不设置 meta 标签）、article <img> 为空（部分文章纯图文混排无主图）、页面 <img> 含装饰图（logo/icon 等）。仅依赖单一来源会导致 30%+ 文章无封面，影响小程序展示效果。
+
+**配置参数**（通过 `project-config.json#image_crawl` 配置）：
+```json
+{
+  "image_crawl": {
+    "fallback_chain": ["og_image", "article_img", "page_first_img"],
+    "timeout_per_source_sec": 5,
+    "min_image_size_bytes": 1024,
+    "decorative_filter": {
+      "url_keyword_blacklist": ["logo", "icon", "arrow", "btn", "button", "sprite", "placeholder"],
+      "template_path_blacklist": ["/static/", "/assets/img/", "/images/common/"],
+      "extension_blacklist": [".gif", ".svg"],
+      "min_aspect_ratio": 0.3
+    }
+  }
+}
+```
+
+**判断信号**：
+- grep `og:image` 后无 `elif`/`try/except` fallback 逻辑
+- grep 封面提取函数无 `fallback_chain` 配置读取
+- 测试覆盖率：30%+ 文章无封面返回 None
+
+**正确做法**：
+```python
+# ✅ 三级 fallback + 配置驱动 + 异常隔离
+async def extract_cover_image(html: str, url: str) -> str | None:
+    sources = settings.image_crawl.fallback_chain  # 从配置读取
+    for source in sources:
+        try:
+            img_url = await asyncio.wait_for(
+                _extract_from_source(source, html, url),
+                timeout=settings.image_crawl.timeout_per_source_sec,
+            )
+            if img_url and await _validate_image_size(img_url):
+                if not is_decorative_image(img_url):  # 规范 67
+                    return img_url
+        except Exception as e:
+            logger.warning(f"Cover extraction via {source} failed: {e}")
+            continue
+    return None  # 全部失败返回 None，由上层降级处理
+```
+
+**错误做法**：
+```python
+# ❌ 仅依赖 og:image，无 fallback
+def extract_cover_image(html: str) -> str | None:
+    match = re.search(r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"', html)
+    return match.group(1) if match else None
+
+# ❌ 无超时控制，单源卡住整体超时
+async def extract_cover_image(html: str) -> str | None:
+    return await _extract_og_image(html)  # 站点慢时整体卡死
+```
+
+**适用场景**：所有需要封面图的文章/新闻类业务
+**不适用场景**：无图片需求的纯文本内容；用户主动上传封面的场景
+
+---
+
+## 规范 67：装饰图过滤规则
+
+**封面图提取必须过滤装饰图（logo/icon/arrow 等 URL 关键词、特定站点模板路径、GIF 扩展名），禁止将装饰图作为封面。**
+
+**为什么**：页面首个 <img> 常常是站点 logo、导航 icon、箭头装饰等，这些图作为封面会严重影响阅读体验。GIF 动图作为封面在 iOS 上不显示动效且体积过大。本次迭代未过滤时，小程序封面图 40% 是站点 logo。
+
+**配置参数**（通过 `project-config.json#image_crawl.decorative_filter` 配置）：
+```json
+{
+  "decorative_filter": {
+    "url_keyword_blacklist": ["logo", "icon", "arrow", "btn", "button", "sprite", "placeholder"],
+    "template_path_blacklist": ["/static/", "/assets/img/", "/images/common/"],
+    "extension_blacklist": [".gif", ".svg"],
+    "min_aspect_ratio": 0.3
+  }
+}
+```
+
+**判断信号**：
+- grep `cover_url` 提取逻辑无装饰图过滤（无 keyword_blacklist 检查）
+- 封面图列表中存在 logo/icon/arrow 等关键词
+- 封面图为 GIF 格式
+
+**正确做法**：
+```python
+# ✅ 多维度过滤（URL 关键词 + 模板路径 + 扩展名 + 宽高比）
+def is_decorative_image(img_url: str) -> bool:
+    cfg = settings.image_crawl.decorative_filter
+    url_lower = img_url.lower()
+    # URL 关键词过滤
+    if any(kw in url_lower for kw in cfg.url_keyword_blacklist):
+        return True
+    # 模板路径过滤
+    if any(path in url_lower for path in cfg.template_path_blacklist):
+        return True
+    # 扩展名过滤
+    if any(url_lower.endswith(ext) for ext in cfg.extension_blacklist):
+        return True
+    return False
+```
+
+**错误做法**：
+```python
+# ❌ 直接取首个 <img> 不做过滤
+def extract_first_img(html: str) -> str | None:
+    match = re.search(r'<img[^>]+src="([^"]+)"', html)
+    return match.group(1) if match else None  # 可能是 logo/icon
+
+# ❌ 硬编码关键词，无法配置
+DECORATIVE_KEYWORDS = ["logo", "icon"]  # 缺 arrow/btn/sprite 等
+```
+
+**适用场景**：所有图片提取场景（封面图、列表缩略图、OG 图）
+**不适用场景**：用户主动上传的图片（无需过滤）；图标库素材站（图标本就是有效内容）
+
+---
+
+## 规范 68：FALLBACK_DAYS 动态计算
+
+**素材回溯天数应根据频道入库天数动态计算（3/7/14 天三档），而非固定值。**
+
+**为什么**：新频道入库天数 <3 天时，固定 7 天回溯会查到 0 条素材导致工作流失败；老频道入库天数 >30 天时，3 天回溯过短，无法覆盖节假日内容空窗。本次迭代固定 FALLBACK_DAYS=3 导致新频道首日 0 素材失败。
+
+**配置参数**（通过 `project-config.json#workflow_orchestration.fallback_days_tiers` 配置）：
+```json
+{
+  "workflow_orchestration": {
+    "fallback_days_tiers": {
+      "tiers": [
+        {"max_channel_age_days": 3, "fallback_days": 1},
+        {"max_channel_age_days": 14, "fallback_days": 3},
+        {"max_channel_age_days": 9999, "fallback_days": 7}
+      ],
+      "default_tier_index": 1
+    }
+  }
+}
+```
+
+**判断信号**：
+- grep `FALLBACK_DAYS` 为硬编码数字（如 `FALLBACK_DAYS = 3`）
+- grep 回溯逻辑无 `channel_created_at` 字段使用
+
+**正确做法**：
+```python
+# ✅ 按频道入库天数动态计算
+def calculate_fallback_days(channel_created_at: datetime) -> int:
+    channel_age_days = (datetime.now() - channel_created_at).days
+    tiers = settings.workflow_orchestration.fallback_days_tiers.tiers
+    for tier in tiers:
+        if channel_age_days <= tier["max_channel_age_days"]:
+            return tier["fallback_days"]
+    # 兜底：使用默认档位
+    default_idx = settings.workflow_orchestration.fallback_days_tiers.default_tier_index
+    return tiers[default_idx]["fallback_days"]
+```
+
+**错误做法**：
+```python
+# ❌ 硬编码固定值
+FALLBACK_DAYS = 3  # 新频道首日不够 3 天，查不到素材
+
+async def get_recent_materials(channel_id: int):
+    since = datetime.now() - timedelta(days=FALLBACK_DAYS)
+    return await db.execute(select(Material).where(Material.created_at >= since))
+
+# ❌ 频道创建时间作为参数但未使用
+def get_fallback_days(channel_created_at: datetime) -> int:
+    return 7  # 参数被忽略
+```
+
+**适用场景**：多频道/多租户的素材回溯场景；新频道冷启动场景
+**不适用场景**：单频道项目（无频道差异化需求）；无历史数据的全新项目
+
+---
+
+## 规范 69：LLM 语义过滤 fallback
+
+**关键词过滤结果为 0 时必须降级到 LLM 语义过滤，LLM 失败时保留全部条目供 rewriter 二次筛选。**
+
+**为什么**：关键词过滤依赖词表覆盖度，新话题/同义词/隐喻表达会全部漏掉。若过滤后 0 条直接报错，工作流中断。LLM 语义过滤能理解语义相似性，但仍可能失败（API 超时/限流）。最坏情况下保留全部条目让 rewriter 自行筛选，保证工作流不中断。本次迭代关键词过滤 0 条导致工作流失败 30 分钟。
+
+**配置参数**（通过 `project-config.json#workflow_orchestration.llm_semantic_fallback` 配置）：
+```json
+{
+  "workflow_orchestration": {
+    "llm_semantic_fallback": {
+      "trigger_when_keyword_result_zero": true,
+      "llm_filter_batch_size": 10,
+      "fallback_strategy_on_llm_failure": "keep_all",
+      "llm_filter_timeout_sec": 30
+    }
+  }
+}
+```
+
+**判断信号**：
+- grep 关键词过滤后无 LLM fallback 分支（`if not filtered: raise` 无降级）
+- grep LLM 过滤无 timeout 控制
+
+**正确做法**：
+```python
+# ✅ 三级 fallback：关键词 → LLM 语义 → 保留全部
+async def filter_materials(materials: list, keywords: list[str]) -> list:
+    # 第一级：关键词过滤
+    filtered = [m for m in materials if any(kw in m.title for kw in keywords)]
+    if filtered:
+        return filtered
+    # 第二级：LLM 语义过滤
+    cfg = settings.workflow_orchestration.llm_semantic_fallback
+    try:
+        return await asyncio.wait_for(
+            _llm_semantic_filter(materials, keywords),
+            timeout=cfg.llm_filter_timeout_sec,
+        )
+    except Exception as e:
+        logger.warning(f"LLM semantic filter failed, keep all materials: {e}")
+        # 第三级：保留全部条目
+        return materials
+```
+
+**错误做法**：
+```python
+# ❌ 关键词过滤 0 条直接报错
+async def filter_materials(materials: list, keywords: list[str]) -> list:
+    filtered = [m for m in materials if any(kw in m.title for kw in keywords)]
+    if not filtered:
+        raise BusinessError("无匹配素材")  # 工作流中断
+    return filtered
+
+# ❌ LLM 失败时整体失败
+try:
+    filtered = await llm_filter(materials, keywords)
+except Exception:
+    raise  # 上层工作流直接失败
+```
+
+**适用场景**：所有基于关键词的内容过滤场景（素材筛选/文章分类/评论审核）
+**不适用场景**：纯精确匹配场景（如 ID 过滤、SKU 过滤）；安全敏感场景（不能保留全部，必须严格过滤）
+
+---
+
+## 规范 70：LLM 字数达标约束
+
+**LLM 生成内容必须达到目标字数的 70%，低于阈值触发硬约束重试；超过目标×1.20 时丢弃多余段（保留至少 3 主段+intro+outro）；低于目标×0.80 时追加最多 2 段。**
+
+**为什么**：LLM 生成稿件字数偏差过大会导致音频时长异常（TTS 时长与字数正相关）。字数不足音频过短（小程序显示节目时长 <5 分钟用户体验差），字数超长音频过长（超出 10:30 上限触发切除丢内容）。本次迭代未约束时稿件字数从 800-3500 字波动，音频时长 4-15 分钟。
+
+**配置参数**（通过 `project-config.json#workflow_orchestration.llm_word_count` 配置）：
+```json
+{
+  "workflow_orchestration": {
+    "llm_word_count": {
+      "target_word_count": 1500,
+      "min_achievement_ratio": 0.70,
+      "trim_threshold_ratio": 1.20,
+      "append_threshold_ratio": 0.80,
+      "max_append_segments": 2,
+      "min_main_segments": 3
+    }
+  }
+}
+```
+
+**判断信号**：
+- grep LLM 调用后无字数验证逻辑（无 `len(content)` / `word_count` 检查）
+- grep 重试循环无字数 break 条件
+
+**正确做法**：
+```python
+# ✅ 三段约束：硬重试 + 超长修剪 + 过短追加
+async def generate_script_with_constraint(topic: str) -> str:
+    cfg = settings.workflow_orchestration.llm_word_count
+    target = cfg.target_word_count
+    # 硬约束重试
+    for attempt in range(3):
+        content = await llm.generate(topic, target_words=target)
+        actual = len(content)
+        if actual >= target * cfg.min_achievement_ratio:
+            break
+        logger.warning(f"Word count {actual} < {target * cfg.min_achievement_ratio}, retry {attempt+1}")
+    # 超长修剪
+    if actual > target * cfg.trim_threshold_ratio:
+        content = _trim_to_target(content, target, cfg.min_main_segments)
+    # 过短追加
+    elif actual < target * cfg.append_threshold_ratio:
+        content = await _append_segments(content, topic, cfg.max_append_segments)
+    return content
+```
+
+**错误做法**：
+```python
+# ❌ 无字数约束，LLM 生成什么用什么
+async def generate_script(topic: str) -> str:
+    return await llm.generate(topic)  # 字数可能 200 也可能 5000
+
+# ❌ 仅重试不修剪/追加
+for _ in range(3):
+    content = await llm.generate(topic)
+    if len(content) >= 1000:
+        break
+# 超长内容直接使用，TTS 时长溢出
+```
+
+**适用场景**：所有 LLM 生成内容场景（稿件/标题/摘要/口播文案）
+**不适用场景**：自由创作场景（无字数要求）；结构化输出（如 JSON 数据）
+
+---
+
+## 规范 71：BGM 时长不足兜底
+
+**视频拼接时 BGM 时长不足必须用 BGM 尾段扩展或静音降级，禁止直接报错。**
+
+**为什么**：BGM 库素材时长固定（通常 3-5 分钟），但视频时长可能 6-10 分钟。BGM 短于视频时直接报错会导致整个工作流失败，用户体验断裂。本次迭代 BGM 4:30 视频 6:00 时报错失败。
+
+**配置参数**（通过 `project-config.json#workflow_orchestration.bgm_fallback` 配置）：
+```json
+{
+  "workflow_orchestration": {
+    "bgm_fallback": {
+      "extension_strategy": "tail_loop",
+      "tail_loop_max_count": 2,
+      "silence_fadeout_sec": 2
+    }
+  }
+}
+```
+
+**判断信号**：
+- grep BGM 拼接逻辑无时长不足处理（`if bgm_duration < video_duration: raise`）
+- grep BGM 处理函数无 fallback 分支
+
+**正确做法**：
+```python
+# ✅ 三级处理：正常裁剪 → 尾段扩展 → 静音降级
+async def merge_bgm_with_video(bgm_path: str, video_path: str) -> str:
+    bgm_duration = await get_audio_duration(bgm_path)
+    video_duration = await get_video_duration(video_path)
+    cfg = settings.workflow_orchestration.bgm_fallback
+
+    if bgm_duration >= video_duration:
+        # 正常裁剪
+        return await _trim_bgm(bgm_path, video_duration)
+    # 时长不足：尾段扩展
+    extended_bgm = await _extend_bgm_tail_loop(
+        bgm_path, video_duration, cfg.tail_loop_max_count
+    )
+    if extended_bgm:
+        return extended_bgm
+    # 兜底：静音降级
+    logger.warning(
+        f"BGM extend failed, fallback to silence for {video_duration - bgm_duration}s"
+    )
+    return await _pad_with_silence(bgm_path, video_duration, cfg.silence_fadeout_sec)
+```
+
+**错误做法**：
+```python
+# ❌ BGM 时长不足直接报错
+async def merge_bgm(bgm_path: str, video_path: str) -> str:
+    bgm_duration = await get_audio_duration(bgm_path)
+    video_duration = await get_video_duration(video_path)
+    if bgm_duration < video_duration:
+        raise WorkflowError(f"BGM {bgm_duration}s < video {video_duration}s")  # 工作流中断
+    return await _merge(bgm_path, video_path)
+
+# ❌ 仅静音降级，无尾段扩展尝试
+async def merge_bgm(bgm_path: str, video_path: str) -> str:
+    if bgm_duration < video_duration:
+        return await _pad_with_silence(bgm_path, video_duration)  # 跳过 tail_loop
+```
+
+**适用场景**：所有音频/视频拼接场景（BGM 配音/背景音乐/片头片尾）
+**不适用场景**：无 BGM 的纯人声拼接；BGM 必须完整播放的场景（如音乐 MV）
+
+---
+
+## 规范 72：菜单分组与角色可见性
+
+**管理后台菜单数量 ≥10 时必须按功能分组（el-sub-menu），通过 meta.group 字段配置分组，groupConfig 数组定义分组渲染，支持角色可见性控制（RBAC），启用 unique-opened 手风琴效果，路由变化时自动展开当前分组。**
+
+**为什么**：菜单 ≥10 项时扁平列表视觉拥挤，用户查找困难。功能分组让相关菜单聚合（如"内容管理"含文章/评论/标签）。RBAC 让 operator 看不到"系统设置"等敏感菜单。unique-opened 避免多个分组同时展开挤占屏幕。本次迭代菜单从 8 项增加到 14 项后，扁平列表查找成本激增。
+
+**配置参数**（通过 `project-config.json#frontend_menu_grouping` 配置）：
+```json
+{
+  "frontend_menu_grouping": {
+    "group_threshold": 10,
+    "unique_opened": true,
+    "auto_expand_on_route_change": true,
+    "group_field": "meta.group",
+    "default_visible_roles": ["admin"]
+  }
+}
+```
+
+**判断信号**：
+- grep 菜单数量 ≥10 但无 `meta.group` 字段
+- grep `<el-sub-menu` 无 `unique-opened` 属性
+- grep 路由 watch 无 `activeGroup` / `expandGroup` 调用
+
+**正确做法**：
+```javascript
+// ✅ router/routes.js - meta.group + roles
+const routes = [
+  {
+    path: '/content',
+    meta: { group: 'content', roles: ['admin', 'operator'] },
+    component: ArticleList,
+  },
+  {
+    path: '/system',
+    meta: { group: 'system', roles: ['admin'] },  // 仅 admin 可见
+    component: SystemConfig,
+  },
+]
+
+// ✅ Layout.vue - el-sub-menu + unique-opened + 自动展开
+<el-menu :unique-opened="groupConfig.unique_opened" @select="handleSelect">
+  <el-sub-menu v-for="group in visibleGroups" :key="group.id" :index="group.id">
+    <template #title>{{ group.title }}</template>
+    <el-menu-item v-for="item in group.items" :key="item.path" :index="item.path">
+      {{ item.title }}
+    </el-menu-item>
+  </el-sub-menu>
+</el-menu>
+
+// 路由变化时自动展开当前分组
+watch(() => route.path, (newPath) => {
+  const group = findGroupByPath(newPath)
+  if (group) activeGroup.value = group.id
+})
+```
+
+**错误做法**：
+```javascript
+// ❌ 14 项菜单扁平渲染，无分组
+<el-menu>
+  <el-menu-item v-for="item in allMenus" :key="item.path" :index="item.path">
+    {{ item.title }}
+  </el-menu-item>
+</el-menu>
+
+// ❌ 多分组同时展开，挤占屏幕
+<el-menu>  <!-- 缺少 unique-opened -->
+  <el-sub-menu v-for="g in groups" :key="g.id" :index="g.id">...</el-sub-menu>
+</el-menu>
+
+// ❌ 路由跳转后菜单不自动展开当前分组
+// 缺少 watch(() => route.path, ...) 逻辑
+```
+
+**适用场景**：所有管理后台菜单（≥10 项）；多角色权限系统
+**不适用场景**：菜单数量 <10 的简单后台；无角色区分的内部工具
+
+---
+
+## 规范 73：PWA 图标生成与 MIME 注册
+
+**PWA 应用图标必须同时生成 PNG（192/512）和 ICO（多尺寸 16/32/48），main.py 必须注册 `.ico` 的 MIME 类型（image/x-icon），manifest.json 必须声明 icons 数组含 maskable purpose。**
+
+**为什么**：不同平台对图标格式要求不同——iOS Safari 仅识别 PNG 且需 apple-touch-icon；Windows 桌面 PWA 仅识别 ICO；Android Chrome 要求 maskable purpose 图标（自适应裁剪）。若 main.py 未注册 .ico MIME 类型，浏览器默认按 text/plain 解析导致图标 404/损坏。本次迭代 PWA 安装到 Windows 桌面后图标显示为白板。
+
+**配置参数**（通过 `project-config.json#pwa_icon_generation` 配置）：
+```json
+{
+  "pwa_icon_generation": {
+    "png_sizes": [192, 512],
+    "ico_sizes": [16, 32, 48],
+    "ico_mime_type": "image/x-icon",
+    "manifest_purposes": ["any", "maskable"],
+    "source_icon_path": "assets/source-icon.png"
+  }
+}
+```
+
+**判断信号**：
+- grep `manifest.json` 无 `maskable` purpose
+- grep `main.py` 无 `mimetypes.add_type` for `.ico`
+- grep icons 目录无 `.ico` 文件
+
+**正确做法**：
+```python
+# ✅ main.py - 注册 .ico MIME 类型
+import mimetypes
+mimetypes.add_type(settings.pwa_icon_generation.ico_mime_type, ".ico")
+
+app.mount("/icons", StaticFiles(directory="admin-web/dist/icons"), name="icons")
+```
+
+```json
+// ✅ manifest.json - 含 maskable purpose 的 icons 数组
+{
+  "icons": [
+    {"src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+    {"src": "/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+    {"src": "/favicon.ico", "sizes": "16x16 32x32 48x48", "type": "image/x-icon"}
+  ]
+}
+```
+
+**错误做法**：
+```python
+# ❌ 未注册 .ico MIME 类型
+# main.py
+app.mount("/icons", StaticFiles(directory="dist/icons"))  # .ico 按 text/plain 返回
+
+# ❌ manifest.json 无 maskable purpose
+{
+  "icons": [{"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"}]
+}
+
+# ❌ 仅生成 PNG，无 ICO（Windows 桌面 PWA 无图标）
+```
+
+**适用场景**：所有 PWA 应用（含 manifest.json 的 Web 应用）
+**不适用场景**：非 PWA 的纯 SPA 应用（无离线能力要求）；原生应用（使用原生图标资源）
+
+---
+
+## 规范 74：关键指标监控告警
+
+**关键业务指标（关键词命中率、LLM 字数达成率、TTS 成功率、工作流成功率）低于阈值时必须记录 WARNING 级别日志，阈值通过配置管理。**
+
+**为什么**：关键指标下滑是系统健康度的领先指标。关键词命中率从 80% 降到 30% 意味着关键词表过期或 RSS 源失效；LLM 字数达成率低意味着 LLM 服务降级；TTS 成功率低意味着 TTS 服务故障或配额耗尽。仅记录 INFO 级别日志会被埋没，必须 WARNING 级别触发运维关注。本次迭代 TTS 成功率 50% 持续 2 小时未被发现。
+
+**配置参数**（通过 `project-config.json#monitoring_thresholds` 配置）：
+```json
+{
+  "monitoring_thresholds": {
+    "keyword_hit_rate_min": 0.30,
+    "llm_word_count_achievement_min": 0.70,
+    "tts_success_rate_min": 0.80,
+    "workflow_success_rate_min": 0.90,
+    "alert_log_level": "WARNING"
+  }
+}
+```
+
+**判断信号**：
+- grep 关键业务流程无 WARNING 阈值判断（无 `if rate < threshold: logger.warning`）
+- grep 指标上报函数仅 `logger.info`，无 `logger.warning`
+
+**正确做法**：
+```python
+# ✅ 四指标阈值告警 + WARNING 级别
+async def report_workflow_metrics(metrics: dict) -> None:
+    cfg = settings.monitoring_thresholds
+    if metrics["keyword_hit_rate"] < cfg.keyword_hit_rate_min:
+        logger.warning(
+            f"Keyword hit rate {metrics['keyword_hit_rate']:.2%} "
+            f"below threshold {cfg.keyword_hit_rate_min:.2%}"
+        )
+    if metrics["llm_word_count_achievement"] < cfg.llm_word_count_achievement_min:
+        logger.warning(
+            f"LLM word count achievement {metrics['llm_word_count_achievement']:.2%} "
+            f"below threshold"
+        )
+    if metrics["tts_success_rate"] < cfg.tts_success_rate_min:
+        logger.warning(
+            f"TTS success rate {metrics['tts_success_rate']:.2%} below threshold"
+        )
+    if metrics["workflow_success_rate"] < cfg.workflow_success_rate_min:
+        logger.warning(
+            f"Workflow success rate {metrics['workflow_success_rate']:.2%} "
+            f"below threshold"
+        )
+```
+
+**错误做法**：
+```python
+# ❌ 关键指标仅记录 INFO，无 WARNING 阈值
+async def report_metrics(metrics: dict):
+    logger.info(f"keyword_hit_rate={metrics['keyword_hit_rate']}")  # 阈值下滑被埋没
+
+# ❌ 硬编码阈值，无法配置
+if metrics["tts_success_rate"] < 0.8:  # 应从配置读取
+    logger.warning("TTS rate low")
+
+# ❌ 仅告警部分指标，遗漏工作流成功率
+if metrics["keyword_hit_rate"] < 0.3:
+    logger.warning("Keyword rate low")
+# 缺少 LLM/TTS/工作流成功率检查
+```
+
+**适用场景**：所有关键业务流程（工作流/LLM/TTS/爬虫/审核）
+**不适用场景**：调试日志（DEBUG 级别）；非关键路径（如 UI 点击统计）；已对接 APM 系统（由 APM 告警）
+
+---
+
+## 规范 75：批量数据回填脚本规范
+
+**新增 ORM 字段后必须编写批量回填脚本（backfill_*.py），脚本必须支持 dry_run 预览模式、分批处理（默认 100 条/批）、幂等执行（重复运行不报错）、进度输出。**
+
+**为什么**：ORM 新增字段后，存量数据该字段为 NULL，业务代码读取 NULL 会报错或降级。回填脚本必须 dry_run 让运维预览影响范围；分批处理避免单次事务过大锁表；幂等执行保证重试安全（部分失败后重跑不报错）；进度输出便于长时间任务监控。本次迭代新增 `cover_url` 字段后无回填脚本，导致小程序 80% 文章无封面。
+
+**配置参数**（通过 `project-config.json#backfill_script` 配置）：
+```json
+{
+  "backfill_script": {
+    "batch_size": 100,
+    "dry_run_default": true,
+    "progress_log_interval": 10,
+    "idempotent_check_field": "updated_at",
+    "script_naming_pattern": "backfill_{model}_{field}.py"
+  }
+}
+```
+
+**判断信号**：
+- grep ORM 模型新增字段但无对应 `backfill_*.py` 脚本
+- grep 回填脚本无 `--execute` / `dry_run` 参数
+- grep 回填脚本无 `limit(batch_size)` 分批
+
+**正确做法**：
+```python
+# ✅ backfill_material_cover_url.py - dry_run + 分批 + 幂等 + 进度
+import argparse
+from app.core.config import settings
+from app.models.material import Material
+
+async def backfill(dry_run: bool = None, batch_size: int = None):
+    cfg = settings.backfill_script
+    dry_run = cfg.dry_run_default if dry_run is None else dry_run
+    batch_size = batch_size or cfg.batch_size
+
+    total = await db.scalar(
+        select(func.count(Material.id)).where(Material.cover_url.is_(None))
+    )
+    logger.info(f"Backfill {total} materials, dry_run={dry_run}, batch_size={batch_size}")
+
+    offset = 0
+    processed = 0
+    while offset < total:
+        # 幂等：仅查询 cover_url IS NULL 的记录
+        batch = await db.execute(
+            select(Material).where(Material.cover_url.is_(None))
+            .limit(batch_size).offset(offset)
+        )
+        materials = batch.scalars().all()
+        if dry_run:
+            logger.info(f"[DRY-RUN] Would update {len(materials)} materials (offset={offset})")
+        else:
+            for m in materials:
+                m.cover_url = await extract_cover_image(m.content, m.source_url)
+            await db.commit()
+        processed += len(materials)
+        offset += batch_size
+        if offset % (batch_size * cfg.progress_log_interval) == 0:
+            logger.info(f"Progress: {processed}/{total} ({processed/total:.1%})")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--execute", action="store_true", help="Real execute (default dry_run)")
+    parser.add_argument("--batch-size", type=int, default=None)
+    args = parser.parse_args()
+    asyncio.run(backfill(dry_run=not args.execute, batch_size=args.batch_size))
+```
+
+**错误做法**：
+```python
+# ❌ 一次性 UPDATE 全表，无 dry_run 无分批
+async def backfill_cover_url():
+    await db.execute(update(Material).values(cover_url=None))  # 锁表风险
+    # 实际上没调用 extract_cover_image，字段仍为 NULL
+
+# ❌ 无幂等检查，重复执行覆盖已回填数据
+async def backfill_cover_url():
+    materials = await db.execute(select(Material))  # 未过滤 cover_url IS NULL
+    for m in materials.scalars():
+        m.cover_url = await extract_cover_image(m.content, m.source_url)
+    await db.commit()  # 已有 cover_url 的也被覆盖
+
+# ❌ 无进度输出，长时间任务不可监控
+async def backfill_cover_url():
+    materials = await db.execute(select(Material).where(Material.cover_url.is_(None)))
+    for m in materials.scalars():
+        m.cover_url = await extract_cover_image(...)  # 不知进度
+```
+
+**适用场景**：所有 ORM 模型字段新增场景；数据迁移场景（字段类型变更/数据格式转换）
+**不适用场景**：纯查询字段（computed property）；临时字段（一次性使用后删除）；少量数据（<100 条可直接事务处理）
+
+---
+
+## 规范 76：响应拦截器特殊响应类型处理
+
+**响应拦截器必须先判断响应类型，对二进制响应类型（如 blob/arraybuffer）直接返回原始数据，不走统一 `{code, message, data}` 解构流程。**
+
+**为什么**：项目统一响应格式为 `{code, message, data}`，前端 axios 响应拦截器默认按此结构解构 `response.data.data`。但二进制响应（文件下载、音频流、图片二进制）的 `response.data` 是 Blob/ArrayBuffer，无 `code` 字段。若拦截器先解构再判断，会因 `data.code` 为 undefined 触发错误提示，导致文件下载功能不可用。
+
+**判断信号**：
+- grep `responseType.*blob` 或 `responseType.*arraybuffer` 但拦截器无对应分支
+- grep 拦截器 `response.data.code` 无前置 `responseType` 判断
+- 文件下载接口返回 200 但前端报"业务错误"
+
+**正确做法**：
+```javascript
+// ✅ 拦截器开头判断 responseType，二进制响应直接返回原始数据
+axios.interceptors.response.use(
+  (response) => {
+    // 二进制响应类型不走统一解构，避免把 Blob 当作 {code,message,data} 解析
+    if (response.config?.responseType === 'blob'
+        || response.config?.responseType === 'arraybuffer') {
+      return response.data
+    }
+    // 统一响应格式解构
+    const { code, message, data } = response.data
+    if (code === 0) {
+      return data
+    }
+    ElMessage.error(message || '请求失败')
+    return Promise.reject(new Error(message))
+  }
+)
+```
+
+**错误做法**：
+```javascript
+// ❌ 不判断 responseType，二进制响应被当作 JSON 解构
+axios.interceptors.response.use((response) => {
+  const { code, message, data } = response.data  // Blob 无 code 字段，触发错误
+  if (code === 0) return data
+  return Promise.reject(new Error(message))
+})
+
+// ❌ 判断顺序错误：先解构后判断
+axios.interceptors.response.use((response) => {
+  const { code, data } = response.data
+  if (response.config?.responseType === 'blob') return data  // 已解构，data 是 undefined
+  // ...
+})
+```
+
+**适用场景**：文件下载、音频/视频流请求、图片二进制数据获取
+**不适用场景**：JSON API 响应（统一走 `{code, message, data}` 解构）
+
+---
+
+## 规范 77：配置字段命名一致性
+
+**配置字段在前后端字段名、路由层模型字段名、CONFIG_KEY_MAP 的 key、Settings 属性名之间必须保持一致或通过明确的映射关系连接，四端必须同步。**
+
+**为什么**：项目使用 SQLite 持久化配置 + Settings 单例热生效模式。多 Provider 场景下（如 TTS 多服务商），前端字段名、后端路由 Body 字段名、CONFIG_KEY_MAP 的 key 三者必须一致；Settings 属性名虽为全大写下划线（Python 规范），但通过 CONFIG_KEY_MAP 映射后必须能正确写入。任一端命名不一致会导致前端保存的值在服务端读取时被静默忽略，配置无法生效。
+
+**判断逻辑**：
+- `config_key`（前端字段名）= 全小写下划线（如 `edge_voice`）
+- `Settings 属性名` = 全大写下划线（如 `EDGE_TTS_VOICE`）
+- `CONFIG_KEY_MAP` 映射 `config_key` → `Settings 属性名`
+- 前端表单字段、路由层 Body 字段、CONFIG_KEY_MAP 的 key 三者必须完全一致
+- Settings 属性名通过 CONFIG_KEY_MAP 的 value 映射，可独立命名
+
+**判断信号**：
+- grep `CONFIG_KEY_MAP` 中同一业务域出现多种前缀风格（如 `edge_*` 与 `edge_tts_*` 混用）
+- grep 路由 Body 模型字段名与 CONFIG_KEY_MAP 的 key 不一致
+- grep 前端表单 `v-model` 字段名与路由 Body 字段名不一致
+
+**正确做法**：
+```python
+# ✅ 四端命名一致（前端/路由/CONFIG_KEY_MAP 的 key 用逑名，Settings 用大写）
+# 前端表单：form.edge_voice
+# 路由 Body 模型：edge_voice: str = ""
+# CONFIG_KEY_MAP 的 key：edge_voice
+# Settings 属性名：EDGE_TTS_VOICE（通过 CONFIG_KEY_MAP 的 value 映射）
+
+CONFIG_KEY_MAP = {
+    "edge_voice": "EDGE_TTS_VOICE",
+    "edge_rate": "EDGE_TTS_RATE",
+    "edge_volume": "EDGE_TTS_VOLUME",
+    # 兼容旧键名（LEGACY_KEY_MAP 单独维护，不混入主映射）
+}
+
+# 读取时优先新键，fallback 到旧键
+def _get(key: str, settings_attr: str, default: str = "",
+         legacy_keys: tuple[str, ...] = ()) -> str:
+    for candidate in (key, *legacy_keys):
+        val = raw.get(candidate)
+        if val is not None:
+            return val
+    return str(getattr(settings, settings_attr, default))
+```
+
+**错误做法**：
+```python
+# ❌ 同一业务域混用多种前缀风格
+CONFIG_KEY_MAP = {
+    "edge_voice": "EDGE_TTS_VOICE",       # edge_ 前缀
+    "edge_tts_rate": "EDGE_TTS_RATE",     # edge_tts_ 前缀（混用）
+    "edge_volume": "EDGE_TTS_VOLUME",     # edge_ 前缀
+}
+# 前端保存 edge_rate，但 CONFIG_KEY_MAP 中是 edge_tts_rate，配置无法生效
+```
+
+**规则**：
+- 新增配置项时，前端表单字段、路由 Body 字段、CONFIG_KEY_MAP 的 key 三者必须同步
+- 同一业务域（如同一 Provider）的 config_key 必须使用统一前缀风格
+- Settings 属性名通过 CONFIG_KEY_MAP 的 value 映射，可独立命名（Python 大写规范）
+- 旧键名兼容通过 LEGACY_KEY_MAP 单独维护，不混入主映射
+- 字段变更时必须保留旧键名的兼容读取（legacy_keys fallback）
+
+**适用场景**：多 Provider 配置管理、全链路字段传递、SQLite 持久化配置热生效
+**不适用场景**：内部变量名（无前后端传递需求）、临时配置（一次性使用）
+
+---
+
+## 规范 78：时区一致性
+
+**生产代码统一使用 `utcnow_naive()`（本地时间 naive datetime），测试代码必须用 `datetime.now()`，禁止测试用 `datetime.utcnow()`（UTC）与本地时间混用。**
+
+**为什么**：项目为单机部署（香港时区 UTC+8），所有时间字段存储为本地 naive datetime（无时区信息）。`utcnow_naive()` 是项目封装的本地时间获取函数，与 `datetime.now()` 行为一致。但测试中如果用 `datetime.utcnow()`（UTC 时间），与生产代码的本地时间会有 8 小时偏差，导致时间比较断言失败或时间窗口判断错误。
+
+**判断逻辑**：
+- 生产代码：统一用 `utcnow_naive()` 获取当前时间（本地 naive）
+- 测试代码：必须用 `datetime.now()` 获取当前时间（本地 naive）
+- 禁止测试用 `datetime.utcnow()`（UTC 时间）与生产代码的本地时间比较
+- 所有时间字段存储为本地 naive datetime，不存储 UTC 时间
+
+**判断信号**：
+- grep 测试代码中 `datetime.utcnow()` 与生产代码 `utcnow_naive()` 混用
+- grep 测试代码中 `datetime.utcnow()` 用于时间比较断言
+- 测试时间比较失败，偏差恰好为 8 小时（UTC+8 时区差）
+
+**正确做法**：
+```python
+# ✅ 生产代码：统一用 utcnow_naive()（本地 naive）
+from app.core.timeutil import utcnow_naive
+
+async def create_record(db: AsyncSession):
+    record = Workflow(
+        started_at=utcnow_naive(),  # 本地时间 naive
+        # ...
+    )
+
+# ✅ 测试代码：用 datetime.now()（本地 naive，与生产一致）
+from datetime import datetime
+
+async def test_workflow_time_window():
+    # 测试时间窗口判断逻辑
+    now = datetime.now()  # 本地时间 naive，与 utcnow_naive() 行为一致
+    record = await create_record(db)
+    assert record.started_at <= now + timedelta(seconds=1)
+```
+
+**错误做法**：
+```python
+# ❌ 测试用 datetime.utcnow()，与生产代码 utcnow_naive() 偏差 8 小时
+from datetime import datetime
+
+async def test_workflow_time_window():
+    now = datetime.utcnow()  # UTC 时间，比本地时间晚 8 小时
+    record = await create_record(db)  # started_at 用 utcnow_naive()（本地）
+    # 断言会失败：record.started_at（本地）> now（UTC）+ 1秒
+    assert record.started_at <= now + timedelta(seconds=1)
+
+# ❌ 生产代码混用 utcnow_naive() 和 datetime.utcnow()
+async def create_record(db: AsyncSession):
+    record = Workflow(
+        started_at=utcnow_naive(),        # 本地时间
+        completed_at=datetime.utcnow(),   # UTC 时间（混用！）
+    )
+```
+
+**规则**：
+- 生产代码统一用 `utcnow_naive()` 获取当前时间
+- 测试代码统一用 `datetime.now()` 获取当前时间（与 `utcnow_naive()` 行为一致）
+- 禁止测试用 `datetime.utcnow()` 与本地时间比较
+- 所有时间字段存储为本地 naive datetime，不存储 UTC 时间
+- 单机部署（香港时区 UTC+8），无需考虑跨时区场景
+
+**适用场景**：所有涉及时间计算/比较的测试、所有时间字段存储场景
+**不适用场景**：明确需要存储 UTC 时间的场景（如跨时区分布式系统）

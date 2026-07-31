@@ -8,6 +8,9 @@ from app.core.timeutil import utcnow_naive
 from app.models import Review
 from app.models.review import ReviewStatus
 
+# 审核记录不存在的统一提示，集中管理避免多处硬编码字符串不一致
+_REVIEW_NOT_FOUND_MSG = "审核记录不存在"
+
 
 class ReviewService:
     def __init__(self, db: AsyncSession):
@@ -51,6 +54,9 @@ class ReviewService:
                 "episode_date": r.episode_date.isoformat() if r.episode_date else None,
                 "script_id": r.script_id,
                 "status": r.status if r.status else None,
+                # 自动审批标记：前端据此显示"系统自动"标签
+                "auto_approved": bool(r.auto_approved),
+                "reviewer_name": r.reviewer_name,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
             }
             for r in reviews
@@ -67,7 +73,7 @@ class ReviewService:
         )
         review = result.scalar_one_or_none()
         if review is None:
-            raise NotFoundError("审核记录不存在")
+            raise NotFoundError(_REVIEW_NOT_FOUND_MSG)
 
         script = review.script
         script_data = None
@@ -86,6 +92,11 @@ class ReviewService:
             "script": script_data,
             "audio_url": review.audio_url,
             "status": review.status if review.status else None,
+            # 自动审批标记与触发原因，详情页展示追溯信息
+            "auto_approved": bool(review.auto_approved),
+            "auto_trigger_reason": review.auto_trigger_reason,
+            "reviewer_name": review.reviewer_name,
+            "reviewed_at": review.reviewed_at.isoformat() if review.reviewed_at else None,
             "created_at": review.created_at.isoformat() if review.created_at else None,
         }
 
@@ -109,7 +120,7 @@ class ReviewService:
         )
         review = result.scalar_one_or_none()
         if review is None:
-            raise NotFoundError("审核记录不存在")
+            raise NotFoundError(_REVIEW_NOT_FOUND_MSG)
 
         # 已处理的审核记录不允许重复操作，保证审核流单向流转
         if review.status != ReviewStatus.pending:
@@ -145,3 +156,68 @@ class ReviewService:
 
         # workflow_id 随返回值带出，路由层无需再查详情
         return {"need_publish": need_publish, "workflow_id": review.workflow_id}
+
+    # 批量审批单次上限：防止一次性操作过多导致事务过长或 LLM/TTS 等下游过载
+    BATCH_MAX_SIZE = 50
+
+    async def batch_handle_action(
+        self,
+        review_ids: list[int],
+        action: str,
+        reviewer_id: int,
+        reviewer_name: str,
+        reason: str = None,
+    ) -> dict:
+        """批量处理审核动作。
+
+        设计要点：
+        - 仅允许 approve / reject 批量操作；replace 需 segment_id 不适合批量
+        - 每条独立 commit，保证部分成功可生效；单条失败不影响其他
+        - 已处理的记录归入 skipped 而非 failed，便于前端区分展示
+        - 上限由 BATCH_MAX_SIZE 控制，超出拒绝整批
+        """
+        if action not in ("approve", "reject"):
+            raise BizError(code=400, message="批量操作仅支持 approve/reject")
+        if action == "reject" and not reason:
+            raise BizError(code=400, message="批量打回必须填写理由")
+        if not review_ids:
+            raise BizError(code=400, message="review_ids 不能为空")
+        if len(review_ids) > self.BATCH_MAX_SIZE:
+            raise BizError(
+                code=400,
+                message=f"批量操作上限 {self.BATCH_MAX_SIZE} 条，当前 {len(review_ids)} 条",
+            )
+
+        succeeded: list[dict] = []
+        failed: list[dict] = []
+        skipped: list[dict] = []
+
+        for rid in review_ids:
+            try:
+                result = await self.handle_action(
+                    review_id=rid,
+                    action=action,
+                    reviewer_id=reviewer_id,
+                    reviewer_name=reviewer_name,
+                    reason=reason,
+                )
+                succeeded.append({
+                    "id": rid,
+                    "workflow_id": result["workflow_id"],
+                    "need_publish": result["need_publish"],
+                })
+            except NotFoundError:
+                failed.append({"id": rid, "reason": _REVIEW_NOT_FOUND_MSG})
+            except BizError as exc:
+                # 已处理记录归类为 skipped，便于前端提示用户
+                if "已处理" in exc.message:
+                    skipped.append({"id": rid, "reason": exc.message})
+                else:
+                    failed.append({"id": rid, "reason": exc.message})
+
+        return {
+            "succeeded": succeeded,
+            "failed": failed,
+            "skipped": skipped,
+            "total": len(review_ids),
+        }

@@ -126,3 +126,175 @@ async def verify_internal(request: Request):
     if client_host not in ("127.0.0.1", "::1", "localhost"):
         raise HTTPException(status_code=403, detail="Internal access only")
 ```
+
+## 凭证脱敏规范
+
+### 正则保留 key 名只抹去 value
+
+**为什么**：日志输出、错误信息、测试断言中可能包含凭证信息（API Key / Token / Secret / Password / AppKey）。直接整体替换为 `***` 会丢失字段名上下文，无法定位是哪个凭证泄露；正确做法是保留 key 名，仅抹去 value，便于日志排查同时不暴露凭证。
+
+**判断逻辑**：
+- 正则匹配保留 key 名，仅抹去 value
+- 替换为 `m.group(1) + "***"`（保留 key 名 + 分隔符 + 脱敏标记），而非整体替换为 `***`
+- 适用凭证类型：token / secret / key / password / appkey（不区分大小写）
+
+**固定流程**：
+1. 识别输出文本中可能包含凭证的字段（key=value 或 key: value 格式）
+2. 用正则匹配凭证字段：`(?i)((?:token|secret|key|password|appkey)\s*[:=]\s*)\S+`
+3. 替换 value 为 `***`，保留 key 名和分隔符
+
+**正确做法**：
+```python
+import re
+
+# ✅ 保留 key 名，仅抹去 value
+def mask_credentials(text: str) -> str:
+    """脱敏文本中的凭证信息，保留 key 名便于排查。
+
+    匹配 token/secret/key/password/appkey 字段（不区分大小写），
+    保留 key 名和分隔符，仅将 value 替换为 ***。
+    """
+    pattern = r"(?i)((?:token|secret|key|password|appkey)\s*[:=]\s*)\S+"
+    return re.sub(
+        pattern,
+        lambda m: m.group(1) + "***",  # 保留 key 名 + 分隔符 + 脱敏标记
+        text,
+    )
+
+# 示例
+# 输入：'api_key=sk-abc123, token=xyz789'
+# 输出：'api_key=***, token=***'
+# 输入：'Authorization: Bearer sk-secret123'
+# 输出：'Authorization: Bearer ***'（key 字段不匹配，Bearer 不在清单内，需扩展）
+```
+
+**错误做法**：
+```python
+# ❌ 整体替换为 ***，丢失 key 名上下文
+def mask_credentials(text: str) -> str:
+    pattern = r"(?i)(?:token|secret|key|password|appkey)\s*[:=]\s*\S+"
+    return re.sub(pattern, "***", text)
+    # 输入：'api_key=sk-abc123, token=xyz789'
+    # 输出：'***, ***'  # 无法区分是哪个凭证
+
+# ❌ 仅匹配固定字段名，遗漏 appkey 等
+def mask_credentials(text: str) -> str:
+    # 仅匹配 api_key，遗漏 token/secret/password/appkey
+    return re.sub(r"api_key=\S+", "api_key=***", text)
+
+# ❌ 不区分大小写，遗漏 Token/TOKEN 等变体
+def mask_credentials(text: str) -> str:
+    # 仅匹配小写 token，遗漏 Token/TOKEN
+    return re.sub(r"token=\S+", "token=***", text)
+```
+
+**规则**：
+- 正则必须不区分大小写（`(?i)` 前缀），覆盖 Token/TOKEN/Secret/SECRET 等变体
+- 替换时保留 key 名和分隔符（`m.group(1) + "***"`），不整体替换
+- 凭证类型清单至少包含：token / secret / key / password / appkey
+- 日志输出、错误信息、测试断言中的凭证必须经过脱敏处理
+
+**适用场景**：日志输出、错误信息、测试断言、调试信息中包含凭证的场景
+**不适用场景**：非凭证类文本（如普通业务数据）；配置文件中的凭证（应通过环境变量管理）
+
+## 内存泄漏防护（Blob URL 释放）
+
+### blob URL 必须在组件卸载、列表刷新、删除操作时释放
+
+**为什么**：`URL.createObjectURL(blob)` 创建的 blob URL 会持续占用内存，浏览器不会自动回收（除非页面卸载）。如果组件卸载、列表刷新、删除操作时不调用 `URL.revokeObjectURL(url)` 释放，blob 数据会驻留在内存中，长时间运行后导致浏览器内存泄漏，页面卡顿甚至崩溃。
+
+**判断逻辑**：
+- blob URL 创建后必须在适当时机释放：组件卸载、列表刷新、删除操作
+- 按需加载策略：首次点击才请求音频/文件数据，避免列表加载时并发请求
+- 释放时机：组件 `onUnmounted`、列表 `refresh`、删除元素后
+
+**固定流程**：
+1. 创建 blob URL 时记录引用（保存到 ref/reactive）
+2. 在以下时机释放：组件卸载（`onUnmounted`）、列表刷新（`refresh`）、删除元素后
+3. 释放后将引用置为 null，避免悬空引用
+4. 按需加载：列表加载时不请求二进制数据，首次点击才请求
+
+**正确做法**：
+```javascript
+// ✅ Vue 3 组件：blob URL 在卸载/刷新/删除时释放
+import { ref, onUnmounted } from 'vue'
+
+const audioUrl = ref(null)
+const audioUrls = ref([])  // 列表场景
+
+// 按需加载：首次点击才请求音频数据
+async function playAudio(materialId: string) {
+  // 已存在 blob URL 则复用，避免重复创建
+  if (audioUrl.value) {
+    return
+  }
+  const blob = await fetchAudioBlob(materialId)
+  audioUrl.value = URL.createObjectURL(blob)
+}
+
+// 列表刷新时释放所有 blob URL
+async function refreshList() {
+  // 释放旧 blob URL，避免内存泄漏
+  audioUrls.value.forEach(url => URL.revokeObjectURL(url))
+  audioUrls.value = []
+  // 重新加载数据（不预加载二进制，按需加载）
+  await loadList()
+}
+
+// 删除元素后释放对应 blob URL
+async function deleteItem(id: string) {
+  const idx = audioUrls.value.findIndex(item => item.id === id)
+  if (idx >= 0) {
+    URL.revokeObjectURL(audioUrls.value[idx].url)  // 释放被删除元素的 blob URL
+    audioUrls.value.splice(idx, 1)
+  }
+  await apiDeleteItem(id)
+}
+
+// 组件卸载时释放所有 blob URL
+onUnmounted(() => {
+  if (audioUrl.value) {
+    URL.revokeObjectURL(audioUrl.value)
+    audioUrl.value = null
+  }
+  audioUrls.value.forEach(url => URL.revokeObjectURL(url))
+  audioUrls.value = []
+})
+```
+
+**错误做法**：
+```javascript
+// ❌ 创建 blob URL 但不释放，组件卸载后内存泄漏
+async function playAudio(materialId: string) {
+  const blob = await fetchAudioBlob(materialId)
+  audioUrl.value = URL.createObjectURL(blob)
+  // 无 onUnmounted 释放，无 refresh 释放，无 delete 释放
+}
+
+// ❌ 列表加载时预加载所有二进制数据，并发请求 + 内存堆积
+async function loadList() {
+  const items = await apiListItems()
+  // 列表加载时并发请求所有音频数据（应按需加载）
+  items.forEach(async (item) => {
+    const blob = await fetchAudioBlob(item.id)
+    item.audioUrl = URL.createObjectURL(blob)
+  })
+}
+
+// ❌ 删除元素后不释放对应 blob URL
+async function deleteItem(id: string) {
+  await apiDeleteItem(id)
+  // 未调用 URL.revokeObjectURL 释放被删除元素的 blob URL
+  // 数组虽 splice，但 blob URL 仍占用内存
+}
+```
+
+**规则**：
+- blob URL 创建后必须记录引用，便于后续释放
+- 释放时机：组件卸载（`onUnmounted`）、列表刷新（`refresh`）、删除元素后
+- 释放后必须将引用置为 null，避免悬空引用
+- 列表加载时不预加载二进制数据，按需加载（首次点击才请求）
+- 多个 blob URL 用数组管理，批量释放
+
+**适用场景**：音频/视频播放、文件预览、图片二进制展示
+**不适用场景**：静态资源 URL（如 `https://example.com/image.png`，浏览器自动管理）

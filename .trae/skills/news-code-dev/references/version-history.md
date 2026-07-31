@@ -289,3 +289,128 @@
 - news-backend-code-review v1.6.0 → v1.7.0：新增 8 个审查维度（73-80）
 - news-frontend-code-review v1.7.0 → v1.8.0：新增 4 个审查维度（57-60）
 - news-auto-testing v5 → v6：新增 4 个测试阶段（20-23）
+
+## v3.0.0 (2026-07-22)
+
+### 前端交互稳定性与编辑完整性复盘规范
+
+**背景**：基于 2026-07-22 多轮修复经验（浏览器最小化自动弹出三轮修复 + Agnes AI 模型名大小写 + 工作流重跑状态轮询 + 步骤进度条可视化 + API Key 脱敏回退 + preset_configs 旧数据兼容 + Edit 工具文件损坏），按 Sequential Thinking 4 维度框架系统性地提炼编码规范与可复用流程，预防同类问题再次发生。
+
+**新增元规范（9 条，R118-R126）**：
+- R118：浏览器窗口最小化防护（CRITICAL）— router.push 替代 location.href、!document.hidden 检查、silent 请求、严格相等路径判断
+- R119：异步路由参数时序处理（HIGH）— router.replace 异步、显式传参、detail.value 取最新值
+- R120：列表数据动态轮询状态同步（HIGH）— 终态停止、运行态轮询、不可见暂停、silent 请求、重跑重置
+- R121：第三方服务模型名称核对（CRITICAL）— 官方文档为准、大小写敏感、预设配置一致
+- R122：API Key 脱敏回退链路（HIGH）— is_masked 检查、回退真实密钥、preset_configs 旧数据兼容
+- R123：文件编辑完整性验证（HIGH）— Edit 后 Read 验证、损坏信号检测、Write 完整重写、构建产物 Grep 验证
+- R124：步骤进度可视化（MEDIUM）— pending=0%/running=50%/success=100%、条纹动画、状态映射
+- R125：跨流程组合应用场景（MEDIUM）— 详情页/配置页/测试连接的组合流程模板
+- R126：配置驱动与通用性约束（HIGH）— 所有参数通过配置文件管理、禁止硬编码、新增场景只需修改配置
+
+**可抽象的 7 类固定流程 + 5 类判断逻辑矩阵**：
+1. **浏览器窗口最小化防护流程（Frontend-Minimize-Guard）**：router.push 替代 location.href、!document.hidden 检查、silent 请求、严格相等路径判断
+2. **异步操作后路由参数时序处理流程（Route-Param-Timing）**：router.replace 异步、显式传参、detail.value 取最新值
+3. **列表数据动态轮询流程（Polling-State-Sync）**：终态停止、运行态轮询、不可见暂停、silent 请求、重跑重置
+4. **第三方服务模型名称核对流程（Model-Name-Verification）**：官方文档为准、大小写敏感、预设配置一致
+5. **API Key 脱敏回退链路流程（Masked-Key-Fallback）**：is_masked 检查、回退真实密钥、preset_configs 旧数据兼容
+6. **文件编辑完整性验证流程（Edit-Integrity-Verify）**：Edit 后 Read 验证、损坏信号检测、Write 完整重写、构建产物 Grep 验证
+7. **步骤进度可视化流程（Step-Progress-Visualize）**：pending 0%、running 50%+条纹、success 100%、failed 100%+exception
+
+判断逻辑矩阵：
+1. 路由跳转方式选择矩阵（401/业务/重跑/外链）
+2. 错误提示可见性判断矩阵（用户操作/轮询/不可见/401）
+3. 异步数据加载参数来源矩阵（正常/replace后/轮询/重跑后）
+4. 文件修改工具选择矩阵（小修改/大重写/损坏/验证）
+5. 进度条状态映射矩阵（pending/running/retrying/success/failed）
+
+**project-config.json 新增配置节**：
+- `frontend_minimize_guard`：浏览器窗口最小化防护参数（forbid_location_href/require_hidden_check/silent_param/strict_path_match/login_path）
+- `route_param_timing`：异步路由参数时序参数（explicit_param_mode/use_detail_value/await_after_replace）
+- `polling_state_sync`：轮询状态同步参数（interval_ms/terminal_states/running_state/silent_param/pause_on_hidden/stop_before_restart）
+- `model_name_verification`：模型名称核对参数（case_sensitive/official_source_required/sync_pricing_table/sync_frontend_presets）
+- `masked_key_fallback`：API Key 脱敏回退参数（is_masked_check/fallback_to_db/preset_configs_storage/legacy_data_compat/masked_prefix）
+- `edit_integrity_verify`：文件编辑完整性验证参数（verify_after_edit/corruption_signals/use_write_for_large_rewrite/build_grep_check/build_artifact_path）
+- `step_progress_visualize`：步骤进度可视化参数（state_mapping/success_status/failed_status/stripe_anim_states/max_percentage）
+- `cross_flow_combination`：跨流程组合参数（detail_page_combo/config_page_combo/test_connection_combo）
+- `config_driven_universal`：配置驱动通用性参数（config_files/forbid_hardcoded/template_fixed/new_scenario_config_only）
+
+**配置驱动原则**：所有新规范的阈值参数均通过 project-config.json 管理，不同项目可调整阈值不需修改技能代码。
+
+**适用场景与不适用场景**：
+- 浏览器窗口最小化防护：适用于 SPA 后台管理系统、需要轮询的页面；不适用于 SSR 应用、移动端 App
+- 异步路由参数时序处理：适用于 SPA 路由跳转后立即加载新数据；不适用于同步路由、URL 直接访问
+- 列表数据动态轮询：适用于工作流/任务监控；不适用于 WebSocket/SSE 实时推送
+- 第三方服务模型名称核对：适用于接入第三方 LLM/TTS API；不适用于内部自研 API
+- API Key 脱敏回退链路：适用于配置页面有 API Key 脱敏显示；不适用于无 API Key 的系统
+- 文件编辑完整性验证：适用于使用 Edit 工具修改文件；不适用于全新文件创建
+- 步骤进度可视化：适用于工作流步骤、批处理进度；不适用于实时数据流、瞬时操作
+
+**跨技能同步更新**：
+- news-frontend-code-review：新增 5 个审查配置区块（frontend_minimize_guard_check/route_param_timing_check/polling_state_sync_check/step_progress_visualize_check/edit_integrity_verify_check）
+- news-backend-code-review：新增 3 个审查配置区块（model_name_case_check/masked_key_fallback_check/preset_configs_legacy_compat_check）
+- news-auto-testing：新增 6 个测试阶段（stage_minimize_guard_test/stage_route_param_timing_test/stage_polling_state_sync_test/stage_step_progress_render_test/stage_edit_integrity_verify_test/stage_masked_key_fallback_test）
+
+## v2.1.0 (2026-07-13)
+
+### 编码规范系统性补充（7 条）
+
+**背景**：基于最近解决的问题，系统性地提炼 7 条编码规范到 news-code-dev 技能中，覆盖前端响应拦截器、工作流重跑语义、配置字段命名、时区一致性、外键约束、凭证脱敏、内存泄漏防护等高频踩坑场景。
+
+**新增编码规范（7 条）**：
+
+1. **规范 76：响应拦截器特殊响应类型处理**（references/coding-standards.md）
+   - 二进制响应类型（blob/arraybuffer）不走统一 `{code,message,data}` 解构
+   - 拦截器开头判断 responseType，直接返回原始数据
+   - 适用场景：文件下载、音频/视频流、图片二进制数据
+
+2. **规范 2：工作流重跑/重试语义**（assets/guides/workflow-guide.md 第 9 节）
+   - 重跑应在原工作流上执行，不创建新工作流
+   - 固定流程：删除 from_step 及之后步骤记录 → 重置状态为 queued → 入队当前 workflow_id
+   - 前驱校验：from_step 之前的步骤必须 success 且有 result
+   - 不适用场景：全新工作流触发（应用 trigger_workflow）
+
+3. **规范 77：配置字段命名一致性**（references/coding-standards.md）
+   - config_key（前端字段名）= 逑名（如 edge_voice）
+   - Settings 属性名 = 全大写下划线（如 EDGE_TTS_VOICE）
+   - CONFIG_KEY_MAP 映射 config_key → Settings 属性名
+   - 前后端字段名、路由层模型字段名、CONFIG_KEY_MAP 的 key 必须四者一致
+
+4. **规范 78：时区一致性**（references/coding-standards.md）
+   - 生产代码用 utcnow_naive()（本地时间），测试必须用 datetime.now()
+   - 禁止测试用 datetime.utcnow()（UTC）与本地时间混用
+   - 项目为单机部署（香港时区 UTC+8），所有时间字段存储为本地 naive datetime
+
+5. **规范 5：外键约束防御性处理**（assets/rules/database.md）
+   - 不依赖 SQLite PRAGMA foreign_keys 开关，手动处理关联表
+   - 删除父记录前先 UPDATE 子表外键为 NULL
+   - 测试环境默认未开启 PRAGMA foreign_keys，手动 UPDATE 保证行为一致
+
+6. **规范 6：凭证脱敏规范**（assets/rules/security.md）
+   - 正则保留 key 名只抹去 value：`(?i)((?:token|secret|key|password|appkey)\s*[:=]\s*)\S+`
+   - 替换为 `m.group(1) + "***"` 而非整体替换为 `***`
+   - 适用场景：日志输出、错误信息、测试断言
+
+7. **规范 7：内存泄漏防护（Blob URL 释放）**（assets/rules/security.md）
+   - blob URL 必须在组件卸载、列表刷新、删除操作时释放
+   - 按需加载策略：首次点击才请求音频/文件数据，避免列表加载时并发请求
+   - 适用场景：音频/视频播放、文件预览、图片二进制展示
+
+**规范描述统一格式**：所有 7 条规范均包含「判断逻辑 + 固定流程 + 适用场景 + 不适用场景」四要素，确保可执行可验证。
+
+**配置驱动原则**：所有规范与项目 V1.2 架构（SQLite + TTLCache + 单机 exe）一致，不硬编码具体业务字段名，用逑名表达（如「响应类型」而非「blob」）。
+
+**适用场景与不适用场景**：
+- 响应拦截器特殊响应类型处理：适用于二进制响应；不适用于 JSON API 响应
+- 工作流重跑语义：适用于任意步骤重跑、断点续跑；不适用于全新工作流触发
+- 配置字段命名一致性：适用于多 Provider 配置、全链路字段传递；不适用于内部变量名
+- 时区一致性：适用于所有时间计算/比较的测试；不适用于明确存储 UTC 时间的场景
+- 外键约束防御性处理：适用于测试环境与生产环境行为不一致的外键操作；不适用于明确开启外键约束且数据完整性要求高的场景
+- 凭证脱敏规范：适用于日志输出、错误信息、测试断言；不适用于非凭证类文本
+- 内存泄漏防护：适用于音频/视频播放、文件预览；不适用于静态资源 URL
+
+**文档结构同步**：
+- SKILL.md：version 2.0.0 → 2.1.0，updated 2026-07-18 → 2026-07-13
+- references/coding-standards.md：新增规范 76/77/78
+- assets/guides/workflow-guide.md：新增第 9 节「工作流重跑/重试语义」
+- assets/rules/database.md：新增「外键约束防御性处理」章节
+- assets/rules/security.md：新增「凭证脱敏规范」和「内存泄漏防护（Blob URL 释放）」章节

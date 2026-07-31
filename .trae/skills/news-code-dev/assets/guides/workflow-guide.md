@@ -679,3 +679,96 @@ async def execute_batch(self, task_id: str):
         await self._update_status(task_id, WorkflowStatus.FAILED)
         raise
 ```
+
+## 9. 工作流重跑/重试语义
+
+### 重跑应在原工作流上执行，不创建新工作流
+
+**为什么**：工作流重跑（retry）的目标是从指定步骤开始重新执行，复用上游成功步骤的产物。如果重跑时创建新工作流，会丢失原工作流的执行历史和上游成功产物，无法实现断点续跑；同时原工作流的状态会停留在 failed，污染监控统计。
+
+**判断逻辑**：
+- 重跑必须在原工作流上执行（复用原 `workflow_id`），不创建新工作流
+- 全新工作流触发应使用 `trigger_workflow`，而不是重跑接口
+- 重跑前必须校验：`from_step` 之前的步骤必须 success 且有 result
+
+**固定流程**：
+1. 校验前驱步骤：`from_step` 之前的所有步骤状态为 success 且有 result 产物
+2. 删除步骤记录：删除 `from_step` 及其之后的所有步骤记录
+3. 重置工作流状态：将工作流状态重置为 `queued`
+4. 入队重跑：将当前 `workflow_id` 入队等待调度器执行
+5. 调度器从 `from_step` 开始执行，复用前驱步骤的 result 产物
+
+**正确做法**：
+```python
+# ✅ 在原工作流上重跑，复用 workflow_id
+async def retry_from_step(self, workflow_id: str, from_step: str) -> dict:
+    """在原工作流上从指定步骤重跑。
+
+    规则：
+    1. 校验 from_step 之前的步骤必须 success 且有 result
+    2. 删除 from_step 及之后步骤记录
+    3. 重置工作流状态为 queued
+    4. 入队当前 workflow_id（不创建新工作流）
+    """
+    # 1. 前驱校验：from_step 之前的步骤必须 success 且有 result
+    upstream_steps = await self._get_steps_before(workflow_id, from_step)
+    for step in upstream_steps:
+        if step.status != "success" or step.result is None:
+            raise BusinessError(
+                f"重跑 {from_step} 需要前驱步骤 {step.name} 成功且有产物，"
+                f"当前状态: {step.status}"
+            )
+
+    # 2. 删除 from_step 及之后步骤记录
+    await self.db.execute(
+        delete(WorkflowStep)
+        .where(WorkflowStep.workflow_id == workflow_id)
+        .where(WorkflowStep.step_order >= from_step_order)
+    )
+
+    # 3. 重置工作流状态为 queued
+    await self.db.execute(
+        update(Workflow)
+        .where(Workflow.id == workflow_id)
+        .values(status="queued", started_at=None, completed_at=None)
+    )
+    await self.db.commit()
+
+    # 4. 入队当前 workflow_id（不创建新工作流）
+    await self.scheduler.enqueue(workflow_id)
+    return {"workflow_id": workflow_id, "from_step": from_step}
+```
+
+**错误做法**：
+```python
+# ❌ 创建新工作流，丢失原工作流历史和上游产物
+async def retry_from_step(self, original_workflow_id: str, from_step: str) -> dict:
+    new_workflow_id = generate_uuid()  # 创建新工作流
+    # 复制原工作流的上游产物到新工作流（复杂且易错）
+    await self._copy_upstream_results(original_workflow_id, new_workflow_id, from_step)
+    await self.scheduler.enqueue(new_workflow_id)  # 入队新工作流
+    return {"workflow_id": new_workflow_id}  # 返回新 ID，前端跳转新页面
+
+# ❌ 未校验前驱步骤，from_step 之前的步骤可能失败或无产物
+async def retry_from_step(self, workflow_id: str, from_step: str) -> dict:
+    await self.db.execute(
+        update(Workflow).where(Workflow.id == workflow_id).values(status="queued")
+    )
+    await self.scheduler.enqueue(workflow_id)  # 前驱步骤可能无 result，重跑会失败
+
+# ❌ 全新工作流触发用重跑接口
+async def trigger_new_workflow(self):
+    # 应使用 trigger_workflow，而不是创建一个 failed 工作流再重跑
+    wf = await self._create_workflow(status="failed")
+    await self.retry_from_step(wf.id, "crawl")  # 误用重跑接口
+```
+
+**规则**：
+- 重跑接口必须复用原 `workflow_id`，禁止创建新工作流
+- 重跑前必须校验 `from_step` 之前的步骤状态为 success 且有 result
+- 删除 `from_step` 及之后步骤记录，重置工作流状态为 queued
+- 入队当前 `workflow_id`，调度器从 `from_step` 开始执行
+- 全新工作流触发应使用 `trigger_workflow`，不是重跑接口
+
+**适用场景**：工作流任意步骤重跑、断点续跑、失败后从指定步骤恢复
+**不适用场景**：全新工作流触发（应用 `trigger_workflow`）、工作流取消后重新触发

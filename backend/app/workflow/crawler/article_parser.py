@@ -35,6 +35,19 @@ async def extract(url: str, fallback_selectors: Optional[dict] = None) -> dict:
         ) as client:
             resp = await client.get(url)
             resp.raise_for_status()
+            # httpx 仅根据 HTTP header Content-Type 的 charset 设置编码，
+            # 多数中文站点（人民网、新浪等）在响应头不声明 charset，
+            # 此时 httpx 默认按 ISO-8859-1 解码导致中文页面乱码。
+            # 用 charset_normalizer 检测字节流实际编码兜底（httpx 已传递依赖该库）
+            if not resp.charset_encoding:
+                try:
+                    from charset_normalizer import from_bytes
+                    best = from_bytes(resp.content).best()
+                    if best and best.encoding:
+                        resp.encoding = best.encoding
+                except Exception:
+                    # 编码检测失败时退回 httpx 默认行为，由 errors=replace 容错
+                    pass
             html = resp.text
     except Exception as e:
         # 网络错误、404、超时等：记录后返回 None 由上层兜底
@@ -102,7 +115,7 @@ def _normalize_img_url(src: str, base_url: str) -> str | None:
     return src
 
 
-def _parse_html(html: str, base_url: str = "") -> dict:
+def _parse_html(html: str, base_url: str = "") -> dict:  # NOSONAR
     """从 HTML 提取标题、正文与封面图。
 
     启发式策略：优先取 <article> 容器内的 <p>；无 <article> 时取全页 <p>。

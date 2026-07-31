@@ -7,7 +7,7 @@
 - 两者复用 /subscriptions 前缀，但子路径不同：/subscriptions/message 与 /subscriptions/channels/{id}
 """
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,7 +23,8 @@ router = APIRouter(prefix="/api/v1/subscriptions", tags=["C端-订阅"])
 
 class MessageSubscriptionRequest(BaseModel):
     """订阅消息授权记录请求体。"""
-    template_id: str
+    # 微信模板 ID 长度约 40 字符，加 128 上限防止异常长字符串入库
+    template_id: str = Field(..., min_length=1, max_length=128, description="微信订阅消息模板 ID")
 
 
 @router.post("/message")

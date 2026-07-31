@@ -452,6 +452,65 @@ const docSections = [
     ],
   },
   {
+    id: 'cos-storage',
+    title: '音频存储（COS）',
+    icon: markRaw(Coin),
+    intro: '配置腾讯云 COS 对象存储，加速小程序音频播放。生产环境强烈推荐。',
+    blocks: [
+      {
+        type: 'feature',
+        title: '为什么需要 COS',
+        content: '未配置 COS 时，音频文件经 Tailscale Funnel 中转播放，受限于家庭宽带上行与公网中转延迟，首字播放延迟可达 300-1000ms。配置 COS 后音频直走腾讯云边缘节点，首字延迟降至 50-200ms，下载速度提升 5-10 倍，且不依赖用户电脑在线。',
+      },
+      {
+        type: 'steps',
+        title: '获取 COS 凭证步骤',
+        content: [
+          '注册腾讯云账号：访问 cloud.tencent.com，用微信扫码或手机号注册并完成实名认证（个人认证即可）',
+          '开通对象存储：控制台搜索"对象存储" → 首次进入会提示开通（按用量计费，10GB 内约 1 元/月）',
+          '创建存储桶：存储桶列表 → 创建存储桶，名称自定义（如 morningbrief-audio），地域选离你近的（如 ap-beijing/ap-shanghai），访问权限选"公有读私有写"',
+          '获取 API 密钥：访问管理 → API 密钥管理（console.cloud.tencent.com/cam/capi）→ 新建密钥 → 复制 SecretId 和 SecretKey（SecretKey 只显示一次，请妥善保存）',
+          '记录 Bucket 信息：存储桶详情页复制完整 Bucket 名称（格式：名称-appid，如 morningbrief-audio-1311027859）和所属地域（如 ap-beijing）',
+        ],
+      },
+      {
+        type: 'config',
+        title: '.env 配置参数',
+        content: [
+          ['COS_SECRET_ID', 'AKIDxxxxxxxxxxxxxxxxxxxxxx', '访问管理 API 密钥 ID'],
+          ['COS_SECRET_KEY', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', '访问管理 API 密钥（保密，切勿泄露）'],
+          ['COS_BUCKET', 'morningbrief-audio-1311027859', '存储桶完整名称（含 appid 后缀）'],
+          ['COS_REGION', 'ap-beijing', '存储桶地域（创建时选择）'],
+          ['COS_CDN_DOMAIN', '（留空）', 'CDN 加速域名，留空则用 COS 默认域名（已备案可直用）'],
+        ],
+      },
+      {
+        type: 'steps',
+        title: '部署步骤',
+        content: [
+          '编辑 backend/.env：填入上述 5 个 COS 参数（COS_CDN_DOMAIN 留空即可）',
+          '安装 COS SDK：pip install cos-python-sdk-v5',
+          '验证凭证：python jmeter_test/verify_cos.py（自动上传测试文件 → 公网访问 → 清理）',
+          '迁移历史音频：python jmeter_test/migrate_audio_to_cos.py（自动扫描 /audio/ 路径的 episode 并上传 COS）',
+          '重启后端服务：执行 stop.ps1 → start.ps1',
+          '配置小程序域名白名单：mp.weixin.qq.com → 开发管理 → 服务器域名 → downloadFile 合法域名 → 添加 https://<bucket>.cos.<region>.myqcloud.com',
+          '真机验证：小程序播放任意节目，观察首字播放延迟应显著降低',
+        ],
+      },
+      {
+        type: 'scenario',
+        title: '使用场景',
+        content: '生产环境部署完成后，音频播放慢于局域网；或希望音频播放不依赖开发电脑在线。开发环境调试时可不配置 COS，音频走本地 /audio 路径即可。',
+      },
+      {
+        type: 'note',
+        title: '注意事项',
+        content: 'COS_CDN_DOMAIN 留空时会用 COS 默认域名（xxx.cos.xxx.myqcloud.com），该域名已备案可直用。若需自定义 CDN 域名（如 audio.example.com），需先注册域名并完成 ICP 备案（约 7-20 个工作日）。SecretKey 切勿提交到 Git 或泄露给前端。迁移脚本幂等可重复执行。',
+        noteType: 'warning',
+      },
+    ],
+  },
+  {
     id: 'about',
     title: '关于 / 版本信息',
     icon: markRaw(Promotion),

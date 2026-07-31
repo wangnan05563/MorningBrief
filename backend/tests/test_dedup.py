@@ -124,3 +124,48 @@ async def test_is_duplicate_url_takes_priority(db_session):
         db_session,
     )
     assert result is True
+
+
+@pytest.mark.asyncio
+async def test_is_duplicate_material_url_hit_when_dedup_empty(db_session):
+    """dedup 表无记录但 material 表有同 URL 时应判重（双源去重兜底）。
+
+    复盘 wf-20260730-0005/0006/0008 故障：凌晨 03:00 _cleanup_crawler_dedup
+    清理 TTL 过期 dedup 记录，但 material.url 仍保留 UNIQUE 约束。
+    05:00 cron crawl 时 dedup 未命中但 INSERT material 触发 UNIQUE 冲突。
+    修复：is_duplicate 同时检查 material.url，避免 INSERT 冲突。
+    """
+    from app.models.material import Material, MaterialSourceType, MaterialStatus
+
+    url = "http://example.com/legacy-article"
+    # 直接向 material 表插入一条记录（不通过 dedup，模拟 dedup 被 TTL 清理后的状态）
+    material = Material(
+        source="测试源",
+        source_type=MaterialSourceType.rss,
+        title="测试标题",
+        content="测试内容",
+        url=url,
+        status=MaterialStatus.pending.value,
+        simhash=compute("测试标题"),
+    )
+    db_session.add(material)
+    await db_session.commit()
+
+    # dedup 表为空，但 material 表有该 URL → 应判重
+    result = await is_duplicate(url, "其他标题", compute("其他标题"), db_session)
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_is_duplicate_dedup_hit_short_circuits_material_check(db_session):
+    """dedup 命中时应短路返回，不再查询 material 表（性能优化）。
+
+    验证 dedup 检查优先于 material.url 检查。
+    """
+    url = "http://example.com/dedup-first"
+    await add_to_dedup(url, compute("dedup 测试"), db_session)
+    await db_session.commit()
+
+    # material 表中无此 URL，但 dedup 表命中 → 应判重（短路）
+    result = await is_duplicate(url, "其他标题", compute("其他标题"), db_session)
+    assert result is True

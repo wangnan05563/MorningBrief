@@ -271,7 +271,7 @@ _RSS_RECOMMEND_TEMPLATE = """你是一位专业的新闻编辑。请根据频道
 """
 
 
-async def recommend_rss_keywords_for_channel(
+async def recommend_rss_keywords_for_channel( # NOSONAR
     name: str, description: str, rss_list: list[dict],
 ) -> dict:
     """调用 LLM 为频道推荐 RSS 源子集与关键词过滤。

@@ -639,4 +639,579 @@ miniprogram_navigation_safety:
     - "onTapHistory"
     - "onTapEpisode"
 
+# ============================================================
+# === 2026-07-20 新增：SonarQube 全项目扫描复盘审查配置（前端侧，维度 70-74）===
+# ============================================================
+# 对应 news-code-dev 元规范 R86-R90，详见 SKILL.md 维度 70-74
+# 这些维度来源于 2026-07-20 SonarQube 全项目扫描闭环（168 issues 全部 CLOSED）
+# 前端 NOSONAR 注释语法与后端不同，需按文件类型分别匹配
+
+# ---- 维度 70：NOSONAR 注释位置正确性（前端注释语法，对应 S61/R86）----
+# 背景：SonarQube 扫描前端代码时，NOSONAR 注释必须使用对应文件类型的注释语法
+#       .js/.vue <script> 用 //，.vue <template>/.wxml 用 <!-- -->，.wxss 用 /* */
+# 规则：NOSONAR 大小写敏感（必须全大写），且行号必须与 issue 报告一致
+nosonar_positioning_frontend:
+  enabled: true
+  # 大小写敏感（NOSONAR 必须全大写）
+  case_sensitive: true
+  # NOSONAR 行号必须与 SonarQube issue 报告的行号一致
+  require_line_match_with_issue: true
+  # 按文件类型的合法 NOSONAR 注释语法
+  valid_patterns:
+    .js: "//\\s*NOSONAR\\s*$"                          # JS 单行注释
+    .vue_script: "//\\s*NOSONAR\\s*$"                  # Vue SFC <script> 内 JS 注释
+    .vue_template: "<!--\\s*NOSONAR\\s*-->"             # Vue SFC <template> 内 HTML 注释
+    .wxml: "<!--\\s*NOSONAR\\s*-->"                     # WXML HTML 注释
+    .wxss: "/\\*\\s*NOSONAR\\s*\\*/"                    # WXSS CSS 块注释
+  # 非法模式（大小写错误，不生效）
+  invalid_patterns:
+    - "//\\s*nosonar"      # 小写不生效
+    - "//\\s*NoSonar"      # 混合大小写不生效
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/**/*.vue"
+    - "admin-web/src/**/*.js"
+    - "miniprogram/**/*.js"
+    - "miniprogram/**/*.wxml"
+    - "miniprogram/**/*.wxss"
+
+# ---- 维度 71：SonarQube 扫描环境兼容性（Node.js 版本预检，对应 S62/R87）----
+# 背景：SonarJS bridge 不兼容 Node.js v24（报 Cannot find module
+#       './globals-IVYI6PB4.json'）；PowerShell 5 调用 sonar-scanner 时 -D 参数
+#       报 Unrecognized option，必须用 .bat 文件封装
+# 规则：扫描前预检 Node.js 版本，不兼容时降级为仅 Python 扫描
+sonarqube_environment_frontend:
+  enabled: true
+  # Node.js 最大兼容版本（>20.99.0 时跳过 JS/TS 扫描）
+  # SonarJS bridge 目前仅支持 Node.js v20 LTS
+  nodejs_max_compatible_version: "20.99.0"
+  # PowerShell 调用 sonar-scanner 时必须用 .bat 封装（避免 -D 参数解析问题）
+  powershell_use_bat_wrapper: true
+  # 环境不兼容时降级为仅扫描 Python（而非整体失败）
+  fallback_to_python_only_on_incompat: true
+  # 被禁止的命令（已知有 bug 或不兼容）
+  blocked_commands:
+    - "cmd /c"  # cmd /c 会剥离引号导致命令损坏
+  # 必须设置的环境变量
+  require_env_var_for_token: "SONAR_TOKEN"
+  scanner_path_env_var: "SONAR_SCANNER_HOME"
+  # SonarQube 服务地址
+  sonarqube_url: "http://127.0.0.1:9000"
+  # 前端扫描范围（与后端分离配置）
+  frontend_sources:
+    - "admin-web/src"
+    - "miniprogram"
+
+# ---- 维度 72：并行子代理修复结果核查（对应 S63/R88）----
+# 背景：使用 Task 工具并行派发多个子代理修复前端 NOSONAR 时，子代理报告"已加 NOSONAR"
+#       但实际未写文件，或语法错误，需二次核查
+# 规则：子代理修复后必须用 grep 二次验证
+parallel_subagent_verification_frontend:
+  enabled: true
+  # 必须用 grep 验证 NOSONAR 实际写入文件
+  require_grep_verification: true
+  # 派发给子代理的文件组必须互斥（避免多子代理改同一文件冲突）
+  file_group_mutually_exclusive: true
+  # 验证项清单（前端特有：注释语法与文件类型匹配）
+  verify_items:
+    - "nosonar_actually_written"          # grep 验证 NOSONAR 真实写入
+    - "nosonar_line_matches_issue_line"   # NOSONAR 行号与 issue 行号一致
+    - "nosonar_syntax_matches_file_type"  # 注释语法与文件类型匹配（.js 用 //，.wxml 用 <!-- -->）
+  # 单次派发的子代理上限（避免过度并发导致上下文丢失）
+  max_subagent_count: 5
+
+# ---- 维度 73：前端测试失败 git stash 验证（对应 S64/R89）----
+# 背景：前端测试（Playwright/Vitest/Jest）失败时，无法判断是回归还是预先存在问题
+# 规则：用 git stash 暂存修改后跑测试，仍失败则证明是预先存在问题
+test_failure_diagnosis_frontend:
+  enabled: true
+  # 测试失败时必须用 git stash 验证基线
+  require_stash_verification: true
+  # stash 消息格式（带时间戳便于追溯）
+  stash_message_format: "verify-baseline-{timestamp}"
+  # 只 stash 修改的文件（不影响未跟踪文件如新建测试）
+  stash_target_files: "modified_files_only"
+  # 支持的前端测试框架
+  test_frameworks:
+    - "vitest"
+    - "jest"
+    - "playwright"
+  # 预先存在失败的指示信号（前端常见）
+  indicators_of_preexisting_failure:
+    - "TypeError: Cannot read property of undefined"  # 未做 null 检查
+    - "AssertionError: expected null to equal"        # 测试断言与实现不同步
+    - "test.*no direct relation to modified file"     # 失败测试与修改文件无直接关联
+
+# ---- 维度 74：NOSONAR 抑制 vs 代码修复决策（对应 S65/R90）----
+# 背景：不是所有 SonarQube issue 都应该 NOSONAR 抑制，真缺陷必须修复
+# 规则：must_fix_rules 中的规则禁止用 NOSONAR 抑制，必须实际修复
+nosonar_decision_matrix_frontend:
+  enabled: true
+  # 必须实际修复的规则（禁止 NOSONAR 抑制）
+  # 这些规则代表真实缺陷，抑制会掩盖问题
+  must_fix_rules:
+    - "S5446"  # 裸 except（前端对应 catch (e) {} 空捕获，吞异常导致问题难定位）
+    - "S2817"  # 硬编码 SQL（前端无 SQL，但对应硬编码 URL/凭据等敏感信息）
+    - "S5886"  # Optional 缺失（前端对应未做 null 检查导致 Cannot read property of undefined）
+    - "S3699"  # 从未执行的 Promise（new Promise() 未 .then()/.await，fire-and-forget 调用）
+  # 允许 NOSONAR 抑制的规则（误报或重构成本过高）
+  # 抑制时必须在 NOSONAR 后注释说明原因
+  can_suppress_rules:
+    - "S3776"  # 认知复杂度（若职责单一、重构成本高）
+    - "S125"   # 注释代码误报（中文说明性注释被误判为代码）
+    - "S6353"  # 未使用变量（若为 Vue template 隐式引用，如 v-model 绑定）
+  # 抑制时必须提供原因注释
+  require_reason_comment: true
+  # 原因注释格式（按文件类型）
+  reason_comment_format_js: "// NOSONAR  // {rule}: {reason}"
+  reason_comment_format_html: "<!-- NOSONAR  {rule}: {reason} -->"
+
+# ============================================================
+# === 2026-07-21 新增：综合复盘审查配置（维度 78-82）===
+# ============================================================
+# 对应 news-code-dev 元规范 R97/R98/R91-R92/R86/R97（菜单分组/PWA/图片封面/About-Help/菜单 fallback）
+# 这些维度来源于 2026-07-21 菜单分组、PWA 图标、图片渲染、About/Help 模块、菜单导航 fallback 五项前端迭代复盘
+# 报告中违规条目末尾标注 [V2.0 新增] 便于迭代追溯
+
+# ---- 维度 78：菜单分组与角色可见性审查（对应 R97）----
+# 背景：菜单数量超过阈值时扁平 el-menu 查找困难，必须按功能分组（el-sub-menu）
+# 规则：分组配置必须从配置文件读取，禁止硬编码在 Layout.vue；角色可见性控制未授权角色不渲染
+menu_grouping_check:
+  enabled: true
+  # 菜单数量阈值，超过则强制分组
+  min_menu_count: 10
+  # 路由必须通过 meta.group 字段配置分组
+  require_group_meta: true
+  # groupConfig 必须从配置文件读取（禁止硬编码在 .vue 文件）
+  require_config_driven: true
+  forbid_hardcoded_in_layout: true
+  # groupConfig 数组每项必须含的字段
+  group_config_fields:
+    - group_name
+    - icon
+    - visible_roles
+  # 必须启用 unique-opened 手风琴效果（同时只展开一个子菜单）
+  require_unique_opened: true
+  # 路由变化时必须自动展开当前路由所属分组（watch $route）
+  require_route_watch: true
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/layouts/**/*.vue"
+    - "admin-web/src/router/**/*.js"
+    - "admin-web/src/config/**/*"
+
+# ---- 维度 79：PWA 图标与 manifest 审查（对应 R98）----
+# 背景：PWA 安装到桌面时 manifest.json 声明的图标是用户首次看到的视觉元素
+# 规则：必须含 192/512 两种尺寸 + purpose: "any maskable" + index.html 引用 manifest + theme-color
+pwa_icon_check:
+  enabled: true
+  require_manifest_json: true
+  # 必须声明的图标尺寸
+  required_icon_sizes:
+    - "192x192"
+    - "512x512"
+  # 必须包含 purpose: "any maskable" 声明（Android 自适应图标）
+  require_purpose_any_maskable: true
+  # public/ 目录必须同时存在的图标文件
+  required_icon_files:
+    - "public/favicon.ico"
+    - "public/icon-192.png"
+    - "public/icon-512.png"
+  # index.html 必须引用 manifest.json
+  require_manifest_link: true
+  manifest_link_pattern: "<link\\s+rel=\"manifest\"\\s+href=\"/manifest\\.json\""
+  # index.html 必须声明 theme-color meta 标签
+  require_theme_color_meta: true
+  theme_color_meta_pattern: "<meta\\s+name=\"theme-color\""
+  # ICO 文件推荐包含的多尺寸（16/32/48）
+  recommended_ico_sizes:
+    - 16
+    - 32
+    - 48
+  # 扫描范围
+  scan_files:
+    - "admin-web/public/manifest.json"
+    - "admin-web/index.html"
+    - "admin-web/public/*.{ico,png}"
+
+# ---- 维度 80：图片封面渲染与降级审查（对应 R91/R92）----
+# 背景：小程序详情页按段渲染图文时，图片加载失败需自然降级避免视觉污染
+# 规则：必须 binderror 事件 + lazy-load + 固定宽高比（避免 CLS）
+cover_image_rendering_check:
+  enabled: true
+  # 必须按段渲染图文（segments 数组）
+  require_segments_rendering: true
+  # segments 数组必须含 cover_url 字段判断
+  require_cover_url_field: true
+  # 图片必须绑定 binderror 事件
+  require_binderror: true
+  # 图片必须使用 lazy-load 模式
+  require_lazy_load: true
+  # 图片容器必须有固定宽高比（避免布局抖动 CLS）
+  require_fixed_aspect_ratio: true
+  # 推荐显示 skeleton 占位图
+  recommend_skeleton: true
+  # 扫描范围
+  scan_files:
+    - "miniprogram/pages/detail/**/*.wxml"
+    - "miniprogram/pages/detail/**/*.js"
+    - "miniprogram/pages/detail/**/*.wxss"
+
+# ---- 维度 81：About/Help 模块完整性审查（对应 R97）----
+# 背景：About 页面展示构建元信息便于报障定位版本；Help 页面侧边栏锚点+滚动监听+搜索过滤是文档标准交互
+# 规则：About 必须含 6 项元信息 + 检查更新 + 失败降级；Help 必须含锚点导航 + 滚动监听 + 搜索过滤
+about_help_module_check:
+  enabled: true
+  # About 页面必须展示的字段
+  about_required_fields:
+    - product_name
+    - version
+    - build_date
+    - git_sha
+    - python_version
+    - platform
+  # About 页面必须提供"检查更新"功能
+  require_check_update: true
+  check_update_api: "GitHub Releases API"
+  check_update_api_pattern: "check-update|checkUpdate|check_update"
+  # 检查更新失败时必须降级显示本地来源，不报错
+  require_fallback_on_check_failure: true
+  # Help 页面必须有侧边栏锚点导航
+  help_require_anchor_nav: true
+  # Help 页面必须有滚动监听
+  help_require_scroll_listen: true
+  scroll_listen_pattern: "@scroll|onScroll|addEventListener.*scroll"
+  # Help 页面必须有搜索过滤
+  help_require_search_filter: true
+  # Help 页面每章节支持的 block 类型
+  help_supported_block_types:
+    - text
+    - code
+    - list
+    - table
+    - alert
+  # 推荐开源声明弹窗
+  recommend_opensource_dialog: true
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/views/about/**/*.vue"
+    - "admin-web/src/views/help/**/*.vue"
+    - "admin-web/src/api/about*.js"
+
+# ---- 维度 82：菜单点击导航 fallback 审查（对应 R97 关联）----
+# 背景：小程序菜单点击可能因页面栈满或路由异常导致点击无反应，需 URL 变化比对 + navigate_page fallback
+# 规则：菜单点击后必须比对 URL 变化，未变化时 fallback 到 navigate_page；失败时记录日志
+menu_navigation_fallback_check:
+  enabled: true
+  # 必须比对 URL 变化
+  require_url_change_compare: true
+  # 必须有 navigate_page fallback
+  require_navigate_page_fallback: true
+  navigate_page_pattern: "navigatePage|navigate_page"
+  # 失败时必须记录日志
+  require_failure_logging: true
+  failure_log_pattern: "console\\.warn.*menu|console\\.error.*menu"
+  # 推荐记录到测试报告
+  recommend_test_report_logging: true
+  # 扫描范围
+  scan_files:
+    - "miniprogram/services/**/*.js"
+    - "miniprogram/pages/**/menu*.js"
+    - "miniprogram/components/**/menu*.js"
+
+# ============================================================
+# === 2026-07-22 新增：外部服务降级与音频 URL 前端审查配置（维度 95-96 V2.2）===
+# ============================================================
+# 对应 news-code-dev 元规范 R127-R129 前端侧（2026-07-22 复盘新增）
+# 复制本文件为 config.yaml 后按项目实际调整以下参数
+# 背景：
+#   - 后端 COS 未配置时降级到本地存储，返回 /audio/<key> 相对路径 URL
+#   - 前端 audio 标签与下载函数必须同时支持绝对 URL 与相对路径
+#   - 管理后台配置页必须展示降级状态提示
+#   - 详见 SKILL.md 补充审查要点 F + v2.2 复盘
+
+# ---- 维度 95（V2.2）：前端音频 URL 适配性审查（对应 R129 前端侧）----
+# 规则：前端 audio src 与下载函数必须同时支持绝对 URL 与相对路径（/audio/<key>）
+# 判断信号：grep audio.*src.*http 仅匹配绝对 URL → 违规
+audio_url_adaptability_check:
+  enabled: true
+  # 对应维度编号（与 SKILL.md 一致）
+  dimension: 95
+  # 严重级别（CRITICAL/HIGH/MEDIUM/LOW）
+  severity: "HIGH"
+  # 支持的 URL 协议清单（绝对 URL 前缀）
+  # 前端 audio src 赋值时必须检测这些协议，命中则直接使用
+  supported_url_schemes:
+    - "http://"
+    - "https://"
+  # 相对路径前缀清单（后端降级模式返回的 URL 前缀）
+  # 前端检测到这些前缀时，应直接使用相对路径（浏览器自动解析）
+  # 禁止拼接 BASE_URL 将相对路径转为绝对 URL（可能引入网络层故障点）
+  relative_path_prefixes:
+    - "/audio/"
+  # 下游函数（downloadFile / saveAs / resolveUrl）必须支持前缀检测
+  # 即：检测到 url 以 /audio/ 开头时，直接使用，不走 http 请求
+  require_prefix_detection: true
+  # 禁止的 URL 构造模式
+  # 相对路径传入 new URL() 会抛 TypeError: Invalid URL
+  # 必须先检测前缀，仅对绝对 URL 调用 new URL()
+  forbidden_url_constructors:
+    - "new URL\\(['\"]/audio/"
+  # 小程序端 wx.playBackgroundAudio 的 dataUrl 必须为绝对 URL
+  # 相对路径需先拼接 BASE_URL（小程序不支持相对路径音频加载）
+  miniprogram_require_base_url: true
+  # 判断信号（grep 模式，命中任一即触发审查）
+  signals:
+    - "audio.*src.*=.*http"
+    - "new URL.*http"
+    - "downloadFile|saveAs"
+    - "dataUrl.*audio"
+  # 反模式（违规信号，命中即报 HIGH）
+  # url.match(/^https?:\/\//) 仅匹配绝对 URL，未处理相对路径
+  anti_patterns:
+    - "url\\.match\\(/\\^https\\?:\\/\\//"
+  # 扫描范围（覆盖所有可能赋值 audio src 的位置）
+  scan_files:
+    - "admin-web/src/views/**/*.vue"
+    - "admin-web/src/views/**/*.js"
+    - "admin-web/src/utils/**/*.js"
+    - "miniprogram/services/**/*.js"
+
+# ---- 维度 96（V2.2）：前端降级模式 UI 提示审查（对应 R127 前端侧）----
+# 规则：管理后台存储配置页必须根据后端 is_cos_configured 状态展示降级提示
+# 判断信号：grep is_cos_configured 前端无对应状态展示 → 违规
+storage_fallback_ui_check:
+  enabled: true
+  dimension: 96
+  severity: "MEDIUM"
+  # 必须调用后端状态接口获取 is_cos_configured
+  # 接口返回 { is_cos_configured: bool, local_dir: str, ... }
+  require_status_api: true
+  # 状态接口路径（后端需提供此接口）
+  status_api_path: "/api/admin/storage/status"
+  # 必须使用 el-alert 组件展示降级提示
+  # type=warning（黄色警示，非 error 级别，降级不是故障）
+  require_alert_component: true
+  alert_type: "warning"
+  # 降级提示必须包含切换到 COS 的指引链接
+  # 指向配置页 COS 凭据区域，便于运维快速切换
+  require_switch_guide: true
+  # COS 凭据输入框必须可选（非 required）
+  # 留空时启用本地降级模式，禁止 required 属性阻止降级
+  credentials_optional: true
+  # 判断信号
+  signals:
+    - "is_cos_configured"
+    - "el-alert.*本地存储"
+    - "el-tag.*降级"
+  # 反模式（COS 凭据设为必填会阻止降级模式启用）
+  anti_patterns:
+    - "cos_secret_id.*required"
+    - "cos_secret_key.*required"
+  # 扫描范围（管理后台存储配置页）
+  scan_files:
+    - "admin-web/src/views/config/**/*.vue"
+    - "admin-web/src/views/settings/**/*.vue"
+
+# ============================================================
+# === 2026-07-22 新增：前端响应处理与按需加载复盘审查配置（维度 109-112 V2.6）===
+# ============================================================
+# 对应 news-code-dev 元规范 R149-R152 前端侧（2026-07-22 复盘新增）
+# 复制本文件为 config.yaml 后按项目实际调整以下参数
+# 背景：
+#   - 响应拦截器对 blob 响应统一解构 { code }，blob 无 code 字段触发"请求失败"误报
+#   - URL.createObjectURL 创建后未配对 revokeObjectURL，组件卸载后内存泄漏
+#   - 列表加载时 Promise.all 预请求所有音频 blob，并发压力
+#   - 工作流重跑后 router.replace 跳转破坏 SSE 订阅，文案误导用户
+#   - 详见 SKILL.md 维度 109-112 与 v2.6 复盘
+
+# ---- 维度 109（V2.6）：响应拦截器 blob/二进制响应处理审查 ----
+# 规则：拦截器开头必须判断 responseType === 'blob'（或 'arraybuffer'），短路返回 response.data
+# 判断信号：grep 'interceptors\.response' 后无 'responseType === blob' 判断 → 违规
+blob_response_interceptor_check:
+  enabled: true
+  # 对应维度编号（与 SKILL.md 一致）
+  dimension: 109
+  # 严重级别（CRITICAL/HIGH/MEDIUM/LOW）
+  severity: "HIGH"
+  # 必须在拦截器开头判断 responseType 短路返回
+  require_response_type_short_circuit: true
+  # 需要短路处理的响应类型清单（含 blob 和 arraybuffer）
+  # 拦截器检测到这些 responseType 时，直接返回 response.data，跳过业务码解构
+  blob_response_types:
+    - "blob"
+    - "arraybuffer"
+  # 禁止对 blob 响应进行业务错误码解构（{ code, message, data }）
+  # blob 响应无 code 字段，undefined !== 0 会触发"请求失败"误报
+  forbid_business_code_destruct: true
+  # 禁止对 blob 响应调用全局 ElMessage 错误提示
+  # 下载场景应由调用方在 catch 中处理错误
+  forbid_global_error_on_blob: true
+  # 短路判断位置：必须在业务码解构之前
+  short_circuit_position: "before_business_code_destruct"
+  description: "响应拦截器必须区分 blob/arraybuffer 响应，短路返回 response.data"
+  # 判断信号（grep 模式，命中任一即触发审查）
+  signals:
+    - "interceptors\\.response"
+    - "responseType.*blob|responseType.*arraybuffer"
+    - "code !== 0|code !== 200"
+  # 反模式（违规信号，命中即报 HIGH）
+  # 拦截器中无 responseType 判断直接解构 response.data
+  anti_patterns:
+    - "interceptors\\.response[\\s\\S]*?const\\s*\\{[^}]*code[^}]*\\}\\s*=\\s*response\\.data(?!.*responseType)"
+  # 扫描范围（axios 封装层）
+  scan_files:
+    - "admin-web/src/api/**/*.js"
+    - "admin-web/src/api/**/*.ts"
+    - "admin-web/src/utils/request*.js"
+
+# ---- 维度 110（V2.6）：内联 audio/video 控件 blob URL 内存释放审查 ----
+# 规则：onUnmounted 必须释放所有 blob URL；列表刷新/删除前必须释放旧引用
+# 判断信号：grep 'createObjectURL' 数量 > grep 'revokeObjectURL' 数量 → 违规
+blob_url_lifecycle_check:
+  enabled: true
+  dimension: 110
+  severity: "HIGH"
+  # 组件 onUnmounted 时必须释放所有 blob URL
+  require_revoke_on_unmount: true
+  # 列表刷新/删除操作时必须释放旧 blob URL
+  # 避免替换前丢失引用导致泄漏
+  require_revoke_on_list_refresh: true
+  # 每个 blob URL 必须有对应的管理引用（如行数据字段 row.blobUrl）
+  # 禁止创建后丢失引用
+  require_blob_url_reference: true
+  # 必须封装统一的 revokeAllBlobUrls() 清理函数
+  require_revoke_all_function: true
+  # 必须调用 revokeObjectURL 的位置清单
+  # 审查时检查这些位置是否含 revokeObjectURL 调用
+  revoke_call_sites:
+    - "onUnmounted"
+    - "onBeforeUnmount"
+    - "loadList"
+    - "refreshList"
+    - "handleDelete"
+    - "beforeRouteLeave"
+  # 创建函数与释放函数的配对模式（用于 grep 配对检查）
+  create_function: "URL.createObjectURL"
+  revoke_function: "URL.revokeObjectURL"
+  # 创建点数量必须 ≤ 释放点数量（含列表场景的批量释放）
+  require_create_revoke_balance: true
+  description: "blob URL 创建与释放必须配对，onUnmounted 和列表刷新时必须调用 revokeAllBlobUrls"
+  # 判断信号
+  signals:
+    - "URL\\.createObjectURL"
+    - "URL\\.revokeObjectURL"
+    - "onUnmounted|onBeforeUnmount"
+    - "loadList|refreshList|handleDelete"
+  # 反模式（创建 blob URL 但无任何释放逻辑）
+  anti_patterns:
+    - "URL\\.createObjectURL(?!.*URL\\.revokeObjectURL)"
+    - "row\\.blobUrl\\s*=\\s*URL\\.createObjectURL(?!.*revokeObjectURL.*row\\.blobUrl)"
+  # 扫描范围（含 audio/video 控件的 Vue 组件）
+  scan_files:
+    - "admin-web/src/views/**/*.vue"
+    - "admin-web/src/views/**/*.js"
+    - "admin-web/src/components/**/*.vue"
+
+# ---- 维度 111（V2.6）：按需加载策略（音频/文件播放）审查 ----
+# 规则：列表加载时禁止预加载 blob；按需加载 + 行数据缓存 + loading 状态 + v-if 条件渲染
+# 判断信号：grep 'loadList' 中含 'api.get.*blob' 预加载 → 违规
+on_demand_loading_check:
+  enabled: true
+  dimension: 111
+  severity: "MEDIUM"
+  # 列表加载时禁止预请求所有 blob 数据
+  # 必须采用按需加载（首次点击播放才请求）
+  forbid_preload_in_list_fetch: true
+  # 请求后的 blob URL 必须缓存在行数据中复用
+  # 避免重复请求同一资源
+  require_blob_url_cache_on_row: true
+  # loading 状态必须绑定到行数据
+  # 显示加载中动画，提升用户体验
+  require_loading_state_on_row: true
+  # audio/video 控件必须用 v-if 条件渲染
+  # 未加载时显示"点击加载播放"按钮
+  require_v_if_conditional_render: true
+  # 按需加载函数命名模式（ensureXxxBlob 幂等模式）
+  # 幂等性保证：已加载则直接返回，不重复请求
+  ensure_blob_function_pattern: "ensure[A-Z]\\w*Blob\\s*\\("
+  # 禁止列表加载时并发请求所有 blob
+  # Promise.all(rows.map(fetchBlob)) 会造成网络压力
+  forbid_concurrent_blob_requests: true
+  # 按需加载触发方式（点击按钮触发）
+  trigger_method: "click"
+  # 默认显示文案（未加载时）
+  default_trigger_text: "点击加载播放"
+  description: "列表页音频/视频必须按需加载，禁止预加载，行数据缓存 + v-if 条件渲染"
+  # 判断信号
+  signals:
+    - "loadList|fetchList"
+    - "<audio|<video"
+    - "row\\.loading|row\\.blobUrl"
+    - "ensure.*Blob|loadBlob"
+  # 反模式（列表加载函数中预请求所有 blob）
+  anti_patterns:
+    - "loadList[\\s\\S]*?Promise\\.all[\\s\\S]*?responseType.*blob"
+    - "fetchList[\\s\\S]*?api\\.get[\\s\\S]*?responseType.*blob"
+    - "<audio[^>]*:src=\"row\\.blobUrl\"[^>]*>(?!.*v-if)"
+  # 扫描范围（含媒体播放的列表页）
+  scan_files:
+    - "admin-web/src/views/**/*.vue"
+    - "admin-web/src/views/**/*.js"
+    - "admin-web/src/components/**/*.vue"
+
+# ---- 维度 112（V2.6）：工作流重跑后前端行为审查 ----
+# 规则：重跑后禁止 router.replace 跳转；必须调用 loadDetail 刷新当前页；SSE 无需重建；文案准确
+# 判断信号：grep 'rerun' 回调中含 'router.replace' → 违规
+workflow_rerun_behavior_check:
+  enabled: true
+  dimension: 112
+  severity: "HIGH"
+  # 重跑后禁止 router.replace 跳转新页面
+  # workflow_id 不变，应刷新当前页而非跳转
+  forbid_router_replace_on_rerun: true
+  # 重跑后必须调用 loadDetail() 刷新当前页数据
+  # 不得依赖路由变化触发刷新
+  require_load_detail_after_rerun: true
+  # 重跑后禁止 close 旧 SSE 订阅再重新建立
+  # workflow_id 不变，原订阅无缝衔接
+  forbid_sse_reconnect_on_rerun: true
+  # 文案必须说明"断点续跑"语义
+  # 禁止使用"创建新工作流"等误导性文案
+  require_rerun_semantics_text: true
+  # 推荐的"断点续跑"语义文案关键词（命中任一即合规）
+  recommended_semantics_keywords:
+    - "断点续跑"
+    - "恢复执行"
+    - "重新执行"
+    - "重跑成功"
+  # 禁止使用的误导性文案关键词（命中任一即违规）
+  forbidden_misleading_text:
+    - "创建新工作流"
+    - "新建工作流"
+    - "新建成功"
+  # 推荐重跑按钮与新建按钮分离
+  # 重跑（保留 ID）vs 复制新建（生成新 ID）语义不同，应区分按钮
+  recommend_rerun_vs_new_button_separation: true
+  # 重跑 API 路径关键词（用于定位重跑函数）
+  rerun_api_keywords:
+    - "rerun"
+    - "retry"
+    - "resume"
+  # 判断信号
+  signals:
+    - "rerun|rerunWorkflow|retryWorkflow|resumeWorkflow"
+    - "router\\.replace|router\\.push"
+    - "EventSource|eventSource\\.close"
+  # 反模式（重跑回调中含 router.replace 或 SSE 重建）
+  anti_patterns:
+    - "rerun[\\s\\S]*?router\\.replace"
+    - "rerun[\\s\\S]*?eventSource\\.close[\\s\\S]*?new\\s+EventSource"
+    - "rerun[\\s\\S]*?创建新工作流"
+  # 扫描范围（工作流相关页面）
+  scan_files:
+    - "admin-web/src/views/workflow/**/*.vue"
+    - "admin-web/src/views/workflow/**/*.js"
+    - "admin-web/src/views/**/*.vue"
+
 

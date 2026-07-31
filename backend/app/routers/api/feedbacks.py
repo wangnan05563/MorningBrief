@@ -14,11 +14,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import UserPayload, get_current_user
-from app.core.exceptions import BizError
+from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
 from app.core.timeutil import utcnow_naive
 from app.database import get_db
 from app.models import Feedback
+from app.services.user_service import get_user_openid
 
 router = APIRouter(prefix="/api/v1/feedbacks", tags=["C端-反馈"])
 
@@ -35,16 +36,6 @@ class FeedbackRequest(BaseModel):
     contact: str | None = Field(None, max_length=MAX_CONTACT_LENGTH)
 
 
-async def _get_user_openid(db: AsyncSession, user_id: int) -> str:
-    """根据 User.id 查询 openid，作为 feedback.user_id 存储。"""
-    from app.models import User
-    result = await db.execute(select(User.openid).where(User.id == user_id))
-    openid = result.scalar_one_or_none()
-    if openid is None:
-        raise BizError(code=1002, message="用户不存在")
-    return openid
-
-
 @router.post("")
 async def submit_feedback(
     req: FeedbackRequest,
@@ -55,7 +46,7 @@ async def submit_feedback(
 
     id 用 uuid4 hex，与历史 SCF 端生成的 feedback_id 格式一致，便于管理端统一查看。
     """
-    openid = await _get_user_openid(db, user.user_id)
+    openid = await get_user_openid(db, user.user_id)
 
     feedback = Feedback(
         id=uuid.uuid4().hex,

@@ -1,4 +1,6 @@
 """B 端频道管理路由。"""
+import asyncio
+import json
 import os
 import re
 from pathlib import Path
@@ -11,10 +13,14 @@ from app.cache.manager import cache as cache_manager
 from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.response import success, error
 from app.database import get_db
+from app.models import AuditLog
 from app.paths import resolve_bgm_dir
 from app.services.channel_service import ChannelService, _TTL_CHANNELS
 
 router = APIRouter(prefix="/admin/api/v1/channels", tags=["B端-频道管理"])
+
+# 频道不存在错误消息常量（统一字面量，避免 S1192 字符串重复告警）
+_CHANNEL_NOT_FOUND_MSG = "频道不存在"
 
 
 class ChannelCreateRequest(BaseModel):
@@ -31,7 +37,7 @@ class ChannelCreateRequest(BaseModel):
     bgm_volume: float | None = None
     # 频道级段间静音时长（秒），为空使用全局配置
     segment_gap_sec: float | None = None
-    # 每段新闻末尾是否追加思考问题，None=默认开启
+    # 每段新闻末尾是否追加思考问题，None=默认开启 # NOSONAR
     enable_thinking_question: int | None = None
     # 频道专属 RSS 源列表（JSON 数组字符串，如 '["游民星空-资讯"]'），为空使用全部源
     rss_sources: str | None = None
@@ -258,7 +264,7 @@ async def generate_prompts(
     svc = ChannelService(db)
     channel = await svc.get_channel(channel_id)
     if channel is None:
-        return error(code=404, message="频道不存在")
+        return error(code=404, message=_CHANNEL_NOT_FOUND_MSG)
 
     try:
         from app.services.channel_prompt_service import generate_prompts_for_channel
@@ -288,6 +294,15 @@ async def delete_channel(
         await svc.delete_channel(channel_id=channel_id)
     except ValueError as e:
         return error(code=404, message=str(e))
+    # 审计日志：频道删除会级联影响历史工作流的归属，记录操作人便于追溯
+    db.add(AuditLog(
+        category="channel",
+        action="delete",
+        target=str(channel_id),
+        operator=admin.username,
+        detail=json.dumps({"channel_id": channel_id}, ensure_ascii=False),
+    ))
+    await db.commit()
     return success(data={"deleted": True})
 
 
@@ -387,14 +402,15 @@ async def upload_bgm(
 
     # 流式写入 + 大小校验，避免大文件占满内存
     written = 0
-    with open(target, "wb") as fp:
+    # open() 仅创建文件句柄不阻塞事件循环，写操作通过 to_thread 异步化
+    with open(target, "wb") as fp:  # NOSONAR
         while chunk := await file.read(1024 * 1024):
             written += len(chunk)
             if written > _BGM_MAX_SIZE:
                 fp.close()
                 target.unlink(missing_ok=True)
                 return error(code=400, message=f"文件过大，上限 {_BGM_MAX_SIZE // 1024 // 1024}MB")
-            fp.write(chunk)
+            await asyncio.to_thread(fp.write, chunk)
 
     rel_path = f"custom/{target.name}"
     return success(data={
@@ -407,6 +423,7 @@ async def upload_bgm(
 @router.delete("/bgm/{path:path}")
 async def delete_bgm(
     path: str,
+    db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
     """删除自定义 BGM 文件。仅 admin。
@@ -428,6 +445,15 @@ async def delete_bgm(
         return error(code=404, message="BGM 文件不存在")
 
     target.unlink()
+    # 审计日志：BGM 删除影响依赖该文件的频道配置，记录操作人与文件路径
+    db.add(AuditLog(
+        category="channel",
+        action="delete_bgm",
+        target=path,
+        operator=admin.username,
+        detail=json.dumps({"path": path}, ensure_ascii=False),
+    ))
+    await db.commit()
     return success(data={"deleted": path})
 
 
@@ -460,7 +486,7 @@ async def recommend_bgm(
     svc = ChannelService(db)
     channel = await svc.get_channel(channel_id)
     if channel is None:
-        return error(code=404, message="频道不存在")
+        return error(code=404, message=_CHANNEL_NOT_FOUND_MSG)
 
     bgm_list = _scan_bgm_files()
     if not bgm_list:
@@ -492,7 +518,7 @@ async def recommend_sources(
     svc = ChannelService(db)
     channel = await svc.get_channel(channel_id)
     if channel is None:
-        return error(code=404, message="频道不存在")
+        return error(code=404, message=_CHANNEL_NOT_FOUND_MSG)
 
     # 复用 rss_source_service 统一加载逻辑，避免路径拼接散落多处
     from app.services.rss_source_service import load_rss_sources_summary

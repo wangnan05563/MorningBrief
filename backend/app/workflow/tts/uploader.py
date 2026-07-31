@@ -117,3 +117,88 @@ async def upload_to_cos(data: bytes, key: str) -> str:
         # 本地存储回退：避免开发态无 COS 时 TTS 整体失败
         return await asyncio.to_thread(_save_local_sync, data, key)
     return await asyncio.to_thread(_upload_sync, data, key)
+
+
+def _upload_file_sync(local_path: str, key: str) -> None:
+    """同步上传单个文件到 COS（不返回 URL，由调用方拼装）。"""
+    client = _get_client()
+    with open(local_path, "rb") as f:
+        client.put_object(
+            Bucket=settings.COS_BUCKET,
+            Body=f.read(),
+            Key=key,
+            EnableMD5=False,  # 分片数量多，关闭 MD5 节省 CPU
+        )
+
+
+def _upload_hls_directory_sync(local_dir: str, cos_prefix: str) -> str:
+    """同步上传 HLS 目录到 COS，返回 m3u8 URL。
+
+    Args:
+        local_dir: 本地 HLS 输出目录（含 playlist.m3u8 + seg_*.ts）
+        cos_prefix: COS key 前缀（如 "episodes/20260727/tech_wf-xxx"）
+
+    Returns:
+        m3u8 文件的完整 URL（CDN 优先，回退 COS 默认域名）
+    """
+    client = _get_client()
+    local_dir_path = Path(local_dir)
+
+    # 批量上传 m3u8 + 所有 ts 分片
+    for file_path in sorted(local_dir_path.iterdir()):
+        if not file_path.is_file():
+            continue
+        key = f"{cos_prefix}/{file_path.name}"
+        with open(file_path, "rb") as f:
+            client.put_object(
+                Bucket=settings.COS_BUCKET,
+                Body=f.read(),
+                Key=key,
+                EnableMD5=False,
+            )
+
+    # 拼 m3u8 URL
+    if settings.COS_CDN_DOMAIN:
+        base = settings.COS_CDN_DOMAIN.rstrip("/")
+    else:
+        base = (
+            f"https://{settings.COS_BUCKET}.cos.{settings.COS_REGION}.myqcloud.com"
+        )
+    return f"{base}/{cos_prefix}/playlist.m3u8"
+
+
+def _save_hls_directory_local_sync(local_dir: str, key_prefix: str) -> str:
+    """本地存储回退：复制 HLS 目录到 data/audio_cache/<key_prefix>/。
+
+    Args:
+        local_dir: ffmpeg 生成的 HLS 临时目录
+        key_prefix: 本地相对路径前缀（如 "episodes/20260727/tech_wf-xxx"）
+
+    Returns:
+        /audio/<key_prefix>/playlist.m3u8 静态端点 URL
+    """
+    import shutil
+    dest_root = _local_root() / key_prefix
+    dest_root.parent.mkdir(parents=True, exist_ok=True)
+    # 若已存在先删除，避免旧分片残留（幂等重跑场景）
+    if dest_root.exists():
+        shutil.rmtree(dest_root, ignore_errors=True)
+    shutil.copytree(local_dir, dest_root)
+    return f"/audio/{key_prefix}/playlist.m3u8"
+
+
+async def upload_hls_directory(local_dir: str, key_prefix: str) -> str:
+    """上传 HLS 目录（m3u8 + ts 分片），返回 m3u8 URL。
+
+    COS 已配置时批量上传到云端；未配置时复制到本地 data/audio_cache/。
+
+    Args:
+        local_dir: 本地 HLS 输出目录
+        key_prefix: COS key 前缀或本地路径前缀
+
+    Returns:
+        m3u8 文件 URL（COS URL 或 /audio/ 静态端点）
+    """
+    if not is_cos_configured():
+        return await asyncio.to_thread(_save_hls_directory_local_sync, local_dir, key_prefix)
+    return await asyncio.to_thread(_upload_hls_directory_sync, local_dir, key_prefix)

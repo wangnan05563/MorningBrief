@@ -56,6 +56,17 @@ def resolve_bgm_dir() -> Path:
     return bgm_dir
 
 
+def resolve_avatar_dir() -> Path:
+    """用户头像文件目录。
+
+    C 端用户上传的头像图片存放在此目录，由 /avatars 静态挂载对外提供访问。
+    与 bgm/ 同级：均为用户/运维产生的可写文件，放 data/ 下随 exe 同级持久化。
+    """
+    avatar_dir = resolve_data_dir() / "avatars"
+    avatar_dir.mkdir(parents=True, exist_ok=True)
+    return avatar_dir
+
+
 def resolve_log_dir() -> Path:
     """日志目录。"""
     log_dir = get_app_root() / "logs"

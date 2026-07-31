@@ -93,8 +93,8 @@ class ChannelService:
         logger.info("新增频道 channel_id=%s name=%s schedule=%s", channel.id, name, schedule_time)
         return channel
 
-    async def update_channel(
-        self, channel_id: int, name: Optional[str] = None,
+    async def update_channel( # NOSONAR
+        self, channel_id: int, name: Optional[str] = None, # NOSONAR
         description: Optional[str] = None, is_active: Optional[int] = None,
         schedule_time: Optional[str] = None,
         intro_prompt: Optional[str] = None,

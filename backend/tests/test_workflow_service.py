@@ -51,7 +51,7 @@ async def _create_workflow(
         episode_date=episode_date or date.today(),
         source=source,
         status=status,
-        started_at=datetime.utcnow(),
+        started_at=datetime.now(),
     )
     db.add(wf)
     await db.commit()
@@ -64,7 +64,7 @@ async def _add_step(db, workflow_id, step_name=WorkflowStepName.crawl, status=Wo
         workflow_id=workflow_id,
         step_name=step_name,
         status=status,
-        started_at=datetime.utcnow(),
+        started_at=datetime.now(),
     )
     db.add(step)
     await db.commit()

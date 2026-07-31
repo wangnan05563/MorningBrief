@@ -198,10 +198,60 @@
 }
 
 /* === 节目来源：标题可点击跳转原站 === */
+/* 整体行布局：序号 + 标题同行，垂直对齐顶部（让多行标题与序号顶端对齐） */
+.source-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #F0F4F2;
+}
+
+.source-item:last-child {
+  border-bottom: none;
+}
+
+/* 序号：固定宽度，右对齐，浅灰色，与标题行顶端对齐 */
+.source-seq {
+  flex-shrink: 0;
+  width: 36rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #A0AEC0;
+  text-align: right;
+  line-height: 1.5;
+  padding-top: 2rpx;
+}
+
+/* 标题 + meta 容器：占满剩余宽度 */
+.source-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
 .source-title-row {
   display: flex;
   align-items: center;
-  margin-bottom: 8rpx;
+  gap: 8rpx;
+  line-height: 1.5;
+}
+
+.source-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 28rpx;
+  color: #2D3748;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.source-meta {
+  font-size: 22rpx;
+  color: #A0AEC0;
+  margin-top: 4rpx;
 }
 
 /* 可点击的标题：薄荷青主色 + 下划线，明确视觉反馈 */
@@ -219,8 +269,8 @@
 .source-link-icon {
   font-size: 24rpx;
   color: #A0AEC0;
-  margin-left: 8rpx;
   flex-shrink: 0;
+  line-height: 1;
 }
 
 /* 底部操作 */
@@ -254,41 +304,67 @@
   gap: 16rpx;
 }
 
-/* 操作芯片：图标 + 文字横向排列，激活态使用品牌色背景 */
+/* 操作芯片：毛玻璃风格底色，激活态使用品牌粉渐变
+   半透明 + backdrop-filter 让卡片背景透出，呼应全局按钮风格
+   关键修复（v2）：统一字号 24rpx、padding 10/10、icon 26rpx、gap 6rpx，
+   让 4 个等宽 chip 在最窄机型也能放下"已收藏"和"1时半"这类 3 字文案。
+   激活态不再缩字号/缩图标，避免视觉塌陷，仅靠背景色和文字色区分状态。 */
 .action-chip {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8rpx;
+  gap: 6rpx;
   flex: 1;
-  height: 80rpx;
-  padding: 0 24rpx;
+  min-height: 72rpx;
+  height: auto;
+  padding: 10rpx 10rpx;
   border-radius: 40rpx;
-  background: #F0F4F2;
+  background: rgba(255, 255, 255, 0.55);
   color: #5BA89B;
-  font-size: 26rpx;
+  font-size: 24rpx;
+  white-space: nowrap;
+  border: 2rpx solid rgba(255, 255, 255, 0.5);
+  backdrop-filter: saturate(180%) blur(16rpx);
+  -webkit-backdrop-filter: saturate(180%) blur(16rpx);
+  box-shadow:
+    0 4rpx 12rpx rgba(126, 206, 193, 0.1),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.6);
   transition: all 0.2s ease;
+  overflow: hidden;
 }
 
 .action-chip.active {
-  background: linear-gradient(135deg, #FFD3E0, #FF9AA2);
+  background: linear-gradient(135deg, rgba(255, 211, 224, 0.85), rgba(255, 154, 162, 0.85));
   color: #FFFFFF;
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 4rpx 12rpx rgba(255, 107, 138, 0.2),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.5);
 }
 
+/* 激活态不再缩字号/缩图标，与未激活态保持视觉一致，
+   避免"已收藏"和"定时"在切换瞬间出现塌陷感。 */
 .chip-icon {
-  width: 32rpx;
-  height: 32rpx;
+  width: 26rpx;
+  height: 26rpx;
+  flex-shrink: 0;
 }
 
 /* 文字图标：当无 PNG 图标时用 Unicode 字符替代，与 .chip-icon 同尺寸 */
 .chip-icon-text {
-  font-size: 32rpx;
+  font-size: 26rpx;
   line-height: 1;
   color: inherit;
+  flex-shrink: 0;
 }
 
 .chip-label {
-  font-size: 26rpx;
+  font-size: 24rpx;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  line-height: 1.3;
 }
 
 /* === 任务10：背景虚化层 === */
@@ -312,14 +388,33 @@
   transform: scale(1.2);
 }
 
-/* 半透明白色蒙版，进一步降低对比度提升正文可读性 */
+/* 半透明白色蒙版，进一步降低对比度提升正文可读性
+   默认使用马卡龙渐变（无封面图时）：薄荷→蜜桃→暖杏，让毛玻璃按钮有内容可透
+   有封面图时 .bg-blur-img 通过滤镜模糊后由 mask 进一步柔化 */
 .bg-blur-mask {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(180deg, rgba(249, 253, 251, 0.85), rgba(255, 245, 247, 0.8));
+  background: linear-gradient(
+    135deg,
+    rgba(181, 234, 215, 0.45) 0%,
+    rgba(255, 211, 224, 0.45) 45%,
+    rgba(255, 218, 185, 0.4) 100%
+  );
+}
+
+/* 兜底层：纯色 fallback，避免 mask 渐变在某些设备上渲染异常 */
+.bg-blur-layer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #F9FDFB;
+  z-index: -1;
 }
 
 /* 内容层在背景之上：所有直接子元素都提升 z-index
@@ -505,3 +600,172 @@
   font-size: 24rpx;
   color: #A0AEC0;
 }
+
+/* === 播放队列弹窗（页内弹出） === */
+.queue-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0);
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  transition: background 0.25s ease;
+}
+
+.queue-modal-mask.visible {
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
+
+.queue-modal-container {
+  width: 86%;
+  max-height: 70vh;
+  background: #FFFFFF;
+  border-radius: 28rpx;
+  box-shadow: 0 16rpx 60rpx rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: scale(0.85) translateY(40rpx);
+  opacity: 0;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.queue-modal-mask.visible .queue-modal-container {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+}
+
+/* 弹窗头部 */
+.queue-modal-header {
+  display: flex;
+  align-items: center;
+  padding: 32rpx 32rpx 24rpx;
+  border-bottom: 1rpx solid #F0F4F2;
+  flex-shrink: 0;
+}
+
+.queue-modal-title {
+  flex: 1;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #2D3748;
+}
+
+.queue-modal-count {
+  font-size: 24rpx;
+  color: #A0AEC0;
+  margin-right: 20rpx;
+}
+
+.queue-modal-close.clear-btn {
+  font-size: 26rpx;
+  color: #FF6B8A;
+  font-weight: 500;
+  padding: 8rpx 20rpx;
+  border-radius: 20rpx;
+  background: #FFF0F4;
+}
+
+.queue-modal-close.clear-btn:active {
+  opacity: 0.7;
+}
+
+/* 空状态 */
+.queue-modal-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80rpx 0;
+  gap: 16rpx;
+}
+
+.queue-modal-empty .empty-icon-img {
+  width: 96rpx;
+  height: 96rpx;
+  opacity: 0.4;
+}
+
+.queue-modal-empty text {
+  font-size: 28rpx;
+  color: #CBD5E0;
+}
+
+/* 队列列表 */
+.queue-modal-list {
+  flex: 1;
+  max-height: 60vh;
+  padding: 0 24rpx;
+  overflow-y: auto;
+}
+
+.queue-modal-item {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 16rpx;
+  margin-top: 16rpx;
+  border-radius: 16rpx;
+  background: #FFFFFF;
+  transition: background 0.15s ease;
+}
+
+.queue-modal-item.current {
+  background: linear-gradient(135deg, #F0F4F2, #FFF5F7);
+}
+
+.queue-modal-item:active {
+  opacity: 0.7;
+}
+
+.qm-item-index {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  background: #F0F4F2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 20rpx;
+}
+
+.qm-playing-icon {
+  width: 24rpx;
+  height: 24rpx;
+}
+
+.qm-item-index text {
+  font-size: 24rpx;
+  color: #A0AEC0;
+  font-weight: 500;
+}
+
+.qm-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.qm-item-title {
+  font-size: 28rpx;
+  color: #2D3748;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qm-item-date {
+  font-size: 22rpx;
+  color: #CBD5E0;
+}
+
+/* 防止点击弹窗内部时冒泡到遮罩层关闭 */

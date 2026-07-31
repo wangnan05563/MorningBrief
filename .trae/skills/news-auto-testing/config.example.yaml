@@ -651,3 +651,1162 @@ miniprogram_playback_test:
       - "commentsTotal"
       - "bgCoverUrl"
     test_episodes_with_chinese_slug: true
+
+# === 2026-07-21 新增：SonarQube 扫描测试过程复盘测试配置 ===
+# 对应 SKILL.md 阶段 27-31，详见各阶段说明
+# 来源：2026-07-21 SonarQube 全量扫描 168 issues 全部 CLOSED + 修复过程中发现的测试流程缺口复盘
+
+# ---- 阶段 27：NOSONAR 注释位置正确性验证（对应 news-code-dev S61/R86）----
+# 背景：本次扫描修复中发现 18 处 NOSONAR 被错误加在多行函数定义末行
+#       (def func_name(\n  ...\n) -> ReturnType:  # NOSONAR)，
+#       SonarQube 不识别该位置，仍报告问题。正确位置应在首行 def 行尾。
+# 前端则需按文件类型匹配注释语法（.js 用 //、.wxml 用 <!-- -->、.wxss 用 /* */）。
+nosonar_positioning_test:
+  enabled: true
+  # 大小写敏感：必须为大写 NOSONAR，nosonar/NoSonar 不识别
+  case_sensitive: true
+  # # 前必须有至少一个空格（部分场景 pass# NOSONAR 不识别）
+  require_leading_space: true
+  # 多行函数定义的 NOSONAR 必须在 def 首行
+  require_on_multiline_def_first_line: true
+  scan_files:
+    backend_patterns:
+      - "backend/app/**/*.py"
+    frontend_patterns:
+      - "admin-web/src/**/*.vue"
+      - "admin-web/src/**/*.js"
+      - "miniprogram/**/*.js"
+      - "miniprogram/**/*.wxml"
+      - "miniprogram/**/*.wxss"
+  # 合法位置的正则模式（按文件类型和注释位置）
+  valid_patterns:
+    # Python 多行 def：NOSONAR 在 def 行尾
+    python_multiline_def: "\\bdef\\s+\\w+\\(.*#\\sNOSONAR\\s*$"
+    # Python 单行 def：def func():  # NOSONAR
+    python_single_line_def: "\\bdef\\s+\\w+\\(.*\\).*:\\s*#\\sNOSONAR\\s*$"
+    # JS 单行注释
+    js_line: "//\\s*NOSONAR\\s*$"
+    # JS 块注释
+    js_block: "/\\*\\s*NOSONAR\\s*\\*/"
+    # Vue template / wxml HTML 注释
+    vue_template: "<!--\\s*NOSONAR\\s*-->"
+    # wxss CSS 注释
+    wxss: "/\\*\\s*NOSONAR\\s*\\*/"
+  # 非法位置的正则模式
+  invalid_patterns:
+    # Python 多行 def 的 NOSONAR 在返回类型行尾（位置错误）
+    - "\\)\\s*->\\s*.*:\\s*#\\sNOSONAR"
+    # 大小写错误
+    - "//\\s*nosonar"
+    - "//\\s*NoSonar"
+  severity_on_violation: "FAIL"
+
+# ---- 阶段 28：SonarQube 扫描环境兼容性预检（对应 news-code-dev S62/R87）----
+# 背景：本次扫描遇到两类环境兼容问题：
+#   1. Node.js v24 与 SonarJS bridge 不兼容
+#      (报 Cannot find module './globals-IVYI6PB4.json')，导致前端代码扫描失败
+#   2. PowerShell 5 直接执行 sonar-scanner -D 参数被错误解析，需用 .bat 文件封装
+# 本阶段在正式扫描前预检环境兼容性，避免扫描中途失败浪费时间。
+sonarqube_environment_check:
+  enabled: true
+  # Node.js 版本检查
+  node_version_check:
+    enabled: true
+    # 不兼容版本列表（SonarJS bridge 与之不兼容）
+    incompatible_versions:
+      - "v24"
+    # 推荐版本（LTS）
+    recommended_versions:
+      - "v20"
+      - "v18"
+    version_command: "node --version"
+    # 切换策略（nvm use <version>）
+    fallback_strategy: "nvm use"
+  # PowerShell 版本检查
+  powershell_version_check:
+    enabled: true
+    # PowerShell 5.x 下必须用 .bat 封装 -D 参数
+    require_bat_wrapper_on_ps5: true
+    ps_version_command: "$PSVersionTable.PSVersion.ToString()"
+    # PS5 阈值：< 6.0 视为 PowerShell 5.x
+    ps5_threshold: "6.0"
+  # SonarQube 服务可达性检查
+  server_reachability_check:
+    enabled: true
+    server_url: "http://localhost:9000"
+    expected_status: 200
+  # SONAR_TOKEN 环境变量检查
+  token_check:
+    enabled: true
+    token_env_var: "SONAR_TOKEN"
+    # 禁止的占位符值
+    forbidden_placeholder_values:
+      - "your-sonar-token"
+      - "<token>"
+  # scanner 路径检查
+  scanner_path_check:
+    enabled: true
+    scanner_home_env_var: "SONAR_SCANNER_HOME"
+    required_bin: "bin/sonar-scanner"
+  severity_on_violation: "FAIL"
+
+# ---- 阶段 29：并行子代理修复结果二次核查（对应 news-code-dev S63/R88）----
+# 背景：本次修复使用并行子代理（每个负责一组文件），发现两类问题：
+#   1. 子代理报告"已加 NOSONAR"但实际未加（遗漏）
+#   2. 子代理把 NOSONAR 加在错误位置（多行函数定义末行）
+# 本阶段对所有子代理修复结果进行二次 grep 验证，确保修复实际落地且位置正确。
+parallel_subagent_verification:
+  enabled: true
+  # 子代理报告必须包含的字段
+  require_report_fields:
+    - "file_list"
+    - "fix_summary"
+    - "fix_count"
+  # 核查项目
+  verify_items:
+    - "file_exists"            # 文件存在性
+    - "nosonar_written"        # NOSONAR 实际写入
+    - "nosonar_position"       # NOSONAR 位置正确性
+    - "file_group_exclusive"   # 文件组互斥性
+  verify_nosonar_keyword: "NOSONAR"
+  # 要求位置正确（不只是写入）
+  require_position_correct: true
+  # 要求文件组互斥（不同子代理 file_list 无交集）
+  require_file_group_exclusive: true
+  severity_on_violation: "FAIL"
+
+# ---- 阶段 30：测试失败 git stash 验证（对应 news-code-dev S64/R89）----
+# 背景：本次扫描修复后运行测试发现 4 个测试失败。初判为修复引入的回归，
+#       但实际是预先存在的测试与多频道实现不同步问题。
+# 如不区分回归 vs 预先存在问题，会导致误判修复方案错误。
+# 本阶段通过 git stash 验证失败是否为预先存在。
+test_failure_diagnosis:
+  enabled: true
+  # git stash 命令（-u 包含未追踪文件）
+  stash_command: "git stash push -u"
+  pop_command: "git stash pop"
+  # 测试命令
+  test_command: "pytest --asyncio-mode=auto"
+  # 预先存在问题的信号（命中任一信号进一步佐证）
+  indicators_of_preexisting_failure:
+    - "测试用例引用已删除的字段"
+    - "测试用例 mock 了不存在的服务"
+    - "测试用例断言旧版本响应结构"
+    - "测试文件 last_modified 早于最近重构"
+  # 归因分类
+  classification:
+    # 预先存在问题归类为 business_data（历史欠账）
+    preexisting_failure: "business_data"
+    # 修复引入的回归归类为 code_defect（必须修复）
+    regression_introduced: "code_defect"
+  severity_on_regression: "FAIL"
+  severity_on_preexisting: "WARN"
+
+# ---- 阶段 31：NOSONAR 抑制 vs 代码修复决策验证（对应 news-code-dev S65/R90）----
+# 背景：本次修复发现部分规则适合用 NOSONAR 抑制（如 S3776 认知复杂度高、
+#       S125 注释掉的代码），部分规则必须修复（如 S5446 裸 except、
+#       S930 函数参数缺失、S2817 硬编码 SQL、S5886 Optional 缺失、
+#       S3699 从未执行的 Promise）。
+# 如不做决策验证，可能误用 NOSONAR 抑制真缺陷，导致代码质量风险。
+nosonar_decision_matrix:
+  enabled: true
+  # 要求 NOSONAR 注释包含原因说明
+  require_reason_comment: true
+  # 原因注释格式：# NOSONAR {rule_id}: {reason}
+  reason_comment_format: "# NOSONAR {rule_id}: {reason}"
+  # 必须修复的规则（真缺陷，禁止用 NOSONAR 抑制）
+  must_fix_rules:
+    - "S5446"  # 裸 except
+    - "S930"   # 函数参数缺失
+    - "S2817"  # 硬编码 SQL
+    - "S5886"  # Optional 缺失
+    - "S3699"  # 从未执行的 Promise
+  # 可抑制的规则（重构成本高或非真缺陷）
+  can_suppress_rules:
+    - "S3776"  # 认知复杂度高，重构成本高时可抑制
+    - "S7503"  # 重复代码，重构成本高时可抑制
+    - "S125"   # 注释掉的代码，可抑制（待清理）
+    - "S6353"  # 字符串字面量重复，可抑制
+  # 未知规则的处理方式（warn | fail | manual）
+  unknown_rules_action: "warn"
+  # must_fix 被抑制时阻塞扫描
+  severity_on_must_fix_suppressed: "FAIL"
+  # can_suppress 缺原因注释时警告
+  severity_on_missing_reason: "WARN"
+
+# === 2026-07-21 新增：综合复盘测试配置（阶段 37-42） ===
+# 对应 SKILL.md 阶段 37-42，详见各阶段说明
+# 来源：菜单分组、PWA 图标、图片爬虫、About/Help、P0/P1 监控改进等迭代测试复盘
+
+# ---- 阶段 37：菜单分组与角色可见性测试 ----
+# 背景：菜单数量 ≥10 时需用 el-sub-menu 分组，且不同角色可见分组需差异化控制。
+# 本次菜单分组功能开发中发现手风琴效果失效、角色过滤不生效等问题。
+menu_grouping_test:
+  enabled: true
+  # 触发分组检查的最小菜单数量（< 此值时 SKIP）
+  min_menu_count_for_grouping: 10
+  # 预期分组数量（与 groupConfig 数组长度一致）
+  expected_group_count: 5
+  # 路由配置文件清单（用于静态扫描 meta.group 字段）
+  route_config_files:
+    - "admin-web/src/router/index.js"
+    - "admin-web/src/router/routes.js"
+  # groupConfig 配置来源（验证从配置读取而非硬编码）
+  group_config_source: "admin-web/src/config/menuGroups.js"
+  # 是否要求手风琴效果（unique-opened）
+  require_accordion: true
+  # 是否要求角色可见性控制
+  require_role_visibility: true
+  # admin 角色名称（可见所有分组）
+  admin_role: "admin"
+  # operator 角色名称（仅可见部分分组）
+  operator_role: "operator"
+  # operator 账号（从 credentials 读取，此处声明使用哪个账号测试）
+  operator_account_ref: "credentials.operator"
+  # 是否要求路由变化时自动展开当前分组
+  require_auto_expand_on_route_change: true
+  # 严重级别
+  severity_on_accordion_failure: "FAIL"
+  severity_on_role_visibility_failure: "FAIL"
+  severity_on_group_mismatch: "FAIL"
+  severity_on_hardcoded_group: "WARN"
+
+# ---- 阶段 38：PWA 图标与 manifest 测试 ----
+# 背景：PWA 安装依赖 manifest.json 和 icons 资源完整。
+# 本次图标设计任务中发现 Content-Type 错误、缺 maskable purpose、缺 theme-color 等问题。
+pwa_icon_test:
+  enabled: true
+  # manifest.json 路径（相对 base_url）
+  manifest_path: "/manifest.json"
+  # 期望的 manifest Content-Type
+  expected_manifest_content_type: "application/manifest+json"
+  # manifest.json 必需字段
+  required_manifest_fields:
+    - "name"
+    - "short_name"
+    - "start_url"
+    - "display"
+    - "icons"
+  # 必需的 icon 尺寸
+  required_icon_sizes:
+    - "192x192"
+    - "512x512"
+  # 必需的 icon purpose（至少一个 icon 含此 purpose）
+  required_icon_purpose: "any maskable"
+  # favicon 路径
+  favicon_path: "/favicon.ico"
+  # 期望的 favicon Content-Type
+  expected_favicon_content_type:
+    - "image/x-icon"
+    - "image/vnd.microsoft.icon"
+  # icon 文件路径清单
+  icon_paths:
+    - path: "/icon-192.png"
+      expected_content_type: "image/png"
+    - path: "/icon-512.png"
+      expected_content_type: "image/png"
+  # index.html 必需的 meta 标签
+  required_html_meta:
+    - '<link rel="manifest"'
+    - '<meta name="theme-color"'
+    - '<link rel="apple-touch-icon"'
+  # 严重级别
+  severity_on_manifest_not_found: "FAIL"
+  severity_on_icon_not_found: "FAIL"
+  severity_on_missing_icon_size: "FAIL"
+  severity_on_wrong_content_type: "WARN"
+  severity_on_missing_maskable_purpose: "WARN"
+  severity_on_missing_theme_color: "WARN"
+
+# ---- 阶段 39：图片封面渲染与降级测试 ----
+# 背景：图片爬虫功能开发后，小程序详情页按段渲染图文。
+# 本次测试发现图片加载失败显示错误图标、无 lazy-load、无固定宽高比导致 CLS 累积。
+cover_image_rendering_test:
+  enabled: true
+  # 详情页路径（相对 base_url）
+  detail_page_path: "/pages/detail/detail"
+  # 详情页 wxml 文件路径（用于静态扫描）
+  detail_wxml_file: "miniprogram/pages/detail/detail.wxml"
+  # segment 中含图片的字段名
+  segment_cover_url_field: "cover_url"
+  # 是否要求 lazy-load 属性
+  require_lazy_load: true
+  # 是否要求固定宽高比（aspect-ratio 或同时设置 width/height）
+  require_fixed_aspect_ratio: true
+  # CLS 最大允许值
+  max_cls: 0.1
+  # 是否模拟图片加载失败（通过 Playwright route 拦截）
+  simulate_image_failure: true
+  # 失败后期望的容器状态（hidden / removed / display-none）
+  degraded_container_state: "hidden"
+  # 是否要求 binderror 事件绑定
+  require_binderror_handler: true
+  # 严重级别
+  severity_on_no_lazy_load: "WARN"
+  severity_on_no_fixed_aspect_ratio: "WARN"
+  severity_on_cls_exceeded: "WARN"
+  severity_on_failure_show_error_icon: "FAIL"
+  severity_on_failure_not_hidden: "FAIL"
+
+# ---- 阶段 40：About/Help 模块完整性测试 ----
+# 背景：About/Help 模块开发中发现检查更新失败未降级、锚点点击无响应、搜索过滤失效等问题。
+about_help_module_test:
+  enabled: true
+  # About 页面路径
+  about_page_path: "/about"
+  # About 页面预期展示的元数据字段
+  expected_metadata:
+    - "product_name"
+    - "version"
+    - "build_date"
+    - "git_sha"
+    - "python_version"
+    - "platform"
+  # 检查更新按钮选择器
+  check_update_button_selector: "button.check-update"
+  # 检查更新接口端点
+  update_check_endpoint: "/api/admin/about/check-update"
+  # 检查更新失败时降级显示的文本
+  fallback_source_text: "本地"
+  # Help 页面路径
+  help_page_path: "/help"
+  # Help 页面预期章节数量
+  expected_section_count: 8
+  # Help 侧边栏选择器
+  help_sidebar_selector: ".help-sidebar"
+  # Help 搜索框选择器
+  help_search_selector: "input.help-search"
+  # 搜索测试关键词
+  test_search_keyword: "频道"
+  # 是否要求章节滚动高亮
+  require_scroll_highlight: true
+  # 严重级别
+  severity_on_metadata_missing: "WARN"
+  severity_on_check_update_no_fallback: "FAIL"
+  severity_on_anchor_no_response: "FAIL"
+  severity_on_no_scroll_highlight: "WARN"
+  severity_on_search_no_result: "WARN"
+  severity_on_search_error: "FAIL"
+
+# ---- 阶段 41：关键指标监控告警测试 ----
+# 背景：P0 改进实施引入关键指标监控告警，要求低于阈值时记录 WARNING 日志。
+monitoring_thresholds_test:
+  enabled: true
+  # 关键词命中率阈值（低于此值触发 WARNING）
+  keyword_hit_rate_threshold: 0.10
+  # LLM 字数达成率阈值（低于此值触发 WARNING）
+  llm_word_achievement_threshold: 0.80
+  # TTS 成功率阈值（低于此值触发 WARNING）
+  tts_success_rate_threshold: 0.90
+  # 工作流成功率阈值（低于此值触发 WARNING）
+  workflow_success_rate_threshold: 0.95
+  # 日志文件路径（如配置则从文件 grep）
+  log_file_path: "backend/logs/app.log"
+  # 日志查询接口端点（如配置则从接口查询，优先于文件）
+  log_query_endpoint: "/api/admin/logs/query"
+  # 工作流触发接口端点
+  workflow_trigger_endpoint: "/api/internal/workflow/trigger"
+  # LLM 测试接口端点
+  llm_test_endpoint: "/api/admin/ai/test-llm"
+  # TTS 测试接口端点
+  tts_test_endpoint: "/api/admin/ai/test-tts"
+  # 工作流历史接口端点
+  workflow_history_endpoint: "/api/admin/workflows?page=1&size=20"
+  # 工作流完成等待超时（秒）
+  workflow_completion_timeout_sec: 60
+  # 工作流历史查询条数（用于计算成功率）
+  workflow_history_limit: 20
+  # WARNING 日志必需字段
+  required_log_fields:
+    - "metric_name"
+    - "current_value"
+    - "threshold_value"
+    - "timestamp"
+  # 期望的日志级别
+  expected_log_level: "WARNING"
+  # 严重级别
+  severity_on_no_warning_logged: "FAIL"
+  severity_on_wrong_log_level: "WARN"
+  severity_on_incomplete_log: "WARN"
+  severity_on_endpoint_unavailable: "FAIL"
+
+# ---- 阶段 42：频道素材健康度仪表盘测试 ----
+# 背景：P1 改进实施新增频道素材健康度仪表盘，验证端点返回完整数据 + 健康度三级判定正确。
+channel_health_dashboard_test:
+  enabled: true
+  # 频道健康度端点
+  channel_health_endpoint: "/api/admin/channel-health"
+  # RSS 健康度端点
+  rss_health_endpoint: "/api/admin/rss-health"
+  # 预期频道数量（如为 0 则不校验数量）
+  expected_channel_count: 5
+  # 频道数据必需字段
+  required_channel_fields:
+    - "channel_id"
+    - "channel_name"
+    - "material_count"
+    - "recent_7d_count"
+    - "health_level"
+  # RSS 源数据必需字段
+  required_rss_fields:
+    - "url"
+    - "http_status"
+    - "response_time_ms"
+    - "availability"
+  # 健康度判定阈值（healthy 级别）
+  healthy_threshold:
+    recent_7d_min: 5
+    material_min: 30
+  # 健康度判定阈值（critical 级别，低于此值为 critical）
+  critical_threshold:
+    recent_7d_min: 1
+    material_min: 5
+  # RSS 响应时间阈值（毫秒，超过此值视为 unavailable）
+  rss_response_time_threshold: 5000
+  # RSS 可用性判定字段值
+  rss_availability_values:
+    available: "available"
+    unavailable: "unavailable"
+  # 健康度等级值
+  health_level_values:
+    healthy: "healthy"
+    warning: "warning"
+    critical: "critical"
+  # 严重级别
+  severity_on_endpoint_failure: "FAIL"
+  severity_on_field_missing: "WARN"
+  severity_on_health_level_mismatch: "FAIL"
+  severity_on_availability_mismatch: "FAIL"
+
+# ============================================================
+# === 2026-07-21 新增：小程序真机调试复盘测试配置（阶段 43-46）===
+# ============================================================
+# 对应 news-code-dev 元规范 R101-R108，详见 SKILL.md 阶段 43-46
+# 复制本文件为 config.yaml 后按业务实际调整以下参数
+
+# ---- 阶段 43：小程序 Page 方法名唯一性测试（对应 R101）----
+# 背景：Page 对象内 onLoad 重复定义或与 wxml bindload 回调重名导致生命周期失效
+stage_43_page_method_uniqueness:
+  enabled: true
+  scan_glob: "miniprogram/pages/**/*.js"
+  lifecycle_methods:
+    - "onLoad"
+    - "onShow"
+    - "onReady"
+    - "onHide"
+    - "onUnload"
+    - "onPullDownRefresh"
+    - "onReachBottom"
+  wxml_callback_patterns:
+    - "bindload"
+    - "binderror"
+    - "bindtap"
+    - "bindinput"
+    - "bindchange"
+  forbid_duplicate_keys: true
+  forbid_lifecycle_collision: true
+  severity_on_duplicate: "FAIL"
+  severity_on_lifecycle_collision: "FAIL"
+  severity_on_custom_method_collision: "WARN"
+
+# ---- 阶段 44：小程序外链 ActionSheet 兜底测试（对应 R104）----
+# 背景：业务域名未配置时 wx.navigateTo 跳转 webview 白屏，binderror 不触发
+stage_44_external_link_fallback:
+  enabled: true
+  scan_glob: "miniprogram/pages/**/*.js"
+  nav_patterns:
+    - "wx.navigateTo.*webview"
+    - "wx.navigateTo.*url.*http"
+    - "wx.navigateTo.*url.*encodeURIComponent"
+  require_action_sheet: true
+  require_fail_callback: true
+  required_actions:
+    - "复制链接"
+    - "在小程序内打开"
+  fallback_to_clipboard: true
+  clipboard_function_pattern: "_copySourceUrl|_copyToClipboard"
+  test_urls:
+    - "https://example.com/article/1"
+    - "https://example.com/article/中文路径"
+    - "https://example.com/article?a=1&b=2"
+  severity_on_no_action_sheet: "FAIL"
+  severity_on_no_fail_callback: "FAIL"
+  severity_on_missing_copy_action: "WARN"
+
+# ---- 阶段 45：跨页布局一致性测试（对应 R108）----
+# 背景：列表页与详情页布局不一致导致用户视觉跳跃
+stage_45_cross_page_layout_consistency:
+  enabled: true
+  page_pairs:
+    - source: "pages/index/index"
+      target: "pages/history/history"
+      shared_card_class: "episode-row-card"
+    - source: "pages/index/index"
+      target: "pages/detail/detail"
+      shared_card_class: "episode-row-card"
+  require_enrich_episode_sync: true
+  required_fields:
+    - "date_label"
+    - "duration_label"
+    - "play_count"
+    - "channel_name"
+  screenshot_compare: true
+  diff_threshold: 0.1
+  consistent_style_fields:
+    - "padding"
+    - "margin"
+    - "border-radius"
+    - "font-size"
+  severity_on_class_mismatch: "FAIL"
+  severity_on_field_missing: "FAIL"
+  severity_on_style_diff: "WARN"
+
+# ---- 阶段 46：聚合序号独立计数测试（对应 R106 后端侧）----
+# 背景：sources 序号从 2 开始因后端复用 segment.seq
+stage_46_aggregated_seq_independence:
+  enabled: true
+  api_endpoint: "/api/v1/episodes/{id}/script"
+  aggregated_fields:
+    - "sources"
+    - "chapters"
+    - "timestamps"
+  require_start_from_one: true
+  forbid_reuse_segment_seq: true
+  require_continuous: true
+  test_episode_ids:
+    - 1
+    - 2
+    - 3
+  seq_field: "seq"
+  severity_on_not_from_one: "FAIL"
+  severity_on_reuse_segment_seq: "FAIL"
+  severity_on_jump: "WARN"
+
+# ============================================
+# TTS 多 Provider 测试配置（阶段 47-51）
+# ============================================
+tts_multi_provider_unit_test:
+  description: "TTS 多 Provider 单元测试（阶段 47）"
+  enabled: true
+  providers:
+    - name: "aliyun"
+      module_path: "backend/app/workflow/tts/aliyun_client.py"
+      required_methods: ["synthesize", "test_connection"]
+    - name: "edge"
+      module_path: "backend/app/workflow/tts/edge_client.py"
+      required_methods: ["synthesize"]
+    - name: "tencent"
+      module_path: "backend/app/workflow/tts/tencent_client.py"
+      required_methods: ["synthesize", "test_connection"]
+  require_abstract_base: true
+  require_unified_exception: true
+  exception_types:
+    - "TTSProviderError"
+    - "TTSRateLimitError"
+    - "TTSTimeoutError"
+    - "TTSServiceError"
+  retryable_exceptions:
+    - "TTSRateLimitError"
+    - "TTSTimeoutError"
+    - "TTSServiceError"
+  non_retryable_exceptions:
+    - "TTSProviderError"
+
+tts_fallback_chain_verification_test:
+  description: "降级链路验证测试（阶段 48）"
+  enabled: true
+  require_parse_fallback_chain: true
+  require_config_driven: true
+  config_key: "TTS_FALLBACK_PROVIDERS"
+  require_sequential_try: true
+  require_ultimate_error: true
+  require_warning_log: true
+  warning_log_pattern: "TTS 降级成功"
+  check_budget_position: "outside_loop"
+  mock_main_provider_error: "TTSProviderError"
+
+edge_tts_version_precheck_test:
+  description: "edge-tts 版本预检测试（阶段 49）"
+  enabled: true
+  min_version: "7.2.8"
+  check_save_api: true
+  check_stream_api: true
+  test_voice: "zh-CN-XiaoxiaoNeural"
+  test_text: "测试"
+  check_requirements_txt: true
+  windows_cacert_lock_check: true
+  forbidden_errors:
+    - "403 Forbidden"
+    - "WSServerHandshakeError"
+
+credentials_fallback_chain_test:
+  description: "凭证 fallback 链测试（阶段 50）"
+  enabled: true
+  provider: "tencent"
+  require_three_level_fallback: true
+  explicit_param_test: true
+  dedicated_config_test: true
+  dedicated_config_key: "TENCENT_TTS_SECRET_ID"
+  common_config_test: true
+  common_config_key: "COS_SECRET_ID"
+  require_error_on_all_empty: true
+  require_fallback_priority_doc: true
+
+tts_provider_ui_integration_test:
+  description: "前端 Provider UI 联调测试（阶段 51）"
+  enabled: true
+  pages:
+    - path: "/ai-config"
+      name: "AI 配置页面"
+      require_login: true
+      expected_provider_options: ["aliyun", "edge", "tencent"]
+  require_provider_switch_control: true
+  require_form_linkage: true
+  require_dynamic_voice_options: true
+  voice_mapping:
+    aliyun: ["XiaoxiaoNeural", "YunxiNeural"]
+    edge: ["zh-CN-XiaoxiaoNeural", "zh-CN-YunxiNeural"]
+    tencent: ["101011", "101013"]
+  require_fallback_config_section: true
+  fallback_config_placeholder: "逗号分隔，如 edge,tencent"
+  require_test_connection_dispatch: true
+  require_icon_import_complete: true
+  require_config_reflect_on_save: true
+
+# ============================================================
+# === 2026-07-22 新增：外部服务降级与异常过滤测试配置（阶段 52-54 V2.2）===
+# ============================================================
+# 对应 news-code-dev 元规范 R127-R129（2026-07-22 复盘新增）
+# 复制本文件为 config.yaml 后按项目实际调整以下参数
+# 背景：
+#   - 工作流 wf-20260711-0009 stitch 步骤失败，暴露三类问题：
+#     1) COS 未配置时无降级本地存储，直接 raise
+#     2) Windows asyncio ProactorBasePipeTransport 抛 ConnectionResetError [WinError 10054] 污染日志
+#     3) download_file 未识别本地路径前缀 /audio/，触发 httpx 自回路请求
+#   - 详见 SKILL.md 阶段 52-54 说明 + 复盘章节
+
+# ---- 阶段 52：TTS COS 降级本地存储测试（对应后端维度 113 + 前端维度 96）----
+# 规则：COS 未配置时必须降级到本地存储，返回 /audio/<key> 相对路径 URL
+# 测试步骤：模拟 COS 未配置 → 触发 TTS → 验证文件落盘 → 验证 URL 前缀 → 验证前端可播放 → 验证降级 UI
+external_storage_fallback_test:
+  description: "TTS COS 降级本地存储测试（阶段 52）"
+  enabled: true
+  # 严重级别（CRITICAL/HIGH/MEDIUM/LOW）
+  severity: "CRITICAL"
+  # 模拟 COS 未配置（测试前清空 COS_SECRET_ID / COS_SECRET_KEY）
+  cos_configured_mock: false
+  # 本地降级目录（与后端 news-backend-code-review/config.yaml#external_storage_fallback_check.local_dir 一致）
+  local_dir: "data/audio_cache"
+  # 静态目录挂载点（FastAPI app.mount 挂载 local_dir 到此前缀）
+  static_mount_point: "/audio"
+  # 预期返回 URL 前缀（降级模式下 audio_url 应以 /audio/ 开头）
+  expected_url_prefix: "/audio/"
+  # 测试工作流类型（tts/llm/stitch 等，默认 tts）
+  test_workflow: "tts"
+  # 断言项（全部为 true 时 PASS）
+  assertions:
+    # 音频文件必须落盘到 local_dir
+    file_exists_in_local_dir: true
+    # audio_url 必须以 expected_url_prefix 开头
+    url_starts_with: "/audio/"
+    # 前端播放器必须能加载该 URL
+    frontend_can_play: true
+    # 管理后台配置页必须显示降级提示
+    fallback_ui_alert_displayed: true
+  # 判断信号（grep 模式，用于代码静态扫描）
+  signals:
+    - "is_cos_configured"
+    - "cos_client\\.put_object"
+  # 扫描目录（覆盖所有可能调用 COS 的位置）
+  scan_dirs:
+    - "backend/app/workflow/tts/"
+
+# ---- 阶段 53：Windows asyncio 异常过滤测试（对应后端维度 114）----
+# 规则：Windows 平台必须在事件循环异常处理器中过滤 ConnectionResetError [WinError 10054]
+# 测试步骤：启动服务 → Playwright 打开播放页 → 关闭页面模拟提前断开 → 检查日志级别
+# 注意：仅 Windows 平台启用，Linux/Mac 使用 epoll 不存在此问题
+asyncio_exception_filter_test:
+  description: "Windows asyncio 异常过滤测试（阶段 53）"
+  enabled: true
+  severity: "MEDIUM"
+  # 启用平台列表（仅 Windows，Linux/Mac 的 epoll 不会触发此异常）
+  enabled_platforms:
+    - "win32"
+  # 被过滤的异常类型
+  ignored_exception: "ConnectionResetError"
+  # 触发异常的传输类
+  ignored_transport: "ProactorBasePipeTransport"
+  # Windows 错误码
+  ignored_winerror: 10054
+  # 预期日志级别（降级为 DEBUG，不污染 INFO 日志）
+  expected_log_level: "DEBUG"
+  # 断言项
+  assertions:
+    # 日志中无 ERROR 级别 ConnectionResetError
+    no_error_in_log: true
+    # 匹配到的日志行级别仅为 DEBUG
+    only_debug_level: true
+  # 判断信号
+  signals:
+    - "ProactorBasePipeTransport\\._call_connection_lost"
+    - "ConnectionResetError.*WinError.*10054"
+  # 扫描目录（仅检查启动入口和核心异步模块）
+  scan_dirs:
+    - "backend/app/main.py"
+    - "backend/app/core/"
+
+# ---- 阶段 54：本地路径 URL 约定测试（对应后端维度 115 + 前端维度 95）----
+# 规则：download_file 必须优先检测 /audio/ 前缀，命中则 shutil.copyfile，禁止 httpx 自回路请求
+# 测试步骤：构造本地路径 URL → 调用 download_file → 验证无 httpx 调用 → 验证文件拷贝 → 验证内容一致
+local_path_url_test:
+  description: "本地路径 URL 约定测试（阶段 54）"
+  enabled: true
+  severity: "HIGH"
+  # URL 前缀（后端降级模式返回的 URL 前缀）
+  url_prefix: "/audio/"
+  # 物理目录（URL 前缀映射到的文件系统目录）
+  physical_dir: "data/audio_cache"
+  # 拷贝策略（检测到前缀时直接拷贝文件，不走 http 请求）
+  copy_strategy: "shutil.copyfile"
+  # 禁止的自回路请求模式（命中即报 FAIL）
+  # 这些模式表示下游把本地路径当成了远程 URL，发起 http 请求访问本机服务
+  forbidden_patterns:
+    - "httpx\\.get\\(.*localhost.*audio"
+    - "httpx\\.get\\(.*127\\.0\\.0\\.1.*audio"
+  # 断言项
+  assertions:
+    # 未发起 httpx.get 请求
+    no_httpx_call: true
+    # 文件成功拷贝到目标位置
+    file_copied: true
+    # 源文件与目标文件 MD5 一致
+    content_correct: true
+    # 前端 audio src 支持相对路径
+    frontend_supports_relative: true
+  # 判断信号
+  signals:
+    - "def\\s+download_file\\("
+    - "url\\.startswith\\(['\"]/audio/['\"]\\)"
+  # 扫描目录（覆盖所有可能调用 download_file 的位置）
+  scan_dirs:
+    - "backend/app/workflow/stitch/"
+    - "backend/app/workflow/tts/"
+
+# ============================================================
+# 阶段 71：响应拦截器 blob 响应兼容性测试
+# 测试步骤：构造 blob 响应 → 验证拦截器分支 → 验证无 ElMessage 误报 → 构造 json 对照
+# ============================================================
+blob_interceptor_compat_test:
+  description: "响应拦截器 blob/arraybuffer 响应兼容性测试（阶段 71）"
+  enabled: true
+  severity: "HIGH"
+  # 测试的响应类型清单（拦截器应支持所有列出的类型）
+  response_types:
+    - "blob"
+    - "arraybuffer"
+  # 拦截器源码判断信号（grep 命中表示拦截器无分支判断）
+  interceptor_signal: "response\\.config\\?\\.responseType"
+  # 拦截器源码路径
+  interceptor_files:
+    - "admin-web/src/utils/request.js"
+    - "admin-web/src/api/request.js"
+  # 禁止出现的错误信息（出现即 FAIL，表示误按 JSON 解构）
+  forbidden_error_messages:
+    - "code undefined"
+    - "message undefined"
+    - "Cannot read properties of undefined"
+  # JSON 对照响应（验证正常解构流程不受影响）
+  json_control_response:
+    code: 0
+    message: "ok"
+    data:
+      sample_field: "sample_value"
+  # 断言项
+  assertions:
+    # blob 响应直接返回 response.data
+    blob_returns_data_directly: true
+    # arraybuffer 响应直接返回 response.data
+    arraybuffer_returns_data_directly: true
+    # JSON 响应正常解构为 response.data.data
+    json_destructures_correctly: true
+    # 无 ElMessage.error 误报
+    no_false_error_message: true
+    # 拦截器含 responseType 分支判断
+    interceptor_has_response_type_branch: true
+  # 扫描目录
+  scan_dirs:
+    - "admin-web/src/"
+
+# ============================================================
+# 阶段 72：工作流重跑前后状态验证
+# 测试步骤：记录快照 → 调用 retry → 验证 workflow_id 一致 → 验证步骤处理 → 验证状态重置 → 验证入队
+# ============================================================
+workflow_retry_state_test:
+  description: "工作流重跑前后状态验证（阶段 72）"
+  enabled: true
+  severity: "CRITICAL"
+  # 重跑起始步骤字段名（不硬编码字段名，通过配置管理）
+  from_step_field: "from_step"
+  # 触发者字段名
+  triggered_by_field: "triggered_by"
+  # 重跑后期望的初始状态
+  expected_initial_status: "queued"
+  # 需要重置的字段清单（重跑后应为 None）
+  fields_to_reset:
+    - "error"
+    - "finished_at"
+  # 前驱步骤应保留的状态
+  preserved_step_status: "success"
+  # 步骤记录字段名
+  step_name_field: "step_name"
+  step_status_field: "status"
+  step_result_field: "result"
+  # 优先队列 mock 配置
+  priority_queue_mock:
+    enabled: true
+    method_name: "put"
+    expected_call_count: 1
+  # 断言项
+  assertions:
+    # 返回的 workflow_id 与传入一致（不创建新工作流）
+    workflow_id_unchanged: true
+    # from_step 及之后步骤被删除
+    subsequent_steps_deleted: true
+    # from_step 之前步骤保留且 status=success
+    preceding_steps_preserved: true
+    # 保留步骤的 result 字段完整
+    preserved_result_complete: true
+    # 工作流状态重置为 queued
+    status_reset_to_queued: true
+    # error 字段被清空
+    error_field_cleared: true
+    # finished_at 字段被清空
+    finished_at_field_cleared: true
+    # 工作流重新入队
+    workflow_re_enqueued: true
+
+# ============================================================
+# 阶段 73：时区敏感测试基线对齐
+# 测试步骤：grep utcnow → 确认生产时间函数 → 对齐基线 → 近似断言 → 连续 3 次稳定性验证
+# ============================================================
+timezone_baseline_alignment_test:
+  description: "时区敏感测试基线对齐（阶段 73）"
+  enabled: true
+  severity: "MEDIUM"
+  # 测试代码中禁止使用的时间函数
+  forbidden_time_functions:
+    - "datetime\\.utcnow\\(\\)"
+    - "datetime\\.utcnow\\(\\)\\.replace\\(tzinfo=None\\)"
+  # 生产代码使用的时间函数（用于对齐测试基线）
+  production_time_function: "utcnow_naive"
+  # 生产时间函数返回类型（local_time 或 utc_time）
+  production_returns: "local_time"
+  # 时间比较近似断言的 epsilon 值（秒）
+  epsilon_seconds: 1.0
+  # 稳定性验证运行次数
+  stability_run_count: 3
+  # 精确等于断言检查（命中即 WARN，建议改近似断言）
+  exact_equality_patterns:
+    - "==\\s*datetime\\."
+    - "assertEqual\\(.*datetime\\."
+  # 断言项
+  assertions:
+    # 测试代码不使用 forbidden_time_functions
+    no_forbidden_time_functions: true
+    # 测试时间基线与生产代码一致
+    baseline_aligned: true
+    # 时间比较使用近似断言
+    approximate_assertions: true
+    # 连续运行 3 次稳定通过
+    stability_verified: true
+  # 扫描目录（测试文件）
+  scan_dirs:
+    - "backend/tests/"
+
+# ============================================================
+# 阶段 74：外键关联删除验证
+# 测试步骤：创建父子记录 → 验证 PRAGMA 默认未开启 → 调用删除 → 验证子表外键处理 → 验证不依赖 PRAGMA
+# ============================================================
+foreign_key_cascade_delete_test:
+  description: "外键关联删除验证（阶段 74）"
+  enabled: true
+  severity: "HIGH"
+  # 父表配置（不硬编码表名，通过配置管理）
+  parent_table:
+    name: "channel"
+    # 创建父记录的 API 端点
+    create_endpoint: "/api/admin/channels"
+    # 删除父记录的 API 端点
+    delete_endpoint: "/api/admin/channels/{id}"
+  # 子表配置（外键指向父表）
+  child_table:
+    name: "episode"
+    # 外键字段名
+    foreign_key_field: "channel_id"
+    # 创建子记录的 API 端点
+    create_endpoint: "/api/admin/episodes"
+    # 查询子记录的 API 端点
+    query_endpoint: "/api/admin/episodes?channel_id={id}"
+  # 期望的级联动作（set_null / cascade / restrict）
+  expected_cascade_action: "set_null"
+  # 是否验证不依赖 PRAGMA foreign_keys 开关
+  check_pragma_independence: true
+  # PRAGMA 查询语句
+  pragma_query: "PRAGMA foreign_keys"
+  # 测试环境期望的 PRAGMA 值（默认未开启）
+  expected_pragma_value: 0
+  # 断言项
+  assertions:
+    # 子表外键按 expected_cascade_action 处理
+    foreign_key_handled_correctly: true
+    # 父记录已删除
+    parent_record_deleted: true
+    # 行为不依赖 PRAGMA foreign_keys 开关
+    pragma_independent: true
+    # 测试环境与生产环境行为一致
+    env_consistent: true
+
+# ============================================================
+# 阶段 75：flaky 测试根因修复验证
+# 测试步骤：识别 flaky → 分析根因 → 对齐基线/mock 时间 → 近似断言 → 连续 3 次稳定性验证
+# ============================================================
+flaky_root_cause_fix_test:
+  description: "flaky 测试根因修复验证（阶段 75）"
+  enabled: true
+  severity: "MEDIUM"
+  # 已知 flaky 测试清单（测试用例 ID 或文件名）
+  known_flaky_tests: []
+  # 根因分类清单
+  root_cause_categories:
+    - "timezone"          # 时区差（utcnow vs now）
+    - "concurrency"       # 并发竞态
+    - "random"            # 随机数未固定
+    - "time_precision"    # 时间精度（微秒差）
+    - "test_order"        # 测试执行顺序依赖
+    - "resource_leak"     # 资源泄漏（文件/连接未释放）
+  # 时间比较近似断言的 epsilon 值（秒）
+  epsilon_seconds: 1.0
+  # 稳定性验证运行次数
+  stability_run_count: 3
+  # 是否检查修复引入新失败
+  check_no_new_failures: true
+  # 随机种子固定值（用于固定随机数）
+  random_seed: 42
+  # 断言项
+  assertions:
+    # 根因已分类
+    root_cause_classified: true
+    # 根因已消除
+    root_cause_eliminated: true
+    # 连续运行 stability_run_count 次稳定通过
+    stability_verified: true
+    # 修复未引入新的测试失败
+    no_new_failures: true
+
+# ============================================================
+# 测试流程优化 1：区分本次引入 vs 预先存在的失败
+# ============================================================
+test_failure_diff_check:
+  description: "区分本次修改引入 vs 预先存在的测试失败（流程优化 1）"
+  enabled: true
+  stash_command: "git stash push -u"
+  pop_command: "git stash pop"
+  test_command: "pytest --asyncio-mode=auto"
+  # 如 stashed 状态测试环境不可用则跳过本流程
+  skip_on_env_unavailable: true
+  # 失败分类
+  classification:
+    preexisting_failure: "business_data"
+    regression_introduced: "code_defect"
+  # 严重级别
+  severity_on_regression: "FAIL"
+  severity_on_preexisting: "WARN"
+
+# ============================================================
+# 测试流程优化 2：分步验证策略
+# ============================================================
+stepwise_verification_strategy:
+  description: "分步验证策略（流程优化 2）"
+  enabled: true
+  steps:
+    - name: "syntax_check"
+      command: "python -m py_compile {modified_file}"
+      stop_on_fail: true
+    - name: "target_test"
+      command: "pytest {target_test_file} -v"
+      stop_on_fail: true
+    - name: "full_test_suite"
+      command: "pytest --asyncio-mode=auto"
+      # 完整套件失败时区分回归 vs 预先存在
+      stop_on_fail: false
+    - name: "frontend_build"
+      command: "npm run build"
+      stop_on_fail: true
+      cwd: "admin-web"
+  # 是否记录每步执行耗时
+  record_timing: true
+
+# ============================================================
+# 测试流程优化 3：PowerShell 兼容性策略
+# ============================================================
+powershell_compatibility_strategy:
+  description: "PowerShell 兼容性策略（流程优化 3）"
+  enabled: true
+  # 禁止的语法（PowerShell 5.x 不支持）
+  forbidden_syntax:
+    - "&&"
+    - "||"
+  # 推荐的命令分隔符
+  recommended_separator: ";"
+  # Python 脚本调用规范
+  require_python_unbuffered: true
+  require_stderr_redirect: true
+  python_call_pattern: "python -u {script} 2>&1"
+  # 临时脚本管理
+  temp_script_dir: ".tmp"
+  cleanup_temp_scripts: true
+  # 禁止因 PowerShell RemoteException 警告而 exit 1
+  forbidden_exit_on_warning: true
+  # 扫描文件（检查 PowerShell 兼容性）
+  scan_files:
+    - "*.ps1"
+    - "package.json"
+  # 严重级别
+  severity_on_violation: "WARN"
+
+# ============================================================
+# 测试阶段 87：小程序原生代码 4 维静态验证（R174）
+# 来源：2026-07-31 微信登录修复复盘。小程序原生代码无法用 Playwright 直接测试，
+#       需通过语法/接口/契约/渲染 4 维静态验证覆盖。
+# ============================================================
+miniprogram_static_check:
+  description: "小程序原生代码 4 维静态验证（语法/接口/契约/渲染）"
+  enabled: true
+  # 触发本阶段的文件 glob 模式（修改任一匹配文件即触发）
+  trigger_on_files:
+    - "miniprogram/**/*.js"
+    - "miniprogram/**/*.wxml"
+    - "miniprogram/**/*.wxss"
+    - "miniprogram/**/*.json"
+  # 4 维验证配置（每维独立 severity）
+  dimensions:
+    - id: "syntax"
+      name: "语法维"
+      description: "用 node --check 检查所有修改的 .js 文件语法"
+      command: "node --check {file}"
+      applicable_files: ["miniprogram/**/*.js"]
+      stop_on_fail: true
+      severity_on_fail: "FAIL"
+    - id: "interface"
+      name: "接口维"
+      description: "验证调用的依赖模块函数签名一致"
+      check_items:
+        - "require() 路径存在"
+        - "导出函数名与调用方一致"
+        - "参数个数与签名一致"
+        - "返回值结构与使用方一致"
+      applicable_files: ["miniprogram/**/*.js"]
+      stop_on_fail: true
+      severity_on_fail: "FAIL"
+    - id: "contract"
+      name: "契约维"
+      description: "验证前端请求/响应字段与后端路由定义对齐"
+      check_items:
+        - "请求字段名 vs 后端 Pydantic Model 字段名"
+        - "响应字段名 vs 前端使用字段名"
+        - "snake_case / camelCase 一致性"
+        - "兜底链数据源完整性"
+      backend_route_glob: "backend/app/routers/**/*.py"
+      applicable_files: ["miniprogram/**/*.js"]
+      stop_on_fail: false
+      severity_on_fail: "WARN"
+    - id: "render"
+      name: "渲染维"
+      description: "验证 .wxml 数据绑定字段名与 setData 一致"
+      check_items:
+        - "wxml 中 {{field}} 在 data 或 setData 中存在"
+        - "wx:for 绑定的数组名在 data 中存在"
+        - "绑定的函数名在 Page/Component methods 中存在"
+      applicable_files: ["miniprogram/**/*.wxml", "miniprogram/**/*.js"]
+      stop_on_fail: false
+      severity_on_fail: "WARN"
+  # 报告格式
+  report_format: "dimension_table"
+  report_columns: ["dimension", "status", "issues", "file", "line"]
+  # 修改了小程序代码但跳过 4 维验证属严重违规
+  severity_on_skip: "FAIL"
+  skip_detection:
+    grep_pattern: "node --check"
+    check_location: "git commit message + PR description"
+
+# ============================================================
+# 测试阶段 88：前后端字段契约验证清单（R175）
+# 来源：2026-07-31 微信登录修复复盘。规范 R16 定义原则，本阶段补充可操作的验证清单。
+# ============================================================
+field_contract_check:
+  description: "前后端字段契约验证清单（请求/响应/兜底链）"
+  enabled: true
+  # API 变更检测（匹配任一 glob 即触发本阶段）
+  trigger_on_api_changes: true
+  api_change_detection:
+    backend_glob:
+      - "backend/app/routers/**/*.py"
+      - "backend/app/schemas/**/*.py"
+    frontend_glob:
+      - "admin-web/src/api/**/*.js"
+      - "miniprogram/services/*.js"
+  # 3 项验证清单
+  verification_items:
+    - id: "request_fields"
+      name: "请求字段对齐"
+      description: "前端发送的字段名 vs 后端 Pydantic Model 字段名"
+      check_method: "对比前端 api.js 请求 payload 与后端 Pydantic Schema 字段"
+      severity_on_mismatch: "FAIL"
+    - id: "response_fields"
+      name: "响应字段对齐"
+      description: "后端返回的字段名 vs 前端使用的字段名"
+      check_method: "对比后端路由返回 dict 与前端 res.xxx 取值"
+      severity_on_mismatch: "FAIL"
+    - id: "fallback_chain"
+      name: "兜底链数据源验证"
+      description: "前端多名字兜底（如 avatar_url || avatar || avatarUrl）每个名字都有数据源"
+      check_method: "提取 || 链中每个字段名，验证至少一个数据源返回"
+      severity_on_redundant: "WARN"
+  # 命名风格（可配置为 camelCase/kebab-case 等）
+  naming_style:
+    backend: "snake_case"
+    frontend_passthrough: true
+    forbid_camelcase_transform: true
+  # 已知字段对清单（前端使用了 frontend_wrong 字段即违规）
+  known_field_pairs:
+    - backend: "audio_url"
+      frontend_wrong: "audioUrl"
+      description: "音频地址（snake_case 透传）"
+      severity: "MEDIUM"
+    - backend: "episode_id"
+      frontend_wrong: "episodeId"
+      description: "节目 ID（前端变量可用 camelCase，但取后端字段需用 episode_id）"
+      severity: "LOW"
+    - backend: "categories"
+      frontend_wrong: "category"
+      description: "分类列表（复数，禁止单数）"
+      severity: "MEDIUM"
+    - backend: "script"
+      frontend_wrong: "content"
+      description: "稿件内容（历史兼容可 fallback：res.script || res.content）"
+      severity: "MEDIUM"
+      allow_fallback: true
+    - backend: "placements"
+      frontend_wrong: "dates"
+      description: "排期投放数组（结构不同，dates 是 map，placements 是数组）"
+      severity: "HIGH"
+    - backend: "avatar_url"
+      frontend_wrong: "avatarUrl"
+      description: "头像地址（snake_case 透传，前端兜底链可包含）"
+      severity: "MEDIUM"
+      allow_fallback: true
+  # 报告格式
+  report_format: "contract_matrix"
+  report_columns: ["api_endpoint", "field_name", "backend_definition", "frontend_usage", "status", "severity", "suggestion"]
+  # 跨技能联动：与前端代码审查的字段对配置保持一致
+  cross_reference_config: "news-frontend-code-review/config.yaml#field_contract_frontend"

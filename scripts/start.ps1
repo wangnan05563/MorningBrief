@@ -42,7 +42,16 @@ function Write-Err   { param([string]$Message) Write-Host "$StepPrefix   [FAIL] 
 
 $Script:ProjectRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $Script:ExePath     = Join-Path $ProjectRoot "dist\MorningBrief\MorningBrief.exe"
-$Script:VenvPython  = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+# 支持多种常见 venv 目录名（.venv / .venv-build / venv），按优先级取第一个存在的
+# 原因：项目构建环境可能使用 .venv-build 而非标准 .venv，避免回退到缺依赖的系统 Python
+$Script:VenvPython  = $null
+foreach ($venvName in @(".venv", ".venv-build", "venv")) {
+    $candidate = Join-Path $ProjectRoot "$venvName\Scripts\python.exe"
+    if (Test-Path $candidate) {
+        $Script:VenvPython = $candidate
+        break
+    }
+}
 $Script:LauncherPy  = Join-Path $ProjectRoot "backend\launcher.py"
 # 系统回退：venv 不存在时用系统 python（V1.2 开发模式不强制 venv）
 $Script:SystemPython = $null

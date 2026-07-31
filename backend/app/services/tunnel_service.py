@@ -40,6 +40,9 @@ _DEFAULT_CONFIG: dict = {
     "cpolar_authtoken": "",
     "binary_path": "",
     "auto_start": False,
+    # Tailscale 路径区分模式：非空时用 --set-path 注册路径前缀
+    # 多应用同节点共存时各分配独立前缀（如 /news/、/wiki/、/xianyu/）
+    "path_prefix": "/news/",   # 20_News 默认使用 /news/ 前缀
     # Cloudflare Named Tunnel 相关配置（quick 模式下这些值被忽略）
     "tunnel_mode": "quick",    # quick / named
     "tunnel_name": "",         # 命名隧道名称
@@ -130,6 +133,9 @@ class TunnelService:
         kwargs: dict = {"binary_path": cfg.get("binary_path", "")}
         if provider_name == "cpolar":
             kwargs["authtoken"] = cfg.get("cpolar_authtoken", "")
+        elif provider_name == "tailscale":
+            # 路径区分模式：path_prefix 非空时启用多应用路径前缀
+            kwargs["path_prefix"] = cfg.get("path_prefix", "")
         elif provider_name == "cloudflare":
             # Named Tunnel 参数：quick 模式下这些值被忽略
             kwargs.update(

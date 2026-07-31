@@ -329,6 +329,21 @@ hard_constraints:  # 新增 33-38: 启动脚本安全/构建并发/日志格式/
       exclude_files:
         - "backend/app/config.py"
 
+    # 规范 35：日志格式（Loguru {} 而非 %s）
+    - name: "loguru_placeholder_format"
+      pattern: 'logger\.(warning|error|info)\([^)]*%s[^)]*'
+      message: "Loguru 使用 {} 占位符，禁止使用 %s 格式（会吞掉异常信息）"
+      severity: HIGH
+      auto_fix: false
+      category: logging
+    # 规范 37：共享构建依赖完整提取
+    - name: "shared_build_dll_dependency"
+      pattern: 'zf\.open\(ffmpeg_member\)'
+      message: "共享构建需提取 bin 目录下所有文件（含 DLL），不能只复制 exe"
+      severity: CRITICAL
+      auto_fix: false
+      category: dependency_extraction
+
 # ============================================================
 # 15 维度开关
 # ============================================================
@@ -657,23 +672,6 @@ batch_operations:
       - "/trigger"
       - "/retry"
 
-
-
-    # 规范 35：日志格式（Loguru {} 而非 %s）
-    - name: "loguru_placeholder_format"
-      pattern: 'logger\.(warning|error|info)\([^)]*%s[^)]*'
-      message: "Loguru 使用 {} 占位符，禁止使用 %s 格式（会吞掉异常信息）"
-      severity: HIGH
-      auto_fix: false
-      category: logging
-    # 规范 37：共享构建依赖完整提取
-    - name: "shared_build_dll_dependency"
-      pattern: 'zf\.open\(ffmpeg_member\)'
-      message: "共享构建需提取 bin 目录下所有文件（含 DLL），不能只复制 exe"
-      severity: CRITICAL
-      auto_fix: false
-      category: dependency_extraction
-
 # === 2026-07-18 新增：SonarQube 迭代闭环复盘审查配置 ===
 sonarqube_checklist:
   complexity:
@@ -801,6 +799,696 @@ response_field_priority:
     - "def.*serialize.*episode"
     - "def.*to_dict.*episode"
     - "Episode.*response"
+
+# ============================================================
+# === 2026-07-20 新增：SonarQube 扫描复盘审查配置（维度 84-88）===
+# ============================================================
+# 对应 news-code-dev 元规范 R86-R90，详见 SKILL.md 维度 84-88
+# 这些维度来源于 2026-07-20 SonarQube 全项目扫描闭环（168 issues 全部 CLOSED）
+
+# ---- 维度 84：NOSONAR 注释位置正确性（对应 S61/R86）----
+# 背景：SonarQube 扫描发现 18 个 NOSONAR 注释位置错误（加在多行函数定义末行
+#       `) -> ReturnType:` 而非首行 `def func_name(`），导致 issue 仍 OPEN
+# 规则：多行函数定义时，NOSONAR 必须加在首行 def 行尾
+nosonar_positioning:
+  enabled: true
+  # 多行 def 时 NOSONAR 必须在首行（True=强制）
+  require_on_multiline_def_first_line: true
+  # 大小写敏感（NOSONAR 必须全大写）
+  case_sensitive: true
+  # NOSONAR 前必须有至少一个空格
+  require_leading_space: true
+  # 合法模式：def 函数名( 参数...): 后跟 # NOSONAR
+  # 注意：多行 def 时，参数可能跨越多行，NOSONAR 必须在第一行 def 之后
+  valid_pattern: "\\bdef\\s+\\w+\\(.*#\\sNOSONAR\\s*$"
+  # 非法模式：) -> ReturnType: 后跟 # NOSONAR（多行 def 末行不生效）
+  invalid_pattern: "\\)\\s*->\\s*.*:\\s*#\\sNOSONAR"
+  # 扫描范围
+  scan_files:
+    - "backend/app/**/*.py"
+
+# ---- 维度 85：SonarQube 扫描环境兼容性（对应 S62/R87）----
+# 背景：Node.js v24 与 SonarJS bridge 不兼容（报 Cannot find module
+#       './globals-IVYI6PB4.json'）；PowerShell 5 的 -D 参数被 sonar-scanner
+#       误判为 Unrecognized option，必须用 .bat 文件封装
+# 规则：扫描前预检环境兼容性，不兼容时降级为 Python-only 扫描
+sonarqube_environment:
+  enabled: true
+  # Node.js 最大兼容版本（>20.99.0 时跳过 JS/TS 扫描）
+  # SonarJS bridge 目前仅支持 Node.js v20 LTS
+  nodejs_max_compatible_version: "20.99.0"
+  # PowerShell 调用 sonar-scanner 时必须用 .bat 封装（避免 -D 参数解析问题）
+  powershell_use_bat_wrapper: true
+  # 环境不兼容时降级为仅扫描 Python（而非整体失败）
+  fallback_to_python_only_on_incompat: true
+  # 被禁止的命令（已知有 bug 或不兼容）
+  blocked_commands:
+    - "cmd /c"  # cmd /c 会剥离引号导致命令损坏
+  # 必须设置的环境变量
+  require_env_var_for_token: "SONAR_TOKEN"
+  scanner_path_env_var: "SONAR_SCANNER_HOME"
+  # SonarQube 服务地址（用于 API 调用查询 issue 状态）
+  sonarqube_url: "http://127.0.0.1:9000"
+
+# ---- 维度 86：并行子代理修复结果核查（对应 S63/R88）----
+# 背景：使用 Task 工具并行派发多个子代理修复 NOSONAR 时，子代理报告"已加 NOSONAR"
+#       但实际未写文件，或位置错误，需二次核查
+# 规则：子代理修复后必须用 grep 二次验证
+parallel_subagent_verification:
+  enabled: true
+  # 必须用 grep 验证 NOSONAR 实际写入文件
+  require_grep_verification: true
+  # 派发给子代理的文件组必须互斥（避免多子代理改同一文件冲突）
+  file_group_mutually_exclusive: true
+  # 验证项清单
+  verify_items:
+    - "nosonar_actually_written"          # grep 验证 NOSONAR 真实写入
+    - "nosonar_line_matches_issue_line"   # NOSONAR 行号与 issue 行号一致
+    - "multiline_def_nosonar_on_first_line"  # 多行 def 时 NOSONAR 在首行
+  # 单次派发的子代理上限（避免过度并发）
+  max_subagent_count: 5
+
+# ---- 维度 87：测试失败 git stash 验证（对应 S64/R89）----
+# 背景：SonarQube 修复后跑测试时 4 个测试失败，无法判断是回归还是预先存在问题
+# 规则：用 git stash 暂存修改后跑测试，仍失败则证明是预先存在问题
+test_failure_diagnosis:
+  enabled: true
+  # 测试失败时必须用 git stash 验证基线
+  require_stash_verification: true
+  # stash 消息格式（带时间戳便于追溯）
+  stash_message_format: "verify-baseline-{timestamp}"
+  # 只 stash 修改的文件（不影响未跟踪文件如新建测试）
+  stash_target_files: "modified_files_only"
+  # 预先存在失败的指示信号（出现这些信号时高度怀疑是历史问题）
+  indicators_of_preexisting_failure:
+    - "assert \\[\\] is None"                  # 多频道实现返回 list 但测试断言 None
+    - "TypeError: list indices must be integers"  # 测试用 dict 索引访问 list
+    - "test.*no direct relation to modified file"  # 失败测试与修改文件无直接关联
+
+# ---- 维度 88：NOSONAR 抑制 vs 代码修复决策（对应 S65/R90）----
+# 背景：不是所有 SonarQube issue 都应该 NOSONAR 抑制，真缺陷必须修复
+# 规则：must_fix_rules 中的规则禁止用 NOSONAR 抑制，必须实际修复
+nosonar_decision_matrix:
+  enabled: true
+  # 必须实际修复的规则（禁止 NOSONAR 抑制）
+  # 这些规则代表真实缺陷，抑制会掩盖问题
+  must_fix_rules:
+    - "S5446"  # 裸 except：吞异常导致问题难定位
+    - "S930"   # 函数参数不匹配：调用时会 TypeError
+    - "S2817"  # 硬编码 SQL：SQL 注入风险
+    - "S5886"  # Optional 缺失：调用点未处理 None 导致 AttributeError
+  # 允许 NOSONAR 抑制的规则（误报或重构成本过高）
+  # 抑制时必须在 NOSONAR 后注释说明原因
+  can_suppress_rules:
+    - "S3776"  # 认知复杂度（若职责单一、重构成本高）
+    - "S7503"  # async 无 await（FastAPI lifespan 等契约约束时）
+    - "S125"   # 注释代码误报（中文说明性注释被误判为代码）
+  # 抑制时必须提供原因注释
+  require_reason_comment: true
+  # 原因注释格式（NOSONAR 后跟双空格 + 规则号 + 冒号 + 原因）
+  reason_comment_format: "# NOSONAR  # {rule}: {reason}"
+
+# ============================================================
+# === 2026-07-21 新增：V2.0 综合复盘审查配置（维度 91-100）===
+# ============================================================
+# 对应 news-code-dev 元规范 R91-R100，详见 SKILL.md 维度 91-100
+# 所有阈值、白名单、cron 表达式、字段清单均通过本节管理，禁止硬编码业务值
+# 首次使用：复制本节到 config.yaml 并按项目实际情况调整阈值
+
+# ---- 维度 91：图片封面三级 fallback 提取审查 ----
+# 背景：图片爬虫功能开发，og:image 缺失时需 fallback 到 article <img> 与页面 <img>
+# 规则：三级 fallback + 装饰图过滤 + GIF 排除 + 站点模板路径白名单 + 回填脚本联动
+image_crawl_check:
+  enabled: true
+  # 是否强制三级 fallback（og:image → article <img> → page <img>）
+  require_three_level_fallback: true
+  # 装饰图 URL 关键词黑名单（命中即跳过）
+  # 这些关键词出现在图片 URL 中时视为装饰图，不作为封面
+  decorative_keywords:
+    - "logo"
+    - "icon"
+    - "arrow"
+    - "btn"
+    - "button"
+    - "avatar"
+    - "placeholder"
+    - "spinner"
+    - "loader"
+    - "ad-"
+  # article <img> 是否排除 GIF（动画图不适合封面，会导致列表页跳动）
+  exclude_gif: true
+  # gif 扩展名清单（大小写不敏感匹配）
+  gif_extensions:
+    - ".gif"
+    - ".GIF"
+  # 站点模板路径白名单（这些路径下的图片视为模板装饰，排除）
+  exclude_path_patterns:
+    - "/static/"
+    - "/assets/"
+    - "/template/"
+    - "/skins/"
+    - "/wp-content/themes/"
+  # Material 模型新增 cover_url 字段时是否强制配套回填脚本（联动维度 99）
+  require_backfill_script: true
+  # 触发回填脚本检查的字段名清单
+  trigger_fields_for_backfill:
+    - "cover_url"
+  # 回填脚本命名约定
+  backfill_script_pattern: "backfill_cover_url\\.py"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/workflow/crawler/"
+    - "backend/app/services/"
+  severity: "HIGH"
+
+# ---- 维度 92：FALLBACK_DAYS 动态计算审查 ----
+# 背景：工作流多步骤失败修复，新频道入库天数小时硬编码 7 天回溯导致素材 0 条
+# 规则：按频道入库天数动态计算回溯天数，禁止硬编码 FALLBACK_DAYS = N
+fallback_days_check:
+  enabled: true
+  # 是否禁止硬编码 FALLBACK_DAYS 常量
+  forbid_hardcoded_constant: true
+  # 硬编码信号正则（grep 到此模式即违规）
+  hardcoded_pattern: "FALLBACK_DAYS\\s*=\\s*\\d+"
+  # 三档阈值配置（按频道入库天数升序）
+  # max_age_days: 频道入库天数上界（< 此值用对应 fallback_days）
+  # fallback_days: 该档回溯天数
+  # 默认：新频道（<3 天）回溯 3 天，3-7 天回溯 7 天，>7 天回溯 14 天
+  tiers:
+    - max_age_days: 3
+      fallback_days: 3
+    - max_age_days: 7
+      fallback_days: 7
+    - max_age_days: 999999  # 兜底档（>7 天）
+      fallback_days: 14
+  # 是否要求日志记录 fallback_days 和频道 ID（便于排查素材不足）
+  require_log_fallback_days: true
+  # 日志格式信号（grep 此模式判断是否记录）
+  log_pattern: "fallback_days=\\w+.*channel_id=\\w+"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/services/"
+    - "backend/app/workflow/"
+  severity: "HIGH"
+
+# ---- 维度 93：LLM 语义过滤 fallback 审查 ----
+# 背景：关键词过滤 0 条直接 raise 导致工作流中断
+# 规则：关键词 0 条降级 LLM，LLM 失败保留全部条目供 rewriter 二次筛选，禁止直接 raise
+llm_semantic_fallback_check:
+  enabled: true
+  # 是否强制关键词 0 条降级 LLM
+  require_llm_fallback_on_zero: true
+  # 是否强制 LLM 调用 try/except 兜底
+  require_try_except: true
+  # 是否强制记录 fallback 触发原因（关键词 0 条 / 超时 / 解析失败等）
+  require_fallback_reason_log: true
+  # 关键词 0 条直接 raise 的违规信号
+  raise_on_zero_pattern: "if\\s+not\\s+\\w+:\\s*\\n\\s*raise"
+  # LLM 调用无 try/except 的违规信号
+  no_try_except_pattern: "await\\s+_llm_semantic_filter\\([^)]+\\)\\s*(?!.*try)"
+  # LLM 过滤结果与关键词过滤结果差异率 WARNING 阈值（0-1）
+  # 差异率 = |LLM结果数 - 关键词结果数| / max(关键词结果数, 1)
+  diff_warning_threshold: 0.5
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/workflow/"
+    - "backend/app/services/"
+  severity: "HIGH"
+
+# ---- 维度 94：LLM 字数达标约束审查 ----
+# 背景：P0 改进实施，LLM 字数严重不足导致 TTS 时长不足
+# 规则：四档字数约束（重试/丢弃/追加/失败）全部配置驱动
+llm_word_count_check:
+  enabled: true
+  # 字数下限比例（< target * min_ratio 触发重试）
+  min_ratio: 0.70
+  # 字数上限比例（> target * max_ratio 触发丢弃多余段）
+  max_ratio: 1.20
+  # 字数追加阈值比例（< target * append_threshold 触发追加段）
+  append_threshold: 0.80
+  # 重试次数上限（超限后标记失败）
+  max_retry: 3
+  # 丢弃多余段时保留的主段数量（至少 3 主段 + intro + outro）
+  keep_main_segments: 3
+  # 丢弃时是否保留 intro
+  keep_intro: true
+  # 丢弃时是否保留 outro
+  keep_outro: true
+  # 追加段最大数量（从未使用的选中素材中选取）
+  max_append_segments: 2
+  # 字数统计函数命名约定（grep 此模式判断是否有字数统计）
+  count_function_pattern: "_count_content_words"
+  # 丢弃段函数命名约定
+  discard_function_pattern: "_discard_excess_segments"
+  # 追加段函数命名约定
+  append_function_pattern: "_append_segments_from_unused"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/workflow/rewriter/"
+    - "backend/app/services/"
+  severity: "CRITICAL"
+
+# ---- 维度 95：BGM 时长不足兜底审查 ----
+# 背景：P1 改进实施，BGM 时长不足直接 raise 导致工作流失败
+# 规则：loop-last 扩展 → silent-pad 静音降级，禁止直接 raise
+bgm_fallback_check:
+  enabled: true
+  # 是否强制 loop-last 兜底（BGM 尾段扩展到视频时长）
+  require_loop_last: true
+  # 是否强制 silent-pad 静音降级（loop-last 仍不足时静音填充剩余）
+  require_silent_pad: true
+  # 是否禁止 BGM 不足时直接 raise（应兜底而非中断工作流）
+  forbid_raise_on_short: true
+  # 直接 raise 的违规信号
+  raise_on_short_pattern: "bgm_duration\\s*<\\s*video_duration.*raise"
+  # loop-last 触发的最小比例（BGM 时长 >= video_duration * loop_last_min_ratio 才用 loop-last）
+  # 例：视频 100s，BGM 50s，比例 0.5 >= 0.5，可用 loop-last
+  # 例：视频 100s，BGM 10s，比例 0.1 < 0.5，直接走 silent-pad
+  loop_last_min_ratio: 0.5
+  # loop-last ffmpeg 参数信号（grep 此模式判断是否实现 loop-last）
+  loop_last_signal: "-stream_loop|-filter_complex.*loop"
+  # silent-pad ffmpeg 参数信号
+  silent_pad_signal: "anullsrc|apad|silent_pad"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/workflow/"
+    - "backend/app/services/"
+  severity: "CRITICAL"
+
+# ---- 维度 96：关键指标监控告警审查 ----
+# 背景：P0 改进实施，监控指标异常运营无感知，问题累积到 P0 才发现
+# 规则：四类指标采集 + 低于阈值记录 WARNING，阈值通过配置管理
+monitoring_thresholds_check:
+  enabled: true
+  # 关键词命中率下限（< 此值记录 WARNING）
+  # 关键词命中率 = 关键词过滤后条数 / 过滤前总条数
+  keyword_hit_rate_min: 0.10
+  # LLM 字数达成率下限
+  # 字数达成率 = LLM 实际生成字数 / 目标字数
+  llm_word_count_rate_min: 0.80
+  # TTS 成功率下限
+  # TTS 成功率 = TTS 成功段数 / TTS 总段数
+  tts_success_rate_min: 0.90
+  # 工作流成功率下限
+  # 工作流成功率 = 近 N 天成功工作流数 / 总工作流数
+  workflow_success_rate_min: 0.95
+  # 硬编码阈值违规信号（grep 到这些数字直接硬编码即违规）
+  # 应改为从 get_settings().MONITORING_THRESHOLDS 读取
+  hardcoded_threshold_patterns:
+    - "rate\\s*<\\s*0\\.10"
+    - "rate\\s*<\\s*0\\.80"
+    - "rate\\s*<\\s*0\\.90"
+    - "rate\\s*<\\s*0\\.95"
+  # 是否要求四类指标全部采集
+  require_all_metrics_collected: true
+  # 指标采集点清单（每个采集点必须有 WARNING 判断）
+  metric_collection_points:
+    - "filter_materials"          # 关键词命中率
+    - "generate_with_constraint"  # LLM 字数达成率
+    - "tts_synthesize"            # TTS 成功率
+    - "workflow_run"              # 工作流成功率
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/workflow/"
+    - "backend/app/services/"
+  severity: "HIGH"
+
+# ---- 维度 97：频道素材健康度仪表盘审查 ----
+# 背景：P1 改进实施，频道素材不足运营无感知
+# 规则：/channel-health 端点 + 三级健康判定 + 配置驱动阈值 + 必填字段
+channel_health_dashboard_check:
+  enabled: true
+  # 端点路径
+  endpoint: "/channel-health"
+  # healthy 阈值（素材总数 >= healthy_min 为 healthy）
+  healthy_min: 100
+  # warning 阈值（素材总数 >= warning_min 为 warning，< warning_min 为 critical）
+  warning_min: 30
+  # 健康等级取值清单（必须三档）
+  health_levels:
+    - "healthy"
+    - "warning"
+    - "critical"
+  # 响应必须包含的字段（缺任一字段即违规）
+  required_fields:
+    - "channel_id"
+    - "channel_name"
+    - "total_count"
+    - "recent_count"
+    - "health_level"
+  # 是否支持时间范围筛选（?days=7）
+  support_time_range_filter: true
+  # 默认时间范围（天）
+  default_days: 7
+  # 路由文件扫描目录
+  scan_dirs:
+    - "backend/app/routers/"
+  severity: "MEDIUM"
+
+# ---- 维度 98：RSS 源可达性巡检审查 ----
+# 背景：P1 改进实施，RSS 源失效长期未发现
+# 规则：/rss-health 端点 + cron 定时巡检 + UA 兼容 + Content-Type 验证 + 状态标记
+rss_reachability_check:
+  enabled: true
+  # 端点路径
+  endpoint: "/rss-health"
+  # APScheduler cron 表达式（默认每 2 小时巡检一次）
+  # 格式：minute hour day month day_of_week
+  # 此处用 dict 形式以便直接传给 scheduler.add_job(..., **cron_expression)
+  cron_expression:
+    hour: "*/2"
+    minute: "0"
+  # 巡检 User-Agent 列表（部分源拒绝默认 UA，按顺序尝试）
+  # Steam 等站点拒绝 bot UA，必须用浏览器 UA
+  user_agents:
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+    - "MorningBriefRSSChecker/1.0"
+  # 请求超时（秒）
+  timeout_sec: 10
+  # 是否强制 Content-Type 验证（HTTP 200 但返回 HTML 也判定不可达）
+  require_content_type_validation: true
+  # 合法的 RSS Content-Type 清单（含这些子串视为 RSS）
+  valid_content_types:
+    - "application/rss+xml"
+    - "text/xml"
+    - "application/xml"
+    - "text/rss"
+  # 不可达状态标记
+  unavailable_status: "unavailable"
+  # 可达状态标记
+  available_status: "available"
+  # 巡检必须返回的字段
+  required_fields:
+    - "url"
+    - "status"
+    - "reason"
+    - "elapsed_sec"
+  # 路由文件扫描目录
+  scan_dirs:
+    - "backend/app/routers/"
+    - "backend/app/workflow/crawler/"
+  severity: "HIGH"
+
+# ---- 维度 99：批量数据回填脚本审查 ----
+# 背景：图片爬虫功能开发，ORM 新增 cover_url 字段后存量数据缺失
+# 规则：backfill_*.py 含 --dry-run + 分批 + 幂等 + 进度输出
+backfill_script_check:
+  enabled: true
+  # 是否强制 --dry-run 预览模式（只输出不执行）
+  require_dry_run: true
+  # 是否强制分批处理（避免百万级表 OOM）
+  require_batch_processing: true
+  # 默认批量大小（条/批）
+  default_batch_size: 100
+  # 是否强制幂等（已回填记录跳过，重复执行不报错）
+  require_idempotent: true
+  # 幂等信号：仅查询字段 IS NULL 的记录
+  idempotent_pattern: "WHERE\\s+\\w+\\.\\w+\\.is_\\(None\\)"
+  # 是否强制进度输出（已处理/总数/百分比）
+  require_progress_log: true
+  # 进度日志信号（grep 此模式判断是否输出进度）
+  progress_log_pattern: "backfill progress.*\\d+/\\d+.*%"
+  # 回填脚本命名约定
+  script_naming_pattern: "backfill_\\w+\\.py"
+  # 回填脚本目录
+  script_dirs:
+    - "backend/app/scripts/"
+    - "backend/scripts/"
+  # 触发回填脚本检查的 ORM 字段（这些字段新增时必须配套回填脚本）
+  trigger_fields:
+    - "cover_url"
+    - "audio_url"
+    - "thumbnail_url"
+    - "cover_image"
+  severity: "HIGH"
+
+# ---- 维度 100：PWA manifest 与 MIME 注册审查 ----
+# 背景：图标设计任务，PWA 安装失败因 MIME 未注册
+# 规则：main.py 注册 .ico 与 .webmanifest MIME + 挂载 public/ + manifest.json 必填字段
+pwa_manifest_check:
+  enabled: true
+  # 必须注册的 MIME 类型清单
+  required_mime_types:
+    - extension: ".ico"
+      mime: "image/x-icon"
+    - extension: ".webmanifest"
+      mime: "application/manifest+json"
+  # MIME 注册信号（grep main.py 检查）
+  mime_register_pattern: "mimetypes\\.add_type\\([\"']\\w+[\\/+\\-]\\w+[\"'].*\\.(ico|webmanifest)"
+  # 是否强制挂载 public/ 目录（manifest.json 和图标文件所在）
+  require_public_mount: true
+  # public 目录挂载信号
+  public_mount_pattern: "app\\.mount\\([\"']/public[\"'].*StaticFiles"
+  # manifest.json 必填字段（缺任一字段 PWA 安装异常）
+  manifest_required_fields:
+    - "name"
+    - "short_name"
+    - "theme_color"
+    - "background_color"
+    - "icons"
+  # icons 数组最小数量（多分辨率适配，至少 192 + 512）
+  min_icons_count: 2
+  # 是否推荐 Service Worker（不强制，离线访问需要）
+  recommend_service_worker: true
+  # main.py 文件路径
+  main_file: "backend/app/main.py"
+  # manifest.json 文件路径
+  manifest_file: "backend/public/manifest.json"
+  severity: "MEDIUM"
+
+# ============================================================
+# === 2026-07-22 新增：外部服务降级与异常过滤复盘审查配置（维度 101-103 V2.1）===
+# ============================================================
+# 对应 news-code-dev 元规范 R127-R129（2026-07-22 复盘新增）
+# 复制本文件为 config.yaml 后按业务实际调整以下参数
+# 背景：
+#   - 工作流 wf-20260711-0009 stitch 步骤失败，暴露三类问题：
+#     1) COS 未配置时无降级本地存储，直接 raise
+#     2) Windows asyncio ProactorBasePipeTransport 抛 ConnectionResetError [WinError 10054] 污染日志
+#     3) download_file 未识别本地路径前缀 /audio/，触发 httpx 自回路请求
+#   - 详见 SKILL.md 补充审查要点 H + 维度 7（补充）复盘
+
+# ---- 维度 113（V2.1）：外部服务降级本地存储模式（对应 R127）----
+# 规则：COS/OSS/S3 未配置或不可达时，必须降级到本地目录 + 静态挂载点提供下载
+# 判断信号：cos_client.put_object 后无 try/except 或无 fallback 分支
+external_storage_fallback_check:
+  enabled: true
+  # 对应维度编号（与 SKILL.md 一致）
+  dimension: 113
+  # 严重级别（CRITICAL/HIGH/MEDIUM/LOW）
+  severity: "CRITICAL"
+  # 单一真相源函数名（全项目复用，禁止多处重复判断 settings.COS_SECRET_ID）
+  # 该函数应封装在 core/config.py 或 services/storage_service.py
+  single_truth_source_fn: "is_cos_configured"
+  # 本地降级目录（COS 不可用时，音频文件落盘到此目录）
+  local_dir: "data/audio_cache"
+  # 静态目录挂载点（FastAPI app.mount 挂载 local_dir 到此前缀）
+  static_mount_point: "/audio"
+  # URL 生成函数必须感知的模式列表
+  # 生成 URL 时根据当前模式返回 cos_url 或 /audio/<key>
+  url_generator_modes:
+    - "cos"
+    - "local"
+  # 下游消费者（download_file / stitch / miniprogram）支持的前缀列表
+  # 这些前缀必须被下游识别为本地路径，禁止拼接成 http://localhost/audio/...
+  downstream_prefixes:
+    - "/audio/"
+  # 降级模式日志级别（INFO 用于运维感知降级发生，不应升级为 ERROR）
+  fallback_log_level: "INFO"
+  # 判断信号（grep 模式，命中任一即触发审查）
+  signals:
+    - "cos_client\\.put_object.*$"
+    - "if\\s+is_cos_configured\\(\\):"
+    - "if\\s+settings\\.COS_SECRET_ID:"
+  # 反模式（违规信号，命中即报 HIGH/CRITICAL）
+  # 1) raise "COS not configured" 表示无降级
+  # 2) 直接判断两个 settings 字段，绕过单一真相源
+  anti_patterns:
+    - "raise.*COS not configured"
+    - "if\\s+settings\\.COS_SECRET_ID\\s+and\\s+settings\\.COS_SECRET_KEY:"
+  # 扫描目录（覆盖所有可能调用 COS 的位置）
+  scan_dirs:
+    - "backend/app/workflow/tts/"
+    - "backend/app/services/workflow_scheduler.py"
+    - "backend/app/main.py"
+
+# ---- 维度 114（V2.1）：Windows asyncio ConnectionResetError 异常过滤（对应 R128）----
+# 规则：Windows 平台 FastAPI/uvicorn 必须注册事件循环异常处理器，过滤 ProactorBasePipeTransport 的 ConnectionResetError
+# 背景：客户端（浏览器 audio 标签）提前关闭连接时，Windows asyncio 抛 WinError 10054，污染日志
+asyncio_exception_filter_check:
+  enabled: true
+  dimension: 114
+  severity: "MEDIUM"
+  # 启用平台列表（仅 Windows 平台启用，Linux/Mac 使用 epoll 不存在此问题）
+  enabled_platforms:
+    - "win32"
+  # 被过滤的异常类型清单
+  # 每条异常包含：异常类型、传输类、WinError 码、日志级别
+  ignored_exceptions:
+    - exception_type: "ConnectionResetError"
+      transport_class: "ProactorBasePipeTransport"
+      winerror: 10054
+      # 降级为 DEBUG 级别（不污染 INFO 日志，但仍可追溯）
+      log_level: "DEBUG"
+  # 处理器优先级（数字越大优先级越高，确保在其他 handler 之前拦截）
+  handler_priority: 100
+  # 判断信号
+  signals:
+    - "ProactorBasePipeTransport\\._call_connection_lost"
+    - "ConnectionResetError.*WinError.*10054"
+  # 反模式（无自定义异常处理器，让异常冒泡到日志）
+  # 注：anti_patterns 命中"无 loop.set_exception_handler 调用"时，需结合 main.py 启动检查
+  anti_patterns:
+    - "loop\\.set_exception_handler"
+  # 扫描目录（仅检查启动入口和核心异步模块）
+  scan_dirs:
+    - "backend/app/main.py"
+    - "backend/app/core/"
+
+# ---- 维度 115（V2.1）：本地路径 URL 约定（对应 R129）----
+# 规则：外部存储降级模式或本地开发时，URL 必须使用 /<prefix>/<key> 形式，禁止自回路 http 请求
+# 判断信号：download_file 函数无 url.startswith('/audio/') 分支
+local_path_url_check:
+  enabled: true
+  dimension: 115
+  severity: "HIGH"
+  # URL 前缀到物理路径的映射表
+  # 每条包含：前缀、物理目录、复制策略（直接复制而非下载）
+  url_prefixes:
+    - prefix: "/audio/"
+      physical_dir: "data/audio_cache"
+      copy_strategy: "shutil.copyfile"
+  # 禁止的自回路请求模式（命中即报 CRITICAL）
+  # 这些模式表示下游把本地路径当成了远程 URL，发起 http 请求访问本机服务
+  forbidden_patterns:
+    - "http://localhost:*/audio/"
+    - "http://127.0.0.1:*/audio/"
+  # 下游 download_file 函数必须支持前缀检测
+  # 即：检测到 url 以 /audio/ 开头时，直接从 physical_dir 复制，不走 httpx.get
+  required_prefix_detection: true
+  # 判断信号
+  signals:
+    - "def\\s+download_file\\("
+    - "url\\.startswith\\(['\"]/audio/['\"]\\)"
+  # 反模式（自回路请求本机服务，浪费 socket 且引入网络层故障点）
+  anti_patterns:
+    - "httpx\\.get\\(.*localhost.*audio"
+    - "httpx\\.get\\(.*127\\.0\\.0\\.1.*audio"
+  # 扫描目录（覆盖所有可能调用 download_file 的位置）
+  scan_dirs:
+    - "backend/app/workflow/stitch/"
+    - "backend/app/workflow/tts/"
+
+# ============================================================
+# === 2026-07-21 新增：小程序真机调试复盘审查配置（维度 101-105）===
+# ============================================================
+# 对应 news-code-dev 元规范 R101-R108 后端侧，详见 SKILL.md 维度 101-105
+# 复制本文件为 config.yaml 后按业务实际调整以下参数
+
+# ---- 维度 101：list 接口批量关联覆盖审查（对应 R102）----
+# 背景：list_* API 返回关联字段时若循环内查询造成 N+1 性能问题；不覆盖则前端拿到 None
+list_batch_relation_check:
+  enabled: true
+  require_batch_in_query: true
+  forbid_n_plus_one: true
+  n_plus_one_pattern: "for\\s+\\w+\\s+in\\s+\\w+:\\s*\\n\\s*await\\s+\\w+\\.execute\\(select\\("
+  required_relation_fields:
+    - "user_name"
+    - "user_avatar"
+    - "channel_name"
+    - "channel_slug"
+  default_fallback_value:
+    user_name: "匿名听众"
+    user_avatar: ""
+    channel_name: "未知频道"
+    channel_slug: "default"
+  list_api_pattern: "async\\s+def\\s+list_\\w+"
+  scan_dirs:
+    - "backend/app/services/"
+    - "backend/app/routers/"
+  severity: "HIGH"
+
+# ---- 维度 102：聚合列表序号独立计数审查（对应 R106）----
+# 背景：sources 序号从 2 开始因复用 segment.seq，第 1 段开场白无 material
+aggregated_seq_independence_check:
+  enabled: true
+  require_independent_counter: true
+  forbid_reuse_external_seq: true
+  reuse_pattern: "seq.*seg\\.get\\([\"']seq[\"']\\)|seq.*\\bseg\\.seq\\b"
+  counter_naming_pattern: "_seq\\s*=\\s*0"
+  counter_init_value: 0
+  counter_step: 1
+  aggregated_fields:
+    - "sources"
+    - "chapters"
+    - "timestamps"
+    - "related_items"
+    - "references"
+  scan_dirs:
+    - "backend/app/services/"
+  severity: "HIGH"
+
+# ---- 维度 103：CommentRequest 可选字段扩展审查（对应前端 R103 适配）----
+# 背景：微信基础库 2.27+ 后 wx.getUserProfile 废弃，前端必须用户手动填写
+comment_request_optional_fields_check:
+  enabled: true
+  optional_fields:
+    - "user_name"
+    - "user_avatar"
+  optional_type_pattern: "str\\s*\\|\\s*None\\s*=\\s*None"
+  require_fallback_default: true
+  fallback_user_name: "匿名听众"
+  fallback_user_avatar: ""
+  forbidden_required_pattern: "user_name:\\s*str\\s*$|user_avatar:\\s*str\\s*$"
+  request_models:
+    - "CommentRequest"
+    - "FeedbackRequest"
+    - "ReportRequest"
+  scan_dirs:
+    - "backend/app/schemas/"
+    - "backend/app/routers/"
+  severity: "HIGH"
+
+# ---- 维度 104：get_history play_count 批量统计审查 ----
+# 背景：分页列表展示播放次数需批量 IN 查询，逐条查询造成 N+1
+history_play_count_batch_check:
+  enabled: true
+  require_batch_in_query: true
+  forbid_n_plus_one: true
+  n_plus_one_pattern: "for\\s+\\w+\\s+in\\s+\\w+:\\s*\\n\\s*await\\s+\\w+\\.execute\\(select\\(func\\.count"
+  required_field: "play_count"
+  default_value: 0
+  batch_query_pattern: "\\.in_\\(\\w+_ids\\).*group_by"
+  list_api_functions:
+    - "get_history"
+    - "get_today_episode"
+    - "search_episodes"
+  scan_dirs:
+    - "backend/app/services/"
+  severity: "MEDIUM"
+
+# ---- 维度 105：cache_key 版本后缀审查（对应 R85）----
+# 背景：响应字段变更后旧缓存仍返回缺字段数据，需通过版本后缀自然失效
+cache_key_version_suffix_check:
+  enabled: true
+  require_version_suffix: true
+  suffix_format: ":v{n}"
+  version_start: 2
+  bump_on_field_change:
+    - "add"
+    - "remove"
+    - "rename"
+  tracked_fields:
+    - "cover_url"
+    - "segments"
+    - "sources"
+    - "play_count"
+  no_suffix_pattern: "cache_key\\s*=\\s*f[\"'][^\"']*(?!:v\\d+)[\"']"
+  scan_dirs:
+    - "backend/app/services/"
+    - "backend/app/cache/"
+  severity: "HIGH"
 
 
 

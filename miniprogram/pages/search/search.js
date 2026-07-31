@@ -50,7 +50,12 @@ Page({
     list = list.filter((k) => k !== keyword);
     list.unshift(keyword);
     if (list.length > 10) list = list.slice(0, 10);
-    wx.setStorageSync(STORAGE_KEY_HISTORY, list);
+    // 非关键写入（搜索历史缓存）：改异步避免阻塞主线程，失败仅告警
+    wx.setStorage({
+      key: STORAGE_KEY_HISTORY,
+      data: list,
+      fail: (e) => console.warn('[search] 搜索历史写入失败:', e && e.errMsg),
+    });
     this.setData({ history: list });
   },
 

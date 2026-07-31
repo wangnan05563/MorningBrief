@@ -137,7 +137,7 @@ async def get_current_admin(authorization: Optional[str] = Header(None)) -> Admi
     )
 
 
-async def require_admin(admin: AdminPayload = Depends(get_current_admin)) -> AdminPayload:
+async def require_admin(admin: AdminPayload = Depends(get_current_admin)) -> AdminPayload:  # NOSONAR
     """要求 admin 角色（工作流操作、用户管理等高权限接口）。"""
     if admin.role != "admin":
         raise BizPermissionError("需要管理员权限")

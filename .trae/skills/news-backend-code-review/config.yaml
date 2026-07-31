@@ -323,6 +323,26 @@ hard_constraints:
     severity: HIGH
     auto_fix: false
     category: audit_log_coverage
+  - name: llm_preset_model_uppercase
+    pattern: '"model"\s*:\s*"[A-Z][^"]*"'
+    message: LLM_PRESETS/TTS_PRESETS 中 model 字段含大写字母，部分 API 大小写敏感会拒绝（如 agnes-2.0-flash 而非 Agnes-2.0-Flash）
+    severity: CRITICAL
+    auto_fix: false
+    category: model_name
+    scan_files:
+      - backend/app/services/ai_config_service.py
+  - name: api_key_not_masked_on_return
+    pattern: 'def\s+get_config.*\n(?!.*is_masked).*api_key'
+    message: 返回前端前必须用 is_masked 检查并脱敏 api_key，禁止明文返回
+    severity: HIGH
+    auto_fix: false
+    category: masked_key
+  - name: preset_configs_no_legacy_compat
+    pattern: preset_configs
+    message: preset_configs 必须有旧数据兼容填充逻辑（当前选中预设未存储时用数据库全局值填充）
+    severity: HIGH
+    auto_fix: false
+    category: preset_configs_compat
 checklist:
   layering:
     enabled: true
@@ -609,6 +629,203 @@ review_dimensions:
   - "*.py"
   applicable_dirs:
   - "backend/app/"
+#=== 扩展维度（91+，按需激活）===
+# === 2026-07-31 新增：微信登录修复+历史对话复盘审查配置（规范 R172/R173/R176/R178/R181/R183/R185） ===
+- id: "RD-BE-20"
+  name: "Pydantic Settings 单例导入模式"
+  description: "backend/app/ 下所有模块导入配置必须使用 get_settings() 工厂函数，禁止直接导入 settings 实例"
+  severity: "high"
+  rules:
+  - id: "R-172-1"
+    description: "禁止 from app.config import settings 直接导入实例，应使用 from app.config import get_settings"
+    grep_pattern: "from\\s+app\\.config\\s+import\\s+settings(?!\\s*,)"
+    auto_fix: false
+    false_positive_hints:
+    - "from app.config import get_settings 不算违规"
+    - "测试代码 (tests/) 中允许直接导入 settings"
+  - id: "R-172-2"
+    description: "from app.config import get_settings 后必须有 settings = get_settings() 模块级调用"
+    grep_pattern: "from\\s+app\\.config\\s+import\\s+get_settings"
+    follow_up_check: "settings\\s*=\\s*get_settings\\(\\)"
+    auto_fix: false
+  applicable_files:
+  - "*.py"
+  applicable_dirs:
+  - "backend/app/"
+  exclude_dirs:
+  - "backend/tests/"
+  - "backend/scripts/"
+- id: "RD-BE-21"
+  name: "统一响应模式测试断言对齐"
+  description: "调用统一响应格式 API 的测试必须断言 status_code==200 + json[code]==错误码，禁止断言 HTTP 4xx"
+  severity: "high"
+  rules:
+  - id: "R-173-1"
+    description: "测试代码中禁止 assert resp.status_code == 400 或 == 422（项目统一响应模式返回 HTTP 200）"
+    grep_pattern: "assert\\s+resp\\.status_code\\s*==\\s*(400|422)"
+    auto_fix: false
+    correct_pattern: "assert resp.status_code == 200; assert resp.json()[\"code\"] == 期望错误码"
+  - id: "R-173-2"
+    description: "断言 HTTP 4xx 的测试必须同时检查 resp.json()[\"code\"]"
+    grep_pattern: "assert\\s+resp\\.status_code\\s*==\\s*4\\d\\d"
+    follow_up_check: "resp\\.json\\(\\)\\[.code.\\]"
+    auto_fix: false
+  applicable_files:
+  - "test_*.py"
+  - "*_test.py"
+  applicable_dirs:
+  - "backend/tests/"
+  exclude_endpoints:
+  - "/health/ready"
+  - "/health/live"
+- id: "RD-BE-22"
+  name: "文件上传安全双重校验"
+  description: "文件上传接口必须实施扩展名白名单 + content_type 双重校验 + 大小上限 + 流式写入"
+  severity: "critical"
+  rules:
+  - id: "R-176-1"
+    description: "UploadFile 接口必须有扩展名白名单检查（_ALLOWED_EXTS 或 allowed_extensions）"
+    grep_pattern: "UploadFile"
+    follow_up_check: "(_ALLOWED_EXTS|allowed_extensions|ALLOWED_EXTENSIONS)"
+    auto_fix: false
+  - id: "R-176-2"
+    description: "UploadFile 接口必须有 content_type 校验"
+    grep_pattern: "UploadFile"
+    follow_up_check: "content_type"
+    auto_fix: false
+  - id: "R-176-3"
+    description: "禁止 await file.read() 一次性读取（应流式写入 + 大小累计）"
+    grep_pattern: "await\\s+file\\.read\\(\\)"
+    auto_fix: false
+    false_positive_hints:
+    - "await file.read(chunk_size) 分块读取不算违规"
+  applicable_files:
+  - "*.py"
+  applicable_dirs:
+  - "backend/app/"
+  required_components:
+    extension_whitelist: "_ALLOWED_EXTS | allowed_extensions"
+    content_type_check: "file.content_type"
+    size_limit: "MAX_UPLOAD_SIZE"
+    streaming_write: "await file.read(chunk_size) in while loop"
+    safe_filename: "user_id + timestamp 命名"
+- id: "RD-BE-23"
+  name: "UNIQUE 约束冲突 IntegrityError 兜底"
+  description: "UNIQUE 约束表写入必须捕获 IntegrityError 并 rollback + 复用已有记录或跳过"
+  severity: "high"
+  rules:
+  - id: "R-178-1"
+    description: "db.add() 或 db.flush() 后必须有 except IntegrityError 捕获"
+    grep_pattern: "(db\\.add\\(|db\\.flush\\()"
+    follow_up_check: "except\\s+IntegrityError"
+    auto_fix: false
+  - id: "R-178-2"
+    description: "except IntegrityError 后必须有 await db.rollback()"
+    grep_pattern: "except\\s+IntegrityError"
+    follow_up_check: "await\\s+db\\.rollback\\(\\)"
+    auto_fix: false
+  - id: "R-178-3"
+    description: "except IntegrityError 中禁止直接 raise（必须兜底：查询复用或跳过）"
+    grep_pattern: "except\\s+IntegrityError\\s*:([^#]*?)raise\\s+IntegrityError"
+    auto_fix: false
+  applicable_files:
+  - "*.py"
+  applicable_dirs:
+  - "backend/app/"
+  unique_constraint_tables:
+  - "materials.url"
+  - "users.openid"
+  - "crawler_dedup.url_hash"
+  fallback_strategy:
+    - "rollback"
+    - "query_existing_record"
+    - "reuse_or_skip"
+- id: "RD-BE-24"
+  name: "工作流 0 结果阻断+失败详情可见"
+  description: "工作流步骤返回 0 结果时必须 raise RuntimeError 阻断，result 中含 failure_details"
+  severity: "critical"
+  rules:
+  - id: "R-181-1"
+    description: "material_count == 0 或 len(results) == 0 后必须有 raise RuntimeError"
+    grep_pattern: "(material_count\\s*==\\s*0|len\\(results\\)\\s*==\\s*0)"
+    follow_up_check: "raise\\s+RuntimeError"
+    auto_fix: false
+  - id: "R-181-2"
+    description: "0 结果分支的 raise RuntimeError 中必须包含 failure_details 字段"
+    grep_pattern: "raise\\s+RuntimeError"
+    follow_up_check: "failure_details"
+    auto_fix: false
+  - id: "R-181-3"
+    description: "0 结果分支禁止直接 return {'status': 'success'}"
+    grep_pattern: "(material_count\\s*==\\s*0|len\\(results\\)\\s*==\\s*0)([^#]*?)return\\s*\\{[^}]*status['\"]\\s*:\\s*['\"]success"
+    auto_fix: false
+  applicable_files:
+  - "*.py"
+  applicable_dirs:
+  - "backend/app/workflows/"
+  - "backend/app/services/"
+  exclude_steps:
+  - "search"
+  - "query"
+  failure_details_required_fields:
+  - "source_details"
+  - "troubleshooting_hints"
+- id: "RD-BE-25"
+  name: "HTTP 编码探测 fallback"
+  description: "HTTP 抓取时 header 无 charset 或 ISO-8859-1 必须用 charset_normalizer 探测编码"
+  severity: "high"
+  rules:
+  - id: "R-183-1"
+    description: "resp.text 或 resp.encoding 使用处必须有 charset_normalizer fallback"
+    grep_pattern: "(resp\\.text|resp\\.encoding)"
+    follow_up_check: "charset_normalizer"
+    auto_fix: false
+  - id: "R-183-2"
+    description: "resp.encoding 判断处必须有 charset_normalizer.detect 调用"
+    grep_pattern: "resp\\.encoding"
+    follow_up_check: "charset_normalizer\\.detect"
+    auto_fix: false
+  - id: "R-183-3"
+    description: "charset_normalizer import 后必须在 resp.encoding == 'ISO-8859-1' 分支调用"
+    grep_pattern: "import\\s+charset_normalizer"
+    follow_up_check: "ISO-8859-1"
+    auto_fix: false
+  applicable_files:
+  - "*.py"
+  applicable_dirs:
+  - "backend/app/"
+  exclude_dirs:
+  - "backend/app/api/"  # JSON API 默认 UTF-8，无需探测
+  fallback_pattern: "if not resp.encoding or resp.encoding == 'ISO-8859-1': detected = charset_normalizer.detect(resp.content); resp.encoding = detected['encoding']"
+- id: "RD-BE-26"
+  name: "风格库顺序轮换去重"
+  description: "LLM 风格库选择必须用 seq % len(candidates) 顺序轮换，禁止 random.choice 或永远取第一项"
+  severity: "medium"
+  rules:
+  - id: "R-185-1"
+    description: "风格库选择中禁止 random.choice（可能连续选中同一项）"
+    grep_pattern: "random\\.choice\\([^)]*style_library"
+    auto_fix: false
+    correct_pattern: "style_library['intro'][seq % len(style_library['intro'])]"
+  - id: "R-185-2"
+    description: "风格库选择中禁止 candidates[0] 或 style_library['xxx'][0] 永远取第一项"
+    grep_pattern: "(candidates\\[0\\]|style_library\\[[^]]+\\]\\[0\\])"
+    auto_fix: false
+  - id: "R-185-3"
+    description: "风格库选择中合规模式：% len( 顺序轮换"
+    grep_pattern: "%\\s*len\\([^)]*style_library"
+    is_compliance: true
+    auto_fix: false
+  applicable_files:
+  - "*.py"
+  applicable_dirs:
+  - "backend/app/services/"
+  - "backend/app/workflows/"
+  exclude_dirs:
+  - "backend/app/templates/"  # 固定模板不适用
+  seq_source: "单调递增计数器（素材序号/日期序号）"
+  forbidden_seq_source: "random"
+
 
 # === 2026-07-18 新增：SonarQube 迭代闭环复盘审查配置 ===
 sonarqube_checklist:
@@ -737,3 +954,1480 @@ response_field_priority:
     - "def.*serialize.*episode"
     - "def.*to_dict.*episode"
     - "Episode.*response"
+
+# 维度 84：NOSONAR 注释位置正确性（对应 S61/R86）
+nosonar_positioning:
+  enabled: true
+  require_on_multiline_def_first_line: true
+  case_sensitive: true
+  require_leading_space: true
+  valid_pattern: "\\bdef\\s+\\w+\\(.*#\\sNOSONAR\\s*$"
+  invalid_pattern: "\\)\\s*->\\s*.*:\\s*#\\sNOSONAR"
+  scan_files:
+    - "backend/app/**/*.py"
+
+# 维度 85：SonarQube 扫描环境兼容性（对应 S62/R87）
+sonarqube_environment:
+  enabled: true
+  nodejs_max_compatible_version: "20.99.0"
+  powershell_use_bat_wrapper: true
+  fallback_to_python_only_on_incompat: true
+  blocked_commands:
+    - "cmd /c"
+  require_env_var_for_token: "SONAR_TOKEN"
+  scanner_path_env_var: "SONAR_SCANNER_HOME"
+  sonarqube_url: "http://127.0.0.1:9000"
+
+# 维度 86：并行子代理修复结果核查（对应 S63/R88）
+parallel_subagent_verification:
+  enabled: true
+  require_grep_verification: true
+  file_group_mutually_exclusive: true
+  verify_items:
+    - "nosonar_actually_written"
+    - "nosonar_line_matches_issue_line"
+    - "multiline_def_nosonar_on_first_line"
+  max_subagent_count: 5
+
+# 维度 87：测试失败 git stash 验证（对应 S64/R89）
+test_failure_diagnosis:
+  enabled: true
+  require_stash_verification: true
+  stash_message_format: "verify-baseline-{timestamp}"
+  stash_target_files: "modified_files_only"
+  indicators_of_preexisting_failure:
+    - "assert \\[\\] is None"
+    - "TypeError: list indices must be integers"
+    - "test.*no direct relation to modified file"
+
+# 维度 88：NOSONAR 抑制 vs 代码修复决策（对应 S65/R90）
+nosonar_decision_matrix:
+  enabled: true
+  must_fix_rules:
+    - "S5446"  # 裸 except
+    - "S930"   # 参数不匹配
+    - "S2817"  # 硬编码 SQL
+    - "S5886"  # Optional 缺失
+  can_suppress_rules:
+    - "S3776"  # 认知复杂度（若职责单一）
+    - "S7503"  # async 无 await（契约约束时）
+    - "S125"   # 注释代码误报
+  require_reason_comment: true
+  reason_comment_format: "# NOSONAR  # {rule}: {reason}"
+
+# 维度 89：模块级单例缓存的测试隔离（对应 S64/R89）
+cache_test_isolation_backend:
+  enabled: true
+  # 是否强制要求提供 _reset_cache_for_test 函数
+  require_reset_function: true
+  # 重置函数的命名约定（正则匹配）
+  reset_function_naming: "_reset_cache_for_test"
+  # 是否强制在 fixture 中调用（autouse=True）
+  reset_in_fixture: true
+  # 需要重置的缓存类型清单
+  cache_types_to_reset:
+    - "TTLCache"
+    - "dict_module_level"
+    - "lru_cache"
+    - "functools.cache"
+    - "cachetools.LRUCache"
+  # 扫描范围（相对项目根目录）
+  scan_dirs:
+    - "backend/app/"
+  # 测试文件目录
+  test_dirs:
+    - "backend/tests/"
+  # 判断信号：模块级缓存容器定义模式（正则）
+  module_cache_patterns:
+    - "^_[a-z_]*_cache\\s*[:=]"
+    - "^_[a-z_]*_dict\\s*[:=]"
+    - "^_[a-z_]*_counter\\s*[:=]\\s*(0|\\{\\})"
+  # 严重级别
+  severity: "HIGH"
+  # 排除文件（无需审查）
+  exclude_files:
+    - "__pycache__"
+    - ".venv"
+    - "migrations"
+
+# 维度 90：多版本 Python 环境下的测试执行（对应 S65/R90）
+python_env_test_backend:
+  enabled: true
+  # 是否强制要求显式 Python 路径
+  require_explicit_python_path: true
+  # 系统 Python 路径（可被项目配置覆盖）
+  system_python_path: "F:\\Program Files\\Python3.14\\python.exe"
+  # 测试依赖清单（必须在 requirements-dev.txt 中声明）
+  required_test_deps:
+    - "pytest"
+    - "pytest-asyncio"
+    - "aiosqlite"
+    - "httpx"
+  # 依赖文件名（与生产 requirements.txt 分离）
+  dev_requirements_file: "requirements-dev.txt"
+  # 验证命令模板（{python_path} 占位符）
+  verify_command: '& "{python_path}" -c "import pytest; print(pytest.__version__)"'
+  # 测试执行命令模板
+  test_run_command: '& "{python_path}" -m pytest backend/tests/ -v --tb=short'
+  # 测试脚本路径
+  test_script_path: "scripts/run_tests.ps1"
+  # 禁止的模式（grep 信号）
+  forbidden_patterns:
+    - "^python -m pytest"           # 依赖 PATH 解析
+    - "^python\\s+-m\\s+pytest"     # 任意 python 前缀
+  # CI 配置文件清单（需检查显式路径）
+  ci_config_files:
+    - ".github/workflows/"
+    - ".gitlab-ci.yml"
+    - "azure-pipelines.yml"
+  # 严重级别
+  severity: "HIGH"
+  # 不适用场景说明
+  not_applicable_scenarios:
+    - "Docker 容器内单一 Python 环境"
+    - "Linux pyenv global 锁定版本"
+    - "venv 虚拟环境激活后的 shell"
+
+# ============================================================
+# === 2026-07-21 新增：V2.0 综合复盘审查配置（维度 91-100）===
+# ============================================================
+# 对应 news-code-dev 元规范 R91-R100，详见 SKILL.md 维度 91-100
+# 所有阈值、白名单、cron 表达式、字段清单均通过本节管理，禁止硬编码业务值
+
+# ---- 维度 91：图片封面三级 fallback 提取审查 ----
+# 背景：图片爬虫功能开发，og:image 缺失时需 fallback 到 article <img> 与页面 <img>
+# 规则：三级 fallback + 装饰图过滤 + GIF 排除 + 站点模板路径白名单 + 回填脚本联动
+image_crawl_check:
+  enabled: true
+  # 是否强制三级 fallback（og:image → article <img> → page <img>）
+  require_three_level_fallback: true
+  # 装饰图 URL 关键词黑名单（命中即跳过）
+  decorative_keywords:
+    - "logo"
+    - "icon"
+    - "arrow"
+    - "btn"
+    - "button"
+    - "avatar"
+    - "placeholder"
+    - "spinner"
+    - "loader"
+    - "ad-"
+  # article <img> 是否排除 GIF（动画图不适合封面）
+  exclude_gif: true
+  # gif 扩展名清单（大小写不敏感匹配）
+  gif_extensions:
+    - ".gif"
+    - ".GIF"
+  # 站点模板路径白名单（这些路径下的图片视为模板装饰，排除）
+  exclude_path_patterns:
+    - "/static/"
+    - "/assets/"
+    - "/template/"
+    - "/skins/"
+    - "/wp-content/themes/"
+  # Material 模型新增 cover_url 字段时是否强制配套回填脚本（联动维度 99）
+  require_backfill_script: true
+  # 触发回填脚本检查的字段名清单
+  trigger_fields_for_backfill:
+    - "cover_url"
+  # 回填脚本命名约定
+  backfill_script_pattern: "backfill_cover_url\\.py"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/workflow/crawler/"
+    - "backend/app/services/"
+  # 严重级别
+  severity: "HIGH"
+
+# ---- 维度 92：FALLBACK_DAYS 动态计算审查 ----
+# 背景：工作流多步骤失败修复，新频道入库天数小时硬编码 7 天回溯导致素材 0 条
+# 规则：按频道入库天数动态计算回溯天数，禁止硬编码 FALLBACK_DAYS = N
+fallback_days_check:
+  enabled: true
+  # 是否禁止硬编码 FALLBACK_DAYS 常量
+  forbid_hardcoded_constant: true
+  # 硬编码信号正则
+  hardcoded_pattern: "FALLBACK_DAYS\\s*=\\s*\\d+"
+  # 三档阈值配置（按频道入库天数升序）
+  # max_age_days: 频道入库天数上界（< 此值用对应 fallback_days）
+  # fallback_days: 该档回溯天数
+  tiers:
+    - max_age_days: 3
+      fallback_days: 3
+    - max_age_days: 7
+      fallback_days: 7
+    - max_age_days: 999999  # 兜底档（>7 天）
+      fallback_days: 14
+  # 是否要求日志记录 fallback_days 和频道 ID
+  require_log_fallback_days: true
+  # 日志格式信号（grep 此模式判断是否记录）
+  log_pattern: "fallback_days=\\w+.*channel_id=\\w+"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/services/"
+    - "backend/app/workflow/"
+  severity: "HIGH"
+
+# ---- 维度 93：LLM 语义过滤 fallback 审查 ----
+# 背景：关键词过滤 0 条直接 raise 导致工作流中断
+# 规则：关键词 0 条降级 LLM，LLM 失败保留全部，禁止直接 raise
+llm_semantic_fallback_check:
+  enabled: true
+  # 是否强制关键词 0 条降级 LLM
+  require_llm_fallback_on_zero: true
+  # 是否强制 LLM 调用 try/except 兜底
+  require_try_except: true
+  # 是否强制记录 fallback 触发原因
+  require_fallback_reason_log: true
+  # 关键词 0 条直接 raise 的违规信号
+  raise_on_zero_pattern: "if\\s+not\\s+\\w+:\\s*\\n\\s*raise"
+  # LLM 调用无 try/except 的违规信号
+  no_try_except_pattern: "await\\s+_llm_semantic_filter\\([^)]+\\)\\s*(?!.*try)"
+  # LLM 过滤结果与关键词过滤结果差异率 WARNING 阈值（0-1）
+  diff_warning_threshold: 0.5
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/workflow/"
+    - "backend/app/services/"
+  severity: "HIGH"
+
+# ---- 维度 94：LLM 字数达标约束审查 ----
+# 背景：P0 改进实施，LLM 字数严重不足导致 TTS 时长不足
+# 规则：四档字数约束（重试/丢弃/追加/失败）全部配置驱动
+llm_word_count_check:
+  enabled: true
+  # 字数下限比例（< target * min_ratio 触发重试）
+  min_ratio: 0.70
+  # 字数上限比例（> target * max_ratio 触发丢弃多余段）
+  max_ratio: 1.20
+  # 字数追加阈值比例（< target * append_threshold 触发追加段）
+  append_threshold: 0.80
+  # 重试次数上限
+  max_retry: 3
+  # 丢弃多余段时保留的主段数量
+  keep_main_segments: 3
+  # 丢弃时是否保留 intro
+  keep_intro: true
+  # 丢弃时是否保留 outro
+  keep_outro: true
+  # 追加段最大数量
+  max_append_segments: 2
+  # 字数统计函数命名约定
+  count_function_pattern: "_count_content_words"
+  # 丢弃段函数命名约定
+  discard_function_pattern: "_discard_excess_segments"
+  # 追加段函数命名约定
+  append_function_pattern: "_append_segments_from_unused"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/workflow/rewriter/"
+    - "backend/app/services/"
+  severity: "CRITICAL"
+
+# ---- 维度 95：BGM 时长不足兜底审查 ----
+# 背景：P1 改进实施，BGM 时长不足直接 raise 导致工作流失败
+# 规则：loop-last 扩展 → silent-pad 静音降级，禁止直接 raise
+bgm_fallback_check:
+  enabled: true
+  # 是否强制 loop-last 兜底
+  require_loop_last: true
+  # 是否强制 silent-pad 静音降级
+  require_silent_pad: true
+  # 是否禁止 BGM 不足时直接 raise
+  forbid_raise_on_short: true
+  # 直接 raise 的违规信号
+  raise_on_short_pattern: "bgm_duration\\s*<\\s*video_duration.*raise"
+  # loop-last 触发的最小比例（BGM 时长 >= video_duration * loop_last_min_ratio 才用 loop-last）
+  loop_last_min_ratio: 0.5
+  # loop-last ffmpeg 参数信号
+  loop_last_signal: "-stream_loop|-filter_complex.*loop"
+  # silent-pad ffmpeg 参数信号
+  silent_pad_signal: "anullsrc|apad|silent_pad"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/workflow/"
+    - "backend/app/services/"
+  severity: "CRITICAL"
+
+# ---- 维度 96：关键指标监控告警审查 ----
+# 背景：P0 改进实施，监控指标异常运营无感知，问题累积到 P0 才发现
+# 规则：四类指标采集 + 低于阈值记录 WARNING，阈值通过配置管理
+monitoring_thresholds_check:
+  enabled: true
+  # 关键词命中率下限（< 此值记录 WARNING）
+  keyword_hit_rate_min: 0.10
+  # LLM 字数达成率下限
+  llm_word_count_rate_min: 0.80
+  # TTS 成功率下限
+  tts_success_rate_min: 0.90
+  # 工作流成功率下限
+  workflow_success_rate_min: 0.95
+  # 硬编码阈值违规信号（grep 到这些数字直接硬编码即违规）
+  hardcoded_threshold_patterns:
+    - "rate\\s*<\\s*0\\.10"
+    - "rate\\s*<\\s*0\\.80"
+    - "rate\\s*<\\s*0\\.90"
+    - "rate\\s*<\\s*0\\.95"
+  # 是否要求四类指标全部采集
+  require_all_metrics_collected: true
+  # 指标采集点清单（每个采集点必须有 WARNING 判断）
+  metric_collection_points:
+    - "filter_materials"          # 关键词命中率
+    - "generate_with_constraint"  # LLM 字数达成率
+    - "tts_synthesize"            # TTS 成功率
+    - "workflow_run"              # 工作流成功率
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/workflow/"
+    - "backend/app/services/"
+  severity: "HIGH"
+
+# ---- 维度 97：频道素材健康度仪表盘审查 ----
+# 背景：P1 改进实施，频道素材不足运营无感知
+# 规则：/channel-health 端点 + 三级健康判定 + 配置驱动阈值 + 必填字段
+channel_health_dashboard_check:
+  enabled: true
+  # 端点路径
+  endpoint: "/channel-health"
+  # healthy 阈值（素材总数 >= healthy_min 为 healthy）
+  healthy_min: 100
+  # warning 阈值（素材总数 >= warning_min 为 warning，< warning_min 为 critical）
+  warning_min: 30
+  # 健康等级取值清单
+  health_levels:
+    - "healthy"
+    - "warning"
+    - "critical"
+  # 响应必须包含的字段
+  required_fields:
+    - "channel_id"
+    - "channel_name"
+    - "total_count"
+    - "recent_count"
+    - "health_level"
+  # 是否支持时间范围筛选（?days=7）
+  support_time_range_filter: true
+  # 默认时间范围（天）
+  default_days: 7
+  # 路由文件扫描目录
+  scan_dirs:
+    - "backend/app/routers/"
+  severity: "MEDIUM"
+
+# ---- 维度 98：RSS 源可达性巡检审查 ----
+# 背景：P1 改进实施，RSS 源失效长期未发现
+# 规则：/rss-health 端点 + cron 定时巡检 + UA 兼容 + Content-Type 验证 + 状态标记
+rss_reachability_check:
+  enabled: true
+  # 端点路径
+  endpoint: "/rss-health"
+  # APScheduler cron 表达式（默认每 2 小时巡检一次）
+  # 格式：minute hour day month day_of_week
+  cron_expression:
+    hour: "*/2"
+    minute: "0"
+  # 巡检 User-Agent 列表（部分源拒绝默认 UA，按顺序尝试）
+  user_agents:
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+    - "MorningBriefRSSChecker/1.0"
+  # 请求超时（秒）
+  timeout_sec: 10
+  # 是否强制 Content-Type 验证
+  require_content_type_validation: true
+  # 合法的 RSS Content-Type 清单（含这些子串视为 RSS）
+  valid_content_types:
+    - "application/rss+xml"
+    - "text/xml"
+    - "application/xml"
+    - "text/rss"
+  # 不可达状态标记
+  unavailable_status: "unavailable"
+  # 可达状态标记
+  available_status: "available"
+  # 巡检必须返回的字段
+  required_fields:
+    - "url"
+    - "status"
+    - "reason"
+    - "elapsed_sec"
+  # 路由文件扫描目录
+  scan_dirs:
+    - "backend/app/routers/"
+    - "backend/app/workflow/crawler/"
+  severity: "HIGH"
+
+# ---- 维度 99：批量数据回填脚本审查 ----
+# 背景：图片爬虫功能开发，ORM 新增 cover_url 字段后存量数据缺失
+# 规则：backfill_*.py 含 --dry-run + 分批 + 幂等 + 进度输出
+backfill_script_check:
+  enabled: true
+  # 是否强制 --dry-run 预览模式
+  require_dry_run: true
+  # 是否强制分批处理
+  require_batch_processing: true
+  # 默认批量大小（条/批）
+  default_batch_size: 100
+  # 是否强制幂等（已回填记录跳过）
+  require_idempotent: true
+  # 幂等信号：仅查询字段 IS NULL 的记录
+  idempotent_pattern: "WHERE\\s+\\w+\\.\\w+\\.is_\\(None\\)"
+  # 是否强制进度输出
+  require_progress_log: true
+  # 进度日志信号（grep 此模式判断是否输出进度）
+  progress_log_pattern: "backfill progress.*\\d+/\\d+.*%"
+  # 回填脚本命名约定
+  script_naming_pattern: "backfill_\\w+\\.py"
+  # 回填脚本目录
+  script_dirs:
+    - "backend/app/scripts/"
+    - "backend/scripts/"
+  # 触发回填脚本检查的 ORM 字段（这些字段新增时必须配套回填脚本）
+  trigger_fields:
+    - "cover_url"
+    - "audio_url"
+    - "thumbnail_url"
+    - "cover_image"
+  severity: "HIGH"
+
+# ---- 维度 100：PWA manifest 与 MIME 注册审查 ----
+# 背景：图标设计任务，PWA 安装失败因 MIME 未注册
+# 规则：main.py 注册 .ico 与 .webmanifest MIME + 挂载 public/ + manifest.json 必填字段
+pwa_manifest_check:
+  enabled: true
+  # 必须注册的 MIME 类型清单
+  required_mime_types:
+    - extension: ".ico"
+      mime: "image/x-icon"
+    - extension: ".webmanifest"
+      mime: "application/manifest+json"
+  # MIME 注册信号（grep main.py 检查）
+  mime_register_pattern: "mimetypes\\.add_type\\([\"']\\w+[\\/+\\-]\\w+[\"'].*\\.(ico|webmanifest)"
+  # 是否强制挂载 public/ 目录
+  require_public_mount: true
+  # public 目录挂载信号
+  public_mount_pattern: "app\\.mount\\([\"']/public[\"'].*StaticFiles"
+  # manifest.json 必填字段
+  manifest_required_fields:
+    - "name"
+    - "short_name"
+    - "theme_color"
+    - "background_color"
+    - "icons"
+  # icons 数组最小数量（多分辨率适配）
+  min_icons_count: 2
+  # 是否推荐 Service Worker（不强制）
+  recommend_service_worker: true
+  # main.py 文件路径
+  main_file: "backend/app/main.py"
+  # manifest.json 文件路径
+  manifest_file: "backend/public/manifest.json"
+  severity: "MEDIUM"
+
+# ============================================================
+# === 2026-07-21 新增：小程序真机调试复盘审查配置（维度 101-105）===
+# ============================================================
+# 对应 news-code-dev 元规范 R101-R108 后端侧，详见 SKILL.md 维度 101-105
+# 所有扫描目录、字段清单、兜底默认值均通过本节管理，禁止硬编码业务值
+
+# ---- 维度 101：list 接口批量关联覆盖审查（对应 R102）----
+# 背景：小程序评论列表显示"匿名观众"因后端未批量覆盖 user_name/user_avatar
+# 规则：list_* API 返回关联字段必须批量 IN 查询，禁止 N+1，禁止返回 None 不兜底
+list_batch_relation_check:
+  enabled: true
+  # 是否强制批量 IN 查询
+  require_batch_in_query: true
+  # 是否禁止 N+1 查询（循环内查询）
+  forbid_n_plus_one: true
+  # N+1 查询违规信号（grep 此模式命中即违规）
+  n_plus_one_pattern: "for\\s+\\w+\\s+in\\s+\\w+:\\s*\\n\\s*await\\s+\\w+\\.execute\\(select\\("
+  # 必须覆盖的关联字段清单（前端展示字段必须从批量 map 取值）
+  required_relation_fields:
+    - "user_name"
+    - "user_avatar"
+    - "channel_name"
+    - "channel_slug"
+  # 关联字段缺失时的兜底默认值
+  default_fallback_value:
+    user_name: "匿名听众"
+    user_avatar: ""
+    channel_name: "未知频道"
+    channel_slug: "default"
+  # 触发批量查询的 API 函数命名约定
+  list_api_pattern: "async\\s+def\\s+list_\\w+"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/services/"
+    - "backend/app/routers/"
+  severity: "HIGH"
+
+# ---- 维度 102：聚合列表序号独立计数审查（对应 R106）----
+# 背景：节目来源序号从 2 开始因复用 segment.seq，第 1 段开场白无 material
+# 规则：拼装列表数据必须独立计数器从 1 重新编号，禁止复用外部 seq
+aggregated_seq_independence_check:
+  enabled: true
+  # 是否强制独立计数器
+  require_independent_counter: true
+  # 是否禁止复用外部 seq
+  forbid_reuse_external_seq: true
+  # 复用外部 seq 的违规信号
+  reuse_pattern: "seq.*seg\\.get\\([\"']seq[\"']\\)|seq.*\\bseg\\.seq\\b"
+  # 独立计数器的命名约定（推荐 source_seq / chapter_seq / timestamp_seq）
+  counter_naming_pattern: "_seq\\s*=\\s*0"
+  # 计数器初始值
+  counter_init_value: 0
+  # 计数器步长
+  counter_step: 1
+  # 触发审查的聚合字段名清单
+  aggregated_fields:
+    - "sources"
+    - "chapters"
+    - "timestamps"
+    - "related_items"
+    - "references"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/services/"
+  severity: "HIGH"
+
+# ---- 维度 103：CommentRequest 可选字段扩展审查（对应前端 R103 适配）----
+# 背景：微信基础库 2.27+ 后 wx.getUserProfile 废弃，前端无法自动获取昵称/头像
+# 规则：用户提交内容 API 必须将 user_name/user_avatar 设为 Optional + 兜底默认值
+comment_request_optional_fields_check:
+  enabled: true
+  # 必须设为 Optional 的字段清单
+  optional_fields:
+    - "user_name"
+    - "user_avatar"
+  # Optional 字段类型声明模式
+  optional_type_pattern: "str\\s*\\|\\s*None\\s*=\\s*None"
+  # 是否强制兜底默认值
+  require_fallback_default: true
+  # 兜底默认值
+  fallback_user_name: "匿名听众"
+  fallback_user_avatar: ""
+  # 违规信号：字段强制必填（非 Optional）
+  forbidden_required_pattern: "user_name:\\s*str\\s*$|user_avatar:\\s*str\\s*$"
+  # 触发审查的 Request 模型清单
+  request_models:
+    - "CommentRequest"
+    - "FeedbackRequest"
+    - "ReportRequest"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/schemas/"
+    - "backend/app/routers/"
+  severity: "HIGH"
+
+# ---- 维度 104：get_history play_count 批量统计审查 ----
+# 背景：历史列表缺失 play_count 因未批量 IN 查询 PlayLog
+# 规则：分页列表含聚合统计字段必须一次 IN 查询批量统计，禁止 N+1
+history_play_count_batch_check:
+  enabled: true
+  # 是否强制批量 IN 查询
+  require_batch_in_query: true
+  # 是否禁止 N+1 查询
+  forbid_n_plus_one: true
+  # N+1 查询违规信号（循环内 count 查询）
+  n_plus_one_pattern: "for\\s+\\w+\\s+in\\s+\\w+:\\s*\\n\\s*await\\s+\\w+\\.execute\\(select\\(func\\.count"
+  # 必须返回的聚合统计字段
+  required_field: "play_count"
+  # 字段缺失时的默认值
+  default_value: 0
+  # 批量 IN 查询的正确模式
+  batch_query_pattern: "\\.in_\\(\\w+_ids\\).*group_by"
+  # 触发审查的 API 函数清单
+  list_api_functions:
+    - "get_history"
+    - "get_today_episode"
+    - "search_episodes"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/services/"
+  severity: "MEDIUM"
+
+# ---- 维度 105：cache_key 版本后缀审查（对应 R85）----
+# 背景：响应新增字段后旧缓存仍返回缺字段数据
+# 规则：结构化缓存 cache_key 必须含 :v{n} 后缀，字段变更时递增版本号
+cache_key_version_suffix_check:
+  enabled: true
+  # 是否强制版本后缀
+  require_version_suffix: true
+  # 版本后缀格式
+  suffix_format: ":v{n}"
+  # 版本号起始值
+  version_start: 2
+  # 触发版本递增的字段变更类型
+  bump_on_field_change:
+    - "add"
+    - "remove"
+    - "rename"
+  # 必须追踪版本的字段清单（这些字段变更时必须 bump 版本）
+  tracked_fields:
+    - "cover_url"
+    - "segments"
+    - "sources"
+    - "play_count"
+  # 违规信号：cache_key 无版本后缀
+  no_suffix_pattern: "cache_key\\s*=\\s*f[\"'][^\"']*(?!:v\\d+)[\"']"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/services/"
+    - "backend/app/cache/"
+  severity: "HIGH"
+
+# ---- 维度 113：模型名称大小写核对审查（对应 R121）----
+# 背景：第三方 LLM/TTS API 模型名大小写敏感，大写名称会被 API 拒绝（如 Agnes-2.0-Flash → agnes-2.0-flash）
+# 规则：LLM_PRESETS/TTS_PRESETS 中 model 字段必须与 API 实际接受的值一致；新增模型必须同步定价表
+model_name_case_check:
+  enabled: true
+  # 大小写敏感
+  case_sensitive: true
+  # 必须以官方文档为准
+  official_source_required: true
+  # 新增模型必须同步定价表
+  sync_pricing_table: true
+  pricing_table_pattern: "MODEL_PRICING"
+  # 新增模型必须同步前端预设列表
+  sync_frontend_presets: true
+  # 检测信号：LLM_PRESETS/TTS_PRESETS 中 model 含大写字母
+  uppercase_model_pattern: "[\"']model[\"']\\s*:\\s*[\"'][A-Z][^\"']*[\"']"
+  # 已知大小写敏感的 Provider 列表（model 必须小写）
+  case_sensitive_providers:
+    - "agnes"
+    - "deepseek"
+    - "qwen"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/services/ai_config_service.py"
+    - "backend/app/services/tts_factory.py"
+  severity: "CRITICAL"
+
+# ---- 维度 114：API Key 脱敏回退链路审查（对应 R122）----
+# 背景：返回前端前必须用 is_masked 检查并脱敏；前端提交 is_masked=true 时后端必须回退数据库真实密钥
+# 规则：返回前必须脱敏 + 提交时回退真实值 + preset_configs 旧数据兼容填充
+masked_key_fallback_check:
+  enabled: true
+  # 返回前端前必须 is_masked 检查
+  is_masked_check: true
+  is_masked_pattern: "is_masked"
+  # 脱敏前缀
+  masked_prefix: "sk-****"
+  # 前端提交 is_masked=true 时后端必须回退数据库值
+  fallback_to_db: true
+  fallback_pattern: "if.*is_masked.*:\\s*\\n\\s*.*api_key.*=.*db|if.*is_masked.*:\\s*\\n\\s*.*api_key.*=.*config"
+  # preset_configs 独立存储每个预设的 api_key + model
+  preset_configs_storage: true
+  preset_configs_pattern: "preset_configs"
+  # 旧数据兼容：当前选中预设未存储时用全局值填充
+  legacy_data_compat: true
+  legacy_compat_pattern: "if.*selected.*not in.*presets|if.*selected.*not in.*preset_configs"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/services/ai_config_service.py"
+    - "backend/app/routers/admin/"
+  severity: "HIGH"
+
+# ---- 维度 115：preset_configs 旧数据兼容审查（对应 R122 关联）----
+# 背景：首次使用 preset_configs 机制时数据库无存储值，切换回旧预设时 API Key 为空
+# 规则：当前选中预设未在 preset_configs 中存储时，必须用数据库全局值填充
+preset_configs_legacy_compat_check:
+  enabled: true
+  # 必须有旧数据兼容填充逻辑
+  require_legacy_compat: true
+  # 兼容填充模式：selected not in presets → 用全局值填充
+  compat_fill_pattern: "if\\s+\\w+\\s+and\\s+\\w+\\s+not\\s+in\\s+\\w+:"
+  # 必须填充的字段
+  required_fill_fields:
+    - "api_key"
+    - "model"
+  # 必须用数据库全局值（而非空值）
+  use_global_value: true
+  global_value_pattern: "config\\.get\\([\"']api_key[\"']\\)|config\\.get\\([\"']llm_model[\"']\\)"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/services/ai_config_service.py"
+  severity: "HIGH"
+
+# --- V2.1 新增：外部服务降级与异常过滤（2026-07-22 复盘，对应编码规范 R127-R129）---
+
+external_storage_fallback_check:
+  enabled: true
+  # 对应维度：113
+  # 严重级别（CRITICAL/HIGH/MEDIUM/LOW）
+  severity: "CRITICAL"
+  # 单一真相源函数名（全项目复用，禁止多处重复判断 settings.COS_SECRET_ID）
+  single_truth_source_fn: "is_cos_configured"
+  # 本地降级目录
+  local_dir: "data/audio_cache"
+  # 静态目录挂载点
+  static_mount_point: "/audio"
+  # URL 生成函数必须感知的模式
+  url_generator_modes:
+    - "cos"
+    - "local"
+  # 下游消费者支持的前缀列表
+  downstream_prefixes:
+    - "/audio/"
+  # 降级模式日志级别
+  fallback_log_level: "INFO"
+  # 判断信号（grep 模式）
+  signals:
+    - "cos_client\\.put_object.*$"
+    - "if\\s+is_cos_configured\\(\\):"
+    - "if\\s+settings\\.COS_SECRET_ID:"
+  # 反模式（违规信号）
+  anti_patterns:
+    - "raise.*COS not configured"
+    - "if\\s+settings\\.COS_SECRET_ID\\s+and\\s+settings\\.COS_SECRET_KEY:"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/workflow/tts/"
+    - "backend/app/services/workflow_scheduler.py"
+    - "backend/app/main.py"
+
+asyncio_exception_filter_check:
+  enabled: true
+  # 对应维度：114
+  severity: "MEDIUM"
+  # 启用平台（仅 Windows）
+  enabled_platforms:
+    - "win32"
+  # 被过滤的异常类型清单
+  ignored_exceptions:
+    - exception_type: "ConnectionResetError"
+      transport_class: "ProactorBasePipeTransport"
+      winerror: 10054
+      log_level: "DEBUG"
+  # 处理器优先级
+  handler_priority: 100
+  # 判断信号
+  signals:
+    - "ProactorBasePipeTransport\\._call_connection_lost"
+    - "ConnectionResetError.*WinError.*10054"
+  # 反模式（无自定义异常处理器）
+  anti_patterns:
+    - "loop\\.set_exception_handler"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/main.py"
+    - "backend/app/core/"
+
+local_path_url_check:
+  enabled: true
+  # 对应维度：115
+  severity: "HIGH"
+  # URL 前缀到物理路径的映射
+  url_prefixes:
+    - prefix: "/audio/"
+      physical_dir: "data/audio_cache"
+      copy_strategy: "shutil.copyfile"
+  # 禁止的自回路请求模式
+  forbidden_patterns:
+    - "http://localhost:*/audio/"
+    - "http://127.0.0.1:*/audio/"
+  # 下游 download_file 函数必须支持前缀检测
+  required_prefix_detection: true
+  # 判断信号
+  signals:
+    - "def\\s+download_file\\("
+    - "url\\.startswith\\(['\"]/audio/['\"]\\)"
+  # 反模式（自回路请求本机服务）
+  anti_patterns:
+    - "httpx\\.get\\(.*localhost.*audio"
+    - "httpx\\.get\\(.*127\\.0\\.0\\.1.*audio"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/workflow/stitch/"
+    - "backend/app/workflow/tts/"
+
+# ============================================================
+# === 2026-07-22 新增：浏览器环境诊断后端侧审查（对应 R130-R139 后端侧）===
+# ============================================================
+# 来源：Edge 浏览器最小化自动弹出问题复盘
+# 后端涉及的审查维度：SSE 端点安全、静态文件安全、autofocus 禁用
+# 报告中违规条目末尾标注 [V2.3 新增] 便于迭代追溯
+
+# ---- 维度 116：SSE 端点安全审查（对应 R135 后端侧）----
+# 背景：SSE 端点在客户端最小化时仍持续推送，可能触发前端 UI 更新导致窗口激活
+# 规则：SSE 端点必须检测客户端断开；推送频率必须有上限；推送内容不能触发 focus
+sse_endpoint_safety_check:
+  enabled: true
+  # 对应维度：116
+  severity: "HIGH"
+  # SSE 端点必须检测客户端断开
+  require_disconnect_detection: true
+  # StreamingResponse 模式
+  streaming_response_pattern: "StreamingResponse\\("
+  # 必须检测 request.is_disconnected()
+  disconnect_check_pattern: "request\\.is_disconnected\\(\\)"
+  # 推送频率上限（毫秒）
+  max_push_interval_ms: 1000
+  # 推送频率检测信号
+  push_frequency_pattern: "yield\\s+['\"]data:"
+  # 推送内容不能包含触发 focus 的字段
+  forbidden_push_fields:
+    - "autofocus"
+    - "window\\.focus"
+    - "location\\.href"
+  # 心跳间隔（秒），用于保持连接
+  heartbeat_interval_sec: 30
+  # 心跳内容（配置驱动，可调整）
+  heartbeat_content: ":heartbeat"
+  # 判断信号
+  signals:
+    - "StreamingResponse\\("
+    - "yield\\s+['\"]data:"
+    - "text/event-stream"
+  # 反模式
+  anti_patterns:
+    - "StreamingResponse\\([^)]*\\)\\s*$"
+    - "yield.*autofocus"
+    - "yield.*window\\.focus"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/routers/"
+    - "backend/app/services/"
+
+# ---- 维度 117：静态文件安全审查（对应 R137 后端侧）----
+# 背景：FastAPI 静态文件服务可能包含 autofocus 属性，最小化时触发焦点
+# 规则：静态 HTML 不能包含 autofocus；index.html 不能硬编码 focus 调用
+static_file_safety_check:
+  enabled: true
+  # 对应维度：117
+  severity: "MEDIUM"
+  # 静态 HTML 不能包含 autofocus 属性
+  forbid_autofocus: true
+  autofocus_pattern: "autofocus"
+  # index.html 不能硬编码 window.focus 调用
+  forbid_window_focus_in_html: true
+  window_focus_pattern: "window\\.focus\\("
+  # 不能包含 location.href 赋值
+  forbid_location_href_assign: true
+  location_href_pattern: "location\\.href\\s*="
+  # 静态文件目录
+  static_dirs:
+    - "admin-web/dist/"
+    - "admin-web/public/"
+  # 必须检查的文件类型
+  check_file_types:
+    - ".html"
+    - ".htm"
+  # 判断信号
+  signals:
+    - "autofocus"
+    - "window\\.focus\\("
+    - "location\\.href\\s*="
+  # 反模式
+  anti_patterns:
+    - "<input[^>]*autofocus"
+    - "<button[^>]*autofocus"
+    - "<textarea[^>]*autofocus"
+  # 扫描目录
+  scan_dirs:
+    - "admin-web/dist/"
+    - "admin-web/public/"
+
+# ---- 维度 118：UI 异常诊断流程后端辅助审查（对应 R130-R132 后端侧）----
+# 背景：UI 异常排查时后端日志是重要诊断依据，需要标准化日志输出
+# 规则：SSE/静态文件相关日志必须包含客户端信息；异常日志必须包含请求上下文
+ui_diagnosis_backend_support_check:
+  enabled: true
+  # 对应维度：118
+  severity: "MEDIUM"
+  # SSE 端点日志必须包含客户端 IP 和 User-Agent
+  require_client_info_in_sse_log: true
+  client_info_fields:
+    - "request\\.client\\.host"
+    - "request\\.headers\\.get\\(['\"]user-agent['\"]\\)"
+  # 异常日志必须包含请求上下文
+  require_request_context_in_error_log: true
+  request_context_fields:
+    - "request_id"
+    - "request\\.url"
+    - "request\\.method"
+  # 必须记录 SSE 连接建立/断开日志
+  require_sse_lifecycle_log: true
+  sse_lifecycle_events:
+    - "sse_connect"
+    - "sse_disconnect"
+    - "sse_error"
+  # 必须记录静态文件 404 日志
+  require_static_404_log: true
+  static_404_pattern: "404.*static|static.*404"
+  # 诊断辅助字段
+  diagnostic_fields:
+    - "user_agent"
+    - "client_ip"
+    - "request_path"
+    - "request_method"
+    - "response_status"
+  # 判断信号
+  signals:
+    - "logger\\.(info|warning|error).*sse"
+    - "logger\\.(info|warning|error).*static"
+    - "request\\.client"
+  # 反模式
+  anti_patterns:
+    - "logger\\.error\\(str\\(e\\)\\)$"
+    - "logger\\.exception\\(\\)$"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/routers/"
+    - "backend/app/services/"
+    - "backend/app/middleware/"
+
+# ============================================================
+# === 2026-07-22 新增：频道级配置与 LLM 超时复盘审查配置（V2.4）===
+# ============================================================
+# 对应 SKILL.md 维度 113-115，详见 SKILL.md "维度 113-115：2026-07-22 频道级配置与 LLM 超时复盘新增审查维度"
+# 所有阈值、字段清单、事件类型均通过本节管理，禁止硬编码业务值
+# 注意：历史已存在编号 113-115 的其他配置块（external_storage_fallback_check 等），
+#       本节为 V2.4 新增的频道级配置与 LLM 超时维度，配置块名称不冲突
+
+# 维度 113：LLM 调用超时配置驱动审查
+llm_timeout_config_driven_check:
+  enabled: true
+  severity: high
+  require_settings_read: true
+  require_formula_for_long_running: true
+  llm_timeout_multiplier: 2
+  min_llm_timeout_sec: 60
+  config_key_map_entry: llm_timeout_sec
+  require_budget_record: true
+  description: LLM 调用 timeout 必须从 settings 读取且支持 max(LLM_TIMEOUT_SEC*N, MIN) 公式
+
+# 维度 114：频道级配置覆盖全局审查
+channel_config_override_check:
+  enabled: true
+  severity: high
+  channel_fields:
+    - schedule_time
+    - is_active
+    - intro_prompt
+    - outro_prompt
+    - constraint_prompt
+    - rewrite_template
+  require_fallback_to_global: true
+  require_event_publish_on_change: true
+  require_idempotent_migration: true
+  description: 频道级配置字段优先于 settings 全局配置，为空时 fallback
+
+# 维度 115：频道级定时任务事件驱动审查
+channel_cron_event_driven_check:
+  enabled: true
+  severity: high
+  event_types:
+    - channel.active_changed
+    - channel.schedule_changed
+  publish_method: publish_nowait
+  require_idempotent_subscriber: true
+  require_cancel_queued_on_disable: true
+  require_unregister_on_empty_schedule: true
+  cron_job_config:
+    misfire_grace_time: 300
+    coalesce: true
+    max_instances: 1
+    replace_existing: true
+  description: 频道字段变更必须通过 EventBus 发布事件，订阅者重注册 cron/取消 queued 工作流
+
+# ============================================================
+# === 2026-07-22 新增：V2.5 后端高频故障复盘审查配置（维度 124-129）===
+# ============================================================
+# 对应 SKILL.md 维度 124-129，详见 SKILL.md "v2.5：2026-07-22 后端高频故障复盘新增审查维度"
+# 所有阈值、关键词清单、扫描目录均通过本节管理，禁止硬编码业务值
+# 审查点采用「检查项 + 判断标准 + 修复建议」三元组结构
+
+# ---- 维度 124：响应拦截器特殊响应类型处理（FileResponse 场景）----
+# 背景：前端 axios 拦截器对二进制响应按 JSON 解析失败，且 NotFoundError 返回 200 误导前端
+# 规则：FileResponse 直接返回不包装 success() + 显式 media_type + NotFoundError 映射 HTTP 404
+binary_response_no_wrapper_check:
+  enabled: true
+  # 对应维度：124
+  severity: "HIGH"
+  # 是否强制显式设置 media_type
+  require_media_type: true
+  # 是否禁止二进制响应包装在 success() 中
+  forbid_success_wrapper: true
+  # 是否强制 NotFound 错误返回 HTTP 404
+  require_404_on_not_found: true
+  # 二进制响应类清单（出现这些类即触发审查）
+  binary_response_classes:
+    - "FileResponse"
+    - "StreamingResponse"
+    - "Response.*content.*bytes"
+  # 合法的 media_type 清单（不在此清单内的 media_type 需检查是否正确）
+  valid_media_types:
+    - "audio/mpeg"
+    - "audio/wav"
+    - "audio/ogg"
+    - "video/mp4"
+    - "video/webm"
+    - "image/jpeg"
+    - "image/png"
+    - "image/webp"
+    - "application/octet-stream"
+    - "application/pdf"
+  # 违规信号：二进制响应包装在 success() 中
+  success_wrapper_pattern: "success\\(.*FileResponse|success\\(.*data.*=.*FileResponse"
+  # 违规信号：NotFoundError 返回 200
+  not_found_200_pattern: "status_code\\s*=\\s*200.*not_found|return.*error.*not_found"
+  # 正确信号：HTTP 404 抛出
+  http_404_pattern: "HTTPException\\(.*status_code\\s*=\\s*404|raise.*NotFoundError"
+  # Content-Disposition 推荐使用
+  recommend_content_disposition: true
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/routers/"
+    - "backend/app/services/"
+  description: 二进制响应必须直接返回文件流不包装 success()，NotFoundError 必须映射 HTTP 404
+
+# ---- 维度 125：工作流重跑/重试语义验证（断点续跑模式）----
+# 背景：retry_workflow 错误地创建新工作流导致已成功步骤的 LLM/TTS 配额浪费
+# 规则：retry_workflow 必须在原工作流上断点续跑（删除失败步骤 + 重置状态 + 入队当前 ID）
+workflow_retry_in_place_check:
+  enabled: true
+  # 对应维度：125
+  severity: "CRITICAL"
+  # 是否强制 from_step 参数
+  require_from_step_param: true
+  # 是否强制删除 from_step 及其之后的步骤记录
+  require_delete_failed_steps: true
+  # 是否强制保留 from_step 之前的 success 步骤记录
+  require_preserve_success_steps: true
+  # 是否强制校验前驱步骤 success 且有 result
+  require_predecessor_validation: true
+  # 是否强制重置工作流状态为 queued + 清空 error/finished_at
+  require_status_reset: true
+  # 是否禁止调用 trigger_workflow 创建新工作流
+  forbid_trigger_new_workflow: true
+  # 重跑方法命名约定
+  retry_method_patterns:
+    - "def retry_workflow"
+    - "def rerun_workflow"
+    - "def resume_workflow"
+  # 违规信号：retry_workflow 调用 trigger_workflow
+  trigger_new_workflow_pattern: "retry_workflow.*trigger_workflow|retry.*create.*workflow"
+  # 正确信号：删除 from_step 之后记录
+  delete_failed_steps_pattern: "delete.*WorkflowStep.*seq\\s*>=\\s*\\w+"
+  # 正确信号：重置工作流状态
+  status_reset_pattern: "update.*Workflow.*status.*queued|update.*workflow.*error.*None"
+  # 状态机取值
+  queued_status: "queued"
+  success_status: "success"
+  failed_status: "failed"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/services/"
+    - "backend/app/workflow/"
+  description: retry_workflow 必须断点续跑，禁止创建新工作流；删除+重置+入队三步
+
+# ---- 维度 126：config_key 与 Settings 属性名映射一致性 ----
+# 背景：CONFIG_KEY_MAP 的 key 与 _normalize_xxx / get_config_for_frontend 返回的 key 不一致，导致前端保存的值被忽略
+# 规则：CONFIG_KEY_MAP 作为单一真相源，所有函数返回的 key 与其完全一致
+config_key_settings_mapping_check:
+  enabled: true
+  # 对应维度：126
+  severity: "HIGH"
+  # 是否强制 CONFIG_KEY_MAP key 与 Body 模型字段名对齐
+  require_key_align_with_body: true
+  # 是否强制 CONFIG_KEY_MAP value 与 Settings 属性名对齐
+  require_value_align_with_settings: true
+  # 是否强制 _normalize_xxx 返回 key 与 CONFIG_KEY_MAP key 一致
+  require_normalize_xxx_consistency: true
+  # 是否强制 get_config_for_frontend 返回字段名与 CONFIG_KEY_MAP key 一致
+  require_get_config_for_frontend_consistency: true
+  # 是否强制 SENSITIVE_KEYS/INT_KEYS/FLOAT_KEYS 与 CONFIG_KEY_MAP 命名一致
+  require_type_keys_naming_consistency: true
+  # 是否禁止混用前缀风格
+  forbid_mixed_prefix: true
+  # CONFIG_KEY_MAP 定义模式
+  config_key_map_pattern: "CONFIG_KEY_MAP\\s*="
+  # 归一化与前端读取函数命名约定
+  normalize_function_patterns:
+    - "def _normalize_\\w+"
+    - "def get_config_for_frontend"
+  # 类型/敏感键集合命名约定
+  type_keys_patterns:
+    - "SENSITIVE_KEYS\\s*="
+    - "INT_KEYS\\s*="
+    - "FLOAT_KEYS\\s*="
+  # 推荐的统一前缀风格（多个 Provider 配置应使用 provider_feature_field 格式）
+  prefix_style: "provider_feature_field"
+  # 前缀风格混用检测信号
+  mixed_prefix_patterns:
+    - "edge_tts_\\w+.*edge_\\w+"
+    - "aliyun_tts_\\w+.*aliyun_\\w+"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/services/"
+    - "backend/app/config.py"
+  description: CONFIG_KEY_MAP 作为单一真相源，所有函数返回 key 与其完全一致
+
+# ---- 维度 127：测试时间基线与生产代码对齐 ----
+# 背景：测试代码用 datetime.utcnow() 与生产代码 utcnow_naive() 产生 8 小时偏差，时间精确等于断言失败
+# 规则：测试时间获取方式与生产代码一致 + 近似断言（abs diff < epsilon）
+test_time_baseline_alignment_check:
+  enabled: true
+  # 对应维度：127
+  severity: "HIGH"
+  # 是否强制测试代码使用本地时间（与生产代码 utcnow_naive() 一致）
+  require_local_time_in_test: true
+  # 是否禁止测试代码使用 datetime.utcnow()
+  forbid_utcnow_in_test: true
+  # 是否禁止测试代码使用 datetime.now(timezone.utc)
+  forbid_utc_aware_in_test: true
+  # 是否强制时间近似断言
+  require_approximate_assertion: true
+  # 时间近似断言 epsilon（秒，容忍 datetime.now() 调用间隔与数据库存储精度）
+  time_epsilon_sec: 2
+  # 数据库存储精度映射（不同数据库需要不同 epsilon）
+  db_precision_mapping:
+    sqlite:
+      precision: "second"
+      recommended_epsilon_sec: 2
+    mysql:
+      precision: "microsecond"
+      recommended_epsilon_sec: 1
+    postgresql:
+      precision: "microsecond"
+      recommended_epsilon_sec: 1
+  # 生产代码时间获取函数名（用于对比测试代码是否一致）
+  production_time_function: "utcnow_naive"
+  # 测试代码对应的时间获取函数（必须与生产代码时区一致）
+  test_time_function: "datetime.now()"
+  # 违规信号：测试代码使用 UTC 时间
+  utcnow_in_test_pattern: "datetime\\.utcnow\\(\\)"
+  utc_aware_in_test_pattern: "datetime\\.now\\(timezone\\.utc\\)"
+  # 违规信号：时间精确等于断言
+  exact_equality_pattern: "assert.*==.*datetime|assert.*datetime.*=="
+  # 正确信号：近似断言
+  approximate_assertion_pattern: "assert.*abs\\(.*-.*\\)\\s*<\\s*timedelta|before.*-\\s*epsilon.*<=.*<=.*after.*\\+\\s*epsilon"
+  # 推荐的时间冻结工具
+  recommend_freeze_time_fixture: true
+  freeze_time_fixtures:
+    - "freeze_time"
+    - "time_machine"
+  # 扫描目录
+  scan_dirs:
+    - "backend/tests/"
+  description: 测试时间获取方式必须与生产代码 utcnow_naive() 一致，时间断言必须用近似比较
+
+# ---- 维度 128：外键操作防御性处理 ----
+# 背景：删除父记录时依赖 SQLite PRAGMA foreign_keys 开关，环境切换时产生孤儿记录
+# 规则：删除父记录前必须手动 UPDATE 子表外键，不依赖 PRAGMA foreign_keys 开关
+foreign_key_defensive_handling_check:
+  enabled: true
+  # 对应维度：128
+  severity: "CRITICAL"
+  # 是否强制手动处理子表外键
+  require_manual_fk_handling: true
+  # 是否禁止依赖 PRAGMA foreign_keys 开关
+  forbid_pragma_foreign_keys_dependency: true
+  # 是否强制同一事务内完成 UPDATE + DELETE
+  require_same_transaction: true
+  # 是否推荐删除前查询子表引用计数
+  recommend_pre_delete_count_check: true
+  # 是否推荐 ondelete 作为兜底（不得作为唯一保障）
+  recommend_ondelete_as_fallback: true
+  # 删除操作模式（触发审查）
+  delete_operation_patterns:
+    - "db\\.delete\\("
+    - "db\\.execute\\(delete\\("
+  # 违规信号：依赖 PRAGMA foreign_keys 开关
+  pragma_dependency_pattern: "PRAGMA foreign_keys|foreign_keys\\s*=\\s*ON"
+  # 正确信号：删除前 UPDATE 子表外键
+  pre_delete_update_pattern: "update\\(.*\\)\\.where.*\\.values\\(.*=\\s*None"
+  # 正确信号：显式 DELETE 子表
+  pre_delete_child_delete_pattern: "delete\\(.*\\)\\.where.*workflow_id"
+  # 推荐的 ondelete 配置（作为兜底）
+  recommended_ondelete:
+    - "SET NULL"
+    - "CASCADE"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/services/"
+    - "backend/app/models/"
+  description: 删除父记录前必须手动 UPDATE 子表外键，不依赖 PRAGMA foreign_keys 开关
+
+# ---- 维度 129：凭证脱敏正则验证 ----
+# 背景：脱敏正则整体替换为 *** 丢失 key 名，日志中无法辨识是哪个字段
+# 规则：脱敏正则用捕获组保留 key 名，关键词清单通过 config 管理
+credential_masking_regex_check:
+  enabled: true
+  # 对应维度：129
+  severity: "HIGH"
+  # 是否强制使用捕获组保留 key 名
+  require_capture_group: true
+  # 是否强制脱敏后保留 key 名（如 token=*** 而非 ***）
+  require_key_name_preservation: true
+  # 是否强制大小写不敏感（(?i) 前缀）
+  require_case_insensitive: true
+  # 敏感关键词清单（可扩展，配置驱动）
+  sensitive_keywords:
+    - "token"
+    - "secret"
+    - "key"
+    - "password"
+    - "appkey"
+    - "access_key"
+    - "secret_key"
+    - "api_key"
+    - "access_token"
+    - "refresh_token"
+    - "authorization"
+    - "cookie"
+    - "credential"
+  # 替换模板（必须使用捕获组引用 \1 或 m.group(1)）
+  replacement_template: "\\1***"
+  # 正确的脱敏正则模式模板（{keywords} 占位符由 sensitive_keywords 拼接）
+  correct_pattern_template: "(?i)((?:{keywords})\\s*[:=]\\s*)\\S+"
+  # 违规信号：整体替换为 ***（无捕获组）
+  anti_pattern_no_capture_group: "re\\.sub\\([^)]*['\"]\\*\\*\\*['\"]"
+  # 违规信号：硬编码关键词清单
+  anti_pattern_hardcoded_keywords: "(?:token\\|secret\\|key\\|password\\|appkey)"
+  # 推荐的统一脱敏函数入口
+  unified_function_name: "mask_sensitive"
+  # 推荐的函数命名变体
+  unified_function_variants:
+    - "mask_sensitive"
+    - "_mask_credential"
+    - "sanitize_text"
+    - "redact_secrets"
+  # 扫描目录
+  scan_dirs:
+    - "backend/app/services/"
+    - "backend/app/routers/"
+    - "backend/app/core/"
+    - "backend/app/workflow/"
+  description: 脱敏正则必须用捕获组保留 key 名（token=*** 而非 ***），关键词清单配置驱动
+
+# ============================================================
+# 维度 113：模块级函数对称性检查（R150）
+# ============================================================
+function_symmetry_check:
+  description: "模块级函数对称性检查配置"
+  symmetric_function_patterns:
+    - "resolve_*_path"
+    - "get_*_config"
+    - "check_*_exists"
+    - "format_*_url"
+  known_pairs:
+    - func_a: "resolve_ffmpeg_path"
+      func_b: "resolve_ffprobe_path"
+      module: "app.paths"
+    - func_a: "resolve_data_dir"
+      func_b: "resolve_log_dir"
+      module: "app.paths"
+  verify_command: 'python -c "from module import *"'
+  strict_mode: true
+  severity: "HIGH"
+
+# ============================================================
+# 维度 114：服务重启加载新代码验证（R151）
+# ============================================================
+service_restart_verification:
+  description: "服务重启加载新代码验证配置"
+  openapi_endpoint: "/openapi.json"
+  health_endpoint: "/api/health"
+  health_timeout_sec: 30
+  start_script: "scripts/启动服务.bat"
+  stop_script: "scripts/停止服务.bat"
+  verify_endpoint_count: true
+  verify_endpoint_paths: true
+  severity: "CRITICAL"
+
+# ============================================================
+# 维度 115：参考实现移植适配检查（R153）
+# ============================================================
+cross_project_migration_adaptation:
+  description: "参考实现移植适配检查配置"
+  naming_convention_map:
+    source_prefix: "XH_"
+    target_prefix: "NEWS_"
+    examples:
+      - "XH_WEB_PORT -> NEWS_WEB_PORT"
+  config_format_map:
+    source_format: "yaml"
+    target_format: "json"
+    migration_note: "YAML 配置移植到 JSON 时保持键名一致，仅改格式"
+  notification_system_map:
+    source: "EventType enum + Event dataclass"
+    target: "NotificationEvent dataclass + NotifierHub"
+    bridge_pattern: "notify_tunnel_started(provider, url, port) -> NotificationEvent"
+  auth_model:
+    rule: "keep_target_project_auth_model"
+    note: "不照搬源项目认证白名单，保持目标项目全部认证"
+  checklist:
+    - "naming_adaptation"
+    - "config_format"
+    - "notification_system"
+    - "auth_model"
+  severity: "HIGH"
+
+# ============================================================
+# 维度 116-119：多页面共享状态同步复盘新增后端审查要点（对应前端规范 66-72）
+# 来源：2026-07-31 "我的偏爱"频道显示异常复盘。前端规范 66-72 侧重前端状态
+#       同步，后端需提供配套支持：空结果返回空数组、状态变更返回时间戳、
+#       API 过滤契约明确性、多级缓存同步。本区块参数均通过配置管理，无硬编码。
+# 通用性：trigger_on_files 可配置任意后端路由/服务文件路径，
+#        response_patterns 可配置任意响应字段模式。
+# ============================================================
+shared_state_backend_support:
+  description: "多页面共享状态同步的后端配套审查（对应前端规范 66-72）"
+  enabled: true
+  cross_reference:
+    frontend_review: "news-frontend-code-review/config.yaml#shared_state_sync"
+    coding_standards: "news-code-dev/references/lessons-learned.md#规范66-72"
+    auto_testing: "news-auto-testing/config.yaml#shared_state_testing"
+  trigger_on_files:
+  - "backend/app/routers/**/*.py"
+  - "backend/app/services/**/*.py"
+  - "backend/app/schemas/**/*.py"
+
+  # ----------------------------------------------------------
+  # 维度 116：API 空结果返回空数组（对应前端规范 68-空状态显式标记）
+  # 为什么：前端依赖空数组判断空状态，若后端返回 null/None，前端 xxxEmpty 标志无法正确设置
+  # ----------------------------------------------------------
+  dimension_116:
+    description: "API 空结果必须返回空数组 [] 而非 null/None"
+    rule_ref: "对应前端规范 68"
+    severity: HIGH
+    category: "empty_response_contract"
+    # 检测模式：返回 None 而非 [] 的列表接口
+    detection_patterns:
+    - id: "return_none_for_list_endpoint"
+      description: "列表接口返回 None 而非空数组"
+      grep_pattern: 'def\s+get\w*s?\s*\(.*\).*:\s*\n.*return\s+None'
+      severity_on_match: "WARN"
+      applicable_files:
+      - "backend/app/routers/**/*.py"
+      - "backend/app/services/**/*.py"
+    # 应返回空数组的接口模式
+    list_endpoint_patterns:
+    - "get_episodes"
+    - "get_channels"
+    - "get_history"
+    - "get_preferred_channels"
+    # 合规返回值
+    compliant_return_values:
+    - "[]"
+    - "list()"
+    - "[]"
+    test_steps:
+    - "请求列表接口且无数据 → 验证响应体中列表字段为 [] 而非 null"
+    - "请求过滤后无结果的接口 → 验证响应体中列表字段为 []"
+    pass_criteria:
+    - "所有列表接口在无数据时返回空数组 []"
+    - "禁止返回 null/None 作为列表字段的值"
+
+  # ----------------------------------------------------------
+  # 维度 117：状态变更接口返回 updated_at 时间戳（对应前端规范 69-双校验）
+  # 为什么：前端通过时间戳检测状态变更，后端必须在状态变更接口响应中返回 updated_at
+  # ----------------------------------------------------------
+  dimension_117:
+    description: "状态变更接口响应必须包含 updated_at 时间戳"
+    rule_ref: "对应前端规范 69"
+    severity: MEDIUM
+    category: "change_notification_contract"
+    # 需要返回 updated_at 的接口模式（可配置任意状态变更接口）
+    state_change_endpoints:
+    - "set_preferred_channels"
+    - "update_user_preference"
+    - "save_channel_config"
+    - "update_playlist"
+    # 检测模式：状态变更接口响应中缺少 updated_at
+    detection_patterns:
+    - id: "state_change_no_updated_at"
+      description: "状态变更接口响应中未包含 updated_at 字段"
+      grep_pattern: 'def\s+(set_preferred|update_user|save_channel|update_playlist).*\n(?!.*updated_at)'
+      severity_on_match: "WARN"
+      applicable_files:
+      - "backend/app/routers/**/*.py"
+    # 时间戳格式要求
+    timestamp_format: "iso8601"
+    timestamp_field: "updated_at"
+    test_steps:
+    - "调用状态变更接口 → 验证响应体包含 updated_at 字段"
+    - "连续调用两次 → 验证第二次的 updated_at 大于第一次"
+    pass_criteria:
+    - "所有状态变更接口响应包含 updated_at 字段"
+    - "updated_at 格式为 ISO 8601，且每次变更后值递增"
+
+  # ----------------------------------------------------------
+  # 维度 118：API 过滤契约明确性（对应前端规范 67-防御性二次过滤）
+  # 为什么：前端防御性二次过滤的前提是知道后端是否已过滤。后端应在响应中声明过滤状态
+  # ----------------------------------------------------------
+  dimension_118:
+    description: "支持过滤参数的 API 应在响应中声明是否已过滤"
+    rule_ref: "对应前端规范 67"
+    severity: LOW
+    category: "filter_contract_clarity"
+    # 支持过滤参数的接口模式
+    filterable_endpoints:
+    - "get_episodes"
+    - "get_history"
+    - "get_today_episode"
+    # 过滤参数名（可配置）
+    filter_param_names:
+    - "channel_id"
+    - "preferred"
+    - "category"
+    # 响应中应包含的过滤元数据字段
+    filter_metadata_fields:
+    - "applied_filter"
+    - "total_count"
+    - "filtered_count"
+    # 检测模式：支持过滤参数但响应中无过滤元数据
+    detection_patterns:
+    - id: "filterable_endpoint_no_metadata"
+      description: "支持过滤参数的接口响应中未包含过滤元数据"
+      grep_pattern: 'def\s+get_\w+.*channel_id.*\n(?!.*applied_filter)'
+      severity_on_match: "INFO"
+      applicable_files:
+      - "backend/app/routers/**/*.py"
+    test_steps:
+    - "请求带过滤参数的接口 → 验证响应中包含过滤元数据（applied_filter/filtered_count）"
+    - "请求不带过滤参数的接口 → 验证响应中 applied_filter 为 null 或 all"
+    pass_criteria:
+    - "支持过滤的接口响应中声明当前应用的过滤条件"
+    - "前端可通过过滤元数据判断是否需要二次过滤"
+
+  # ----------------------------------------------------------
+  # 维度 119：多级缓存同步（对应前端规范 71-globalData/data 镜像同步）
+  # 为什么：后端多级缓存（Redis + 内存）清空/更新时必须同步所有级别，避免读到残留数据
+  # ----------------------------------------------------------
+  dimension_119:
+    description: "多级缓存清空/更新时必须同步所有缓存级别"
+    rule_ref: "对应前端规范 71"
+    severity: HIGH
+    category: "multi_level_cache_sync"
+    # 缓存级别（可配置）
+    cache_levels:
+    - "redis"
+    - "memory"
+    - "local"
+    # 需要同步的缓存键模式（可配置）
+    cache_key_patterns:
+    - "episode:today"
+    - "channel:list"
+    - "user:preference"
+    # 检测模式：清空一级缓存但未清空其他级别
+    detection_patterns:
+    - id: "clear_one_cache_level_only"
+      description: "清空 Redis 缓存但未清空内存缓存"
+      grep_pattern: 'redis\.delete\([^)]*\)(?!.*memory_cache\.clear)'
+      severity_on_match: "WARN"
+      applicable_files:
+      - "backend/app/services/**/*.py"
+      - "backend/app/cache/**/*.py"
+    # 合规模式：同步清空所有级别
+    compliant_pattern: "redis.delete({key}); memory_cache.delete({key})"
+    test_steps:
+    - "更新数据 → 验证 Redis 和内存缓存同步更新"
+    - "清空缓存 → 验证所有级别的缓存都被清空"
+    - "从不同级别读取缓存 → 验证数据一致"
+    pass_criteria:
+    - "数据更新时所有缓存级别同步更新"
+    - "缓存清空时所有级别同步清空，无残留数据"

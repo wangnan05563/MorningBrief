@@ -4,18 +4,19 @@
 一个工作流只产出一份稿件，workflow_id 查询返回单条（非列表）。
 支持稿件级手动编辑：编辑/增删 segment，重算 full_text/total_words/estimated_duration。
 """
+import json
 import logging
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
 from app.database import get_db
-from app.models import Script
+from app.models import AuditLog, Script
 from app.models.script import ScriptStatus
 from app.workflow.llm import sensitive_filter
 from app.workflow.llm.rewriter import WORDS_PER_MINUTE
@@ -23,6 +24,9 @@ from app.workflow.llm.rewriter import WORDS_PER_MINUTE
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin/api/v1/scripts", tags=["B端-稿件管理"])
+
+# 稿件不存在错误消息常量（统一字面量，避免 S1192 字符串重复告警）
+_SCRIPT_NOT_FOUND_MSG = "稿件不存在"
 
 
 def _script_to_dict(s: Script) -> dict:
@@ -71,7 +75,7 @@ async def get_script(
     result = await db.execute(select(Script).where(Script.id == script_id))
     s = result.scalar_one_or_none()
     if s is None:
-        raise NotFoundError("稿件不存在")
+        raise NotFoundError(_SCRIPT_NOT_FOUND_MSG)
     return success(data=_script_to_dict(s))
 
 
@@ -108,7 +112,7 @@ async def update_segments(
     result = await db.execute(select(Script).where(Script.id == script_id))
     s = result.scalar_one_or_none()
     if s is None:
-        raise NotFoundError("稿件不存在")
+        raise NotFoundError(_SCRIPT_NOT_FOUND_MSG)
 
     # approved/rejected 稿件已进入或退出审核流程，锁定不可编辑
     if s.status != ScriptStatus.draft.value:
@@ -169,8 +173,16 @@ async def delete_script(
     result = await db.execute(select(Script).where(Script.id == script_id))
     s = result.scalar_one_or_none()
     if s is None:
-        raise NotFoundError("稿件不存在")
+        raise NotFoundError(_SCRIPT_NOT_FOUND_MSG)
 
     await db.execute(delete(Script).where(Script.id == script_id))
+    # 审计日志：稿件硬删除不可恢复，记录关联 workflow_id 便于追溯历史节目归属
+    db.add(AuditLog(
+        category="script",
+        action="delete",
+        target=str(script_id),
+        operator=admin.username,
+        detail=json.dumps({"script_id": script_id, "workflow_id": s.workflow_id}, ensure_ascii=False),
+    ))
     await db.commit()
     return success(data={"deleted": script_id})

@@ -1,4 +1,5 @@
 """B 端广告路由。"""
+import json
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query
@@ -8,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AdminPayload, get_current_admin
 from app.core.response import success
 from app.database import get_db
+from app.models import AuditLog
 from app.services.ad_service import AdService
 
 router = APIRouter(prefix="/admin/api/v1/ads", tags=["B端-广告"])
@@ -65,6 +67,15 @@ async def delete_material(
 ):
     svc = AdService(db)
     await svc.delete_material(material_id)
+    # 审计日志：广告素材删除影响关联投放，记录操作人便于追溯
+    db.add(AuditLog(
+        category="ad",
+        action="delete_material",
+        target=str(material_id),
+        operator=admin.username,
+        detail=json.dumps({"material_id": material_id}, ensure_ascii=False),
+    ))
+    await db.commit()
     return success(data={"success": True})
 
 
@@ -104,6 +115,15 @@ async def delete_placement(
 ):
     svc = AdService(db)
     await svc.delete_placement(placement_id)
+    # 审计日志：投放删除影响广告排期，记录操作人便于追溯
+    db.add(AuditLog(
+        category="ad",
+        action="delete_placement",
+        target=str(placement_id),
+        operator=admin.username,
+        detail=json.dumps({"placement_id": placement_id}, ensure_ascii=False),
+    ))
+    await db.commit()
     return success(data={"success": True})
 
 

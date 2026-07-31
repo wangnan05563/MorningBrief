@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 主页按钮图标：薄荷青房子，用于浅色背景的次按钮
+     图标来源：Tabler Icons (MIT License) - home
+     使用场景：detail 页"返回首页"按钮 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <path d="M 5 12 L 12 5 L 19 12" fill="none" stroke="#5BA89B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 6 11 V 19 a 1 1 0 0 0 1 1 H 17 a 1 1 0 0 0 1 -1 V 11" fill="none" stroke="#5BA89B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="10" y1="20" x2="10" y2="15" stroke="#5BA89B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="14" y1="20" x2="14" y2="15" stroke="#5BA89B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

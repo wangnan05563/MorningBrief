@@ -2,7 +2,7 @@
 .floating-player {
   position: fixed;
   right: 24rpx;
-  bottom: 180rpx;
+  bottom: calc(160rpx + env(safe-area-inset-bottom));
   z-index: 100;
   display: flex;
   align-items: center;

@@ -21,7 +21,7 @@ def test_heat_score_range():
     material = {
         "title": "普通日常新闻",
         "source_authority": 0.0,
-        "published_at": datetime.utcnow() - timedelta(days=10),
+        "published_at": datetime.now() - timedelta(days=10),
     }
     score = heat_score(material)
     assert 0.0 <= score <= 1.0
@@ -30,7 +30,7 @@ def test_heat_score_range():
     material_hot = {
         "title": "重磅突破发布",
         "source_authority": 1.0,
-        "published_at": datetime.utcnow(),
+        "published_at": datetime.now(),
     }
     score_hot = heat_score(material_hot)
     assert 0.0 <= score_hot <= 1.0
@@ -40,7 +40,7 @@ def test_higher_authority_higher_score():
     """其他条件相同时，源权威度高的分数更高。"""
     base = {
         "title": "普通标题",
-        "published_at": datetime.utcnow(),
+        "published_at": datetime.now(),
     }
     low = heat_score({**base, "source_authority": 0.1})
     high = heat_score({**base, "source_authority": 0.9})
@@ -53,10 +53,10 @@ def test_recency_factor():
         "title": "普通标题",
         "source_authority": 0.5,
     }
-    fresh = heat_score({**base, "published_at": datetime.utcnow()})
+    fresh = heat_score({**base, "published_at": datetime.now()})
     old = heat_score({
         **base,
-        "published_at": datetime.utcnow() - timedelta(days=5),
+        "published_at": datetime.now() - timedelta(days=5),
     })
     assert fresh > old
 
@@ -108,7 +108,7 @@ def test_keyword_heat_increases_total_score():
     """包含热词的标题综合分数高于无热词的标题。"""
     base = {
         "source_authority": 0.5,
-        "published_at": datetime.utcnow(),
+        "published_at": datetime.now(),
     }
     no_hot = heat_score({**base, "title": "普通日常新闻"})
     with_hot = heat_score({**base, "title": "重磅突破发布"})

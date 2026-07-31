@@ -80,6 +80,83 @@
                 钉钉群机器人 → 安全设置 → 加签 → 密钥（以 SEC 开头）
               </div>
             </el-form-item>
+          </el-form>
+
+          <!-- 企业微信凭证 -->
+          <el-divider content-position="left">企业微信群机器人</el-divider>
+          <el-form :model="configForm" label-width="160px" class="config-form">
+            <el-form-item label="Webhook 地址">
+              <el-input
+                v-model="configForm.wecom_webhook"
+                :type="showWecomWebhook ? 'text' : 'password'"
+                placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+              >
+                <template #append>
+                  <el-button @click="showWecomWebhook = !showWecomWebhook">
+                    {{ showWecomWebhook ? '隐藏' : '显示' }}
+                  </el-button>
+                </template>
+              </el-input>
+              <div class="field-tip">
+                企业微信群机器人 → 添加机器人 → 复制 Webhook 地址
+              </div>
+            </el-form-item>
+          </el-form>
+
+          <!-- 邮件 SMTP -->
+          <el-divider content-position="left">邮件通知（SMTP）</el-divider>
+          <el-form :model="configForm" label-width="160px" class="config-form">
+            <el-form-item label="SMTP 服务器">
+              <el-input
+                v-model="configForm.email_smtp_host"
+                placeholder="smtp.qq.com / smtp.163.com / smtp.gmail.com"
+              />
+            </el-form-item>
+            <el-form-item label="SMTP 端口">
+              <el-input-number
+                v-model="configForm.email_smtp_port"
+                :min="1"
+                :max="65535"
+                controls-position="right"
+                style="width: 200px"
+              />
+              <span class="field-tip" style="margin-left: 12px">
+                465 = SSL 直连；587/25 = STARTTLS
+              </span>
+            </el-form-item>
+            <el-form-item label="发件人账号">
+              <el-input
+                v-model="configForm.email_smtp_user"
+                placeholder="sender@example.com"
+              />
+            </el-form-item>
+            <el-form-item label="发件人密码">
+              <el-input
+                v-model="configForm.email_smtp_password"
+                :type="showEmailPwd ? 'text' : 'password'"
+                placeholder="SMTP 授权码（非邮箱登录密码）"
+              >
+                <template #append>
+                  <el-button @click="showEmailPwd = !showEmailPwd">
+                    {{ showEmailPwd ? '隐藏' : '显示' }}
+                  </el-button>
+                </template>
+              </el-input>
+              <div class="field-tip">
+                多数邮箱需用授权码（QQ/163/Gmail 均在账户设置中开启 SMTP 后生成）
+              </div>
+            </el-form-item>
+            <el-form-item label="收件人">
+              <el-input
+                v-model="configForm.email_to"
+                placeholder="ops@example.com（多个用英文逗号分隔）"
+              />
+            </el-form-item>
+          </el-form>
+
+          <!-- 测试发送（独立段，避免与单一渠道混淆） -->
+          <el-divider content-position="left">测试发送</el-divider>
+          <el-form :model="configForm" label-width="160px" class="config-form">
             <el-form-item>
               <el-button
                 type="primary"
@@ -87,7 +164,7 @@
                 :loading="testing"
                 @click="handleTestSend"
               >
-                测试发送
+                测试发送到所有已配置渠道
               </el-button>
               <el-tag
                 v-if="testResult"
@@ -384,6 +461,8 @@ const saving = ref(false)
 const testing = ref(false)
 const showWebhook = ref(false)
 const showSecret = ref(false)
+const showWecomWebhook = ref(false)
+const showEmailPwd = ref(false)
 const detectedBaseUrl = ref('')
 const testResult = ref(null)
 
@@ -394,6 +473,12 @@ const configForm = reactive({
   published_enabled: false,
   dingtalk_webhook: '',
   dingtalk_secret: '',
+  wecom_webhook: '',
+  email_smtp_host: '',
+  email_smtp_port: 587,
+  email_smtp_user: '',
+  email_smtp_password: '',
+  email_to: '',
   admin_base_url: '',
 })
 
@@ -401,7 +486,7 @@ async function loadConfig() {
   configLoading.value = true
   try {
     const data = await getNotificationConfig()
-    // 后端返回脱敏值 "******" 时直接显示，保存时后端会忽略该值
+    // 后端返回脱敏值 "****" 时直接显示，保存时后端会忽略该值
     Object.assign(configForm, {
       global_enabled: data.global_enabled ?? true,
       failed_enabled: data.failed_enabled ?? true,
@@ -409,6 +494,12 @@ async function loadConfig() {
       published_enabled: data.published_enabled ?? false,
       dingtalk_webhook: data.dingtalk_webhook || '',
       dingtalk_secret: data.dingtalk_secret || '',
+      wecom_webhook: data.wecom_webhook || '',
+      email_smtp_host: data.email_smtp_host || '',
+      email_smtp_port: data.email_smtp_port ?? 587,
+      email_smtp_user: data.email_smtp_user || '',
+      email_smtp_password: data.email_smtp_password || '',
+      email_to: data.email_to || '',
       admin_base_url: data.admin_base_url || '',
     })
     detectedBaseUrl.value = data.auto_detected_base_url || ''
@@ -444,7 +535,7 @@ async function handleTestSend() {
     const result = await sendTestNotification()
     testResult.value = result
     if (result.success) {
-      ElMessage.success('测试通知已发送，请检查钉钉群')
+      ElMessage.success('测试通知已发送，请检查已配置渠道')
     } else {
       ElMessage.warning('测试通知发送失败，请检查配置')
     }
@@ -568,12 +659,18 @@ async function handleResend(row) {
   row._resending = true
   try {
     const result = await resendNotificationLog(row.id)
+    // 重发后后端会创建新日志记录（非更新原记录）。
+    // 若用户当前按 status 过滤（如查看失败记录），新记录的状态与过滤不一致时不会出现在列表中，
+    // 会导致用户看不到重发结果。此处主动清空 status 过滤并回到首页，确保新记录可见。
+    if (logFilter.status && logFilter.status !== result.status) {
+      logFilter.status = ''
+      logFilter.page = 1
+    }
     if (result.status === 'success') {
-      ElMessage.success('重发成功')
+      ElMessage.success('重发成功，已为你展示最新记录')
     } else {
       ElMessage.warning(`重发失败: ${result.message || ''}`)
     }
-    // 刷新列表以展示最新重发记录
     await loadLogs()
   } catch (e) {
     // 拦截器已统一提示

@@ -140,5 +140,451 @@
         "unit_test_command": "pytest --asyncio-mode=auto",
         "integration_test_command": "pytest tests/integration/",
         "e2e_test_command": "python scripts/with_server.py -- python e2e_test.py"
+    },
+    "cross_project_migration": {
+        "required_steps": ["requirement_confirm", "architecture_align", "backend_dev", "frontend_dev", "test_write", "test_execute", "build_verify"],
+        "architecture_align_checklist": ["目录结构对齐", "技术栈对齐", "依赖库对齐", "命名约定对齐", "路径风格对齐"],
+        "build_verify_required": true,
+        "test_execute_required": true
+    },
+    "frontend_nested_paths": {
+        "nested_dir_pattern": "views/<module>/<Page>.vue",
+        "parent_level_required": 2,
+        "path_types_to_check": ["scss_use", "js_import", "ts_import", "vue_import"],
+        "build_verify_required": true
+    },
+    "icon_migration": {
+        "target_icon_library": "@element-plus/icons-vue",
+        "verify_command": "node -e \"const icons = require('@element-plus/icons-vue'); console.log(Object.keys(icons))\"",
+        "fallback_icon": "MagicStick",
+        "verify_before_build": true
+    },
+    "cache_test_isolation": {
+        "require_reset_function": true,
+        "reset_function_naming": "_reset_cache_for_test",
+        "reset_in_fixture": true,
+        "cache_types_to_reset": ["TTLCache", "dict_module_level", "lru_cache", "functools.cache"]
+    },
+    "python_env_test": {
+        "require_explicit_python_path": true,
+        "system_python_path": "F:\\Program Files\\Python3.14\\python.exe",
+        "required_test_deps": ["pytest", "pytest-asyncio", "aiosqlite"],
+        "verify_command": "python -c \"import pytest; print(pytest.__version__)\""
+    },
+    "image_crawl": {
+        "fallback_chain": ["og_image", "article_img", "page_first_img"],
+        "timeout_per_source_sec": 5,
+        "min_image_size_bytes": 1024,
+        "decorative_filter": {
+            "url_keyword_blacklist": ["logo", "icon", "arrow", "btn", "button", "sprite", "placeholder"],
+            "template_path_blacklist": ["/static/", "/assets/img/", "/images/common/"],
+            "extension_blacklist": [".gif", ".svg"],
+            "min_aspect_ratio": 0.3
+        }
+    },
+    "workflow_orchestration": {
+        "fallback_days_tiers": {
+            "tiers": [
+                {"max_channel_age_days": 3, "fallback_days": 1},
+                {"max_channel_age_days": 14, "fallback_days": 3},
+                {"max_channel_age_days": 9999, "fallback_days": 7}
+            ],
+            "default_tier_index": 1
+        },
+        "llm_semantic_fallback": {
+            "trigger_when_keyword_result_zero": true,
+            "llm_filter_batch_size": 10,
+            "fallback_strategy_on_llm_failure": "keep_all",
+            "llm_filter_timeout_sec": 30
+        },
+        "llm_word_count": {
+            "target_word_count": 1500,
+            "min_achievement_ratio": 0.70,
+            "trim_threshold_ratio": 1.20,
+            "append_threshold_ratio": 0.80,
+            "max_append_segments": 2,
+            "min_main_segments": 3
+        },
+        "bgm_fallback": {
+            "extension_strategy": "tail_loop",
+            "tail_loop_max_count": 2,
+            "silence_fadeout_sec": 2
+        }
+    },
+    "frontend_menu_grouping": {
+        "group_threshold": 10,
+        "unique_opened": true,
+        "auto_expand_on_route_change": true,
+        "group_field": "meta.group",
+        "default_visible_roles": ["admin"]
+    },
+    "pwa_icon_generation": {
+        "png_sizes": [192, 512],
+        "ico_sizes": [16, 32, 48],
+        "ico_mime_type": "image/x-icon",
+        "manifest_purposes": ["any", "maskable"],
+        "source_icon_path": "assets/source-icon.png"
+    },
+    "monitoring_thresholds": {
+        "keyword_hit_rate_min": 0.30,
+        "llm_word_count_achievement_min": 0.70,
+        "tts_success_rate_min": 0.80,
+        "workflow_success_rate_min": 0.90,
+        "alert_log_level": "WARNING"
+    },
+    "backfill_script": {
+        "batch_size": 100,
+        "dry_run_default": true,
+        "progress_log_interval": 10,
+        "idempotent_check_field": "updated_at",
+        "script_naming_pattern": "backfill_{model}_{field}.py"
+    },
+    "frontend_minimize_guard": {
+        "forbid_location_href": true,
+        "require_hidden_check": true,
+        "silent_param": "silent",
+        "strict_path_match": true,
+        "login_path": "/login",
+        "_comment": "R118 浏览器窗口最小化防护：401 用 router.push，错误提示前检查 !document.hidden，轮询请求加 silent"
+    },
+    "route_param_timing": {
+        "explicit_param_mode": true,
+        "use_detail_value": true,
+        "await_after_replace": true,
+        "_comment": "R119 异步路由参数时序处理：router.replace 异步，显式传参 + detail.value 取最新值"
+    },
+    "polling_state_sync": {
+        "interval_ms": 3000,
+        "terminal_states": ["success", "failed"],
+        "running_state": "running",
+        "silent_param": "silent",
+        "pause_on_hidden": true,
+        "stop_before_restart": true,
+        "_comment": "R120 列表数据动态轮询状态同步：终态停止、不可见暂停、silent 请求、重跑重置"
+    },
+    "model_name_verification": {
+        "case_sensitive": true,
+        "official_source_required": true,
+        "sync_pricing_table": true,
+        "sync_frontend_presets": true,
+        "_comment": "R121 第三方服务模型名称核对：以官方文档为准，大小写敏感"
+    },
+    "masked_key_fallback": {
+        "is_masked_check": true,
+        "fallback_to_db": true,
+        "preset_configs_storage": true,
+        "legacy_data_compat": true,
+        "masked_prefix": "sk-****",
+        "_comment": "R122 API Key 脱敏回退链路：is_masked 检查 + 后端回退 + 旧数据兼容"
+    },
+    "edit_integrity_verify": {
+        "verify_after_edit": true,
+        "corruption_signals": ["reesponse", "ne  }", "Mesror", "El.respon", "globalThis.location.href"],
+        "use_write_for_large_rewrite": true,
+        "build_grep_check": true,
+        "build_artifact_path": "admin-web/dist/assets",
+        "_comment": "R123 文件编辑完整性验证：Edit 后 Read 验证 + 损坏信号检测 + 构建产物 Grep 验证"
+    },
+    "step_progress_visualize": {
+        "state_mapping": {
+            "pending": 0,
+            "running": 50,
+            "retrying": 50,
+            "success": 100,
+            "failed": 100
+        },
+        "success_status": "success",
+        "failed_status": "exception",
+        "stripe_anim_states": ["running", "retrying"],
+        "max_percentage": 100,
+        "_comment": "R124 步骤进度可视化：状态映射 + 条纹动画 + 颜色区分"
+    },
+    "cross_flow_combination": {
+        "detail_page_combo": ["R118", "R119", "R120", "R124"],
+        "config_page_combo": ["R121", "R122", "R123"],
+        "test_connection_combo": ["R121", "R122"],
+        "_comment": "R125 跨流程组合应用场景：详情页/配置页/测试连接的组合流程模板"
+    },
+    "config_driven_universal": {
+        "config_files": ["project-config.json", "config.yaml"],
+        "forbid_hardcoded": ["url", "account", "threshold", "interval"],
+        "template_fixed": true,
+        "new_scenario_config_only": true,
+        "_comment": "R126 配置驱动与通用性约束：所有参数通过配置文件管理，禁止硬编码"
+    },
+    "external_storage_fallback": {
+        "enabled": true,
+        "severity": "CRITICAL",
+        "single_truth_source_fn": "is_cos_configured",
+        "local_dir": "data/audio_cache",
+        "static_mount_point": "/audio",
+        "url_generator_modes": ["cos", "local"],
+        "downstream_prefixes": ["/audio/"],
+        "fallback_log_level": "INFO",
+        "_comment": "R127 外部服务降级本地存储模式：COS 未配置时降级到 data/audio_cache/ + /audio/<key> 静态目录"
+    },
+    "asyncio_exception_filter": {
+        "enabled": true,
+        "severity": "MEDIUM",
+        "enabled_platforms": ["win32"],
+        "ignored_exceptions": [
+            {
+                "exception_type": "ConnectionResetError",
+                "transport_class": "ProactorBasePipeTransport",
+                "winerror": 10054,
+                "log_level": "DEBUG"
+            }
+        ],
+        "handler_priority": 100,
+        "_comment": "R128 Windows asyncio ConnectionResetError 异常过滤：平台已知行为配置驱动过滤，不污染业务日志"
+    },
+    "local_path_url": {
+        "enabled": true,
+        "severity": "HIGH",
+        "url_prefixes": [
+            {
+                "prefix": "/audio/",
+                "physical_dir": "data/audio_cache",
+                "copy_strategy": "shutil.copyfile"
+            }
+        ],
+        "forbidden_patterns": [
+            "http://localhost:*/audio/",
+            "http://127.0.0.1:*/audio/"
+        ],
+        "required_prefix_detection": true,
+        "_comment": "R129 本地路径 URL 约定：/audio/<key> 映射 data/audio_cache/<key>，download_file 优先本地前缀检测"
+    },
+    "browser_diagnosis": {
+        "environment_isolation": {
+            "enabled": true,
+            "incognito_test_required": true,
+            "cross_browser_test_required": true,
+            "disable_extensions_test_required": true,
+            "decision_tree_steps": [
+                "step1_repro_normal",
+                "step2_incognito_test",
+                "step3_cross_browser",
+                "step4_disable_extensions",
+                "step5_reset_profile"
+            ],
+            "_comment": "R130 UI 异常环境隔离验证流程：三步法（无痕模式 + 跨浏览器 + 禁用扩展）"
+        },
+        "max_code_fix_rounds": 3,
+        "reassess_checklist": [
+            "环境隔离验证是否执行",
+            "无痕模式是否测试",
+            "浏览器配置文件损坏是否考虑",
+            "系统级问题是否考虑"
+        ],
+        "_comment_max_rounds": "R131 连续修复失败重评机制：达到上限必须重新评估诊断方向",
+        "profile_corruption": {
+            "diagnostic_signal": "incognito_normal + normal_mode_abnormal",
+            "primary_suspect": "browser_user_profile_corruption",
+            "fix_method": "rename_user_data_folder",
+            "user_data_paths": {
+                "edge": "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data",
+                "chrome": "%LOCALAPPDATA%\\Google\\Chrome\\User Data",
+                "firefox": "%APPDATA%\\Mozilla\\Firefox\\Profiles"
+            },
+            "warning_data_loss": true,
+            "_comment": "R132 浏览器配置文件损坏诊断：无痕正常 + 普通异常 = 配置文件损坏强信号"
+        },
+        "window_management": {
+            "intercept_apis": [
+                "focus",
+                "open",
+                "alert",
+                "location",
+                "title",
+                "EventSource",
+                "fetch",
+                "XHR"
+            ],
+            "require_visibility_check": true,
+            "blur_event_alone_invalid": true,
+            "sse_disconnect_on_hidden": true,
+            "message_wrapper_required": true,
+            "intercept_prototype_focus": true,
+            "_comment": "R133-R137 浏览器窗口管理规范：focus 安全调用 + blur/visibilitychange 联合判断 + SSE 隐藏断开 + ElMessage 包装器 + HTMLElement.prototype.focus 拦截"
+        },
+        "pwa_display_mode": "browser",
+        "pwa_display_mode_options": ["standalone", "browser", "minimal-ui", "fullscreen"],
+        "_comment_pwa": "R138 PWA manifest display 配置化：避免硬编码，不同业务场景选择不同 display 模式",
+        "cross_browser_test_browsers": ["chrome", "edge"],
+        "cross_browser_event_order_test": [
+            "blur",
+            "visibilitychange",
+            "focus",
+            "pagehide",
+            "pageshow"
+        ],
+        "_comment_cross_browser": "R139 跨浏览器事件触发顺序测试：至少 Chrome + Edge，重点验证事件顺序差异",
+        "_comment": "R130-R139 浏览器环境诊断与防御纵深复盘：UI 异常诊断分层决策树 + 浏览器窗口管理规范 + 跨浏览器兼容性"
+    },
+    "frontend_switch_type_contract": {
+        "enabled": true,
+        "require_explicit_values": true,
+        "active_value_type": "int",
+        "inactive_value_type": "int",
+        "active_value": 1,
+        "inactive_value": 0,
+        "applicable_components": ["el-switch", "el-radio", "el-checkbox"],
+        "backend_field_types": {
+            "is_active": "int",
+            "status": "int",
+            "enabled": "int"
+        },
+        "change_callback_param_must_match": true,
+        "form_init_must_match_active_value": true,
+        "description": "el-switch/radio/checkbox 必须显式声明 :active-value/:inactive-value 且与后端字段类型一致；form 初始值和 @change 回调参数类型必须与 active-value 一致"
+    },
+    "api_timeout_override": {
+        "enabled": true,
+        "default_timeout_ms": 15000,
+        "long_running_endpoints": [
+            "/channels/{id}/generate-prompts",
+            "/workflows/trigger",
+            "/workflows/batch-delete",
+            "/admin/.*upload",
+            "/admin/.*import"
+        ],
+        "override_timeout_ms": 120000,
+        "llm_timeout_multiplier": 2,
+        "min_llm_timeout_sec": 60,
+        "backend_setting_key": "LLM_TIMEOUT_SEC",
+        "frontend_timeout_must_ge_backend": true,
+        "description": "长耗时接口必须请求级 timeout 覆盖 axios 默认值；后端 LLM 调用 timeout 从 settings 读取且支持 max(LLM_TIMEOUT_SEC*N, MIN) 公式"
+    },
+    "channel_level_config_override": {
+        "enabled": true,
+        "channel_fields": [
+            "schedule_time",
+            "is_active",
+            "intro_prompt",
+            "outro_prompt",
+            "constraint_prompt",
+            "rewrite_template",
+            "rss_sources",
+            "keywords"
+        ],
+        "fallback_to_global": true,
+        "priority_order": ["channel_field", "settings_global", "default_value"],
+        "global_settings_prefix": "LLM_",
+        "require_event_publish_on_change": true,
+        "description": "频道级配置字段优先于 settings 全局配置；频道字段为空时 fallback 到全局；频道字段变更必须发布事件"
+    },
+    "event_bus_config_driven": {
+        "enabled": true,
+        "event_types": [
+            "channel.active_changed",
+            "channel.schedule_changed"
+        ],
+        "publish_method": "publish_nowait",
+        "subscriber_idempotent": true,
+        "subscribers": {
+            "channel.active_changed": ["_on_channel_active_changed"],
+            "channel.schedule_changed": ["_on_channel_schedule_changed"]
+        },
+        "event_data_fields": ["channel_id", "is_active", "schedule_time"],
+        "description": "频道字段变更必须通过 EventBus 发布事件，订阅者需重注册 cron/取消 queued 工作流；事件发布用 publish_nowait 避免阻塞主流程"
+    },
+    "command_chain_syntax": {
+        "description": "命令链语法适配配置（R149）",
+        "shell_separators": {
+            "powershell_5": ";",
+            "powershell_7": ";",
+            "cmd": "&",
+            "bash": "&&",
+            "zsh": "&&"
+        },
+        "default_platform": "powershell_5",
+        "error_signal": "The token '&&' is not a valid statement separator",
+        "auto_detect": true
+    },
+    "function_symmetry_check": {
+        "description": "模块级函数对称性检查配置（R150）",
+        "symmetric_function_patterns": [
+            "resolve_*_path",
+            "get_*_config",
+            "check_*_exists",
+            "format_*_url"
+        ],
+        "known_pairs": [
+            {"func_a": "resolve_ffmpeg_path", "func_b": "resolve_ffprobe_path", "module": "app.paths"},
+            {"func_a": "resolve_data_dir", "func_b": "resolve_log_dir", "module": "app.paths"}
+        ],
+        "verify_command": "python -c \"from module import *\"",
+        "strict_mode": true
+    },
+    "service_restart_verification": {
+        "description": "服务重启加载新代码验证配置（R151）",
+        "openapi_endpoint": "/openapi.json",
+        "health_endpoint": "/api/health",
+        "health_timeout_sec": 30,
+        "start_script": "scripts/启动服务.bat",
+        "stop_script": "scripts/停止服务.bat",
+        "verify_endpoint_count": true,
+        "verify_endpoint_paths": true
+    },
+    "auth_verification_matrix": {
+        "description": "API 认证验证矩阵配置（R152）",
+        "token_present_expected_status": 200,
+        "token_absent_expected_status": 401,
+        "token_expired_expected_status": 401,
+        "token_invalid_expected_status": 401,
+        "test_scenarios": ["with_token", "without_token"],
+        "optional_scenarios": ["expired_token", "invalid_token"],
+        "login_endpoint": "/admin/api/v1/auth/login",
+        "login_response_token_field": "token"
+    },
+    "cross_project_migration_adaptation": {
+        "description": "参考实现移植适配检查配置（R153）",
+        "naming_convention_map": {
+            "source_prefix": "XH_",
+            "target_prefix": "NEWS_",
+            "examples": ["XH_WEB_PORT -> NEWS_WEB_PORT"]
+        },
+        "config_format_map": {
+            "source_format": "yaml",
+            "target_format": "json",
+            "migration_note": "YAML 配置移植到 JSON 时保持键名一致，仅改格式"
+        },
+        "notification_system_map": {
+            "source": "EventType enum + Event dataclass",
+            "target": "NotificationEvent dataclass + NotifierHub",
+            "bridge_pattern": "notify_tunnel_started(provider, url, port) -> NotificationEvent"
+        },
+        "auth_model": {
+            "rule": "keep_target_project_auth_model",
+            "note": "不照搬源项目认证白名单，保持目标项目全部认证"
+        },
+        "checklist": ["naming_adaptation", "config_format", "notification_system", "auth_model"]
+    },
+    "test_three_phase": {
+        "description": "测试三阶段执行配置（R154）",
+        "phase_1_static_check": {
+            "backend_command": "python -m py_compile",
+            "frontend_command": "npm run build",
+            "required": true
+        },
+        "phase_2_runtime_check": {
+            "service_start": true,
+            "health_check": true,
+            "openapi_verification": true,
+            "required": true
+        },
+        "phase_3_functional_check": {
+            "api_call": true,
+            "auth_matrix": true,
+            "critical_path": true,
+            "required": true
+        },
+        "delivery_gate": "all_phases_pass",
+        "hotfix_mode": {
+            "enabled": false,
+            "skip_phases": ["phase_2_runtime_check"],
+            "note": "hotfix 可跳过运行时验证，但必须通过静态+功能验证"
+        }
     }
 }

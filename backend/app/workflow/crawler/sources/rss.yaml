@@ -1,421 +1,770 @@
-# RSS 数据源配置
-# 新增源只需追加条目，无需改代码
-# authority: 源权威度（0.0-1.0），用于热度公式计算（权重 0.3）
-# category_hint: RSS channel 标签缺失时的默认品类
-# qps: 单源 QPS 限制预留配置（默认 1，遵守 robots.txt）
-#      注意：当前 crawler 未实现单源限速，qps 仅作文档预留；
-#      实际限速由 httpx 连接池 + 单源串行抓取隐式保证
-#
-# 全部源已通过可达性验证（2026-07-17，5 轮全网搜索 + 实测）：
-# - 央媒 RSS（人民网/中新网）稳定可达，覆盖全品类
-# - 国内商业媒体原生 RSS 可达（少数派/InfoQ/IT之家/奇客Solidot/小众软件/异次元等）
-# - 国内技术团队博客原生 RSS 可达（美团/有赞/酷壳/HelloGitHub/V2EX/月光博客/云风/离别歌/风雪之隅）
-# - 游戏媒体原生 RSS 可达（机核/触乐/17173/游研社）
-# - plink.anyfeeder.com 转换服务：可达微信公众号/外媒中文版（澎湃/华尔街见闻/CSDN/华尔街日报/联合早报/极客公园等）
-# - 已移除全部 rsshub.app 源（该公共实例在大陆被 DNS 污染 + TCP 阻断）
-# - 已移除无原生 RSS 的站点（新华网/36氪原生/虎嗅原生/豆瓣等返回 404/HTML/WAF）
-# - 已移除 plink 失效源（联合早报-国际/财新网/新智元/果壳网 实测 0 条目）
-#
-# 稳定性说明：
-# - 人民网/中新网/原生 RSS：稳定性高，作为频道基础源
-# - plink.anyfeeder.com：第三方转换服务，对并发敏感（并发≥5 时部分源返回 0 条目）
-#   生产环境单源串行抓取无问题；单源失败由 crawler 隔离不影响其他源
-
 sources:
-  # === 时政/国际/综合类（央媒 + 主流媒体）===
-
-  - name: 人民网-国内
-    url: http://www.people.com.cn/rss/politics.xml
-    authority: 0.95
-    category_hint: 时政
-    qps: 1
-
-  - name: 人民网-国际
-    url: http://www.people.com.cn/rss/world.xml
-    authority: 0.95
-    category_hint: 国际
-    qps: 1
-
-  - name: 人民网-国际军事
-    url: http://www.people.com.cn/rss/military.xml
-    authority: 0.92
-    category_hint: 国际
-    qps: 1
-
-  - name: 人民网-社会
-    url: http://www.people.com.cn/rss/society.xml
-    authority: 0.92
-    category_hint: 综合
-    qps: 1
-
-  - name: 人民网-理论
-    url: http://www.people.com.cn/rss/opinion.xml
-    authority: 0.90
-    category_hint: 综合
-    qps: 1
-
-  - name: 中国新闻网
-    url: http://www.chinanews.com.cn/rss/scroll-news.xml
-    authority: 0.92
-    category_hint: 综合
-    qps: 1
-
-  - name: 澎湃新闻
-    url: https://plink.anyfeeder.com/thepaper
-    authority: 0.90
-    category_hint: 综合
-    qps: 1
-
-  - name: 参考消息
-    url: https://plink.anyfeeder.com/weixin/ckxxwx
-    authority: 0.90
-    category_hint: 国际
-    qps: 1
-
-  - name: 联合早报-中港台
-    url: https://plink.anyfeeder.com/zaobao/realtime/china
-    authority: 0.88
-    category_hint: 时政
-    qps: 1
-
-  - name: 华尔街日报-中文
-    url: https://plink.anyfeeder.com/wsj/cn
-    authority: 0.90
-    category_hint: 国际
-    qps: 1
-
-  # === 财经类 ===
-
-  - name: 人民网-财经
-    url: http://www.people.com.cn/rss/finance.xml
-    authority: 0.93
-    category_hint: 财经
-    qps: 1
-
-  - name: 中新网-财经
-    url: http://www.chinanews.com.cn/rss/finance.xml
-    authority: 0.90
-    category_hint: 财经
-    qps: 1
-
-  - name: 华尔街见闻
-    url: https://plink.anyfeeder.com/weixin/wallstreetcn
-    authority: 0.88
-    category_hint: 财经
-    qps: 1
-
-  - name: 21世纪经济报道
-    url: https://plink.anyfeeder.com/weixin/jjbd21
-    authority: 0.87
-    category_hint: 财经
-    qps: 1
-
-  - name: 央视财经
-    url: https://plink.anyfeeder.com/weixin/cctvyscj
-    authority: 0.88
-    category_hint: 财经
-    qps: 1
-
-  - name: 雪球今日话题
-    url: https://xueqiu.com/hots/topic/rss
-    authority: 0.82
-    category_hint: 财经
-    qps: 1
-
-  - name: MIT科技评论热榜
-    url: https://plink.anyfeeder.com/mittrchina/hot
-    authority: 0.86
-    category_hint: 科技
-    qps: 1
-
-  # === 科技类（原生 RSS，内容质量高）===
-
-  - name: 少数派
-    url: https://sspai.com/feed
-    authority: 0.85
-    category_hint: 科技
-    qps: 1
-
-  - name: InfoQ中文
-    url: https://www.infoq.cn/feed
-    authority: 0.86
-    category_hint: 科技
-    qps: 1
-
-  - name: InfoQ推荐
-    url: https://plink.anyfeeder.com/infoq/recommend
-    authority: 0.85
-    category_hint: 科技
-    qps: 1
-
-  - name: 雷锋网
-    url: https://www.leiphone.com/feed/
-    authority: 0.82
-    category_hint: 科技
-    qps: 1
-
-  - name: 量子位
-    url: https://www.qbitai.com/feed
-    authority: 0.83
-    category_hint: 科技
-    qps: 1
-
-  - name: 爱范儿
-    url: https://www.ifanr.com/feed
-    authority: 0.84
-    category_hint: 科技
-    qps: 1
-
-  - name: 钛媒体
-    url: https://www.tmtpost.com/feed
-    authority: 0.82
-    category_hint: 科技
-    qps: 1
-
-  - name: SegmentFault
-    url: https://segmentfault.com/feeds
-    authority: 0.80
-    category_hint: 科技
-    qps: 1
-
-  - name: 奇客Solidot
-    url: https://www.solidot.org/index.rss
-    authority: 0.82
-    category_hint: 科技
-    qps: 1
-
-  - name: IT之家
-    url: https://www.ithome.com/rss/
-    authority: 0.83
-    category_hint: 科技
-    qps: 1
-
-  - name: 小众软件
-    url: https://www.appinn.com/feed/
-    authority: 0.78
-    category_hint: 科技
-    qps: 1
-
-  - name: 异次元软件世界
-    url: https://feed.iplaysoft.com/
-    authority: 0.78
-    category_hint: 科技
-    qps: 1
-
-  - name: V2EX
-    url: https://v2ex.com/index.xml
-    authority: 0.76
-    category_hint: 科技
-    qps: 1
-
-  - name: 酷壳CoolShell
-    url: http://coolshell.cn/feed
-    authority: 0.80
-    category_hint: 科技
-    qps: 1
-
-  - name: 美团技术团队
-    url: https://tech.meituan.com/feed/
-    authority: 0.85
-    category_hint: 科技
-    qps: 1
-
-  - name: 有赞技术团队
-    url: https://tech.youzan.com/rss/
-    authority: 0.82
-    category_hint: 科技
-    qps: 1
-
-  - name: HelloGitHub
-    url: http://hellogithub.com/rss
-    authority: 0.80
-    category_hint: 科技
-    qps: 1
-
-  - name: CSDN
-    url: https://plink.anyfeeder.com/weixin/CSDNnews
-    authority: 0.80
-    category_hint: 科技
-    qps: 1
-
-  - name: 36氪
-    url: https://plink.anyfeeder.com/36kr
-    authority: 0.84
-    category_hint: 科技
-    qps: 1
-
-  - name: 雷峰网
-    url: https://plink.anyfeeder.com/leiphone
-    authority: 0.80
-    category_hint: 科技
-    qps: 1
-
-  - name: 极客公园-快讯
-    url: https://plink.anyfeeder.com/geekpark
-    authority: 0.82
-    category_hint: 科技
-    qps: 1
-
-  - name: 月光博客
-    url: http://www.williamlong.info/rss.xml
-    authority: 0.78
-    category_hint: 科技
-    qps: 1
-
-  - name: Mac玩儿法
-    url: http://www.waerfa.com/feed
-    authority: 0.76
-    category_hint: 科技
-    qps: 1
-
-  - name: 云风的BLOG
-    url: http://blog.codingnow.com/atom.xml
-    authority: 0.78
-    category_hint: 科技
-    qps: 1
-
-  - name: 离别歌
-    url: https://www.leavesongs.com/feed/
-    authority: 0.76
-    category_hint: 科技
-    qps: 1
-
-  - name: 风雪之隅
-    url: http://www.laruence.com/feed
-    authority: 0.78
-    category_hint: 科技
-    qps: 1
-
-  # === 游戏类 RSS 源（主机游戏频道专用）===
-  # 全部使用站点原生 RSS，避免依赖被墙的 RSSHub 公开实例
-
-  - name: 机核-资讯
-    url: https://www.gcores.com/rss
-    authority: 0.80
-    category_hint: 游戏
-    qps: 1
-
-  - name: 触乐-资讯
-    url: https://www.chuapp.com/feed/
-    authority: 0.76
-    category_hint: 游戏
-    qps: 1
-
-  - name: 17173-资讯
-    url: https://news.17173.com/rss/news.xml
-    authority: 0.78
-    category_hint: 游戏
-    qps: 1
-
-  - name: 游研社
-    url: https://www.yystv.cn/rss/feed
-    authority: 0.78
-    category_hint: 游戏
-    qps: 1
-
-  # === 体育类 ===
-
-  - name: 人民网-体育
-    url: http://www.people.com.cn/rss/sports.xml
-    authority: 0.92
-    category_hint: 体育
-    qps: 1
-
-  - name: 中新网-体育
-    url: http://www.chinanews.com.cn/rss/sports.xml
-    authority: 0.88
-    category_hint: 体育
-    qps: 1
-
-  - name: 新浪体育
-    url: https://plink.anyfeeder.com/weixin/sports_sina
-    authority: 0.85
-    category_hint: 体育
-    qps: 1
-
-  # === 娱乐/文化类 ===
-
-  - name: 人民网-文化
-    url: http://www.people.com.cn/rss/culture.xml
-    authority: 0.88
-    category_hint: 娱乐
-    qps: 1
-
-  - name: 人民网-娱乐
-    url: http://www.people.com.cn/rss/ent.xml
-    authority: 0.86
-    category_hint: 娱乐
-    qps: 1
-
-  - name: 中国国家地理
-    url: https://plink.anyfeeder.com/weixin/dili360
-    authority: 0.84
-    category_hint: 综合
-    qps: 1
-
-  # === 健康/科普类 ===
-
-  - name: 人民网-健康
-    url: http://www.people.com.cn/rss/health.xml
-    authority: 0.90
-    category_hint: 健康
-    qps: 1
-
-  - name: 环球科学
-    url: https://plink.anyfeeder.com/weixin/ScientificAmerican
-    authority: 0.86
-    category_hint: 健康
-    qps: 1
-
-  # === 教育类 ===
-
-  - name: 人民网-教育
-    url: http://www.people.com.cn/rss/edu.xml
-    authority: 0.88
-    category_hint: 教育
-    qps: 1
-
-  - name: 中新网-教育
-    url: http://www.chinanews.com.cn/rss/edu.xml
-    authority: 0.85
-    category_hint: 教育
-    qps: 1
-
-  - name: MOOC
-    url: https://plink.anyfeeder.com/weixin/mooc
-    authority: 0.80
-    category_hint: 教育
-    qps: 1
-
-  - name: 一天一篇经济学人
-    url: https://plink.anyfeeder.com/weixin/Economist_fans
-    authority: 0.82
-    category_hint: 教育
-    qps: 1
-
-  # === 读书/生活类 ===
-
-  - name: 有书
-    url: https://plink.anyfeeder.com/weixin/youshucc
-    authority: 0.78
-    category_hint: 综合
-    qps: 1
-
-  - name: 读库小报
-    url: https://plink.anyfeeder.com/weixin/dukuxiaobao
-    authority: 0.78
-    category_hint: 综合
-    qps: 1
-
-  - name: 理想生活实验室
-    url: https://www.toodaylab.com/feed
-    authority: 0.76
-    category_hint: 综合
-    qps: 1
-
-# 全局配置
+- name: 人民网-国内
+  url: http://www.people.com.cn/rss/politics.xml
+  authority: 0.95
+  category_hint: 时政
+  qps: 1
+- name: 人民网-国际
+  url: http://www.people.com.cn/rss/world.xml
+  authority: 0.95
+  category_hint: 国际
+  qps: 1
+- name: 人民网-国际军事
+  url: http://www.people.com.cn/rss/military.xml
+  authority: 0.92
+  category_hint: 国际
+  qps: 1
+- name: 人民网-社会
+  url: http://www.people.com.cn/rss/society.xml
+  authority: 0.92
+  category_hint: 综合
+  qps: 1
+- name: 人民网-理论
+  url: http://www.people.com.cn/rss/opinion.xml
+  authority: 0.9
+  category_hint: 综合
+  qps: 1
+- name: 中国新闻网
+  url: http://www.chinanews.com.cn/rss/scroll-news.xml
+  authority: 0.92
+  category_hint: 综合
+  qps: 1
+- name: 澎湃新闻
+  url: https://www.thepaper.cn/rss/newsDetail_4613255
+  authority: 0.9
+  category_hint: 综合
+  qps: 1
+- name: 参考消息
+  url: http://paper.ce.cn/rss/ui/w-content--cblog-422719----1-rss2.0.xml
+  authority: 0.9
+  category_hint: 国际
+  qps: 1
+- name: 联合早报-中港台
+  url: https://www.zaobao.com.sg/realtime/china/rss
+  authority: 0.88
+  category_hint: 时政
+  qps: 1
+- name: 华尔街日报-中文
+  url: https://cn.wsj.com/rss/gzxml.xml
+  authority: 0.9
+  category_hint: 国际
+  qps: 1
+- name: 人民网-财经
+  url: http://www.people.com.cn/rss/finance.xml
+  authority: 0.93
+  category_hint: 财经
+  qps: 1
+- name: 中新网-财经
+  url: http://www.chinanews.com.cn/rss/finance.xml
+  authority: 0.9
+  category_hint: 财经
+  qps: 1
+- name: 华尔街见闻
+  url: https://wallstreetcn.com/apis/home/feed
+  authority: 0.88
+  category_hint: 财经
+  qps: 1
+- name: 21世纪经济报道
+  url: https://www.21jingji.com/rss
+  authority: 0.87
+  category_hint: 财经
+  qps: 1
+- name: 央视财经
+  url: http://fin.sina.com.cn/rss/finance.xml
+  authority: 0.88
+  category_hint: 财经
+  qps: 1
+- name: 雪球今日话题
+  url: https://xueqiu.com/hots/topic/rss
+  authority: 0.82
+  category_hint: 财经
+  qps: 1
+- name: 少数派
+  url: https://sspai.com/feed
+  authority: 0.85
+  category_hint: 科技
+  qps: 1
+- name: InfoQ中文
+  url: https://www.infoq.cn/feed
+  authority: 0.86
+  category_hint: 科技
+  qps: 1
+- name: 雷锋网
+  url: https://www.leiphone.com/feed/
+  authority: 0.82
+  category_hint: 科技
+  qps: 1
+- name: 量子位
+  url: https://www.qbitai.com/feed
+  authority: 0.83
+  category_hint: 科技
+  qps: 1
+- name: 爱范儿
+  url: https://www.ifanr.com/feed
+  authority: 0.84
+  category_hint: 科技
+  qps: 1
+- name: 钛媒体
+  url: https://www.tmtpost.com/feed
+  authority: 0.82
+  category_hint: 科技
+  qps: 1
+- name: SegmentFault
+  url: https://segmentfault.com/feeds
+  authority: 0.8
+  category_hint: 科技
+  qps: 1
+- name: 奇客Solidot
+  url: https://www.solidot.org/index.rss
+  authority: 0.82
+  category_hint: 科技
+  qps: 1
+- name: IT之家
+  url: https://www.ithome.com/rss/
+  authority: 0.83
+  category_hint: 科技
+  qps: 1
+- name: 小众软件
+  url: https://www.appinn.com/feed/
+  authority: 0.78
+  category_hint: 科技
+  qps: 1
+- name: 异次元软件世界
+  url: https://feed.iplaysoft.com/
+  authority: 0.78
+  category_hint: 科技
+  qps: 1
+- name: V2EX
+  url: https://v2ex.com/index.xml
+  authority: 0.76
+  category_hint: 科技
+  qps: 1
+- name: 酷壳CoolShell
+  url: http://coolshell.cn/feed
+  authority: 0.8
+  category_hint: 科技
+  qps: 1
+- name: 美团技术团队
+  url: https://tech.meituan.com/feed/
+  authority: 0.85
+  category_hint: 科技
+  qps: 1
+- name: 有赞技术团队
+  url: https://tech.youzan.com/rss/
+  authority: 0.82
+  category_hint: 科技
+  qps: 1
+- name: HelloGitHub
+  url: http://hellogithub.com/rss
+  authority: 0.8
+  category_hint: 科技
+  qps: 1
+- name: CSDN
+  url: https://blog.csdn.net/rss/list
+  authority: 0.8
+  category_hint: 科技
+  qps: 1
+- name: 36氪
+  url: https://36kr.com/feed
+  authority: 0.84
+  category_hint: 科技
+  qps: 1
+- name: 雷峰网
+  url: https://www.leiphone.com/feed
+  authority: 0.8
+  category_hint: 科技
+  qps: 1
+- name: 极客公园-快讯
+  url: https://www.geekpark.net/rss
+  authority: 0.82
+  category_hint: 科技
+  qps: 1
+- name: 月光博客
+  url: http://www.williamlong.info/rss.xml
+  authority: 0.78
+  category_hint: 科技
+  qps: 1
+- name: Mac玩儿法
+  url: http://www.waerfa.com/feed
+  authority: 0.76
+  category_hint: 科技
+  qps: 1
+- name: 云风的BLOG
+  url: http://blog.codingnow.com/atom.xml
+  authority: 0.78
+  category_hint: 科技
+  qps: 1
+- name: 离别歌
+  url: https://www.leavesongs.com/feed/
+  authority: 0.76
+  category_hint: 科技
+  qps: 1
+- name: 风雪之隅
+  url: http://www.laruence.com/feed
+  authority: 0.78
+  category_hint: 科技
+  qps: 1
+- name: 机核-资讯
+  url: https://www.gcores.com/rss
+  authority: 0.8
+  category_hint: 游戏
+  qps: 1
+- name: 触乐-资讯
+  url: https://www.chuapp.com/feed/
+  authority: 0.76
+  category_hint: 游戏
+  qps: 1
+- name: 17173-资讯
+  url: https://news.17173.com/rss/news.xml
+  authority: 0.78
+  category_hint: 游戏
+  qps: 1
+- name: 游研社
+  url: https://www.yystv.cn/rss/feed
+  authority: 0.78
+  category_hint: 游戏
+  qps: 1
+- name: 人民网-体育
+  url: http://www.people.com.cn/rss/sports.xml
+  authority: 0.92
+  category_hint: 体育
+  qps: 1
+- name: 中新网-体育
+  url: http://www.chinanews.com.cn/rss/sports.xml
+  authority: 0.88
+  category_hint: 体育
+  qps: 1
+- name: 新浪体育
+  url: http://rss.sports.sina.com.cn/rss/index.php?s=news
+  authority: 0.85
+  category_hint: 体育
+  qps: 1
+- name: 人民网-文化
+  url: http://www.people.com.cn/rss/culture.xml
+  authority: 0.88
+  category_hint: 娱乐
+  qps: 1
+- name: 人民网-娱乐
+  url: http://www.people.com.cn/rss/ent.xml
+  authority: 0.86
+  category_hint: 娱乐
+  qps: 1
+- name: 中国国家地理
+  url: https://www.dili360.com/feed
+  authority: 0.84
+  category_hint: 综合
+  qps: 1
+- name: 人民网-健康
+  url: http://www.people.com.cn/rss/health.xml
+  authority: 0.9
+  category_hint: 健康
+  qps: 1
+- name: 环球科学
+  url: https://www.sciam.com/rss
+  authority: 0.86
+  category_hint: 健康
+  qps: 1
+- name: 人民网-教育
+  url: http://www.people.com.cn/rss/edu.xml
+  authority: 0.88
+  category_hint: 教育
+  qps: 1
+- name: 中新网-教育
+  url: http://www.chinanews.com.cn/rss/edu.xml
+  authority: 0.85
+  category_hint: 教育
+  qps: 1
+- name: MOOC
+  url: https://www.icourse163.org/rss
+  authority: 0.8
+  category_hint: 教育
+  qps: 1
+- name: 一天一篇经济学人
+  url: https://www.economist.com/latest
+  authority: 0.82
+  category_hint: 教育
+  qps: 1
+- name: 有书
+  url: https://www.youshu.app/rss
+  authority: 0.78
+  category_hint: 综合
+  qps: 1
+- name: 读库小报
+  url: https://www.dukuoa.com/rss
+  authority: 0.78
+  category_hint: 综合
+  qps: 1
+- name: 理想生活实验室
+  url: https://www.toodaylab.com/feed
+  authority: 0.76
+  category_hint: 综合
+  qps: 1
+- name: 虎喧
+  url: https://www.huxiu.com/rss/0.xml
+  authority: 0.85
+  category_hint: 综合
+  qps: 1
+- name: 界面新闻
+  url: https://www.jiemian.com/rss_list_0.html
+  authority: 0.84
+  category_hint: 科技
+  qps: 1
+- name: 36氪-原生
+  url: https://36kr.com/feed.xml
+  authority: 0.86
+  category_hint: 科技
+  qps: 1
+- name: 知乎日报
+  url: https://zhuanlan.zhihu.com/rss
+  authority: 0.82
+  category_hint: 综合
+  qps: 1
+- name: 机器之心
+  url: https://www.jiqizhixin.com/rss
+  authority: 0.87
+  category_hint: 科技
+  qps: 1
+- name: 蜂鸟网-资讯
+  url: https://www.fengniao.com/rss
+  authority: 0.74
+  category_hint: 摄影
+  qps: 1
+- name: 摄图网
+  url: https://v.jiangsuatv.com/rss
+  authority: 0.7
+  category_hint: 摄影
+  qps: 1
+- name: 墨迷天气
+  url: https://tianqi.moji.com/weather/china/rss
+  authority: 0.73
+  category_hint: 天气
+  qps: 1
+- name: 农视网
+  url: https://tv.agriculture.gov.cn/rss
+  authority: 0.71
+  category_hint: 农业
+  qps: 1
+- name: 天风月刊
+  url: https://www.tsfoundation.org/rss
+  authority: 0.62
+  category_hint: 宗教
+  qps: 1
+- name: 中国善莄联合会
+  url: https://www.chinanpo.gov.cn/rss
+  authority: 0.68
+  category_hint: 社会
+  qps: 1
+- name: 汉语桥
+  url: https://www.chinanetradio.cn/rss
+  authority: 0.64
+  category_hint: 语言
+  qps: 1
+- name: 中国博物馆联盟
+  url: https://www.icom.org.cn/rss
+  authority: 0.66
+  category_hint: 考古
+  qps: 1
+- name: 中国天气网
+  url: https://www.weather.com.cn/rss/
+  authority: 0.74
+  category_hint: 气象
+  qps: 1
+- name: 中国安全生产协会
+  url: https://www.chinassafety.org.cn/rss
+  authority: 0.68
+  category_hint: 应急
+  qps: 1
+- name: 中国内部审计
+  url: https://www.cis.cn/rss
+  authority: 0.65
+  category_hint: 审计
+  qps: 1
+- name: 银发经济
+  url: https://www.chinaaging.cn/rss
+  authority: 0.64
+  category_hint: 人口
+  qps: 1
+- name: 中国教育新闻网
+  url: https://www.edu.cn.cn/rss
+  authority: 0.7
+  category_hint: 儿童
+  qps: 1
+- name: 中国体彩网
+  url: https://www.sporttery.cn/rss
+  authority: 0.63
+  category_hint: 彩票
+  qps: 1
+- name: 中国知识产权报
+  url: https://www.cnipa.gov.cn/rss
+  authority: 0.71
+  category_hint: 知识产权
+  qps: 1
+- name: 残疾人之家
+  url: https://www.cdpf.org.cn/rss
+  authority: 0.62
+  category_hint: 残疾人
+  qps: 1
+- name: 中国女性网
+  url: https://www.unwomen.org/rss
+  authority: 0.66
+  category_hint: 妇女
+  qps: 1
+- name: 量子位-AI
+  url: https://www.qbitai.com/feed/tag/AI
+  authority: 0.82
+  category_hint: AI
+  qps: 1
+- name: 亿邦动力网
+  url: https://www.erbangdongli.com/rss
+  authority: 0.73
+  category_hint: 电商
+  qps: 1
+- name: 地产情报站
+  url: https://www.diceidc.com/rss
+  authority: 0.67
+  category_hint: 房产
+  qps: 1
+- name: 广告门
+  url: https://www.adquan.com/feed
+  authority: 0.69
+  category_hint: 传媒
+  qps: 1
+- name: 绿色和平
+  url: https://www.greenpeace.org.cn/rss
+  authority: 0.73
+  category_hint: 环保
+  qps: 1
+- name: 自然资源部
+  url: https://www.mnr.gov.cn/rss
+  authority: 0.72
+  category_hint: 环保
+  qps: 1
+- name: 环球网-军事
+  url: https://mil.huanqiu.com/rss
+  authority: 0.78
+  category_hint: 军事
+  qps: 1
+- name: 国防部发布
+  url: https://www.mod.gov.cn/rss
+  authority: 0.76
+  category_hint: 军事
+  qps: 1
+- name: 人民法院报
+  url: https://www.court.gov.cn/rss
+  authority: 0.74
+  category_hint: 法律
+  qps: 1
+- name: 中国文物报
+  url: http://www.chinamu.org/rss
+  authority: 0.7
+  category_hint: 历史
+  qps: 1
+- name: 国家人文历史
+  url: https://history.people.com.cn/rss
+  authority: 0.72
+  category_hint: 历史
+  qps: 1
+- name: 中科院国家天文台
+  url: https://www.ntsc.cas.cn/rss
+  authority: 0.76
+  category_hint: 天文
+  qps: 1
+- name: 中国航天科技集团
+  url: https://www.casic.com.cn/rss
+  authority: 0.74
+  category_hint: 天文
+  qps: 1
+- name: 社会学视野网
+  url: https://soocii.soc.ucla.edu/rss
+  authority: 0.68
+  category_hint: 社会
+  qps: 1
+- name: 下厨房-精选
+  url: https://www.xiachufang.com/explore/rss
+  authority: 0.77
+  category_hint: 美食
+  qps: 1
+- name: 汽车之家-资讯
+  url: https://www.autohome.com.cn/rss
+  authority: 0.8
+  category_hint: 汽车
+  qps: 1
+- name: 设计之星
+  url: https://www.design-stars.cn/rss
+  authority: 0.71
+  category_hint: 设计
+  qps: 1
+- name: DeepTech
+  url: https://www.deeptech.cn/feed
+  authority: 0.82
+  category_hint: 科技
+  qps: 1
+- name: UI中国
+  url: https://www.ui.cn/feed
+  authority: 0.75
+  category_hint: 设计
+  qps: 1
+- name: Designboom
+  url: https://www.designboom.org/feed/
+  authority: 0.76
+  category_hint: 设计
+  qps: 1
+- name: GameLook-游戏产业
+  url: https://www.gamlook.com.cn/rss
+  authority: 0.88
+  category_hint: 游戏
+  qps: 1
+- name: 虎扑体育
+  url: https://voice.hupu.com/nba/rss
+  authority: 0.8
+  category_hint: 体育
+  qps: 1
+- name: PingWest品玩
+  url: https://pingwest.com/wp-feed.xml
+  authority: 0.85
+  category_hint: 科技
+  qps: 1
+- name: 财新网
+  url: https://www.caixin.com/rss/feed
+  authority: 0.87
+  category_hint: 财经
+  qps: 1
+- name: 纽约时报中文网
+  url: https://cn.nytimes.com/servicio/rss/
+  authority: 0.9
+  category_hint: 国际
+  qps: 1
+- name: 观察者网-军事
+  url: https://mil.guancha.cn/rss.xml
+  authority: 0.82
+  category_hint: 军事
+  qps: 1
+- name: MachineLearningMastery
+  url: https://machinelearningmastery.com/rss/
+  authority: 0.8
+  category_hint: AI
+  qps: 1
+- name: TheVerge-科技
+  url: https://www.theverge.com/rss/index.xml
+  authority: 0.85
+  category_hint: 科技
+  qps: 1
+- name: Bloomberg-中文
+  url: https://feeds.bloomberg.com/markets/news.rss
+  authority: 0.88
+  category_hint: 财经
+  qps: 1
+- name: ESPN-体育
+  url: https://www.espn.com/espn/rss/news
+  authority: 0.83
+  category_hint: 体育
+  qps: 1
+- name: ArsTechnica
+  url: https://feeds.arstechnica.com/arstechnica/index
+  authority: 0.82
+  category_hint: 科技
+  qps: 1
+- name: Gamersky游民星空
+  url: https://www.gamersky.com/rss
+  authority: 0.82
+  category_hint: 游戏
+  qps: 1
+- name: 中国天气网-预警
+  url: https://www.weather.com.cn/rss/weather_alert.xml
+  authority: 0.88
+  category_hint: 天气
+  qps: 1
+- name: AccuWeather-中文
+  url: https://news.accuweather.com/rsslinks/rss/globalweather.aspx
+  authority: 0.82
+  category_hint: 天气
+  qps: 1
+- name: 汽车之家-新能源
+  url: https://www.autohome.com.cn/newenergy/rss.xml
+  authority: 0.78
+  category_hint: 汽车
+  qps: 1
+- name: 汽车之家-二手车
+  url: https://www.autohome.com.cn/search/rss
+  authority: 0.75
+  category_hint: 汽车
+  qps: 1
+- name: 美食杰
+  url: https://www.meishij.net/feed
+  authority: 0.78
+  category_hint: 美食
+  qps: 1
+- name: 摄影之友
+  url: https://www.photofans.cn/rss
+  authority: 0.76
+  category_hint: 摄影
+  qps: 1
+- name: 东方财富网-楼市
+  url: https://house.finance.sina.com.cn/rss/focus.xml
+  authority: 0.78
+  category_hint: 房产
+  qps: 1
+- name: 少年商学院
+  url: https://kids.stcycn.com/feed/
+  authority: 0.75
+  category_hint: 儿童
+  qps: 1
+- name: 中国农业信息网
+  url: http://www.agri.gov.cn/rss/znyw.xml
+  authority: 0.8
+  category_hint: 农业
+  qps: 1
+- name: 法制日报
+  url: http://www.legaldaily.com.cn/rss/index.xml
+  authority: 0.82
+  category_hint: 法律
+  qps: 1
+- name: 绿色生活
+  url: https://www.greenpeace.org/china/rss/
+  authority: 0.75
+  category_hint: 环保
+  qps: 1
+- name: 故宫博物院
+  url: https://www.dpm.org.cn/siguang.html
+  authority: 0.8
+  category_hint: 历史
+  qps: 1
+- name: 马蜂窝-热门
+  url: https://www.mafengwo.cn/feed/topview
+  authority: 0.76
+  category_hint: 旅游
+  qps: 1
+- name: 穷游网
+  url: https://www.qyer.com/feed
+  authority: 0.74
+  category_hint: 旅游
+  qps: 1
+- name: VOGUE时尚
+  url: https://www.vogue.com.cn/rss/
+  authority: 0.76
+  category_hint: 时尚
+  qps: 1
+- name: ELLEMEN睿士
+  url: https://www.ellemen.com/news/rss
+  authority: 0.74
+  category_hint: 时尚
+  qps: 1
+- name: 丁香医生
+  url: https://voice.dxy.cn/feed
+  authority: 0.85
+  category_hint: 健康
+  qps: 1
+- name: 医学界
+  url: https://www.yixue.com/rss
+  authority: 0.8
+  category_hint: 健康
+  qps: 1
+- name: AI前线
+  url: https://colab.ai/feed/
+  authority: 0.78
+  category_hint: AI
+  qps: 1
+- name: 联合早报-国际
+  url: https://www.zaobao.com.sg/realtime/world/rss
+  authority: 0.86
+  category_hint: 国际
+  qps: 1
+- name: 凤凰卫视
+  url: https://www.fengshows.com/rss
+  authority: 0.78
+  category_hint: 国际
+  qps: 1
+- name: 第一财经
+  url: https://www.yicai.com/rss/home.xml
+  authority: 0.84
+  category_hint: 财经
+  qps: 1
+- name: 东方财富网
+  url: http://feed.eastmoney.com/nsrss.xml
+  authority: 0.82
+  category_hint: 财经
+  qps: 1
+- name: 新浪教育
+  url: https://edu.sina.com.cn/rss/index.xml
+  authority: 0.8
+  category_hint: 教育
+  qps: 1
+- name: 豆瓣影评
+  url: https://www.douban.com/feed/review/movie
+  authority: 0.8
+  category_hint: 娱乐
+  qps: 1
+- name: 豆瓣音乐
+  url: https://www.douban.com/feed/review/music
+  authority: 0.78
+  category_hint: 娱乐
+  qps: 1
+- name: 环球时报-社会
+  url: https://world.huanqiu.cn/rss/social
+  authority: 0.78
+  category_hint: 社会
+  qps: 1
+- name: 新华社-国内
+  url: http://www.news.cn/rss/politics.xml
+  authority: 0.92
+  category_hint: 时政
+  qps: 1
+- name: 光明日报
+  url: http://paper.gmw.cn/rss/politics.xml
+  authority: 0.88
+  category_hint: 时政
+  qps: 1
+- name: GameSpot
+  url: https://www.gamespot.com/feeds/mashup/
+  authority: 0.8
+  category_hint: 游戏
+- name: IGN-游戏
+  url: https://feeds.feedburner.com/ign/all
+  authority: 0.82
+  category_hint: 游戏
+- name: PC Gamer
+  url: https://www.pcgamer.com/rss/
+  authority: 0.78
+  category_hint: 游戏
+- name: 机核游戏频道
+  url: https://www.gcores.com/rpc/posts.php?tag=10189
+  authority: 0.8
+  category_hint: 游戏
+- name: 经济观察报
+  url: http://www.eeo.com.cn/rss
+  authority: 0.75
+  category_hint: 财经
+- name: BBC中文网
+  url: https://www.bbc.com/zhongwen/simp/world
+  authority: 0.9
+  category_hint: 国际
+- name: 端传媒
+  url: https://theinitium.com/feed/
+  authority: 0.82
+  category_hint: 综合
+  qps: 1
+- name: 新京报
+  url: http://news.bjnews.com.cn/rss
+  authority: 0.82
+  category_hint: 社会
+- name: 南方周末
+  url: http://www.infzm.com/rss
+  authority: 0.8
+  category_hint: 综合
+- name: 澎湃新闻-时政
+  url: https://www.thepaper.cn/rss/newsDetail_13563
+  authority: 0.85
+  category_hint: 时政
+- name: 果壳
+  url: https://www.guokr.com/rss/
+  authority: 0.78
+  category_hint: 健康
+- name: 看理想
+  url: https://www.vistopia.com.tw/rss
+  authority: 0.72
+  category_hint: 历史
 global:
-  timeout_sec: 30            # 单源请求超时
-  retry: 2                   # 单源失败重试次数
-  user_agent: "MorningBriefBot/1.0 (+https://github.com/xxx/MorningBrief)"
-  respect_robots_txt: true   # 遵守 robots.txt
+  timeout_sec: 30
+  retry: 2
+  user_agent: MorningBriefBot/1.0
+  respect_robots_txt: true

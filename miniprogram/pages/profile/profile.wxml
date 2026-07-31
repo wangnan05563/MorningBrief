@@ -5,7 +5,12 @@
     <view class="card login-card">
       <image class="login-icon" src="/images/icons/headphones.png" mode="aspectFit" />
       <view class="login-tip">登录后查看你的收听记录</view>
-      <view class="btn-primary login-btn" bindtap="onLogin">点击登录</view>
+      <view class="btn-primary login-btn" bindtap="onLogin">
+        <view class="btn-content">
+          <image class="btn-icon" src="/images/icons/btn-login.png" mode="aspectFit" />
+          <text>点击登录</text>
+        </view>
+      </view>
     </view>
   </view>
 
@@ -58,6 +63,10 @@
         <text class="list-text">我的频道</text>
         <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
       </view>
+      <view class="list-item" bindtap="onTapSetting" data-key="preferred">
+        <text class="list-text">偏爱频道设置</text>
+        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
+      </view>
       <view class="list-item" bindtap="onTapSetting" data-key="feedback">
         <text class="list-text">意见反馈</text>
         <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
@@ -97,12 +106,12 @@
     </view>
   </block>
 
-  <!-- 完善资料弹窗：用 button chooseAvatar + input nickname 主动获取资料（适配 2.27+ 基础库） -->
+  <!-- 使用微信资料弹窗：用 button chooseAvatar + input nickname 获取微信头像和昵称（微信官方推荐方式） -->
   <view class="edit-modal-mask" wx:if="{{showEditProfile}}" bindtap="onCloseEditProfile">
-    <view class="edit-modal" catchtap="">
-      <view class="edit-modal-title">完善个人资料</view>
+    <view class="edit-modal" catchtap="stopPropagation">
+      <view class="edit-modal-title">使用微信资料</view>
 
-      <!-- 头像选择：button open-type="chooseAvatar"（微信原生支持） -->
+      <!-- 头像选择：button open-type="chooseAvatar"（点击后默认显示微信头像，一键选用） -->
       <button
         class="edit-avatar-btn"
         open-type="chooseAvatar"
@@ -114,26 +123,36 @@
           src="{{editAvatar || userInfo.avatar || userInfo.avatar_url || '/images/icons/headphones.png'}}"
           mode="aspectFill"
         />
-        <text class="edit-avatar-tip">点击选择头像</text>
+        <text class="edit-avatar-tip">使用微信头像</text>
       </button>
 
-      <!-- 昵称输入：input type="nickname"（微信原生支持，调起微信昵称） -->
+      <!-- 昵称输入：input type="nickname"（唤起键盘上方的"使用微信昵称"按钮，一键填入） -->
       <view class="edit-nickname-row">
         <text class="edit-nickname-label">昵称</text>
         <input
           class="edit-nickname-input"
           type="nickname"
-          placeholder="请输入昵称"
+          placeholder="点击使用微信昵称"
           value="{{editNickname}}"
           bindinput="onInputNickname"
-          bindblur="onInputNickname"
+          bindblur="onBlurNickname"
         />
       </view>
 
       <!-- 操作按钮 -->
       <view class="edit-actions">
-        <view class="edit-btn edit-btn-cancel" bindtap="onCloseEditProfile">取消</view>
-        <view class="edit-btn edit-btn-confirm" bindtap="onConfirmEditProfile">保存</view>
+        <view class="edit-btn edit-btn-cancel" bindtap="onCloseEditProfile">
+          <view class="btn-content">
+            <image class="btn-icon" src="/images/icons/btn-x-mint.png" mode="aspectFit" />
+            <text>取消</text>
+          </view>
+        </view>
+        <view class="edit-btn edit-btn-confirm" bindtap="onConfirmEditProfile">
+          <view class="btn-content">
+            <image class="btn-icon" src="/images/icons/btn-check.png" mode="aspectFit" />
+            <text>保存</text>
+          </view>
+        </view>
       </view>
     </view>
   </view>

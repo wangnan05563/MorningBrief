@@ -90,15 +90,22 @@
 
     <!-- 任务表格 -->
     <el-card shadow="never">
-      <el-table :data="tasks" v-loading="loading" stripe>
-        <el-table-column prop="channel_name" label="频道" min-width="120" />
-        <el-table-column prop="priority" label="优先级" width="90" />
-        <el-table-column label="状态" width="100">
+      <el-table
+        ref="tableRef"
+        :data="tasks"
+        v-loading="loading"
+        stripe
+        :default-sort="defaultSort"
+        @sort-change="handleSortChange"
+      >
+        <el-table-column prop="channel_name" label="频道" min-width="120" sortable="custom" />
+        <el-table-column prop="priority" label="优先级" width="90" sortable="custom" />
+        <el-table-column prop="status" label="状态" width="100" sortable="custom">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="开始时间" min-width="170">
+        <el-table-column prop="started_at" label="开始时间" min-width="170" sortable="custom">
           <template #default="{ row }">{{ formatTime(row.started_at) }}</template>
         </el-table-column>
         <el-table-column label="耗时" width="120">
@@ -257,6 +264,15 @@ const page = ref(1)
 const size = ref(20)
 const loading = ref(false)
 
+// 排序状态：默认视觉提示为 started_at 倒序，与后端默认排序（failed 优先+started_at 倒序）保持视觉一致
+// userSort 仅在用户主动点击表头时填充；为 null 时不传参，后端走默认排序
+const defaultSort = { prop: 'started_at', order: 'descending' }
+const userSort = ref(null)
+// el-table 实例引用：轮询刷新 data 后需调用 sort() 恢复视觉指示器，否则会被清除
+const tableRef = ref(null)
+// 防止 sort() 恢复视觉时触发 sort-change → loadTasks → sort() 无限循环
+let isRestoringSort = false
+
 // 详情抽屉
 const detailVisible = ref(false)
 const currentTask = ref(null)
@@ -346,6 +362,11 @@ async function loadTasks() {
     if (filter.status) params.status = filter.status
     if (filter.channel_id) params.channel_id = filter.channel_id
     if (filter.priority) params.priority = filter.priority
+    // 仅当用户主动选择排序时传参，否则后端走默认排序（failed 优先+started_at 倒序）
+    if (userSort.value) {
+      params.sort_by = userSort.value.prop
+      params.sort_order = userSort.value.order === 'ascending' ? 'asc' : 'desc'
+    }
     const data = await listQueueTasks(params)
     // 后端返回 items 字段，对齐 SRS 5.1 API 规范
     tasks.value = data.items || []
@@ -357,10 +378,30 @@ async function loadTasks() {
   } finally {
     loading.value = false
   }
+  // 轮询刷新 data 后 el-table 会清除排序视觉指示器，需手动恢复
+  // userSort 有值时恢复用户选择的排序，否则恢复默认排序视觉
+  // isRestoringSort 标志防止 sort() 触发 sort-change → loadTasks 无限循环
+  if (tableRef.value) {
+    isRestoringSort = true
+    const sortProp = userSort.value ? userSort.value.prop : defaultSort.prop
+    const sortOrder = userSort.value ? userSort.value.order : defaultSort.order
+    tableRef.value.sort(sortProp, sortOrder)
+    isRestoringSort = false
+  }
 }
 
 // 筛选变化时回到第一页，避免在旧页码上找不到数据
 function handleFilterChange() {
+  page.value = 1
+  loadTasks()
+}
+
+// 表头排序变化：el-table sort-change 事件
+// order 为 null 表示用户取消排序（第三次点击），回到后端默认排序
+// isRestoringSort 为 true 时是 loadTasks 内 sort() 恢复视觉触发，跳过避免循环
+function handleSortChange({ prop, order }) {
+  if (isRestoringSort) return
+  userSort.value = order ? { prop, order } : null
   page.value = 1
   loadTasks()
 }

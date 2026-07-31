@@ -15,8 +15,8 @@ import {
  * - 失败提示
  */
 test.describe('登录流程', () => {
-  // 并行执行时 vite 首次编译各路由组件较慢，5s 默认超时不足
-  test.use({ expect: { timeout: 15000 } })
+  // vite 首次按需编译路由组件可能耗时 15-25s，给到 30s 避免 flaky
+  test.use({ expect: { timeout: 30000 } })
 
   test.beforeEach(async ({ page }) => {
     // 覆盖 document.hidden/visibilityState，确保 axios 拦截器不会跳过 ElMessage
@@ -39,12 +39,13 @@ test.describe('登录流程', () => {
     await page.goto('/login')
 
     // 标题（显式超时避免 vite 首次编译延迟导致 flaky）
-    await expect(page.locator('.login-title')).toHaveText('MorningBrief 运营后台', { timeout: 15000 })
+    // Login.vue 标题为 "MorningBrief"，副标题为 "智能新闻播客运营平台"
+    await expect(page.locator('.login-title')).toHaveText('MorningBrief', { timeout: 30000 })
     // 用户名/密码输入框存在
-    await expect(page.getByPlaceholder('请输入用户名')).toBeVisible({ timeout: 15000 })
-    await expect(page.getByPlaceholder('请输入密码')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByPlaceholder('请输入用户名')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByPlaceholder('请输入密码')).toBeVisible({ timeout: 30000 })
     // 登录按钮存在
-    await expect(page.getByRole('button', { name: '登录' })).toBeVisible({ timeout: 15000 })
+    await expect(page.getByRole('button', { name: '登录' })).toBeVisible({ timeout: 30000 })
   })
 
   test('空表单提交显示校验错误', async ({ page }) => {
@@ -54,8 +55,8 @@ test.describe('登录流程', () => {
     await page.getByRole('button', { name: '登录' }).click()
 
     // Element Plus 表单校验提示在 DOM 中渲染
-    await expect(page.getByText('请输入用户名')).toBeVisible({ timeout: 15000 })
-    await expect(page.getByText('请输入密码')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('请输入用户名')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('请输入密码')).toBeVisible({ timeout: 30000 })
   })
 
   test('正确凭据登录跳转审核页', async ({ page }) => {
@@ -67,7 +68,7 @@ test.describe('登录流程', () => {
 
     // SPA 导航：等待审核页 tab 出现表示页面已渲染完成
     // 不使用 waitForURL，避免 vite 首次编译期间 socket 连接问题
-    await expect(page.getByRole('tab', { name: '待审核' })).toBeVisible({ timeout: 15000 })
+    await expect(page.getByRole('tab', { name: '待审核' })).toBeVisible({ timeout: 30000 })
     await expect(page).toHaveURL(/\/review$/)
     // localStorage 应有 token
     const token = await page.evaluate(() => window.localStorage.getItem('admin_token'))
@@ -87,7 +88,7 @@ test.describe('登录流程', () => {
     await page.getByRole('button', { name: '登录' }).click()
 
     // axios 拦截器对 code !== 0 调用 ElMessage.error 显示错误
-    await expect(page.locator('.el-message').getByText('用户名或密码错误')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('.el-message').getByText('用户名或密码错误')).toBeVisible({ timeout: 30000 })
     // 仍停留在登录页
     await expect(page).toHaveURL(/\/login/)
   })

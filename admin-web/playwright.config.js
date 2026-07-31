@@ -34,6 +34,7 @@ export default defineConfig({
     url: 'http://localhost:5173',
     // 本地复用已运行的 dev server，避免每次跑测试都重启
     reuseExistingServer: !process.env.CI,
-    timeout: 60000,
+    // vite 首次冷启动 + 依赖预构建可能耗时 2-3 分钟（Windows + HDD 环境）
+    timeout: 180000,
   },
 })

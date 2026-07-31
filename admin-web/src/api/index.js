@@ -10,7 +10,10 @@ import axios from 'axios'
 import { ElMessage } from '../utils/message'
 
 const api = axios.create({
-  baseURL: '/admin/api/v1',
+  // baseURL 带 /news 前缀：通过 Tailscale Funnel 访问时，
+  // Funnel 自动去除 /news/ 前缀转发给后端，后端收到 /admin/api/v1/...
+  // 本地开发时 Vite proxy 的 rewrite 去除 /news 前缀
+  baseURL: '/news/admin/api/v1',
   timeout: 15000,
 })
 
@@ -54,8 +57,9 @@ api.interceptors.response.use(
       localStorage.removeItem('admin_role')
       // 页面隐藏时跳过跳转：location.href 会激活最小化窗口，
       // 用户恢复后路由守卫基于已清空的 token 自动跳转到登录页，效果一致
-      if (!document.hidden && globalThis.location.pathname !== '/login') {
-        globalThis.location.href = '/login'
+      // 路径必须带 /news 前缀：浏览器原生跳转不走 vue-router，不会自动补 base
+      if (!document.hidden && globalThis.location.pathname !== '/news/login') {
+        globalThis.location.href = '/news/login'
       }
     } else if (!error.config?.silent) {
       // silent 请求（如后台轮询）不弹 ElMessage，避免最小化时积压错误提示

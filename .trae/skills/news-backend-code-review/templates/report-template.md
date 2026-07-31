@@ -83,6 +83,65 @@
 
 **合并结论**：[允许合并 / 阻止合并（存在 CRITICAL 违规）]
 
+## V2.4 频道级配置与 LLM 超时审查结果（维度 113-115）
+
+> 对应 `config.yaml#llm_timeout_config_driven_check`、`channel_config_override_check`、`channel_cron_event_driven_check`，详见 SKILL.md "维度 113-115：2026-07-22 频道级配置与 LLM 超时复盘新增审查维度"
+
+| 维度 | 审查项 | 状态 | 违规位置 | 配置节点 |
+|------|--------|------|----------|----------|
+| 113 | LLM 调用 timeout 从 settings 读取 | ✅ 通过 / ❌ 违规 | - | `llm_timeout_config_driven_check.require_settings_read` |
+| 113 | 长耗时 LLM 调用使用 max(LLM_TIMEOUT_SEC*N, MIN) 公式 | ✅ 通过 / ❌ 违规 | - | `llm_timeout_config_driven_check.require_formula_for_long_running` |
+| 113 | LLM_TIMEOUT_SEC 在 CONFIG_KEY_MAP 可配置 | ✅ 通过 / ❌ 违规 | - | `llm_timeout_config_driven_check.config_key_map_entry` |
+| 113 | LLM 调用失败记录 token 用量到预算系统 | ✅ 通过 / ❌ 违规 | - | `llm_timeout_config_driven_check.require_budget_record` |
+| 114 | 频道级配置字段优先于 settings 全局 | ✅ 通过 / ❌ 违规 | - | `channel_config_override_check.channel_fields` |
+| 114 | 频道字段为空时 fallback 到全局配置 | ✅ 通过 / ❌ 违规 | - | `channel_config_override_check.require_fallback_to_global` |
+| 114 | 频道字段变更发布 EventBus 事件 | ✅ 通过 / ❌ 违规 | - | `channel_config_override_check.require_event_publish_on_change` |
+| 114 | 数据库迁移幂等（PRAGMA 检测后 ALTER TABLE） | ✅ 通过 / ❌ 违规 | - | `channel_config_override_check.require_idempotent_migration` |
+| 115 | schedule_time 变更发布 channel.schedule_changed 事件 | ✅ 通过 / ❌ 违规 | - | `channel_cron_event_driven_check.event_types` |
+| 115 | is_active 变更发布 channel.active_changed 事件 | ✅ 通过 / ❌ 违规 | - | `channel_cron_event_driven_check.event_types` |
+| 115 | 事件发布用 publish_nowait 避免阻塞 | ✅ 通过 / ❌ 违规 | - | `channel_cron_event_driven_check.publish_method` |
+| 115 | 订阅者处理幂等（重复事件无副作用） | ✅ 通过 / ❌ 违规 | - | `channel_cron_event_driven_check.require_idempotent_subscriber` |
+| 115 | 频道禁用时取消 queued 工作流 | ✅ 通过 / ❌ 违规 | - | `channel_cron_event_driven_check.require_cancel_queued_on_disable` |
+| 115 | schedule_time 清空时移除 cron 任务 | ✅ 通过 / ❌ 违规 | - | `channel_cron_event_driven_check.require_unregister_on_empty_schedule` |
+| 115 | cron 任务配置 misfire_grace_time/coalesce/max_instances=1 | ✅ 通过 / ❌ 违规 | - | `channel_cron_event_driven_check.cron_job_config` |
+
+## V2.5 后端高频故障复盘审查结果（维度 124-129）
+
+> 对应 `config.yaml#binary_response_no_wrapper_check`、`workflow_retry_in_place_check`、`config_key_settings_mapping_check`、`test_time_baseline_alignment_check`、`foreign_key_defensive_handling_check`、`credential_masking_regex_check`，详见 SKILL.md "v2.5：2026-07-22 后端高频故障复盘新增审查维度（维度 124-129）"
+
+| 维度 | 审查项 | 状态 | 违规位置 | 配置节点 |
+|------|--------|------|----------|----------|
+| 124 | FileResponse/StreamingResponse 显式设置 media_type | ✅ 通过 / ❌ 违规 | - | `binary_response_no_wrapper_check.require_media_type` |
+| 124 | 二进制响应禁止包装在 {code,message,data} 中 | ✅ 通过 / ❌ 违规 | - | `binary_response_no_wrapper_check.forbid_success_wrapper` |
+| 124 | 文件不存在返回 HTTP 404 而非 200+error | ✅ 通过 / ❌ 违规 | - | `binary_response_no_wrapper_check.require_404_on_not_found` |
+| 124 | 扫描范围覆盖 routers/ 与 services/ | ✅ 通过 / ❌ 违规 | - | `binary_response_no_wrapper_check.scan_dirs` |
+| 125 | retry_workflow 接受 from_step 参数 | ✅ 通过 / ❌ 违规 | - | `workflow_retry_in_place_check.require_from_step_param` |
+| 125 | 删除 from_step 及之后步骤记录（含失败记录） | ✅ 通过 / ❌ 违规 | - | `workflow_retry_in_place_check.require_delete_failed_steps` |
+| 125 | 保留 from_step 之前的成功步骤记录 | ✅ 通过 / ❌ 违规 | - | `workflow_retry_in_place_check.require_preserve_success_steps` |
+| 125 | 校验前驱步骤 success 且有 result | ✅ 通过 / ❌ 违规 | - | `workflow_retry_in_place_check.require_predecessor_validation` |
+| 125 | 重置状态为 queued，清空 error 与 finished_at | ✅ 通过 / ❌ 违规 | - | `workflow_retry_in_place_check.require_status_reset` |
+| 125 | 入队当前 workflow_id，禁止 trigger_workflow | ✅ 通过 / ❌ 违规 | - | `workflow_retry_in_place_check.forbid_trigger_new_workflow` |
+| 126 | CONFIG_KEY_MAP 的 key 与路由层 BaseModel 字段名一致 | ✅ 通过 / ❌ 违规 | - | `config_key_settings_mapping_check.require_key_align_with_body` |
+| 126 | CONFIG_KEY_MAP 的 value 与 Settings 属性名一致 | ✅ 通过 / ❌ 违规 | - | `config_key_settings_mapping_check.require_value_align_with_settings` |
+| 126 | _normalize_xxx 返回 result key 与 CONFIG_KEY_MAP 的 key 一致 | ✅ 通过 / ❌ 违规 | - | `config_key_settings_mapping_check.require_normalize_xxx_consistency` |
+| 126 | get_config_for_frontend 返回字段名与 CONFIG_KEY_MAP 的 key 一致 | ✅ 通过 / ❌ 违规 | - | `config_key_settings_mapping_check.require_get_config_for_frontend_consistency` |
+| 126 | SENSITIVE_KEYS/INT_KEYS 与 CONFIG_KEY_MAP 的 key 命名一致 | ✅ 通过 / ❌ 违规 | - | `config_key_settings_mapping_check.require_type_keys_naming_consistency` |
+| 126 | 禁止混用前缀风格（如 edge_tts_xxx 与 edge_xxx 混用） | ✅ 通过 / ❌ 违规 | - | `config_key_settings_mapping_check.forbid_mixed_prefix` |
+| 127 | 测试用 datetime.now() 而非 datetime.utcnow() | ✅ 通过 / ❌ 违规 | - | `test_time_baseline_alignment_check.require_local_time_in_test` |
+| 127 | 禁止测试用 UTC aware 时间与本地时间混用 | ✅ 通过 / ❌ 违规 | - | `test_time_baseline_alignment_check.forbid_utc_aware_in_test` |
+| 127 | 时间比较用近似断言（abs diff < epsilon） | ✅ 通过 / ❌ 违规 | - | `test_time_baseline_alignment_check.require_approximate_assertion` |
+| 127 | epsilon 按数据库精度配置（SQLite 2s / MySQL 1s） | ✅ 通过 / ❌ 违规 | - | `test_time_baseline_alignment_check.db_precision_mapping` |
+| 128 | 删除父记录前先 UPDATE 子表外键为 NULL 或级联删除 | ✅ 通过 / ❌ 违规 | - | `foreign_key_defensive_handling_check.require_manual_fk_handling` |
+| 128 | 不依赖 PRAGMA foreign_keys 开关 | ✅ 通过 / ❌ 违规 | - | `foreign_key_defensive_handling_check.forbid_pragma_foreign_keys_dependency` |
+| 128 | 删除操作在同一事务内完成 | ✅ 通过 / ❌ 违规 | - | `foreign_key_defensive_handling_check.require_same_transaction` |
+| 128 | 推荐预删除 count 检查 | ✅ 通过 / ❌ 违规 | - | `foreign_key_defensive_handling_check.recommend_pre_delete_count_check` |
+| 128 | 推荐 ON DELETE SET NULL/CASCADE 作为兜底 | ✅ 通过 / ❌ 违规 | - | `foreign_key_defensive_handling_check.recommend_ondelete_as_fallback` |
+| 129 | 脱敏正则使用捕获组保留 key 名 | ✅ 通过 / ❌ 违规 | - | `credential_masking_regex_check.require_capture_group` |
+| 129 | 替换为 m.group(1)+"***" 而非整体替换 | ✅ 通过 / ❌ 违规 | - | `credential_masking_regex_check.require_key_name_preservation` |
+| 129 | 大小写不敏感（(?i) 前缀） | ✅ 通过 / ❌ 违规 | - | `credential_masking_regex_check.require_case_insensitive` |
+| 129 | 敏感关键词列表可配置（token/secret/key/password/appkey 等） | ✅ 通过 / ❌ 违规 | - | `credential_masking_regex_check.sensitive_keywords` |
+| 129 | 统一函数名 mask_sensitive | ✅ 通过 / ❌ 违规 | - | `credential_masking_regex_check.unified_function_name` |
+
 ## 详细问题列表
 
 ### 🔴 阻塞问题（必须修复）
@@ -261,3 +320,5 @@ pwsh .trae/skills/news-backend-code-review/scripts/auto-scan.ps1
 | 警告 (warning) | fix_next_iteration | ✗ |
 | 次要 (minor) | log_only | ✗ |
 | 信息 (info) | log_only | ✗ |
+
+> 技能专属审查章节已迁移至统一模板：[_shared/templates/report-template.md](../_shared/templates/report-template.md)

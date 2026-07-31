@@ -58,7 +58,14 @@ async def test_login_by_code_new_user(db_session):
     """新用户首次登录：自动创建 User 记录，返回 token 与用户信息。"""
     svc = UserService(db_session)
 
-    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_mock_wx_response())):
+    # 用 MagicMock 而非 AsyncMock 作为 client：AsyncMock 会让所有属性变异步，
+    # 导致 resp.json() 返回协程而非 dict。MagicMock 的 json() 保持同步。
+    # 仅 __aenter__/__aexit__/get 需要 AsyncMock（异步方法）
+    mock_client = MagicMock()
+    mock_client.get = AsyncMock(return_value=_mock_wx_response())
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    with patch("httpx.AsyncClient", return_value=mock_client):
         result = await svc.login_by_code("valid-code")
 
     # 返回结构完整
@@ -85,10 +92,12 @@ async def test_login_by_code_existing_user(db_session):
     old_id = existing.id
 
     svc = UserService(db_session)
-    with patch(
-        "httpx.AsyncClient.get",
-        new=AsyncMock(return_value=_mock_wx_response(openid="wx-old-001")),
-    ):
+    # 同 test_login_by_code_new_user：MagicMock client + AsyncMock get/__aenter__
+    mock_client = MagicMock()
+    mock_client.get = AsyncMock(return_value=_mock_wx_response(openid="wx-old-001"))
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    with patch("httpx.AsyncClient", return_value=mock_client):
         result = await svc.login_by_code("any-code")
 
     # 复用同一用户，未新建
@@ -117,7 +126,12 @@ async def test_login_by_code_wx_error_raises(db_session):
     resp.json.return_value = {"errcode": 40029, "errmsg": "invalid code"}
 
     svc = UserService(db_session)
-    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=resp)):
+    # 同 test_login_by_code_new_user：MagicMock client + AsyncMock get/__aenter__
+    mock_client = MagicMock()
+    mock_client.get = AsyncMock(return_value=resp)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    with patch("httpx.AsyncClient", return_value=mock_client):
         with pytest.raises(BizError) as exc_info:
             await svc.login_by_code("bad-code")
     assert "微信登录失败" in exc_info.value.message

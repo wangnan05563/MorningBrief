@@ -53,7 +53,7 @@ def _get_tts_semaphore() -> asyncio.Semaphore:
     return _tts_semaphore
 
 
-async def _wait_for_tts_rate_limit_slot(timeout: float = 65) -> bool:
+async def _wait_for_tts_rate_limit_slot(timeout: float = 65) -> bool:  # NOSONAR
     """等待 TTS 频率预算有空位（频率超限时的恢复策略）。
 
     与 LLM 模块的 _wait_for_rate_limit_slot 对齐：

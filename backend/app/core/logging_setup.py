@@ -1,4 +1,4 @@
-﻿"""日志系统配置（loguru + InterceptHandler）
+"""日志系统配置（loguru + InterceptHandler）
 
 对标 17_xianyu 项目的日志设计：
 - 控制台 sink：彩色输出，含日期时间 + request_id + 模块路径
@@ -126,6 +126,17 @@ def setup_logging(log_level: str = "INFO", log_dir: str | Path | None = None) ->
         uv_logger = logging.getLogger(name)
         uv_logger.handlers = [InterceptHandler()]
         uv_logger.propagate = False
+
+    # 拦截 root logger：将所有标准库 logging（crawler/article_parser/dedup 等业务模块
+    # 使用 logging.getLogger(__name__)）重定向到 loguru。
+    # 不配置时，业务模块的日志走标准 logging 继承链到 root logger，
+    # root logger 无 handler 导致日志丢失（wf-20260728-0011 排查时 crawler 业务日志
+    # 在 9:11-9:14 时间段完全缺失，无法定位 10 条 insert_failures 的具体异常）。
+    # InterceptHandler.emit 调用 record.getMessage() 会正确执行 %s/%d 格式化，
+    # 因此业务模块可继续使用标准 logging 的 %-style 占位符。
+    root_logger = logging.getLogger()
+    root_logger.handlers = [InterceptHandler()]
+    root_logger.setLevel(0)  # 不过滤，由 loguru sink 的 level 决定最终输出
 
 
 def get_logger():

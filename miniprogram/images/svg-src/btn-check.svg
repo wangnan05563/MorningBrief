@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 保存按钮图标：白色对勾，用于彩色背景的主按钮
+     图标来源：Tabler Icons (MIT License) - check
+     使用场景：profile 页"保存"按钮（edit-btn-confirm） -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <polyline points="20 6 9 17 4 12" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

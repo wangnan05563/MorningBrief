@@ -1,0 +1,174 @@
+﻿{
+    "scan_date":  "2026-07-31 14:15:25",
+    "skills_root":  "D:\\code\\otherProjects\\20_News\\.trae\\skills",
+    "threshold":  {
+                      "skill_md_lines":  500
+                  },
+    "skills":  [
+                   {
+                       "name":  "news-auto-testing",
+                       "skill_md":  {
+                                        "lines":  249,
+                                        "chars":  11211,
+                                        "est_tokens":  5096,
+                                        "over_threshold":  false
+                                    },
+                       "config":  {
+                                      "path":  "config.yaml",
+                                      "lines":  3596,
+                                      "est_tokens":  46838
+                                  },
+                       "references":  {
+                                          "file_count":  1,
+                                          "total_lines":  2677,
+                                          "est_tokens":  40828
+                                      },
+                       "assets":  {
+                                      "total_lines":  0,
+                                      "est_tokens":  0
+                                  },
+                       "retrospective_sections":  {
+
+                                                  },
+                       "orphan_references":  {
+
+                                             },
+                       "budget":  {
+                                      "skill_md_lines":  500,
+                                      "config_lines":  1200
+                                  },
+                       "total_est_tokens":  92762
+                   },
+                   {
+                       "name":  "news-backend-code-review",
+                       "skill_md":  {
+                                        "lines":  159,
+                                        "chars":  8450,
+                                        "est_tokens":  3841,
+                                        "over_threshold":  false
+                                    },
+                       "config":  {
+                                      "path":  "config.yaml",
+                                      "lines":  2371,
+                                      "est_tokens":  33364
+                                  },
+                       "references":  {
+                                          "file_count":  1,
+                                          "total_lines":  2868,
+                                          "est_tokens":  59423
+                                      },
+                       "assets":  {
+                                      "total_lines":  0,
+                                      "est_tokens":  0
+                                  },
+                       "retrospective_sections":  {
+
+                                                  },
+                       "orphan_references":  {
+
+                                             },
+                       "budget":  {
+                                      "skill_md_lines":  500,
+                                      "config_lines":  900
+                                  },
+                       "total_est_tokens":  96628
+                   },
+                   {
+                       "name":  "news-code-dev",
+                       "skill_md":  {
+                                        "lines":  253,
+                                        "chars":  15038,
+                                        "est_tokens":  6836,
+                                        "over_threshold":  false
+                                    },
+                       "config":  {
+                                      "path":  "config/project-config.json",
+                                      "lines":  590,
+                                      "est_tokens":  10044
+                                  },
+                       "references":  {
+                                          "file_count":  6,
+                                          "total_lines":  7532,
+                                          "est_tokens":  131790
+                                      },
+                       "assets":  {
+                                      "total_lines":  3565,
+                                      "est_tokens":  45735
+                                  },
+                       "retrospective_sections":  {
+
+                                                  },
+                       "orphan_references":  {
+
+                                             },
+                       "budget":  {
+                                      "skill_md_lines":  500,
+                                      "config_lines":  590
+                                  },
+                       "total_est_tokens":  194405
+                   },
+                   {
+                       "name":  "news-frontend-code-review",
+                       "skill_md":  {
+                                        "lines":  118,
+                                        "chars":  5781,
+                                        "est_tokens":  2628,
+                                        "over_threshold":  false
+                                    },
+                       "config":  {
+                                      "path":  "config.yaml",
+                                      "lines":  1818,
+                                      "est_tokens":  26445
+                                  },
+                       "references":  {
+                                          "file_count":  1,
+                                          "total_lines":  752,
+                                          "est_tokens":  13608
+                                      },
+                       "assets":  {
+                                      "total_lines":  0,
+                                      "est_tokens":  0
+                                  },
+                       "retrospective_sections":  {
+
+                                                  },
+                       "orphan_references":  {
+
+                                             },
+                       "budget":  {
+                                      "skill_md_lines":  500,
+                                      "config_lines":  800
+                                  },
+                       "total_est_tokens":  42681
+                   }
+               ],
+    "violations":  [
+                       {
+                           "Detail":  "config 3596 行 \u003e 预算 1200 行",
+                           "Type":  "config_over_budget",
+                           "Skill":  "news-auto-testing",
+                           "Severity":  "WARN"
+                       },
+                       {
+                           "Detail":  "config 2371 行 \u003e 预算 900 行",
+                           "Type":  "config_over_budget",
+                           "Skill":  "news-backend-code-review",
+                           "Severity":  "WARN"
+                       },
+                       {
+                           "Detail":  "config 1818 行 \u003e 预算 800 行",
+                           "Type":  "config_over_budget",
+                           "Skill":  "news-frontend-code-review",
+                           "Severity":  "WARN"
+                       }
+                   ],
+    "summary":  {
+                    "skill_count":  4,
+                    "total_skill_md_lines":  779,
+                    "total_skill_md_tokens":  18401,
+                    "total_est_tokens":  426476,
+                    "violation_count":  3,
+                    "error_count":  0,
+                    "warn_count":  3
+                }
+}

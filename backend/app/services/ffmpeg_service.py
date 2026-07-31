@@ -23,14 +23,12 @@ logger = logging.getLogger(__name__)
 
 # BtbN/FFmpeg-Builds 共享构建（gpl-shared）：含 ffmpeg.exe/ffprobe.exe + DLL，免编译
 # win64 共享构建体积约 30MB，适合项目 bundled 部署
-FFMPEG_DOWNLOAD_URL = (
-    "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/"
-    "ffmpeg-master-latest-win64-gpl-shared.zip"
-)
-# 下载超时（秒）：GitHub release 经 CDN 分发，通常较快但需容错大文件场景
-DOWNLOAD_TIMEOUT_SEC = 300
-# subprocess 检测超时（秒）：未安装时 Windows 报错很快，已安装时 -version 秒回
-CHECK_TIMEOUT_SEC = 10
+# 下载 URL/超时通过 settings 管理，便于切换镜像源或调整超时
+from app.config import get_settings as _get_settings
+_settings = _get_settings()
+FFMPEG_DOWNLOAD_URL = _settings.FFMPEG_DOWNLOAD_URL
+DOWNLOAD_TIMEOUT_SEC = _settings.FFMPEG_DOWNLOAD_TIMEOUT_SEC
+CHECK_TIMEOUT_SEC = _settings.FFMPEG_CHECK_TIMEOUT_SEC
 
 
 def _get_bundled_bin_dir() -> Path:

@@ -53,13 +53,10 @@ class TencentTTSProvider(TTSProvider):
     - 101004: 智云（通用男声）
     """
 
-    # 腾讯云 TTS 基础语音合成 endpoint
-    ENDPOINT = "https://tts.tencentcloudapi.com/"
     # API 固定参数
     ACTION = "TextToVoice"
     VERSION = "2019-08-23"
     SERVICE = "tts"
-    HOST = "tts.tencentcloudapi.com"
     # 单次合成文本上限（腾讯云限制 150 汉字，保守取 140 留余量）
     MAX_TEXT_LENGTH = 140
     # 腾讯云支持的采样率白名单
@@ -102,6 +99,11 @@ class TencentTTSProvider(TTSProvider):
         # 音量/语速：显式参数优先，未传则回退到 settings（试音时传入临时值）
         self._volume = volume if volume is not None else settings.TENCENT_TTS_VOLUME
         self._speed = speed if speed is not None else settings.TENCENT_TTS_SPEED
+        # endpoint 与 host 从 settings 读取，避免硬编码
+        # host 从 endpoint URL 派生（用 urllib 避免手写字符串拆分）
+        from urllib.parse import urlparse
+        self._endpoint = settings.TENCENT_TTS_ENDPOINT
+        self._host = urlparse(self._endpoint).hostname or "tts.tencentcloudapi.com"
 
     async def synthesize(
         self,
@@ -205,7 +207,7 @@ class TencentTTSProvider(TTSProvider):
         headers = {
             "Authorization": auth_header,
             "Content-Type": "application/json; charset=utf-8",
-            "Host": self.HOST,
+            "Host": self._host,
             "X-TC-Action": self.ACTION,
             "X-TC-Version": self.VERSION,
             "X-TC-Timestamp": str(timestamp),
@@ -214,7 +216,7 @@ class TencentTTSProvider(TTSProvider):
             headers["X-TC-Region"] = self._region
 
         async with httpx.AsyncClient(timeout=settings.ALIYUN_TTS_TIMEOUT_SEC) as client:
-            resp = await client.post(self.ENDPOINT, content=payload_bytes, headers=headers)
+            resp = await client.post(self._endpoint, content=payload_bytes, headers=headers)
 
         # 状态码异常映射
         if resp.status_code == 429:
@@ -277,7 +279,7 @@ class TencentTTSProvider(TTSProvider):
         content_type = "application/json; charset=utf-8"
         canonical_headers = (
             f"content-type:{content_type}\n"
-            f"host:{self.HOST}\n"
+            f"host:{self._host}\n"
             f"x-tc-action:{self.ACTION.lower()}\n"
         )
         signed_headers = "content-type;host;x-tc-action"

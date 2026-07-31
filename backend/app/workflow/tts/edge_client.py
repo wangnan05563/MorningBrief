@@ -152,6 +152,15 @@ class EdgeTTSProvider(TTSProvider):
             msg = str(e).lower()
             if "429" in msg or "rate" in msg:
                 raise TTSRateLimitError(f"Edge-TTS 限流: {e}") from e
+            if "403" in msg:
+                # 403 通常因 SSL 证书缺失或地区限制导致
+                # 打包后 certifi CA 证书未收集是最常见原因
+                raise TTSServiceError(
+                    "Edge-TTS 连接被拒绝(403)，可能原因："
+                    "1) SSL 证书缺失（打包后未包含 certifi CA 证书）；"
+                    "2) 网络限制（需能访问 WebSocket 服务）；"
+                    f"3) 音色配置无效。详情: {e}"
+                ) from e
             if "timeout" in msg:
                 raise TTSTimeoutError(f"Edge-TTS 超时: {e}") from e
             if "connection" in msg or "websocket" in msg:
@@ -175,6 +184,16 @@ class EdgeTTSProvider(TTSProvider):
         Edge-TTS 无鉴权概念，测试即实际合成。
         """
         try:
+            # 先检查 SSL 证书是否可用（打包后常见问题）
+            import certifi
+            ca_path = certifi.where()
+            if not os.path.isfile(ca_path):
+                logger.warning(
+                    "Edge-TTS SSL 证书缺失: %s 不存在，"
+                    "打包后请确认 certifi 数据文件已收集",
+                    ca_path,
+                )
+
             await self.synthesize(
                 "测试", voice=self._voice, format="mp3", sample_rate=16000
             )

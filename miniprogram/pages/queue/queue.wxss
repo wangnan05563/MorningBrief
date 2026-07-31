@@ -1,14 +1,145 @@
-/* pages/queue/queue.wxss */
+/**
+ * 播放队列页样式
+ * 与详情页队列弹窗（detail.wxss 中的 .queue-modal-* / .qm-item-*）保持视觉一致：
+ * 用户在详情页弹窗和独立队列页看到的列表项外观完全相同，
+ * 避免用户在两个入口间切换时产生"样式割裂"感。
+ *
+ * 复用方式：直接使用详情页同款类名，仅去掉弹窗遮罩/容器定位相关样式
+ * （mask/container 是弹窗专用，独立页面不需要）
+ */
 
-/* 队列空状态描述 */
+.page-queue {
+  min-height: 100vh;
+  background: #F7FAF9;
+}
+
+/* === 头部（复用详情页弹窗 header 样式） === */
+.queue-modal-header {
+  display: flex;
+  align-items: center;
+  padding: 32rpx 32rpx 24rpx;
+  border-bottom: 1rpx solid #F0F4F2;
+  background: #FFFFFF;
+}
+
+.queue-modal-title {
+  flex: 1;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #2D3748;
+}
+
+.queue-modal-count {
+  font-size: 24rpx;
+  color: #A0AEC0;
+  margin-right: 20rpx;
+}
+
+.queue-modal-close.clear-btn {
+  font-size: 26rpx;
+  color: #FF6B8A;
+  font-weight: 500;
+  padding: 8rpx 20rpx;
+  border-radius: 20rpx;
+  background: #FFF0F4;
+}
+
+.queue-modal-close.clear-btn:active {
+  opacity: 0.7;
+}
+
+/* === 空状态 === */
+.queue-modal-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 0 80rpx;
+  gap: 16rpx;
+}
+
+.queue-modal-empty .empty-icon-img {
+  width: 96rpx;
+  height: 96rpx;
+  opacity: 0.4;
+}
+
+.queue-modal-empty text {
+  font-size: 28rpx;
+  color: #CBD5E0;
+}
+
 .empty-desc {
   font-size: 24rpx;
   color: #CBD5E0;
   margin-top: 12rpx;
 }
 
-/* 当前播放项的小播放图标 */
-.playing-icon {
+/* === 队列列表 === */
+.queue-page-list {
+  height: calc(100vh - 100rpx);
+  padding: 0 24rpx;
+}
+
+.queue-modal-item {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 16rpx;
+  margin-top: 16rpx;
+  border-radius: 16rpx;
+  background: #FFFFFF;
+  transition: background 0.15s ease;
+}
+
+.queue-modal-item.current {
+  background: linear-gradient(135deg, #F0F4F2, #FFF5F7);
+}
+
+.queue-modal-item:active {
+  opacity: 0.7;
+}
+
+.qm-item-index {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  background: #F0F4F2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 20rpx;
+}
+
+.qm-playing-icon {
   width: 24rpx;
   height: 24rpx;
+}
+
+.qm-item-index text {
+  font-size: 24rpx;
+  color: #A0AEC0;
+  font-weight: 500;
+}
+
+.qm-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.qm-item-title {
+  font-size: 28rpx;
+  color: #2D3748;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qm-item-date {
+  font-size: 22rpx;
+  color: #CBD5E0;
 }

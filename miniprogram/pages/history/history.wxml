@@ -3,7 +3,7 @@
   <!-- 顶部工具栏：搜索 + 频道切换 -->
   <view class="top-bar">
     <view class="top-action" bindtap="onSearch">
-      <image class="action-icon" src="/images/icons/search.png" mode="aspectFit" />
+      <image class="action-icon" lazy-load src="/images/icons/search.png" mode="aspectFit" />
     </view>
     <scroll-view scroll-x class="channel-bar" wx:if="{{channels.length > 0}}">
       <view
@@ -19,12 +19,12 @@
   <!-- 任务6+7：继续播放 + 排序按钮 + 列表按钮（与今日页同款风格：左继续播放，右工具） -->
   <view class="history-action-bar">
     <view class="continue-card-mini" wx:if="{{lastPlayedEpisode}}" bindtap="onTapContinue">
-      <image class="continue-icon" src="/images/icons/play-mini.png" mode="aspectFit" />
+      <image class="continue-icon" lazy-load src="{{(isPlaying && currentEpisodeId === lastPlayedEpisode.id) ? '/images/icons/pause.png' : '/images/icons/play-mini.png'}}" mode="aspectFit" />
       <view class="continue-info">
         <text class="continue-label">继续播放</text>
         <text class="continue-title">{{lastPlayedEpisode.title || '上次的节目'}}</text>
       </view>
-      <image class="continue-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
+      <image class="continue-arrow" lazy-load src="/images/icons/chevron-right.png" mode="aspectFit" />
     </view>
     <view class="history-tools">
       <view class="tool-chip" bindtap="onToggleSort">
@@ -38,18 +38,45 @@
     </view>
   </view>
 
-  <!-- 空状态 -->
-  <view class="empty-state" wx:if="{{!loading && list.length === 0}}">
-    <image class="empty-icon-img" src="/images/icons/newspaper.png" mode="aspectFit" />
-    <text>暂无历史节目</text>
+  <!-- "我的偏爱"未设置时的引导设置提示 -->
+  <view class="card preferred-empty-card" wx:if="{{isPreferredMode && preferredEmpty}}">
+    <image class="preferred-empty-icon" lazy-load src="/images/icons/radio.png" mode="aspectFit" />
+    <view class="preferred-empty-title">还没有偏爱频道</view>
+    <view class="preferred-empty-desc">勾选喜爱的频道，这里会只展示你关心的内容</view>
+    <view class="btn-primary preferred-empty-btn" bindtap="onTapPreferredSettings">
+      <view class="btn-content">
+        <image class="btn-icon" src="/images/icons/btn-settings.png" mode="aspectFit" />
+        <text>去设置偏爱频道</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 空状态：已设置偏爱频道但过滤后无节目，或非偏爱模式下无历史 -->
+  <view class="empty-state" wx:elif="{{!loading && list.length === 0}}">
+    <image class="empty-icon-img" lazy-load src="/images/icons/newspaper.png" mode="aspectFit" />
+    <text>{{isPreferredMode ? '偏爱频道暂无历史节目' : '暂无历史节目'}}</text>
+  </view>
+
+  <!-- 骨架屏：首次加载时显示，与节目行布局对齐 -->
+  <view class="skeleton-wrap" wx:elif="{{loading && list.length === 0}}">
+    <view class="skeleton-card" wx:for="{{[1,2,3,4]}}" wx:key="*this">
+      <view class="skeleton-cover shimmer"></view>
+      <view class="skeleton-main">
+        <view class="skeleton-title shimmer"></view>
+        <view class="skeleton-sub shimmer"></view>
+      </view>
+      <view class="skeleton-play shimmer"></view>
+    </view>
   </view>
 
   <!-- 节目列表：与今日页完全一致的行式卡片（左侧彩色封面 + 中间标题+统计 + 右侧播放按钮） -->
+  <!-- 渲染数据源是 renderList（list 的前 renderCount 项），避免几百条一次性进渲染层卡顿 -->
+  <!-- data-index 仍是 list 中的真实索引：renderList = list.slice(0, renderCount)，二者下标一致，setQueue(list, idx) 不受影响 -->
   <block wx:else>
     <view class="history-list">
       <view
-        class="card episode-row-card"
-        wx:for="{{list}}"
+        class="card episode-row-card {{item.played ? 'played' : ''}}"
+        wx:for="{{renderList}}"
         wx:key="id"
         data-id="{{item.id}}"
         data-index="{{index}}"
@@ -58,22 +85,24 @@
         <view class="row-cover">
           <text class="row-cover-channel">{{item.channel_name || '节目'}}</text>
           <text class="row-cover-date">{{item.date_label || ''}}</text>
+          <!-- 已播放角标：与未播放的卡片形成视觉区分 -->
+          <text class="played-badge" wx:if="{{item.played}}">已播放</text>
         </view>
         <view class="row-main">
           <text class="row-title">{{item.title || (item.date_label + ' · ' + (item.channel_name || '节目'))}}</text>
           <view class="row-stats">
             <view class="row-stat">
-              <image class="row-stat-icon" src="/images/icons/play-mini.png" mode="aspectFit" />
+              <image class="row-stat-icon" lazy-load src="/images/icons/play-mini.png" mode="aspectFit" />
               <text>{{item.play_count || 0}} 播放</text>
             </view>
             <view class="row-stat">
-              <image class="row-stat-icon" src="/images/icons/duration.png" mode="aspectFit" />
+              <image class="row-stat-icon" lazy-load src="/images/icons/duration.png" mode="aspectFit" />
               <text>{{item.duration_label || '00:00'}}</text>
             </view>
           </view>
         </view>
         <view class="row-play" data-id="{{item.id}}" data-index="{{index}}" catchtap="onPlay">
-          <image class="row-play-icon" src="/images/icons/play.png" mode="aspectFit" />
+          <image class="row-play-icon" lazy-load src="/images/icons/play.png" mode="aspectFit" />
         </view>
       </view>
     </view>

@@ -14,33 +14,111 @@ page {
   line-height: 1.6;
 }
 
-/* === 通用卡片 === */
+/* === 通用卡片 ===
+   改用 92% 白色 + 毛玻璃，让 detail 页的马卡龙渐变背景能透出
+   96% 透明度在浅色背景下几乎等同纯白，但玻璃感更强 */
 .card {
-  background: #FFFFFF;
+  background: rgba(255, 255, 255, 0.78);
   border-radius: 24rpx;
   padding: 32rpx;
   margin: 24rpx;
-  box-shadow: 0 4rpx 16rpx rgba(126, 206, 193, 0.08);
+  backdrop-filter: saturate(180%) blur(24rpx);
+  -webkit-backdrop-filter: saturate(180%) blur(24rpx);
+  border: 2rpx solid rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 4rpx 24rpx rgba(126, 206, 193, 0.12),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.6);
 }
 
-/* === 柔和按钮 === */
+/* === 苹果毛玻璃按钮 ===
+   - 半透明色块（透明度 0.75~0.85）作为基底，让背后内容能透出
+   - backdrop-filter saturate(180%) blur(20rpx) 增强色彩饱和度同时模糊背景
+   - 1px 内高光边框（白色 50% 透明）模拟玻璃边缘反光
+   - 双向阴影：外柔光 + 内顶高光，符合 iOS 14+ 按钮质感
+   - rpx 单位保持跨设备尺寸一致；border 用 2rpx 兼顾 iOS 1px 渲染 */
+
 .btn-primary {
-  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  background: linear-gradient(135deg, rgba(126, 206, 193, 0.78), rgba(91, 168, 155, 0.78));
   color: #FFFFFF;
   border-radius: 40rpx;
   padding: 20rpx 48rpx;
   font-size: 30rpx;
   font-weight: 500;
-  border: none;
+  border: 2rpx solid rgba(255, 255, 255, 0.45);
+  text-align: center;
+  backdrop-filter: saturate(180%) blur(20rpx);
+  -webkit-backdrop-filter: saturate(180%) blur(20rpx);
+  box-shadow:
+    0 8rpx 24rpx rgba(91, 168, 155, 0.25),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.5);
+  /* 不支持 backdrop-filter 时降级为不透明色块，保证可读性 */
+  overflow: hidden;
+  position: relative;
 }
 
 .btn-secondary {
-  background: #FFD3E0;
+  background: rgba(255, 211, 224, 0.65);
   color: #FF6B8A;
   border-radius: 40rpx;
   padding: 20rpx 48rpx;
   font-size: 30rpx;
-  border: none;
+  font-weight: 500;
+  border: 2rpx solid rgba(255, 255, 255, 0.6);
+  text-align: center;
+  backdrop-filter: saturate(180%) blur(20rpx);
+  -webkit-backdrop-filter: saturate(180%) blur(20rpx);
+  box-shadow:
+    0 8rpx 24rpx rgba(255, 107, 138, 0.18),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.7);
+  overflow: hidden;
+  position: relative;
+}
+
+/* 顶层高光：横向渐变从顶部透出，增强玻璃折射感
+   用 ::before 伪元素不影响内容布局 */
+.btn-primary::before,
+.btn-secondary::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0));
+  pointer-events: none;
+  border-radius: 40rpx 40rpx 0 0;
+}
+
+/* 按钮内容层 z-index 高于 ::before 高光，避免文字被覆盖 */
+.btn-primary > .btn-content,
+.btn-secondary > .btn-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* === 按钮内图标：开源 Tabler Icons (MIT)，禁止 AI 预制图标 ===
+   主按钮图标统一为白色（通过 filter 强制反色），次按钮保留原色。
+   尺寸 40rpx（约 20px），与文字垂直居中对齐，间距 12rpx */
+.btn-icon {
+  width: 40rpx;
+  height: 40rpx;
+  margin-right: 12rpx;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* 主按钮内图标强制变白：解决薄荷绿按钮上看不见同色图标的撞色问题
+   （SVG 描边色与按钮底色重叠时，filter 提亮对比度） */
+.btn-primary .btn-icon {
+  filter: brightness(0) invert(1);
+}
+
+/* 按钮内 image + text 水平排列容器，覆盖 button 默认 inline-block 居中问题 */
+.btn-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 /* === 标签 === */

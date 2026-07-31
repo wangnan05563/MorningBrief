@@ -6,7 +6,8 @@
  * - 兼容旧响应字段：优先用 list，回退到 items
  * - 接入埋点（FR-SUP-10）
  */
-const { getFavorites, removeFavorite } = require('../../services/api');
+// localData 封装收藏的双写（本地+后端），按 openid 隔离，读取优先本地
+const localData = require('../../services/local-data');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 
 Page({
@@ -44,17 +45,13 @@ Page({
   },
 
   /**
-   * 加载收藏列表
-   * 后端已 join episode 详情，前端直接使用，无需逐个拉详情
+   * 加载收藏列表（优先本地，本地无时从后端读取并缓存）
    * @param {boolean} silent - 静默刷新（不展示 loading 遮罩）
    */
   async loadFavorites(silent) {
     if (!silent) this.setData({ loading: true });
     try {
-      const res = await getFavorites();
-      // 兼容 list / items 两种字段名（旧版后端用 items）
-      const items = (res && (res.list || res.items)) || [];
-
+      const items = await localData.getFavoriteList();
       this.setData({ list: items, loading: false });
     } catch (err) {
       this.setData({ loading: false });
@@ -90,14 +87,14 @@ Page({
   },
 
   /**
-   * 调用接口移除收藏并更新本地列表
+   * 调用接口移除收藏并更新本地列表（双写本地+后端）
    * 本地直接过滤掉目标项，避免再次全量拉取
    */
   async removeFavorite(episodeId, title) {
     this.setData({ removing: true });
     wx.showLoading({ title: '取消中...' });
     try {
-      await removeFavorite(episodeId);
+      await localData.removeFavorite(episodeId);
       const newList = this.data.list.filter((it) => it.episode_id !== episodeId && it.id !== episodeId);
       this.setData({ list: newList, removing: false });
       wx.hideLoading();

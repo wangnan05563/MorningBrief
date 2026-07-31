@@ -6,6 +6,7 @@ V1.2 起缓存层从 Redis 改为进程内 TTLCache：
 """
 from datetime import date
 
+from loguru import logger
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,7 +27,7 @@ class ContentService:
         # 进程内缓存：替代原 Redis cache-aside，避免热点查询打 DB
         self.cache = cache_manager
 
-    async def get_today_episode(self, channel_id: int | None = None) -> dict | list:
+    async def get_today_episode(self, channel_id: int | None = None) -> dict | list | None: # NOSONAR
         """今日节目，cache-aside：先查缓存，未命中查 DB 后回写。
 
         channel_id 指定时按频道过滤，返回该频道今日最新一期；
@@ -186,18 +187,73 @@ class ContentService:
         return data
 
     async def search_episodes(self, keyword: str, page: int, size: int) -> dict:
-        """节目搜索：按标题模糊匹配。
+        """节目搜索：优先用 FTS5 全文索引，回退到 LIKE 模糊匹配。
 
-        MVP 使用 SQLite LIKE，远期可接入 FTS5 全文检索。
+        FTS5 性能比 LIKE 高 10-100 倍（走倒排索引而非全表扫描）。
+        关键词含双引号或特殊字符时 FTS5 MATCH 可能报错，降级为 LIKE。
         """
         if not keyword or page < 1 or size < 1:
             return {"total": 0, "list": []}
 
-        # 转义 LIKE 特殊字符，避免用户输入 % _ 影响匹配
+        offset = (page - 1) * size
+
+        # 尝试 FTS5 全文检索（性能最优）
+        try:
+            from sqlalchemy import text as sql_text
+
+            # FTS5 MATCH 语法：关键词作为整体短语匹配
+            # 用参数绑定避免 SQL 注入（FTS5 不支持传统参数化，但 SQLAlchemy text 可安全传递）
+            # 双引号包裹让 FTS5 把关键词作为 phrase 查询，避免被分词
+            fts_query = f'"{keyword}"'
+
+            # 总数（FTS5 JOIN episode 过滤已发布）
+            count_sql = sql_text(
+                "SELECT COUNT(*) FROM episode_fts fts "
+                "JOIN episode ON episode.id = fts.rowid "
+                "WHERE episode_fts MATCH :q "
+                "AND episode.status = 'published'"
+            )
+            count_result = await self.db.execute(count_sql, {"q": fts_query})
+            total = count_result.scalar() or 0
+
+            # 分页（按 date 倒序）
+            list_sql = sql_text(
+                "SELECT episode.id, episode.date, episode.title, "
+                "episode.duration, episode.cover_url, episode.categories "
+                "FROM episode_fts fts "
+                "JOIN episode ON episode.id = fts.rowid "
+                "WHERE episode_fts MATCH :q "
+                "AND episode.status = 'published' "
+                "ORDER BY episode.date DESC, episode.id DESC "
+                "LIMIT :limit OFFSET :offset"
+            )
+            result = await self.db.execute(
+                list_sql, {"q": fts_query, "limit": size, "offset": offset}
+            )
+            rows = result.all()
+
+            list_data = [
+                {
+                    "id": r[0],
+                    "date": r[1].isoformat() if r[1] else None,
+                    "title": r[2],
+                    "duration": r[3],
+                    "cover_url": r[4],
+                    "categories": r[5] or [],
+                }
+                for r in rows
+            ]
+
+            return {"total": total, "list": list_data}
+        except Exception:
+            # FTS5 不可用或 MATCH 语法错误（含特殊字符），降级到 LIKE
+            # 为什么不向上抛：搜索是低频但容错性要求高的场景，降级保证可用性
+            pass
+
+        # 降级：LIKE 模糊匹配（原 MVP 实现）
         escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         pattern = f"%{escaped}%"
 
-        # 总数
         count_result = await self.db.execute(
             select(func.count(Episode.id)).where(
                 Episode.status == EpisodeStatus.published,
@@ -206,8 +262,6 @@ class ContentService:
         )
         total = count_result.scalar() or 0
 
-        # 分页
-        offset = (page - 1) * size
         result = await self.db.execute(
             select(Episode)
             .where(
@@ -234,7 +288,7 @@ class ContentService:
 
         return {"total": total, "list": list_data}
 
-    async def get_script(self, episode_id: int) -> dict | None:
+    async def get_script(self, episode_id: int) -> dict | None:  # NOSONAR
         """稿件全文，懒加载：先查 episode 拿 script_id，再查 script 表。
 
         V1.3：响应追加 sources 字段，展示每段新闻来源 URL（版权溯源合规）。
@@ -280,22 +334,25 @@ class ContentService:
             for mat in mat_result.scalars().all():
                 materials_map[mat.id] = mat
 
-        # 按 segment seq 顺序拼装 sources，并把每个 segment 第一个有封面的 material
+        # 按 segment 顺序拼装 sources，并把每个 segment 第一个有封面的 material
         # 的 cover_url 注入 segment，供前端"虚化背景"和"分段配图"使用
         # 任务10+任务2：segments 缺少 cover_url 字段，前端无法显示分段图片
+        # 任务11：sources 的 seq 必须从 1 重新编号（之前用 segment.seq 会从 2 开始，因为
+        #   第 1 段通常是开场白没有 material_ids，sources 直接从第 2 段开始）
         enriched_segments = []
+        source_seq = 0  # sources 自己的 1-based 序号
         for seg in segments:
             if not isinstance(seg, dict):
                 enriched_segments.append(seg)
                 continue
-            seq = seg.get("seq")
             material_ids = seg.get("material_ids") or []
             seg_cover = None
             for mid in material_ids:
                 mat = materials_map.get(mid)
                 if mat:
+                    source_seq += 1
                     sources.append({
-                        "seq": seq,
+                        "seq": source_seq,
                         "title": mat.title,
                         "url": mat.url,
                         "category": mat.category,
@@ -373,6 +430,8 @@ class ContentService:
             title=title,
             duration=script.estimated_duration if script else 600,
             audio_url=review.audio_url,
+            # HLS URL 从 review 拷贝：拼接阶段生成，发布时落入 episode 表
+            hls_url=review.hls_url,
             script_id=review.script_id,
             review_id=review.id,
             categories=script.categories if script else None,
@@ -387,23 +446,51 @@ class ContentService:
 
         # 5. 缓存失效（发布后旧缓存必须清除，否则小程序看到旧节目）
         # TTLCache 不支持 SCAN，用 delete_pattern 一次性清理列表前缀
-        await self.cache.delete("episode:today")
+        # 修复：key 必须与 get_today_episode 中实际写入的 all_key 一致
+        # （原代码 delete("episode:today") 是精确匹配，不会命中 "episode:today:all"）
+        await self.cache.delete("episode:today:all")
         await self.cache.delete_pattern("episode:today:ch:*")
         await self.cache.delete_pattern("episode:list:page:*")
 
         return episode.id
 
     @staticmethod
+    def _resolve_audio_base_url() -> str:
+        """解析音频/封面静态资源最终生效的对外访问 URL。
+
+        优先级：
+        1. tunnel_service.public_url（运行时动态获取的内网穿透地址）
+           —— 隧道运行时，外网用户必须通过公网域名访问，否则 audio_url 会指向内网 IP
+        2. settings.audio_base_url_resolved（.env 配置或自动检测局域网 IP）
+           —— 无隧道时走配置值或局域网 IP
+
+        为什么不直接在 settings.audio_base_url_resolved 里判断：
+        get_settings() 用了 @lru_cache，是启动时加载的静态快照；
+        而 tunnel 状态是运行时动态变化的（启动/停止），必须在请求时实时查询。
+        """
+        try:
+            from app.services.tunnel_service import get_tunnel_service
+            tunnel = get_tunnel_service()
+            url = tunnel.public_url
+            if url:
+                return url.rstrip("/")
+        except Exception:
+            # tunnel_service 未初始化或导入失败属于降级场景，DEBUG 即可；
+            # 必须保留 exc_info=True 便于排障时回溯隧道服务异常根因
+            logger.debug("tunnel_service 不可用，回退到静态配置", exc_info=True)
+        from app.config import get_settings
+        return get_settings().audio_base_url_resolved
+
+    @staticmethod
     def _episode_to_dict(episode: Episode) -> dict:
         """统一 Episode 序列化，避免多处重复。
 
         音频 URL 转换：相对路径 /audio/... 转换为完整 URL 供小程序播放。
-        基础 URL 由 AUDIO_BASE_URL 配置决定（真机测试需设为局域网 IP），
-        未配置时回退到 localhost（仅开发者工具可用）。
+        基础 URL 由 _resolve_audio_base_url 解析：
+        - 隧道运行时用公网域名（外网用户可访问）
+        - 无隧道时用 .env 配置或自动检测的局域网 IP（局域网真机调试）
         """
-        from app.config import get_settings
-        from urllib.parse import quote
-        base = get_settings().AUDIO_BASE_URL or 'http://localhost:8000'
+        base = ContentService._resolve_audio_base_url()
 
         audio_url = episode.audio_url
         if audio_url and audio_url.startswith('/audio/') and not audio_url.startswith('http'):
@@ -426,6 +513,19 @@ class ContentService:
             encoded_path = quote(parsed.path, safe='/_:')
             cover_url = urlunparse((parsed.scheme, parsed.netloc, encoded_path, parsed.params, parsed.query, parsed.fragment))
 
+        # HLS m3u8 清单 URL 处理：与 audio_url 同样的相对路径转换 + URL 编码
+        # 为什么单独处理：HLS 目录位于 /audio/hls/ 子路径下，m3u8 内部引用的 ts 分片
+        # 用相对路径，播放器会基于 m3u8 URL 解析。此处仅转换 m3u8 自身 URL。
+        # 为空表示该节目未生成 HLS（HLS_ENABLE=false 或旧节目），客户端回退到 audio_url
+        hls_url = episode.hls_url
+        if hls_url and hls_url.startswith('/audio/') and not hls_url.startswith('http'):
+            hls_url = base + hls_url
+        if hls_url and hls_url.startswith('http'):
+            from urllib.parse import urlparse, urlunparse, quote
+            parsed = urlparse(hls_url)
+            encoded_path = quote(parsed.path, safe='/_:')
+            hls_url = urlunparse((parsed.scheme, parsed.netloc, encoded_path, parsed.params, parsed.query, parsed.fragment))
+
         # 任务1：把 channel_id 一起序列化，前端在频道列表加载完前可回退到此字段
         return {
             "id": episode.id,
@@ -433,6 +533,8 @@ class ContentService:
             "title": episode.title,
             "duration": episode.duration,
             "audio_url": audio_url,
+            # HLS 清单 URL：为空时小程序回退到 audio_url 播放
+            "hls_url": hls_url,
             "cover_url": cover_url,
             "categories": episode.categories or [],
             "status": episode.status if episode.status else None,

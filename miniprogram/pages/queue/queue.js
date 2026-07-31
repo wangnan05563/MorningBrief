@@ -3,8 +3,7 @@
  *
  * V1.3 新增（FR-SUP-05）
  */
-const { getQueue, getQueueIndex, clearQueue, onQueueChange } = require('../../services/audio');
-const { playEpisode } = require('../../services/audio');
+const { getQueue, getQueueIndex, clearQueue, onQueueChange, playQueueAt } = require('../../services/audio');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 
 Page({
@@ -46,7 +45,8 @@ Page({
     const episode = this.data.queue[idx];
     if (!episode) return;
     trackEvent('queue', 'tap_item', 'episode_' + episode.id);
-    playEpisode(episode);
+    // 用 playQueueAt 同步更新 queueIndex，避免连播顺序错乱（与详情页一致）
+    playQueueAt(idx);
     wx.navigateBack();
   },
 

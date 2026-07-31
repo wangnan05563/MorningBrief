@@ -60,7 +60,12 @@ Page({
    */
   saveSettings(patch) {
     const saved = wx.getStorageSync(STORAGE_KEY_SETTINGS) || {};
-    wx.setStorageSync(STORAGE_KEY_SETTINGS, { ...saved, ...patch });
+    // 非关键写入（偏好设置）：改异步避免阻塞主线程，失败仅告警不影响 UI
+    wx.setStorage({
+      key: STORAGE_KEY_SETTINGS,
+      data: { ...saved, ...patch },
+      fail: (e) => console.warn('[settings] 设置写入失败:', e && e.errMsg),
+    });
   },
 
   onRateChange(e) {

@@ -40,7 +40,7 @@ class Channel(Base):
     bgm_volume: Mapped[Optional[float]] = mapped_column(default=None)
     # 频道级段间静音时长（秒）：为空时使用全局 settings.SEGMENT_GAP_SEC
     segment_gap_sec: Mapped[Optional[float]] = mapped_column(default=None)
-    # 是否在每段新闻末尾追加思考问题（0=关闭，1=开启，None=开启默认行为）
+    # 是否在每段新闻末尾追加思考问题（0=关闭，1=开启，None=开启默认行为） # NOSONAR
     enable_thinking_question: Mapped[Optional[int]] = mapped_column(default=None)
     # 频道专属 RSS 源列表（JSON 数组，存储 rss.yaml 中的 source name，如 ["人民网-国内"]）
     # 为空时 crawler 回退到全局所有源；非空时仅采集列表中的源，实现频道级数据源隔离

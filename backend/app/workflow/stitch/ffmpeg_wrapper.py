@@ -1,7 +1,7 @@
 """FFmpeg 命令封装:音频拼接所需的底层命令构造与执行。
 
-统一输出格式:libmp3lame 128k 44100Hz 单声道,保证整期节目音频参数一致,
-避免拼接后参数不一致导致的播放器重采样卡顿。
+统一输出格式:libmp3lame 44100Hz 单声道,码率由配置决定(默认 64k 语音已足够),
+保证整期节目音频参数一致,避免拼接后参数不一致导致的播放器重采样卡顿。
 """
 import asyncio
 import logging
@@ -10,12 +10,21 @@ from pathlib import Path
 
 import httpx
 
+from app.config import get_settings
 from app.paths import resolve_ffmpeg_path, resolve_ffprobe_path
 
 logger = logging.getLogger(__name__)
 
 # FFmpeg 单次执行上限:超过 120s 大概率卡死,及时失败便于排查
 FFMPEG_TIMEOUT_SEC = 120
+
+# filter_complex 输出标签,3 处 -map 复用,提为常量避免字面量重复触发 S1192
+_FFMPEG_OUT_LABEL = "[out]"
+
+
+def _audio_bitrate() -> str:
+    """从配置读取音频码率，便于运营在 .env 调整而无需改代码。"""
+    return get_settings().AUDIO_BITRATE
 
 
 class StitchError(Exception):
@@ -121,7 +130,7 @@ def build_concat_cmd(input_paths: list[str], output_path: str) -> list[str]:
         resolve_ffmpeg_path(), "-y",
         "-f", "concat", "-safe", "0",
         "-i", list_path,
-        "-c:a", "libmp3lame", "-b:a", "128k",
+        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
         "-ar", "44100", "-ac", "1",
         output_path,
     ]
@@ -143,8 +152,8 @@ def build_mid_ad_cmd(
         f"[0:a]atrim=0:{insert_at},asetpts=N/SR/TB[a1];"
         f"[0:a]atrim={insert_at},asetpts=N/SR/TB[a2];"
         "[a1][1:a][a2]concat=n=3:v=0:a=1[out]",
-        "-map", "[out]",
-        "-c:a", "libmp3lame", "-b:a", "128k",
+        "-map", _FFMPEG_OUT_LABEL,
+        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
         "-ar", "44100", "-ac", "1",
         output_path,
     ]
@@ -167,8 +176,8 @@ def build_full_concat_cmd(inputs: list[str], output_path: str) -> list[str]:
         *input_args,
         "-filter_complex",
         f"{labels}concat=n={n}:v=0:a=1[out]",
-        "-map", "[out]",
-        "-c:a", "libmp3lame", "-b:a", "128k",
+        "-map", _FFMPEG_OUT_LABEL,
+        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
         "-ar", "44100", "-ac", "1",
         output_path,
     ]
@@ -185,7 +194,7 @@ async def generate_silence(duration_sec: float, output_path: str) -> None:
         "-f", "lavfi",
         "-i", "anullsrc=r=44100:cl=mono",
         "-t", str(duration_sec),
-        "-c:a", "libmp3lame", "-b:a", "128k",
+        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
         "-ar", "44100", "-ac", "1",
         output_path,
     ]
@@ -220,9 +229,9 @@ async def mix_bgm(
         "-stream_loop", "-1", "-i", bgm_path,
         "-filter_complex",
         f"[1:a]volume={volume}[bgm];[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=0[out]",
-        "-map", "[out]",
+        "-map", _FFMPEG_OUT_LABEL,
         "-t", str(main_duration),
-        "-c:a", "libmp3lame", "-b:a", "128k",
+        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
         "-ar", "44100", "-ac", "1",
         output_path,
     ]
@@ -243,8 +252,96 @@ async def adjust_tempo(input_path: str, output_path: str, tempo: float) -> None:
     cmd = [
         resolve_ffmpeg_path(), "-y", "-i", input_path,
         "-filter:a", f"atempo={tempo}",
-        "-c:a", "libmp3lame", "-b:a", "128k",
+        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
         "-ar", "44100", "-ac", "1",
         output_path,
     ]
     await run_ffmpeg(cmd)
+
+
+async def generate_bgm_tail(
+    bgm_path: str, duration_sec: float, output_path: str, volume: float = 0.15
+) -> None:
+    """从 BGM 截取一段尾部补足音频，末尾应用 2s 淡出。
+
+    用于 stitch 时长不足时的 BGM 自然延续兜底：节目末尾衔接 BGM 片段，
+    比单纯静音填充更自然，听众感受到的是节目在 BGM 中渐弱结束。
+
+    策略：
+    1. 从 BGM 中段截取 duration_sec 秒（避免开头引入识别度高的主旋律）
+    2. 应用 volume 滤镜调整音量（与主节目 BGM 一致）
+    3. 末尾 afade 2s 淡出，避免突兀结束
+
+    Args:
+        bgm_path: BGM 源文件路径
+        duration_sec: 截取时长（秒）
+        output_path: 输出路径
+        volume: 音量（0.0-1.0），与主节目 BGM 音量一致避免跳变
+    """
+    # 从 BGM 30s 处开始截取（跳过开头主旋律），若 BGM < 30s 则从 0 开始
+    bgm_duration = await get_audio_duration(bgm_path)
+    start_at = min(30.0, max(0.0, bgm_duration - duration_sec - 2))
+    fade_start = max(0.0, duration_sec - 2.0)
+
+    # BGM 时长不足时循环播放以填满所需补足时长（素材稀缺场景 padding 可能很大）
+    # -stream_loop -1 无限循环输入，配合 -t 限制输出时长，确保输出恰好为 duration_sec
+    needs_loop = duration_sec > bgm_duration
+    cmd = [
+        resolve_ffmpeg_path(), "-y",
+    ]
+    if needs_loop:
+        cmd.extend(["-stream_loop", "-1"])
+    cmd.extend([
+        "-ss", str(start_at),
+        "-t", str(duration_sec),
+        "-i", bgm_path,
+        "-filter_complex",
+        f"[0:a]volume={volume},afade=t=out:st={fade_start}:d=2.0[out]",
+        "-map", _FFMPEG_OUT_LABEL,
+        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
+        "-ar", "44100", "-ac", "1",
+        output_path,
+    ])
+    await run_ffmpeg(cmd)
+
+
+def build_hls_cmd(input_path: str, output_dir: str) -> tuple[list[str], str]:
+    """构造 HLS 分片生成命令（mp3 → m3u8 + ts 分片）。
+
+    为什么 HLS 用 AAC 而非 MP3：HLS 规范（RFC 8216）要求 ADTS-AAC，
+    ffmpeg -f hls 对 mp3 输出兼容性差，部分播放器无法解码。
+    AAC 64kbps 与 MP3 64kbps 听感相当，且 HLS 原生支持。
+
+    输出结构：
+        output_dir/
+        ├── playlist.m3u8      # 主清单（VOD 类型，支持任意 seek）
+        └── seg_00000.ts       # 分片文件（按 HLS_SEGMENT_SEC 切分）
+
+    Args:
+        input_path: 输入 mp3 文件路径
+        output_dir: 输出目录（函数内自动创建）
+
+    Returns:
+        (cmd, playlist_path): FFmpeg 命令列表 + m3u8 文件绝对路径
+    """
+    settings = get_settings()
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    playlist_path = str(Path(output_dir) / "playlist.m3u8")
+    seg_pattern = str(Path(output_dir) / "seg_%05d.ts")
+
+    cmd = [
+        resolve_ffmpeg_path(), "-y",
+        "-i", input_path,
+        # AAC 编码，码率与 mp3 保持一致避免体积膨胀
+        "-c:a", "aac", "-b:a", _audio_bitrate(),
+        "-ar", "44100", "-ac", "1",
+        # HLS 封装参数
+        "-f", "hls",
+        "-hls_time", str(settings.HLS_SEGMENT_SEC),
+        "-hls_playlist_type", settings.HLS_PLAYLIST_TYPE,
+        "-hls_segment_filename", seg_pattern,
+        "-hls_list_size", "0",  # 0 = 保留所有分片（VOD 必需）
+        playlist_path,
+    ]
+    return cmd, playlist_path
