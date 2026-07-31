@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 文稿按钮图标：薄荷青文件+文字，用于浅色背景的次按钮
+     图标来源：Tabler Icons (MIT License) - file-text
+     使用场景：detail 页"查看完整文稿"按钮 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <path d="M 14 3 V 7 a 1 1 0 0 0 1 1 H 19" fill="none" stroke="#5BA89B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 17 21 H 7 a 2 2 0 0 1 -2 -2 V 5 a 2 2 0 0 1 2 -2 H 14 L 19 8 V 19 a 2 2 0 0 1 -2 2 Z" fill="none" stroke="#5BA89B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="9" y1="13" x2="15" y2="13" stroke="#5BA89B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="9" y1="17" x2="15" y2="17" stroke="#5BA89B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

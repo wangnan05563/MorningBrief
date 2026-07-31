@@ -11,16 +11,30 @@
 - 失败不抛异常给上层（由调用方决定是否重试）
 """
 import asyncio
-import logging
 from typing import Optional
+
+from loguru import logger
 
 from app.config import get_settings
 
-logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # 延迟初始化 CosS3Client，避免测试时无 COS 配置导致导入失败
 _cos_client = None
+
+
+def is_cos_configured() -> bool:
+    """检查 COS 是否已配置（单一真相源）。
+
+    调用方据此区分日志级别：未配置时降级为 DEBUG（避免每次调用刷 WARNING
+    污染日志），已配置但失败时升为 WARNING（真实异常需排障）。
+    仅校验三项必填项（ID/KEY/BUCKET），REGION 有默认值不强制。
+    """
+    return bool(
+        settings.COS_SECRET_ID
+        and settings.COS_SECRET_KEY
+        and settings.COS_BUCKET
+    )
 
 
 def _get_cos_client():
@@ -66,7 +80,8 @@ class CosClientWrapper:
             body = response["Body"]
             return await asyncio.to_thread(body.read)
         except Exception as e:
-            logger.debug(f"[cos] 对象不存在或读取失败 Key={Key}: {e}")
+            # loguru {} 占位符延迟格式化：DEBUG 被过滤时不计算字符串，优于 f-string
+            logger.debug("[cos] 对象不存在或读取失败 Key={}: {}", Key, e)
             return None
 
     async def delete_object(self, Key: str) -> None:  # NOSONAR

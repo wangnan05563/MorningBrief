@@ -322,12 +322,23 @@
           </el-select>
         </el-form-item>
         <el-form-item label="正文" required>
-          <el-input v-model="materialDialog.form.content" type="textarea" :rows="8" />
+          <el-input
+            v-model="materialDialog.form.content"
+            type="textarea"
+            :rows="8"
+            :placeholder="materialDialog.contentLoading ? '正文加载中...' : ''"
+            :disabled="materialDialog.contentLoading"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="materialDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="materialDialog.saving" @click="saveMaterial">保存</el-button>
+        <el-button
+          type="primary"
+          :loading="materialDialog.saving"
+          :disabled="materialDialog.contentLoading"
+          @click="saveMaterial"
+        >保存</el-button>
       </template>
     </el-dialog>
 
@@ -445,14 +456,16 @@ function formatDuration(row) {
   return (ms / 1000).toFixed(1)
 }
 
-async function loadDetail() {
-  loading.value = true
+// silent=true 时为轮询调用：不显示整表遮罩、不弹错误提示
+// 避免轮询期间频繁触发 v-loading 遮罩残留导致"卡死"现象
+async function loadDetail(silent = false) {
+  if (!silent) loading.value = true
   try {
-    detail.value = await api.get(`/workflows/${route.params.id}`)
+    detail.value = await api.get(`/workflows/${route.params.id}`, { silent })
     // 根据最新状态启停轮询：工作流非终态时启动，终态时停止
     startPollingIfNeeded()
   } catch { /* 拦截器已提示 */ } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 
@@ -505,24 +518,36 @@ function materialStatusLabel(s) { return MATERIAL_STATUS_MAP[s]?.label || s }
 function materialStatusType(s) { return MATERIAL_STATUS_MAP[s]?.type || 'info' }
 
 const materialDialog = ref({
-  visible: false, id: null, saving: false,
+  visible: false, id: null, saving: false, contentLoading: false,
   form: { title: '', source: '', url: '', category: '', status: 'pending', content: '' },
 })
+// 编辑素材时拉取全文的请求序号，用于丢弃过期响应（用户快速切换素材时旧请求不应覆盖新对话框）
+let materialContentReqId = 0
 
 function openMaterialDialog(material = null) {
   if (material) {
     materialDialog.value = {
-      visible: true, id: material.id, saving: false,
+      visible: true, id: material.id, saving: false, contentLoading: true,
       form: { title: material.title, source: material.source, url: material.url,
         category: material.category || '', status: material.status || 'pending', content: '' },
     }
-    // 编辑时拉取全文
+    // 编辑时拉取全文，使用序号避免快速切换素材时旧响应覆盖新对话框内容
+    const reqId = ++materialContentReqId
     getMaterial(material.id).then((data) => {
+      if (reqId !== materialContentReqId) return  // 过期响应丢弃
       materialDialog.value.form.content = data.content || ''
+    }).catch(() => {
+      if (reqId !== materialContentReqId) return
+      ElMessage.warning('素材正文加载失败，请重试')
+    }).finally(() => {
+      if (reqId !== materialContentReqId) return
+      materialDialog.value.contentLoading = false
     })
   } else {
+    // 新增素材无需拉取全文，重置序号使任何在途的编辑请求过期失效
+    materialContentReqId++
     materialDialog.value = {
-      visible: true, id: null, saving: false,
+      visible: true, id: null, saving: false, contentLoading: false,
       form: { title: '', source: '手动添加', url: '', category: '', status: 'pending', content: '' },
     }
   }
@@ -563,10 +588,16 @@ async function handleDeleteMaterial(row) {
 
 function viewMaterial(row) {
   getMaterial(row.id).then((data) => {
+    // 使用 VNode 渲染替代 HTML 字符串拼接，避免爬虫数据含恶意脚本导致 XSS
+    // ElMessageBox 的 message 参数支持 VNode，无需 dangerouslyUseHTMLString
     ElMessageBox.alert(
-      `<div style="max-height:60vh;overflow:auto"><h4>${data.title}</h4><p style="color:#999;font-size:12px">来源: ${data.source} | 品类: ${data.category || '-'}</p><div style="white-space:pre-wrap;margin-top:12px">${data.content}</div></div>`,
+      h('div', { style: 'max-height:60vh;overflow:auto' }, [
+        h('h4', null, data.title),
+        h('p', { style: 'color:#999;font-size:12px' }, `来源: ${data.source} | 品类: ${data.category || '-'}`),
+        h('div', { style: 'white-space:pre-wrap;margin-top:12px' }, data.content),
+      ]),
       '素材详情',
-      { dangerouslyUseHTMLString: true, customClass: 'material-detail-dialog' },
+      { customClass: 'material-detail-dialog' },
     )
   })
 }
@@ -803,7 +834,8 @@ function setupSSE() {
       const wid = event.data?.workflow_id
       if (!wid || wid !== detail.value.workflow_id) return
       if (document.hidden) return
-      loadDetail()
+      // SSE 事件触发时使用 silent 刷新：不显示整表遮罩，不弹错误提示
+      loadDetail(true)
     }),
   )
 }
@@ -823,8 +855,9 @@ function startPollingIfNeeded() {
     return
   }
   if (!pollTimer && isWorkflowActive()) {
+    // silent=true 局部刷新：不显示整表遮罩，避免遮罩残留卡死
     pollTimer = setInterval(() => {
-      if (!document.hidden) loadDetail()
+      if (!document.hidden) loadDetail(true)
     }, 5000)
   }
 }
@@ -846,8 +879,9 @@ function handleVisibilityChange() {
     // 直接清理所有残留 mask
     cleanupLoadingMasks()
     // rAF 等待浏览器完成一帧渲染后加载新数据
+    // silent=true：避免恢复可见时立即触发整表遮罩，造成"卡死"观感
     requestAnimationFrame(() => {
-      loadDetail()
+      loadDetail(true)
       startPollingIfNeeded()
     })
   }

@@ -29,13 +29,15 @@
       "outputPath": ""
     }
   },
-  "appid": "wx5eaf6c69ccbab9a0",
+  "appid": "wx1b4d58afd98bf2f6",
   "projectname": "MorningBrief",
   "libVersion": "3.3.4",
   "condition": {},
   "simulatorPluginLibVersion": {},
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      {"type": "folder", "value": "images/svg-src"}
+    ],
     "include": []
   },
   "editorSetting": {}

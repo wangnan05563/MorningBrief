@@ -4,14 +4,25 @@
   加载失败时显示"复制链接"按钮作为 fallback，让用户在浏览器中打开
 -->
 <view class="page-webview">
-  <web-view wx:if="{{url}}" src="{{url}}" binderror="onError" bindload="onWebviewLoad" />
+  <!-- error 为 true 时不渲染 web-view，避免微信在加载前原生拦截显示"无法打开该页面" -->
+  <web-view wx:if="{{url && !error}}" src="{{url}}" binderror="onError" bindload="onWebviewLoad" />
   <view class="webview-fallback" wx:if="{{error}}">
     <text class="fallback-title">无法在小程序内打开此链接</text>
     <text class="fallback-desc">链接可能未加入业务域名白名单，请复制到浏览器打开</text>
     <view class="fallback-url">{{url}}</view>
     <view class="fallback-actions">
-      <button class="btn-primary" bindtap="onCopy">复制链接</button>
-      <button class="btn-secondary" bindtap="onBack">返回</button>
+      <button class="btn-primary" bindtap="onCopy" hover-class="none">
+        <view class="btn-content">
+          <image class="btn-icon" src="/images/icons/btn-copy.png" mode="aspectFit" />
+          <text>复制链接</text>
+        </view>
+      </button>
+      <button class="btn-secondary" bindtap="onBack" hover-class="none">
+        <view class="btn-content">
+          <image class="btn-icon" src="/images/icons/btn-arrow-left-mint.png" mode="aspectFit" />
+          <text>返回</text>
+        </view>
+      </button>
     </view>
   </view>
 </view>

@@ -38,7 +38,9 @@ async def get_history(
     channel_id: int | None = Query(None, description="频道 ID，为空则返回全部"),
     sort_order: str | None = Query(
         None,
-        regex="^(asc|desc)$",
+        # Pydantic v2 中 regex 参数已废弃，必须用 pattern；
+        # 否则校验静默失效，任意字符串都能通过
+        pattern="^(asc|desc)$",
         description="排序方向：asc=日期正序（最旧在前）/ desc=倒序（最新在前，默认）",
     ),
     db: AsyncSession = Depends(get_db),
@@ -56,9 +58,9 @@ async def search_episodes(
     size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    """节目搜索：按标题模糊匹配。
+    """节目搜索：优先 FTS5 全文索引，降级 LIKE 模糊匹配。
 
-    MVP 使用 SQLite LIKE，远期可接入 FTS5 全文检索提升性能与相关性。
+    FTS5 走倒排索引性能比 LIKE 高 10-100 倍，详见 content_service.search_episodes。
     """
     svc = ContentService(db)
     data = await svc.search_episodes(keyword, page, size)

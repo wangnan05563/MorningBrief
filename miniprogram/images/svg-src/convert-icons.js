@@ -48,6 +48,23 @@ const iconConfigs = [
   { svg: 'music.svg',                out: 'music.png',                size: 96 },
   { svg: 'newspaper.svg',            out: 'newspaper.png',            size: 96 },
   { svg: 'radio.svg',                out: 'radio.png',                size: 96 },
+  // 应用 logo：96x96，关于页/开屏页品牌标识
+  { svg: 'app-logo.svg',             out: 'app-logo.png',             size: 96 },
+  // 小程序主图标：512x512，上传至微信后台解决"最近使用"空白图标
+  { svg: 'app-icon.svg',             out: 'app-icon.png',             size: 512 },
+  // 按钮图标：48x48，用于按钮内 icon + text 组合（开源 Tabler Icons，避免 AI 预制）
+  // 白色版本：用于彩色背景的主按钮（btn-primary / edit-btn-confirm）
+  { svg: 'btn-share.svg',            out: 'btn-share.png',            size: 48 },
+  { svg: 'btn-send.svg',             out: 'btn-send.png',             size: 48 },
+  { svg: 'btn-copy.svg',             out: 'btn-copy.png',             size: 48 },
+  { svg: 'btn-settings.svg',         out: 'btn-settings.png',         size: 48 },
+  { svg: 'btn-login.svg',            out: 'btn-login.png',            size: 48 },
+  { svg: 'btn-check.svg',            out: 'btn-check.png',            size: 48 },
+  // 薄荷青版本：用于浅色背景的次按钮（btn-secondary / edit-btn-cancel）
+  { svg: 'btn-arrow-left-mint.svg',  out: 'btn-arrow-left-mint.png',  size: 48 },
+  { svg: 'btn-home-mint.svg',        out: 'btn-home-mint.png',        size: 48 },
+  { svg: 'btn-script-mint.svg',      out: 'btn-script-mint.png',      size: 48 },
+  { svg: 'btn-x-mint.svg',           out: 'btn-x-mint.png',           size: 48 },
 ];
 
 console.log(`SVG Source: ${scriptDir}`);

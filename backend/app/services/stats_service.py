@@ -4,13 +4,15 @@ V1.2 改造：Redis Bitmap DAU → SQLite COUNT(DISTINCT user_id) 聚合。
 - get_overview: DAU 与 play_count 等合并为一次查询
 - get_trend: DAU 趋势改为 SQLite GROUP BY func.date 一次聚合
 """
-from datetime import date, datetime, timedelta, timezone
+import json
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BizError
-from app.models import PlayLog
+from app.models import PlayLog, Material, Channel
+from app.models.material import MaterialStatus
 
 
 class StatsService:
@@ -68,7 +70,9 @@ class StatsService:
         GROUP BY func.date(played_at) 一次聚合，与其他指标统一。
         返回 dates 与 values 等长对齐，缺数据的日期补 0。
         """
-        today = datetime.now(timezone.utc).date()
+        # 项目约定：所有时间字段存为本地 naive datetime（香港 UTC+8，无夏令时）
+        # 与 get_overview 的 day_start/day_end 切分逻辑保持一致，避免 UTC vs 本地偏差
+        today = date.today()
         dates: list[str] = []
         values: list = []
 
@@ -106,3 +110,137 @@ class StatsService:
             values.append(db_map.get(d.isoformat(), 0))
 
         return {"dates": dates, "values": values}
+
+    async def get_channel_health(self, range_days: int = 7) -> dict:  # NOSONAR S3776: 健康度仪表盘聚合多维度数据，职责单一
+        """频道素材健康度仪表盘：按频道聚合近 N 天入库趋势与当日待改写量。
+
+        用于运维发现"某频道长期无新素材"或"RSS 源衰退"等问题：
+        - 近 7 天每日入库数趋势：连续 0 入库说明 RSS 源失效
+        - 当日 pending 数：<3 时 rewriter 可能无素材可用，触发降级回溯
+        - 健康状态：healthy / warning / critical，按入库连续性与 pending 数综合判定
+
+        Args:
+            range_days: 趋势回溯天数，默认 7（与 rewriter FALLBACK_DAYS 对齐）
+
+        Returns:
+            {
+                "channels": [
+                    {
+                        "channel_id": 1, "name": "科技前沿",
+                        "rss_source_count": 5, "keyword_count": 12,
+                        "today_pending": 8,
+                        "range_total": 35,
+                        "daily_trend": [{"date": "2026-07-15", "count": 5}, ...],
+                        "health_status": "healthy"
+                    }, ...
+                ],
+                "summary": {"healthy": 6, "warning": 2, "critical": 1, "total": 9}
+            }
+        """
+        # 项目约定：所有时间字段存为本地 naive datetime（香港 UTC+8，无夏令时）
+        # 与 crawled_at 存储方式一致，避免 UTC vs 本地 8 小时偏差导致凌晨数据漏统计
+        today = date.today()
+        day_start = datetime.combine(today - timedelta(days=range_days - 1), datetime.min.time())
+        day_end = datetime.combine(today + timedelta(days=1), datetime.min.time())
+
+        # 1. 查询所有频道（含未激活，便于全局观察）
+        ch_result = await self.db.execute(
+            select(Channel).order_by(Channel.id)
+        )
+        channels = ch_result.scalars().all()
+
+        # 2. 近 N 天每日入库数（按 channel_id + date 聚合，一次查询）
+        # func.date(crawled_at) 在 SQLite 返回字符串 YYYY-MM-DD
+        trend_result = await self.db.execute(
+            select(
+                Material.channel_id,
+                func.date(Material.crawled_at),
+                func.count(Material.id),
+            ).where(
+                Material.crawled_at >= day_start,
+                Material.crawled_at < day_end,
+            ).group_by(Material.channel_id, func.date(Material.crawled_at))
+        )
+        # 建表 {(channel_id, date_str): count}，供后续填充每日序列
+        trend_map: dict[tuple[int | None, str], int] = {}
+        for cid, d, cnt in trend_result.all():
+            trend_map[(cid, str(d))] = int(cnt or 0)
+
+        # 3. 当日 pending 素材数（按 channel_id 聚合）
+        # pending 数是 rewriter 是否可用的直接指标，selected/skipped 已被处理过
+        today_start = datetime.combine(today, datetime.min.time())
+        pending_result = await self.db.execute(
+            select(
+                Material.channel_id,
+                func.count(Material.id),
+            ).where(
+                Material.crawled_at >= today_start,
+                Material.crawled_at < day_end,
+                Material.status == MaterialStatus.pending.value,
+            ).group_by(Material.channel_id)
+        )
+        pending_map: dict[int | None, int] = {}
+        for cid, cnt in pending_result.all():
+            pending_map[cid] = int(cnt or 0)
+
+        # 4. 组装每个频道的健康数据
+        channel_list = []
+        summary = {"healthy": 0, "warning": 0, "critical": 0, "total": 0}
+
+        for ch in channels:
+            # 每日入库趋势序列：补 0 对齐日期，便于前端折线图渲染
+            daily_trend = []
+            range_total = 0
+            zero_days = 0
+            for i in range(range_days - 1, -1, -1):
+                d = (today - timedelta(days=i)).isoformat()
+                cnt = trend_map.get((ch.id, d), 0)
+                daily_trend.append({"date": d, "count": cnt})
+                range_total += cnt
+                if cnt == 0:
+                    zero_days += 1
+
+            today_pending = pending_map.get(ch.id, 0)
+
+            # RSS 源数量与关键词数量：从配置 JSON / 逗号字符串解析
+            rss_source_count = 0
+            if ch.rss_sources:
+                try:
+                    parsed = json.loads(ch.rss_sources)
+                    if isinstance(parsed, list):
+                        rss_source_count = len(parsed)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            keyword_count = 0
+            if ch.keywords:
+                keyword_count = len([k for k in ch.keywords.split(",") if k.strip()])
+
+            # 健康状态判定：
+            # - critical: 近 N 天 0 入库（RSS 源全部失效 / 配置错误）
+            # - warning: 近 N 天有入库但当日 pending < 3（rewriter 可用素材不足）
+            #            或 zero_days >= N-1（仅 1 天有素材，源不稳定）
+            # - healthy: 近 N 天有 ≥2 天入库且当日 pending ≥ 3
+            if range_total == 0:
+                status = "critical"
+            elif today_pending < 3 or zero_days >= range_days - 1:
+                status = "warning"
+            else:
+                status = "healthy"
+
+            summary[status] += 1
+            summary["total"] += 1
+
+            channel_list.append({
+                "channel_id": ch.id,
+                "name": ch.name,
+                "description": ch.description,
+                "is_active": bool(ch.is_active),
+                "rss_source_count": rss_source_count,
+                "keyword_count": keyword_count,
+                "today_pending": today_pending,
+                "range_total": range_total,
+                "daily_trend": daily_trend,
+                "health_status": status,
+            })
+
+        return {"channels": channel_list, "summary": summary}

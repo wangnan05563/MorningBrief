@@ -5,6 +5,7 @@
 - 详情查询：返回单条素材全文
 - 新增/编辑/删除：手动维护素材，需 admin 权限
 """
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -16,9 +17,12 @@ from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.exceptions import NotFoundError, BizError
 from app.core.response import success
 from app.database import get_db
-from app.models import Material
+from app.models import AuditLog, Material
 
 router = APIRouter(prefix="/admin/api/v1/materials", tags=["B端-素材管理"])
+
+# 素材不存在错误消息常量（统一字面量，避免 S1192 字符串重复告警）
+_MATERIAL_NOT_FOUND_MSG = "素材不存在"
 
 
 class MaterialCreateRequest(BaseModel):
@@ -122,7 +126,7 @@ async def get_material(
     result = await db.execute(select(Material).where(Material.id == material_id))
     m = result.scalar_one_or_none()
     if m is None:
-        raise NotFoundError("素材不存在")
+        raise NotFoundError(_MATERIAL_NOT_FOUND_MSG)
     return success(data=_material_to_dict(m))
 
 
@@ -173,7 +177,7 @@ async def update_material(
     result = await db.execute(select(Material).where(Material.id == material_id))
     m = result.scalar_one_or_none()
     if m is None:
-        raise NotFoundError("素材不存在")
+        raise NotFoundError(_MATERIAL_NOT_FOUND_MSG)
 
     if req.status is not None and req.status not in ("pending", "selected", "skipped"):
         raise BizError(code=400, message="status 仅允许 pending/selected/skipped")
@@ -201,8 +205,16 @@ async def delete_material(
     result = await db.execute(select(Material).where(Material.id == material_id))
     m = result.scalar_one_or_none()
     if m is None:
-        raise NotFoundError("素材不存在")
+        raise NotFoundError(_MATERIAL_NOT_FOUND_MSG)
 
     await db.delete(m)
+    # 审计日志：硬删除不可恢复，记录操作人与素材标题便于事后追溯
+    db.add(AuditLog(
+        category="material",
+        action="delete",
+        target=str(material_id),
+        operator=admin.username,
+        detail=json.dumps({"material_id": material_id, "title": m.title}, ensure_ascii=False),
+    ))
     await db.commit()
     return success(data={"deleted": material_id})

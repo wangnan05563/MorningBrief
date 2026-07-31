@@ -22,7 +22,8 @@ import {
  * - RBAC：operator 仅可查看详情
  */
 test.describe('队列管理', () => {
-  test.use({ expect: { timeout: 15000 } })
+  // vite 首次按需编译路由组件可能耗时 15-25s，给到 30s 避免 flaky
+  test.use({ expect: { timeout: 30000 } })
 
   test.beforeEach(async ({ page }) => {
     // mock SSE 连接：QueueManagement 会发起 SSE 连接，后端未运行时 ECONNREFUSED 导致 flaky
@@ -62,17 +63,17 @@ test.describe('队列管理', () => {
     await page.goto('/queue')
 
     // 统计卡片：等待中 3 / 执行中 1 / 已完成 10 / 失败 2
-    await expect(page.locator('.stat-queued .stat-value')).toHaveText('3', { timeout: 15000 })
-    await expect(page.locator('.stat-running .stat-value')).toHaveText('1', { timeout: 15000 })
-    await expect(page.locator('.stat-success .stat-value')).toHaveText('10', { timeout: 15000 })
-    await expect(page.locator('.stat-failed .stat-value')).toHaveText('2', { timeout: 15000 })
+    await expect(page.locator('.stat-queued .stat-value')).toHaveText('3', { timeout: 30000 })
+    await expect(page.locator('.stat-running .stat-value')).toHaveText('1', { timeout: 30000 })
+    await expect(page.locator('.stat-success .stat-value')).toHaveText('10', { timeout: 30000 })
+    await expect(page.locator('.stat-failed .stat-value')).toHaveText('2', { timeout: 30000 })
 
     // 任务表格应展示 mock 数据：channel_name 列应显示频道名（验证字段对齐）
-    await expect(page.getByText('科技频道').first()).toBeVisible({ timeout: 15000 })
-    await expect(page.getByText('财经频道').first()).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('科技频道').first()).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('财经频道').first()).toBeVisible({ timeout: 30000 })
     // 状态标签
-    await expect(page.locator('.el-tag').filter({ hasText: '等待中' })).toBeVisible({ timeout: 15000 })
-    await expect(page.locator('.el-tag').filter({ hasText: '失败' })).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('.el-tag').filter({ hasText: '等待中' })).toBeVisible({ timeout: 30000 })
+    await expect(page.locator('.el-tag').filter({ hasText: '失败' })).toBeVisible({ timeout: 30000 })
   })
 
   test('配置面板加载默认串行模式', async ({ page }) => {
@@ -80,11 +81,11 @@ test.describe('队列管理', () => {
     await page.goto('/queue')
 
     // 串行模式 radio 选中
-    await expect(page.locator('input[value="serial"]')).toBeChecked({ timeout: 15000 })
+    await expect(page.locator('input[value="serial"]')).toBeChecked({ timeout: 30000 })
     // 并行模式未选中
-    await expect(page.locator('input[value="parallel"]')).not.toBeChecked({ timeout: 15000 })
+    await expect(page.locator('input[value="parallel"]')).not.toBeChecked({ timeout: 30000 })
     // 串行模式下不显示并发数 slider
-    await expect(page.locator('.concurrency-slider')).toHaveCount(0, { timeout: 15000 })
+    await expect(page.locator('.concurrency-slider')).toHaveCount(0, { timeout: 30000 })
   })
 
   test('切换并行模式显示并发数滑块', async ({ page }) => {
@@ -94,7 +95,7 @@ test.describe('队列管理', () => {
     // 切换到并行
     await page.locator('label').filter({ hasText: '并行' }).click()
     // 并发数 slider 应出现
-    await expect(page.locator('.concurrency-slider')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('.concurrency-slider')).toBeVisible({ timeout: 30000 })
   })
 
   test('保存配置调用正确接口', async ({ page }) => {
@@ -116,7 +117,7 @@ test.describe('队列管理', () => {
     expect(body.max_concurrent).toBeDefined()
 
     // 成功提示
-    await expect(page.locator('.el-message').getByText('配置已保存')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('.el-message').getByText('配置已保存')).toBeVisible({ timeout: 30000 })
   })
 
   test('取消排队任务', async ({ page }) => {
@@ -129,7 +130,7 @@ test.describe('队列管理', () => {
     await page.getByRole('button', { name: 'OK' }).click()
 
     // 成功提示
-    await expect(page.locator('.el-message').getByText('已取消')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('.el-message').getByText('已取消')).toBeVisible({ timeout: 30000 })
   })
 
   test('改优先级', async ({ page }) => {
@@ -142,7 +143,7 @@ test.describe('队列管理', () => {
     await page.locator('.priority-popover button', { hasText: '确定' }).first().click()
 
     // 成功提示
-    await expect(page.locator('.el-message').getByText('优先级已更新')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('.el-message').getByText('优先级已更新')).toBeVisible({ timeout: 30000 })
   })
 
   test('重试失败任务', async ({ page }) => {
@@ -154,8 +155,8 @@ test.describe('队列管理', () => {
     // ElMessageBox 确认
     await page.getByRole('button', { name: 'OK' }).click()
 
-    // 成功提示
-    await expect(page.locator('.el-message').getByText('已加入重试队列')).toBeVisible({ timeout: 15000 })
+    // 成功提示：QueueManagement.vue handleRetry 实际文案
+    await expect(page.locator('.el-message').getByText('已从失败步骤断点续跑，原工作流已重新入队')).toBeVisible({ timeout: 30000 })
   })
 
   test('详情抽屉显示任务信息', async ({ page }) => {
@@ -166,11 +167,11 @@ test.describe('队列管理', () => {
     await page.getByRole('button', { name: '详情' }).first().click()
 
     // 抽屉应可见
-    await expect(page.locator('.el-drawer')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('.el-drawer')).toBeVisible({ timeout: 30000 })
     // 抽屉标题
-    await expect(page.locator('.el-drawer__title')).toHaveText('任务详情', { timeout: 15000 })
+    await expect(page.locator('.el-drawer__title')).toHaveText('任务详情', { timeout: 30000 })
     // 任务 ID 应显示在描述列表中
-    await expect(page.locator('.el-descriptions').getByText('wf-20260708-0001')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('.el-descriptions').getByText('wf-20260708-0001')).toBeVisible({ timeout: 30000 })
   })
 
   test('operator 仅可查看详情，无操作按钮', async ({ page }) => {
@@ -178,10 +179,10 @@ test.describe('队列管理', () => {
     await page.goto('/queue')
 
     // operator 不应看到取消/改优先级/重试按钮
-    await expect(page.getByRole('button', { name: '取消' })).toHaveCount(0, { timeout: 15000 })
-    await expect(page.getByRole('button', { name: '改优先级' })).toHaveCount(0, { timeout: 15000 })
-    await expect(page.getByRole('button', { name: '重试' })).toHaveCount(0, { timeout: 15000 })
+    await expect(page.getByRole('button', { name: '取消' })).toHaveCount(0, { timeout: 30000 })
+    await expect(page.getByRole('button', { name: '改优先级' })).toHaveCount(0, { timeout: 30000 })
+    await expect(page.getByRole('button', { name: '重试' })).toHaveCount(0, { timeout: 30000 })
     // 但应看到详情按钮
-    await expect(page.getByRole('button', { name: '详情' }).first()).toBeVisible({ timeout: 15000 })
+    await expect(page.getByRole('button', { name: '详情' }).first()).toBeVisible({ timeout: 30000 })
   })
 })

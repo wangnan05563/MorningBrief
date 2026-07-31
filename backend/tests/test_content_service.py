@@ -28,7 +28,7 @@ async def _create_episode(
         cover_url="http://cdn/cover.png",
         categories=["科技", "财经"],
         status=status,
-        published_at=datetime.utcnow() if status == EpisodeStatus.published else None,
+        published_at=datetime.now() if status == EpisodeStatus.published else None,
     )
     db.add(ep)
     await db.commit()
@@ -38,10 +38,11 @@ async def _create_episode(
 
 @pytest.mark.asyncio
 async def test_get_today_episode_none(db_session):
-    """今日无已发布节目时返回 None。"""
+    """今日无已发布节目时返回空列表（多频道聚合，无 channel_id 时返回 list）。"""
     svc = ContentService(db_session)
     result = await svc.get_today_episode()
-    assert result is None
+    # 多频道架构：未指定 channel_id 时返回 list，无数据为空列表
+    assert result == []
 
 
 @pytest.mark.asyncio
@@ -52,10 +53,13 @@ async def test_get_today_episode_published(db_session):
 
     svc = ContentService(db_session)
     result = await svc.get_today_episode()
-    assert result is not None
-    assert result["date"] == today.isoformat()
-    assert result["status"] == "published"
-    assert "audio_url" in result
+    # 未指定 channel_id 时返回 list，每个频道最新一期
+    assert isinstance(result, list)
+    assert len(result) >= 1
+    ep = result[0]
+    assert ep["date"] == today.isoformat()
+    assert ep["status"] == "published"
+    assert "audio_url" in ep
 
 
 @pytest.mark.asyncio
@@ -66,7 +70,8 @@ async def test_get_today_episode_draft_not_returned(db_session):
 
     svc = ContentService(db_session)
     result = await svc.get_today_episode()
-    assert result is None
+    # draft 不被查询过滤命中，返回空列表
+    assert result == []
 
 
 @pytest.mark.asyncio
@@ -136,9 +141,10 @@ async def test_publish_episode_creates_episode_and_invalidates_cache(db_session)
     await db_session.commit()
     await db_session.refresh(review)
 
-    # 预先写一个 episode:today 缓存，验证发布后被删除
+    # 预先写一个 episode:today:all 缓存，验证发布后被删除
+    # 注意：缓存 key 必须与 get_today_episode 中实际写入的 all_key 一致
     # cache_manager.set 直接接收 Python 对象，无需 json.dumps
-    await cache_manager.set("episode:today", {"old": True}, ttl=3600)
+    await cache_manager.set("episode:today:all", {"old": True}, ttl=3600)
     # 预写列表缓存
     await cache_manager.set("episode:list:page:1", {"old": True}, ttl=3600)
 
@@ -155,7 +161,7 @@ async def test_publish_episode_creates_episode_and_invalidates_cache(db_session)
     assert ep.workflow_id == "wf-test-001"
 
     # 缓存应被失效：get 返回 None 即表示已删除
-    assert await cache_manager.get("episode:today") is None
+    assert await cache_manager.get("episode:today:all") is None
     assert await cache_manager.get("episode:list:page:1") is None
 
 
@@ -181,7 +187,9 @@ async def test_cache_miss_and_hit(db_session):
 
     # 第一次：cache miss，查 DB 并回写缓存
     result1 = await svc.get_today_episode()
-    assert result1["title"] == "原始标题"
+    # 未指定 channel_id 时返回 list，取第一个元素
+    assert isinstance(result1, list) and len(result1) >= 1
+    assert result1[0]["title"] == "原始标题"
 
     # 篡改 DB 数据（不通过缓存）
     ep.title = "新标题"
@@ -189,7 +197,8 @@ async def test_cache_miss_and_hit(db_session):
 
     # 第二次：cache hit，应返回缓存的旧标题
     result2 = await svc.get_today_episode()
-    assert result2["title"] == "原始标题"
+    assert isinstance(result2, list) and len(result2) >= 1
+    assert result2[0]["title"] == "原始标题"
 
-    # 验证缓存 key 存在：get 返回非 None 即表示命中
-    assert await cache_manager.get("episode:today") is not None
+    # 验证缓存 key 存在：未指定 channel_id 时使用 all_key
+    assert await cache_manager.get("episode:today:all") is not None

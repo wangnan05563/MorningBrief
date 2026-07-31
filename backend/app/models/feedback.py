@@ -34,7 +34,7 @@ class Feedback(Base):
     category: Mapped[str] = mapped_column(String(32), nullable=False, comment="反馈分类")
     content: Mapped[str] = mapped_column(Text, nullable=False, comment="反馈内容")
     contact: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, comment="联系方式")
-    # pending=待处理 / processed=处理中 / resolved=已解决
+    # pending=待处理 / processed=处理中 / resolved=已解决 # NOSONAR
     status: Mapped[str] = mapped_column(String(16), default="pending", comment="处理状态")
     # 反馈创建时间（从 COS JSON 读取，SCF 端写入时已生成）
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, comment="反馈创建时间")

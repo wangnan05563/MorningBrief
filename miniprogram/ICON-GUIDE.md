@@ -42,7 +42,19 @@ miniprogram/images/
 │   ├── headphones.png            # 耳机装饰（空状态/未登录/关于）
 │   ├── music.png                 # 音乐装饰（队列空状态）
 │   ├── newspaper.png             # 报纸装饰（历史空状态）
-│   └── radio.png                 # 收音机装饰（频道空状态）
+│   ├── radio.png                 # 收音机装饰（频道空状态）
+│   ├── app-logo.png              # 应用品牌 logo（关于页/开屏页）
+│   ├── app-icon.png              # 小程序主图标（上传微信后台，解决"最近使用"空白图标）
+│   ├── btn-share.png             # 按钮图标：分享（白色，主按钮）
+│   ├── btn-send.png              # 按钮图标：发送（白色，主按钮）
+│   ├── btn-copy.png              # 按钮图标：复制（白色，主按钮）
+│   ├── btn-settings.png          # 按钮图标：设置（白色，主按钮）
+│   ├── btn-login.png             # 按钮图标：登录（白色，主按钮）
+│   ├── btn-check.png             # 按钮图标：保存对勾（白色，主按钮）
+│   ├── btn-arrow-left-mint.png   # 按钮图标：返回（薄荷青，次按钮）
+│   ├── btn-home-mint.png         # 按钮图标：返回首页（薄荷青，次按钮）
+│   ├── btn-script-mint.png       # 按钮图标：查看文稿（薄荷青，次按钮）
+│   └── btn-x-mint.png            # 按钮图标：取消（薄荷青，次按钮）
 └── svg-src/                  # SVG 设计源文件（仅供维护，不参与运行）
     ├── *.svg                     # 各图标的矢量源文件
     ├── convert-icons.js          # SVG → PNG 转换脚本（Node.js + @resvg/resvg-js）
@@ -58,6 +70,9 @@ miniprogram/images/
 | 列表项小图标 | 32×32 px | 时长前置、列表项播放小图标 | 24×24 |
 | 顶部工具栏图标 | 48×48 px | 搜索、睡眠定时器入口 | 24×24 |
 | 空状态装饰图标 | 96×96 px | 空状态、未登录卡片 | 64×64 |
+| 应用品牌 logo | 96×96 px | 关于页/开屏页品牌标识 | 64×64 |
+| 小程序主图标 | 512×512 px | 微信公众平台后台上传 | 512×512 |
+| 按钮内功能图标 | 48×48 px | 按钮内 icon + text 组合（渲染 32rpx） | 24×24 |
 
 **说明**：小程序 `<image>` 标签会用 `mode="aspectFit"` 自适应容器尺寸，PNG 实际尺寸为渲染上限。为保证 Retina 屏清晰度，PNG 尺寸应 ≥ 容器 rpx ÷ 2（设计稿 750rpx → 375px 设备）。
 
@@ -129,12 +144,73 @@ miniprogram/images/
 
 | 场景 | 图标 | 语义 |
 |------|------|------|
-| 节目未上线 / 未登录 / 关于页 logo | `headphones.png` | 耳机（产品定位） |
+| 节目未上线 / 未登录 | `headphones.png` | 耳机（产品定位） |
 | 历史节目空状态 | `newspaper.png` | 报纸（新闻内容） |
 | 收藏列表空状态 | `favorite.png` | 心形（收藏主题） |
 | 频道列表空状态 | `radio.png` | 收音机（频道） |
 | 队列空状态 | `music.png` | 音乐（音频内容） |
 | 搜索无结果 | `search.png` | 放大镜（搜索主题） |
+
+### 4.8 品牌图标
+
+**选用标准**：主图标用于微信后台配置，logo 用于应用内品牌展示，延续 tabBar 渐变设计语言（耳机+声波，体现"用耳朵听新闻"）。
+
+| 场景 | 图标 | 尺寸 | 设计说明 |
+|------|------|------|---------|
+| 关于页 / 开屏页 logo | `app-logo.png` | 96×96 px | 耳机+中央声波，品牌青绿色 `#7ECEC1`，透明背景 |
+| 微信小程序主图标 | `app-icon.png` | 512×512 px | 耳机+中央声波，薄荷青→蜜桃粉渐变背景，需上传至微信公众平台后台 |
+
+**主图标上传指引**：微信小程序"最近使用"列表默认显示空白图标，是因为未在后台配置小程序图标。需登录 [微信公众平台](https://mp.weixin.qq.com) → 设置 → 基本设置 → 小程序头像，上传 `app-icon.png`（512×512，PNG）。
+
+### 4.9 按钮内功能图标
+
+**选用标准**：所有按钮（`<button>` 与 `<view>` 模拟按钮）必须搭配开源 Tabler Icons 图标，图标 + 文字水平排列，禁止纯文字按钮，禁止使用 AI 预制图标。颜色按按钮类型分两套：
+
+- 白色版本：用于彩色背景的主按钮（`.btn-primary` / `.edit-btn-confirm`）
+- 薄荷青版本（`#5BA89B`）：用于浅色背景的次按钮（`.btn-secondary` / `.edit-btn-cancel`）
+
+| 图标 | 颜色 | 使用场景 | 按钮类型 |
+|------|------|----------|----------|
+| `btn-share.png` | 白色 | detail 页"分享节目"按钮（open-type=share） | 主按钮 |
+| `btn-send.png` | 白色 | feedback 页"提交反馈"按钮 | 主按钮 |
+| `btn-copy.png` | 白色 | webview 页"复制链接"按钮 | 主按钮 |
+| `btn-settings.png` | 白色 | index/history 页"去设置偏爱频道"按钮 | 主按钮 |
+| `btn-login.png` | 白色 | profile 页"点击登录"按钮 | 主按钮 |
+| `btn-check.png` | 白色 | profile 页"保存"按钮（edit-btn-confirm） | 主按钮 |
+| `btn-arrow-left-mint.png` | 薄荷青 | webview 页"返回"按钮 | 次按钮 |
+| `btn-home-mint.png` | 薄荷青 | detail 页"返回首页"按钮 | 次按钮 |
+| `btn-script-mint.png` | 薄荷青 | detail 页"查看完整文稿"按钮 | 次按钮 |
+| `btn-x-mint.png` | 薄荷青 | profile 页"取消"按钮（edit-btn-cancel） | 次按钮 |
+
+**WXML 使用模板**：
+
+```xml
+<!-- 主按钮：白色图标 + 白色文字 + 薄荷青渐变背景 -->
+<button class="btn-primary" hover-class="none">
+  <view class="btn-content">
+    <image class="btn-icon" src="/images/icons/btn-share.png" mode="aspectFit" />
+    <text>分享节目</text>
+  </view>
+</button>
+
+<!-- 次按钮：薄荷青图标 + 蜜桃粉文字 + 浅粉背景 -->
+<view class="btn-secondary">
+  <view class="btn-content">
+    <image class="btn-icon" src="/images/icons/btn-arrow-left-mint.png" mode="aspectFit" />
+    <text>返回</text>
+  </view>
+</view>
+```
+
+**样式规范**（[app.wxss](file:///d:/code/otherProjects/20_News/miniprogram/app.wxss) 全局定义）：
+
+- `.btn-icon`：32rpx × 32rpx，右间距 12rpx，vertical-align: middle
+- `.btn-content`：inline-flex 容器，水平居中、垂直居中
+- `.btn-primary` / `.btn-secondary`：text-align: center，确保 `.btn-content` 在按钮内居中
+
+**特例**：`<button open-type="chooseAvatar">`（profile 页头像选择）内部已含用户头像 image + 提示文字，不再额外添加功能图标，避免视觉冗余。
+
+
 
 ## 五、emoji 使用边界
 

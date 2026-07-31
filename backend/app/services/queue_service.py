@@ -7,9 +7,9 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, case
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import contains_eager
 
 from app.core.exceptions import ParamError
 from app.core.timeutil import utcnow_naive
@@ -20,6 +20,15 @@ from app.models.workflow import (
 )
 
 logger = logging.getLogger(__name__)
+
+# 允许排序的字段白名单：避免外部传入任意字段名拼 SQL 造成注入风险
+# channel_name 需通过 joinedload 的 Channel 关系排序
+_SORT_FIELD_MAP = {
+    "channel_name": Channel.name,
+    "priority": Workflow.priority,
+    "status": Workflow.status,
+    "started_at": Workflow.started_at,
+}
 
 
 class QueueService:
@@ -49,8 +58,16 @@ class QueueService:
         channel_id: Optional[int] = None,
         priority: Optional[int] = None,
         page: int = 1, size: int = 20,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
     ) -> tuple[list[dict], int]:
-        """分页查询队列任务，返回 (任务列表, 总数)。"""
+        """分页查询队列任务，返回 (任务列表, 总数)。
+
+        排序策略：
+        - 默认（sort_by/sort_order 任一为空或字段不在白名单）：
+          failed 状态置顶 + started_at 倒序，确保最新失败任务优先可见
+        - 指定字段：按 sort_by 字段 + sort_order 方向单一排序
+        """
         conditions = []
         if status:
             conditions.append(Workflow.status == status)
@@ -65,12 +82,17 @@ class QueueService:
             count_stmt = count_stmt.where(cond)
         total = (await self.db.execute(count_stmt)).scalar() or 0
 
-        # 列表（按优先级降序 + 创建时间升序，与队列出队顺序一致）
-        # joinedload Channel 避免 N+1 查询，前端表格需展示频道名
+        # 构建 order_by：白名单校验 + 方向控制
+        # 双参数必须同时提供且字段在白名单内才走自定义排序，否则走默认
+        order_clauses = self._build_order_clauses(sort_by, sort_order)
+
+        # 显式 outerjoin Channel 并用 contains_eager 复用该 join 加载关系，
+        # 避免 joinedload 自动生成 channel_1 别名导致 ORDER BY channel.name 失效
         list_stmt = (
             select(Workflow)
-            .options(joinedload(Workflow.channel))
-            .order_by(Workflow.priority.desc(), Workflow.started_at.asc())
+            .options(contains_eager(Workflow.channel))
+            .outerjoin(Channel, Workflow.channel_id == Channel.id)
+            .order_by(*order_clauses)
             .offset((page - 1) * size)
             .limit(size)
         )
@@ -94,6 +116,31 @@ class QueueService:
                 "error": wf.error,
             })
         return items, total
+
+    @staticmethod
+    def _build_order_clauses(
+        sort_by: Optional[str], sort_order: Optional[str],
+    ) -> list:
+        """构建 order_by 子句列表。
+
+        默认排序：failed 状态置顶（CASE 表达式）+ started_at 倒序，
+        保证运维第一时间看到最新失败任务。
+        自定义排序：白名单字段 + asc/desc 方向。
+
+        双参数必须同时有效才走自定义排序，避免半残状态。
+        """
+        # 自定义排序：字段在白名单 + 方向有效
+        if sort_by in _SORT_FIELD_MAP and sort_order in ("asc", "desc"):
+            col = _SORT_FIELD_MAP[sort_by]
+            return [col.asc() if sort_order == "asc" else col.desc()]
+
+        # 默认排序：failed 状态置顶（0 < 1，failed 排前），再按 started_at 倒序
+        # CASE 表达式避免在 Python 层排序，由 SQLite 完成排序
+        status_priority = case(
+            (Workflow.status == WorkflowStatus.failed.value, 0),
+            else_=1,
+        )
+        return [status_priority.asc(), Workflow.started_at.desc()]
 
     async def cancel_task(self, workflow_id: str) -> None:
         """取消排队中任务。status=queued → cancelled，标记队列条目 cancelled=True。"""

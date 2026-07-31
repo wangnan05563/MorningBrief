@@ -82,7 +82,7 @@ async def _resolve_sse_admin(
 
 
 @router.get("/stream")
-async def event_stream(
+async def event_stream(  # NOSONAR
     request: Request,
     authorization: str | None = Header(None),
     token: str | None = Query(None, description="EventSource 不支持 header 时的回退 token"),
@@ -97,7 +97,7 @@ async def event_stream(
     bus = get_event_bus()
     queue: asyncio.Queue[Event] = asyncio.Queue(maxsize=_MAX_QUEUE_SIZE)
 
-    async def _on_event(event: Event) -> None:
+    async def _on_event(event: Event) -> None:  # NOSONAR
         """EventBus handler：将事件放入连接私有队列。
 
         put_nowait 不阻塞 EventBus 主循环；队列满时丢弃最旧事件

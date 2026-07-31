@@ -46,6 +46,13 @@ priority:
   - preset_reflect: 维度 27：预设下拉框反射
   - preset_match: 维度 28：预设自动匹配
   - api_key_protection: 维度 29：API Key 保护
+  - shared_state_sync: 维度 30：多页面共享状态同步（规范66）
+  - defensive_filter: 维度 31：过滤模式防御性二次过滤（规范67）
+  - empty_state_explicit: 维度 32：空状态显式标记（规范68）
+  - dual_signal_detect: 维度 33：时间戳+内容双校验（规范69）
+  - async_window_read: 维度 34：异步窗口本地存储直接读取（规范70）
+  - globaldata_sync: 维度 35：globalData 与 data 镜像同步（规范71）
+  - lifecycle_reload: 维度 36：页面生命周期刷新策略（规范72）
   report_threshold: LOW
 checklist:
   directory_structure: true
@@ -67,6 +74,18 @@ checklist:
   preset_dropdown_reflect: true
   preset_auto_match: true
   api_key_protection: true
+  frontend_minimize_guard: true
+  route_param_timing: true
+  polling_state_sync: true
+  step_progress_visualize: true
+  shared_state_sync: true
+  defensive_filter: true
+  empty_state_explicit: true
+  dual_signal_detect: true
+  async_window_read: true
+  globaldata_sync: true
+  lifecycle_reload: true
+  edit_integrity_verify: true
 hard_constraints:
   rules:
   - name: miniprogram_circular_require_top
@@ -214,6 +233,84 @@ hard_constraints:
     severity: MEDIUM
     auto_fix: false
     category: audit_log
+  - name: forbid_location_href_for_401
+    pattern: location\.href\s*=\s*['"]/login
+    message: 401 跳转禁止用 location.href（激活最小化窗口），必须用 router.push('/login')
+    severity: CRITICAL
+    auto_fix: false
+    category: frontend_minimize_guard
+  - name: elmessage_without_hidden_check
+    pattern: (?s)interceptors\.response.*?ElMessage\.(error|warning|success)\((?!.*document\.hidden)
+    message: 响应拦截器中 ElMessage 调用前必须检查 !document.hidden，避免最小化窗口被激活
+    severity: CRITICAL
+    auto_fix: false
+    category: frontend_minimize_guard
+  - name: polling_without_silent
+    pattern: (?s)setInterval\s*\([^)]*api\.(get|post)\([^)]*\)\s*(?!.*silent)
+    message: "轮询请求必须加 { silent: true } 跳过全局 ElMessage，避免最小化窗口被激活"
+    severity: HIGH
+    auto_fix: false
+    category: polling_state_sync
+  - name: polling_without_clearinterval
+    pattern: setInterval\s*\(
+    message: setInterval 必须配对 clearInterval（在 onUnmounted 中清理），防止内存泄漏
+    severity: HIGH
+    auto_fix: false
+    category: polling_state_sync
+  - name: router_replace_then_load_without_param
+    pattern: (?s)router\.replace\([^)]+\)\s*(?!.*await\s+loadDetail\(\s*\w+\.\w+\s*\))
+    message: router.replace 后必须显式传参 await loadDetail(new_id)，禁止依赖 route.params（尚未更新）
+    severity: HIGH
+    auto_fix: false
+    category: route_param_timing
+  - name: workflow_step_without_progress
+    pattern: (?s)<el-table[^>]*>[\s\S]*?status[\s\S]*?</el-table>(?!.*el-progress)
+    message: 工作流步骤表格必须有 el-progress 进度条列，状态映射 pending=0%/running=50%/success=100%
+    severity: MEDIUM
+    auto_fix: false
+    category: step_progress_visualize
+  - name: miniprogram_onshow_no_authority_source
+    pattern: (?s)onShow\s*\([^)]*\)\s*\{(?:(?!localData\.|getApp\(\)\.globalData\.).)*?(?:isPreferredMode|currentChannelId)
+    message: onShow 中涉及共享状态（preferredMode/currentChannelId）但未从权威源（localData/globalData）读取最新值，会导致切 Tab 后残留旧数据（规范66）
+    severity: HIGH
+    auto_fix: false
+    category: shared_state_sync
+  - name: miniprogram_no_defensive_filter
+    pattern: (?s)_apply\w*Data\s*\([^)]*\)\s*\{(?:(?!\.filter\().)*?currentChannelId\s*===\s*''preferred''
+    message: 数据应用层（_applyXxxData）在偏爱模式下未对数据二次过滤，上游返回全量数据时会泄漏所有频道（规范67）
+    severity: HIGH
+    auto_fix: false
+    category: defensive_filter
+  - name: miniprogram_empty_state_not_explicit
+    pattern: (?s)async\s+load\w*\s*\([^)]*\)\s*\{(?:(?!Empty\s*[:=]).)*?setData\(\{
+    message: 数据加载函数（loadXxx）未显式设置 xxxEmpty 标志，切 Tab 后空状态残留导致显示旧数据或误显示空提示（规范68）
+    severity: MEDIUM
+    auto_fix: false
+    category: empty_state_explicit
+  - name: miniprogram_single_signal_change_detect
+    pattern: _lastPreferredTs\s*!==\s*\w+\.globalData\.\w+Changed(??!.*JSON\.stringify)
+    message: 跨页面状态变更检测仅用时间戳单信号，普通 Tab 切换不更新时间戳会漏刷新，必须用"时间戳 OR 内容比对"双校验（规范69）
+    severity: HIGH
+    auto_fix: false
+    category: dual_signal_detect
+  - name: miniprogram_load_reads_data_mirror
+    pattern: (?s)async\s+load(?:Preferred|History)\s*\([^)]*\)\s*\{\s*this\.data\.preferredIds
+    message: 数据加载函数入口从 this.data.preferredIds 读取（setData 异步窗口旧值），应直接从 localData.getPreferredChannels() 读取最新值（规范70）
+    severity: HIGH
+    auto_fix: false
+    category: async_window_read
+  - name: miniprogram_globaldata_not_synced
+    pattern: (?s)setData\(\{[^}]*todayList:\s*\[\][^}]*\}\)(?!.*globalData\.todayList\s*=\s*\[\])
+    message: 清空 data.todayList 时未同步清空 globalData.todayList，切回页面从 globalData 读到残留数据（规范71）
+    severity: HIGH
+    auto_fix: false
+    category: globaldata_sync
+  - name: miniprogram_onshow_no_reload
+    pattern: (?s)onShow\s*\([^)]*\)\s*\{[^}]*setData\(\{[^}]*preferredIds[^}]*\}\)(?!.*load(?:Preferred|History))
+    message: onShow 同步 preferredIds 后未调用 loadPreferred/loadHistory，UI 仍显示旧数据（规范72）
+    severity: HIGH
+    auto_fix: false
+    category: lifecycle_reload
   block_on_violation: true
 abstraction_thresholds:
   inline_style_repeat: 3
@@ -437,6 +534,129 @@ review_dimensions:
   - "*.vue"
   applicable_dirs:
   - "admin-web/src/"
+#=== 扩展维度（91+，按需激活）===
+# === 2026-07-31 新增：微信登录修复+历史对话复盘审查维度（规范 R171-R185） ===
+- id: "RD-FE-18"
+  name: "小程序用户态数据双层同步"
+  description: "写入 globalData 的用户态数据必须同步写入 localStorage，确保跨会话持久化"
+  severity: "critical"
+  rules:
+  - id: "R-171-1"
+    description: "app.globalData.userInfo 赋值后 3 行内必须有 setToken 或 wx.setStorageSync 调用"
+    grep_pattern: "app\\.globalData\\.userInfo\\s*="
+    auto_fix: false
+  - id: "R-171-2"
+    description: "app.globalData.token 赋值后 3 行内必须有 wx.setStorageSync 同步"
+    grep_pattern: "app\\.globalData\\.token\\s*="
+    auto_fix: false
+  applicable_files:
+  - "*.js"
+  applicable_dirs:
+  - "miniprogram/"
+- id: "RD-FE-19"
+  name: "小程序 4 维静态验证"
+  description: "修改 miniprogram/*.js 后必须完成语法/接口/契约/渲染 4 维静态验证"
+  severity: "major"
+  rules:
+  - id: "R-174-1"
+    description: "修改的 .js 文件必须通过 node --check 语法检查"
+    grep_pattern: "node --check"
+    auto_fix: false
+  - id: "R-174-2"
+    description: ".wxml 数据绑定字段名必须与 setData 字段名一致"
+    grep_pattern: "\\{\\{userInfo\\.\\w+\\}\\}"
+    auto_fix: false
+  applicable_files:
+  - "*.js"
+  - "*.wxml"
+  applicable_dirs:
+  - "miniprogram/"
+- id: "RD-FE-20"
+  name: "前后端字段契约验证清单"
+  description: "前后端交互 API 必须核对请求字段/响应字段/兜底链三项"
+  severity: "major"
+  rules:
+  - id: "R-175-1"
+    description: "前端使用的字段名必须与后端 Pydantic Model 定义一致（snake_case vs camelCase）"
+    grep_pattern: "snake_case|camelCase"
+    auto_fix: false
+  - id: "R-175-2"
+    description: "前端兜底链中的每个字段名必须有对应的数据源"
+    grep_pattern: "\\|\\|\\s*\\w+\\."
+    auto_fix: false
+  applicable_files:
+  - "*.js"
+  - "*.vue"
+  applicable_dirs:
+  - "miniprogram/"
+  - "admin-web/src/"
+- id: "RD-FE-21"
+  name: "小程序进度上报条件容错"
+  description: "进度上报不得因 duration<=0 整体跳过，listened_seconds 必须独立上报"
+  severity: "major"
+  rules:
+  - id: "R-177-1"
+    description: "进度上报函数中禁止 if (duration <= 0) return 整体跳过"
+    grep_pattern: "if\\s*\\(.*duration.*<=\\s*0\\)\\s*return"
+    auto_fix: false
+  - id: "R-177-2"
+    description: "reportPlayProgress 参数中必须包含 listened_seconds"
+    grep_pattern: "reportPlayProgress"
+    auto_fix: false
+  applicable_files:
+  - "*.js"
+  applicable_dirs:
+  - "miniprogram/"
+- id: "RD-FE-22"
+  name: "状态属性与标志位一致性"
+  description: "对象 status 属性必须先检查标志位，不能直接查询外部状态覆盖"
+  severity: "major"
+  rules:
+  - id: "R-179-1"
+    description: "status 属性中直接查询外部状态而无 if self._stopped 检查 → 违规"
+    grep_pattern: "def\\s+status|get\\s+status"
+    auto_fix: false
+  - id: "R-179-2"
+    description: "stop() 方法必须设置 _stopped 标志位"
+    grep_pattern: "def\\s+stop|stop\\s*\\(\\)"
+    auto_fix: false
+  applicable_files:
+  - "*.js"
+  - "*.ts"
+  - "*.vue"
+  applicable_dirs:
+  - "miniprogram/"
+  - "admin-web/src/"
+- id: "RD-FE-23"
+  name: "音频队列自动播放"
+  description: "onEnded 必须触发 playNext 自动播放，队列空时 _autoFillQueue 预填"
+  severity: "minor"
+  rules:
+  - id: "R-180-1"
+    description: "onEnded 回调中必须有 playNext 调用"
+    grep_pattern: "onEnded"
+    auto_fix: false
+  - id: "R-180-2"
+    description: "playNext 中队列空时必须有 _autoFillQueue 预填逻辑"
+    grep_pattern: "playNext"
+    auto_fix: false
+  applicable_files:
+  - "*.js"
+  applicable_dirs:
+  - "miniprogram/"
+- id: "RD-FE-24"
+  name: "小程序分包配置校验"
+  description: "app.json 中主包页面路径不能在分包 root 目录下"
+  severity: "major"
+  rules:
+  - id: "R-182-1"
+    description: "pages 数组中的路径不能以 subPackages[].root 为前缀"
+    grep_pattern: "subPackages"
+    auto_fix: false
+  applicable_files:
+  - "app.json"
+  applicable_dirs:
+  - "miniprogram/"
 
 # === 2026-07-18 新增：SonarQube 迭代闭环复盘审查配置 ===
 sonarqube_checklist:
@@ -597,4 +817,1050 @@ miniprogram_navigation_safety:
     - "onTapContinue"
     - "onTapFloatingPlayer"
     - "onTapHistory"
-    - "onTapEpisode"
+
+# === 2026-07-20 新增：SonarQube 全项目扫描复盘审查配置（前端侧，维度 70-74）===
+# 对应 news-code-dev 元规范 R86-R90，详见 SKILL.md 维度 70-74
+# 这些维度来源于 2026-07-20 SonarQube 全项目扫描闭环（168 issues 全部 CLOSED）
+
+# 维度 70：NOSONAR 注释位置正确性（前端注释语法，对应 S61/R86）
+nosonar_positioning_frontend:
+  enabled: true
+  case_sensitive: true
+  require_line_match_with_issue: true
+  # 按文件类型的合法 NOSONAR 注释语法
+  valid_patterns:
+    .js: "//\\s*NOSONAR\\s*$"
+    .vue_script: "//\\s*NOSONAR\\s*$"
+    .vue_template: "<!--\\s*NOSONAR\\s*-->"
+    .wxml: "<!--\\s*NOSONAR\\s*-->"
+    .wxss: "/\\*\\s*NOSONAR\\s*\\*/"
+  # 非法模式（大小写错误）
+  invalid_patterns:
+    - "//\\s*nosonar"      # 小写不生效
+    - "//\\s*NoSonar"      # 混合大小写不生效
+  scan_files:
+    - "admin-web/src/**/*.vue"
+    - "admin-web/src/**/*.js"
+    - "miniprogram/**/*.js"
+    - "miniprogram/**/*.wxml"
+    - "miniprogram/**/*.wxss"
+
+# 维度 71：SonarQube 扫描环境兼容性（Node.js 版本预检，对应 S62/R87）
+sonarqube_environment_frontend:
+  enabled: true
+  nodejs_max_compatible_version: "20.99.0"
+  powershell_use_bat_wrapper: true
+  fallback_to_python_only_on_incompat: true
+  blocked_commands:
+    - "cmd /c"
+  require_env_var_for_token: "SONAR_TOKEN"
+  scanner_path_env_var: "SONAR_SCANNER_HOME"
+  sonarqube_url: "http://127.0.0.1:9000"
+  # 前端扫描范围（与后端分离）
+  frontend_sources:
+    - "admin-web/src"
+    - "miniprogram"
+
+# 维度 72：并行子代理修复结果核查（对应 S63/R88）
+parallel_subagent_verification_frontend:
+  enabled: true
+  require_grep_verification: true
+  file_group_mutually_exclusive: true
+  verify_items:
+    - "nosonar_actually_written"
+    - "nosonar_line_matches_issue_line"
+    - "nosonar_syntax_matches_file_type"
+  max_subagent_count: 5
+
+# 维度 73：前端测试失败 git stash 验证（对应 S64/R89）
+test_failure_diagnosis_frontend:
+  enabled: true
+  require_stash_verification: true
+  stash_message_format: "verify-baseline-{timestamp}"
+  stash_target_files: "modified_files_only"
+  # 前端测试框架
+  test_frameworks:
+    - "vitest"
+    - "jest"
+    - "playwright"
+  indicators_of_preexisting_failure:
+    - "TypeError: Cannot read property of undefined"
+    - "AssertionError: expected null to equal"
+    - "test.*no direct relation to modified file"
+
+# 维度 74：NOSONAR 抑制 vs 代码修复决策（对应 S65/R90）
+nosonar_decision_matrix_frontend:
+  enabled: true
+  must_fix_rules:
+    - "S5446"  # 裸 except（前端对应 catch (e) {} 空捕获）
+    - "S2817"  # 硬编码 SQL（前端对应硬编码 URL/凭据）
+    - "S5886"  # Optional 缺失（前端对应未做 null 检查）
+    - "S3699"  # 从未执行的 Promise
+  can_suppress_rules:
+    - "S3776"  # 认知复杂度（若职责单一、重构成本高）
+    - "S125"   # 注释代码误报（中文说明性注释）
+    - "S6353"  # 未使用变量（Vue template 隐式引用）
+  require_reason_comment: true
+  reason_comment_format_js: "// NOSONAR  // {rule}: {reason}"
+  reason_comment_format_html: "<!-- NOSONAR  {rule}: {reason} -->"
+
+# === 2026-07-21 新增：跨项目模块迁移复盘审查配置（前端侧，维度 75-77）===
+# 对应 news-code-dev 元规范 R86-R88 / coding-standards.md 规范 S61-S63
+# 这些维度来源于 2026-07-21 参考 17_xianyu 项目实现"关于/帮助"模块的完整复盘
+
+# 维度 75：跨项目模块迁移 7 步法（前端侧，对应 R86/S61）
+cross_project_migration_frontend:
+  enabled: true
+  required_steps:
+    - "requirement_confirm"
+    - "architecture_align"
+    - "backend_dev"
+    - "frontend_dev"
+    - "test_write"
+    - "test_execute"
+    - "build_verify"
+  architecture_align_checklist:
+    - "目录结构对齐"
+    - "技术栈对齐"
+    - "依赖库对齐"
+    - "命名约定对齐"
+    - "路径风格对齐"
+  build_verify_required: true
+  build_verify_command: "npm run build"
+  test_execute_required: true
+  test_frameworks:
+    - "vitest"
+    - "jest"
+    - "playwright"
+
+# 维度 76：前端嵌套目录相对路径校验（对应 R92/S87）
+frontend_nested_paths:
+  enabled: true
+  nested_dir_pattern: "views/<module>/<Page>.vue"
+  parent_level_required: 2  # 嵌套层级：扁平为 1，单层嵌套为 2，双层嵌套为 3
+  path_types_to_check:
+    - "scss_use"
+    - "js_import"
+    - "ts_import"
+    - "vue_import"
+  # 错误模式：嵌套目录下使用一级 ../
+  invalid_patterns:
+    - pattern: "@use '\\.\\./styles/"
+      description: "嵌套目录下 SCSS @use 应为 ../../styles/"
+      fix_hint: "改为 @use '../../styles/'"
+    - pattern: "from '\\.\\./utils/"
+      description: "嵌套目录下 JS import 应为 ../../utils/"
+      fix_hint: "改为 from '../../utils/'"
+    - pattern: "from '\\.\\./api/"
+      description: "嵌套目录下 JS import 应为 ../../api/"
+      fix_hint: "改为 from '../../api/'"
+    - pattern: "from '\\.\\./components/"
+      description: "嵌套目录下 JS import 应为 ../../components/"
+      fix_hint: "改为 from '../../components/'"
+  scan_dirs:
+    - "admin-web/src/views/*/"
+  build_verify_required: true
+
+# 维度 77：UI 图标跨库迁移存在性验证（对应 R88/S63）
+icon_migration_frontend:
+  enabled: true
+  target_icon_library: "@element-plus/icons-vue"
+  verify_command: "node -e \"const icons = require('@element-plus/icons-vue'); console.log(Object.keys(icons))\""
+  verify_before_build: true
+  fallback_icon: "MagicStick"
+  # 常见 React → Vue 图标映射（参考项目 → 目标项目）
+  icon_mapping:
+    Rocket: "MagicStick"
+    Heart: "Star"
+    Star: "StarFilled"
+    Settings: "Setting"
+    Bell: "Bell"
+    User: "User"
+    Mail: "Message"
+    Search: "Search"
+  # 已知不存在的图标名（参考项目特有）
+  known_missing_icons:
+    - "Rocket"
+    - "Zap"
+    - "Layers"
+    - "Grid"
+  scan_imports_from:
+    - "@element-plus/icons-vue"
+
+# ============================================================
+# === 2026-07-21 新增：综合复盘审查配置（维度 78-82）===
+# ============================================================
+# 对应 news-code-dev 元规范 R97/R98/R91-R92/R86/R97（菜单分组/PWA/图片封面/About-Help/菜单 fallback）
+# 这些维度来源于 2026-07-21 菜单分组、PWA 图标、图片渲染、About/Help 模块、菜单导航 fallback 五项前端迭代复盘
+# 报告中违规条目末尾标注 [V2.0 新增] 便于迭代追溯
+
+# ---- 维度 78：菜单分组与角色可见性审查（对应 R97）----
+# 背景：菜单数量超过阈值时扁平 el-menu 查找困难，必须按功能分组（el-sub-menu）
+# 规则：分组配置必须从配置文件读取，禁止硬编码在 Layout.vue；角色可见性控制未授权角色不渲染
+menu_grouping_check:
+  enabled: true
+  # 菜单数量阈值，超过则强制分组
+  min_menu_count: 10
+  # 路由必须通过 meta.group 字段配置分组
+  require_group_meta: true
+  # groupConfig 必须从配置文件读取（禁止硬编码在 .vue 文件）
+  require_config_driven: true
+  forbid_hardcoded_in_layout: true
+  # groupConfig 数组每项必须含的字段
+  group_config_fields:
+    - group_name
+    - icon
+    - visible_roles
+  # 必须启用 unique-opened 手风琴效果（同时只展开一个子菜单）
+  require_unique_opened: true
+  # 路由变化时必须自动展开当前路由所属分组（watch $route）
+  require_route_watch: true
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/layouts/**/*.vue"
+    - "admin-web/src/router/**/*.js"
+    - "admin-web/src/config/**/*"
+
+# ---- 维度 79：PWA 图标与 manifest 审查（对应 R98）----
+# 背景：PWA 安装到桌面时 manifest.json 声明的图标是用户首次看到的视觉元素
+# 规则：必须含 192/512 两种尺寸 + purpose: "any maskable" + index.html 引用 manifest + theme-color
+pwa_icon_check:
+  enabled: true
+  require_manifest_json: true
+  # 必须声明的图标尺寸
+  required_icon_sizes:
+    - "192x192"
+    - "512x512"
+  # 必须包含 purpose: "any maskable" 声明（Android 自适应图标）
+  require_purpose_any_maskable: true
+  # public/ 目录必须同时存在的图标文件
+  required_icon_files:
+    - "public/favicon.ico"
+    - "public/icon-192.png"
+    - "public/icon-512.png"
+  # index.html 必须引用 manifest.json
+  require_manifest_link: true
+  manifest_link_pattern: "<link\\s+rel=\"manifest\"\\s+href=\"/manifest\\.json\""
+  # index.html 必须声明 theme-color meta 标签
+  require_theme_color_meta: true
+  theme_color_meta_pattern: "<meta\\s+name=\"theme-color\""
+  # ICO 文件推荐包含的多尺寸（16/32/48）
+  recommended_ico_sizes:
+    - 16
+    - 32
+    - 48
+  # 扫描范围
+  scan_files:
+    - "admin-web/public/manifest.json"
+    - "admin-web/index.html"
+    - "admin-web/public/*.{ico,png}"
+
+# ---- 维度 80：图片封面渲染与降级审查（对应 R91/R92）----
+# 背景：小程序详情页按段渲染图文时，图片加载失败需自然降级避免视觉污染
+# 规则：必须 binderror 事件 + lazy-load + 固定宽高比（避免 CLS）
+cover_image_rendering_check:
+  enabled: true
+  # 必须按段渲染图文（segments 数组）
+  require_segments_rendering: true
+  # segments 数组必须含 cover_url 字段判断
+  require_cover_url_field: true
+  # 图片必须绑定 binderror 事件
+  require_binderror: true
+  # 图片必须使用 lazy-load 模式
+  require_lazy_load: true
+  # 图片容器必须有固定宽高比（避免布局抖动 CLS）
+  require_fixed_aspect_ratio: true
+  # 推荐显示 skeleton 占位图
+  recommend_skeleton: true
+  # 扫描范围
+  scan_files:
+    - "miniprogram/pages/detail/**/*.wxml"
+    - "miniprogram/pages/detail/**/*.js"
+    - "miniprogram/pages/detail/**/*.wxss"
+
+# ---- 维度 81：About/Help 模块完整性审查（对应 R97）----
+# 背景：About 页面展示构建元信息便于报障定位版本；Help 页面侧边栏锚点+滚动监听+搜索过滤是文档标准交互
+# 规则：About 必须含 6 项元信息 + 检查更新 + 失败降级；Help 必须含锚点导航 + 滚动监听 + 搜索过滤
+about_help_module_check:
+  enabled: true
+  # About 页面必须展示的字段
+  about_required_fields:
+    - product_name
+    - version
+    - build_date
+    - git_sha
+    - python_version
+    - platform
+  # About 页面必须提供"检查更新"功能
+  require_check_update: true
+  check_update_api: "GitHub Releases API"
+  check_update_api_pattern: "check-update|checkUpdate|check_update"
+  # 检查更新失败时必须降级显示本地来源，不报错
+  require_fallback_on_check_failure: true
+  # Help 页面必须有侧边栏锚点导航
+  help_require_anchor_nav: true
+  # Help 页面必须有滚动监听
+  help_require_scroll_listen: true
+  scroll_listen_pattern: "@scroll|onScroll|addEventListener.*scroll"
+  # Help 页面必须有搜索过滤
+  help_require_search_filter: true
+  # Help 页面每章节支持的 block 类型
+  help_supported_block_types:
+    - text
+    - code
+    - list
+    - table
+    - alert
+  # 推荐开源声明弹窗
+  recommend_opensource_dialog: true
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/views/about/**/*.vue"
+    - "admin-web/src/views/help/**/*.vue"
+    - "admin-web/src/api/about*.js"
+
+# ---- 维度 82：菜单点击导航 fallback 审查（对应 R97 关联）----
+# 背景：小程序菜单点击可能因页面栈满或路由异常导致点击无反应，需 URL 变化比对 + navigate_page fallback
+# 规则：菜单点击后必须比对 URL 变化，未变化时 fallback 到 navigate_page；失败时记录日志
+menu_navigation_fallback_check:
+  enabled: true
+  # 必须比对 URL 变化
+  require_url_change_compare: true
+  # 必须有 navigate_page fallback
+  require_navigate_page_fallback: true
+  navigate_page_pattern: "navigatePage|navigate_page"
+  # 失败时必须记录日志
+  require_failure_logging: true
+  failure_log_pattern: "console\\.warn.*menu|console\\.error.*menu"
+  # 推荐记录到测试报告
+  recommend_test_report_logging: true
+  # 扫描范围
+  scan_files:
+    - "miniprogram/services/**/*.js"
+    - "miniprogram/pages/**/menu*.js"
+    - "miniprogram/components/**/menu*.js"
+
+# ---- 维度 83：浏览器窗口最小化防护审查（对应 R118）----
+# 背景：浏览器最小化时 ElMessage.error / location.href 会激活窗口，需 router.push + document.hidden 检查 + silent 请求
+# 规则：401 跳转必须用 router.push；错误提示前必须检查 !document.hidden；轮询请求必须加 silent
+frontend_minimize_guard_check:
+  enabled: true
+  # 禁止 location.href 全量刷新
+  forbid_location_href: true
+  location_href_pattern: "location\\.href\\s*="
+  # 错误提示前必须检查 document.hidden
+  require_hidden_check: true
+  elmessage_pattern: "ElMessage\\.(error|warning|success)\\("
+  hidden_check_pattern: "document\\.hidden"
+  # 轮询请求必须加 silent
+  require_silent_polling: true
+  silent_param: "silent"
+  # 路径判断必须用严格相等
+  strict_path_match: true
+  forbidden_path_pattern: "pathname\\.includes\\(['\"]\\/login['\"]\\)"
+  # 登录页路径（可配置）
+  login_path: "/login"
+  # 严重级别
+  severity: CRITICAL
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/api/**/*.js"
+    - "admin-web/src/api/**/*.ts"
+    - "admin-web/src/router/**/*.js"
+    - "admin-web/src/router/**/*.ts"
+
+# ---- 维度 84：异步路由参数时序审查（对应 R119）----
+# 背景：router.replace/router.push 是异步操作，回调内读 route.params 会拿到旧值，需显式传参
+# 规则：router.replace 后必须显式传参加载新数据；轮询函数必须用 detail.value 而非 route.params
+route_param_timing_check:
+  enabled: true
+  # loadDetail 必须支持显式传参
+  explicit_param_mode: true
+  explicit_param_pattern: "loadDetail\\s*\\(\\s*\\w+\\s*\\)"
+  # 轮询函数必须用 detail.value
+  use_detail_value: true
+  forbidden_route_params_in_polling: "setInterval[\\s\\S]*?route\\.params"
+  # router.replace 后必须 await loadDetail(new_id)
+  await_after_replace: true
+  replace_then_load_pattern: "router\\.replace[\\s\\S]*?await\\s+loadDetail\\(\\s*\\w+\\.\\w+\\s*\\)"
+  # 严重级别
+  severity: HIGH
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/views/**/*.vue"
+    - "admin-web/src/views/**/*.js"
+
+# ---- 维度 85：列表数据动态轮询状态同步审查（对应 R120）----
+# 背景：轮询必须终态停止、不可见暂停、silent 请求、重跑重置，否则激活窗口或资源浪费
+# 规则：setInterval 必须配对 clearInterval；轮询必须检查 document.hidden；轮询请求必须 silent
+polling_state_sync_check:
+  enabled: true
+  # 轮询间隔（毫秒）
+  interval_ms: 3000
+  # 终态列表（达到后必须停止轮询）
+  terminal_states:
+    - "success"
+    - "failed"
+  # 运行态（触发轮询）
+  running_state: "running"
+  # setInterval 必须配对 clearInterval
+  require_clear_interval: true
+  setinterval_pattern: "setInterval\\s*\\("
+  clearinterval_pattern: "clearInterval\\s*\\("
+  # 轮询必须检查 document.hidden
+  require_hidden_check: true
+  # 轮询请求必须 silent
+  require_silent_polling: true
+  silent_param: "silent"
+  # 必须有 visibilitychange 监听
+  require_visibility_listener: true
+  visibility_pattern: "visibilitychange"
+  # 重跑/重置前必须 stopPolling
+  require_stop_before_restart: true
+  # 严重级别
+  severity: HIGH
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/views/**/*.vue"
+    - "admin-web/src/views/**/*.js"
+
+# ---- 维度 86：步骤进度可视化审查（对应 R124）----
+# 背景：工作流步骤表格必须有 el-progress 进度条，状态映射 pending=0%/running=50%/success=100%
+# 规则：步骤表格必须有 el-progress；percentage 必须有状态映射函数；running/retrying 必须有条纹动画
+step_progress_visualize_check:
+  enabled: true
+  # 状态映射
+  state_mapping:
+    pending: 0
+    running: 50
+    retrying: 50
+    success: 100
+    failed: 100
+  # 成功状态
+  success_status: "success"
+  # 失败状态
+  failed_status: "exception"
+  # 启用条纹动画的状态
+  stripe_anim_states:
+    - "running"
+    - "retrying"
+  # 百分比上限
+  max_percentage: 100
+  # 必须有 el-progress 组件
+  require_el_progress: true
+  elprogress_pattern: "el-progress"
+  # 必须有状态映射函数
+  require_state_mapping_function: true
+  mapping_function_pattern: "stepProgress|stepProgressStatus"
+  # 严重级别
+  severity: MEDIUM
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/views/workflow/**/*.vue"
+    - "admin-web/src/views/workflow/**/*.js"
+
+# ---- 维度 87：文件编辑完整性验证审查（对应 R123）----
+# 背景：Edit 工具可能损坏文件，需 Read 验证 + 损坏信号检测 + 构建产物 Grep 验证
+# 规则：Edit 后必须 Read 验证；检测损坏信号；大范围重写用 Write；构建后 Grep 验证
+edit_integrity_verify_check:
+  enabled: true
+  # Edit 后必须 Read 验证
+  verify_after_edit: true
+  # 损坏信号关键词
+  corruption_signals:
+    - "reesponse"
+    - "ne  }"
+    - "Mesror"
+    - "El.respon"
+    - "globalThis.location.href"
+  # 大范围重写优先 Write
+  use_write_for_large_rewrite: true
+  # 构建后 Grep 验证
+  build_grep_check: true
+  # 构建产物路径
+  build_artifact_path: "admin-web/dist/assets"
+  # 严重级别
+  severity: HIGH
+  # 扫描范围（本规则为流程规范，不扫描特定文件）
+  scan_files: []
+
+# --- V2.2 新增：外部服务降级与音频 URL 前端审查（2026-07-22 复盘，对应编码规范 R127-R129 前端侧）---
+
+audio_url_adaptability_check:
+  enabled: true
+  # 对应维度：95
+  severity: HIGH
+  # 支持的 URL 协议清单（绝对 URL）
+  supported_url_schemes:
+    - "http://"
+    - "https://"
+  # 相对路径前缀清单（后端降级模式返回的 URL 前缀）
+  relative_path_prefixes:
+    - "/audio/"
+  # 下游函数必须支持前缀检测
+  require_prefix_detection: true
+  # 禁止的 URL 构造模式（相对路径传入 new URL 会抛 TypeError）
+  forbidden_url_constructors:
+    - "new URL\\(['\"]/audio/"
+  # 小程序端 dataUrl 必须拼接 BASE_URL
+  miniprogram_require_base_url: true
+  # 判断信号
+  signals:
+    - "audio.*src.*=.*http"
+    - "new URL.*http"
+    - "downloadFile|saveAs"
+    - "dataUrl.*audio"
+  # 反模式
+  anti_patterns:
+    - "url\\.match\\(/\\^https\\?:\\/\\//"
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/views/**/*.vue"
+    - "admin-web/src/views/**/*.js"
+    - "admin-web/src/utils/**/*.js"
+    - "miniprogram/services/**/*.js"
+
+storage_fallback_ui_check:
+  enabled: true
+  # 对应维度：96
+  severity: MEDIUM
+  # 必须调用后端状态接口
+  require_status_api: true
+  status_api_path: "/api/admin/storage/status"
+  # 必须使用 el-alert 展示降级提示
+  require_alert_component: true
+  alert_type: "warning"
+  # 必须包含切换到 COS 的指引
+  require_switch_guide: true
+  # COS 凭据必须可选（留空启用降级）
+  credentials_optional: true
+  # 判断信号
+  signals:
+    - "is_cos_configured"
+    - "el-alert.*本地存储"
+    - "el-tag.*降级"
+  # 反模式（COS 凭据设为必填会阻止降级）
+  anti_patterns:
+    - "cos_secret_id.*required"
+    - "cos_secret_key.*required"
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/views/config/**/*.vue"
+    - "admin-web/src/views/settings/**/*.vue"
+
+# ===== 2026-07-22 新增：浏览器窗口管理与环境诊断审查（对应 R130-R139）=====
+# 来源：Edge 浏览器最小化自动弹出问题复盘（5 轮代码修复无效 → 重置 Edge 个人资料解决）
+# 报告中违规条目末尾标注 [V2.3 新增] 便于迭代追溯
+
+# ---- 维度 97：浏览器窗口管理审查（对应 R133-R137）----
+# 背景：window.focus() / blur 事件 / SSE / ElMessage / HTMLElement.prototype.focus 在最小化时会激活窗口
+# 规则：focus 必须检查 visibilityState；blur 不能单独使用；SSE 必须隐藏断开；ElMessage 必须包装；prototype.focus 必须拦截
+browser_window_management_check:
+  enabled: true
+  # 对应维度：97
+  severity: HIGH
+  # window.focus() 必须检查 document.visibilityState
+  require_visibility_check: true
+  window_focus_pattern: "window\\.focus\\("
+  visibility_check_pattern: "document\\.visibilityState\\s*!==\\s*['\"]hidden['\"]"
+  # blur 事件不能单独使用，必须配合 visibilitychange
+  forbid_blur_alone: true
+  blur_pattern: "addEventListener\\(['\"]blur['\"]"
+  visibilitychange_pattern: "addEventListener\\(['\"]visibilitychange['\"]"
+  # SSE 必须在页面隐藏时断开
+  require_sse_disconnect_on_hidden: true
+  eventsource_pattern: "new\\s+EventSource\\("
+  sse_disconnect_pattern: "eventSource\\.close\\(\\)"
+  # ElMessage 必须使用安全包装器
+  require_safe_wrapper: true
+  forbidden_elmessage_pattern: "ElMessage\\.(error|warning|success|info)\\("
+  forbidden_elmessagebox_pattern: "ElMessageBox\\.(confirm|alert|prompt)\\("
+  safe_wrapper_pattern: "safeElMessage|safeElMessageBox"
+  # HTMLElement.prototype.focus 必须被拦截
+  require_prototype_focus_intercept: true
+  prototype_focus_pattern: "HTMLElement\\.prototype\\.focus"
+  # 拦截 API 列表（配置驱动，可扩展）
+  intercept_apis:
+    - "focus"
+    - "open"
+    - "alert"
+    - "location"
+    - "title"
+    - "EventSource"
+    - "fetch"
+    - "XHR"
+  # 判断信号
+  signals:
+    - "window\\.focus\\("
+    - "addEventListener\\(['\"]blur['\"]"
+    - "new\\s+EventSource\\("
+    - "ElMessage\\.(error|warning|success|info)\\("
+    - "ElMessageBox\\.(confirm|alert|prompt)\\("
+    - "HTMLElement\\.prototype\\.focus"
+  # 反模式
+  anti_patterns:
+    - "window\\.focus\\(\\)\\s*;\\s*$"
+    - "addEventListener\\(['\"]blur['\"]\\)\\s*[^v]"
+    - "ElMessage\\.error\\([^)]*\\)\\s*;\\s*$"
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/**/*.vue"
+    - "admin-web/src/**/*.js"
+    - "admin-web/src/**/*.ts"
+    - "admin-web/public/manifest.json"
+
+# ---- 维度 98：PWA manifest 配置化审查（对应 R138）----
+# 背景：manifest.json 的 display 字段硬编码会导致不同业务场景无法适配
+# 规则：display 必须从配置文件读取；不同业务场景应选择不同 display 模式
+pwa_manifest_config_check:
+  enabled: true
+  # 对应维度：98
+  severity: MEDIUM
+  # manifest.json 必须存在
+  require_manifest: true
+  manifest_path: "admin-web/public/manifest.json"
+  # display 字段不能硬编码
+  forbid_hardcoded_display: true
+  display_pattern: "\"display\"\\s*:\\s*['\"](standalone|browser|minimal-ui|fullscreen)['\"]"
+  # 支持的 display 取值
+  supported_display_values:
+    - "standalone"
+    - "browser"
+    - "minimal-ui"
+    - "fullscreen"
+  # 默认 display 模式（不同业务场景应调整）
+  default_display: "browser"
+  # 业务场景与 display 模式映射
+  business_scenario_mapping:
+    real_time_collaboration: "browser"
+    offline_tool: "standalone"
+    immersive_content: "fullscreen"
+    simple_admin: "minimal-ui"
+  # 判断信号
+  signals:
+    - "\"display\"\\s*:"
+    - "manifest"
+  # 扫描范围
+  scan_files:
+    - "admin-web/public/manifest.json"
+    - "admin-web/public/manifest.webmanifest"
+    - "admin-web/index.html"
+
+# ---- 维度 99：跨浏览器兼容性审查（对应 R139）----
+# 背景：仅 Chrome 测试通过不能上线，必须在 Edge/Firefox 验证事件触发顺序差异
+# 规则：事件监听必须考虑跨浏览器差异；测试报告必须包含跨浏览器事件顺序对比
+cross_browser_compatibility_check:
+  enabled: true
+  # 对应维度：99
+  severity: HIGH
+  # 必须测试的浏览器列表
+  required_browsers:
+    - "chrome"
+    - "edge"
+  optional_browsers:
+    - "firefox"
+    - "safari"
+  # 必须验证的事件触发顺序
+  critical_event_sequences:
+    - events: ["blur", "visibilitychange"]
+      description: "Edge 中 blur 先于 visibilitychange 触发"
+      risk: "单独使用 blur 事件会误判页面隐藏"
+    - events: ["pagehide", "pageshow"]
+      description: "页面缓存行为差异"
+      risk: "可能导致 SSE 连接未正确断开"
+    - events: ["focus", "visibilitychange"]
+      description: "focus 事件触发时机差异"
+      risk: "可能导致窗口焦点判断错误"
+  # 必须验证的 API 行为差异
+  api_behavior_differences:
+    - api: "HTMLElement.prototype.focus"
+      difference: "Edge 最小化时调用会激活窗口"
+      risk: "窗口自动弹出"
+    - api: "window.focus"
+      difference: "Edge 行为与 Chrome 不一致"
+      risk: "窗口意外激活"
+    - api: "EventSource"
+      difference: "断开重连行为差异"
+      risk: "SSE 连接异常"
+  # 判断信号（事件监听代码必须出现）
+  signals:
+    - "addEventListener\\(['\"]blur['\"]"
+    - "addEventListener\\(['\"]visibilitychange['\"]"
+    - "addEventListener\\(['\"]focus['\"]"
+    - "addEventListener\\(['\"]pagehide['\"]"
+    - "addEventListener\\(['\"]pageshow['\"]"
+  # 反模式（单独使用 blur 事件）
+  anti_patterns:
+    - "addEventListener\\(['\"]blur['\"]\\)\\s*[^v]"
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/**/*.vue"
+    - "admin-web/src/**/*.js"
+    - "admin-web/src/**/*.ts"
+
+# ---- 维度 100：UI 异常诊断流程审查（对应 R130-R132）----
+# 背景：UI 异常排查直接进入代码修复而无环境隔离验证，导致 5 轮无效修复
+# 规则：UI 异常必须按决策树分层诊断；连续 3 轮修复失败必须重评；无痕正常必须考虑配置文件损坏
+ui_diagnosis_flow_check:
+  enabled: true
+  # 对应维度：100
+  severity: CRITICAL
+  # 环境隔离验证三步法
+  environment_isolation_steps:
+    - "step1_repro_normal: 在普通浏览器窗口复现问题"
+    - "step2_incognito_test: 在无痕/隐私模式下测试（关键分水岭）"
+    - "step3_cross_browser: 在另一浏览器测试"
+    - "step4_disable_extensions: 禁用所有扩展测试"
+    - "step5_reset_profile: 重置用户配置文件（最后手段）"
+  # 连续修复失败上限
+  max_code_fix_rounds: 3
+  # 重评检查清单
+  reassess_checklist:
+    - "环境隔离验证是否执行"
+    - "无痕模式是否测试"
+    - "浏览器配置文件损坏是否考虑"
+    - "系统级问题是否考虑"
+  # 浏览器配置文件损坏诊断信号
+  profile_corruption_signals:
+    - "incognito_mode_normal"
+    - "normal_mode_abnormal"
+    - "window_auto_restore"
+    - "focus_anomaly"
+  # 浏览器配置文件路径（用于诊断报告）
+  browser_profile_paths:
+    edge: "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data"
+    chrome: "%LOCALAPPDATA%\\Google\\Chrome\\User Data"
+    firefox: "%APPDATA%\\Mozilla\\Firefox\\Profiles"
+  # 修复方法
+  fix_method: "rename_user_data_folder"
+  warning_data_loss: true
+  # 判断信号（审查报告中的诊断流程完整性）
+  required_diagnosis_sections:
+    - "环境隔离验证结果"
+    - "跨浏览器测试结果"
+    - "扩展禁用测试结果"
+    - "诊断方向评估"
+  # 扫描范围（本规则为流程规范，不扫描特定文件）
+  scan_files: []
+
+# ===== 2026-07-22 新增：频道管理与表单类型契约复盘审查配置（维度 101-103）=====
+# 来源：频道管理页面 el-switch 状态不持久化、AI 重新生成报超时、频道级表单字段初始化三类前端问题修复复盘
+# 对应 SKILL.md 维度 101-103，报告中违规条目末尾标注 [V2.4 新增] 便于迭代追溯
+
+# ---- 维度 101：el-switch 类型契约审查 ----
+# 背景：el-switch 默认 active-value=true/inactive-value=false，但后端返回 int 0/1，
+#       JS 严格相等 1 !== true 导致开关死循环（显示关闭→触发 change→提交 false→后端存 0→刷新仍显示关闭）
+# 规则：el-switch 必须显式声明 :active-value/:inactive-value 且与后端字段类型一致；
+#       form 初始值、@change 回调参数、handleToggle 回滚逻辑必须与 active-value 类型一致
+switch_type_contract_check:
+  enabled: true
+  # 对应维度：101
+  severity: critical
+  applicable_components:
+    - el-switch
+    - el-radio
+    - el-checkbox
+  require_explicit_values: true
+  # 后端字段类型映射（决定 active-value/inactive-value 应使用的类型）
+  backend_field_types:
+    is_active: int
+    status: int
+    enabled: int
+  active_value_default: 1
+  inactive_value_default: 0
+  # form 初始值类型必须与 active-value 一致
+  form_init_must_match: true
+  # @change 回调参数类型必须与 active-value 一致
+  change_callback_param_must_match: true
+  # handleToggle 回滚逻辑必须与 active-value 类型匹配（val === 1 ? 0 : 1 而非 !val）
+  rollback_logic_must_match: true
+  description: el-switch 必须显式声明 :active-value/:inactive-value 且与后端字段类型一致
+  # 判断信号
+  signals:
+    - "<el-switch[^>]*>(?!.*active-value)"
+    - "is_active.*true|is_active.*false"
+    - "handleToggle.*val.*!"
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/**/*.vue"
+
+# ---- 维度 102：请求级超时配置审查 ----
+# 背景：axios 默认 timeout=15000ms（15s），AI 生成/大文件上传/批量处理等长耗时接口会超时失败
+# 规则：长耗时接口必须请求级 timeout 覆盖 axios 默认值；timeout 值必须 ≥ 后端接口超时时间
+api_timeout_override_check:
+  enabled: true
+  # 对应维度：102
+  severity: high
+  # 长耗时接口 URL 关键词（命中则强制要求请求级 timeout）
+  long_running_endpoint_patterns:
+    - "generate"
+    - "upload"
+    - "batch"
+    - "import"
+    - "trigger"
+  # axios 默认超时（毫秒）
+  default_timeout_ms: 15000
+  # 推荐超时值（按接口类型）
+  recommended_timeout_ms:
+    ai_generate: 120000      # AI 生成类（LLM 生成长文本）
+    file_upload: 60000       # 大文件上传
+    batch_operation: 30000   # 批量操作
+  # 前端 timeout 必须 ≥ 后端接口超时（避免前端先于后端超时）
+  frontend_timeout_must_ge_backend: true
+  description: 长耗时接口必须请求级 timeout 覆盖 axios 默认值
+  # 判断信号
+  signals:
+    - "api\\.post|api\\.get|api\\.put|api\\.delete"
+    - "generate|upload|batch|import"
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/api/**/*.js"
+
+# ---- 维度 103：频道级表单字段初始化审查 ----
+# 背景：频道级表单字段（is_active/schedule_time/intro_prompt 等）初始化类型必须与后端字段类型一致
+# 规则：openEdit 必须类型转换；handleSubmit 编辑分支直接使用 form 值不二次转换；
+#       resetForm 初始化类型与 active-value 一致；频道字段为空时 fallback 到空字符串
+channel_form_init_check:
+  enabled: true
+  # 对应维度：103
+  severity: high
+  # 频道级字段清单（需类型对齐的字段）
+  channel_fields:
+    - schedule_time
+    - is_active
+    - intro_prompt
+    - outro_prompt
+    - constraint_prompt
+    - rewrite_template
+  # openEdit 中 form 字段必须转换为与后端类型一致（row.is_active ? 1 : 0）
+  require_type_conversion_in_open_edit: true
+  # handleSubmit 编辑分支必须直接使用 form 字段值，不再二次转换
+  require_direct_use_in_submit: true
+  # 频道字段为空时必须 fallback 到空字符串（row.schedule_time || ''）
+  require_fallback_empty_string: true
+  description: 频道级表单字段初始化必须与后端字段类型一致
+  # 判断信号
+  signals:
+    - "openEdit|resetForm"
+    - "handleSubmit.*is_active"
+    - "row\\.(schedule_time|intro_prompt)"
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/views/**/*.vue"
+    - "admin-web/src/views/**/*.js"
+
+# ===== 2026-07-22 新增：前端响应处理与按需加载复盘审查配置（维度 109-112 V2.6）=====
+# 来源：响应拦截器 blob 响应误报、内联 audio 控件 blob URL 内存泄漏、
+#       音频预加载并发请求、工作流重跑后误跳转四类前端问题修复复盘
+# 对应 SKILL.md 维度 109-112，报告中违规条目末尾标注 [V2.6 新增] 便于迭代追溯
+
+# ---- 维度 109：响应拦截器 blob/二进制响应处理审查 ----
+# 背景：axios 响应拦截器对所有响应统一 { code, message, data } 解构，
+#       blob 响应无 code 字段，undefined !== 0 触发"请求失败"误报
+# 规则：拦截器开头必须判断 responseType === 'blob'（或 'arraybuffer'），短路返回 response.data
+blob_response_interceptor_check:
+  enabled: true
+  # 对应维度：109
+  severity: HIGH
+  # 必须在拦截器开头判断 responseType 短路返回
+  require_response_type_short_circuit: true
+  # 需要短路处理的响应类型清单（含 blob 和 arraybuffer）
+  blob_response_types:
+    - "blob"
+    - "arraybuffer"
+  # 禁止对 blob 响应进行业务错误码解构（{ code, message, data }）
+  forbid_business_code_destruct: true
+  # 禁止对 blob 响应调用全局 ElMessage 错误提示
+  forbid_global_error_on_blob: true
+  # 短路判断位置：必须在业务码解构之前
+  short_circuit_position: "before_business_code_destruct"
+  description: 响应拦截器必须区分 blob/arraybuffer 响应，短路返回 response.data
+  # 判断信号
+  signals:
+    - "interceptors\\.response"
+    - "responseType.*blob|responseType.*arraybuffer"
+    - "code !== 0|code !== 200"
+  # 反模式（拦截器中无 responseType 判断直接解构）
+  anti_patterns:
+    - "interceptors\\.response[\\s\\S]*?const\\s*\\{[^}]*code[^}]*\\}\\s*=\\s*response\\.data(?!.*responseType)"
+  # 扫描范围（axios 封装层）
+  scan_files:
+    - "admin-web/src/api/**/*.js"
+    - "admin-web/src/api/**/*.ts"
+    - "admin-web/src/utils/request*.js"
+
+# ---- 维度 110：内联 audio/video 控件 blob URL 内存释放审查 ----
+# 背景：URL.createObjectURL 创建的 blob URL 若未配对 revokeObjectURL，
+#       组件卸载后引用丢失，浏览器内存持续增长
+# 规则：onUnmounted 必须释放所有 blob URL；列表刷新/删除前必须释放旧引用；
+#       每个 blob URL 必须有管理引用；必须封装 revokeAllBlobUrls() 函数
+blob_url_lifecycle_check:
+  enabled: true
+  # 对应维度：110
+  severity: HIGH
+  # 组件 onUnmounted 时必须释放所有 blob URL
+  require_revoke_on_unmount: true
+  # 列表刷新/删除操作时必须释放旧 blob URL
+  require_revoke_on_list_refresh: true
+  # 每个 blob URL 必须有对应的管理引用（如 row.blobUrl）
+  require_blob_url_reference: true
+  # 必须封装统一的 revokeAllBlobUrls() 清理函数
+  require_revoke_all_function: true
+  # 必须调用 revokeObjectURL 的位置
+  revoke_call_sites:
+    - "onUnmounted"
+    - "onBeforeUnmount"
+    - "loadList"
+    - "refreshList"
+    - "handleDelete"
+    - "beforeRouteLeave"
+  # 创建函数与释放函数的配对模式
+  create_function: "URL.createObjectURL"
+  revoke_function: "URL.revokeObjectURL"
+  # 创建点数量必须 ≤ 释放点数量（含列表场景的批量释放）
+  require_create_revoke_balance: true
+  description: blob URL 创建与释放必须配对，onUnmounted 和列表刷新时必须调用 revokeAllBlobUrls
+  # 判断信号
+  signals:
+    - "URL\\.createObjectURL"
+    - "URL\\.revokeObjectURL"
+    - "onUnmounted|onBeforeUnmount"
+    - "loadList|refreshList|handleDelete"
+  # 反模式（创建 blob URL 但无任何释放逻辑）
+  anti_patterns:
+    - "URL\\.createObjectURL(?!.*URL\\.revokeObjectURL)"
+    - "row\\.blobUrl\\s*=\\s*URL\\.createObjectURL(?!.*revokeObjectURL.*row\\.blobUrl)"
+  # 扫描范围（含 audio/video 控件的 Vue 组件）
+  scan_files:
+    - "admin-web/src/views/**/*.vue"
+    - "admin-web/src/views/**/*.js"
+    - "admin-web/src/components/**/*.vue"
+
+# ---- 维度 111：按需加载策略（音频/文件播放）审查 ----
+# 背景：列表加载时 Promise.all(rows.map(fetchBlob)) 并发请求所有音频 blob，
+#       造成网络压力与后端负载
+# 规则：列表加载时禁止预加载 blob；按需加载 + 行数据缓存 + loading 状态 + v-if 条件渲染
+on_demand_loading_check:
+  enabled: true
+  # 对应维度：111
+  severity: MEDIUM
+  # 列表加载时禁止预请求所有 blob 数据
+  forbid_preload_in_list_fetch: true
+  # 请求后的 blob URL 必须缓存在行数据中复用
+  require_blob_url_cache_on_row: true
+  # loading 状态必须绑定到行数据
+  require_loading_state_on_row: true
+  # audio/video 控件必须用 v-if 条件渲染
+  require_v_if_conditional_render: true
+  # 按需加载函数命名模式（ensureXxxBlob 幂等模式）
+  ensure_blob_function_pattern: "ensure[A-Z]\\w*Blob\\s*\\("
+  # 禁止列表加载时并发请求所有 blob
+  forbid_concurrent_blob_requests: true
+  # 按需加载触发方式（点击按钮触发）
+  trigger_method: "click"
+  # 默认显示文案（未加载时）
+  default_trigger_text: "点击加载播放"
+  description: 列表页音频/视频必须按需加载，禁止预加载，行数据缓存 + v-if 条件渲染
+  # 判断信号
+  signals:
+    - "loadList|fetchList"
+    - "<audio|<video"
+    - "row\\.loading|row\\.blobUrl"
+    - "ensure.*Blob|loadBlob"
+  # 反模式（列表加载函数中预请求所有 blob）
+  anti_patterns:
+    - "loadList[\\s\\S]*?Promise\\.all[\\s\\S]*?responseType.*blob"
+    - "fetchList[\\s\\S]*?api\\.get[\\s\\S]*?responseType.*blob"
+    - "<audio[^>]*:src=\"row\\.blobUrl\"[^>]*>(?!.*v-if)"
+  # 扫描范围（含媒体播放的列表页）
+  scan_files:
+    - "admin-web/src/views/**/*.vue"
+    - "admin-web/src/views/**/*.js"
+    - "admin-web/src/components/**/*.vue"
+
+# ---- 维度 112：工作流重跑后前端行为审查 ----
+# 背景：工作流重跑后 workflow_id 不变，但前端 router.replace 跳转新页面
+#       导致 SSE 订阅中断后又重建，且文案"创建新工作流"误导用户
+# 规则：重跑后禁止 router.replace 跳转；必须调用 loadDetail 刷新当前页；
+#       SSE 无需重新建立；文案必须说明"断点续跑"语义
+workflow_rerun_behavior_check:
+  enabled: true
+  # 对应维度：112
+  severity: HIGH
+  # 重跑后禁止 router.replace 跳转新页面（workflow_id 不变）
+  forbid_router_replace_on_rerun: true
+  # 重跑后必须调用 loadDetail() 刷新当前页数据
+  require_load_detail_after_rerun: true
+  # 重跑后禁止 close 旧 SSE 订阅再重新建立
+  forbid_sse_reconnect_on_rerun: true
+  # 文案必须说明"断点续跑"语义
+  require_rerun_semantics_text: true
+  # 推荐的"断点续跑"语义文案关键词（命中任一即合规）
+  recommended_semantics_keywords:
+    - "断点续跑"
+    - "恢复执行"
+    - "重新执行"
+    - "重跑成功"
+  # 禁止使用的误导性文案关键词（命中任一即违规）
+  forbidden_misleading_text:
+    - "创建新工作流"
+    - "新建工作流"
+    - "新建成功"
+  # 推荐重跑按钮与新建按钮分离（保留 ID vs 生成新 ID）
+  recommend_rerun_vs_new_button_separation: true
+  # 重跑 API 路径关键词（用于定位重跑函数）
+  rerun_api_keywords:
+    - "rerun"
+    - "retry"
+    - "resume"
+  # 判断信号
+  signals:
+    - "rerun|rerunWorkflow|retryWorkflow|resumeWorkflow"
+    - "router\\.replace|router\\.push"
+    - "EventSource|eventSource\\.close"
+  # 反模式（重跑回调中含 router.replace 或 SSE 重建）
+  anti_patterns:
+    - "rerun[\\s\\S]*?router\\.replace"
+    - "rerun[\\s\\S]*?eventSource\\.close[\\s\\S]*?new\\s+EventSource"
+    - "rerun[\\s\\S]*?创建新工作流"
+  # 扫描范围（工作流相关页面）
+  scan_files:
+    - "admin-web/src/views/workflow/**/*.vue"
+    - "admin-web/src/views/workflow/**/*.js"
+    - "admin-web/src/views/**/*.vue"
+
+# ============================================================
+# 维度 95：跨项目移植前端适配检查（R153 前端部分）
+# ============================================================
+cross_project_frontend_adaptation:
+  description: "跨项目移植前端适配检查配置"
+  naming_convention_map:
+    source_prefix: "xh_"
+    target_prefix: "news_"
+    check_fields: ["variable_names", "component_names", "style_class_names"]
+  ui_library_map:
+    source_library: "ant_design"
+    target_library: "element_plus"
+    api_mapping:
+      - source: "message.success"
+        target: "ElMessage.success"
+      - source: "Modal.confirm"
+        target: "ElMessageBox.confirm"
+  api_field_map:
+    source_fields: ["access_token"]
+    target_fields: ["token"]
+    note: "API 响应字段名必须与目标项目后端一致"
+  auth_model:
+    rule: "keep_target_project_auth_flow"
+    note: "不照搬源项目前端认证白名单，保持目标项目认证流程"
+  slow_operation_timeout:
+    enabled: true
+    default_timeout_ms: 120000
+    applicable_endpoints: ["cloudflare/login", "cloudflare/create", "cloudflare/route-dns"]
+  checklist:
+    - "naming_adaptation"
+    - "ui_library_adaptation"
+    - "api_field_adaptation"
+    - "auth_model"
+    - "slow_operation_timeout"
+  severity: "HIGH"

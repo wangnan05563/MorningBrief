@@ -29,10 +29,12 @@ from app.core.response import success
 router = APIRouter(prefix="/admin/api/v1/about", tags=["关于"])
 
 # 项目仓库（用于检查更新与 release_url 跳转）
-# 当前项目无对外开源仓库，release_url 指向占位地址；后续接入时仅改这里
-_REPO_URL = "https://github.com/your-org/MorningBrief"
-_RELEASES_API = f"{_REPO_URL}/releases/latest"
-_RELEASE_URL = f"{_REPO_URL}/releases"
+# 从 settings.REPO_URL 读取（用户可在 .env 中配置），避免硬编码占位符
+# 留空时 check-update 端点自动降级为本地版本检测
+from app.config import get_settings as _get_settings
+_REPO_URL = _get_settings().REPO_URL
+_RELEASES_API = f"{_REPO_URL}/releases/latest" if _REPO_URL else ""
+_RELEASE_URL = f"{_REPO_URL}/releases" if _REPO_URL else ""
 _PRODUCT_NAME = "MorningBrief"
 
 # UTC+8 时区（构建日期/检查时间统一使用，与项目其他模块一致）
@@ -216,6 +218,10 @@ async def check_update(
     """
     info = _safe_build_info()
     current = info["version"]
+
+    # 未配置仓库 URL 时直接降级，避免向空地址发请求
+    if not _REPO_URL:
+        return success(data=_build_local_response(current, error="未配置 REPO_URL，跳过更新检查"))
 
     # 缓存命中：5 分钟内直接复用上次结果
     now = time.monotonic()

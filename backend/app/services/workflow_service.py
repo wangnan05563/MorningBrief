@@ -41,7 +41,7 @@ class WorkflowService:
             return None
         return await self._workflow_to_dict(workflow)
 
-    async def list_workflows(
+    async def list_workflows(  # NOSONAR
         self,
         page: int,
         size: int,

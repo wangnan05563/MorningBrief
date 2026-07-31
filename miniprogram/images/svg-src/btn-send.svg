@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 发送按钮图标：白色纸飞机，用于彩色背景的主按钮
+     图标来源：Tabler Icons (MIT License) - send
+     使用场景：feedback 页"提交反馈"按钮 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <path d="M 22 2 L 11 13" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M 22 2 L 15 22 L 11 13 L 2 9 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

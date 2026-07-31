@@ -1,18 +1,15 @@
 <template>
   <div class="login-page">
-    <!-- 装饰背景层：纯 CSS + SVG 绘制，通过 CSS 变量自动适配各主题色 -->
+    <!-- 装饰背景层：Aqueous Whisper 声波图谱 PNG + CSS 动态色块，随主题色混合变换 -->
     <div class="bg-decor">
-      <!-- 大色块光晕：两个径向渐变球，缓慢浮动 -->
+      <!-- 艺术背景层：声波图谱 PNG，通过 mix-blend-mode 与主题色融合，实现随主题变换 -->
+      <!-- 背景图用内联 style：CSS url() 不支持 Vite base，需在 JS 中拼接路径 -->
+      <div class="bg-art" :style="{ backgroundImage: `url(${publicPath}login/aqueous-whisper-bg.png)` }" />
+
+      <!-- 大色块光晕：径向渐变球，缓慢浮动，与背景图声波叠加营造呼吸感 -->
       <div class="blob blob-1" />
       <div class="blob blob-2" />
       <div class="blob blob-3" />
-
-      <!-- 声波圆环：呼应 favicon 声波图标，象征播客新闻 -->
-      <svg class="rings" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="300" cy="300" r="120" fill="none" stroke="var(--color-primary)" stroke-width="1.5" opacity="0.15" />
-        <circle cx="300" cy="300" r="180" fill="none" stroke="var(--color-primary)" stroke-width="1.5" opacity="0.10" />
-        <circle cx="300" cy="300" r="240" fill="none" stroke="var(--color-primary)" stroke-width="1.5" opacity="0.06" />
-      </svg>
 
       <!-- 漂浮粒子：小圆点错落分布 -->
       <div class="particles">
@@ -22,40 +19,9 @@
 
     <!-- 登录卡片 -->
     <div class="login-card">
-      <!-- 机器人 IP 头像：SVG 绘制，戴耳机的新闻主播机器人 -->
+      <!-- 品牌图标：Aqueous Whisper 声纹胶囊，磨砂玻璃质感抽象 IP，替代具象机器人 -->
       <div class="avatar-wrap">
-        <svg class="robot-avatar" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
-          <!-- 头部主体：圆角方形 -->
-          <rect x="28" y="24" width="64" height="64" rx="20" ry="20" fill="var(--color-primary)" opacity="0.9" />
-          <!-- 天线 -->
-          <line x1="60" y1="24" x2="60" y2="14" stroke="var(--color-primary-dark)" stroke-width="2.5" stroke-linecap="round" />
-          <circle cx="60" cy="12" r="3.5" fill="var(--color-primary-dark)" />
-          <!-- 眼睛：两个白圆点 -->
-          <circle cx="48" cy="50" r="6" fill="#FFFFFF" />
-          <circle cx="72" cy="50" r="6" fill="#FFFFFF" />
-          <circle cx="48" cy="50" r="2.5" fill="var(--color-primary-dark)" />
-          <circle cx="72" cy="50" r="2.5" fill="var(--color-primary-dark)" />
-          <!-- 腮红 -->
-          <ellipse cx="40" cy="64" rx="4" ry="2.5" fill="var(--color-secondary)" opacity="0.6" />
-          <ellipse cx="80" cy="64" rx="4" ry="2.5" fill="var(--color-secondary)" opacity="0.6" />
-          <!-- 嘴巴：小弧线微笑 -->
-          <path d="M 52 68 Q 60 74 68 68" stroke="#FFFFFF" stroke-width="2.5" fill="none" stroke-linecap="round" />
-          <!-- 耳机：两侧圆角矩形 -->
-          <rect x="20" y="44" width="10" height="20" rx="4" fill="var(--color-primary-dark)" />
-          <rect x="90" y="44" width="10" height="20" rx="4" fill="var(--color-primary-dark)" />
-          <!-- 耳机连接弧线 -->
-          <path d="M 28 44 Q 60 28 92 44" stroke="var(--color-primary-dark)" stroke-width="2.5" fill="none" stroke-linecap="round" />
-          <!-- 声波：耳机两侧律动线条 -->
-          <g class="sound-wave" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" fill="none">
-            <line x1="12" y1="50" x2="12" y2="58" opacity="0.6" />
-            <line x1="8" y1="48" x2="8" y2="60" opacity="0.4" />
-            <line x1="108" y1="50" x2="108" y2="58" opacity="0.6" />
-            <line x1="112" y1="48" x2="112" y2="60" opacity="0.4" />
-          </g>
-          <!-- 身体：小圆角矩形（领口） -->
-          <rect x="44" y="88" width="32" height="16" rx="8" fill="var(--color-primary)" opacity="0.7" />
-          <circle cx="60" cy="96" r="3" fill="var(--color-secondary)" />
-        </svg>
+        <img :src="`${publicPath}login/aqueous-whisper-icon.png`" alt="MorningBrief" class="brand-icon" />
       </div>
 
       <h1 class="login-title">MorningBrief</h1>
@@ -105,12 +71,13 @@
 
 <script setup>
 /**
- * 登录页：磨砂玻璃卡片 + SVG 装饰背景（主题自适应）
+ * 登录页：磨砂玻璃卡片 + Aqueous Whisper 声波图谱（主题自适应）
  *
  * 设计要点：
- * - 背景全部 CSS + SVG 绘制，通过 var(--color-*) 自动适配 6 套主题
- * - 机器人 IP 形象呼应 favicon 声波图标，传达"AI 新闻主播"定位
- * - 装饰元素缓慢浮动 + 声波律动，营造柔和动态氛围
+ * - 背景由 PNG 声波图谱（Aqueous Whisper 艺术运动）+ CSS 浮动光晕层叠而成
+ * - 通过 mix-blend-mode（multiply/screen）让单张中性 macaron 背景图随 6 套主题色融合变换
+ * - 品牌图标采用磨砂玻璃质感声纹胶囊，呼应"声波凝结成图谱"的设计哲学
+ * - 装饰元素缓慢浮动，营造柔和动态氛围
  * - 登录态由 useUserStore 管理，组件只负责表单与提交
  */
 import { ref, reactive } from 'vue'
@@ -118,6 +85,10 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from '../../utils/message'
 import { User, Lock } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
+
+// publicPath 跟随 Vite base：base='/news/' 时 publicPath='/news/'
+// public/ 目录的文件引用不会自动加 base 前缀，需手动拼接
+const publicPath = import.meta.env.BASE_URL
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -245,15 +216,23 @@ async function handleLogin() {
   }
 }
 
-// 声波圆环：居中，呼吸缩放
-.rings {
+// 艺术背景层：Aqueous Whisper 声波图谱 PNG
+// 浅色主题用 multiply（声波纹理融入主题色渐变），暗色主题用 screen（浅色声波在深底上提亮显现）
+// 这样一张中性偏 macaron 的背景图即可随 6 套主题色融合变换
+.bg-art {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 600px;
-  height: 600px;
-  transform: translate(-50%, -50%);
-  animation: breathe 8s ease-in-out infinite;
+  inset: 0;
+  // background-image 由内联 style 设置（跟随 Vite base path）
+  background-size: cover;
+  background-position: center;
+  opacity: 0.62;
+  mix-blend-mode: multiply;
+
+  // showcase 暗黑主题：浅色 PNG 在深底上用 screen 提亮，避免被黑色吞没
+  :global([data-theme='showcase']) & {
+    mix-blend-mode: screen;
+    opacity: 0.48;
+  }
 }
 
 // 漂浮粒子：小圆点，缓慢上下浮动 + 淡入淡出
@@ -273,11 +252,6 @@ async function handleLogin() {
 @keyframes float {
   0%, 100% { transform: translateY(0) scale(1); }
   50% { transform: translateY(-30px) scale(1.05); }
-}
-
-@keyframes breathe {
-  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
-  50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.3; }
 }
 
 @keyframes particleFloat {
@@ -314,39 +288,25 @@ async function handleLogin() {
   }
 }
 
-/* === 机器人头像 === */
+/* === 品牌图标 === */
 .avatar-wrap {
   display: flex;
   justify-content: center;
   margin-bottom: 16px;
 
-  .robot-avatar {
-    width: 88px;
-    height: 88px;
-    // 头像轻微浮动，呼应"活的主播"
+  .brand-icon {
+    width: 96px;
+    height: 96px;
+    // 图标轻微浮动，呼应声波呼吸
     animation: avatarFloat 3s ease-in-out infinite;
+    // 圆形柔光，融入磨砂玻璃质感
+    filter: drop-shadow(0 4px 12px rgba(126, 206, 193, 0.18));
   }
 }
 
 @keyframes avatarFloat {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-4px); }
-}
-
-// 声波律动：耳机两侧线条交替缩放
-.sound-wave line {
-  animation: wavePulse 1.2s ease-in-out infinite;
-  transform-origin: center;
-
-  &:nth-child(1) { animation-delay: 0s; }
-  &:nth-child(2) { animation-delay: 0.2s; }
-  &:nth-child(3) { animation-delay: 0s; }
-  &:nth-child(4) { animation-delay: 0.2s; }
-}
-
-@keyframes wavePulse {
-  0%, 100% { opacity: 0.3; transform: scaleY(0.8); }
-  50% { opacity: 0.7; transform: scaleY(1.2); }
 }
 
 .login-title {

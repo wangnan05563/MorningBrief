@@ -52,7 +52,9 @@ SELECT_MIN_N = 5
 MIN_VALID_SEGMENTS = 3
 # 当日无 pending 素材时，向前回溯查询最近 N 天的 pending 素材
 # 场景：RSS 源无新内容时爬虫去重导致当日采集 0 条，回溯避免工作流直接失败
-FALLBACK_DAYS = 3
+# 取 7 而非 3：覆盖周末+小长假场景（周五素材到周一已 3 天，原值会漏掉），
+# 同时 7 天内素材时效性仍在新闻可接受范围内
+FALLBACK_DAYS = 7
 # 稿件最大段数：组装时仅取前 N 条成功段，避免段数过多导致节目超长
 # 与 SELECT_TOP_N 对齐：10 条候选全部可用时不浪费，目标 900s 时每段约 655 字（LLM 可达成）
 MAX_SCRIPT_SEGMENTS = 10
@@ -69,6 +71,102 @@ DEFAULT_TARGET_DURATION_SEC = 600
 # 会在 3s 内产生 30 次调用尝试，全部被 check_budget 拦截
 # 3 并发：10 条分 4 批，每批约 3s，总耗时约 12s，且不会超出频率预算
 _LLM_CONCURRENCY_LIMIT = 3
+
+# 字数硬约束重试命中率累计指标（自进程启动以来累计，重启清零）
+# 用于运维评估 P2-2 改进效果：触发率反映 LLM 字数缩水严重程度，
+# 改善率反映硬约束 prompt 的有效性，未改善率反映需要进一步优化的场景
+_WORD_COUNT_RETRY_STATS = {
+    "triggered": 0,    # 触发硬约束重试的次数（首次生成字数 <70%）
+    "improved": 0,     # 重试后字数有改善的次数
+    "not_improved": 0,  # 重试后字数未改善（保留首次结果）的次数
+    "total_calls": 0,  # _rewrite_one 总调用次数（基线，用于算触发率）
+}
+
+
+def get_word_count_retry_stats() -> dict:
+    """返回字数硬约束重试命中率指标（含派生率）。
+
+    供 /admin/api/v1/stats/llm-metrics 端点调用，运维仪表盘可视化：
+    - trigger_rate = triggered / total_calls：触发率，反映 LLM 字数缩水严重程度
+    - improve_rate = improved / triggered：改善率，反映硬约束 prompt 有效性
+    - not_improve_rate = not_improved / triggered：未改善率，反映需进一步优化场景占比
+
+    Returns:
+        原始计数 + 派生率（百分比 0-100，保留 2 位小数），total_calls=0 时率为 0
+    """
+    total = _WORD_COUNT_RETRY_STATS["total_calls"]
+    triggered = _WORD_COUNT_RETRY_STATS["triggered"]
+    improved = _WORD_COUNT_RETRY_STATS["improved"]
+    not_improved = _WORD_COUNT_RETRY_STATS["not_improved"]
+
+    return {
+        "total_calls": total,
+        "triggered": triggered,
+        "improved": improved,
+        "not_improved": not_improved,
+        # 派生率：分母为 0 时返回 0.0 避免 ZeroDivisionError
+        "trigger_rate": round(triggered / total * 100, 2) if total > 0 else 0.0,
+        "improve_rate": round(improved / triggered * 100, 2) if triggered > 0 else 0.0,
+        "not_improve_rate": round(not_improved / triggered * 100, 2) if triggered > 0 else 0.0,
+    }
+
+
+# 告警阈值：单次工作流粒度的即时告警，触发即输出 WARNING
+# 触发率 > 50%：LLM 字数缩水严重，应优化 prompt 或更换模型
+# 改善率 < 30%：硬约束后缀效果不佳，应更换重试策略
+_TRIGGER_RATE_ALERT_THRESHOLD = 50.0
+_IMPROVE_RATE_ALERT_THRESHOLD = 30.0
+
+
+def _emit_word_count_retry_stats(workflow_id: str, stats_before: dict) -> None:
+    """输出本轮 + 累计 LLM 字数重试指标，触发阈值时告警。
+
+    在 rewrite() 主函数末尾调用，便于运维观察：
+    - 本轮指标：单次工作流粒度的即时反馈，高触发率或低改善率立即告警
+    - 累计指标：进程启动以来的整体趋势，供 /llm-metrics 端点查询
+
+    Args:
+        workflow_id: 工作流 ID，用于日志关联
+        stats_before: 本轮 rewrite 开始前的 _WORD_COUNT_RETRY_STATS 快照
+    """
+    after = _WORD_COUNT_RETRY_STATS
+    # 本轮贡献 = 当前快照 - 开始前快照  # NOSONAR S125: 中文说明性注释，非注释掉的代码
+    round_calls = after["total_calls"] - stats_before.get("total_calls", 0)
+    round_triggered = after["triggered"] - stats_before.get("triggered", 0)
+    round_improved = after["improved"] - stats_before.get("improved", 0)
+    round_not_improved = after["not_improved"] - stats_before.get("not_improved", 0)
+
+    # 本轮派生率：本轮无调用时分母为 0，跳过派生率计算避免 ZeroDivisionError
+    round_trigger_rate = round(round_triggered / round_calls * 100, 2) if round_calls > 0 else 0.0
+    round_improve_rate = round(round_improved / round_triggered * 100, 2) if round_triggered > 0 else 0.0
+
+    # INFO 日志：本轮 + 累计快照，便于运维通过日志观察趋势
+    logger.info(
+        "LLM 字数重试指标 workflow_id=%s 本轮 calls=%d triggered=%d improved=%d not_improved=%d"
+        " trigger_rate=%.2f%% improve_rate=%.2f%% | 累计 calls=%d triggered=%d improved=%d",
+        workflow_id, round_calls, round_triggered, round_improved, round_not_improved,
+        round_trigger_rate, round_improve_rate,
+        after["total_calls"], after["triggered"], after["improved"],
+    )
+
+    # 告警：仅在本轮有触发时检查改善率，避免无触发场景误告警
+    # 触发率告警：> 50% 说明 LLM 字数缩水严重
+    if round_calls > 0 and round_trigger_rate > _TRIGGER_RATE_ALERT_THRESHOLD:
+        logger.warning(
+            "LLM 字数重试触发率 %.2f%% 超过 %.0f%% 阈值 workflow_id=%s"
+            "（本轮 %d/%d 调用触发），LLM 字数缩水严重，建议优化 prompt 或更换模型",
+            round_trigger_rate, _TRIGGER_RATE_ALERT_THRESHOLD,
+            workflow_id, round_triggered, round_calls,
+        )
+
+    # 改善率告警：< 30% 说明硬约束后缀效果不佳（仅在本轮有触发时检查）
+    if round_triggered > 0 and round_improve_rate < _IMPROVE_RATE_ALERT_THRESHOLD:
+        logger.warning(
+            "LLM 字数重试改善率 %.2f%% 低于 %.0f%% 阈值 workflow_id=%s"
+            "（本轮 %d/%d 触发后改善），硬约束后缀效果不佳，建议更换重试策略",
+            round_improve_rate, _IMPROVE_RATE_ALERT_THRESHOLD,
+            workflow_id, round_improved, round_triggered,
+        )
 
 # 开场白与结尾（固定文案，约 180 字 ≈ 50s 播报）
 # {date_placeholder} 由 _assemble_script 动态替换为"今天是7月15日星期三"
@@ -120,11 +218,26 @@ _JSON_FORMAT_SUFFIX = """
 
 
 # 思考问题后缀：频道开启 enable_thinking_question 时追加到 prompt 末尾
-# 作为"第9条改写要求"动态注入，关闭时不追加，rewrite.txt 默认不含此要求
+# 作为"补充要求"动态注入（独立于 rewrite.txt 的 9 条改写要求），关闭时不追加
 _THINKING_QUESTION_SUFFIX = """
 
 ## 补充要求（结尾思考）
 正文最后用一句话向听众提出引发思考的问题（15-25字），问题需紧扣本段新闻核心，激发听众联想或判断，如"这项政策落地后，你会是受益者吗？""技术进步带来的便利，是否也让我们失去了什么？"。问题以问号结尾，语气亲切自然，像与朋友聊天。思考问题计入总字数。
+"""
+
+
+# 字数硬约束后缀：当首次生成字数严重不足（<70%）时追加到 prompt 末尾触发重试
+# 场景：中文 LLM 普遍存在"字数缩水"现象，prompt 中 ±10% 约束常被忽视
+# 此后缀用更强烈的措辞 + 明确的字数下限数字，提升 LLM 遵守率
+# 仅在字数低于 70% 时触发（避免频繁重试浪费 LLM 调用配额）
+# 关键数字 {words_min} 前置到首行，避免 LLM 在长后缀中忽视
+_WORD_COUNT_ENFORCE_SUFFIX = """
+
+## 字数硬约束（必须严格遵守，否则任务失败）
+本次正文必须达到 {words_min}-{words_max} 字（上次仅 {actual_words} 字，严重不足）。
+扩充方法（禁止重复内容或填充无意义连接词）：
+- 补充背景与细节：事件时间线、相关历史、具体数字、地点、人物言论
+- 补充影响与观点：对相关群体/行业/社会的具体影响、不同立场的人对此事的看法
 """
 
 
@@ -212,6 +325,49 @@ def _calc_segment_words(target_sec: int, rate_multiplier: float) -> tuple[int, i
     return target_segments, words_per_seg
 
 
+def _count_content_words(text: str) -> int:
+    """统计正文字数（去除空白与标点）。
+
+    中文按字符计数：每个汉字算 1 字，标点与空白不计入。
+    英文按空格分词：连续字母数字算 1 词。
+    此计数与 LLM prompt 中的"字"语义一致（中文 LLM 通常按字符计）。
+    """
+    if not text:
+        return 0
+    # 去除所有空白字符（空格/换行/制表符）
+    cleaned = re.sub(r"\s+", "", text)
+    # 去除中英文标点（常见标点全角半角均覆盖）
+    # ] 放在字符类开头表示字面 ]（否则会被解析为字符类结束符），[ 在字符类内无需转义
+    cleaned = re.sub(r"[]，。！？；：、""''（）【】《》—…,.!?;:\"'()<>-]", "", cleaned)
+    return len(cleaned)
+
+
+def _strip_markdown_residue(text: str) -> str:
+    """防御性清洗 content 字段中残留的 Markdown 标记。
+
+    场景：LLM 偶发违反"禁止输出 Markdown 标记"约束，在 content 中留下
+    未闭合的 ** 加粗或 # 标题符号。TTS 朗读时会念出"星号星号"或"井号"，
+    严重影响听感。此处做兜底清理，仅清理已知模式，不破坏正文标点。
+
+    清理范围：
+    - **xxx** 闭合加粗 → 保留内部文字 xxx
+    - **xxx 未闭合加粗 → 保留内部文字 xxx（移除开头的 **）
+    - 孤立的 **（未成对）→ 直接移除
+    - 行首 # / ## / ### 等 Markdown 标题符号 + 空格 → 移除符号保留标题文字
+    """
+    if not text:
+        return text
+    # 先清理闭合的 **xxx**（避免被未闭合规则误伤）
+    text = re.sub(r"\*\*([^*]+?)\*\*", r"\1", text)
+    # 清理未闭合的 **xxx（行内剩余的开头 **）
+    text = re.sub(r"\*\*([^*\n]+)", r"\1", text)
+    # 清理孤立的 **（未成对出现）
+    text = text.replace("**", "")
+    # 清理行首 Markdown 标题符号（# / ## / ### 后跟空格）
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    return text
+
+
 # ===== 异常定义（LLD 7.4） =====
 # 可重试错误：网络抖动 / 服务端临时问题，指数退避后大概率成功
 class LLMRateLimitError(Exception):
@@ -265,7 +421,6 @@ def _log_retry(retry_state):
     与项目 loguru logger 不兼容。
     """
     exc = retry_state.outcome.exception() if retry_state.outcome else None
-    next_action = retry_state.next_action if hasattr(retry_state, 'next_action') else 'sleep'
     logger.warning(
         "LLM 调用重试 attempt={} wait={:.1f}s exc={}: {}",
         retry_state.attempt_number,
@@ -337,7 +492,7 @@ def _is_placeholder_api_key(key: str) -> bool:
     return False
 
 
-async def _wait_for_rate_limit_slot(timeout: float = 65) -> bool:
+async def _wait_for_rate_limit_slot(timeout: float = 65) -> bool:  # NOSONAR
     """等待本地频率预算有空位（频率超限时的恢复策略）。
 
     60s 滑动窗口内的旧记录会随时间过期，轮询 check_budget 直到通过或超时。
@@ -436,6 +591,7 @@ def _build_prompt(
     extra_constraint: str = None,
     template_text: str = None,
     enable_thinking_question: bool = True,
+    style_hint: str = None,
 ) -> str:
     """构建改写 prompt（读 rewrite.txt 模板，填入素材信息 + 动态字数要求）。
 
@@ -446,6 +602,8 @@ def _build_prompt(
         extra_constraint: 额外约束（如敏感词命中后追加的规避要求）
         template_text: 频道级自定义模板，为 None 则读默认 rewrite.txt
         enable_thinking_question: 是否在 prompt 中注入结尾思考问题要求
+        style_hint: 风格多样性提示（开场白/过渡词/同义词/段落结构变体），
+            None 时不追加。由 _rewrite_one_with_limit 按 seq 号从 style_library 轮换选取
     """
     template = template_text if template_text else PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
     # 预计算字数范围，供模板中 {words_min}/{words_max} 使用
@@ -472,6 +630,13 @@ def _build_prompt(
             segment_duration=segment_duration,
             source_url=material["url"],
         )
+    # 风格多样性约束先于思考问题注入：
+    # 风格约束含"提问前置"变体（段首提问），与"段尾思考问题"二选一不叠加
+    # style_hint 为 None 时（如字数硬约束重试场景）跳过，避免重复追加
+    if style_hint:
+        prompt = prompt + style_hint
+        # style_hint 已含段首提问要求，强制跳过段尾思考问题，避免 LLM 收到矛盾指令
+        enable_thinking_question = False
     # 思考问题要求动态注入：开关开启时追加，无论使用默认模板还是频道自定义模板
     # 频道自定义模板通常不含思考问题要求（seed 模板已移除），追加不会重复
     if enable_thinking_question:
@@ -482,7 +647,7 @@ def _build_prompt(
     return prompt
 
 
-async def _rewrite_one(
+async def _rewrite_one(  # NOSONAR S3776: 双层过滤改写主逻辑，职责单一不可再拆分
     material: dict,
     words_per_segment: int = 450,
     segment_duration: int = 60,
@@ -490,6 +655,7 @@ async def _rewrite_one(
     template_text: str = None,
     constraint_text: str = None,
     enable_thinking_question: bool = True,
+    style_hint: str = None,
 ) -> dict:
     """改写单条素材（LLD 7.3 双层过滤）。
 
@@ -509,10 +675,16 @@ async def _rewrite_one(
         template_text: 频道级自定义改写模板，None 则用默认 rewrite.txt
         constraint_text: 频道级敏感词约束，None 则用默认 PROMPT_CONSTRAINT
         enable_thinking_question: 是否在 prompt 中注入结尾思考问题要求
+        style_hint: 风格多样性提示（开场白/过渡词/同义词/段落结构变体），
+            None 时不追加。由 _rewrite_one_with_limit 按 seq 号轮换注入
 
     Returns:
-        {title, content, estimated_duration, source_url, material_id}
+        {title, content, estimated_duration, source_url, material_id, cover_url}
     """
+    # 字数重试命中率统计基线：每次进入 _rewrite_one 计 1
+    # 用于计算触发率 = triggered / total_calls
+    _WORD_COUNT_RETRY_STATS["total_calls"] += 1
+
     # 频道级约束优先，回退到默认 PROMPT_CONSTRAINT
     effective_constraint = constraint_text if constraint_text is not None else PROMPT_CONSTRAINT
     prompt = _build_prompt(
@@ -522,6 +694,7 @@ async def _rewrite_one(
         extra_constraint=effective_constraint if retry_with_constraint else None,
         template_text=template_text,
         enable_thinking_question=enable_thinking_question,
+        style_hint=style_hint,
     )
     raw = await _call_llm(prompt)
 
@@ -576,6 +749,62 @@ async def _rewrite_one(
                 f"素材 {material['id']} 首次生成命中敏感词"
             )
 
+    # 字数硬约束校验：content 字数低于目标 70% 时触发一次重试
+    # 场景：中文 LLM 普遍字数缩水，首次生成 65-80% 字数是常见现象
+    # 重试策略：追加 _WORD_COUNT_ENFORCE_SUFFIX 强化约束，仅重试一次
+    # 不在二次重生成（retry_with_constraint=True）时触发，避免与敏感词重试叠加
+    actual_words = _count_content_words(data.get("content", ""))
+    words_min = int(words_per_segment * 0.9)
+    words_max = int(words_per_segment * 1.1)
+    if (
+        not retry_with_constraint
+        and actual_words < words_per_segment * 0.70
+        and actual_words > 0
+    ):
+        # 触发硬约束重试计数：用于运维评估 LLM 字数缩水严重程度
+        _WORD_COUNT_RETRY_STATS["triggered"] += 1
+        logger.warning(
+            "字数严重不足 material_id=%s actual=%d target=%d（%.0f%%），追加硬约束重试",
+            material["id"], actual_words, words_per_segment,
+            actual_words / words_per_segment * 100,
+        )
+        enforce_suffix = _WORD_COUNT_ENFORCE_SUFFIX.format(
+            actual_words=actual_words,
+            words_per_segment=words_per_segment,
+            words_min=words_min,
+            words_max=words_max,
+        )
+        # 在原 prompt 基础上追加字数硬约束后重新调用
+        retry_prompt = prompt + enforce_suffix
+        try:
+            retry_raw = await _call_llm(retry_prompt)
+            retry_data = _parse_llm_response(retry_raw, material["id"])
+            retry_words = _count_content_words(retry_data.get("content", ""))
+            # 重试后字数有改善则采用重试结果，否则保留首次结果（避免重试更差）
+            if retry_words > actual_words:
+                _WORD_COUNT_RETRY_STATS["improved"] += 1
+                logger.info(
+                    "字数硬约束重试改善 material_id=%s %d → %d 字",
+                    material["id"], actual_words, retry_words,
+                )
+                data = retry_data
+            else:
+                # 未改善包含两种场景：重试字数 ≤ 首次、重试异常失败
+                # 两者都意味着硬约束 prompt 未生效，统一计入 not_improved
+                _WORD_COUNT_RETRY_STATS["not_improved"] += 1
+                logger.warning(
+                    "字数硬约束重试未改善 material_id=%s 重试=%d 首次=%d，保留首次结果",
+                    material["id"], retry_words, actual_words,
+                )
+        except Exception as e:
+            # 重试失败不阻断主流程，使用首次结果（由 5.6 节字数补足兜底）
+            # 计入 not_improved：硬约束重试未带来改善（与未改善语义一致）
+            _WORD_COUNT_RETRY_STATS["not_improved"] += 1
+            logger.warning(
+                "字数硬约束重试异常 material_id=%s: %s，使用首次结果",
+                material["id"], e,
+            )
+
     return {
         "title": data.get("title", material["title"]),
         "content": data.get("content", ""),
@@ -585,6 +814,76 @@ async def _rewrite_one(
         # 封面图透传到 segment，小程序文稿页按段展示
         "cover_url": material.get("cover_url"),
     }
+
+
+def _parse_llm_response(raw: str, material_id: int) -> dict:  # NOSONAR S3776: LLM 响应解析含两级降级容错，结构清晰
+    """解析 LLM 响应为 dict（剥离 Markdown 代码块 + JSON 解析 + content 字段清洗）。
+
+    抽出此函数避免 _rewrite_one 在字数重试分支重复解析逻辑。
+    失败时抛 LLMContentError，由调用方决定是否降级。
+
+    容错策略（两级降级）：
+    1. 严格模式 json.loads：标准 JSON 解析
+    2. 宽松模式 json.loads(strict=False)：允许控制字符（实际换行符/制表符）
+       出现在字符串值中。LLM 生成长文本时常在 content 字段中返回未转义
+       的换行符，导致 "Expecting ',' delimiter" 错误（如 wf-20260722-0002
+       material_id=176 案例）。strict=False 是 Python json 模块内置的
+       容错机制，无需引入额外依赖。
+
+    解析后对 content 字段做 Markdown 残留清洗：
+    - LLM 偶发违反"禁止输出 Markdown 标记"约束，在 content 中残留 ** 或 #
+    - TTS 朗读这些符号会念出"星号星号"或"井号"，严重影响听感
+    - 此处做兜底清理，确保任何路径返回的 content 都已清洗
+    """
+    if not raw or not raw.strip():
+        raise LLMContentError("LLM 返回空 content（可能被限流或审核拒绝）")
+
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
+    # 第一级：严格模式解析（标准 JSON）
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        # 第一级失败，进入第二级宽松模式
+        parsed = None
+
+    if parsed is None:
+        # 第二级：宽松模式解析（允许控制字符出现在字符串值中）
+        # 场景：LLM 在 content 字段中返回未转义换行符/制表符
+        try:
+            parsed = json.loads(text, strict=False)
+            logger.warning(
+                "LLM 响应 JSON 严格模式解析失败，宽松模式成功 material_id={}",
+                material_id,
+            )
+        except json.JSONDecodeError as e:
+            logger.error(
+                "LLM 响应 JSON 解析失败 material_id={} raw_preview={}",
+                material_id, raw[:300],
+            )
+            raise LLMContentError(
+                f"JSON 解析失败: {e}，raw 前300字: {raw[:300]}"
+            ) from e
+
+    # 防御性清洗 content 字段中残留的 Markdown 标记
+    # 统一在解析成功后处理，覆盖严格/宽松两条路径
+    if isinstance(parsed, dict) and isinstance(parsed.get("content"), str):
+        original = parsed["content"]
+        cleaned = _strip_markdown_residue(original)
+        if cleaned != original:
+            logger.warning(
+                "LLM 输出 content 含 Markdown 残留，已清洗 material_id=%s",
+                material_id,
+            )
+            parsed["content"] = cleaned
+    return parsed
 
 
 def _select_top_materials(materials: list[dict], top_n: int = SELECT_TOP_N) -> list[dict]:
@@ -630,7 +929,11 @@ def _select_top_materials(materials: list[dict], top_n: int = SELECT_TOP_N) -> l
     return selected[:top_n]
 
 
-def _build_aggregated_error(segments: list[dict], failure_details: list[dict]) -> LLMError:
+def _build_aggregated_error(
+    segments: list[dict],
+    failure_details: list[dict],
+    min_segments: int = MIN_VALID_SEGMENTS,
+) -> LLMError:
     """根据并发失败的 failure_details 聚合错误信息，构建 LLMError。
 
     策略：
@@ -641,9 +944,12 @@ def _build_aggregated_error(segments: list[dict], failure_details: list[dict]) -
 
     始终把完整 failure_details 附加到 LLMError.failure_details 属性，
     供 workflow_scheduler._run_step 在 failed 状态下写入 workflow_step.result。
+
+    Args:
+        min_segments: 动态有效段数下限（素材稀缺时降级，默认 MIN_VALID_SEGMENTS）
     """
     base_msg = (
-        f"有效改写段数 {len(segments)} < {MIN_VALID_SEGMENTS}，无法生成节目"
+        f"有效改写段数 {len(segments)} < {min_segments}，无法生成节目"
     )
 
     if not failure_details:
@@ -779,7 +1085,12 @@ def _assemble_script(
 
 
 async def _fetch_materials(date_str: str, channel_id: int = None) -> list[dict]:
-    """查询当日 pending 素材，当日不足 SELECT_MIN_N 条时回溯最近 FALLBACK_DAYS 天。
+    """查询当日 pending 素材，当日不足 SELECT_MIN_N 条时回溯最近 N 天。
+
+    N 按频道入库频率动态计算（_calc_dynamic_fallback_days）：
+    - 高频道道（≥5 天/周有入库）：3 天回溯，避免拉入过旧素材
+    - 中频道道（2-4 天/周）：7 天回溯，覆盖周末场景
+    - 低频道道（0-1 天/周）：14 天回溯，避免无素材可用
 
     按 crawled_at 当日筛选，避免历史积压素材混入当日节目。
     status=pending 确保不重复消费已被选题的素材。
@@ -812,12 +1123,13 @@ async def _fetch_materials(date_str: str, channel_id: int = None) -> list[dict]:
         result = await session.execute(stmt)
         rows = list(result.scalars().all())
 
-        # 当日 pending 素材不足时，回溯最近 FALLBACK_DAYS 天补足
+        # 当日 pending 素材不足时，按频道入库频率动态回溯
         # 场景：RSS 源周末/夜间/稀疏日，单日仅 1-2 条素材，
         # 改写后段数 < MIN_VALID_SEGMENTS 必然失败，提前回溯兜底
-        if len(rows) < SELECT_MIN_N and FALLBACK_DAYS > 0:
+        fallback_days = await _calc_dynamic_fallback_days(channel_id)
+        if len(rows) < SELECT_MIN_N and fallback_days > 0:
             fb_start = datetime.combine(
-                day - timedelta(days=FALLBACK_DAYS), datetime.min.time()
+                day - timedelta(days=fallback_days), datetime.min.time()
             )
             existing_ids = {r.id for r in rows}
             fb_stmt = select(Material).where(
@@ -838,7 +1150,7 @@ async def _fetch_materials(date_str: str, channel_id: int = None) -> list[dict]:
                     "当日 %s pending 素材不足（%d < %d），回溯最近 %d 天补 %d 条，合计 %d 条"
                     "（channel_id=%s）",
                     date_str, len(existing_ids), SELECT_MIN_N,
-                    FALLBACK_DAYS, len(fb_rows), len(rows),
+                    fallback_days, len(fb_rows), len(rows),
                     channel_id,
                 )
 
@@ -859,6 +1171,51 @@ async def _fetch_materials(date_str: str, channel_id: int = None) -> list[dict]:
             }
             for r in rows
         ]
+
+
+async def _calc_dynamic_fallback_days(channel_id: int | None) -> int:
+    """按频道近 7 天入库频率动态计算回溯天数。
+
+    策略：
+    - 高频道道（≥5 天有入库）：3 天（素材充足，小回溯即可）
+    - 中频道道（2-4 天有入库）：7 天（默认值，覆盖周末场景）
+    - 低频道道（0-1 天有入库）：14 天（扩大回溯，避免无素材可用）
+
+    channel_id 为 None 时（全局工作流）使用默认值 7。
+
+    实现细节：用 func.date(crawled_at) 去重日期，统计近 7 天有入库的天数。
+    不查 pending 状态：入库频率反映 RSS 源活跃度，与素材是否已被消费无关。
+    """
+    if channel_id is None:
+        return FALLBACK_DAYS
+
+    try:
+        today = date.today()
+        week_ago = datetime.combine(today - timedelta(days=7), datetime.min.time())
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(func.date(Material.crawled_at))
+                .where(
+                    Material.channel_id == channel_id,
+                    Material.crawled_at >= week_ago,
+                )
+                .group_by(func.date(Material.crawled_at))
+            )
+            result = await session.execute(stmt)
+            distinct_days = len(result.all())
+
+        if distinct_days >= 5:
+            return 3
+        if distinct_days >= 2:
+            return FALLBACK_DAYS
+        return 14
+    except Exception as e:
+        # 查询失败时回退到默认值，避免影响主流程
+        logger.warning(
+            "动态 FALLBACK_DAYS 查询失败 channel_id=%s: %s，使用默认值 %d",
+            channel_id, e, FALLBACK_DAYS,
+        )
+        return FALLBACK_DAYS
 
 
 async def _fetch_channel_prompts(channel_id: int) -> dict:
@@ -981,7 +1338,7 @@ async def _filter_materials_by_relevance(
         return materials
 
 
-async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> dict:
+async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> dict:  # NOSONAR
     """改写主入口（LLD 5.3）。
 
     整合目标时长 + TTS 实际语速，动态反算每段字数要求，注入 prompt。
@@ -999,6 +1356,11 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         LLMError: 有效改写段数 < 3，无法生成节目
     """
     logger.info("改写启动 workflow_id=%s date=%s channel_id=%s", workflow_id, date_str, channel_id)
+
+    # 记录本轮改写开始前的字数重试计数器快照
+    # 用于在 rewrite 结束时计算本轮触发率/改善率，单次工作流粒度的即时反馈
+    # _WORD_COUNT_RETRY_STATS 是模块级累计计数器，差值即本轮贡献
+    _stats_before = dict(_WORD_COUNT_RETRY_STATS)
 
     # 0. 占位符前置检测：避免无效 API key 浪费重试配额
     # 若 .env 未替换占位符或前端未配置真实 key，立即抛出明确错误
@@ -1055,8 +1417,11 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
             status_rows = (await session.execute(status_stmt)).all()
             status_dist = dict(status_rows) if status_rows else {}
         channel_hint = f"频道 channel_id={channel_id} " if channel_id is not None else "全局"
+        # 动态回溯天数由 _calc_dynamic_fallback_days 按频道入库频率计算（3/7/14 天三档）
+        # 此处复用同一函数获取实际回溯天数，避免错误消息与实际行为不符误导运维
+        actual_fallback_days = await _calc_dynamic_fallback_days(channel_id)
         raise LLMError(
-            f"当日 {date_str} 无 pending 素材（回溯 {FALLBACK_DAYS} 天亦无），"
+            f"当日 {date_str} 无 pending 素材（回溯 {actual_fallback_days} 天亦无），"
             f"无法改写。{channel_hint}material 表共 {total_count} 条，"
             f"状态分布: {status_dist or '空表'}。"
             f"请检查爬虫是否正常运行、RSS 源配置是否可达"
@@ -1076,6 +1441,23 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
             channel_prompts.get("description") or "",
         )
         logger.info("AI 相关性筛选后剩余 %d 条", len(selected))
+
+    # 2.4 动态段数下限：素材稀缺时降级允许生成短节目，而非直接失败（R23 自动调整 / R110 自动降级）
+    # 场景：低频频道（如主机游戏/教育资讯）周末或 RSS 源稀疏日，回溯期内 pending 素材
+    # 仍不足 MIN_VALID_SEGMENTS=3，原逻辑直接 raise 导致工作流必然失败
+    # 策略：有效下限 = min(配置下限, 实际选题数)，至少 1 段保证节目可生成
+    # 后续 duration 下限校验（5.6）会记录字数不足警告，但不阻断短节目生成
+    if selected:
+        effective_min_segments = min(MIN_VALID_SEGMENTS, len(selected))
+    else:
+        effective_min_segments = MIN_VALID_SEGMENTS
+    if effective_min_segments < MIN_VALID_SEGMENTS:
+        logger.warning(
+            "选题数 %d < MIN_VALID_SEGMENTS=%d，动态下调有效段数下限为 %d "
+            "(channel_id=%s, workflow_id=%s)，将生成较短节目",
+            len(selected), MIN_VALID_SEGMENTS, effective_min_segments,
+            channel_id, workflow_id,
+        )
 
     # 2.5 关联素材到当前工作流并标记为 selected
     # 回溯选取的历史素材 workflow_id 可能为 NULL，需更新为当前工作流
@@ -1097,8 +1479,18 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
     # 远超 20 次/分钟的频率预算，导致全部被 check_budget 拦截
     semaphore = asyncio.Semaphore(_LLM_CONCURRENCY_LIMIT)
 
-    async def _rewrite_one_with_limit(m: dict) -> dict:
+    # 风格多样性提示：按 selected 索引 i 作为 seq 号从 style_library 轮换选取
+    # 用 selected 索引而非最终 segments seq：并发调用时 segments seq 不可预知，
+    # 而 selected 索引稳定，保证单期内开场白/过渡词轮换不重复
+    # total_segments 用 selected 长度，让 LLM 知道整期节目段数以控制循环周期
+    from app.workflow.llm.style_library import get_style_hint
+    channel_id_for_style = channel_id
+    total_for_style = len(selected)
+
+    async def _rewrite_one_with_limit(m: dict, style_seq: int) -> dict:
         async with semaphore:
+            # 按 seq 号从 style_library 轮换选取开场白/过渡词/同义词提示
+            style_hint = get_style_hint(channel_id_for_style, style_seq, total_for_style)
             return await _rewrite_one(
                 m,
                 words_per_segment=words_per_segment,
@@ -1106,18 +1498,22 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                 template_text=channel_prompts["rewrite_template"] if channel_prompts else None,
                 constraint_text=channel_prompts["constraint_prompt"] if channel_prompts else None,
                 enable_thinking_question=channel_prompts["enable_thinking_question"] if channel_prompts else True,
+                style_hint=style_hint,
             )
 
-    tasks = [_rewrite_one_with_limit(m) for m in selected]
+    # enumerate 从 1 开始：seq=1 用开场白（intro），seq>=2 用过渡词（transition）
+    tasks = [_rewrite_one_with_limit(m, i + 1) for i, m in enumerate(selected)]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # 4. 过滤失败项 + 敏感词扫描
     segments = []
     failure_details: list[dict] = []  # 记录每条素材失败原因，供 workflow_step 展示
-    for m, r in zip(selected, results):
+    for i, (m, r) in enumerate(zip(selected, results)):
         if isinstance(r, SensitiveHitError):
             # 首次命中敏感词，带约束 prompt 二次重生成
+            # style_hint 在敏感词重试时仍注入：保持风格一致性，避免重试产出与首版风格迥异
             try:
+                style_hint = get_style_hint(channel_id_for_style, i + 1, total_for_style)
                 r = await _rewrite_one(
                     m,
                     words_per_segment=words_per_segment,
@@ -1126,6 +1522,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                     template_text=channel_prompts["rewrite_template"] if channel_prompts else None,
                     constraint_text=channel_prompts["constraint_prompt"] if channel_prompts else None,
                     enable_thinking_question=channel_prompts["enable_thinking_question"] if channel_prompts else True,
+                    style_hint=style_hint,
                 )
                 segments.append({**r, "seq": len(segments) + 1})
             except Exception as e:
@@ -1150,7 +1547,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         else:
             segments.append({**r, "seq": len(segments) + 1})
 
-    if len(segments) < MIN_VALID_SEGMENTS:
+    if len(segments) < effective_min_segments:
         # 错误聚合：若多数失败属同一类型，透传根因异常而非笼统报"段数不足"
         # 避免掩盖真实问题（如全部 LLMAuthError 应明确报鉴权失败）
         # 回滚素材状态：改写前已把素材标记为 selected，段数不足抛错后 _run_step
@@ -1175,7 +1572,9 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                     "回滚素材状态失败 workflow_id=%s: %s",
                     workflow_id, rollback_err,
                 )
-        raise _build_aggregated_error(segments, failure_details)
+        raise _build_aggregated_error(
+            segments, failure_details, effective_min_segments
+        )
 
     # 4.5 限制最终段数，避免选题数增加后节目时长过长
     # 按 target_segments 截取，避免段数超出目标时长对应的需求
@@ -1196,11 +1595,12 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
 
     # 5.5 字数上限校验：LLM 常不遵守 prompt 字数约束（中文 LLM 尤甚），
     # 超长时从末尾丢弃正文段，避免 TTS 合成后时长超出 stitch 校验上限
-    # 安全边界：保留至少 MIN_VALID_SEGMENTS 段正文 + intro + outro
+    # 安全边界：保留至少 effective_min_segments 段正文 + intro + outro
+    # （素材稀缺场景 effective_min_segments 已下调，截断下限同步调整避免过度截断）
     max_allowed_duration = int(target_sec * 1.2)
     if assembled["estimated_duration"] > max_allowed_duration:
         segs = assembled["segments_json"]
-        while len(segs) > MIN_VALID_SEGMENTS + 2 and assembled["estimated_duration"] > max_allowed_duration:
+        while len(segs) > effective_min_segments + 2 and assembled["estimated_duration"] > max_allowed_duration:
             segs.pop(-2)
             assembled["total_words"] = sum(len(s["content"]) for s in segs)
             assembled["estimated_duration"] = int(
@@ -1212,6 +1612,83 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
             "字数超限截断 target=%ds max=%ds 保留段数=%d estimated=%ds",
             target_sec, max_allowed_duration, len(segs), assembled["estimated_duration"],
         )
+
+    # 5.6 字数下限补足：LLM 实际生成字数常低于 prompt 约束（中文 LLM 尤甚），
+    # 不足时从 selected 中未使用的素材追加 LLM 改写，补到目标下限
+    # 场景：LLM 生成 2400 字（目标 3300 字），stitch 拼接后 459s < 480s 下限
+    # 安全边界：最多追加 2 段避免无限循环；selected 无未使用素材时跳过
+    min_allowed_duration = int(target_sec * 0.80)
+    if assembled["estimated_duration"] < min_allowed_duration:
+        # 已使用的素材 ID（segments 中已改写的 material_id）
+        used_material_ids = {seg["material_id"] for seg in segments if seg.get("material_id")}
+        # 从 selected 中找未使用的素材（按热度降序已排好）
+        unused_materials = [m for m in selected if m["id"] not in used_material_ids]
+
+        if unused_materials:
+            logger.warning(
+                "字数不足补足 target=%ds min=%ds estimated=%ds 待补素材 %d 条",
+                target_sec, min_allowed_duration, assembled["estimated_duration"],
+                len(unused_materials),
+            )
+            # 追加补充段：最多 2 段，避免 LLM 调用过多
+            # 每段补足后立即检查是否达到下限，达到则停止
+            max_supplement = min(2, len(unused_materials))
+            for i in range(max_supplement):
+                if assembled["estimated_duration"] >= min_allowed_duration:
+                    break
+                try:
+                    sup_seg = await _rewrite_one_with_limit(unused_materials[i], i + 1)
+                    segments.append({**sup_seg, "seq": len(segments) + 1})
+                    # 重新组装以更新时长估算
+                    assembled = _assemble_script(
+                        segments,
+                        rate_multiplier=rate_multiplier,
+                        intro_text=channel_prompts["intro_prompt"] if channel_prompts else None,
+                        outro_text=channel_prompts["outro_prompt"] if channel_prompts else None,
+                    )
+                    logger.info(
+                        "补充段 %d 完成 material_id=%s 重新估算 %ds",
+                        i + 1, unused_materials[i]["id"], assembled["estimated_duration"],
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "补充段 %d 改写失败 material_id=%s: %s",
+                        i + 1, unused_materials[i]["id"], e,
+                    )
+                    break
+
+            logger.info(
+                "字数补足结束 最终 estimated=%ds segments=%d",
+                assembled["estimated_duration"], len(segments),
+            )
+        else:
+            logger.warning(
+                "字数不足 %ds < %ds 但 selected 无未使用素材，跳过补足",
+                assembled["estimated_duration"], min_allowed_duration,
+            )
+
+    # 5.7 LLM 字数达成率监控：对比目标字数与实际字数
+    # 场景：LLM 常不遵守 prompt ±10% 字数约束（中文 LLM 尤甚），
+    # 实际生成 65-80% 字数是常见现象，达成率低于 80% 时 WARNING
+    # 便于运维发现 LLM 模型质量问题或 prompt 约束力不足
+    # 不阻断工作流：补足机制（5.6）已尽力兜底，监控仅告警
+    target_total_words = _calc_target_words(target_sec, rate_multiplier)
+    actual_total_words = assembled["total_words"]
+    if target_total_words > 0:
+        achievement_rate = actual_total_words / target_total_words
+        if achievement_rate < 0.80:
+            logger.warning(
+                "LLM 字数达成率 %.0f%% 低于 80%% 阈值"
+                "（实际 %d 字 / 目标 %d 字，segments=%d estimated=%ds）"
+                "prompt ±10%% 约束未被遵守，建议检查 LLM 模型或 prompt",
+                achievement_rate * 100, actual_total_words, target_total_words,
+                len(segments), assembled["estimated_duration"],
+            )
+        else:
+            logger.info(
+                "LLM 字数达成率 %.0f%%（%d / %d 字）",
+                achievement_rate * 100, actual_total_words, target_total_words,
+            )
 
     # 6. 落库 script 表
     referenced_materials = [
@@ -1243,6 +1720,11 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         len(segments),
         assembled["total_words"],
     )
+
+    # 7. LLM 字数重试指标采集与告警
+    # 输出本轮 + 累计两个粒度的快照，便于运维观察单次工作流与长期趋势
+    # 告警阈值：本轮触发率 > 50%（LLM 字数缩水严重）或改善率 < 30%（硬约束无效）
+    _emit_word_count_retry_stats(workflow_id, _stats_before)
 
     return {
         "script_id": script_id,

@@ -9,7 +9,7 @@
  * 并通过比较 player.title 判断“当前播放的是否是本组件的节目”，
  * 从而在多页面共享同一个播放器时仍能正确反映本组件的播放态。
  */
-const { playEpisode } = require('../../services/audio');
+const { playEpisode, seek, onPlaybackChange, onTimeUpdateChange, offTimeUpdateChange } = require('../../services/audio');
 
 Component({
   properties: {
@@ -26,6 +26,7 @@ Component({
     duration: 0,               // 总时长（秒）
     currentTimeText: '00:00',  // 预格式化文本，避免在 WXML 中调用方法
     durationText: '00:00',
+    seekTimestamp: 0,          // seek后1500ms内忽略onTimeUpdate覆盖，防止重缓冲把进度重置
   },
 
   observers: {
@@ -41,57 +42,56 @@ Component({
       this.syncFromPlayer();
     },
     detached() {
-      // 显式 off 本组件注册的回调：组件 onPlay 等注册的是自身闭包，
-      // 与 audio.js 内部注册的回调是不同引用，off 不会误删全局监听
-      const player = getApp().globalData.player;
-      if (player && this._onPlay) {
-        player.offPlay(this._onPlay);
-        player.offPause(this._onPause);
-        player.offTimeUpdate(this._onTimeUpdate);
-        player.offEnded(this._onEnded);
+      // 取消 audio.js 的订阅：避免组件销毁后回调仍触发 setData 报错
+      if (this._unsubPlayback) {
+        this._unsubPlayback();
+        this._unsubPlayback = null;
       }
-      this._onPlay = null;
-      this._onPause = null;
-      this._onTimeUpdate = null;
-      this._onEnded = null;
+      if (this._onTimeUpdateChange) {
+        offTimeUpdateChange(this._onTimeUpdateChange);
+        this._onTimeUpdateChange = null;
+      }
     },
   },
 
   methods: {
     /**
      * 绑定全局 player 事件以同步本组件 UI
-     * 全局 player 是单例，事件对所有页面触发，
-     * 故每次回调都需校验是否为当前节目，避免串扰
+     *
+     * 为什么用订阅接口而非直接 player.onXxx：
+     * BackgroundAudioManager.onXxx 是覆盖式注册，直接注册会覆盖 audio.js initPlayer 中
+     * 注册的回调（含 playNext 自动连播、startProgressReport、applyPlaybackRate 等核心逻辑），
+     * 导致自动连播失效、进度不上报、倍速丢失等问题。
+     * 改为通过 audio.js 的订阅接口（onPlaybackChange/onTimeUpdateChange）监听事件。
      */
     bindPlayerEvents() {
-      const player = getApp().globalData.player;
-      if (!player) return;
+      // 播放/暂停/结束状态变更
+      this._unsubPlayback = onPlaybackChange((evt) => {
+        if (!this.isCurrentEpisode()) return;
+        const player = getApp().globalData.player;
+        if (evt.type === 'play') {
+          this.setData({ isPlaying: true, durationText: this.formatTime(player.duration) });
+        } else if (evt.type === 'pause' || evt.type === 'ended') {
+          this.setData({ isPlaying: false });
+          if (evt.type === 'ended') {
+            this.setData({ currentTime: 0, currentTimeText: '00:00' });
+          }
+        }
+      });
 
-      this._onPlay = () => {
+      // 时间更新：同步进度条
+      this._onTimeUpdateChange = (currentTime, duration) => {
         if (!this.isCurrentEpisode()) return;
-        this.setData({ isPlaying: true, durationText: this.formatTime(player.duration) });
-      };
-      this._onPause = () => {
-        if (!this.isCurrentEpisode()) return;
-        this.setData({ isPlaying: false });
-      };
-      this._onTimeUpdate = () => {
-        if (!this.isCurrentEpisode()) return;
+        // seek后1500ms内忽略timeUpdate回调，防止重缓冲把进度重置为0
+        if (Date.now() - (this.data.seekTimestamp || 0) < 1500) return;
         this.setData({
-          currentTime: Math.floor(player.currentTime) || 0,
-          duration: Math.floor(player.duration) || 0,
-          currentTimeText: this.formatTime(player.currentTime),
-          durationText: this.formatTime(player.duration),
+          currentTime,
+          duration,
+          currentTimeText: this.formatTime(currentTime),
+          durationText: this.formatTime(duration),
         });
       };
-      this._onEnded = () => {
-        this.setData({ isPlaying: false, currentTime: 0, currentTimeText: '00:00' });
-      };
-
-      player.onPlay(this._onPlay);
-      player.onPause(this._onPause);
-      player.onTimeUpdate(this._onTimeUpdate);
-      player.onEnded(this._onEnded);
+      onTimeUpdateChange(this._onTimeUpdateChange);
     },
 
     /**
@@ -137,8 +137,15 @@ Component({
       if (!player || !this.isCurrentEpisode()) return;
       // slider 的 detail.value 即拖动落点（秒）
       const pos = e.detail.value;
-      player.seek(pos);
-      this.setData({ currentTime: pos, currentTimeText: this.formatTime(pos) });
+      // 调用 services/audio 的 seek 函数：处理暂停状态下 seek 不生效的问题
+      seek(pos);
+      // 记录seek时间点，onTimeUpdate会忽略seek后1500ms内的回调，
+      // 防止重缓冲期间 onTimeUpdate 把进度拉回旧值或 0
+      this.setData({
+        currentTime: pos,
+        currentTimeText: this.formatTime(pos),
+        seekTimestamp: Date.now(),
+      });
     },
 
     /**

@@ -121,6 +121,26 @@ export const reviewActionSuccessResponse = {
   data: null,
 }
 
+// 批量审核成功响应：2 条成功、0 跳过、0 失败
+export const reviewBatchActionSuccessResponse = {
+  code: 0,
+  message: 'success',
+  data: {
+    succeeded: [
+      { id: 1, workflow_id: 'wf-001', need_publish: true },
+      { id: 2, workflow_id: 'wf-002', need_publish: true },
+    ],
+    failed: [],
+    skipped: [],
+    published: [
+      { id: 1, episode_id: 101 },
+      { id: 2, episode_id: 102 },
+    ],
+    publish_failed: [],
+    total: 2,
+  },
+}
+
 // ============== 广告相关 ==============
 export const adMaterialsListResponse = {
   code: 0,
@@ -226,6 +246,138 @@ export const statsTrendResponse = {
   data: {
     dates: ['2026-07-01', '2026-07-02', '2026-07-03'],
     values: [1000, 1200, 1500],
+  },
+}
+
+// 频道素材健康度：3 个频道覆盖 healthy/warning/critical 三种状态
+export const channelHealthResponse = {
+  code: 0,
+  message: 'success',
+  data: {
+    channels: [
+      {
+        channel_id: 1,
+        name: '科技前沿',
+        description: '科技资讯',
+        is_active: true,
+        rss_source_count: 5,
+        keyword_count: 12,
+        today_pending: 8,
+        range_total: 35,
+        daily_trend: [
+          { date: '2026-07-15', count: 5 },
+          { date: '2026-07-16', count: 6 },
+          { date: '2026-07-17', count: 4 },
+          { date: '2026-07-18', count: 7 },
+          { date: '2026-07-19', count: 5 },
+          { date: '2026-07-20', count: 4 },
+          { date: '2026-07-21', count: 4 },
+        ],
+        health_status: 'healthy',
+      },
+      {
+        channel_id: 2,
+        name: '财经观察',
+        description: '财经动态',
+        is_active: true,
+        rss_source_count: 3,
+        keyword_count: 10,
+        today_pending: 2,
+        range_total: 18,
+        daily_trend: [
+          { date: '2026-07-15', count: 0 },
+          { date: '2026-07-16', count: 8 },
+          { date: '2026-07-17', count: 0 },
+          { date: '2026-07-18', count: 0 },
+          { date: '2026-07-19', count: 10 },
+          { date: '2026-07-20', count: 0 },
+          { date: '2026-07-21', count: 0 },
+        ],
+        health_status: 'warning',
+      },
+      {
+        channel_id: 3,
+        name: '主机游戏',
+        description: '主机游戏资讯',
+        is_active: true,
+        rss_source_count: 4,
+        keyword_count: 15,
+        today_pending: 0,
+        range_total: 0,
+        daily_trend: [
+          { date: '2026-07-15', count: 0 },
+          { date: '2026-07-16', count: 0 },
+          { date: '2026-07-17', count: 0 },
+          { date: '2026-07-18', count: 0 },
+          { date: '2026-07-19', count: 0 },
+          { date: '2026-07-20', count: 0 },
+          { date: '2026-07-21', count: 0 },
+        ],
+        health_status: 'critical',
+      },
+    ],
+    summary: { healthy: 1, warning: 1, critical: 1, total: 3 },
+  },
+}
+
+// RSS 源可达性：覆盖 ok/fail/unknown 三种状态
+export const rssHealthResponse = {
+  code: 0,
+  message: 'success',
+  data: {
+    total: 3,
+    ok: 1,
+    fail: 1,
+    unknown: 1,
+    checked_at: '2026-07-21T05:00:00+00:00',
+    sources: [
+      {
+        name: '人民网-国内',
+        url: 'http://www.people.com.cn/rss/politics.xml',
+        category_hint: '时政',
+        status: 'ok',
+        latency_ms: 320,
+        consecutive_failures: 0,
+        last_check: '2026-07-21T05:00:00+00:00',
+        last_error: null,
+      },
+      {
+        name: 'rsshub 失效源',
+        url: 'https://rsshub.app/failed',
+        category_hint: '科技',
+        status: 'fail',
+        latency_ms: 8000,
+        consecutive_failures: 3,
+        last_check: '2026-07-21T05:00:00+00:00',
+        last_error: 'ConnectError: DNS resolution failed',
+      },
+      {
+        name: '未巡检源',
+        url: 'http://example.com/rss',
+        category_hint: '科技',
+        status: 'unknown',
+        latency_ms: 0,
+        consecutive_failures: 0,
+        last_check: null,
+        last_error: null,
+      },
+    ],
+  },
+}
+
+// LLM 字数硬约束重试命中率：覆盖触发率/改善率/未改善率三种典型场景数据
+// mock 值典型场景：100 次调用 → 30 次触发 → 20 次改善 + 10 次未改善
+export const llmMetricsResponse = {
+  code: 0,
+  message: 'success',
+  data: {
+    total_calls: 100,
+    triggered: 30,
+    improved: 20,
+    not_improved: 10,
+    trigger_rate: 30.0,
+    improve_rate: 66.67,
+    not_improve_rate: 33.33,
   },
 }
 

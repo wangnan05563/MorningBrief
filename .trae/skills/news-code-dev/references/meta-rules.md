@@ -1387,4 +1387,1773 @@
 - 适用：所有结构化缓存（dict/list 对象）；前后端字段变更场景
 - 不适用：纯标量缓存（如 `count:5`）；TTL 短（< 60s）的临时缓存
 
+## 规范 86-90：2026-07-21 跨项目模块迁移与测试执行复盘新增规范
+
+> 以下规范来源于参考 D:\code\otherProjects\17_xianyu 项目实现"关于"和"帮助文档"模块的完整复盘，覆盖跨项目迁移、嵌套目录路径、图标跨库迁移、缓存测试隔离、多版本 Python 测试执行等高频问题场景。所有阈值通过 `project-config.json#cross_project_migration`、`project-config.json#frontend_nested_paths`、`project-config.json#icon_migration`、`project-config.json#cache_test_isolation`、`project-config.json#python_env_test` 配置管理。
+
+### 规范 86：跨项目模块迁移 7 步法
+
+**参考式跨项目模块迁移必须完整执行 7 个步骤：需求确认 → 架构对齐 → 后端开发 → 前端开发 → 测试编写 → 测试执行 → 构建验证，禁止跳过任一步骤。**
+
+- 为什么：跨项目迁移时，参考项目的架构、技术栈、约定可能与目标项目不一致。直接复制代码会导致路径错误、图标不存在、构建失败等问题。本次迭代从 17_xianyu 迁移"关于/帮助"模块时，因跳过架构对齐导致 SCSS 路径错误、JS import 路径错误、Rocket 图标不存在 3 个问题，全部在 vite build 阶段才暴露。
+- 阈值参数（通过 `project-config.json#cross_project_migration` 配置）：
+  - `required_steps`: ["requirement_confirm", "architecture_align", "backend_dev", "frontend_dev", "test_write", "test_execute", "build_verify"]
+  - `architecture_align_checklist`: ["目录结构对齐", "技术栈对齐", "依赖库对齐", "命名约定对齐", "路径风格对齐"]
+  - `build_verify_required`: true（构建验证必须通过才算完成）
+  - `test_execute_required`: true（测试执行必须通过才算完成）
+- 判断信号：
+  - 跨项目迁移任务跳过架构对齐步骤
+  - 迁移后未执行 vite build / py_compile 验证
+  - 迁移后未执行测试用例验证
+- 7 步流程：
+  1. **需求确认**：明确迁移目标、范围、验收标准
+  2. **架构对齐**：对比参考项目与目标项目的目录结构、技术栈、依赖库、命名约定、路径风格
+  3. **后端开发**：按目标项目分层架构（routers → services → models → core）实现
+  4. **前端开发**：按目标项目目录结构（views/<module>/<Page>.vue）实现，校验相对路径
+  5. **测试编写**：编写单元测试（后端）+ 测试用例（前端）
+  6. **测试执行**：运行 pytest + vite build，确保测试通过且构建成功
+  7. **构建验证**：实际启动服务/打开页面验证功能可用
+- 适用：所有参考式跨项目模块迁移
+- 不适用：从零开发（无参考项目）、纯配置迁移（无代码）
+
+### 规范 87：前端嵌套目录相对路径校验
+
+**Vue 项目采用 `views/<module>/<Page>.vue` 嵌套目录结构时，SCSS `@use` 和 JS `import` 的相对路径必须按嵌套层级计算（`../../` 而非 `../`），禁止照搬扁平目录的路径风格。**
+
+- 为什么：17_xianyu 项目采用扁平目录（views/About.vue），SCSS 用 `@use '../styles/variables.scss'`。20_News 项目采用嵌套目录（views/about/About.vue），照搬 17_xianyu 的 `../styles/` 路径会指向 `views/styles/`（不存在），实际应为 `../../styles/`。vite build 阶段才暴露此错误，开发阶段无任何提示。
+- 阈值参数（通过 `project-config.json#frontend_nested_paths` 配置）：
+  - `nested_dir_pattern`: "views/<module>/<Page>.vue"（嵌套目录结构模式）
+  - `parent_level_required`: 2（嵌套层级，扁平为 1，单层嵌套为 2，双层嵌套为 3）
+  - `path_types_to_check`: ["scss_use", "js_import", "ts_import", "vue_import"]
+  - `build_verify_required`: true（vite build 必须通过）
+- 判断信号：
+  - grep `@use '\.\./styles/'` 在 `views/<module>/*.vue` 文件中（应为 `../../styles/`）
+  - grep `from '\.\./utils/'` 在 `views/<module>/*.vue` 文件中（应为 `../../utils/`）
+  - grep `from '\.\./api/'` 在 `views/<module>/*.vue` 文件中（应为 `../../api/`）
+- 正确做法：
+  ```vue
+  <!-- ✅ 正确：嵌套目录 views/about/About.vue 的相对路径 -->
+  <style lang="scss">
+  @use '../../styles/variables.scss' as *;  // 两级 ../
+  </style>
+  <script setup>
+  import { someUtil } from '../../utils/someUtil'  // 两级 ../
+  import { someApi } from '../../api/someApi'      // 两级 ../
+  </script>
+
+  <!-- ❌ 错误：照搬扁平目录路径风格 -->
+  <style lang="scss">
+  @use '../styles/variables.scss' as *;  // 一级 ../，指向 views/styles/（不存在）
+  </style>
+  <script setup>
+  import { someUtil } from '../utils/someUtil'  // 一级 ../，指向 views/utils/（不存在）
+  </script>
+  ```
+- 适用：所有 `views/<module>/<Page>.vue` 嵌套目录结构
+- 不适用：扁平目录结构（views/Page.vue）、绝对路径（@/）
+
+### 规范 88：UI 图标跨库迁移存在性验证
+
+**从参考项目迁移 UI 图标到目标项目时，必须验证图标在目标 UI 库中存在，禁止直接照搬参考项目的图标名。**
+
+- 为什么：17_xianyu 项目使用 React 图标库（如 lucide-react），其中含 `Rocket` 图标。20_News 项目使用 @element-plus/icons-vue，该库不含 `Rocket`。照搬 `Rocket` 图标名后 vite build 报错 "Rocket is not exported by @element-plus/icons-vue"。React 图标库与 Vue 图标库的图标命名、覆盖范围差异较大，必须逐个验证。
+- 阈值参数（通过 `project-config.json#icon_migration` 配置）：
+  - `target_icon_library`: "@element-plus/icons-vue"（目标图标库）
+  - `verify_command`: "node -e \"const icons = require('@element-plus/icons-vue'); console.log(Object.keys(icons))\""（验证命令）
+  - `fallback_icon`: "MagicStick"（图标不存在时的兜底替换）
+  - `verify_before_build`: true（构建前必须验证图标存在性）
+- 判断信号：
+  - grep `from '@element-plus/icons-vue'` 后跟参考项目特有图标名（如 Rocket, Heart, Star 等）
+  - 迁移任务未执行图标存在性验证
+- 正确做法：
+  ```javascript
+  // ✅ 正确：迁移前验证图标存在性
+  // 1. 列出目标库所有图标
+  // node -e "const icons = require('@element-plus/icons-vue'); console.log(Object.keys(icons))"
+  // 2. 对照参考项目使用的图标，替换不存在的
+  import { MagicStick } from '@element-plus/icons-vue'  // Rocket 不存在，替换为 MagicStick
+
+  // ❌ 错误：照搬参考项目图标名
+  import { Rocket } from '@element-plus/icons-vue'  // vite build 报错
+  ```
+- 适用：所有跨 UI 库图标迁移（React → Vue、Ant Design → Element Plus 等）
+- 不适用：同 UI 库内的图标调整、自定义 SVG 图标
+
+### 规范 89：模块级单例缓存的测试隔离
+
+**进程内模块级单例缓存（TTLCache / dict / lru_cache）的单元测试，必须在测试用例间通过 `_reset_cache_for_test()` 等显式清理函数重置缓存，禁止依赖测试执行顺序或 GC 自动清理。**
+
+- 为什么：模块级单例（如 `settings = get_settings()`、`_cache = TTLCache(...)`）在进程生命周期内只初始化一次。pytest 多个测试用例共享同一进程，前一个用例修改的缓存状态会影响后一个用例。本次迭代测试 settings 单例时，未重置缓存导致后续用例读取到前一个用例修改的值，测试结果与执行顺序相关，违反测试隔离原则。
+- 阈值参数（通过 `project-config.json#cache_test_isolation` 配置）：
+  - `require_reset_function`: true（必须有显式重置函数）
+  - `reset_function_naming`: "_reset_cache_for_test"（重置函数命名约定）
+  - `reset_in_fixture`: true（推荐在 pytest fixture 中调用重置）
+  - `cache_types_to_reset`: ["TTLCache", "dict_module_level", "lru_cache", "functools.cache"]
+- 判断信号：
+  - 测试用例依赖执行顺序（颠倒顺序后失败）
+  - 测试模块级单例的代码无 `_reset_cache_for_test()` 调用
+  - 使用 `pytest-randomly` 随机顺序执行时出现间歇性失败
+- 正确做法：
+  ```python
+  # app/core/cache.py
+  from cachetools import TTLCache
+  _cache: TTLCache = TTLCache(maxsize=100, ttl=300)
+
+  def _reset_cache_for_test() -> None:
+      """测试专用：重置模块级缓存，确保用例间隔离。"""
+      _cache.clear()
+
+  # tests/test_cache.py
+  import pytest
+  from app.core.cache import _cache, _reset_cache_for_test
+
+  @pytest.fixture(autouse=True)
+  def reset_cache():
+      """每个测试用例前自动重置缓存。"""
+      _reset_cache_for_test()
+      yield
+
+  def test_cache_set():
+      _cache["key1"] = "value1"
+      assert _cache["key1"] == "value1"
+
+  def test_cache_empty():  # 不受 test_cache_set 影响
+      assert "key1" not in _cache  # 通过，因为 fixture 已重置
+  ```
+- 错误做法：
+  ```python
+  # ❌ 无重置函数，依赖 GC 或测试顺序
+  def test_cache_set():
+      _cache["key1"] = "value1"
+      assert _cache["key1"] == "value1"
+
+  def test_cache_empty():  # 如果在 test_cache_set 后执行，会失败
+      assert "key1" not in _cache  # 失败，_cache["key1"] 仍存在
+  ```
+- 适用：所有进程内缓存模块（TTLCache / dict 模块级单例 / lru_cache / functools.cache / 单例模式的类属性）
+- 不适用：函数局部变量（每次调用自然隔离）、数据库状态（用事务回滚隔离）
+
+### 规范 90：多版本 Python 环境下的测试执行
+
+**Windows 环境下 Trae 内置 Python 与系统 Python 多版本共存时，执行 pytest 必须显式指定 Python 解释器完整路径，禁止依赖 PATH 解析（PATH 中 Trae 内置 Python 可能优先，但其不含 pytest 等开发依赖）。**
+
+- 为什么：Windows 安装 Trae 后，PATH 中 Trae 内置 Python 可能优先于系统 Python。Trae 内置 Python 是精简版，不含 pytest / pytest-asyncio 等开发依赖。直接 `python -m pytest` 会报 `No module named pytest`，但 `python --version` 显示正常版本号，误导开发者以为是其他问题。
+- 阈值参数（通过 `project-config.json#python_env_test` 配置）：
+  - `require_explicit_python_path`: true（强制显式指定 Python 路径）
+  - `system_python_path`: "F:\\Program Files\\Python3.14\\python.exe"（系统 Python 完整路径，从配置读取）
+  - `required_test_deps`: ["pytest", "pytest-asyncio", "aiosqlite"]（必需测试依赖列表）
+  - `verify_command`: "python -c \"import pytest; print(pytest.__version__)\""（验证命令）
+- 判断信号：
+  - `python -m pytest` 报 `No module named pytest` 但 `python --version` 正常
+  - PATH 中 Trae 内置 Python 优先于系统 Python
+  - 多个 Python 版本共存（如 Python 3.12 / 3.14 / Trae 内置）
+- 正确做法：
+  ```powershell
+  # ✅ 正确：显式指定系统 Python 完整路径
+  & "F:\Program Files\Python3.14\python.exe" -m pytest tests/ -v
+  & "F:\Program Files\Python3.14\python.exe" -m pytest --asyncio-mode=auto
+
+  # ✅ 正确：先验证 pytest 已安装
+  & "F:\Program Files\Python3.14\python.exe" -c "import pytest; print(pytest.__version__)"
+
+  # ❌ 错误：依赖 PATH 解析
+  python -m pytest tests/ -v  # 可能使用 Trae 内置 Python，无 pytest
+  ```
+- 适用：Windows + 多 Python 版本共存环境（Trae 内置 Python + 系统 Python）
+- 不适用：Linux/Mac 单版本 Python 环境、虚拟环境（venv 已激活）
+
+## 规范 91-100：2026-07-21 综合复盘新增规范
+
+> 以下规范来源于 2026-07-21 图片爬虫功能开发、工作流多步骤失败修复、P0/P1 改进实施、菜单分组功能开发、图标设计任务等综合复盘，覆盖封面图提取、装饰图过滤、动态回溯天数、LLM 语义降级、LLM 字数约束、BGM 兜底、菜单分组、PWA 图标、监控告警、批量回填脚本等高频场景。所有阈值通过 `project-config.json#image_crawl`、`project-config.json#workflow_orchestration`、`project-config.json#frontend_menu_grouping`、`project-config.json#pwa_icon_generation`、`project-config.json#monitoring_thresholds`、`project-config.json#backfill_script` 配置管理。
+
+### 规范 91：图片封面三级 fallback 提取
+
+**文章封面图提取必须实现 og:image → article <img> → 页面首个非装饰 <img> 三级 fallback，禁止仅依赖单一来源。**
+
+- **为什么**：文章封面图来源多样且不稳定。og:image 缺失（部分站点不设置 meta 标签）、article <img> 为空（部分文章纯图文混排无主图）、页面 <img> 含装饰图（logo/icon 等）。仅依赖单一来源会导致 30%+ 文章无封面，影响小程序展示效果。
+- **阈值参数**（通过 `project-config.json#image_crawl` 配置）：
+  - `fallback_chain`: ["og_image", "article_img", "page_first_img"]（fallback 顺序）
+  - `timeout_per_source_sec`: 5（单源超时）
+  - `min_image_size_bytes`: 1024（小于此大小的图视为无效）
+- **判断信号**：grep `og:image` 后无 `elif`/`try/except` fallback 逻辑
+- **正确做法**：
+  ```python
+  async def extract_cover_image(html: str, url: str) -> str | None:
+      sources = settings.image_crawl.fallback_chain  # 从配置读取
+      for source in sources:
+          try:
+              img_url = await _extract_from_source(source, html, url)
+              if img_url and await _validate_image_size(img_url):
+                  return img_url
+          except Exception as e:
+              logger.warning(f"Cover extraction via {source} failed: {e}")
+              continue
+      return None  # 全部失败返回 None，由上层降级处理
+  ```
+- **错误做法**：
+  ```python
+  # ❌ 仅依赖 og:image，无 fallback
+  def extract_cover_image(html: str) -> str | None:
+      match = re.search(r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"', html)
+      return match.group(1) if match else None
+  ```
+- **适用场景**：所有需要封面图的文章/新闻类业务
+- **不适用场景**：无图片需求的纯文本内容；用户主动上传封面的场景
+
+### 规范 92：装饰图过滤规则
+
+**封面图提取必须过滤装饰图（logo/icon/arrow 等 URL 关键词、特定站点模板路径、GIF 扩展名），禁止将装饰图作为封面。**
+
+- **为什么**：页面首个 <img> 常常是站点 logo、导航 icon、箭头装饰等，这些图作为封面会严重影响阅读体验。GIF 动图作为封面在 iOS 上不显示动效且体积过大。本次迭代未过滤时，小程序封面图 40% 是站点 logo。
+- **阈值参数**（通过 `project-config.json#image_crawl.decorative_filter` 配置）：
+  - `url_keyword_blacklist`: ["logo", "icon", "arrow", "btn", "button", "sprite", "placeholder"]
+  - `template_path_blacklist`: ["/static/", "/assets/img/", "/images/common/"]
+  - `extension_blacklist`: [".gif", ".svg"]
+  - `min_aspect_ratio`: 0.3（宽高比下限，过滤细长装饰条）
+- **判断信号**：grep `cover_url` 提取逻辑无装饰图过滤（无 keyword_blacklist 检查）
+- **正确做法**：
+  ```python
+  def is_decorative_image(img_url: str) -> bool:
+      cfg = settings.image_crawl.decorative_filter
+      url_lower = img_url.lower()
+      # URL 关键词过滤
+      if any(kw in url_lower for kw in cfg.url_keyword_blacklist):
+          return True
+      # 模板路径过滤
+      if any(path in url_lower for path in cfg.template_path_blacklist):
+          return True
+      # 扩展名过滤
+      if any(url_lower.endswith(ext) for ext in cfg.extension_blacklist):
+          return True
+      return False
+  ```
+- **错误做法**：
+  ```python
+  # ❌ 直接取首个 <img> 不做过滤
+  def extract_first_img(html: str) -> str | None:
+      match = re.search(r'<img[^>]+src="([^"]+)"', html)
+      return match.group(1) if match else None  # 可能是 logo/icon
+  ```
+- **适用场景**：所有图片提取场景（封面图、列表缩略图、OG 图）
+- **不适用场景**：用户主动上传的图片（无需过滤）；图标库素材站（图标本就是有效内容）
+
+### 规范 93：FALLBACK_DAYS 动态计算
+
+**素材回溯天数应根据频道入库天数动态计算（3/7/14 天三档），而非固定值。**
+
+- **为什么**：新频道入库天数 <3 天时，固定 7 天回溯会查到 0 条素材导致工作流失败；老频道入库天数 >30 天时，3 天回溯过短，无法覆盖节假日内容空窗。本次迭代固定 FALLBACK_DAYS=3 导致新频道首日 0 素材失败。
+- **阈值参数**（通过 `project-config.json#workflow_orchestration.fallback_days_tiers` 配置）：
+  - `tiers`: [{"max_channel_age_days": 3, "fallback_days": 1}, {"max_channel_age_days": 14, "fallback_days": 3}, {"max_channel_age_days": 9999, "fallback_days": 7}]
+  - `default_tier_index`: 1（默认档位）
+- **判断信号**：grep `FALLBACK_DAYS` 为硬编码数字（如 `FALLBACK_DAYS = 3`）
+- **正确做法**：
+  ```python
+  def calculate_fallback_days(channel_created_at: datetime) -> int:
+      channel_age_days = (datetime.now() - channel_created_at).days
+      tiers = settings.workflow_orchestration.fallback_days_tiers.tiers
+      for tier in tiers:
+          if channel_age_days <= tier["max_channel_age_days"]:
+              return tier["fallback_days"]
+      return tiers[settings.workflow_orchestration.fallback_days_tiers.default_tier_index]["fallback_days"]
+  ```
+- **错误做法**：
+  ```python
+  # ❌ 硬编码固定值
+  FALLBACK_DAYS = 3  # 新频道首日不够 3 天，查不到素材
+
+  async def get_recent_materials(channel_id: int):
+      since = datetime.now() - timedelta(days=FALLBACK_DAYS)
+      return await db.execute(select(Material).where(Material.created_at >= since))
+  ```
+- **适用场景**：多频道/多租户的素材回溯场景；新频道冷启动场景
+- **不适用场景**：单频道项目（无频道差异化需求）；无历史数据的全新项目（首次入库无回溯必要）
+
+### 规范 94：LLM 语义过滤 fallback
+
+**关键词过滤结果为 0 时必须降级到 LLM 语义过滤，LLM 失败时保留全部条目供 rewriter 二次筛选。**
+
+- **为什么**：关键词过滤依赖词表覆盖度，新话题/同义词/隐喻表达会全部漏掉。若过滤后 0 条直接报错，工作流中断。LLM 语义过滤能理解语义相似性，但仍可能失败（API 超时/限流）。最坏情况下保留全部条目让 rewriter 自行筛选，保证工作流不中断。本次迭代关键词过滤 0 条导致工作流失败 30 分钟。
+- **阈值参数**（通过 `project-config.json#workflow_orchestration.llm_semantic_fallback` 配置）：
+  - `trigger_when_keyword_result_zero`: true（关键词过滤 0 条时触发）
+  - `llm_filter_batch_size`: 10（LLM 批量过滤批次大小）
+  - `fallback_strategy_on_llm_failure`: "keep_all"（LLM 失败时保留全部）
+  - `llm_filter_timeout_sec`: 30（LLM 过滤超时）
+- **判断信号**：grep 关键词过滤后无 LLM fallback 分支（`if not filtered: raise` 无降级）
+- **正确做法**：
+  ```python
+  async def filter_materials(materials: list, keywords: list[str]) -> list:
+      # 第一级：关键词过滤
+      filtered = [m for m in materials if any(kw in m.title for kw in keywords)]
+      if filtered:
+          return filtered
+      # 第二级：LLM 语义过滤
+      cfg = settings.workflow_orchestration.llm_semantic_fallback
+      try:
+          return await asyncio.wait_for(
+              _llm_semantic_filter(materials, keywords),
+              timeout=cfg.llm_filter_timeout_sec,
+          )
+      except Exception as e:
+          logger.warning(f"LLM semantic filter failed, keep all materials: {e}")
+          # 第三级：保留全部条目
+          return materials
+  ```
+- **错误做法**：
+  ```python
+  # ❌ 关键词过滤 0 条直接报错
+  async def filter_materials(materials: list, keywords: list[str]) -> list:
+      filtered = [m for m in materials if any(kw in m.title for kw in keywords)]
+      if not filtered:
+          raise BusinessError("无匹配素材")  # 工作流中断
+      return filtered
+  ```
+- **适用场景**：所有基于关键词的内容过滤场景（素材筛选/文章分类/评论审核）
+- **不适用场景**：纯精确匹配场景（如 ID 过滤、SKU 过滤）；安全敏感场景（不能保留全部，必须严格过滤）
+
+### 规范 95：LLM 字数达标约束
+
+**LLM 生成内容必须达到目标字数的 70%，低于阈值触发硬约束重试；超过目标×1.20 时丢弃多余段（保留至少 3 主段+intro+outro）；低于目标×0.80 时追加最多 2 段。**
+
+- **为什么**：LLM 生成稿件字数偏差过大会导致音频时长异常（TTS 时长与字数正相关）。字数不足音频过短（小程序显示节目时长 <5 分钟用户体验差），字数超长音频过长（超出 10:30 上限触发切除丢内容）。本次迭代未约束时稿件字数从 800-3500 字波动，音频时长 4-15 分钟。
+- **阈值参数**（通过 `project-config.json#workflow_orchestration.llm_word_count` 配置）：
+  - `target_word_count`: 1500（目标字数）
+  - `min_achievement_ratio`: 0.70（硬约束下限，低于触发重试）
+  - `trim_threshold_ratio`: 1.20（超此比例丢弃多余段）
+  - `append_threshold_ratio`: 0.80（低于此比例追加段）
+  - `max_append_segments`: 2（最多追加段数）
+  - `min_main_segments`: 3（修剪后最少保留主段数）
+- **判断信号**：grep LLM 调用后无字数验证逻辑（无 `len(content)` / `word_count` 检查）
+- **正确做法**：
+  ```python
+  async def generate_script_with_constraint(topic: str) -> str:
+      cfg = settings.workflow_orchestration.llm_word_count
+      target = cfg.target_word_count
+      for attempt in range(3):  # 硬约束重试
+          content = await llm.generate(topic, target_words=target)
+          actual = len(content)
+          if actual >= target * cfg.min_achievement_ratio:
+              break
+          logger.warning(f"Word count {actual} < {target * cfg.min_achievement_ratio}, retry {attempt+1}")
+      # 超长修剪
+      if actual > target * cfg.trim_threshold_ratio:
+          content = _trim_to_target(content, target, cfg.min_main_segments)
+      # 过短追加
+      elif actual < target * cfg.append_threshold_ratio:
+          content = await _append_segments(content, topic, cfg.max_append_segments)
+      return content
+  ```
+- **错误做法**：
+  ```python
+  # ❌ 无字数约束，LLM 生成什么用什么
+  async def generate_script(topic: str) -> str:
+      return await llm.generate(topic)  # 字数可能 200 也可能 5000
+  ```
+- **适用场景**：所有 LLM 生成内容场景（稿件/标题/摘要/口播文案）
+- **不适用场景**：自由创作场景（无字数要求）；结构化输出（如 JSON 数据）
+
+### 规范 96：BGM 时长不足兜底
+
+**视频拼接时 BGM 时长不足必须用 BGM 尾段扩展或静音降级，禁止直接报错。**
+
+- **为什么**：BGM 库素材时长固定（通常 3-5 分钟），但视频时长可能 6-10 分钟。BGM 短于视频时直接报错会导致整个工作流失败，用户体验断裂。本次迭代 BGM 4:30 视频 6:00 时报错失败。
+- **阈值参数**（通过 `project-config.json#workflow_orchestration.bgm_fallback` 配置）：
+  - `extension_strategy`: "tail_loop"（尾段扩展策略，可选 "tail_loop"/"silence"/"crossfade"）
+  - `tail_loop_max_count`: 2（尾段扩展最大次数，超过则降级静音）
+  - `silence_fadeout_sec`: 2（静音降级时的淡出秒数）
+- **判断信号**：grep BGM 拼接逻辑无时长不足处理（`if bgm_duration < video_duration: raise`）
+- **正确做法**：
+  ```python
+  async def merge_bgm_with_video(bgm_path: str, video_path: str) -> str:
+      bgm_duration = await get_audio_duration(bgm_path)
+      video_duration = await get_video_duration(video_path)
+      cfg = settings.workflow_orchestration.bgm_fallback
+
+      if bgm_duration >= video_duration:
+          # 正常裁剪
+          return await _trim_bgm(bgm_path, video_duration)
+      # 时长不足：尾段扩展
+      extended_bgm = await _extend_bgm_tail_loop(bgm_path, video_duration, cfg.tail_loop_max_count)
+      if extended_bgm:
+          return extended_bgm
+      # 兜底：静音降级
+      logger.warning(f"BGM extend failed, fallback to silence for {video_duration - bgm_duration}s")
+      return await _pad_with_silence(bgm_path, video_duration, cfg.silence_fadeout_sec)
+  ```
+- **错误做法**：
+  ```python
+  # ❌ BGM 时长不足直接报错
+  async def merge_bgm(bgm_path: str, video_path: str) -> str:
+      bgm_duration = await get_audio_duration(bgm_path)
+      video_duration = await get_video_duration(video_path)
+      if bgm_duration < video_duration:
+          raise WorkflowError(f"BGM {bgm_duration}s < video {video_duration}s")  # 工作流中断
+      return await _merge(bgm_path, video_path)
+  ```
+- **适用场景**：所有音频/视频拼接场景（BGM 配音/背景音乐/片头片尾）
+- **不适用场景**：无 BGM 的纯人声拼接；BGM 必须完整播放的场景（如音乐 MV）
+
+### 规范 97：菜单分组与角色可见性
+
+**管理后台菜单数量 ≥10 时必须按功能分组（el-sub-menu），通过 meta.group 字段配置分组，groupConfig 数组定义分组渲染，支持角色可见性控制（RBAC），启用 unique-opened 手风琴效果，路由变化时自动展开当前分组。**
+
+- **为什么**：菜单 ≥10 项时扁平列表视觉拥挤，用户查找困难。功能分组让相关菜单聚合（如"内容管理"含文章/评论/标签）。RBAC 让 operator 看不到"系统设置"等敏感菜单。unique-opened 避免多个分组同时展开挤占屏幕。本次迭代菜单从 8 项增加到 14 项后，扁平列表查找成本激增。
+- **阈值参数**（通过 `project-config.json#frontend_menu_grouping` 配置）：
+  - `group_threshold`: 10（触发分组的最小菜单数）
+  - `unique_opened`: true（手风琴效果）
+  - `auto_expand_on_route_change`: true（路由变化自动展开）
+  - `group_field`: "meta.group"（路由 meta 中的分组字段名）
+  - `default_visible_roles`: ["admin"]（默认仅 admin 可见敏感分组）
+- **判断信号**：grep 菜单数量 ≥10 但无 `meta.group` 字段；grep `<el-sub-menu` 无 `unique-opened` 属性
+- **正确做法**：
+  ```javascript
+  // router/routes.js
+  const routes = [
+    {
+      path: '/content',
+      meta: { group: 'content', roles: ['admin', 'operator'] },
+      component: ArticleList,
+    },
+    {
+      path: '/system',
+      meta: { group: 'system', roles: ['admin'] },  // 仅 admin 可见
+      component: SystemConfig,
+    },
+  ]
+
+  // Layout.vue
+  <el-menu :unique-opened="groupConfig.unique_opened" @select="handleSelect">
+    <el-sub-menu v-for="group in visibleGroups" :key="group.id" :index="group.id">
+      <template #title>{{ group.title }}</template>
+      <el-menu-item v-for="item in group.items" :key="item.path" :index="item.path">
+        {{ item.title }}
+      </el-menu-item>
+    </el-sub-menu>
+  </el-menu>
+
+  // 路由变化时自动展开当前分组
+  watch(() => route.path, (newPath) => {
+    const group = findGroupByPath(newPath)
+    if (group) activeGroup.value = group.id
+  })
+  ```
+- **错误做法**：
+  ```javascript
+  // ❌ 14 项菜单扁平渲染，无分组
+  <el-menu>
+    <el-menu-item v-for="item in allMenus" :key="item.path" :index="item.path">
+      {{ item.title }}
+    </el-menu-item>
+  </el-menu>
+  ```
+- **适用场景**：所有管理后台菜单（≥10 项）；多角色权限系统
+- **不适用场景**：菜单数量 <10 的简单后台；无角色区分的内部工具
+
+### 规范 98：PWA 图标生成与 MIME 注册
+
+**PWA 应用图标必须同时生成 PNG（192/512）和 ICO（多尺寸 16/32/48），main.py 必须注册 `.ico` 的 MIME 类型（image/x-icon），manifest.json 必须声明 icons 数组含 maskable purpose。**
+
+- **为什么**：不同平台对图标格式要求不同——iOS Safari 仅识别 PNG 且需 apple-touch-icon；Windows 桌面 PWA 仅识别 ICO；Android Chrome 要求 maskable purpose 图标（自适应裁剪）。若 main.py 未注册 .ico MIME 类型，浏览器默认按 text/plain 解析导致图标 404/损坏。本次迭代 PWA 安装到 Windows 桌面后图标显示为白板。
+- **阈值参数**（通过 `project-config.json#pwa_icon_generation` 配置）：
+  - `png_sizes`: [192, 512]（PNG 尺寸列表）
+  - `ico_sizes`: [16, 32, 48]（ICO 多尺寸）
+  - `ico_mime_type`: "image/x-icon"（.ico MIME 类型）
+  - `manifest_purposes`: ["any", "maskable"]（manifest purpose 列表）
+  - `source_icon_path`: "assets/source-icon.png"（源图标路径）
+- **判断信号**：grep `manifest.json` 无 `maskable` purpose；grep `main.py` 无 `mimetypes.add_type` for `.ico`
+- **正确做法**：
+  ```python
+  # main.py - 注册 .ico MIME 类型
+  import mimetypes
+  mimetypes.add_type(settings.pwa_icon_generation.ico_mime_type, ".ico")
+
+  app.mount("/icons", StaticFiles(directory="admin-web/dist/icons"), name="icons")
+  ```
+
+  ```json
+  // manifest.json - 声明含 maskable purpose 的 icons 数组
+  {
+    "icons": [
+      {"src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+      {"src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+      {"src": "/icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+      {"src": "/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+      {"src": "/favicon.ico", "sizes": "16x16 32x32 48x48", "type": "image/x-icon"}
+    ]
+  }
+  ```
+- **错误做法**：
+  ```python
+  # ❌ 未注册 .ico MIME 类型
+  # main.py
+  app.mount("/icons", StaticFiles(directory="dist/icons"))  # .ico 按 text/plain 返回
+
+  # ❌ manifest.json 无 maskable purpose
+  {
+    "icons": [{"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"}]
+  }
+  ```
+- **适用场景**：所有 PWA 应用（含 manifest.json 的 Web 应用）
+- **不适用场景**：非 PWA 的纯 SPA 应用（无离线能力要求）；原生应用（使用原生图标资源）
+
+### 规范 99：关键指标监控告警
+
+**关键业务指标（关键词命中率、LLM 字数达成率、TTS 成功率、工作流成功率）低于阈值时必须记录 WARNING 级别日志，阈值通过配置管理。**
+
+- **为什么**：关键指标下滑是系统健康度的领先指标。关键词命中率从 80% 降到 30% 意味着关键词表过期或 RSS 源失效；LLM 字数达成率低意味着 LLM 服务降级；TTS 成功率低意味着 TTS 服务故障或配额耗尽。仅记录 INFO 级别日志会被埋没，必须 WARNING 级别触发运维关注。本次迭代 TTS 成功率 50% 持续 2 小时未被发现。
+- **阈值参数**（通过 `project-config.json#monitoring_thresholds` 配置）：
+  - `keyword_hit_rate_min`: 0.30（关键词命中率下限）
+  - `llm_word_count_achievement_min`: 0.70（LLM 字数达成率下限）
+  - `tts_success_rate_min`: 0.80（TTS 成功率下限）
+  - `workflow_success_rate_min`: 0.90（工作流成功率下限）
+  - `alert_log_level`: "WARNING"（告警日志级别）
+- **判断信号**：grep 关键业务流程无 WARNING 阈值判断（无 `if rate < threshold: logger.warning`）
+- **正确做法**：
+  ```python
+  async def report_workflow_metrics(metrics: dict) -> None:
+      cfg = settings.monitoring_thresholds
+      if metrics["keyword_hit_rate"] < cfg.keyword_hit_rate_min:
+          logger.warning(
+              f"Keyword hit rate {metrics['keyword_hit_rate']:.2%} below threshold {cfg.keyword_hit_rate_min:.2%}"
+          )
+      if metrics["llm_word_count_achievement"] < cfg.llm_word_count_achievement_min:
+          logger.warning(
+              f"LLM word count achievement {metrics['llm_word_count_achievement']:.2%} below threshold"
+          )
+      if metrics["tts_success_rate"] < cfg.tts_success_rate_min:
+          logger.warning(
+              f"TTS success rate {metrics['tts_success_rate']:.2%} below threshold"
+          )
+      if metrics["workflow_success_rate"] < cfg.workflow_success_rate_min:
+          logger.warning(
+              f"Workflow success rate {metrics['workflow_success_rate']:.2%} below threshold"
+          )
+  ```
+- **错误做法**：
+  ```python
+  # ❌ 关键指标仅记录 INFO，无 WARNING 阈值
+  async def report_metrics(metrics: dict):
+      logger.info(f"keyword_hit_rate={metrics['keyword_hit_rate']}")  # 阈值下滑被埋没
+  ```
+- **适用场景**：所有关键业务流程（工作流/LLM/TTS/爬虫/审核）
+- **不适用场景**：调试日志（DEBUG 级别）；非关键路径（如 UI 点击统计）；已对接 APM 系统（由 APM 告警）
+
+### 规范 100：批量数据回填脚本规范
+
+**新增 ORM 字段后必须编写批量回填脚本（backfill_*.py），脚本必须支持 dry_run 预览模式、分批处理（默认 100 条/批）、幂等执行（重复运行不报错）、进度输出。**
+
+- **为什么**：ORM 新增字段后，存量数据该字段为 NULL，业务代码读取 NULL 会报错或降级。回填脚本必须 dry_run 让运维预览影响范围；分批处理避免单次事务过大锁表；幂等执行保证重试安全（部分失败后重跑不报错）；进度输出便于长时间任务监控。本次迭代新增 `cover_url` 字段后无回填脚本，导致小程序 80% 文章无封面。
+- **阈值参数**（通过 `project-config.json#backfill_script` 配置）：
+  - `batch_size`: 100（每批处理条数）
+  - `dry_run_default`: true（默认 dry_run 模式，需显式 --execute 才真实执行）
+  - `progress_log_interval`: 10（每 N 批输出一次进度）
+  - `idempotent_check_field`: "updated_at"（幂等检查字段，已回填的跳过）
+  - `script_naming_pattern`: "backfill_{model}_{field}.py"（脚本命名约定）
+- **判断信号**：grep ORM 模型新增字段但无对应 `backfill_*.py` 脚本
+- **正确做法**：
+  ```python
+  # backfill_material_cover_url.py
+  import argparse
+  from app.core.config import settings
+  from app.models.material import Material
+
+  async def backfill(dry_run: bool = None, batch_size: int = None):
+      cfg = settings.backfill_script
+      dry_run = cfg.dry_run_default if dry_run is None else dry_run
+      batch_size = batch_size or cfg.batch_size
+
+      total = await db.scalar(select(func.count(Material.id)).where(Material.cover_url.is_(None)))
+      logger.info(f"Backfill {total} materials, dry_run={dry_run}, batch_size={batch_size}")
+
+      offset = 0
+      processed = 0
+      while offset < total:
+          batch = await db.execute(
+              select(Material).where(Material.cover_url.is_(None))
+              .limit(batch_size).offset(offset)
+          )
+          materials = batch.scalars().all()
+          if dry_run:
+              logger.info(f"[DRY-RUN] Would update {len(materials)} materials (offset={offset})")
+          else:
+              for m in materials:
+                  m.cover_url = await extract_cover_image(m.content, m.source_url)
+              await db.commit()
+          processed += len(materials)
+          offset += batch_size
+          if offset % (batch_size * cfg.progress_log_interval) == 0:
+              logger.info(f"Progress: {processed}/{total} ({processed/total:.1%})")
+
+  if __name__ == "__main__":
+      parser = argparse.ArgumentParser()
+      parser.add_argument("--execute", action="store_true", help="Real execute (default dry_run)")
+      parser.add_argument("--batch-size", type=int, default=None)
+      args = parser.parse_args()
+      asyncio.run(backfill(dry_run=not args.execute, batch_size=args.batch_size))
+  ```
+- **错误做法**：
+  ```python
+  # ❌ 一次性 UPDATE 全表，无 dry_run 无分批
+  async def backfill_cover_url():
+      await db.execute(update(Material).values(cover_url=None))  # 锁表风险
+      # 实际上没调用 extract_cover_image，字段仍为 NULL
+  ```
+- **适用场景**：所有 ORM 模型字段新增场景；数据迁移场景（字段类型变更/数据格式转换）
+- **不适用场景**：纯查询字段（computed property）；临时字段（一次性使用后删除）；少量数据（<100 条可直接事务处理）
+
+## 规范 118-126：2026-07-22 前端交互稳定性与编辑完整性复盘新增规范
+
+### 规范 118：浏览器窗口最小化防护
+
+**SPA 后台管理系统中，401 跳转必须用 router.push（非 location.href），错误提示前必须检查 !document.hidden，后台轮询请求必须加 silent: true。**
+
+- 为什么：浏览器最小化时，任何 ElMessage.error / location.href 全量刷新都会触发 DOM 插入或页面重载，导致最小化的窗口被重新激活弹出。本次浏览器最小化自动弹出问题经历三轮修复才彻底解决，根因是 Edit 工具损坏文件未及时发现，且未验证构建产物。
+- 阈值参数（通过 `project-config.json#frontend_minimize_guard` 配置）：
+  - `forbid_location_href`: true（禁止 location.href 全量刷新）
+  - `require_hidden_check`: true（错误提示前必须检查 document.hidden）
+  - `silent_param`: "silent"（静默请求参数名）
+  - `strict_path_match`: true（路径判断用 === 严格相等，禁止 includes）
+  - `login_path`: "/login"（登录页路径，可配置）
+- 判断信号：
+  - grep `location\.href\s*=` 在 api/index.js 或 router 守卫
+  - grep `ElMessage\.(error|warning|success)\(` 后无 `!document.hidden` 检查
+  - grep `pathname\.includes\(['"]\/login['"]\)` 应改为 `===`
+- 正确做法：
+  ```javascript
+  if (error.response?.status === 401) {
+    localStorage.removeItem('admin_token')
+    if (globalThis.location.pathname !== '/login') {
+      router.push('/login')
+    }
+  } else if (!error.config?.silent && !document.hidden) {
+    ElMessage.error(error.response?.data?.message || '请求失败')
+  }
+  ```
+- 错误做法：
+  ```javascript
+  if (status === 401) { location.href = '/login' }
+  ElMessage.error(message)
+  ```
+- 适用：SPA 后台管理系统、需要轮询的页面、ElMessage 全局拦截器
+- 不适用：SSR 应用、移动端 App、无登录态系统
+
+### 规范 119：异步路由参数时序处理
+
+**router.replace/router.push 是异步操作，回调内禁止依赖 route.params 即时更新，必须用显式传参模式或 detail.value 取最新值。**
+
+- 为什么：router.replace 是异步操作，调用后 route.params.id 尚未更新，立即执行 loadDetail() 会请求旧 ID。本次工作流重跑后 loadDetail 请求的是旧工作流 ID。
+- 阈值参数（通过 `project-config.json#route_param_timing` 配置）：
+  - `explicit_param_mode`: true（loadDetail 接受可选 workflowId 参数）
+  - `use_detail_value`: true（轮询函数用 detail.value.xxx 而非 route.params）
+  - `await_after_replace`: true（router.replace 后必须 await loadDetail(new_id)）
+- 判断信号：
+  - grep `router\.(replace|push)\(` 后立即调用依赖 route.params 的函数
+  - grep `setInterval.*route\.params` 在轮询回调中读 route.params
+- 正确做法：
+  ```javascript
+  async function loadDetail(workflowId) {
+    const wid = workflowId || route.params.id
+    detail.value = await api.get(`/workflows/${wid}`)
+    startPolling()
+  }
+  async function handleRetry() {
+    const data = await api.post(`/workflows/${route.params.id}/retry`, {...})
+    router.replace(`/workflows/${data.new_workflow_id}`)
+    await loadDetail(data.new_workflow_id)
+  }
+  ```
+- 错误做法：
+  ```javascript
+  router.replace(`/workflows/${data.new_workflow_id}`)
+  await loadDetail()  // route.params.id 还是旧值
+  ```
+- 适用：任何 SPA 路由跳转后需立即加载新数据的场景
+- 不适用：同步路由；URL 直接访问
+
+### 规范 120：列表数据动态轮询状态同步
+
+**轮询必须满足：终态停止、运行态轮询、不可见暂停、silent 请求、重跑重置。**
+
+- 为什么：重跑后状态不更新导致用户无法感知执行状态；轮询触发的 ElMessage 同样会激活最小化窗口；页面不可见时继续轮询浪费资源。
+- 阈值参数（通过 `project-config.json#polling_state_sync` 配置）：
+  - `interval_ms`: 3000（轮询间隔，默认 3 秒）
+  - `terminal_states`: ["success", "failed"]（终态列表）
+  - `running_state`: "running"（运行态，触发轮询）
+  - `silent_param`: "silent"（静默请求参数名）
+  - `pause_on_hidden`: true（页面不可见时暂停轮询）
+  - `stop_before_restart`: true（重跑/重置前必须 stopPolling）
+- 判断信号：
+  - grep `setInterval` 无 `clearInterval` 配对
+  - grep `setInterval` 无 `document.hidden` 检查
+  - grep 轮询回调内调用 `ElMessage` 无 `silent: true`
+- 正确做法：
+  ```javascript
+  function startPolling() {
+    stopPolling()
+    if (detail.value.status === 'running' && !document.hidden) {
+      const wid = detail.value.workflow_id
+      pollTimer = setInterval(async () => {
+        if (document.hidden) return
+        try {
+          detail.value = await api.get(`/workflows/${wid}`, { silent: true })
+          if (detail.value.status !== 'running') stopPolling()
+        } catch { }
+      }, POLL_INTERVAL)
+    }
+  }
+  onMounted(() => {
+    loadDetail()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+  })
+  onUnmounted(() => {
+    stopPolling()
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
+  })
+  ```
+- 错误做法：
+  ```javascript
+  pollTimer = setInterval(async () => {
+    const data = await api.get(`/workflows/${id}`)
+    if (data.status === 'success') ElMessage.success('完成')
+  }, 3000)
+  ```
+- 适用：工作流/任务监控、长耗时操作状态跟踪、批处理进度
+- 不适用：WebSocket/SSE 实时推送；一次性查询；高频数据
+
+### 规范 121：第三方服务模型名称核对
+
+**模型名称以官方文档为准，大小写敏感；LLM_PRESETS 中 model 字段必须与 API 实际接受的值一致。**
+
+- 为什么：本次 Agnes AI 模型名 "Agnes-2.0-Flash"（大写）被 API 拒绝，改为 "agnes-2.0-flash"（小写）才通过。
+- 阈值参数（通过 `project-config.json#model_name_verification` 配置）：
+  - `case_sensitive`: true（模型名大小写敏感）
+  - `official_source_required`: true（必须以官方文档为准）
+  - `sync_pricing_table`: true（新增模型必须同步定价表）
+  - `sync_frontend_presets`: true（新增模型必须同步前端预设列表）
+- 判断信号：
+  - grep `LLM_PRESETS` 中 model 字段含大写字母
+  - 新增 Provider 时未查询官方文档
+- 正确做法：
+  ```python
+  LLM_PRESETS = [
+      {"key": "agnes", "label": "Agnes AI",
+       "base_url": "https://api.agnes-ai.com/v1",
+       "model": "agnes-2.0-flash"},
+  ]
+  ```
+- 错误做法：
+  ```python
+  "model": "Agnes-2.0-Flash"  # 大写，API 拒绝
+  ```
+- 适用：接入任何第三方 LLM/TTS/Image API；新增 Provider 预设
+- 不适用：内部自研 API；模型名固定不变
+
+### 规范 122：API Key 脱敏回退链路
+
+**返回前端前必须用 is_masked 检查并脱敏；前端提交时若 is_masked=true，后端必须回退到数据库真实密钥；preset_configs 旧数据必须兼容填充。**
+
+- 为什么：本次切换回 DeepSeek 时 API Key 为空，根因是首次使用 preset_configs 机制时数据库无存储值。脱敏回退需要前后端协同，三层缺一不可。
+- 阈值参数（通过 `project-config.json#masked_key_fallback` 配置）：
+  - `is_masked_check`: true（返回前端前必须 is_masked 检查）
+  - `fallback_to_db`: true（前端提交 is_masked=true 时后端回退数据库值）
+  - `preset_configs_storage`: true（每个预设独立存储 api_key + model）
+  - `legacy_data_compat`: true（旧数据用数据库全局值填充）
+  - `masked_prefix`: "sk-****"（脱敏前缀，可配置）
+- 判断信号：
+  - grep `api_key` 返回前端前无 `is_masked` 检查
+  - grep `preset_configs` 无旧数据兼容填充逻辑
+- 正确做法：
+  ```python
+  def get_config():
+      config = read_from_db()
+      if config.get("api_key"):
+          config["api_key_masked"] = _mask_api_key(config["api_key"])
+          config["is_masked"] = True
+      presets = config.get("preset_configs", {})
+      selected = config.get("llm_preset")
+      if selected and selected not in presets:
+          presets[selected] = {"api_key": config.get("api_key", ""),
+                               "model": config.get("llm_model", "")}
+      return config
+
+  def update_config(payload):
+      if payload.get("is_masked"):
+          payload["api_key"] = read_from_db().get("api_key", "")
+  ```
+- 错误做法：
+  ```python
+  def get_config():
+      return read_from_db()  # api_key 明文返回
+  ```
+- 适用：任何配置页面有 API Key 脱敏显示的场景；多预设独立配置
+- 不适用：无 API Key 的系统；单租户无脱敏需求；前端只读不提交
+
+### 规范 123：文件编辑完整性验证
+
+**Edit 工具修改后必须 Read 验证文件完整性；大范围重写优先用 Write 工具；修复后必须 Grep 构建产物验证修复代码已编译。**
+
+- 为什么：本次 api/index.js 被 Edit 工具严重损坏（变量名错误、语法截断、函数名损坏），导致第一轮修复未生效。损坏信号检测 + 构建产物验证是双重保险。
+- 阈值参数（通过 `project-config.json#edit_integrity_verify` 配置）：
+  - `verify_after_edit`: true（Edit 后必须 Read 验证）
+  - `corruption_signals`: ["reesponse", "ne  }", "Mesror", "El.respon", "globalThis.location.href"]
+  - `use_write_for_large_rewrite`: true（大范围重写优先 Write）
+  - `build_grep_check`: true（修复后 Grep 构建产物验证）
+  - `build_artifact_path`: "admin-web/dist/assets"
+- 判断信号：
+  - Edit 后 Read 文件发现变量名错误（如 `(reesponse.data`）
+  - Edit 后 Read 文件发现语法截断（如 `return Promise.reject(ne  }`）
+  - Edit 后 Read 文件发现函数名损坏（如 `Mesror('无权限...')`）
+- 正确做法：
+  ```text
+  步骤 1: Edit 修改后 Read 验证完整性
+  步骤 2: 检测损坏信号（变量名错误、语法截断、函数名损坏）
+  步骤 3: 若损坏，改用 Write 工具完整重写
+  步骤 4: 构建后 Grep 构建产物验证修复代码已编译
+    grep "document.hidden" admin-web/dist/assets/*.js
+    grep "$t.push(\"/login\")" admin-web/dist/assets/*.js
+  ```
+- 错误做法：
+  ```text
+  Edit 后不验证，直接构建
+  结果：文件损坏，构建产物不包含修复代码，用户反馈"还是存在"
+  ```
+- 适用：所有使用 Edit 工具修改文件的场景；大范围重写
+- 不适用：全新文件创建（用 Write）；小范围单行修改且 old_string 唯一
+
+### 规范 124：步骤进度可视化
+
+**进度条状态映射：pending=0%、running/retrying=50%、success/failed=100%；success 用 status='success'，failed 用 status='exception'；running/retrying 启用条纹动画。**
+
+- 为什么：本次工作流详情页步骤缺少进度条，用户无法直观感知执行进度。el-progress 的状态映射 + 条纹动画提供清晰的视觉反馈。
+- 阈值参数（通过 `project-config.json#step_progress_visualize` 配置）：
+  - `state_mapping`: {"pending": 0, "running": 50, "retrying": 50, "success": 100, "failed": 100}
+  - `success_status`: "success"（绿色）
+  - `failed_status`: "exception"（红色）
+  - `stripe_anim_states`: ["running", "retrying"]
+  - `max_percentage`: 100
+- 判断信号：
+  - grep 工作流步骤表格无 `el-progress` 组件
+  - grep `el-progress` 的 `percentage` 无状态映射函数
+- 正确做法：
+  ```vue
+  <el-table-column label="进度" width="200">
+    <template #default="{ row }">
+      <el-progress
+        :percentage="stepProgress(row)"
+        :status="stepProgressStatus(row.status)"
+        :striped="row.status === 'running' || row.status === 'retrying'"
+        :striped-flow="row.status === 'running' || row.status === 'retrying'"
+      />
+    </template>
+  </el-table-column>
+  ```
+- 错误做法：
+  ```vue
+  <el-table-column label="状态">
+    <template #default="{ row }">{{ row.status }}</template>
+  </el-table-column>
+  ```
+- 适用：工作流步骤、任务流水线、批处理进度、长耗时操作
+- 不适用：实时数据流；瞬时操作（<1秒）；纯文本终端
+
+### 规范 125：跨流程组合应用场景
+
+**多个流程模板可组合应用：详情页优化 = R118+R119+R120+R124；配置页优化 = R121+R122+R123；测试连接 = R121+R122。**
+
+- 为什么：本次工作流详情页优化同时涉及 4 个流程模板，AI 配置页优化涉及 3 个流程模板。
+- 阈值参数（通过 `project-config.json#cross_flow_combination` 配置）：
+  - `detail_page_combo`: ["R118", "R119", "R120", "R124"]
+  - `config_page_combo`: ["R121", "R122", "R123"]
+  - `test_connection_combo`: ["R121", "R122"]
+- 判断信号：
+  - 详情页优化需求（重跑状态 + 进度条 + 路由跳转）→ 应用 detail_page_combo
+  - 配置页优化需求（模型名 + API Key + 编辑修复）→ 应用 config_page_combo
+  - 测试连接失败 → 应用 test_connection_combo
+- 正确做法：识别场景 → 应用对应组合 → 按组合中每个流程模板执行
+- 错误做法：只应用单一流程模板，忽略其他相关流程
+- 适用：详情页优化、配置页优化、测试连接
+- 不适用：单一问题场景；互斥流程
+
+### 规范 126：配置驱动与通用性约束
+
+**所有技能参数必须通过 config.yaml / project-config.json 管理；禁止在审查规则或测试用例中硬编码 URL、账号、阈值；新增业务场景只需修改配置文件。**
+
+- 为什么：本次优化四个技能要求无硬编码、参数化、通用性。流程模板本身固定，参数化的是模板内的具体数值。
+- 阈值参数（通过 `project-config.json#config_driven_universal` 配置）：
+  - `config_files`: ["project-config.json", "config.yaml"]
+  - `forbid_hardcoded`: ["url", "account", "threshold", "interval"]
+  - `template_fixed`: true（流程模板固定，参数化的是模板内的具体数值）
+  - `new_scenario_config_only`: true（新增场景只需修改配置文件）
+- 判断信号：
+  - grep 技能代码含硬编码 URL（http://localhost、127.0.0.1）
+  - grep 技能代码含硬编码账号（admin/admin123）
+  - grep 技能代码含硬编码阈值（3000ms、50%、0.001）
+- 正确做法：
+  ```yaml
+  polling_state_sync:
+    interval_ms: 3000
+    terminal_states: ["success", "failed"]
+  ```
+- 错误做法：
+  ```javascript
+  const POLL_INTERVAL = 3000  // 硬编码
+  ```
+- 适用：所有技能（code-dev/review/testing）；多项目复用；参数频繁调整
+- 不适用：一次性脚本；原型验证；纯文档技能
+
+## 规范 127-129：2026-07-22 外部服务降级与异常过滤复盘新增规范
+
+### 规范 127：外部服务降级本地存储模式
+
+**COS/OSS/S3 等外部对象存储未配置或不可达时，必须降级到本地文件系统保证业务连续性；单一真相源 `is_xxx_configured()` 全项目复用；静态目录挂载顺序在 SPA fallback 之前。**
+
+- **为什么**：生产环境 COS 可能因配置缺失、凭证失效、网络不可达等原因不可用。若代码直接 raise 会导致整个工作流失败，已生成的 TTS 音频浪费。本次 TTS COS 上传失败后，实施本地降级存储（`data/audio_cache/` + `/audio/<key>` 静态目录）保证业务连续性。
+- **阈值参数**（通过 `project-config.json#external_storage_fallback` 配置）：
+  - `enabled`: true（是否启用降级模式）
+  - `severity`: "CRITICAL"（违规严重级别）
+  - `single_truth_source_fn`: "is_cos_configured"（单一真相源函数名，全项目复用）
+  - `local_dir`: "data/audio_cache"（本地降级目录）
+  - `static_mount_point`: "/audio"（静态目录挂载点）
+  - `url_generator_modes`: ["cos", "local"]（URL 生成函数必须感知的模式）
+  - `downstream_prefixes`: ["/audio/"]（下游消费者支持的前缀列表）
+  - `fallback_log_level`: "INFO"（降级模式日志级别）
+- **判断信号**：
+  - grep `cos_client.put_object` 后无 try/except 或无 fallback 分支
+  - grep `if is_cos_configured():` 后无 else 分支
+  - grep 多处 `if settings.COS_SECRET_ID:` 重复判断（应复用 `is_cos_configured()`）
+  - grep 外部存储上传失败直接 raise 而非降级
+- **正确做法**：
+  ```python
+  from app.core.config import is_cos_configured
+
+  async def upload_audio(content: bytes, key: str) -> str:
+      if is_cos_configured():
+          try:
+              cos_client.put_object(Bucket=settings.COS_BUCKET, Key=key, Body=content)
+              return f"https://{settings.COS_BUCKET}.cos.{settings.COS_REGION}.myqcloud.com/{key}"
+          except Exception as e:
+              logger.warning(f"COS upload failed, fallback to local: {e}")
+      # 降级到本地存储
+      local_dir = Path(settings.LOCAL_AUDIO_CACHE_DIR)
+      local_dir.mkdir(parents=True, exist_ok=True)
+      (local_dir / key).write_bytes(content)
+      logger.info("External COS not configured, fallback to local storage")
+      return f"/audio/{key}"
+  ```
+- **错误做法**：
+  ```python
+  # 多处重复判断 + 无降级
+  if settings.COS_SECRET_ID and settings.COS_SECRET_KEY:
+      cos_client.put_object(...)
+      return url
+  raise RuntimeError("COS not configured")  # 业务中断
+  ```
+- **适用场景**：生产环境 COS 降级、开发环境无 COS、COS 配置缺失容错
+- **不适用场景**：纯本地开发环境（无需 COS 配置检测）；已配置 COS 的稳定生产环境
+
+### 规范 128：Windows asyncio ConnectionResetError 异常过滤
+
+**Windows 平台 FastAPI/uvicorn 服务，浏览器 audio 标签提前关闭连接时，ProactorBasePipeTransport 抛出 ConnectionResetError [WinError 10054]，属平台已知行为非业务 bug，必须通过配置驱动的事件循环异常处理器过滤，避免日志污染。**
+
+- **为什么**：Windows asyncio ProactorBasePipeTransport 在客户端提前关闭连接时，服务端 `socket.shutdown` 抛出 `ConnectionResetError`。这是 Python + Windows 的已知行为，非业务 bug。但默认异常处理器会打印完整 traceback 到 stderr，污染日志，干扰真实问题定位。
+- **阈值参数**（通过 `project-config.json#asyncio_exception_filter` 配置）：
+  - `enabled`: true（是否启用异常过滤）
+  - `severity`: "MEDIUM"（违规严重级别，非业务 bug 但需减少日志污染）
+  - `enabled_platforms`: ["win32"]（启用平台，仅 Windows）
+  - `ignored_exceptions`:
+    - `exception_type`: "ConnectionResetError"（异常类型）
+    - `transport_class`: "ProactorBasePipeTransport"（传输类名）
+    - `winerror`: 10054（Windows 错误码）
+    - `log_level`: "DEBUG"（过滤后日志级别）
+  - `handler_priority`: 100（处理器优先级）
+- **判断信号**：
+  - 日志中重复出现 `Exception in callback _ProactorBasePipeTransport._call_connection_lost`
+  - `ConnectionResetError: [WinError 10054]` 频繁出现
+  - 无自定义异常处理器过滤此类已知行为
+- **正确做法**：
+  ```python
+  import sys
+  from app.core.config import settings
+
+  def _on_loop_exception(loop, context):
+      exc = context.get('exception')
+      handle = context.get('handle', '')
+      for rule in settings.ASYNCIO_IGNORED_EXCEPTIONS:
+          if (isinstance(exc, getattr(__builtins__, rule['exception_type'], object))
+                  and rule['transport_class'] in str(handle)):
+              logger.debug(f"Ignored platform exception: {rule['exception_type']}")
+              return
+      loop.default_exception_handler(context)
+
+  if sys.platform == 'win32' and settings.ASYNCIO_SUPPRESS_CONNECTION_RESET:
+      loop.set_exception_handler(_on_loop_exception)
+  ```
+- **错误做法**：
+  ```python
+  # 无异常过滤，日志被污染
+  loop = asyncio.get_event_loop()
+  # 默认异常处理器会打印完整 traceback 到 stderr
+  ```
+- **适用场景**：Windows 平台部署、客户端连接频繁断开（如浏览器 audio 标签）
+- **不适用场景**：Linux/macOS（select/epoll 无此问题）；服务端长连接
+
+### 规范 129：本地路径 URL 约定
+
+**外部存储降级模式下，URL 必须使用 `/audio/<key>` 相对路径约定，映射到 `data/audio_cache/<key>` 物理路径；下游 download_file 函数必须优先检测本地前缀，命中则用 shutil.copyfile 直接拷贝，禁止 httpx 自回路请求本机服务。**
+
+- **为什么**：外部存储降级模式下，下游服务（如 ffmpeg、TTS 拼接器）需要通过 URL 访问本地文件。若用 httpx 自回路请求本机服务（`http://localhost:8000/audio/...`）会造成性能损耗和死锁风险（事件循环等待自己处理请求）。
+- **阈值参数**（通过 `project-config.json#local_path_url` 配置）：
+  - `enabled`: true（是否启用本地路径约定）
+  - `severity`: "HIGH"（违规严重级别）
+  - `url_prefixes`:
+    - `prefix`: "/audio/"（URL 前缀）
+    - `physical_dir`: "data/audio_cache"（物理目录）
+    - `copy_strategy`: "shutil.copyfile"（拷贝策略）
+  - `forbidden_patterns`:
+    - "http://localhost:*/audio/"（禁止自回路请求）
+    - "http://127.0.0.1:*/audio/"（禁止自回路请求）
+  - `required_prefix_detection`: true（download_file 必须支持前缀检测）
+- **判断信号**：
+  - grep `download_file(url)` 函数无 `url.startswith('/audio/')` 分支
+  - grep `httpx.get('http://localhost:*/audio/')` 自回路请求
+  - grep 文件路径硬编码绝对路径
+- **正确做法**：
+  ```python
+  import shutil
+  from pathlib import Path
+
+  async def download_file(url: str, dest: str) -> None:
+      for prefix_config in settings.LOCAL_PATH_PREFIXES:
+          prefix = prefix_config['prefix']
+          physical_dir = Path(prefix_config['physical_dir'])
+          if url.startswith(prefix):
+              key = url[len(prefix):]
+              src = physical_dir / key
+              shutil.copyfile(str(src), dest)
+              return
+      async with httpx.AsyncClient() as client:
+          resp = await client.get(url)
+          resp.raise_for_status()
+          with open(dest, 'wb') as f:
+              f.write(resp.content)
+  ```
+- **错误做法**：
+  ```python
+  # 自回路请求本机服务下载本地文件
+  async with httpx.AsyncClient() as client:
+      resp = await client.get(url)  # url 是 http://localhost:8000/audio/xxx
+  ```
+- **适用场景**：外部存储降级模式、本地开发联调、CI 测试环境
+- **不适用场景**：已配置 COS 的生产环境；跨主机访问场景
+
+## 规范 140-143：2026-07-13 前端组件类型契约与配置覆盖复盘新增规范
+
+> 以下规范来源于 2026-07-13 频道管理 3 类问题修复复盘：el-switch 状态不持久化（JS `===` 严格比较陷阱）、AI 生成超时（前后端超时不协同）、频道级配置覆盖全局（service 层未实现优先级链路）。所有阈值通过 `project-config.json#frontend_switch_type_contract`、`project-config.json#api_timeout_override`、`project-config.json#channel_level_config_override`、`project-config.json#event_bus_config_driven` 配置管理。
+
+### 规范 140：el-switch 双向绑定值类型契约
+
+**当后端返回 int（0/1）时，el-switch 必须显式 `:active-value="1" :inactive-value="0"`；form 初始值与 @change 回调参数类型必须与 active-value 一致，禁止依赖 JS 隐式类型转换。**
+
+- **为什么**：el-switch 默认 `active-value=true`（bool）、`inactive-value=false`（bool），但后端 `is_active` 字段是 int 0/1。JavaScript 严格相等 `1 === true` 为 false，导致开关始终显示关闭。更隐蔽的是，el-switch 在列表渲染初始化时，值从 int 1 变为默认 false 时会触发 `@change` 事件，将 `row.is_active` 改写为 false，提交给后端时数据丢失；同时初始化阶段触发的 ElMessage 会误导用户"已禁用"。
+- **阈值参数**（通过 `project-config.json#frontend_switch_type_contract` 配置）：
+  - `enabled`: true（启用强制类型契约）
+  - `require_explicit_values`: true（强制显式声明 active-value/inactive-value）
+  - `active_value_type`: "int"（active-value 类型，与后端字段类型一致）
+  - `inactive_value_type`: "int"（inactive-value 类型）
+  - `active_value`: 1（active-value 字面值）
+  - `inactive_value`: 0（inactive-value 字面值）
+  - `applicable_components`: ["el-switch", "el-radio", "el-checkbox"]（适用组件列表）
+  - `backend_field_types`: {"is_active": "int", "status": "int", "enabled": "int"}（后端字段类型映射）
+  - `change_callback_param_must_match`: true（@change 回调参数类型必须与 active-value 一致）
+  - `form_init_must_match_active_value`: true（form 初始值必须与 active-value 类型一致）
+- **判断信号**：
+  - grep `<el-switch` 无 `:active-value` 属性且后端对应字段为 int 类型
+  - grep `:active-value="true"` 或 `:active-value="'1'"`（类型与后端不一致：bool/str vs int）
+  - grep `form\.is_active\s*=\s*true` 或 `form\.is_active\s*=\s*'1'`（form 初始值类型与 active-value 不一致）
+- **正确做法**：
+  ```vue
+  <!-- ✅ 显式声明 int 类型 active-value/inactive-value -->
+  <el-switch
+    v-model="row.is_active"
+    :active-value="1"
+    :inactive-value="0"
+    @change="handleActiveChange(row)"
+  />
+
+  <script setup>
+  // form 初始值类型与 active-value 一致（int 1，非 bool true / str '1'）
+  const form = ref({
+    is_active: 1,
+    name: '',
+  })
+
+  // @change 回调参数类型与 active-value 一致（int 0 或 1）
+  function handleActiveChange(row) {
+    // row.is_active 此时为 int 1 或 0，可直接提交后端
+    api.post('/channels/update', { id: row.id, is_active: row.is_active })
+  }
+  </script>
+  ```
+- **错误做法**：
+  ```vue
+  <!-- ❌ 未显式声明 active-value，依赖默认 true/false -->
+  <el-switch v-model="row.is_active" @change="handleActiveChange(row)" />
+  <!-- row.is_active 是 int 1，但 el-switch 默认 active-value=true -->
+  <!-- 1 === true 为 false，开关始终显示关闭 -->
+  <!-- 初始化时 el-switch 把 row.is_active 从 1 改为 false，触发 @change -->
+
+  <script setup>
+  // ❌ form 初始值类型为 bool，与后端 int 不一致
+  const form = ref({ is_active: true })
+  </script>
+  ```
+- **适用场景**：所有 el-switch/el-radio/el-checkbox 双向绑定后端 int 0/1 字段；管理后台开关状态字段；任何后端返回 int 但前端默认 bool 的场景
+- **不适用场景**：后端已返回 bool 的字段；纯展示组件（无 v-model 双向绑定）；无状态组件
+
+### 规范 141：请求级超时覆盖全局
+
+**长耗时接口（AI 生成/大文件上传/批量处理）必须请求级 timeout 覆盖 axios 全局默认值；后端 LLM 调用 timeout 必须从 settings 读取，且支持 `max(LLM_TIMEOUT_SEC*N, MIN)` 公式动态计算。**
+
+- **为什么**：axios 默认 `timeout=15000ms`（15 秒），但 AI 生成 4 段提示词需 30-60 秒。前端 15 秒超时先于后端 30 秒触发，导致接口报错 `timeout of 15000ms exceeded`，但后端实际仍在正常执行，造成资源浪费和用户感知失败。前后端超时必须协同：前端 timeout ≥ 后端实际耗时上限，后端 timeout 从 settings 读取可配置，避免硬编码。
+- **阈值参数**（通过 `project-config.json#api_timeout_override` 配置）：
+  - `enabled`: true（启用长耗时接口超时覆盖）
+  - `default_timeout_ms`: 15000（axios 全局默认超时）
+  - `long_running_endpoints`: ["/channels/{id}/generate-prompts", "/workflows/trigger", "/workflows/batch-delete", "/admin/.*upload", "/admin/.*import"]（长耗时接口正则列表）
+  - `override_timeout_ms`: 120000（长耗时接口请求级超时，默认 120 秒）
+  - `llm_timeout_multiplier`: 2（LLM 超时倍数，长文本生成 N=2）
+  - `min_llm_timeout_sec`: 60（LLM 最小超时秒数）
+  - `backend_setting_key`: "LLM_TIMEOUT_SEC"（后端 settings 中的超时配置键名）
+  - `frontend_timeout_must_ge_backend`: true（前端 timeout 必须 ≥ 后端 timeout）
+- **判断信号**：
+  - grep `api\.(post|put|get)\(` 调用长耗时接口（含 AI/upload/batch/import）但无 `{ timeout: }` 请求级配置
+  - grep 后端 LLM 调用代码硬编码 `timeout=30` 而非从 `settings.LLM_TIMEOUT_SEC` 读取
+  - 接口报错 `timeout of 15000ms exceeded` 但后端日志显示仍在执行
+- **正确做法**：
+  ```javascript
+  // ✅ 前端：长耗时接口请求级 timeout 覆盖全局
+  export function generateChannelPrompts(channelId) {
+    return api.post(
+      `/channels/${channelId}/generate-prompts`,
+      {},
+      { timeout: 120000 } // 请求级 timeout 覆盖 axios 默认 15s
+    )
+  }
+  ```
+  ```python
+  # ✅ 后端：LLM timeout 从 settings 读取，支持 max(N*multiplier, MIN) 公式
+  from app.core.config import settings
+
+  async def generate_prompts(channel_id: int):
+      cfg = settings.api_timeout_override
+      prompt_timeout = max(
+          settings.LLM_TIMEOUT_SEC * cfg.llm_timeout_multiplier,
+          cfg.min_llm_timeout_sec,
+      )
+      result = await asyncio.wait_for(
+          _call_llm_generate(prompts),
+          timeout=prompt_timeout,
+      )
+  ```
+- **错误做法**：
+  ```javascript
+  // ❌ 长耗时接口无请求级 timeout，使用 axios 默认 15s
+  export function generateChannelPrompts(channelId) {
+    return api.post(`/channels/${channelId}/generate-prompts`, {})
+    // 15s 后报 timeout of 15000ms exceeded
+  }
+  ```
+  ```python
+  # ❌ 后端 LLM timeout 硬编码
+  async def generate_prompts(channel_id: int):
+      result = await asyncio.wait_for(_call_llm_generate(prompts), timeout=30)
+      # 30s 硬编码，不可配置；前端 15s 先超时
+  ```
+- **适用场景**：AI 生成接口（提示词/稿件/摘要）、大文件上传、批量处理、导入导出等长耗时 API；任何实际耗时可能超过 axios 默认 15s 的接口
+- **不适用场景**：短查询接口（<3s）；本地操作（无网络 IO）；WebSocket 长连接（用心跳机制而非 timeout）
+
+### 规范 142：频道级配置覆盖全局
+
+**多频道/多租户场景下，频道级配置字段（schedule_time/is_active/intro_prompt/outro_prompt/constraint_prompt/rewrite_template/rss_sources/keywords）必须优先于 settings 全局配置；频道字段为空时 fallback 到全局 settings；service 层必须实现优先级链路。**
+
+- **为什么**：只做全局配置时所有频道共享同一参数，无法差异化运营。本次修复前，channel_prompt_service.py 直接读 `settings.LLM_INTRO_PROMPT`，未查询频道字段 `channel.intro_prompt`，导致频道自定义提示词不生效，工作流使用全局默认提示词。频道级配置与全局配置的优先级关系是 SaaS 多租户的通用模式，service 层必须实现"频道字段非空优先，为空 fallback"的链路。
+- **阈值参数**（通过 `project-config.json#channel_level_config_override` 配置）：
+  - `enabled`: true（启用频道级配置覆盖）
+  - `channel_fields`: ["schedule_time", "is_active", "intro_prompt", "outro_prompt", "constraint_prompt", "rewrite_template", "rss_sources", "keywords"]（支持频道级覆盖的字段列表）
+  - `fallback_to_global`: true（频道字段为空时 fallback 到全局 settings）
+  - `priority_order`: ["channel_field", "settings_global", "default_value"]（优先级顺序）
+  - `global_settings_prefix`: "LLM_"（全局 settings 中对应的配置项前缀）
+  - `require_event_publish_on_change`: true（频道字段变更必须发布事件，见 R143）
+- **判断信号**：
+  - grep `settings\.(LLM_|X)` 在 service 层中无 `if channel.x is not None` 频道级检查
+  - grep service 函数参数中无 `channel` 对象但使用全局 settings 配置提示词
+  - 频道配置了自定义提示词但工作流实际使用全局默认值
+- **正确做法**：
+  ```python
+  from app.core.config import settings
+
+  async def build_prompts(channel: Channel) -> dict:
+      """构建提示词，频道级字段优先于 settings 全局。"""
+      # 优先级：channel.xxx → settings.LLM_XXX → 默认值
+      intro = channel.intro_prompt or settings.LLM_INTRO_PROMPT or ""
+      outro = channel.outro_prompt or settings.LLM_OUTRO_PROMPT or ""
+      constraint = channel.constraint_prompt or settings.LLM_CONSTRAINT_PROMPT or ""
+      rewrite_tpl = channel.rewrite_template or settings.LLM_REWRITE_TEMPLATE or ""
+      return {
+          "intro": intro,
+          "outro": outro,
+          "constraint": constraint,
+          "rewrite_template": rewrite_tpl,
+      }
+
+  async def get_schedule_time(channel: Channel) -> str:
+      """频道级 schedule_time 优先于全局。"""
+      return channel.schedule_time or settings.DEFAULT_SCHEDULE_TIME
+  ```
+- **错误做法**：
+  ```python
+  # ❌ service 层直接读全局 settings，未查询频道字段
+  async def build_prompts(channel_id: int) -> dict:
+      # 频道自定义提示词不生效
+      return {
+          "intro": settings.LLM_INTRO_PROMPT,
+          "outro": settings.LLM_OUTRO_PROMPT,
+      }
+  ```
+- **适用场景**：多频道/多租户/多环境差异化配置场景；频道级配置字段（提示词/模板/调度时间/状态）；SaaS 产品的租户级配置覆盖
+- **不适用场景**：单频道项目（无频道概念）；全局唯一配置（如数据库路径、JWT 密钥）；无频道字段的配置项
+
+### 规范 143：配置驱动事件总线
+
+**频道字段变更必须通过 EventBus 发布事件（channel.active_changed/channel.schedule_changed），订阅者重注册 cron 任务或取消 queued 工作流；事件发布用 `publish_nowait` 避免阻塞主流程；订阅者必须幂等。**
+
+- **为什么**：频道 `schedule_time` 变更后，原 cron 任务不更新，仍按旧时间触发；频道 `is_active` 变更为 0 后，已入队的工作流仍会执行。缺少事件总线导致配置变更无法联动调度系统。事件发布必须用 `publish_nowait`（非阻塞），否则配置变更接口会因订阅者执行慢而超时；订阅者必须幂等，避免重复注册 cron 或重复取消工作流。
+- **阈值参数**（通过 `project-config.json#event_bus_config_driven` 配置）：
+  - `enabled`: true（启用事件总线）
+  - `event_types`: ["channel.active_changed", "channel.schedule_changed"]（事件类型列表）
+  - `publish_method`: "publish_nowait"（事件发布方法，非阻塞）
+  - `subscriber_idempotent`: true（订阅者必须幂等）
+  - `subscribers`: {"channel.active_changed": ["_on_channel_active_changed"], "channel.schedule_changed": ["_on_channel_schedule_changed"]}（事件订阅者映射）
+  - `event_data_fields`: ["channel_id", "is_active", "schedule_time"]（事件数据字段列表）
+- **判断信号**：
+  - grep `update.*channel` 后无 `bus\.publish_nowait` 事件发布
+  - grep `schedule_time` 变更后无 `channel.schedule_changed` 事件
+  - grep `is_active` 变更后无 `channel.active_changed` 事件
+  - 频道配置变更后 cron 任务未更新（仍按旧时间触发）
+- **正确做法**：
+  ```python
+  from app.core.event_bus import bus
+
+  async def update_channel(channel_id: int, payload: dict):
+      """更新频道，发布配置变更事件。"""
+      old = await get_channel(channel_id)
+      await db.execute(update(Channel).where(Channel.id == channel_id).values(**payload))
+      await db.commit()
+
+      # 配置变更发布事件（非阻塞）
+      if "is_active" in payload and payload["is_active"] != old.is_active:
+          bus.publish_nowait(
+              "channel.active_changed",
+              {"channel_id": channel_id, "is_active": payload["is_active"]},
+          )
+      if "schedule_time" in payload and payload["schedule_time"] != old.schedule_time:
+          bus.publish_nowait(
+              "channel.schedule_changed",
+              {"channel_id": channel_id, "schedule_time": payload["schedule_time"]},
+          )
+
+  # 订阅者：幂等重注册 cron / 取消 queued 工作流
+  @bus.subscribe("channel.schedule_changed")
+  async def _on_channel_schedule_changed(event: dict):
+      """幂等：先移除旧 cron，再注册新 cron。"""
+      channel_id = event["channel_id"]
+      schedule_time = event["schedule_time"]
+      await scheduler.remove_job(f"channel_cron_{channel_id}")  # 幂等：不存在不报错
+      if schedule_time:
+          await scheduler.add_job(
+              trigger_workflow, "cron", hour=schedule_time.hour, minute=schedule_time.minute,
+              id=f"channel_cron_{channel_id}", args=[channel_id],
+          )
+
+  @bus.subscribe("channel.active_changed")
+  async def _on_channel_active_changed(event: dict):
+      """幂等：频道禁用时取消 queued 工作流。"""
+      if not event["is_active"]:
+          await cancel_queued_workflows(event["channel_id"])  # 幂等：无 queued 不报错
+  ```
+- **错误做法**：
+  ```python
+  # ❌ 频道字段变更无事件发布
+  async def update_channel(channel_id: int, payload: dict):
+      await db.execute(update(Channel).where(Channel.id == channel_id).values(**payload))
+      await db.commit()
+      # 未发布 channel.active_changed / channel.schedule_changed 事件
+      # cron 任务不更新，queued 工作流不取消
+
+  # ❌ 事件发布用阻塞方法
+  await bus.publish("channel.schedule_changed", data)  # 阻塞主流程
+  ```
+- **适用场景**：频道/租户配置变更需联动调度系统的场景；cron 任务重注册；queued 工作流取消；任何配置变更需通知订阅者的场景
+- **不适用场景**：单频道项目（无配置变更）；无调度系统的项目；同步场景（可直接调用，无需事件总线）
+
+## 规范 156-161：2026-07-22 三参数联动与编码规范系统提炼复盘新增规范
+
+> 以下规范来源于 2026-07-22 音频拼接时长越界（276s 超出 [300, 630]）问题修复复盘：TTS 语速 1.5 倍导致实际时长缩短、目标时长参数缺失、字数与语速未联动、校验范围硬编码、错误诊断信息不完整、前端 computed 命名冲突。所有阈值通过 `project-config.json#config_full_chain_registration`、`project-config.json#estimation_actual_param_linkage`、`project-config.json#dynamic_range_calculation`、`project-config.json#error_diagnostic_completeness`、`project-config.json#frontend_computed_naming_safety`、`project-config.json#dual_verification_workflow` 配置管理。
+
+### 规范 156：配置项全链路注册
+
+**新增配置项必须贯穿 config.py → ai_config_service（CONFIG_KEY_MAP + INT_KEYS + _normalize + get_config_for_frontend）→ 前端序列化五端，缺任一端则配置无法持久化或前端不可见。**
+
+- **为什么**：TARGET_DURATION_SEC 配置项最初只在 config.py 定义，未在 ai_config_service 的 CONFIG_KEY_MAP 注册，导致前端保存后无法回传后端；未加入 INT_KEYS 导致类型不归一化；未在 _normalize 中处理导致写入时被丢弃；未在 get_config_for_frontend 中序列化导致前端读取不到。配置项的"五端注册"是配置全链路管理的最小完整集合，缺少任何一端都会导致配置"断链"。
+- **阈值参数**（通过 `project-config.json#config_full_chain_registration` 配置）：
+  - `enabled`: true（启用全链路注册校验）
+  - `required_anchors`: ["config_py_field", "config_key_map", "int_keys_or_float_keys", "normalize_handler", "frontend_serialize"]（必须注册的五端）
+  - `config_key_map_location`: "ai_config_service.py CONFIG_KEY_MAP dict"（CONFIG_KEY_MAP 定义位置）
+  - `int_keys_location`: "ai_config_service.py INT_KEYS list"（INT_KEYS 定义位置）
+  - `normalize_location`: "ai_config_service.py _normalize_llm function"（_normalize 定义位置）
+  - `frontend_serialize_location`: "ai_config_service.py get_config_for_frontend function"（前端序列化位置）
+  - `type_keys_map`: {"int": "INT_KEYS", "float": "FLOAT_KEYS", "str": "STR_KEYS"}（类型与 keys 列表映射）
+- **判断信号**：
+  - grep `config.py` 新增 `X_FIELD: int = 600` 但 `ai_config_service.py` 的 `CONFIG_KEY_MAP` 无 `"x_field": "X_FIELD"` 映射
+  - grep `CONFIG_KEY_MAP` 含 `"x_field"` 但 `INT_KEYS`/`FLOAT_KEYS` 无 `"x_field"`（类型未注册）
+  - grep `_normalize_llm` 中无 `"x_field"` 分支（写入时被丢弃）
+  - grep `get_config_for_frontend` 的 `llm_config` 中无 `"x_field"` 字段（前端读取不到）
+- **正确做法**：
+  ```python
+  # 1. config.py：定义字段
+  class Settings(BaseSettings):
+      X_FIELD: int = 600
+
+  # 2. ai_config_service.py：五端注册
+  CONFIG_KEY_MAP = {
+      ...
+      "x_field": "X_FIELD",  # ② CONFIG_KEY_MAP 注册
+  }
+  INT_KEYS = [..., "x_field"]  # ③ INT_KEYS 注册（int 类型）
+
+  def _normalize_llm(config: dict) -> dict:
+      result = {}
+      ...
+      if "x_field" in config:  # ④ _normalize 处理
+          result["x_field"] = str(config["x_field"])
+      return result
+
+  def get_config_for_frontend(...):
+      ...
+      llm_config = {
+          ...
+          "x_field": _get_int("x_field", "X_FIELD", 600),  # ⑤ 前端序列化
+      }
+  ```
+- **错误做法**：
+  ```python
+  # ❌ 只在 config.py 定义，未注册到 ai_config_service
+  # 前端保存配置 → 后端 _normalize 不识别 → 写入时被丢弃 → 读取时回退默认值
+  class Settings(BaseSettings):
+      X_FIELD: int = 600
+  # ai_config_service.py 中无任何引用 → 配置"断链"
+  ```
+- **适用场景**：所有需要前端可配置的后端 settings 字段；AI 配置项（LLM/TTS 参数）；任何通过 admin-web 持久化到 SQLite 的配置项
+- **不适用场景**：仅后端内部使用的配置（如 SQLITE_DB_PATH）；环境变量直接读取的配置（不经 ai_config_service）；一次性脚本配置
+
+### 规范 157：估算参数与实际产出联动
+
+**当系统存在"估算值"与"实际产出值"两个相关参数时，估算公式必须包含实际产出参数作为变量；调整实际产出参数时，估算值必须自动重新计算。**
+
+- **为什么**：TTS 语速设为 1.5 倍后，实际音频时长 = 字数 / (基础语速 × 1.5) × 60，但 rewriter 仍按基础语速估算字数，导致生成 1450 字 → 实际 1450/(210×1.5)×60 = 276s，远低于目标 600s。估算与实际产出脱钩是参数联动失效的根因。三参数数学模型：`时长(秒) = 总字数 / (基础语速 × 语速倍率) × 60`，反算 `总字数 = 时长 × 基础语速 × 倍率 / 60`，调整任一参数时必须按公式反算其他参数。
+- **阈值参数**（通过 `project-config.json#estimation_actual_param_linkage` 配置）：
+  - `enabled`: true（启用估算与实际产出联动）
+  - `linkage_formula`: "duration = words / (base_rate * multiplier) * 60"（联动公式）
+  - `reverse_formula`: "words = duration * base_rate * multiplier / 60"（反算公式）
+  - `params`: ["duration_sec", "total_words", "base_rate", "rate_multiplier"]（联动参数列表）
+  - `adjustable_params`: ["duration_sec", "rate_multiplier"]（用户可调参数）
+  - `derived_params`: ["total_words", "segment_count", "words_per_segment"]（自动反算参数）
+  - `provider_rate_mapping`: {"edge": "parse_edge_rate", "tencent": "1.0 + speed * 0.1", "aliyun": "1.0"}（Provider 语速解析映射）
+  - `clamp_range`: {"rate_multiplier": [0.5, 2.5], "duration_sec": [180, 1800]}（参数安全范围）
+- **判断信号**：
+  - grep 估算公式中不含实际产出参数（如 `words = duration * 330 / 60` 无 `rate_multiplier` 变量）
+  - grep 调整语速配置后估算字数未重新计算（无 `_get_rate_multiplier()` 调用）
+  - grep 实际产出（TTS 时长）与估算值（字数推算时长）偏差 > 15%
+- **正确做法**：
+  ```python
+  # ✅ 估算公式包含实际产出参数（rate_multiplier）
+  def _calc_target_words(target_sec: int, rate_multiplier: float) -> int:
+      """按目标时长 + 实际语速反算所需总字数。"""
+      return int(target_sec * WORDS_PER_MINUTE * rate_multiplier / 60)
+
+  def _assemble_script(segments, rate_multiplier: float = 1.0):
+      """组装时用实际语速估算时长，而非基础语速。"""
+      actual_words_per_min = WORDS_PER_MINUTE * rate_multiplier
+      estimated_duration = total_words / actual_words_per_min * 60
+  ```
+- **错误做法**：
+  ```python
+  # ❌ 估算公式不含语速倍率，按基础语速估算
+  def _calc_target_words(target_sec: int) -> int:
+      return int(target_sec * WORDS_PER_MINUTE / 60)  # 缺少 rate_multiplier
+  # 语速 1.5 倍时：估算 2100 字 → 实际 2100/(210×1.5)×60 = 400s（目标 600s，偏差 33%）
+  ```
+- **适用场景**：TTS 语速/时长/字数三参数联动；任何"估算→实际产出"场景（如视频时长估算、文件大小估算）；用户可调参数影响产出的场景
+- **不适用场景**：固定参数场景（无用户可调变量）；纯展示场景（估算值不用于控制逻辑）；一次性计算（无联动需求）
+
+### 规范 158：校验范围动态计算
+
+**时长/容量/大小等校验范围必须基于目标值动态计算，禁止硬编码固定范围；动态范围公式：[max(下限, target×0.85), target×1.15]。**
+
+- **为什么**：stitch 原硬编码 `MIN_DURATION_SEC=200, MAX_DURATION_SEC=630`，当目标时长从 600s 改为 300s 时，最大值 630s 仍不变，导致 300s 目标下允许 630s 的音频通过校验（超出目标 110%）。动态范围基于目标值计算，目标变化时范围自动跟随，确保校验始终与目标对齐。
+- **阈值参数**（通过 `project-config.json#dynamic_range_calculation` 配置）：
+  - `enabled`: true（启用动态范围计算）
+  - `lower_bound_ratio`: 0.85（下限比例，target × 0.85）
+  - `upper_bound_ratio`: 1.15（上限比例，target × 1.15）
+  - `absolute_min`: 180（绝对下限，max(absolute_min, target×ratio)）
+  - `absolute_max`: null（绝对上限，null 表示无上限，否则 target×ratio 和 absolute_max 取小）
+  - `target_field`: "TARGET_DURATION_SEC"（目标值字段名）
+  - `applicable_metrics`: ["duration_sec", "file_size_mb", "word_count"]（适用度量指标）
+- **判断信号**：
+  - grep `MIN_DURATION_SEC = 200` 或 `MAX_DURATION_SEC = 630` 等硬编码范围常量
+  - grep 校验逻辑 `if duration < MIN or duration > MAX` 中 MIN/MAX 为字面值而非动态计算
+  - grep `target_duration` 配置项变更后校验范围未跟随变化
+- **正确做法**：
+  ```python
+  ABSOLUTE_MIN_DURATION_SEC = 180
+
+  def _get_duration_range() -> tuple[int, int]:
+      """按目标时长动态计算允许的时长范围。"""
+      target = getattr(settings, "TARGET_DURATION_SEC", 600) or 600
+      try:
+          target = int(target)
+      except (ValueError, TypeError):
+          target = 600
+      low = max(ABSOLUTE_MIN_DURATION_SEC, int(target * 0.85))
+      high = int(target * 1.15)
+      return low, high
+  ```
+- **错误做法**：
+  ```python
+  # ❌ 硬编码固定范围
+  MIN_DURATION_SEC = 200
+  MAX_DURATION_SEC = 630
+  if not (MIN_DURATION_SEC <= duration <= MAX_DURATION_SEC):
+      raise StitchError(f"时长 {duration}s 超出 [{MIN}, {MAX}]")
+  # 目标改为 300s 时，MAX=630 仍允许 630s 通过（超出目标 110%）
+  ```
+- **适用场景**：音频/视频时长校验；文件大小校验；字数/段数校验；任何基于目标值的容差范围校验
+- **不适用场景**：物理硬限制（如 HTTP 状态码 200-299）；协议固定值（如 TCP 端口 0-65535）；无目标值的绝对限制
+
+### 规范 159：错误诊断信息完整性
+
+**校验类异常信息必须包含：目标值、实际值、允许范围、配置来源，四要素缺一则运维无法定位根因。**
+
+- **为什么**：原错误 `最终音频时长 276s 超出允许范围 [300, 630]` 缺少目标值（600s）和配置来源（TARGET_DURATION_SEC），运维无法判断是目标配置错误还是 TTS 语速问题。完整诊断信息应让运维一眼看出：目标是什么、实际是多少、允许范围、范围如何计算。
+- **阈值参数**（通过 `project-config.json#error_diagnostic_completeness` 配置）：
+  - `enabled`: true（启用错误诊断完整性校验）
+  - `required_fields`: ["target_value", "actual_value", "allowed_range", "config_source"]（必须包含的四要素）
+  - `config_source_format`: "settings.{FIELD_NAME} (default={DEFAULT})"（配置来源格式）
+  - `range_explanation_format`: "目标 {target}s ±{ratio}%"（范围解释格式）
+  - `applicable_exception_types`: ["StitchError", "ValueError", "RuntimeError"]（适用异常类型）
+- **判断信号**：
+  - grep `raise.*Error.*超出.*范围` 但错误信息中无目标值（`target`）
+  - grep `raise.*Error.*时长` 但错误信息中无配置来源（`TARGET_DURATION_SEC`）
+  - grep 校验异常信息仅含实际值和范围，缺少目标值和范围计算依据
+- **正确做法**：
+  ```python
+  min_allowed, max_allowed = _get_duration_range()
+  if not (min_allowed <= duration <= max_allowed):
+      raise StitchError(
+          f"最终音频时长 {duration}s 超出允许范围 "
+          f"[{min_allowed}, {max_allowed}]"
+          f"（目标时长 {getattr(settings, 'TARGET_DURATION_SEC', 600)}s ±15%）"
+      )
+  # 输出：最终音频时长 276s 超出允许范围 [510, 690]（目标时长 600s ±15%）
+  # 运维可立即判断：目标 600s，实际 276s，范围 [510, 690]，目标配置正确 → 排查字数/语速
+  ```
+- **错误做法**：
+  ```python
+  # ❌ 错误信息缺少目标值和配置来源
+  raise StitchError(f"最终音频时长 {duration}s 超出允许范围 [{min}, {max}]")
+  # 运维不知道目标是什么，范围如何计算，无法定位根因
+  ```
+- **适用场景**：所有校验类异常（时长/大小/数量/范围）；配置驱动的校验逻辑；运维需要快速定位的校验失败
+- **不适用场景**：用户输入校验（前端表单验证）；协议级错误（HTTP 400/404）；业务逻辑错误（如"库存不足"）
+
+### 规范 160：前端 computed 命名避让内置属性
+
+**Vue 3 computed 名称不得与 Element Plus 组件内置 prop/属性名冲突，否则 computed 返回值会覆盖组件内置行为导致不可预期的 UI 异常。**
+
+- **为什么**：AIConfig.vue 中 computed 命名为 `duration`（计算目标时长），与 el-slider 的内置 prop `duration`（动画时长）冲突，导致 el-slider 滑动时 computed 返回值覆盖了组件内置动画时长，出现滑动卡顿。Element Plus 组件内置 prop 名是保留字，computed 命名必须避让。
+- **阈值参数**（通过 `project-config.json#frontend_computed_naming_safety` 配置）：
+  - `enabled`: true（启用 computed 命名安全检查）
+  - `reserved_prefixes`: ["el-", "El"]（Element Plus 组件前缀）
+  - `conflict_detection`: true（启用冲突检测）
+  - `known_conflicting_props`: ["duration", "size", "type", "placeholder", "name", "value", "label", "disabled", "readonly", "loading"]（已知与 Element Plus 组件 prop 冲突的常见名称）
+  - `naming_pattern`: "calculatedXxx / expectedXxx / xxxValue"（推荐命名模式，加前缀避免冲突）
+  - `check_scope`: "computed + ref + reactive 字段名"（检查范围）
+- **判断信号**：
+  - grep `const duration = computed(` 但模板中使用 `<el-slider v-model="duration">`（冲突）
+  - grep computed 名称出现在 `known_conflicting_props` 列表中
+  - grep computed 名称与同文件中 el-* 组件的 prop 名相同
+- **正确做法**：
+  ```vue
+  <!-- ✅ computed 加前缀避免冲突 -->
+  <script setup>
+  const calculatedDuration = computed(() => form.target_duration_sec)
+  const expectedWords = computed(() => calcWords(calculatedDuration.value, edgeRatePercent.value))
+  </script>
+  <template>
+    <el-slider v-model="form.target_duration_sec" />
+    <el-tag>预期字数：{{ expectedWords }}</el-tag>
+  </template>
+  ```
+- **错误做法**：
+  ```vue
+  <!-- ❌ computed 命名 duration 与 el-slider 内置 prop duration 冲突 -->
+  <script setup>
+  const duration = computed(() => form.target_duration_sec)
+  </script>
+  <template>
+    <el-slider v-model="duration" />  <!-- duration 覆盖 el-slider 动画时长 -->
+  </template>
+  ```
+- **适用场景**：Vue 3 + Element Plus 项目的 computed/ref/reactive 命名；任何 UI 框架的组件 prop 保留字避让
+- **不适用场景**：非 UI 框架项目；纯逻辑模块（无 UI 组件）；局部变量（非响应式）
+
+### 规范 161：修改后双重验证流程
+
+**代码修改后必须执行双重验证：后端 py_compile 全部修改文件 + 前端 vite build 全量构建，两者均通过方可认定修改完成。**
+
+- **为什么**：rewriter.py 修改后未执行 py_compile，导致 WORDS_PER_MINUTE 常量重复定义（Edit 工具残留旧代码）未被发现，运行时后者覆盖前者。前端 AIConfig.vue 修改后未执行 vite build，computed 命名冲突等语法错误未被发现。双重验证是修改完成的必要条件，编译/构建能发现语法错误、重复定义、导入缺失等问题。
+- **阈值参数**（通过 `project-config.json#dual_verification_workflow` 配置）：
+  - `enabled`: true（启用双重验证）
+  - `backend_verify_command`: "python -m py_compile {files}"（后端验证命令模板）
+  - `frontend_verify_command`: "npm run build"（前端验证命令）
+  - `verify_all_modified_files`: true（验证所有修改文件，非仅入口文件）
+  - `fail_fast`: true（任一文件验证失败立即停止）
+  - `cleanup_check`: true（验证后检查常量重复定义、残留旧代码）
+  - `grep_after_edit`: true（Edit 工具修改常量后必须 grep 全局去重）
+- **判断信号**：
+  - 修改 .py 文件后未执行 `python -m py_compile` 验证
+  - 修改 .vue/.js 文件后未执行 `npm run build` 验证
+  - Edit 工具修改常量后未 grep 全局检查重复定义
+  - 声称"修改完成"但未提供编译/构建通过的证明
+- **正确做法**：
+  ```powershell
+  # 后端修改后：逐文件 py_compile 验证
+  python -m py_compile backend/app/config.py
+  python -m py_compile backend/app/services/ai_config_service.py
+  python -m py_compile backend/app/workflow/llm/rewriter.py
+  python -m py_compile backend/app/workflow/stitch/concat.py
+
+  # 修改常量后：grep 全局去重
+  # Grep WORDS_PER_MINUTE 确认无重复定义
+
+  # 前端修改后：vite build 全量构建
+  cd admin-web; npm run build
+  # build exit 0 方可认定完成
+  ```
+- **错误做法**：
+  ```python
+  # ❌ 修改后未验证，残留重复定义
+  WORDS_PER_MINUTE = 470  # 旧代码残留
+  WORDS_PER_MINUTE = 210  # 新代码，运行时后者覆盖前者
+  ```
+- **适用场景**：所有代码修改后的验证；Edit 工具修改常量后的去重检查；发版前的编译/构建验证
+- **不适用场景**：文档修改（无编译需求）；配置文件修改（无语法检查）；注释修改（不影响运行）
+
+## 规范 171-185：2026-07-31 微信登录修复+历史对话复盘新增规范
+
+以下 15 条规范来源于 2026-07-27 至 2026-07-31 的多个历史对话复盘，使用 Sequential Thinking 从四个维度（成功步骤 / 失败点 / 可抽象流程 / 适用场景）系统提炼。
+
+### 规范 171：小程序用户态数据双层同步
+
+**小程序中写入 globalData 的用户态数据必须同步写入 localStorage，确保跨会话持久化。**
+
+- 适用：小程序所有用户态数据（userInfo / token / 偏好设置）
+- 不适用：纯 UI 状态（弹窗开关）、会话内临时数据（临时文件路径）
+- 判断信号：grep 搜索 `app.globalData.userInfo =` 后无 `setToken` 或 `wx.setStorageSync` 调用
+- 正确做法：每次写入 globalData 后，紧接 `const tk = getToken(); if (tk) setToken(tk, enriched);` 同步 localStorage
+- 为什么：globalData 是小程序进程内内存，重启即丢；若不同步 localStorage，重启后若 login() 失败（网络/invalid code）会回退读 getUser() 拿到旧空缓存，导致"保存了头像昵称但下次进来又没了"
+
+### 规范 172：Pydantic Settings 单例导入模式
+
+**后端模块导入配置必须使用 get_settings() 工厂函数，禁止直接导入 settings 实例。**
+
+- 适用：backend/app/ 下所有模块导入配置
+- 不适用：测试代码（用 fixture 注入）、scripts/ 下独立脚本
+- 判断信号：grep 搜索 `from app.config import settings`（直接导入实例）
+- 正确做法：`from app.config import get_settings` + 模块级 `settings = get_settings()`
+- 为什么：直接导入 settings 实例可能在配置未加载时就触发实例化，导致 ImportError 或配置缺失；get_settings 用 lru_cache 延迟加载，与 user_service 等模块一致
+
+### 规范 173：统一响应模式测试断言对齐
+
+**测试断言必须对齐项目统一响应模式：BizError 返回 HTTP 200 + JSON body {code: 非0}，而非标准 RESTful 的 HTTP 4xx。**
+
+- 适用：所有调用返回统一响应格式 API 的测试
+- 不适用：HTTP 异常端点（如 /health/ready 返回 503）、文件上传 multipart 响应
+- 判断信号：grep 搜索测试代码中 `assert resp.status_code == 400` 或 `== 422`
+- 正确做法：`assert resp.status_code == 200` + `assert resp.json()["code"] == 期望错误码`
+- 为什么：项目统一响应模式中 BizError 返回 HTTP 200 + JSON body {code: 非0, message: ...}，与标准 RESTful 语义不同。按标准 RESTful 习惯断言 HTTP 400 会导致假失败
+
+### 规范 174：小程序原生代码 4 维静态验证
+
+**小程序原生代码修改后必须通过 4 维静态验证：语法 + 接口 + 契约 + 渲染。**
+
+- 适用：微信小程序原生代码修改后、无法用 Playwright 直接测试的场景
+- 不适用：Web 应用（应直接用 Playwright 动态测试）、后端 Python 代码（应用 pytest）
+- 判断信号：修改了 miniprogram/ 下的 .js 文件但未做 4 维验证
+- 正确做法：
+  - 语法维：`node --check` 检查所有修改的 .js 文件
+  - 接口维：读取依赖模块，验证调用签名一致性
+  - 契约维：读取后端路由，验证请求/响应字段对齐
+  - 渲染维：读取 .wxml，验证数据绑定字段名与 setData 一致
+- 为什么：小程序的 Page/wx/getApp 等全局对象在 Node.js 中不存在，无法直接执行；4 维静态验证是不启动小程序的情况下最全面的验证方式
+
+### 规范 175：前后端字段契约验证清单
+
+**前后端交互的 API 开发后必须按验证清单核对字段：请求字段对齐 + 响应字段对齐 + 兜底链数据源验证。**
+
+- 适用：任何涉及前后端交互的 API 开发
+- 不适用：纯前端 UI 逻辑（动画/布局）、纯后端内部逻辑（工作流编排）
+- 判断信号：前端使用 snake_case 而后端返回 camelCase，或前端用了后端不返回的字段名
+- 正确做法：
+  - 请求字段：前端发送的字段名 vs 后端 Pydantic Model 定义的字段名
+  - 响应字段：后端返回的字段名 vs 前端使用的字段名
+  - 兜底链：前端多名字兜底（如 `avatar_url || avatar || avatarUrl`）是否有对应的数据源
+- 为什么：规范 16 已定义"前后端字段契约"原则，但缺少具体的验证清单流程。本规范补充可操作的验证步骤
+
+### 规范 176：文件上传安全双重校验
+
+**文件上传接口必须实施扩展名白名单 + content_type 双重校验 + 大小上限 + 流式写入。**
+
+- 适用：所有文件上传接口（头像/封面/BGM/附件）
+- 不适用：纯文本/JSON 接口
+- 判断信号：grep 搜索 `UploadFile` 无扩展名白名单检查，或无 content_type 校验
+- 正确做法：
+  - 扩展名白名单：`_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}`
+  - content_type 双重校验：扩展名与 content_type 必须匹配
+  - 大小上限：流式写入时累计字节超过上限则拒绝
+  - 文件名：用 user_id + timestamp 命名，避免路径穿越
+- 为什么：仅校验扩展名可被伪造（改后缀绕过），content_type 双重校验防止上传可执行文件
+
+### 规范 177：小程序进度上报条件容错
+
+**小程序进度上报不得因单一字段异常（如 duration<=0）而整体跳过，必须容错处理。**
+
+- 适用：小程序所有进度/状态上报逻辑
+- 不适用：无上报需求的纯展示页面
+- 判断信号：grep 搜索 `if (duration > 0)` 或 `if (duration <= 0) return` 在进度上报函数中
+- 正确做法：将 listened_seconds 作为独立累计字段，duration<=0 时仍上报 listened_seconds，不跳过整个上报
+- 为什么：HLS 流式播放下 duration 初始为 0，若以此跳过上报会导致 listened_seconds 永远为 0，用户收听时长统计失真
+
+### 规范 178：UNIQUE 约束冲突 IntegrityError 兜底
+
+**数据库写入操作必须捕获 IntegrityError 并做兜底处理，不因 UNIQUE 约束冲突导致整个流程失败。**
+
+- 适用：所有涉及 UNIQUE 约束的数据库写入（material.url / user.openid 等）
+- 不适用：无 UNIQUE 约束的表、允许重复的日志表
+- 判断信号：grep 搜索 `db.add()` 或 `db.flush()` 后无 `except IntegrityError`
+- 正确做法：
+  ```python
+  try:
+      db.add(obj)
+      await db.flush()
+  except IntegrityError:
+      await db.rollback()
+      # 兜底：查询已有记录并复用，或跳过
+  ```
+- 为什么：dedup TTL 清理后仍可能存在残留记录，并发写入时 UNIQUE 约束冲突是预期场景而非错误
+
+### 规范 179：状态属性与标志位一致性
+
+**对象的状态属性（property）必须先检查标志位，不能直接重新查询覆盖已设置的标志位。**
+
+- 适用：所有有 stop()/start() 方法的状态对象（TailscaleProvider / 播放器 / 连接池）
+- 不适用：无状态服务、一次性操作
+- 判断信号：grep 搜索 `def status` 属性中直接查询外部状态而无标志位检查
+- 正确做法：stop() 中设置 `self._stopped = True`，status 属性开头检查 `if self._stopped: return "stopped"`
+- 为什么：stop() 后若 status 属性重新查询外部状态（如 `tailscale funnel status`），会覆盖 _stopped 标志位，返回 "running"，导致 UI 显示与实际不符
+
+### 规范 180：音频队列自动播放
+
+**小程序音频播放器 onEnded 必须触发 playNext 自动播放下一首，队列空时 _autoFillQueue 预填。**
+
+- 适用：小程序音频播放器
+- 不适用：单曲循环模式、用户主动暂停
+- 判断信号：grep 搜索 `onEnded` 无 `playNext` 调用
+- 正确做法：
+  ```javascript
+  audioManager.onEnded(() => {
+      this.playNext();  // 自动播放下一首
+  });
+  // playNext 中队列空时调 _autoFillQueue 预填
+  ```
+- 为什么：用户听节目时不会手动点下一首，onEnded 不自动播放会导致播放中断，用户体验差
+
+### 规范 181：工作流 0 结果阻断+失败详情可见
+
+**工作流步骤返回 0 结果时必须标记失败并阻断后续步骤，result 中包含失败详情供前端展示。**
+
+- 适用：所有工作流步骤（crawl / rewrite / tts 等）
+- 不适用：允许 0 结果的查询步骤（如搜索）
+- 判断信号：grep 搜索 `material_count == 0` 或 `len(results) == 0` 后无 `raise RuntimeError`
+- 正确做法：
+  ```python
+  if material_count == 0:
+      raise RuntimeError({
+          "failure_details": {
+              "source_details": [...],
+              "troubleshooting_hints": [...]
+          }
+      })
+  ```
+- 为什么：0 结果仍标记 success 会导致后续步骤（rewrite/tts）因无输入而报错，且前端无法显示失败原因。在 crawl 步骤阻断可避免不必要的 LLM 调用
+
+### 规范 182：小程序分包配置校验
+
+**小程序 app.json 中主包页面路径不能在分包 root 目录下，提交前必须校验。**
+
+- 适用：小程序 app.json 配置变更
+- 不适用：无分包的小程序
+- 判断信号：app.json 中 pages 数组的页面路径以 subPackages[].root 为前缀
+- 正确做法：预检脚本遍历 pages 数组，检查每个页面路径是否在任一分包 root 下，有冲突则报错
+- 为什么：主包页面在分包 root 下会触发编译错误，且报错信息不直观，容易浪费排查时间
+
+### 规范 183：HTTP 编码探测 fallback
+
+**HTTP 抓取时 header 无 charset 必须用 charset_normalizer 探测编码，不依赖默认 UTF-8。**
+
+- 适用：所有 HTTP 抓取场景（RSS / 网页解析 / API 调用）
+- 不适用：已知编码的 API 响应（如 JSON 默认 UTF-8）
+- 判断信号：grep 搜索 `resp.text` 或 `resp.encoding` 无 charset_normalizer fallback
+- 正确做法：
+  ```python
+  if not resp.encoding or resp.encoding == 'ISO-8859-1':
+      detected = charset_normalizer.detect(resp.content)
+      resp.encoding = detected['encoding']
+  ```
+- 为什么：部分中文网站（如人民网）HTTP header 不声明 charset，默认按 ISO-8859-1 解码会导致中文乱码
+
+### 规范 184：启停脚本 PID 文件三级兜底
+
+**启停脚本必须实现三级进程查找兜底：PID 文件 → 进程名 → 端口监听者。**
+
+- 适用：所有服务的启停脚本（start.ps1 / stop.ps1）
+- 不适用：Docker 容器环境（用 docker stop）
+- 判断信号：grep 搜索 stop 脚本中仅用 PID 文件查找进程，无进程名/端口兜底
+- 正确做法：
+  1. 优先读 PID 文件
+  2. PID 文件不存在时，按进程名（如 `python.*launcher.py`）查找
+  3. 进程名找不到时，按端口监听者（如 `netstat -ano | findstr :8000`）查找
+- 为什么：健康检查超时时 start.ps1 可能未写入 PID 文件，stop.ps1 仅依赖 PID 文件会导致旧进程残留、端口占用
+
+### 规范 185：风格库顺序轮换去重
+
+**LLM 生成内容使用风格库时必须用 seq % len(candidates) 顺序轮换，避免高频词重复。**
+
+- 适用：LLM 改写/生成中的风格库（开场白/过渡词/结尾词）
+- 不适用：固定模板（如新闻标题格式）、随机选择场景
+- 判断信号：grep 搜索 `random.choice` 或 `candidates[0]` 在风格库选择中
+- 正确做法：
+  ```python
+  intro = style_library['intro'][seq % len(style_library['intro'])]
+  ```
+- 为什么：random.choice 可能连续选中同一项，candidates[0] 永远用第一个；顺序轮换确保每个候选词均匀使用，高频词重复率降低 40%+
+
 

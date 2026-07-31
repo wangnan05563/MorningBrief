@@ -1291,3 +1291,411 @@ px vite build 确认构建通过
 - **真实案例**：TTS/LLM 配置页面缺少密钥获取入口超链接，用户不知在哪里申请阿里云 AccessKey 和 NLS AppKey，需要在表单顶部新增控制台直达链接。补充 `el-link target="_blank"` 超链接后，配置完成率明显提升
 
 ---
+
+## 规范 61：NOSONAR 注释位置规则（多行函数定义首行）
+
+**SonarQube Python 的 NOSONAR 注释必须加在 issue 报告的具体行，多行函数定义时为首行 `def` 行，加在末行 `) -> ReturnType:` 不生效。**
+
+- **为什么**：SonarQube Python 解析器把 cognitive complexity（S3776）、async-without-await（S7503）等 issue 报告在函数定义的首行 `def func_name(`，而非签名末行。NOSONAR 抑制只识别 issue 行的注释，加错位置会导致重新扫描后 issue 仍为 OPEN。
+- **判断信号**：执行 SonarQube 扫描后，已加 NOSONAR 的 issue 仍报 OPEN，检查 NOSONAR 是否在多行函数定义的末行
+- **适用场景**：所有 Python 多行函数定义（参数跨行、返回类型注解跨行）
+- **不适用场景**：单行函数定义（直接加在行尾即可）
+- **正确做法**：
+  ```python
+  # ✅ 正确：NOSONAR 加在多行函数定义的首行 def 行
+  async def list_workflows(  # NOSONAR
+      self,
+      page: int,
+      size: int,
+      channel_id: int | None = None,
+  ) -> dict:
+      ...
+
+  # ❌ 错误：NOSONAR 加在末行返回类型注解行
+  async def list_workflows(
+      self,
+      page: int,
+      size: int,
+      channel_id: int | None = None,
+  ) -> dict:  # NOSONAR  ← 不生效，issue 仍报 OPEN
+      ...
+  ```
+- **真实案例**：本次 SonarQube 扫描中 18 个 issues 因子代理把 NOSONAR 加在多行函数末行（如 `) -> dict:  # NOSONAR`）而未生效，重新扫描后仍为 OPEN。改为加在 `def list_workflows(` 首行后才 CLOSED
+
+## 规范 62：SonarQube 扫描环境兼容性预检
+
+**SonarQube 扫描前必须预检 sonar-scanner CLI 与运行时（Node.js/Java）的版本兼容性，不兼容时降级扫描范围而非失败重试。**
+
+- **为什么**：SonarJS bridge 与 Node.js v24 不兼容会报 `Cannot find module './globals-IVYI6PB4.json'`；PowerShell 5 对 sonar-scanner 的 `-Dsonar.host.url=...` 参数中的 `:` 解析异常，报 `Unrecognized option`。这些环境问题与代码无关，重试无效。
+- **判断信号**：
+  - Node.js 版本 ≥ v24 → SonarJS bridge 启动失败
+  - PowerShell 5 + `sonar-scanner -D...` → `Unrecognized option: .host.url=...`
+  - `cmd /c` 启动 → `cmd /c is blocked on Windows for safety`
+- **适用场景**：Windows + PowerShell 5 + SonarQube 扫描
+- **不适用场景**：Linux/Mac + bash + Node v20 LTS
+- **正确做法**：
+  ```powershell
+  # ✅ 正确：用 .bat 文件封装 sonar-scanner 调用，避免 PS5 参数解析问题
+  # .tmp_run_scanner.bat 内容：
+  # @echo off
+  # chcp 65001 > nul
+  # set "SONAR_TOKEN=xxx"
+  # "D:\path\sonar-scanner.bat" -Dsonar.host.url=http://127.0.0.1:9000
+  Start-Process -FilePath ".tmp_run_scanner.bat" -NoNewWindow -Wait
+
+  # ❌ 错误：直接在 PS5 中传 -D 参数
+  & sonar-scanner.bat -Dsonar.host.url=http://127.0.0.1:9000  # 报 Unrecognized option
+  ```
+- **降级策略**：Node v24 + SonarJS 不兼容时，临时修改 `sonar-project.properties` 的 `sonar.sources` 仅包含 Python 后端，扫描完成后恢复原配置
+- **真实案例**：本次扫描首次因 Node v24 报 SonarJS bridge 模块缺失错误，降级为仅扫描 `backend/app` 后成功；PS5 直接传 `-D` 参数报 Unrecognized option，改用 .bat 文件封装后成功
+
+## 规范 63：并行子代理修复结果二次核查
+
+**多个并行子代理修复 SonarQube issues 后，主代理必须二次核查 NOSONAR 注释是否实际写入，子代理报告"已加"可能存在遗漏或位置错误。**
+
+- **为什么**：子代理在长任务中可能因 token 压缩丢失上下文，或对"加在某行"的理解与主代理不一致（如多行函数定义 NOSONAR 应加首行还是末行）。无核查会导致重新扫描后部分 issues 仍 OPEN，浪费时间。
+- **判断信号**：
+  - 子代理报告"已加 NOSONAR 到 L504"
+  - 重新扫描后该 issue 仍为 OPEN
+  - grep `NOSONAR` 文件，发现实际行号与子代理报告不符
+- **适用场景**：所有并行子代理修复任务（SonarQube issues、批量重构、多文件改动）
+- **不适用场景**：单代理串行修改（主代理可直接观察每次 Edit 结果）
+- **正确做法**：
+  ```powershell
+  # ✅ 正确：子代理修复后，主代理用 grep 核查所有 NOSONAR 位置
+  Select-String -Path "backend/app/services/*.py" -Pattern "NOSONAR" | 
+    ForEach-Object { "$($_.Filename):$($_.LineNumber): $($_.Line)" }
+  # 对照 SonarQube 报告的 issue 行号，逐一核对
+  ```
+- **真实案例**：本次扫描中 5 个子代理修复 54 个 issues，重新扫描后 18 个仍 OPEN。核查发现：(1) 1 个子代理报告加 NOSONAR 到 backup_service.py L172 但实际未加；(2) 4 个子代理把 NOSONAR 加到多行函数末行而非首行（见规范 61）。二次修复后全部 CLOSED
+
+## 规范 64：预先存在测试失败识别（git stash 验证）
+
+**测试失败时，必须用 git stash 验证失败是否为预先存在问题，避免误判为本次修改引入的回归。**
+
+- **为什么**：项目可能存在长期失败的测试（如测试与实现不同步），如果直接修复会浪费时间为"回归"找原因，实际是预先存在问题。git stash 暂存当前修改后运行测试，可区分两种情况。
+- **判断信号**：
+  - 修改后 N 个测试失败
+  - 失败的测试与本次修改的文件无直接关联（如修改 content_service.py 但 test_workflow_service.py 失败）
+  - 失败信息提示类型不匹配（如 `assert [] is None`）→ 测试与实现契约不同步
+- **适用场景**：任何代码修改后的测试验证
+- **不适用场景**：全新项目无 git 历史
+- **正确做法**：
+  ```bash
+  # ✅ 正确：git stash 后运行测试，对比失败是否预先存在
+  git stash push -m 'verify-baseline' -- backend/app/services/content_service.py
+  python -m pytest tests/test_content_service.py -v
+  # 若仍失败 → 预先存在问题，git stash pop 恢复后修复测试
+  # 若通过 → 本次修改引入回归，git stash pop 后修复代码
+  git stash pop
+  ```
+- **真实案例**：本次扫描修改 content_service.py L29 类型注解后，4 个 test_content_service.py 测试失败。git stash 后测试仍失败，证明是预先存在的"测试与多频道实现不同步"问题（`get_today_episode()` 无 channel_id 时返回 list 但测试期望 dict/None）。修复测试断言而非回退代码
+
+## 规范 65：NOSONAR 抑制 vs 代码修复判断
+
+**SonarQube issue 修复必须区分"真缺陷"与"误报/重构成本高"，真缺陷必须修复代码，误报或重构成本高时才用 NOSONAR 抑制。**
+
+- **为什么**：滥用 NOSONAR 会让真实缺陷被掩盖，降低代码质量。反之，对认知复杂度超阈值但职责单一的函数强行重构会引入风险。需要明确判断标准。
+- **判断信号**：
+  - 真缺陷信号：裸 `except:`（S5446）、参数名不匹配（S930）、SQL 注入风险（S2817）、可空类型未声明（S5886）
+  - 可抑制信号：cognitive complexity 超阈值但函数职责单一（S3776）、lifespan 钩子 async 但内部 sync（S7503）、中文说明性注释被误报为代码注释（S125）
+- **适用场景**：所有 SonarQube issue 修复决策
+- **不适用场景**：无 SonarQube 的项目（用 IDE linter 规则替代）
+- **决策矩阵**：
+  | 规则 | 类型 | 处理方式 |
+  |------|------|----------|
+  | S5446 裸 except | 真缺陷 | 修复为 `except Exception:` |
+  | S930 参数不匹配 | 真缺陷 | 修复参数名 |
+  | S2817 硬编码 SQL | 真缺陷 | 提取常量 |
+  | S5886 Optional 缺失 | 真缺陷 | 补充类型注解 |
+  | S3776 认知复杂度 | 重构成本高 | NOSONAR 抑制（若职责单一） |
+  | S7503 async 无 await | 误报/契约约束 | NOSONAR 抑制（如 lifespan 钩子） |
+  | S125 注释代码误报 | 误报 | NOSONAR 抑制 |
+- **真实案例**：本次扫描中 backup_service.py L92 裸 `except:` 改为 `except Exception:`（真缺陷修复）；channels.py L390 同步 open 改为 `asyncio.to_thread`（真缺陷修复）；main.py L98 `_seed_default_admin` async 但内部 sqlite3 同步操作，因 lifespan 调用方用 `await` 调用，改 async 会破坏调用契约，用 NOSONAR 抑制
+
+---
+
+## 经验教训：前端组件类型契约与配置覆盖（2026-07-13 复盘）
+
+### 核心教训
+
+1. **el-switch `===` 严格比较是 JS 类型系统的隐蔽陷阱**：el-switch 内部用 `===` 严格比较 v-model 值与 active-value，后端返回 int 0/1 时若前端未显式声明 `:active-value="1" :inactive-value="0"`，`1 === true` 为 false 导致开关始终显示关闭。更隐蔽的是，初始化时 el-switch 会把值从 int 1 改为默认 false 并触发 `@change`，造成数据丢失和误触发 ElMessage。**必须显式声明 active-value/inactive-value 且类型与后端字段一致**（对应 R140）。
+
+2. **el-switch 初始化时值变化会触发 change 事件**：el-switch 设计为值变化即触发 change，无"初始化阶段不触发"的内置机制。因此 form 初始值必须与 active-value 类型一致（int 1 ↔ active-value=1），否则初始化时类型转换会触发 change，导致"用户点击菜单即提示已禁用"等异常。**form 初始值、active-value、@change 回调参数、后端字段类型四者必须类型一致**（对应 R140）。
+
+3. **axios 默认 timeout=15000ms 是常见默认值，AI 生成接口必须请求级覆盖**：axios 实例默认 `timeout=15000ms`（15 秒），但 AI 生成 4 段提示词需 30-60 秒。前端 15 秒超时先于后端 30 秒触发，导致接口报错 `timeout of 15000ms exceeded`，但后端实际仍在执行。**长耗时接口必须请求级 timeout 覆盖全局默认值；后端 LLM timeout 从 settings 读取且支持 `max(LLM_TIMEOUT_SEC*N, MIN)` 公式动态计算**（对应 R141）。
+
+4. **频道级配置与全局配置的优先级关系是 SaaS 多租户的通用模式**：多频道场景下，频道字段（schedule_time/is_active/intro_prompt/outro_prompt/constraint_prompt/rewrite_template/rss_sources/keywords）应优先于 settings 全局配置；频道字段为空时 fallback 到全局。service 层必须实现优先级链路：`channel.xxx or settings.LLM_XXX or default`。**禁止 service 层直接读全局 settings 而不查询频道字段**（对应 R142）。
+
+5. **频道字段变更必须通过 EventBus 发布事件联动调度系统**：频道 `schedule_time` 变更后 cron 任务必须重注册，`is_active` 变更为 0 后已入队工作流必须取消。事件发布用 `publish_nowait`（非阻塞）避免主流程超时；订阅者必须幂等（重复注册 cron/取消工作流不报错）。**禁止频道字段变更后无事件发布，导致调度系统不联动**（对应 R143）。
+
+### 适用场景
+
+| 教训 | 适用场景 | 不适用场景 |
+|------|---------|------------|
+| el-switch `===` 严格比较 | 所有 el-switch/el-radio/el-checkbox 双向绑定后端 int 0/1 字段 | 后端返回 bool 的字段；纯展示组件 |
+| el-switch 初始化触发 change | 所有 el-switch 列表渲染场景；form 初始化与 active-value 类型不一致 | 后端返回 bool；无 @change 回调 |
+| axios 默认 timeout 陷阱 | AI 生成/大文件上传/批量处理等长耗时 API | 短查询接口（<3s）；WebSocket 长连接 |
+| 频道级配置优先级 | 多频道/多租户/多环境差异化配置 | 单频道项目；全局唯一配置 |
+| EventBus 联动调度 | 频道/租户配置变更需联动 cron/工作流 | 单频道项目；无调度系统 |
+
+---
+
+---
+
+---
+
+## 经验教训：多页面共享状态同步与过滤模式（2026-07-31 复盘）
+
+### 四维度复盘总览
+
+#### 维度 1：成功执行任务的完整步骤
+
+针对"多页面共享状态显示异常"类缺陷的标准修复流程：
+
+1. **现象分类** → 区分"未设置时残留"、"设置后显示全量"、"设置后无数据"等独立场景
+2. **数据流梳理** → 追踪数据来源链路（权威源 localData → data 镜像 → globalData 镜像 → wxml 渲染）
+3. **生命周期分析** → 分析 onLoad/onShow 触发条件与现有刷新逻辑的覆盖盲区（如普通 Tab 切换不更新时间戳）
+4. **根因定位** → 识别每个独立现象的根因（单信号检测漏刷新、异步窗口读旧值、未二次过滤、空状态未显式标记）
+5. **修复实施** → 分文件、分函数修改，每个修复点对应明确的代码变更
+6. **回归验证** → 覆盖所有现象组合（未设置切 Tab、设置后今日、设置后历史、设置后切换）
+7. **规范提炼** → 从修复中抽象可复用模板，明确适用/不适用场景
+
+#### 维度 2：任务执行过程中的不确定性与失败点
+
+| 失败点 | 触发条件 | 影响范围 | 根因 | 修复方式 |
+|--------|----------|----------|------|----------|
+| 时间戳单信号失效 | 普通 Tab 切换不更新 preferredChannelsChanged | onShow 不触发刷新，残留旧数据 | 仅用时间戳判断变更，遗漏 Tab 切换场景 | 增加"时间戳 OR 内容比对"双校验 |
+| setData 异步窗口 | onShow 中 setData 后立即读取 this.data | loadXxx 误读旧值，过滤逻辑错误 | setData 是异步的，立即读取拿到旧值 | 在数据加载函数入口直接读 localData |
+| 预渲染数据未过滤 | onLoad 从 globalData.todayEpisode 拿全量数据 | 偏爱模式显示所有频道 | _applyTodayData 未考虑当前过滤模式 | 在数据应用层按当前模式二次过滤 |
+| preferredEmpty 未重置 | 切 Tab 后 preferredEmpty 仍为旧值 | 显示残留数据或误显示空状态 | 状态未在每次加载时显式设置 | 每次加载在所有分支显式设置空状态标志 |
+| globalData 与 data 不同步 | 清空 data.todayList 未清空 globalData.todayList | 切回页面从 globalData 读到残留 | 两份镜像未同步清理 | 清空/更新时同步处理 globalData |
+
+#### 维度 3：可抽象的固定流程与判断逻辑
+
+| 模板 | 核心判断信号 | 落地方式 |
+|------|--------------|----------|
+| 多页面共享状态同步 | grep onShow 中未从权威源读取共享状态 | onShow 强制从 localData/globalData 同步最新值 |
+| 过滤模式防御性二次过滤 | grep 数据应用层无当前过滤条件校验 | 即使上游已过滤，下游按当前模式二次过滤 |
+| 空状态显式标记 | grep xxxEmpty 未在每次加载的所有分支设置 | 加载函数在每个分支显式设置空状态标志 |
+| 时间戳+内容双校验 | grep 仅用时间戳判断状态变更 | 时间戳变化 OR 内容不一致 任一满足即刷新 |
+| 本地存储直接读取 | grep 从 data 镜像读取而非 localData | 异步场景下直接读本地存储获取最新值 |
+| globalData 与 data 同步 | grep 清空 data 未清空 globalData 镜像 | 状态清空/更新时同步处理两份镜像 |
+| 页面生命周期刷新策略 | grep onShow 中无共享状态刷新逻辑 | 涉及共享状态的页面在 onShow 强制刷新 |
+
+#### 维度 4：适用场景与不适用场景
+
+| 模板 | 适用场景 | 不适用场景 |
+|------|----------|------------|
+| 多页面共享状态同步 | 跨页面共享用户偏好、筛选条件、登录态 | 页面私有状态、单次加载的静态数据 |
+| 过滤模式防御性二次过滤 | 按用户偏好/权限/频道过滤的列表展示 | 单一来源已保证过滤且契约稳定 |
+| 空状态显式标记 | 可能为空且影响 UI 展示的状态 | 始终有默认值或 fallback 的状态 |
+| 时间戳+内容双校验 | 跨页面状态变更通知 | 单页面内部状态变更 |
+| 本地存储直接读取 | setData 后立即需要最新值的异步场景 | 同步场景下 data 镜像足够 |
+| globalData 与 data 同步 | 跨页面通过 globalData 共享数据 | 仅页面内部使用的数据 |
+| 页面生命周期刷新策略 | 共享状态可能被其他页面修改 | 状态完全由当前页面控制 |
+
+---
+## 规范 66：多页面共享状态 onShow 同步
+
+**跨页面共享的状态（用户偏好、筛选条件、登录态）在 onShow 必须从权威源（localData/globalData）重新读取，禁止仅依赖 data 镜像或单信号时间戳判断。**
+
+- **为什么**：多 Tab 页面共享同一份状态时，状态可能被其他页面（如设置页）修改。若 onShow 仅依赖 data 镜像或时间戳单信号，普通 Tab 切换（不更新时间戳）会漏刷新，导致残留旧数据。
+- **适用**：跨页面共享的用户偏好、筛选条件、登录态
+- **不适用**：页面私有状态、单次加载的静态数据
+- **判断信号**：grep onShow 中未从 localData/globalData 读取共享状态
+- **正确做法**：
+  ```javascript
+  // ✅ 正确：onShow 从权威源同步
+  onShow() {
+    const latestIds = localData.getPreferredChannels()
+    const app = getApp()
+    const changedByTs = this._lastPreferredTs
+      && this._lastPreferredTs !== app.globalData.preferredChannelsChanged
+    const changedByContent = JSON.stringify(this.data.preferredIds)
+      !== JSON.stringify(latestIds)
+    if (changedByTs || changedByContent) {
+      this.setData({ preferredIds: latestIds })
+    }
+    if (this.data.isPreferredMode) this.loadPreferred()
+    this._lastPreferredTs = app.globalData.preferredChannelsChanged
+  }
+
+  // ❌ 错误：仅用时间戳，普通 Tab 切换不触发刷新
+  onShow() {
+    if (this._lastPreferredTs !== getApp().globalData.preferredChannelsChanged) {
+      this.loadPreferred()
+    }
+  }
+  ```
+- **真实案例**：未设置偏爱频道时，切换到历史页再切回今日页，onShow 因时间戳未变不触发刷新，todayList 残留 onLoad 预渲染的全部频道数据。
+
+
+## 规范 67：过滤模式防御性二次过滤
+
+**列表渲染层必须按当前过滤条件（频道/分类/偏好）对数据二次校验，即使上游承诺已过滤。**
+
+- **为什么**：上游（API/缓存/预渲染）可能因缓存命中、globalData 残留等原因返回未过滤的全量数据。若下游不再过滤，会展示不应出现的内容。
+- **适用**：按用户偏好/权限/频道过滤的列表展示
+- **不适用**：单一来源已保证过滤且契约稳定
+- **判断信号**：grep 数据应用层（_applyXxxData）无当前过滤条件校验
+- **正确做法**：
+  ```javascript
+  // ✅ 正确：在数据应用层按当前模式二次过滤
+  _applyTodayData(data) {
+    let list = Array.isArray(data) ? data : []
+    if (this.data.currentChannelId === ''preferred'' && list.length > 0) {
+      const preferredIds = localData.getPreferredChannels()
+      if (preferredIds.length > 0) {
+        const idSet = new Set(preferredIds)
+        list = list.filter(ep => idSet.has(ep.channel_id))
+      } else {
+        list = []
+      }
+    }
+    this.setData({ todayList: list.map(ep => this._enrichEpisode(ep)) })
+  }
+
+  // ❌ 错误：信任上游已过滤，下游不再校验
+  _applyTodayData(data) {
+    this.setData({ todayList: data })
+  }
+  ```
+- **真实案例**：设置偏爱后，onLoad 从 globalData.todayEpisode 拿到全部频道数据，_applyTodayData 未二次过滤，导致"我的偏爱"展示所有频道。
+
+## 规范 68：空状态显式标记
+
+**每个可能为空的状态必须有对应的 xxxEmpty 标志，数据加载函数必须在所有分支（未设置、加载失败、过滤后为空）显式设置该标志。**
+
+- **为什么**：若不显式标记，UI 会残留上一次的数据或空状态，导致"切 Tab 后又能看到已清空的内容"或"设置后仍显示空提示"。
+- **适用**：可能为空且影响 UI 展示的状态
+- **不适用**：始终有默认值或 fallback 的状态
+- **判断信号**：grep xxxEmpty 未在数据加载函数的所有分支设置
+- **正确做法**：
+  ```javascript
+  // ✅ 正确：每个分支显式设置 preferredEmpty
+  async loadPreferred() {
+    const preferredIds = localData.getPreferredChannels()
+    if (preferredIds.length === 0) {
+      this.setData({ todayList: [], preferredEmpty: true, loading: false })
+      return
+    }
+    const filtered = await this._fetchAndFilter(preferredIds)
+    this.setData({
+      todayList: filtered,
+      preferredEmpty: filtered.length === 0,
+      loading: false,
+    })
+  }
+
+  // ❌ 错误：未显式重置 preferredEmpty
+  async loadPreferred() {
+    const list = await fetchData()
+    this.setData({ todayList: list })
+  }
+  ```
+- **真实案例**：未设置偏爱时首次进入显示空提示，切 Tab 后 preferredEmpty 仍为 false，导致显示残留的 todayList 数据。
+
+## 规范 69：时间戳+内容双校验变更检测
+
+**跨页面状态变更检测必须采用"时间戳变化 OR 内容不一致"双校验，单信号检测会漏掉 Tab 切换等不更新时间戳的场景。**
+
+- **为什么**：时间戳由"状态修改方"显式更新，但"状态读取方"的普通 Tab 切换不会触发状态修改方更新时间戳，导致单信号检测漏刷新。
+- **适用**：跨页面状态变更通知
+- **不适用**：单页面内部状态变更（无需跨页面通知）
+- **判断信号**：grep 仅用时间戳判断状态变更，无内容比对
+- **正确做法**：
+  ```javascript
+  // ✅ 正确：时间戳 OR 内容，任一满足即刷新
+  const changedByTs = this._lastPreferredTs
+    && this._lastPreferredTs !== app.globalData.preferredChannelsChanged
+  const changedByContent = JSON.stringify(this.data.preferredIds)
+    !== JSON.stringify(latestIds)
+  if (changedByTs || changedByContent) {
+    this.setData({ preferredIds: latestIds })
+  }
+
+  // ❌ 错误：仅时间戳，Tab 切换漏刷新
+  if (this._lastPreferredTs !== app.globalData.preferredChannelsChanged) {
+    this.setData({ preferredIds: latestIds })
+  }
+  ```
+- **真实案例**：onShow 仅检查 preferredChannelsChanged 时间戳，普通 Tab 切换不更新该时间戳，导致切回页面不刷新。
+
+## 规范 70：异步窗口本地存储直接读取
+
+**在 setData 后立即需要最新值的场景（如 onShow 调用 setData 后立即调用 loadXxx），数据加载函数必须直接从 localData 读取，禁止依赖 this.data 镜像。**
+
+- **为什么**：setData 是异步的，调用后立即读取 this.data 拿到的是旧值，会导致后续判断（如"偏爱是否为空"）错误。
+- **适用**：setData 后立即需要最新值的异步场景
+- **不适用**：同步场景下 data 镜像足够
+- **判断信号**：grep 数据加载函数从 this.data 读取共享状态而非 localData
+- **正确做法**：
+  ```javascript
+  // ✅ 正确：loadXxx 入口直接读 localData
+  async loadPreferred() {
+    const preferredIds = localData.getPreferredChannels()
+    if (preferredIds.length === 0) { /* ... */ }
+  }
+
+  // ❌ 错误：读 this.data.preferredIds，可能为旧值
+  async loadPreferred() {
+    if (this.data.preferredIds.length === 0) { /* 误判 */ }
+  }
+  ```
+- **真实案例**：loadHistory 开头用 this.data.preferredIds 判断是否为空，因 setData 异步未完成，读到旧值导致误判为非空，过滤后无数据。
+
+## 规范 71：globalData 与 data 镜像同步
+
+**通过 globalData 跨页面共享的数据，在清空/更新 data 镜像时必须同步清空/更新 globalData 中的对应字段，避免其他页面从 globalData 读到残留数据。**
+
+- **为什么**：globalData 是跨页面共享的"次级缓存"，若只清 data 不清 globalData，其他页面 onLoad/onShow 时会从 globalData 读到残留数据，导致"切回页面又显示已清空的内容"。
+- **适用**：跨页面通过 globalData 共享数据
+- **不适用**：仅页面内部使用的数据
+- **判断信号**：grep 清空 data.xxx 未同步清空 globalData.xxx
+- **正确做法**：
+  ```javascript
+  // ✅ 正确：同步清空 data 和 globalData
+  if (preferredIds.length === 0) {
+    this.setData({ todayList: [], preferredEmpty: true, loading: false })
+    getApp().globalData.todayList = []
+    return
+  }
+
+  // ❌ 错误：只清 data，globalData 残留
+  if (preferredIds.length === 0) {
+    this.setData({ todayList: [] })
+  }
+  ```
+- **真实案例**：未设置偏爱时 loadPreferred 清空了 data.todayList 但未清空 globalData.todayList，切回页面 onLoad 从 globalData 读到残留的全部频道数据。
+
+## 规范 72：页面生命周期刷新策略
+
+**涉及跨页面共享状态的页面，onShow 必须在检测到状态变更后强制重新加载当前模式数据，禁止仅同步状态而不触发加载。**
+
+- **为什么**：仅同步 preferredIds 到 data 而不触发 loadPreferred，会导致 UI 仍显示旧数据。状态同步是前提，数据重载是结果，两者必须配套。
+- **适用**：共享状态可能被其他页面修改的页面
+- **不适用**：状态完全由当前页面控制
+- **判断信号**：grep onShow 同步状态后无 loadXxx 调用
+- **正确做法**：
+  ```javascript
+  // ✅ 正确：同步状态 + 强制重载
+  onShow() {
+    const latestIds = localData.getPreferredChannels()
+    if (/* 状态变更 */) {
+      this.setData({ preferredIds: latestIds })
+    }
+    if (this.data.isPreferredMode) {
+      this.loadPreferred()
+    }
+  }
+
+  // ❌ 错误：仅同步状态不重载
+  onShow() {
+    const latestIds = localData.getPreferredChannels()
+    this.setData({ preferredIds: latestIds })
+  }
+  ```
+- **真实案例**：onShow 同步了 preferredIds 但未调用 loadHistory，导致历史页"我的偏爱"未展示任何信息。
+
+---

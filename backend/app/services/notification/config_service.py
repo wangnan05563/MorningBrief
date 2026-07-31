@@ -16,6 +16,8 @@ from app.config import get_settings
 from app.models.ai_config import AIConfig
 
 # 通知配置 key 与默认值
+# 含三类渠道：钉钉（dingtalk）、企业微信（wecom）、邮件（email）
+# 三类渠道均通过 ai_config key-value 表持久化，前端可独立配置
 NOTIFY_CONFIG_KEYS: dict[str, str] = {
     "notify_global_enabled": "0",
     "notify_failed_enabled": "1",
@@ -23,11 +25,17 @@ NOTIFY_CONFIG_KEYS: dict[str, str] = {
     "notify_published_enabled": "0",
     "notify_dingtalk_webhook": "",
     "notify_dingtalk_secret": "",
+    "notify_wecom_webhook": "",
+    "notify_email_smtp_host": "",
+    "notify_email_smtp_port": "587",
+    "notify_email_smtp_user": "",
+    "notify_email_smtp_password": "",
+    "notify_email_to": "",
     "notify_admin_base_url": "",
 }
 
 # 需要脱敏的 key（前端回传 **** 开头视为未修改）
-SENSITIVE_NOTIFY_KEYS = {"notify_dingtalk_secret"}
+SENSITIVE_NOTIFY_KEYS = {"notify_dingtalk_secret", "notify_email_smtp_password"}
 
 # 场景开关 key 与 event_type 的映射
 SCENE_SWITCH_MAP: dict[str, str] = {
@@ -91,11 +99,17 @@ class NotificationConfigService:
             "published_enabled": raw["notify_published_enabled"] == "1",
             "dingtalk_webhook": raw["notify_dingtalk_webhook"],
             "dingtalk_secret": _mask_value(raw["notify_dingtalk_secret"]),
+            "wecom_webhook": raw["notify_wecom_webhook"],
+            "email_smtp_host": raw["notify_email_smtp_host"],
+            "email_smtp_port": int(raw["notify_email_smtp_port"]) if raw["notify_email_smtp_port"] else 587,
+            "email_smtp_user": raw["notify_email_smtp_user"],
+            "email_smtp_password": _mask_value(raw["notify_email_smtp_password"]),
+            "email_to": raw["notify_email_to"],
             "admin_base_url": raw["notify_admin_base_url"],
             "auto_detected_base_url": auto_url,
         }
 
-    async def save_config(self, data: dict[str, Any]) -> None:
+    async def save_config(self, data: dict[str, Any]) -> None:  # NOSONAR S3776: 配置保存含脱敏值识别与多端同步，结构清晰
         """保存通知配置。
 
         脱敏值（****开头）视为未修改，跳过；
@@ -118,6 +132,23 @@ class NotificationConfigService:
         secret = data.get("dingtalk_secret", "")
         if secret and not _is_masked(secret):
             updates["notify_dingtalk_secret"] = str(secret)
+
+        # 企业微信 webhook 直接写入
+        if "wecom_webhook" in data:
+            updates["notify_wecom_webhook"] = str(data["wecom_webhook"] or "")
+
+        # 邮件 SMTP 配置：host/user/to 直接写入，password 脱敏值跳过，port 转 str
+        if "email_smtp_host" in data:
+            updates["notify_email_smtp_host"] = str(data["email_smtp_host"] or "")
+        if "email_smtp_port" in data:
+            updates["notify_email_smtp_port"] = str(data["email_smtp_port"] or "587")
+        if "email_smtp_user" in data:
+            updates["notify_email_smtp_user"] = str(data["email_smtp_user"] or "")
+        email_pwd = data.get("email_smtp_password", "")
+        if email_pwd and not _is_masked(email_pwd):
+            updates["notify_email_smtp_password"] = str(email_pwd)
+        if "email_to" in data:
+            updates["notify_email_to"] = str(data["email_to"] or "")
 
         # admin_base_url 直接写入（允许空字符串，空时用自动检测值）
         if "admin_base_url" in data:
@@ -154,14 +185,29 @@ class NotificationConfigService:
     def _reload_notifier_hub(self, updates: dict[str, str]) -> None:
         """保存配置后热更新 NotifierHub 渠道实例。
 
-        将 notify_dingtalk_webhook/secret 同步到 Settings 单例，
-        再调用 hub.reload() 重新加载渠道，避免重启服务。
+        将三类渠道凭证同步到 Settings 单例，再调用 hub.reload() 重新加载渠道，
+        避免重启服务。hub.reload() 会重新遍历注册表，过滤未配置凭证的渠道。
         """
         settings = get_settings()
         if "notify_dingtalk_webhook" in updates:
             settings.ALERT_DINGTALK_WEBHOOK = updates["notify_dingtalk_webhook"]
         if "notify_dingtalk_secret" in updates:
             settings.ALERT_DINGTALK_SECRET = updates["notify_dingtalk_secret"]
+        if "notify_wecom_webhook" in updates:
+            settings.ALERT_WECOM_WEBHOOK = updates["notify_wecom_webhook"]
+        if "notify_email_smtp_host" in updates:
+            settings.ALERT_EMAIL_SMTP_HOST = updates["notify_email_smtp_host"]
+        if "notify_email_smtp_port" in updates:
+            try:
+                settings.ALERT_EMAIL_SMTP_PORT = int(updates["notify_email_smtp_port"])
+            except (ValueError, TypeError):
+                pass
+        if "notify_email_smtp_user" in updates:
+            settings.ALERT_EMAIL_SMTP_USER = updates["notify_email_smtp_user"]
+        if "notify_email_smtp_password" in updates:
+            settings.ALERT_EMAIL_SMTP_PASSWORD = updates["notify_email_smtp_password"]
+        if "notify_email_to" in updates:
+            settings.ALERT_EMAIL_TO = updates["notify_email_to"]
 
         try:
             from app.services.notifier import get_notifier_hub

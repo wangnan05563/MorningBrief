@@ -9,7 +9,6 @@
 """
 import asyncio
 import logging
-import os
 import time
 from typing import Optional
 
@@ -30,12 +29,10 @@ settings = get_settings()
 class AliyunSpeechClient:
     """阿里云 NLS 长文本语音合成客户端。
 
-    基于 NLS 异步长文本 RESTful API 实现，适合新闻播报这类分钟级长音频：
+    基于异步长文本 RESTful API 实现，适合新闻播报这类分钟级长音频：
     创建任务 → 轮询状态 → 下载音频。鉴权使用 appkey + token。
     """
 
-    # 异步长文本语音合成入口（创建与轮询共用同一 URL，按 HTTP 方法区分语义）
-    ENDPOINT = "https://nls-gateway.cn-shanghai.aliyuncs.com/rest/v1/tts/async"
     # 轮询间隔：NLS 长文本合成为异步批处理，过密轮询浪费配额且无收益
     POLL_INTERVAL_SEC = 2
 
@@ -48,12 +45,11 @@ class AliyunSpeechClient:
     ):
         # api_key 实为阿里云 NLS 访问令牌(token)，由 AccessKeyId/Secret 换取
         self._token = api_key
-        # appkey 是 NLS 项目标识，与 token 不同；优先从 settings 读取，
-        # 未定义则 fallback 到环境变量，保证调用方构造代码无需改动
-        self._appkey = (
-            getattr(settings, "ALIYUN_TTS_APPKEY", "")
-            or os.environ.get("ALIYUN_TTS_APPKEY", "")
-        )
+        # appkey 是 NLS 项目标识，与 token 不同；统一从 settings 读取，
+        # 避免散落的 os.environ.get 调用（违反配置驱动原则）
+        self._appkey = getattr(settings, "ALIYUN_TTS_APPKEY", "")
+        # endpoint 从 settings 读取，避免硬编码（用户可在 .env 中覆盖）
+        self._endpoint = getattr(settings, "ALIYUN_TTS_ENDPOINT", "")
         # 音量/语速/基频：显式参数优先，未传则回退到 settings 默认值
         # 试音时传入临时值，生产合成时用 settings 配置
         self._volume = volume if volume is not None else getattr(settings, "ALIYUN_TTS_VOLUME", 50)
@@ -133,7 +129,7 @@ class AliyunSpeechClient:
         }
         headers = {"Content-Type": "application/json"}
         resp = await self._request(
-            client, "POST", self.ENDPOINT, json=payload, headers=headers
+            client, "POST", self._endpoint, json=payload, headers=headers
         )
         data = resp.json()
         # NLS 约定 error_code == 20000000 表示请求被服务端接受
@@ -167,7 +163,7 @@ class AliyunSpeechClient:
                     f"阿里云 TTS 轮询超时 task_id={task_id} timeout={timeout}s"
                 )
             resp = await self._request(
-                client, "GET", self.ENDPOINT, params=params
+                client, "GET", self._endpoint, params=params
             )
             data = resp.json()
             error_code = data.get("error_code")

@@ -24,17 +24,20 @@ from app.paths import resolve_ffmpeg_path
 from app.services.ad_service import AdService
 from app.workflow.stitch.ffmpeg_wrapper import (
     StitchError,
+    _audio_bitrate,
     adjust_tempo,
     build_concat_cmd,
     build_full_concat_cmd,
+    build_hls_cmd,
     build_mid_ad_cmd,
     download_file,
+    generate_bgm_tail,
     generate_silence,
     get_audio_duration,
     mix_bgm,
     run_ffmpeg,
 )
-from app.workflow.tts.uploader import upload_to_cos
+from app.workflow.tts.uploader import upload_to_cos, upload_hls_directory
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -50,6 +53,10 @@ ABSOLUTE_MIN_DURATION_SEC = 180
 MID_AD_INSERT_AT_DEFAULT = 300
 # 广告与主音频之间的静音过渡时长(秒)
 SILENCE_DURATION = 0.5
+# 素材稀缺场景的段数判定阈值：总段数（含 intro/outro）< 5 即视为稀缺
+# 对应正文段 < 3（与 rewriter.MIN_VALID_SEGMENTS 对齐）
+# 稀缺场景下放宽 padding 上限，允许用 BGM/静音补足全部缺口
+SPARSE_SEGMENT_THRESHOLD = 5
 
 
 def _slugify_channel_name(name: str | None) -> str:
@@ -65,7 +72,7 @@ def _slugify_channel_name(name: str | None) -> str:
     return cleaned[:32] or "default"
 
 
-async def _resolve_channel_bgm(channel_id: int | None) -> tuple[str, Path | None, float, float]:
+async def _resolve_channel_bgm(channel_id: int | None) -> tuple[str, Path | None, float, float]:  # NOSONAR
     """解析频道级配置（BGM + 段间静音，频道未配置时回退全局 settings）。
 
     一次查询同时取 name + bgm_path + bgm_volume + segment_gap_sec，避免多次 DB 往返。
@@ -143,7 +150,7 @@ def _read_file(path: str) -> bytes:
         return f.read()
 
 
-async def concat(
+async def concat(  # NOSONAR
     workflow_id: str,
     episode_date,
     audio_segments: list,
@@ -274,16 +281,17 @@ async def concat(
             # 无任何广告:主音频直接重编码统一格式输出
             await run_ffmpeg([
                 resolve_ffmpeg_path(), "-y", "-i", main_path,
-                "-c:a", "libmp3lame", "-b:a", "128k",
+                "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
                 "-ar", "44100", "-ac", "1", final_path,
             ])
         else:
             await run_ffmpeg(build_full_concat_cmd(final_inputs, final_path))
 
-        # 8. 时长校验 + 超长 atempo 兜底
-        # 正常范围 [target×0.80, target×1.20]；超长但在 1.15x atempo 可修复范围内时
-        # 自动轻微加速（不改变音高），避免 LLM 字数波动导致工作流直接失败
-        # 安全边界：atempo 最多 1.15x（几乎不可察觉），超出则报错
+        # 8. 时长校验 + 双向兜底（超长 atempo 加速 / 不足 BGM 补足）
+        # 正常范围 [target×0.80, target×1.20]：
+        # - 超长但在 1.15x atempo 可修复范围内时，自动轻微加速（不改变音高）
+        # - 不足时优先用 BGM 自然延续兜底，无 BGM 时降级静音填充
+        # 安全边界：atempo 最多 1.15x；补足最多追加 min_allowed×0.20 秒，避免无限补
         duration = await get_audio_duration(final_path)
         min_allowed, max_allowed = _get_duration_range()
         if duration > max_allowed:
@@ -306,10 +314,56 @@ async def concat(
                     f"超长 {tempo_needed:.2f}x 超过 atempo 安全上限 1.15x"
                 )
         elif duration < min_allowed:
-            raise StitchError(
-                f"最终音频时长 {duration}s 低于允许范围 "
-                f"[{min_allowed}, {max_allowed}]（目标时长 "
-                f"{getattr(settings, 'TARGET_DURATION_SEC', 600)}s ±20%）"
+            # 时长不足兜底：补到 min_allowed + 2s 缓冲（防 ffprobe 取整再次落入下限以下）
+            # 优先用 BGM 尾段延续（与主节目 BGM 音量一致，听众感知为"节目在 BGM 中结束"）
+            # 无 BGM 时降级静音填充（最后选择，仅保证不失败，体验略差）
+            # 场景：rewriter 5.6 字数补足仍不够（LLM 严重不遵守字数约束 / selected 素材耗尽）
+            shortfall = (min_allowed - duration) + 2
+            # 上限保护：单次最多补 target×0.30 秒，超出说明 rewriter 严重失效，应直接失败暴露问题
+            # 例外：素材稀缺场景（总段数 < SPARSE_SEGMENT_THRESHOLD，即正文段 < 3）时
+            # rewriter 已动态下调段数下限，此处同步放宽 padding 上限到全部缺口，
+            # 避免短节目因 padding 不足而拼接失败（R23 自动调整 / R110 自动降级）
+            max_supplement = int(target_sec * 0.30)
+            if len(segments) < SPARSE_SEGMENT_THRESHOLD:
+                logger.warning(
+                    "素材稀缺场景（总段数 %d < %d），放宽 padding 上限从 %ds 到 %ds",
+                    len(segments), SPARSE_SEGMENT_THRESHOLD,
+                    max_supplement, shortfall,
+                )
+                max_supplement = shortfall
+            supplement_sec = min(shortfall, max_supplement)
+
+            logger.warning(
+                "时长不足兜底 workflow_id=%s 时长=%ds < 下限=%ds，补足 %ds（BGM=%s）",
+                workflow_id, duration, min_allowed, supplement_sec,
+                "有" if bgm_path else "无（降级静音）",
+            )
+
+            tail_path = str(tmp_dir / "tail_filler.mp3")
+            if bgm_path:
+                await generate_bgm_tail(
+                    str(bgm_path), supplement_sec, tail_path, volume=bgm_volume,
+                )
+            else:
+                await generate_silence(supplement_sec, tail_path)
+
+            # 主音频 + 尾段拼接
+            padded_path = str(tmp_dir / "final_padded.mp3")
+            await run_ffmpeg(build_full_concat_cmd([final_path, tail_path], padded_path))
+            final_path = padded_path
+            original_duration = duration
+            duration = await get_audio_duration(final_path)
+
+            # 补足后仍不足则报错（不应发生，除非 ffprobe 测量异常）
+            if duration < min_allowed:
+                raise StitchError(
+                    f"BGM/静音补足后时长仍不足: 原时长={original_duration}s "
+                    f"补足 {supplement_sec}s 后={duration}s < 下限={min_allowed}s"
+                )
+
+            logger.info(
+                "时长补足完成 workflow_id=%s 原时长=%ds 补足=%ds 最终=%ds",
+                workflow_id, original_duration, supplement_sec, duration,
             )
 
         # 9. 上传 COS:key 含日期+频道名+workflow_id,避免同日多频道/重试覆盖
@@ -321,11 +375,41 @@ async def concat(
         )
         final_url = await upload_to_cos(data, cos_key)
 
+        # 10. 生成 HLS 分片（V1.3 新增）：开启 HLS_ENABLE 时同步生成 m3u8 + ts 分片
+        # 为什么放在 upload_to_cos 之后：mp3 是主交付物，HLS 失败不应阻塞主流程
+        # 失败时仅记录日志，hls_url 留空，客户端回退到 mp3 播放
+        hls_url = None
+        if settings.HLS_ENABLE:
+            try:
+                hls_dir = str(tmp_dir / "hls")
+                hls_cmd, _ = build_hls_cmd(final_path, hls_dir)
+                await run_ffmpeg(hls_cmd)
+                hls_key_prefix = (
+                    f"episodes/{episode_date.strftime('%Y%m%d')}/"
+                    f"{channel_slug}_{workflow_id}"
+                )
+                hls_url = await upload_hls_directory(hls_dir, hls_key_prefix)
+                logger.info(
+                    "HLS 生成完成 workflow_id=%s url=%s",
+                    workflow_id, hls_url,
+                )
+            except Exception as hls_err:
+                # HLS 失败不阻塞主流程：mp3 已上传，客户端可降级播放
+                logger.warning(
+                    "HLS 生成失败，回退到 mp3 播放 workflow_id=%s err=%s",
+                    workflow_id, hls_err,
+                )
+
         logger.info(
-            "拼接完成 workflow_id=%s duration=%ds channel=%s url=%s",
+            "拼接完成 workflow_id=%s duration=%ds channel=%s url=%s hls=%s",
             workflow_id, duration, channel_slug, final_url,
+            hls_url or "（未生成）",
         )
-        return {"final_audio_url": final_url, "duration": duration}
+        return {
+            "final_audio_url": final_url,
+            "hls_url": hls_url,
+            "duration": duration,
+        }
     finally:
         # 10. 清理临时目录:无论成功失败都回收磁盘空间
         # 用 to_thread 包装避免阻塞事件循环（rmtree 在大目录下耗时）

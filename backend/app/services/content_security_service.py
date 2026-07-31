@@ -29,9 +29,10 @@ settings = get_settings()
 _ACCESS_TOKEN_CACHE: TTLCache = TTLCache(maxsize=1, ttl=7200)
 _ACCESS_TOKEN_LOCK = asyncio.Lock()
 
-# 微信 API 端点
-_TOKEN_URL = "https://api.weixin.qq.com/cgi-bin/token"
-_MSG_SEC_CHECK_URL = "https://api.weixin.qq.com/wxa/msg_sec_check"
+# 微信 API 端点：从 settings.WX_API_BASE 派生，避免硬编码
+# 仅在微信变更域名时才需修改 WX_API_BASE，默认值对齐官方文档
+_TOKEN_URL = f"{settings.WX_API_BASE}/cgi-bin/token"
+_MSG_SEC_CHECK_URL = f"{settings.WX_API_BASE}/wxa/msg_sec_check"
 
 # HTTP 请求超时：微信 API 通常 < 1s，留 10s 余量防止网络抖动
 _HTTP_TIMEOUT = 10.0

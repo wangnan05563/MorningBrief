@@ -66,6 +66,9 @@ from app.models.audit_log import AuditLog
 # 通知模块（钉钉消息通知，含模板与发送日志）
 from app.models.notification_template import NotificationTemplate
 from app.models.notification_log import NotificationLog
+# 自动审批模块（配置表 + 统计表）
+from app.models.auto_review_config import AutoReviewConfig
+from app.models.auto_review_stat import AutoReviewStat
 
 __all__ = [
     # 业务表
@@ -114,4 +117,7 @@ __all__ = [
     # 通知模块
     "NotificationTemplate",
     "NotificationLog",
+    # 自动审批模块
+    "AutoReviewConfig",
+    "AutoReviewStat",
 ]

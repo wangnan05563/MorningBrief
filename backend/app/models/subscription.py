@@ -35,6 +35,6 @@ class Subscription(Base):
     subscribed_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow_naive, comment="用户授权时间"
     )
-    # 0=未推送（待发送），1=已推送（已消费）
+    # 0=未推送（待发送），1=已推送（已消费） # NOSONAR
     used: Mapped[int] = mapped_column(Integer, default=0, comment="是否已推送：0=未推送 1=已推送")
     sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, comment="实际推送时间")

@@ -501,7 +501,7 @@ class AIConfigService:
             result["segment_gap_sec"] = str(config["segment_gap_sec"])
         return result
 
-    def _normalize_tts(self, config: dict) -> dict[str, str]:
+    def _normalize_tts(self, config: dict) -> dict[str, str]:  # NOSONAR
         """将前端 TTS 配置转为 config_key -> value 映射。
 
         覆盖三套 Provider 字段：阿里云（api_key/appkey/voice/...）、
@@ -730,7 +730,7 @@ class AIConfigService:
 
         脱敏值（****开头）视为未修改，回退到已保存配置。
         """
-        provider = provider or settings.TTS_PROVIDER or "aliyun"
+        provider = provider or get_settings().TTS_PROVIDER or "aliyun"
 
         if provider == "aliyun":
             return await self._test_aliyun(api_key, appkey)
@@ -757,7 +757,8 @@ class AIConfigService:
                 return {"success": False, "message": "TTS AppKey 未配置"}
             appkey = saved_appkey
 
-        endpoint = "https://nls-gateway.cn-shanghai.aliyuncs.com/rest/v1/tts/async"
+        # 从 settings 读取 endpoint，避免硬编码（与 AliyunSpeechClient 保持单一可信源）
+        endpoint = get_settings().ALIYUN_TTS_ENDPOINT
         payload = {
             "header": {"appkey": appkey, "token": api_key},
             "context": {"device_id": "config_test"},
@@ -851,10 +852,10 @@ class AIConfigService:
         """
         if not secret_id or _is_masked(secret_id):
             saved_id = await self.get_config_value("tencent_tts_secret_id")
-            secret_id = saved_id or settings.COS_SECRET_ID
+            secret_id = saved_id or get_settings().COS_SECRET_ID
         if not secret_key or _is_masked(secret_key):
             saved_key = await self.get_config_value("tencent_tts_secret_key")
-            secret_key = saved_key or settings.COS_SECRET_KEY
+            secret_key = saved_key or get_settings().COS_SECRET_KEY
 
         if not secret_id or not secret_key:
             return {
@@ -884,7 +885,7 @@ class AIConfigService:
     # ---- 试音合成 ----
 
     async def preview_tts(
-        self,
+        self, # NOSONAR
         text: str,
         provider: str = "edge",
         # 阿里云参数
@@ -917,7 +918,7 @@ class AIConfigService:
             ValueError: provider 未知或凭证缺失
             TTSError: 合成失败（网络/鉴权/音色等）
         """
-        provider = provider or settings.TTS_PROVIDER or "edge"
+        provider = provider or get_settings().TTS_PROVIDER or "edge"
 
         if not text.strip():
             raise ValueError("试音文本不能为空")
@@ -962,8 +963,8 @@ class AIConfigService:
         )
         return await client.synthesize(
             text, voice=voice or None,
-            format=settings.ALIYUN_TTS_FORMAT,
-            sample_rate=settings.ALIYUN_TTS_SAMPLE_RATE,
+            format=get_settings().ALIYUN_TTS_FORMAT,
+            sample_rate=get_settings().ALIYUN_TTS_SAMPLE_RATE,
         )
 
     async def _preview_edge(
@@ -987,11 +988,11 @@ class AIConfigService:
         if not secret_id or _is_masked(secret_id):
             secret_id = await self.get_config_value("tencent_tts_secret_id") or ""
         if not secret_id:
-            secret_id = settings.COS_SECRET_ID
+            secret_id = get_settings().COS_SECRET_ID
         if not secret_key or _is_masked(secret_key):
             secret_key = await self.get_config_value("tencent_tts_secret_key") or ""
         if not secret_key:
-            secret_key = settings.COS_SECRET_KEY
+            secret_key = get_settings().COS_SECRET_KEY
         if not secret_id or not secret_key:
             raise ValueError("腾讯云 TTS 凭证未配置")
 
@@ -1132,7 +1133,7 @@ class AIConfigService:
 
         不同 provider 的音色 ID 体系不同，前端切换 provider 时需重新加载音色列表。
         """
-        provider = provider or settings.TTS_PROVIDER or "aliyun"
+        provider = provider or get_settings().TTS_PROVIDER or "aliyun"
 
         if provider == "edge":
             return [

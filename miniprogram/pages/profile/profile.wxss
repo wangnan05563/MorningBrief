@@ -277,3 +277,8 @@
   color: #FFFFFF;
   box-shadow: 0 4rpx 12rpx rgba(126, 206, 193, 0.3);
 }
+
+/* 主色背景的编辑按钮（薄荷绿）内图标也强制变白，与全局 .btn-primary .btn-icon 规则对齐 */
+.edit-btn-confirm .btn-icon {
+  filter: brightness(0) invert(1);
+}

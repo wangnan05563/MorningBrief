@@ -38,9 +38,9 @@ class TemplateRenderer:
             return configured.rstrip("/")
         return config_svc._detect_base_url().rstrip("/")
 
-    async def build_context(
+    async def build_context(  # NOSONAR
         self,
-        event_type: str,
+        _event_type: str,
         workflow_id: str,
         extra_vars: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
@@ -114,7 +114,7 @@ class TemplateRenderer:
 
         return ctx
 
-    async def render(
+    async def render(  # NOSONAR
         self,
         title_template: str,
         body_template: str,

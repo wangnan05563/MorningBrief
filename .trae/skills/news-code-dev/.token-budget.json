@@ -1,0 +1,22 @@
+{
+  "skill": "news-code-dev",
+  "version": "1.0.0",
+  "updated": "2026-07-31",
+  "budgets": {
+    "skill_md_lines": 500,
+    "skill_md_est_tokens": 12000,
+    "config_lines": 590,
+    "config_est_tokens": 4000,
+    "references_total_lines": 8000,
+    "references_total_est_tokens": 100000,
+    "total_est_tokens": 120000
+  },
+  "policy": {
+    "skill_md_over_budget": "ERROR",
+    "config_over_budget": "WARN",
+    "retrospective_in_skill_md": "ERROR",
+    "config_lookup_in_skill_md": "ERROR",
+    "orphan_reference": "WARN"
+  },
+  "exemptions": []
+}

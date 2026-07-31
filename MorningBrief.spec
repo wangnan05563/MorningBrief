@@ -63,6 +63,9 @@ hiddenimports += ['aiosqlite', 'cachetools', 'feedparser']
 # Pydantic v2 内部模块
 hiddenimports += ['pydantic', 'pydantic_settings', 'pydantic.deprecated']
 
+# edge-tts：edge_tts.Communicate 通过字符串动态导入，PyInstaller 静态分析看不到
+hiddenimports += collect_submodules('edge_tts')
+
 # COS SDK（cos-python-sdk-v5 无动态导入，无需额外 hiddenimport）
 
 # ============================================================
@@ -78,6 +81,10 @@ datas += collect_data_files('app.workflow.crawler.sources')
 datas += collect_data_files('app.workflow.llm')
 datas += collect_data_files('app.workflow.llm.prompts')
 datas += collect_data_files('app.workflow.tts')
+
+# certifi CA 证书：edge-tts 使用 certifi.where() 指定 SSL 证书路径，
+# 若不收集 cacert.pem，打包后 SSL 握手失败，服务端返回 403
+datas += collect_data_files('certifi')
 
 # 显式补充关键配置文件（确保路径正确）
 # 格式：(源文件相对路径, 目标目录相对路径)

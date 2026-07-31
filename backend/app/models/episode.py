@@ -35,6 +35,10 @@ class Episode(Base):
     title: Mapped[str] = mapped_column(String(128), nullable=False)
     duration: Mapped[int] = mapped_column(Integer, nullable=False, comment="时长（秒）")
     audio_url: Mapped[str] = mapped_column(String(512), nullable=False)
+    # HLS m3u8 清单 URL：小程序 BackgroundAudioManager.protocol='hls' 时优先使用
+    # 为什么单独存而非动态推导：HLS 是否生成由配置决定，且文件位于子目录，
+    # 持久化避免每次请求探测文件系统；为空时客户端回退到 audio_url
+    hls_url: Mapped[Optional[str]] = mapped_column(String(512))
     cover_url: Mapped[Optional[str]] = mapped_column(String(512))
     script_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("script.id")

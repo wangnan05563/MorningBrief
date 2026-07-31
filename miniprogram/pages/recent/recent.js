@@ -4,7 +4,8 @@
  * V1.3 新增（FR-SUP-13）
  * 后端 /playlogs/recent 已按 episode 去重（每个 episode 仅展示最新一条）
  */
-const { fetchRecentPlaylogs } = require('../../services/api');
+// localData 封装播放历史的双写（本地+后端），按 openid 隔离，读取优先本地
+const localData = require('../../services/local-data');
 const { setQueue } = require('../../services/audio');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 
@@ -31,7 +32,8 @@ Page({
 
     this.setData({ loading: true });
     try {
-      const res = await fetchRecentPlaylogs(this.data.page, 20);
+      // localData.getHistory 优先本地，本地无时从后端读取
+      const res = await localData.getHistory(this.data.page, 20);
       const items = res.list || [];
       const newList = first ? items : this.data.list.concat(items);
       this.setData({

@@ -4,6 +4,7 @@
 通过本地回环地址 + 共享密钥签名鉴权（HLD 10.1）。
 MVP 阶段简化为仅 localhost 校验；配置 INTERNAL_API_TOKEN 后启用双因素校验。
 """
+import json
 from datetime import date
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
@@ -12,10 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.core.response import success
 from app.database import get_db
+from app.models import AuditLog
 from app.services.content_service import ContentService
 from app.services.workflow_service import WorkflowService
-
-router = APIRouter(prefix="/api/internal/workflow", tags=["内部-工作流"])
 
 
 async def verify_localhost(request: Request):  # NOSONAR
@@ -25,8 +25,12 @@ async def verify_localhost(request: Request):  # NOSONAR
     配置 INTERNAL_API_TOKEN 后，额外校验 X-Internal-Token 头，
     形成 localhost + token 双因素校验（防止同机其他服务误调用）。
     """
+    # 反向代理场景下 request.client.host 是代理 IP，需检查 X-Forwarded-For 首跳
+    # 链路首个 IP 是真实客户端，若非 localhost 则视为外网调用
     client_host = request.client.host if request.client else None
-    if client_host not in ("127.0.0.1", "::1", "localhost"):
+    xff = request.headers.get("X-Forwarded-For", "")
+    real_ip = xff.split(",")[0].strip() if xff else client_host
+    if real_ip not in ("127.0.0.1", "::1", "localhost"):
         raise HTTPException(status_code=403, detail="仅允许本地调用")
 
     # 双因素校验：配置了 INTERNAL_API_TOKEN 时，请求须携带匹配的 token
@@ -37,11 +41,20 @@ async def verify_localhost(request: Request):  # NOSONAR
             raise HTTPException(status_code=403, detail="内部接口 token 无效")
 
 
+# 路由级统一声明 verify_localhost：新增路由自动继承鉴权，
+# 避免每个路由单独声明时漏配导致内部接口暴露
+router = APIRouter(
+    prefix="/api/internal/workflow",
+    tags=["内部-工作流"],
+    dependencies=[Depends(verify_localhost)],
+)
+
+
 @router.post("/trigger")
 async def trigger_workflow(
     episode_date: str = Body(..., embed=True),
     source: str = Body("cron", embed=True),
-    _: None = Depends(verify_localhost),
+    db: AsyncSession = Depends(get_db),
 ):
     """触发工作流（APScheduler Cron 调用 / 运营后台内部调用）。"""
     from app.services.workflow_scheduler import workflow_scheduler
@@ -51,6 +64,15 @@ async def trigger_workflow(
         episode_date=target_date,
         source=source,
     )
+    # 审计日志：区分 cron 自动触发与人为内部调用，便于追溯异常触发的来源
+    db.add(AuditLog(
+        category="workflow",
+        action="internal_trigger",
+        target=workflow_id,
+        operator=f"internal:{source}",
+        detail=json.dumps({"episode_date": episode_date, "workflow_id": workflow_id}, ensure_ascii=False),
+    ))
+    await db.commit()
     return success(data={"workflow_id": workflow_id, "status": "running"})
 
 
@@ -58,7 +80,6 @@ async def trigger_workflow(
 async def get_workflow(
     workflow_id: str,
     db: AsyncSession = Depends(get_db),
-    _: None = Depends(verify_localhost),
 ):
     """查询工作流状态。"""
     svc = WorkflowService(db)
@@ -71,12 +92,21 @@ async def publish_workflow(
     workflow_id: str,
     review_id: int = Body(..., embed=True),
     db: AsyncSession = Depends(get_db),
-    _: None = Depends(verify_localhost),
 ):
     """审核通过后发布节目。
 
     由审核服务在 approve 时内部调用，或由运营后台手动触发。
+    强制发布属于敏感操作，必须记录审计日志便于事后追溯。
     """
     svc = ContentService(db)
     episode_id = await svc.publish_episode(workflow_id, review_id)
+    # 审计日志：强制发布可绕过审核流程直接上线，必须可追溯
+    db.add(AuditLog(
+        category="workflow",
+        action="force_publish",
+        target=workflow_id,
+        operator="internal",
+        detail=json.dumps({"review_id": review_id, "episode_id": episode_id}, ensure_ascii=False),
+    ))
+    await db.commit()
     return success(data={"episode_id": episode_id, "status": "published"})

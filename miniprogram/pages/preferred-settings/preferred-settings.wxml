@@ -1,0 +1,53 @@
+<!-- 偏爱频道设置页：多选频道用于"我的偏爱"tab 筛选 -->
+<view class="page-preferred-settings">
+  <!-- 顶部说明 -->
+  <view class="tip-bar">
+    <text class="tip-text">勾选你喜爱的频道，"我的偏爱"将只展示这些频道的节目</text>
+  </view>
+
+  <!-- 加载中 -->
+  <view class="loading-mask" wx:if="{{loading}}">
+    <text>加载中...</text>
+  </view>
+
+  <!-- 空状态 -->
+  <view class="empty-state" wx:elif="{{channels.length === 0}}">
+    <text>暂无可用频道</text>
+  </view>
+
+  <!-- 频道多选列表 -->
+  <block wx:else>
+    <view class="channel-list">
+      <view
+        class="card channel-item {{item.selected ? 'selected' : ''}}"
+        wx:for="{{channels}}"
+        wx:key="id"
+        data-index="{{index}}"
+        bindtap="onToggleChannel"
+      >
+        <view class="channel-info">
+          <view class="channel-name">{{item.name}}</view>
+          <view class="channel-desc">{{item.description || '精彩内容，等你来听'}}</view>
+        </view>
+        <!-- 勾选标记 -->
+        <view class="check-box {{item.selected ? 'checked' : ''}}">
+          <text wx:if="{{item.selected}}" class="check-icon">✓</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 底部操作栏 -->
+    <view class="bottom-bar">
+      <!-- 首次引导模式显示"暂不设置"，普通入口显示"全选" -->
+      <view class="select-all-btn" wx:if="{{!isOnboarding}}" bindtap="onSelectAll">
+        <text>{{channels.length > 0 && channels[0].selected ? '全不选' : '全选'}}</text>
+      </view>
+      <view class="select-all-btn" wx:else bindtap="onSkip">
+        <text>暂不设置</text>
+      </view>
+      <view class="save-btn {{selectedCount > 0 ? '' : 'disabled'}}" bindtap="onSave">
+        <text>保存（{{selectedCount}}）</text>
+      </view>
+    </view>
+  </block>
+</view>

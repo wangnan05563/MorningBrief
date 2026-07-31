@@ -7,11 +7,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.security import create_access_token
-from app.core.exceptions import BizError, AuthError
+from app.core.exceptions import BizError, AuthError, NotFoundError
 from app.models import User
 from app.services.blacklist_service import add_to_blacklist
 
 settings = get_settings()
+
+
+async def get_user_openid(db: AsyncSession, user_id: int) -> str:
+    """根据 User.id 查询 openid，未找到抛 NotFoundError。
+
+    作为公共辅助函数供 C 端路由（favorites/comments/feedbacks）复用，
+    统一异常类型，避免每个路由各自定义导致行为不一致。
+    """
+    result = await db.execute(select(User.openid).where(User.id == user_id))
+    openid = result.scalar_one_or_none()
+    if openid is None:
+        raise NotFoundError("用户不存在")
+    return openid
 
 
 class UserService:
@@ -25,9 +38,10 @@ class UserService:
             raise BizError(code=400, message="code 不能为空")
 
         # 小程序登录态由微信签发，必须回源校验 code 有效性
+        # URL 从 settings.WX_API_BASE 派生，避免硬编码（与 content_security_service 共用配置）
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
-                "https://api.weixin.qq.com/sns/jscode2session",
+                f"{settings.WX_API_BASE}/sns/jscode2session",
                 params={
                     "appid": settings.WX_APPID,
                     "secret": settings.WX_SECRET,

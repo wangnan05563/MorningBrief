@@ -151,3 +151,27 @@ backend/data/*.db
 backend/data/*.db-shm
 backend/data/*.db-wal
 backend/data/*.malformed.bak
+
+# ═══════════════════════════════════════════
+# 清理技能自动生成规则（防止调试产物复发）
+# ═══════════════════════════════════════════
+# Vite 临时配置缓存
+admin-web/vite.config.js.timestamp-*.mjs
+
+# 构建输出散落根目录
+/build_output.txt
+/build_output.log
+
+# 测试产物散落根目录（图片/音频/脚本）
+/test_tts.mp3
+/clear_test.py
+/generated_image.png
+/morning_brief_cycling.png
+
+# 异常命名文件（PowerShell 误重定向产物）
+/-w
+
+# SonarQube 调试输出（补充 *.log 未覆盖的 .txt 变体）
+/sonar-*.log
+/sonar-*.txt
+/pytest-output.log

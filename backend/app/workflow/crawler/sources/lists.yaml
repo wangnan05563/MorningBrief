@@ -36,6 +36,107 @@ sources:
     category_hint: 财经
     qps: 1
 
+
+  # === 军事/国防类 ===
+
+  - name: 新华社-军事
+    url: https://www.news.cn/mil/
+    authority: 0.92
+    list_selector: 'div.list_news li'
+    title_selector: 'a::text'
+    url_selector: 'a::attr(href)'
+    date_selector: 'span.time::text'
+    date_format: '%Y-%m-%d %H:%M'
+    category_hint: 军事
+    qps: 1
+
+  - name: 解放军报
+    url: http://www.81.cn/index/news.shtml
+    authority: 0.88
+    list_selector: 'ul.news_list li a'
+    title_selector: 'a::text'
+    url_selector: 'a::attr(href)'
+    date_selector: ''
+    date_format: ''
+    category_hint: 军事
+    qps: 1
+
+  # === 教育类（新增） ===
+
+  - name: 教育部官网新闻
+    url: https://www.moe.gov.cn/jyb_xxgk/
+    authority: 0.94
+    list_selector: 'div.zx_list ul li'
+    title_selector: 'a::text'
+    url_selector: 'a::attr(href)'
+    date_selector: 'span.date::text'
+    date_format: '%Y-%m-%d'
+    category_hint: 教育
+    qps: 1
+
+  - name: 光明网-教育频道
+    url: https://news.guangming.com.cn/edu/
+    authority: 0.86
+    list_selector: 'div.news-list li a'
+    title_selector: 'a::text'
+    url_selector: 'a::attr(href)'
+    date_selector: 'span.time::text'
+    date_format: '%Y-%m-%d %H:%M'
+    category_hint: 教育
+    qps: 1
+
+  # === 文化/文艺类 ===
+
+  - name: 文化中国
+    url: https://www.whcn.org/news/
+    authority: 0.75
+    list_selector: 'div.news-list li a'
+    title_selector: 'a::text'
+    url_selector: 'a::attr(href)'
+    date_selector: 'span.date::text'
+    date_format: '%Y-%m-%d'
+    category_hint: 文化
+    qps: 1
+
+  # === 环保/生态类 ===
+
+  - name: 生态环境部
+    url: https://www.mee.gov.cn/xxgk2018/xxgk/xxgk_1/
+    authority: 0.88
+    list_selector: 'div.news-list-item li a'
+    title_selector: 'a::text'
+    url_selector: 'a::attr(href)'
+    date_selector: 'span.list-time::text'
+    date_format: '%Y-%m-%d'
+    category_hint: 环保
+    qps: 1
+
+  # === 汽车类 ===
+
+  - name: 汽车之家-资讯
+    url: https://www.autohome.com.cn/news/
+    authority: 0.82
+    list_selector: 'div.list-2 li a.title'
+    title_selector: 'a::text'
+    url_selector: 'a::attr(href)'
+    date_selector: 'span.time::text'
+    date_format: '%Y-%m-%d'
+    category_hint: 汽车
+    qps: 1
+
+  # === 摄影/视觉类 ===
+
+  - name: 图虫社区-发现
+    url: https://tuchong.com/explore/
+    authority: 0.72
+    list_selector: 'div.post-list li a'
+    title_selector: 'a::text'
+    url_selector: 'a::attr(href)'
+    date_selector: ''
+    date_format: ''
+    category_hint: 摄影
+    qps: 1
+
 # 详情页正文提取（V1.2：selectolax 启发式提取，失败时回退到 RSS summary）
 article_parser:
   default_engine: selectolax

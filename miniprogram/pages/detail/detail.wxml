@@ -1,10 +1,10 @@
 <!-- 节目详情：信息卡片 + 播放控制 + 稿件懒加载 -->
 <view class="page-detail">
   <!-- 任务10：背景虚化层，取自 segments 第一张封面图，淡色滤镜柔化避免抢戏 -->
-  <view class="bg-blur-layer" wx:if="{{bgCoverUrl}}">
-    <image class="bg-blur-img" src="{{bgCoverUrl}}" mode="aspectFill" />
-    <view class="bg-blur-mask"></view>
-  </view>
+  <view class="bg-blur-layer">
+  <image class="bg-blur-img" lazy-load src="{{bgCoverUrl}}" mode="aspectFill" wx:if="{{bgCoverUrl}}" />
+  <view class="bg-blur-mask"></view>
+</view>
 
   <!-- 详情加载中 -->
   <view class="loading-mask" wx:if="{{loading}}">
@@ -13,7 +13,7 @@
 
   <!-- 详情加载失败 -->
   <view class="empty-state" wx:elif="{{error}}">
-    <image class="empty-icon-img" src="/images/icons/alert.png" mode="aspectFit" />
+    <image class="empty-icon-img" lazy-load src="/images/icons/alert.png" mode="aspectFit" />
     <text>{{error}}</text>
   </view>
 
@@ -26,7 +26,7 @@
       </view>
       <view class="episode-title">{{episode.title}}</view>
       <view class="episode-duration">
-        <image class="duration-icon" src="/images/icons/duration.png" mode="aspectFit" />
+        <image class="duration-icon" lazy-load src="/images/icons/duration.png" mode="aspectFit" />
         <text>时长 {{durationLabel}}</text>
       </view>
     </view>
@@ -35,20 +35,20 @@
     <view class="card play-card">
       <!-- 播放错误提示：音频丢失/不可访问时持久显示，避免 toast 消失后用户不知道原因 -->
       <view class="play-error-tip" wx:if="{{playError}}">
-        <image class="error-icon" src="/images/icons/alert.png" mode="aspectFit" />
+        <image class="error-icon" lazy-load src="/images/icons/alert.png" mode="aspectFit" />
         <text>{{playError}}</text>
       </view>
       <view class="play-row">
         <!-- 上一首按钮（队列未设置时隐藏） -->
         <view class="nav-btn" wx:if="{{hasPrev}}" bindtap="onPrev">
-          <image class="nav-icon" src="/images/icons/skip-back.png" mode="aspectFit" />
+          <image class="nav-icon" lazy-load src="/images/icons/skip-back.png" mode="aspectFit" />
         </view>
         <view class="play-btn" bindtap="onTogglePlay">
-          <image class="play-icon" src="{{isPlaying ? '/images/icons/pause.png' : '/images/icons/play.png'}}" mode="aspectFit" />
+          <image class="play-icon" lazy-load src="{{isPlaying ? '/images/icons/pause.png' : '/images/icons/play.png'}}" mode="aspectFit" />
         </view>
         <!-- 下一首按钮 -->
         <view class="nav-btn" wx:if="{{hasNext}}" bindtap="onNext">
-          <image class="nav-icon" src="/images/icons/skip-forward.png" mode="aspectFit" />
+          <image class="nav-icon" lazy-load src="/images/icons/skip-forward.png" mode="aspectFit" />
         </view>
         <view class="play-info">
           <slider
@@ -60,6 +60,7 @@
             backgroundColor="#E6F4F1"
             block-size="22"
             block-color="#7ECEC1"
+            bindinput="onSeekInput"
             bindchange="onSeek"
           />
           <view class="time-row">
@@ -75,7 +76,7 @@
           <text>{{currentRate}}x</text>
         </view>
         <view class="action-chip {{favorited ? 'active' : ''}}" bindtap="onToggleFavorite">
-          <image class="chip-icon" src="{{favorited ? '/images/icons/favorite-filled.png' : '/images/icons/favorite.png'}}" mode="aspectFit" />
+          <image class="chip-icon" lazy-load src="{{favorited ? '/images/icons/favorite-filled.png' : '/images/icons/favorite.png'}}" mode="aspectFit" />
           <text class="chip-label">{{favorited ? '已收藏' : '收藏'}}</text>
         </view>
         <view class="action-chip" bindtap="onOpenQueue">
@@ -83,7 +84,7 @@
           <text class="chip-label">列表</text>
         </view>
         <view class="action-chip {{sleepActive ? 'active' : ''}}" bindtap="onSleepTimer">
-          <image class="chip-icon" src="{{sleepActive ? '/images/icons/alarm.png' : '/images/icons/moon.png'}}" mode="aspectFit" />
+          <image class="chip-icon" lazy-load src="{{sleepActive ? '/images/icons/alarm.png' : '/images/icons/moon.png'}}" mode="aspectFit" />
           <text class="chip-label" wx:if="{{sleepActive}}">{{sleepLabel}}</text>
           <text class="chip-label" wx:else>定时</text>
         </view>
@@ -97,7 +98,10 @@
       <!-- 未加载：展示入口按钮 -->
       <view class="script-entry" wx:if="{{!scriptLoaded}}">
         <view class="btn-secondary script-btn" bindtap="onLoadScript">
-          {{scriptLoading ? '加载中...' : '查看完整文稿'}}
+          <view class="btn-content">
+            <image class="btn-icon" src="/images/icons/btn-script-mint.png" mode="aspectFit" />
+            <text>{{scriptLoading ? '加载中...' : '查看完整文稿'}}</text>
+          </view>
         </view>
       </view>
 
@@ -129,7 +133,7 @@
         <view class="source-item" wx:for="{{sources}}" wx:key="seq">
           <text class="source-seq">{{item.seq}}</text>
           <view class="source-info">
-            <!-- 标题可点击跳转原站：有 url 时显示链接样式 + 图标提示 -->
+            <!-- 标题可点击复制链接：有 url 时显示链接样式 + 外链图标提示 -->
             <view
               class="source-title-row"
               wx:if="{{item.url}}"
@@ -175,6 +179,7 @@
           <!-- 头像 -->
           <image
             class="comment-avatar"
+            lazy-load
             src="{{item.user_avatar || '/images/icons/favorite.png'}}"
             mode="aspectFill"
             data-url="{{item.user_avatar}}"
@@ -191,6 +196,7 @@
             <view class="comment-like" data-id="{{item.id}}" data-index="{{index}}" bindtap="onLikeComment">
               <image
                 class="like-icon"
+                lazy-load
                 src="{{item.liked ? '/images/icons/favorite-filled.png' : '/images/icons/favorite.png'}}"
                 mode="aspectFit"
               />
@@ -209,10 +215,58 @@
       </view>
     </view>
 
+<!-- 播放队列弹窗 -->
+<view class="queue-modal-mask {{showQueueModal ? 'visible' : ''}}" bindtap="onCloseQueueModal" catchtouchmove="preventTouchMove">
+  <view class="queue-modal-container" catchtap="stopPropagation">
+    <!-- 弹窗头部 -->
+    <view class="queue-modal-header">
+      <text class="queue-modal-title">播放队列</text>
+      <text class="queue-modal-count">{{queue.length}} 首</text>
+      <view class="queue-modal-close clear-btn" bindtap="onClearQueue" wx:if="{{queue.length > 0}}">清空</view>
+    </view>
+
+    <!-- 空状态 -->
+    <view class="queue-modal-empty" wx:if="{{queue.length === 0}}">
+      <image class="empty-icon-img" lazy-load src="/images/icons/music.png" mode="aspectFit" />
+      <text>队列为空</text>
+    </view>
+
+    <!-- 队列列表 -->
+    <scroll-view scroll-y class="queue-modal-list" wx:else>
+      <view
+        class="queue-modal-item {{index === currentIndex ? 'current' : ''}}"
+        wx:for="{{queue}}"
+        wx:key="index"
+        data-index="{{index}}"
+        bindtap="onQueueItemClick"
+      >
+        <view class="qm-item-index">
+          <image wx:if="{{index === currentIndex}}" class="qm-playing-icon" lazy-load src="/images/icons/play-mini.png" mode="aspectFit" />
+          <text wx:else>{{index + 1}}</text>
+        </view>
+        <view class="qm-item-info">
+          <text class="qm-item-title">{{item.title}}</text>
+          <text class="qm-item-date">{{item.date}}</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</view>
+
     <!-- 底部操作 -->
     <view class="footer-actions">
-      <button class="btn-primary footer-btn" open-type="share">分享节目</button>
-      <view class="btn-secondary footer-btn" bindtap="onBackHome">返回首页</view>
+      <button class="btn-primary footer-btn" open-type="share" hover-class="none">
+        <view class="btn-content">
+          <image class="btn-icon" src="/images/icons/btn-share.png" mode="aspectFit" />
+          <text>分享节目</text>
+        </view>
+      </button>
+      <view class="btn-secondary footer-btn" bindtap="onBackHome">
+        <view class="btn-content">
+          <image class="btn-icon" src="/images/icons/btn-home-mint.png" mode="aspectFit" />
+          <text>返回首页</text>
+        </view>
+      </view>
     </view>
   </block>
 </view>

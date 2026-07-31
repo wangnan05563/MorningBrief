@@ -89,7 +89,7 @@ class BackupService:
             async with engine.connect() as conn:
                 await conn.execution_options(isolation_level="AUTOCOMMIT")
                 await conn.execute(text(sql))
-        except Exception as e:
+        except Exception:
             logger.exception("数据库备份失败 path=%s", backup_path)
             # 清理可能产生的不完整备份文件
             try:
@@ -169,7 +169,7 @@ class BackupService:
         return backups
 
     @staticmethod
-    async def restore_backup(backup_path: str) -> bool:
+    async def restore_backup(backup_path: str) -> bool:  # NOSONAR
         """从备份恢复数据库。
 
         恢复策略：

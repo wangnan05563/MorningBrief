@@ -48,9 +48,13 @@
       class="btn-primary submit-btn {{submitting ? 'disabled' : ''}}"
       disabled="{{submitting}}"
       bindtap="onSubmit"
+      hover-class="none"
     >
-      <text wx:if="{{submitting}}" class="submit-loading">提交中...</text>
-      <text wx:else>提交反馈</text>
+      <view class="btn-content">
+        <image class="btn-icon" src="/images/icons/btn-send.png" mode="aspectFit" />
+        <text wx:if="{{submitting}}" class="submit-loading">提交中...</text>
+        <text wx:else>提交反馈</text>
+      </view>
     </button>
   </view>
 </view>

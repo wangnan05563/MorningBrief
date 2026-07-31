@@ -1,7 +1,7 @@
 # 阿里云 TTS 音色配置
 # voice_id: 阿里云内置音色 ID
 # sample_rate: 采样率（统一 44100，避免拼接爆音）
-# format: 输出格式（统一 mp3 128kbps）
+# format: 输出格式（统一 mp3，码率由 settings.AUDIO_BITRATE 控制，默认 64kbps）
 
 default_voice: xiaoyun
 

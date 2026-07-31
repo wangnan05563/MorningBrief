@@ -1,0 +1,113 @@
+/**
+ * 偏爱频道设置页样式
+ * 复用全局 .card 卡片基础样式，仅扩展多选交互相关元素：
+ * - tip-bar：顶部说明条
+ * - channel-item：点击切换选中态，选中时整体高亮
+ * - check-box / check-icon：右上角勾选标记
+ * - bottom-bar：固定底部操作栏（全选/保存）
+ */
+.page-preferred-settings {
+  padding-bottom: 140rpx; /* 给底部操作栏留位，避免最后一项被遮 */
+}
+
+.tip-bar {
+  margin: 24rpx;
+  padding: 20rpx 28rpx;
+  background: #EAF7F4;
+  border-radius: 16rpx;
+}
+.tip-text {
+  font-size: 26rpx;
+  color: #5BA89B;
+}
+
+.channel-list {
+  margin-top: 8rpx;
+}
+
+/* 单个频道卡片：复用全局 .card，此处仅扩展选中态 */
+.channel-item {
+  display: flex;
+  align-items: center;
+  transition: background 0.2s, border-color 0.2s;
+  border: 2rpx solid transparent;
+}
+.channel-item.selected {
+  background: #F4FBF9;
+  border-color: #7ECEC1;
+}
+
+.channel-info {
+  flex: 1;
+  min-width: 0; /* 让 text 省略号生效 */
+}
+.channel-name {
+  font-size: 30rpx;
+  font-weight: 500;
+  color: #2D3748;
+  margin-bottom: 8rpx;
+}
+.channel-desc {
+  font-size: 24rpx;
+  color: #A0AEC0;
+}
+
+/* 勾选标记：未选时是浅灰描边圆，选中时填充薄荷青 */
+.check-box {
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 50%;
+  border: 2rpx solid #CBD5E0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #FFFFFF;
+  flex-shrink: 0;
+  margin-left: 24rpx;
+}
+.check-box.checked {
+  background: #5BA89B;
+  border-color: #5BA89B;
+}
+.check-icon {
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* 底部操作栏：固定在屏幕底部，与 floating-player 错开 */
+.bottom-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding: 20rpx 32rpx;
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  background: #FFFFFF;
+  box-shadow: 0 -4rpx 16rpx rgba(126, 206, 193, 0.12);
+  z-index: 100;
+}
+.select-all-btn {
+  flex-shrink: 0;
+  padding: 16rpx 24rpx;
+  color: #5BA89B;
+  font-size: 28rpx;
+}
+.save-btn {
+  flex: 1;
+  margin-left: 16rpx;
+  padding: 22rpx 0;
+  text-align: center;
+  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  color: #FFFFFF;
+  border-radius: 40rpx;
+  font-size: 30rpx;
+  font-weight: 500;
+}
+.save-btn.disabled {
+  background: #E2E8F0;
+  color: #A0AEC0;
+}

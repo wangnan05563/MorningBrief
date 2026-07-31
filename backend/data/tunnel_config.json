@@ -1,7 +1,13 @@
 {
-  "provider": "cloudflare",
+  "provider": "tailscale",
   "local_port": 0,
   "cpolar_authtoken": "test_token_12345",
   "binary_path": "",
-  "auto_start": false
+  "auto_start": true,
+  "tunnel_mode": "quick",
+  "tunnel_name": "",
+  "tunnel_id": "",
+  "credentials_file": "",
+  "hostname": "",
+  "cert_file": ""
 }

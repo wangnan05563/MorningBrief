@@ -1,4 +1,4 @@
-﻿"""C 端收藏路由。
+"""C 端收藏路由。
 
 设计原因：
 - Favorite 模型 user_id 字段为 openid 字符串（与历史 SCF/COS 路径对齐），
@@ -16,6 +16,7 @@ from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
 from app.database import get_db
 from app.models import Favorite, Episode, EpisodeStatus
+from app.services.user_service import get_user_openid
 
 router = APIRouter(prefix="/api/v1/favorites", tags=["C端-收藏"])
 
@@ -23,19 +24,6 @@ router = APIRouter(prefix="/api/v1/favorites", tags=["C端-收藏"])
 class FavoriteRequest(BaseModel):
     """添加收藏请求体。"""
     episode_id: int
-
-
-async def _get_user_openid(db: AsyncSession, user_id: int) -> str:
-    """根据 User.id 查询 openid，作为 favorite.user_id 存储。
-
-    Favorite 表历史沿用 openid 字符串作为 user_id，保持向后兼容。
-    """
-    from app.models import User
-    result = await db.execute(select(User.openid).where(User.id == user_id))
-    openid = result.scalar_one_or_none()
-    if openid is None:
-        raise NotFoundError("用户不存在")
-    return openid
 
 
 @router.get("")
@@ -46,7 +34,7 @@ async def list_favorites(
     db: AsyncSession = Depends(get_db),
 ):
     """收藏列表分页：返回 episode_id 与收藏时间，前端按需拉详情。"""
-    openid = await _get_user_openid(db, user.user_id)
+    openid = await get_user_openid(db, user.user_id)
 
     count_result = await db.execute(
         select(func.count(Favorite.id)).where(Favorite.user_id == openid)
@@ -97,7 +85,7 @@ async def add_favorite(
     db: AsyncSession = Depends(get_db),
 ):
     """添加收藏：幂等，已收藏则直接返回成功。"""
-    openid = await _get_user_openid(db, user.user_id)
+    openid = await get_user_openid(db, user.user_id)
 
     ep_result = await db.execute(
         select(Episode).where(
@@ -132,7 +120,7 @@ async def remove_favorite(
     db: AsyncSession = Depends(get_db),
 ):
     """取消收藏：幂等，不存在也返回成功。"""
-    openid = await _get_user_openid(db, user.user_id)
+    openid = await get_user_openid(db, user.user_id)
 
     await db.execute(
         delete(Favorite).where(
@@ -157,7 +145,7 @@ async def check_favorite(
     if user is None:
         return success(data={"favorited": False})
 
-    openid = await _get_user_openid(db, user.user_id)
+    openid = await get_user_openid(db, user.user_id)
 
     result = await db.execute(
         select(Favorite.id).where(

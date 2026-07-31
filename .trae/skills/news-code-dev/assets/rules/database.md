@@ -177,3 +177,73 @@ engine = create_async_engine(
     pool_pre_ping=True,    # 使用前检查连接有效性
 )
 ```
+
+## 外键约束防御性处理
+
+### 不依赖 SQLite PRAGMA foreign_keys 开关，手动处理关联表
+
+**为什么**：SQLite 默认不开启 `PRAGMA foreign_keys = ON`，且项目测试环境也未开启此开关。如果代码依赖外键约束的 `ON DELETE CASCADE` 或 `ON DELETE SET NULL` 行为，在测试环境会出现父记录删除后子表外键仍指向已删除记录的问题。手动处理关联表保证测试环境与生产环境行为一致，不依赖数据库配置开关。
+
+**判断逻辑**：
+- 不依赖 `PRAGMA foreign_keys` 开关，手动处理关联表的外键
+- 删除父记录前必须先 UPDATE 子表外键为 NULL（或删除子表记录）
+- 测试环境默认未开启 `PRAGMA foreign_keys`，手动 UPDATE 保证行为一致
+
+**固定流程**：
+1. 识别父表与子表的关联关系（外键约束）
+2. 删除父记录前，先 UPDATE 子表外键为 NULL（或按业务删除子表记录）
+3. 再 DELETE 父表记录
+4. 整个流程用事务包裹，保证原子性
+
+**正确做法**：
+```python
+# ✅ 删除父记录前先 UPDATE 子表外键为 NULL
+async def delete_channel(db: AsyncSession, channel_id: int) -> None:
+    """删除频道，手动处理关联表外键。
+
+    不依赖 PRAGMA foreign_keys 开关，手动 UPDATE 保证测试/生产行为一致。
+    """
+    async with db.begin():
+        # 1. 先 UPDATE 子表外键为 NULL
+        await db.execute(
+            update(Material)
+            .where(Material.channel_id == channel_id)
+            .values(channel_id=None)
+        )
+        await db.execute(
+            update(PlayProgress)
+            .where(PlayProgress.channel_id == channel_id)
+            .values(channel_id=None)
+        )
+        # 2. 再 DELETE 父表记录
+        await db.execute(
+            delete(Channel).where(Channel.id == channel_id)
+        )
+```
+
+**错误做法**：
+```python
+# ❌ 依赖 PRAGMA foreign_keys ON DELETE SET NULL，测试环境未开启会失败
+async def delete_channel(db: AsyncSession, channel_id: int) -> None:
+    async with db.begin():
+        # 直接删除父记录，依赖外键约束自动 SET NULL
+        # 测试环境 PRAGMA foreign_keys 默认 OFF，子表外键仍指向已删除记录
+        await db.execute(
+            delete(Channel).where(Channel.id == channel_id)
+        )
+
+# ❌ 仅开启 PRAGMA 但不手动处理，生产环境切换数据库时可能失效
+async def delete_channel(db: AsyncSession, channel_id: int) -> None:
+    await db.execute(text("PRAGMA foreign_keys = ON"))  # 仅当前连接生效
+    await db.execute(delete(Channel).where(Channel.id == channel_id))
+    # 连接池复用时其他连接未开启 PRAGMA，行为不一致
+```
+
+**规则**：
+- 不依赖 `PRAGMA foreign_keys` 开关，手动处理关联表外键
+- 删除父记录前必须先 UPDATE 子表外键为 NULL（或删除子表记录）
+- 整个流程用事务包裹（`async with db.begin()`），保证原子性
+- 多个关联表按依赖顺序处理（先处理叶子表，再处理中间表，最后处理父表）
+
+**适用场景**：测试环境与生产环境外键约束行为不一致的场景；SQLite 单机部署项目
+**不适用场景**：明确开启外键约束且数据完整性要求高的场景（如金融系统）；PostgreSQL/MySQL 等默认开启外键约束的数据库

@@ -75,6 +75,40 @@
 
 **合并结论**：[允许合并 / 阻止合并（存在 CRITICAL 违规）]
 
+## V2.4 新增维度检查结果（维度 101-103）
+
+> 基于 2026-07-22 频道管理与表单类型契约复盘新增的 3 个审查维度。配置详见 `config.yaml#switch_type_contract_check`、`config.yaml#api_timeout_override_check`、`config.yaml#channel_form_init_check`。违规条目末尾标注 `[V2.4 新增]` 便于迭代追溯。
+
+### 维度 101：el-switch 类型契约
+
+| 检查项 | 状态 | 违规位置 | 修复建议 |
+|--------|------|----------|----------|
+| el-switch 显式声明 :active-value/:inactive-value | ✅ 通过 / ❌ 违规 | - | 显式声明 `:active-value="1" :inactive-value="0"` 与后端 int 类型一致 |
+| active-value/inactive-value 类型与后端字段一致 | ✅ 通过 / ❌ 违规 | - | 后端 int 0/1 → 前端 `:active-value="1" :inactive-value="0"` |
+| form 初始值类型与 active-value 一致 | ✅ 通过 / ❌ 违规 | - | `form.is_active = 1` 而非 `true` |
+| @change 回调参数类型与 active-value 一致 | ✅ 通过 / ❌ 违规 | - | `val` 为整数 1/0 |
+| handleToggle 回滚逻辑与 active-value 类型匹配 | ✅ 通过 / ❌ 违规 | - | `val === 1 ? 0 : 1` 而非 `!val` |
+| openEdit 中 form 字段转换为 active-value 一致类型 | ✅ 通过 / ❌ 违规 | - | `row.is_active ? 1 : 0` |
+
+### 维度 102：请求级超时配置
+
+| 检查项 | 状态 | 违规位置 | 修复建议 |
+|--------|------|----------|----------|
+| 长耗时接口（AI 生成/上传/批量）请求级 timeout 覆盖默认值 | ✅ 通过 / ❌ 违规 | - | AI 生成 `{ timeout: 120000 }`、上传 `{ timeout: 60000 }`、批量 `{ timeout: 30000 }` |
+| 请求级 timeout ≥ 后端接口超时时间 | ✅ 通过 / ❌ 违规 | - | 前端 timeout 必须 ≥ 后端超时，避免前端先超时 |
+| timeout 值从配置文件读取（非硬编码） | ✅ 通过 / ❌ 违规 | - | 从 `config.yaml#api_timeout_override_check.recommended_timeout_ms` 读取 |
+
+### 维度 103：频道级表单字段初始化
+
+| 检查项 | 状态 | 违规位置 | 修复建议 |
+|--------|------|----------|----------|
+| openEdit 中 form 字段转换为后端类型（`row.is_active ? 1 : 0`） | ✅ 通过 / ❌ 违规 | - | 禁止直接赋值 `form.is_active = row.is_active`，必须类型转换 |
+| handleSubmit 编辑分支直接使用 form 值（不二次转换） | ✅ 通过 / ❌ 违规 | - | `is_active: form.is_active` 而非 `is_active: form.is_active ? 1 : 0` |
+| resetForm 初始化类型与 active-value 一致 | ✅ 通过 / ❌ 违规 | - | `is_active: 1` 而非 `true` |
+| 频道字段为空时 fallback 到空字符串 | ✅ 通过 / ❌ 违规 | - | `row.schedule_time \|\| ''`、`row.intro_prompt \|\| ''` |
+
+**合并结论**：[允许合并 / 阻止合并（存在维度 101 CRITICAL 违规）]
+
 ## 抽象建议触发情况
 
 基于 `abstraction_thresholds` 阈值检查：
@@ -258,3 +292,5 @@ pwsh .trae/skills/news-frontend-code-review/scripts/auto-scan.ps1
 | 警告 (warning) | fix_next_iteration | ✗ |
 | 建议 (suggestion) | log_only | ✗ |
 | 信息 (info) | log_only | ✗ |
+
+> 技能专属审查章节已迁移至统一模板：[_shared/templates/report-template.md](../_shared/templates/report-template.md)

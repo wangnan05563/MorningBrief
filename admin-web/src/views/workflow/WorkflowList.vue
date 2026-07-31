@@ -54,6 +54,16 @@
         <el-button :icon="Refresh" @click="resetFilters">重置</el-button>
       </div>
       <div class="top-actions">
+        <!-- 全频道启动：仅 admin 可见，醒目绿色按钮，确认弹窗防误操作 -->
+        <el-button
+          v-if="userStore.isAdmin"
+          type="success"
+          :icon="Promotion"
+          :loading="triggeringAll"
+          @click="handleTriggerAll"
+        >
+          全频道启动
+        </el-button>
         <el-button
           v-if="userStore.isAdmin"
           type="primary"
@@ -85,17 +95,20 @@
     <el-card shadow="never">
       <!--
         el-table 多选模式：
+        - row-key + reserve-selection：列表刷新后选中状态自动保留（按 id 匹配而非对象引用）
+          修复 loadList 重新拉数据后 selectedRows 引用失效导致勾选消失的问题
         - @selection-change 同步选中行到 selectedRows
         - ref 用于删除后调用 clearSelection() 重置选中状态
       -->
       <el-table
         ref="tableRef"
         :data="list"
+        row-key="id"
         v-loading="loading"
         stripe
         @selection-change="handleSelectionChange"
       >
-        <el-table-column type="selection" width="48" />
+        <el-table-column type="selection" width="48" :reserve-selection="true" />
         <el-table-column label="工作流 ID" width="180">
           <template #default="{ row }">
             <!-- 点击跳详情：使用 replace 避免列表页堆积历史 -->
@@ -153,6 +166,71 @@
         />
       </div>
     </el-card>
+
+    <!-- 全频道触发结果对话框：统计概览 + 三类详情 Tab + 失败重试 -->
+    <el-dialog
+      v-model="triggerAllDialogVisible"
+      title="全频道触发结果"
+      width="720px"
+      :close-on-click-modal="false"
+    >
+      <div v-if="triggerAllResult" class="trigger-all-result">
+        <!-- 统计概览：四个色块直观展示触发结果分布 -->
+        <div class="result-summary">
+          <div class="stat-item">
+            <span class="stat-value">{{ triggerAllResult.total }}</span>
+            <span class="stat-label">总频道数</span>
+          </div>
+          <div class="stat-item stat-success">
+            <span class="stat-value">{{ triggerAllResult.triggered.length }}</span>
+            <span class="stat-label">成功触发</span>
+          </div>
+          <div class="stat-item stat-info">
+            <span class="stat-value">{{ triggerAllResult.skipped.length }}</span>
+            <span class="stat-label">已跳过</span>
+          </div>
+          <div class="stat-item stat-danger">
+            <span class="stat-value">{{ triggerAllResult.failed.length }}</span>
+            <span class="stat-label">失败</span>
+          </div>
+        </div>
+        <!-- 详情列表：按成功/跳过/失败分 Tab 展示 -->
+        <el-tabs>
+          <el-tab-pane :label="`成功 (${triggerAllResult.triggered.length})`">
+            <el-table :data="triggerAllResult.triggered" size="small" max-height="280">
+              <el-table-column prop="channel_name" label="频道" width="180" />
+              <el-table-column prop="workflow_id" label="工作流 ID" />
+            </el-table>
+          </el-tab-pane>
+          <el-tab-pane :label="`跳过 (${triggerAllResult.skipped.length})`">
+            <el-table :data="triggerAllResult.skipped" size="small" max-height="280">
+              <el-table-column prop="channel_name" label="频道" width="180" />
+              <el-table-column prop="reason" label="跳过原因" />
+            </el-table>
+          </el-tab-pane>
+          <el-tab-pane :label="`失败 (${triggerAllResult.failed.length})`">
+            <el-table :data="triggerAllResult.failed" size="small" max-height="280">
+              <el-table-column prop="channel_name" label="频道" width="180" />
+              <el-table-column prop="error" label="错误信息" show-overflow-tooltip />
+            </el-table>
+            <!-- 失败重试：仅在有失败频道时显示 -->
+            <div v-if="triggerAllResult.failed.length > 0" class="retry-bar">
+              <el-button
+                type="warning"
+                :icon="RefreshRight"
+                :loading="retrying"
+                @click="retryFailedChannels"
+              >
+                重试失败频道
+              </el-button>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
+      </div>
+      <template #footer>
+        <el-button @click="triggerAllDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -160,10 +238,11 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
-import { VideoPlay, Delete, Refresh } from '@element-plus/icons-vue'
+import { VideoPlay, Delete, Refresh, Promotion, RefreshRight } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
 import api from '../../api'
 import { listChannels } from '../../api/channels'
+import { triggerAllWorkflows, triggerWorkflow } from '../../api/workflow'
 import { subscribe, broadcastLocal } from '../../utils/sse'
 import { cleanupLoadingMasks } from '../../utils/window-guard'
 import { formatTime } from '../../utils/format'
@@ -175,6 +254,11 @@ const userStore = useUserStore()
 const loading = ref(false)
 const triggering = ref(false)
 const deleting = ref(false)
+// 全频道触发相关状态
+const triggeringAll = ref(false)
+const triggerAllDialogVisible = ref(false)
+const triggerAllResult = ref(null)
+const retrying = ref(false)
 const list = ref([])
 const total = ref(0)
 const page = ref(1)
@@ -236,8 +320,10 @@ function statusLabel(s) {
   return STATUS_LABEL_MAP[s] || s
 }
 
-async function loadList() {
-  loading.value = true
+// silent=true 时为轮询调用：不显示整表遮罩、不弹错误提示
+// 实现进度字段局部刷新：仅更新数据，不触发 v-loading 整表卡死
+async function loadList(silent = false) {
+  if (!silent) loading.value = true
   try {
     const params = { page: page.value, size: size.value }
     if (filterChannelId.value !== null) {
@@ -252,13 +338,14 @@ async function loadList() {
     if (filterSource.value) {
       params.source = filterSource.value
     }
-    const data = await api.get('/workflows', { params })
+    const data = await api.get('/workflows', { params, silent })
     list.value = data.list || []
     total.value = data.total || 0
 
     // 安全页码修正：删除后当前页可能变空（如第 3 页只剩 1 条被删），
     // 此时回退到上一页避免用户面对空白列表
-    if (list.value.length === 0 && page.value > 1) {
+    // 仅在非 silent 模式下递归修正，避免轮询中递归 loadList(true)
+    if (!silent && list.value.length === 0 && page.value > 1) {
       page.value -= 1
       await loadList()
     }
@@ -266,7 +353,7 @@ async function loadList() {
     // 根据最新列表状态启停轮询：有活跃工作流时启动，全部终态时停止
     startPollingIfNeeded()
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 
@@ -290,6 +377,87 @@ async function handleTrigger() {
     await loadList()
   } finally {
     triggering.value = false
+  }
+}
+
+async function handleTriggerAll() {
+  // 二次确认：全频道触发影响范围大，需明确告知用户系统行为
+  try {
+    await ElMessageBox.confirm(
+      '确认立即触发所有活跃频道的工作流？\n\n' +
+      '系统将跳过当日已有运行中工作流的频道，\n' +
+      '失败频道可在结果对话框中重试。',
+      '全频道启动',
+      { type: 'warning', confirmButtonText: '确认启动', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+
+  triggeringAll.value = true
+  try {
+    const data = await triggerAllWorkflows()
+    triggerAllResult.value = data
+    triggerAllDialogVisible.value = true
+
+    // 有触发成功时刷新列表，让用户看到新创建的工作流
+    if (data.triggered.length > 0) {
+      page.value = 1
+      await loadList()
+    }
+
+    ElMessage.success(
+      `触发完成：成功 ${data.triggered.length} | 跳过 ${data.skipped.length} | 失败 ${data.failed.length}`
+    )
+  } finally {
+    triggeringAll.value = false
+  }
+}
+
+async function retryFailedChannels() {
+  if (!triggerAllResult.value || triggerAllResult.value.failed.length === 0) return
+
+  retrying.value = true
+  try {
+    const failedList = triggerAllResult.value.failed
+    // 并发重试所有失败频道：与全频道触发一致，trigger_workflow 仅入队不阻塞
+    const retryResults = await Promise.allSettled(
+      failedList.map((ch) => triggerWorkflow(ch.channel_id))
+    )
+
+    // 分类重试结果：成功的移到 triggered，仍失败的更新 error 信息
+    const newTriggered = []
+    const stillFailed = []
+    retryResults.forEach((result, idx) => {
+      if (result.status === 'fulfilled') {
+        newTriggered.push({
+          channel_id: failedList[idx].channel_id,
+          channel_name: failedList[idx].channel_name,
+          workflow_id: result.value.workflow_id,
+        })
+      } else {
+        stillFailed.push({
+          ...failedList[idx],
+          error: result.reason?.message || '重试失败',
+        })
+      }
+    })
+
+    triggerAllResult.value = {
+      ...triggerAllResult.value,
+      triggered: [...triggerAllResult.value.triggered, ...newTriggered],
+      failed: stillFailed,
+    }
+
+    if (newTriggered.length > 0) {
+      ElMessage.success(`重试成功 ${newTriggered.length} 个频道`)
+      page.value = 1
+      await loadList()
+    } else if (stillFailed.length > 0) {
+      ElMessage.error(`重试失败 ${stillFailed.length} 个频道`)
+    }
+  } finally {
+    retrying.value = false
   }
 }
 
@@ -343,11 +511,12 @@ function setupSSE() {
   ]
   const handlers = eventTypes.map((type) =>
     subscribe(type, () => {
-      if (!document.hidden) loadList()
+      // SSE 事件触发时使用 silent 刷新：不显示整表遮罩，不弹错误提示
+      if (!document.hidden) loadList(true)
     })
   )
   unsubscribeLocalDelete = subscribe('local.workflow.deleted', () => {
-    if (!document.hidden) loadList()
+    if (!document.hidden) loadList(true)
   })
   unsubscribeSse = () => {
     handlers.forEach((fn) => fn())
@@ -358,6 +527,8 @@ function setupSSE() {
 // ===== 轮询兜底：SSE 断连或漏事件时仍能感知工作流状态变化 =====
 // 仅当列表中存在 running/queued 工作流时启动 5s 轮询，全部终态时停止
 // 避免无工作流运行时持续轮询浪费资源
+// 轮询使用 silent 模式：不显示 v-loading 整表遮罩，避免遮罩残留导致"卡死"
+// 仅更新 list 数据 + row-key + reserve-selection 自动保留勾选状态
 let pollTimer = null
 const RUNNING_STATUSES = new Set(['running', 'queued'])
 
@@ -373,9 +544,9 @@ function startPollingIfNeeded() {
     return
   }
   if (!pollTimer && hasActiveWorkflow()) {
-    // 有活跃工作流，启动 5s 轮询
+    // 有活跃工作流，启动 5s 轮询（silent=true 局部刷新）
     pollTimer = setInterval(() => {
-      if (!document.hidden) loadList()
+      if (!document.hidden) loadList(true)
     }, 5000)
   }
 }
@@ -395,11 +566,15 @@ function handleVisibilityChange() {
     loading.value = false
     triggering.value = false
     deleting.value = false
+    triggeringAll.value = false
+    retrying.value = false
     // 直接清理所有残留 mask（包括当前页面外的，保持全局一致性）
     cleanupLoadingMasks()
     // rAF 等待浏览器完成一帧渲染后加载新数据，确保 mask 清理后立即重建数据
+    // 使用 silent=true：避免恢复可见时立即触发整表遮罩，造成"卡死"观感
+    // reserve-selection 会自动保留勾选状态，无需担心丢失
     requestAnimationFrame(() => {
-      loadList()
+      loadList(true)
       startPollingIfNeeded()
     })
   }
@@ -473,6 +648,48 @@ onUnmounted(() => {
     display: flex;
     justify-content: flex-end;
     margin-top: 16px;
+  }
+}
+</style>
+
+<!-- 非 scoped：el-dialog 默认 teleport 到 body，scoped 样式无法穿透 -->
+<style lang="scss">
+.trigger-all-result {
+  .result-summary {
+    display: flex;
+    justify-content: space-around;
+    margin-bottom: 20px;
+    padding: 20px 16px;
+    background: var(--el-fill-color-light);
+    border-radius: 8px;
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+
+      .stat-value {
+        font-size: 28px;
+        font-weight: 600;
+        color: var(--el-text-color-primary);
+        line-height: 1.2;
+      }
+
+      .stat-label {
+        font-size: 13px;
+        color: var(--el-text-color-secondary);
+      }
+
+      &.stat-success .stat-value { color: var(--el-color-success); }
+      &.stat-info .stat-value { color: var(--el-color-info); }
+      &.stat-danger .stat-value { color: var(--el-color-danger); }
+    }
+  }
+
+  .retry-bar {
+    margin-top: 12px;
+    text-align: right;
   }
 }
 </style>

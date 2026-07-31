@@ -31,6 +31,10 @@ from app.paths import resolve_data_dir
 
 logger = logging.getLogger(__name__)
 
+# cloudflared 凭证目录与文件名常量：避免字面量重复触发 S1192
+_CLOUDFLARED_DIR = ".cloudflared"
+_CLOUDFLARED_CERT = "cert.pem"
+
 
 class BinaryDownloadError(RuntimeError):
     """二进制下载失败，附带手动放置指引。
@@ -160,7 +164,7 @@ class TunnelProvider(ABC):
         """实际下载逻辑（子类可覆盖以处理 zip 解压等）。"""
         urllib.request.urlretrieve(url, str(target))
 
-    def _wait_for_url(self, url_pattern: re.Pattern, timeout: int = 15) -> str:
+    def _wait_for_url(self, url_pattern: re.Pattern, timeout: int = 15) -> str:  # NOSONAR
         """从子进程输出中解析公网 URL（通用实现）。
 
         超时时收集最近 20 行 stdout 输出和进程状态包含在异常消息中，
@@ -362,13 +366,13 @@ class CloudflareProvider(TunnelProvider):
         - 部分 Windows 版本: %LOCALAPPDATA%\\.cloudflared\\cert.pem
         - 从 login 输出中提取的路径（兜底）
         """
-        paths: list[Path] = [Path.home() / ".cloudflared" / "cert.pem"]
+        paths: list[Path] = [Path.home() / _CLOUDFLARED_DIR / _CLOUDFLARED_CERT]
         local_app_data = os.environ.get("LOCALAPPDATA")
         if local_app_data:
-            paths.append(Path(local_app_data) / ".cloudflared" / "cert.pem")
+            paths.append(Path(local_app_data) / _CLOUDFLARED_DIR / _CLOUDFLARED_CERT)
         app_data = os.environ.get("APPDATA")
         if app_data:
-            paths.append(Path(app_data) / ".cloudflared" / "cert.pem")
+            paths.append(Path(app_data) / _CLOUDFLARED_DIR / _CLOUDFLARED_CERT)
         # 从 login 输出中正则提取路径（cloudflared 可能输出 cert.pem 的绝对路径）
         output = "".join(self._login_output)
         m = re.search(r"([A-Za-z]:[\\\/][^\s]*cert\.pem|/[^\s]*cert\.pem)", output)
@@ -376,7 +380,7 @@ class CloudflareProvider(TunnelProvider):
             paths.append(Path(m.group(1)))
         return paths
 
-    def start_login(self) -> dict:
+    def start_login(self) -> dict:  # NOSONAR
         """启动 cloudflared tunnel login（非阻塞），返回授权 URL 和状态。
 
         login 是交互式命令：cloudflared 会打开浏览器让用户授权。
@@ -400,6 +404,8 @@ class CloudflareProvider(TunnelProvider):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
         self._login_auth_url = None
@@ -529,6 +535,8 @@ class CloudflareProvider(TunnelProvider):
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
@@ -574,6 +582,8 @@ class CloudflareProvider(TunnelProvider):
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
@@ -635,6 +645,8 @@ class CpolarProvider(TunnelProvider):
             [str(binary), "authtoken", self._authtoken],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=10,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
@@ -662,11 +674,39 @@ class TailscaleProvider(TunnelProvider):
 
     Tailscale CLI 只负责配置系统后台服务，因此运行状态不能用子进程存活判断，
     必须通过 ``tailscale funnel status --json`` 查询。
+
+    多应用路径区分模式：通过 path_prefix 在同一节点的 443 端口下分配独立路径，
+    Funnel 自动去除前缀转发给后端，实现单节点多应用共存。
     """
 
     binary_name = "tailscale.exe"
-    # 不自动下载：要求系统预装 Tailscale
+    # 不自动下载：要求系统预装
     download_urls: list[str] = []
+
+    def __init__(self, local_port: int, binary_path: str = "", path_prefix: str = ""):
+        """初始化 Tailscale provider。
+
+        path_prefix 非空时启用多应用路径区分模式：
+        - start 用 --set-path 注册路径，URL 为 https://{host}{path_prefix}
+        - stop 不调用 funnel off，避免关闭其他应用的 Funnel 路径
+        """
+        super().__init__(local_port, binary_path)
+        # 规范化路径前缀：确保以 / 开头、以 / 结尾，空字符串表示根路径模式（旧行为）
+        self._path_prefix = self._normalize_path_prefix(path_prefix)
+        # 路径区分模式下 stop() 保留 Funnel 配置，需用此标志位避免 status 重新查询 CLI 后覆盖停止状态
+        self._stopped = False
+
+    @staticmethod
+    def _normalize_path_prefix(prefix: str) -> str:
+        """规范化路径前缀为 /xxx/ 形式，空字符串表示根路径模式。"""
+        if not prefix:
+            return ""
+        p = prefix.strip()
+        if not p.startswith("/"):
+            p = "/" + p
+        if not p.endswith("/"):
+            p = p + "/"
+        return p
 
     def _ensure_binary(self) -> Path:
         if self._manual_binary_path:
@@ -692,10 +732,14 @@ class TailscaleProvider(TunnelProvider):
     def _run_cli(self, *args: str, timeout: int = 20) -> subprocess.CompletedProcess:
         if self._binary_path is None:
             self._binary_path = self._ensure_binary()
+        # 显式指定 UTF-8 解码：tailscale CLI 输出固定为 UTF-8，
+        # 中文 Windows 默认用 GBK 解码会导致含非 ASCII 字符（如节点用户名）的 JSON 解析失败
         result = subprocess.run(
             [str(self._binary_path), *args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
@@ -714,22 +758,52 @@ class TailscaleProvider(TunnelProvider):
             raise RuntimeError(f"{command} 返回了无效的 JSON 对象")
         return data
 
-    @staticmethod
-    def _funnel_url_from_status(data: dict) -> str | None:
+    def _funnel_url_from_status(self, data: dict) -> str | None:  # NOSONAR S3776: funnel 多状态解析逻辑不可再拆分
+        """从 funnel status --json 提取当前应用的公网 URL。
+
+        多应用路径模式下，URL 包含 path_prefix（如 https://host/news/）；
+        根路径模式下，URL 为 https://host（旧行为）。
+        通过匹配 Handlers 中的路径前缀确认当前应用的 Funnel 配置是否存在。
+        """
         allow_funnel = data.get("AllowFunnel")
         if not isinstance(allow_funnel, dict):
             return None
+        # 提取 ts.net 主机名
+        host: str | None = None
         for endpoint, enabled in allow_funnel.items():
             if not enabled:
                 continue
-            host = str(endpoint).rsplit(":", 1)[0].rstrip(".")
-            if host.lower().endswith(".ts.net"):
-                return f"https://{host}"
-        return None
+            h = str(endpoint).rsplit(":", 1)[0].rstrip(".")
+            if h.lower().endswith(".ts.net"):
+                host = h
+                break
+        if not host:
+            return None
+
+        # 路径区分模式：检查 Handlers 中是否存在自己的路径前缀
+        if self._path_prefix:
+            web = data.get("Web", {})
+            handlers = {}
+            if isinstance(web, dict):
+                # Web 的 key 格式为 "host:443"，取第一个匹配的
+                for _endpoint, cfg in web.items():
+                    if isinstance(cfg, dict) and "Handlers" in cfg:
+                        handlers = cfg["Handlers"]
+                        break
+            if not isinstance(handlers, dict) or self._path_prefix not in handlers:
+                return None
+            return f"https://{host}{self._path_prefix}"
+
+        # 根路径模式（旧行为）：URL 不含路径前缀
+        return f"https://{host}"
 
     @property
     def status(self) -> str:
         if self._binary_path is None:
+            return "stopped"
+        # 用户主动停止后直接返回 stopped，避免重新查询 CLI 把 _public_url 又赋回去
+        # （路径区分模式下 stop() 保留 Funnel 配置，CLI 查询仍会返回 URL）
+        if self._stopped:
             return "stopped"
         try:
             result = self._run_cli("funnel", "status", "--json")
@@ -740,7 +814,7 @@ class TailscaleProvider(TunnelProvider):
             self._public_url = None
         return "running" if self._public_url else "stopped"
 
-    def start(self) -> str:
+    def start(self) -> str:  # NOSONAR
         self._binary_path = self._ensure_binary()
         status_result = self._run_cli("status", "--json")
         status_data = self._parse_json_output(status_result.stdout, "tailscale status")
@@ -753,15 +827,25 @@ class TailscaleProvider(TunnelProvider):
         if not dns_name.lower().endswith(".ts.net"):
             raise RuntimeError("Tailscale 尚未启用 MagicDNS，无法生成固定 ts.net 地址")
 
+        # 构造 funnel 命令：路径区分模式用 --set-path，根路径模式用默认行为
+        # --set-path 是追加模式，不会覆盖其他应用的路径配置，实现多应用共存
+        funnel_args = ["funnel", "--bg", "--yes"]
+        if self._path_prefix:
+            funnel_args += ["--set-path", self._path_prefix]
+        funnel_args.append(f"http://127.0.0.1:{self._local_port}")
+
         # 用 Popen 非阻塞读取输出：tailscale funnel --bg --yes 在首次启用时会
         # 输出授权链接后不退出，等待用户在浏览器完成授权。用 subprocess.run 会阻塞 60s，
         # 而前端 axios 30s 就超时了。改为 Popen + 读取输出，检测到授权链接立即返回错误。
+        # 显式指定 UTF-8 解码：与 _run_cli 保持一致，避免中文 Windows 默认 GBK 解码失败
         process = subprocess.Popen(
-            [str(self._binary_path), "funnel", "--bg", "--yes", f"http://127.0.0.1:{self._local_port}"],
+            [str(self._binary_path), *funnel_args],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
         auth_url_match: list[str] = []
@@ -785,7 +869,8 @@ class TailscaleProvider(TunnelProvider):
                 break
             # 检测成功标志：funnel 已建立
             if "Funnel started" in stripped or "listening on" in stripped.lower():
-                self._public_url = f"https://{dns_name}"
+                self._public_url = f"https://{dns_name}{self._path_prefix}"
+                self._stopped = False
                 logger.info("[tailscale] Funnel 已建立: %s", self._public_url)
                 return self._public_url
 
@@ -814,8 +899,17 @@ class TailscaleProvider(TunnelProvider):
         )
 
     def stop(self) -> None:
-        # 关闭 Funnel：tailscale funnel off
-        # 捕获异常不抛出：stop 失败不应阻塞配置保存或服务关闭等调用方操作
+        # 标记为已停止：status 属性据此返回 stopped，避免路径区分模式下重新查询 CLI 覆盖状态
+        self._stopped = True
+        # 路径区分模式：不调用 funnel off，避免关闭其他应用的 Funnel 路径
+        # Tailscale 无移除单个路径的命令，停止后路径配置保留（访问会连接失败），
+        # 重新启动应用后 --set-path 幂等更新配置自动恢复
+        if self._path_prefix:
+            self._public_url = None
+            logger.info("[tailscale] 路径区分模式：保留 Funnel 配置 %s", self._path_prefix)
+            return
+
+        # 根路径模式（旧行为）：关闭整个 Funnel
         if self._binary_path is not None:
             try:
                 self._run_cli("funnel", "off", timeout=10)

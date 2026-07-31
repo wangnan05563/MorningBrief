@@ -67,6 +67,24 @@ const routes = [
         meta: { title: '数据统计', icon: 'DataLine', group: '数据分析' },
       },
       {
+        path: 'stats/channel-health',
+        name: 'ChannelHealth',
+        component: () => import('../views/stats/ChannelHealth.vue'),
+        meta: { title: '频道健康度', icon: 'Histogram', group: '数据分析' },
+      },
+      {
+        path: 'stats/rss-health',
+        name: 'RssHealth',
+        component: () => import('../views/stats/RssHealth.vue'),
+        meta: { title: 'RSS 源状态', icon: 'Connection', group: '数据分析' },
+      },
+      {
+        path: 'stats/llm-metrics',
+        name: 'LlmMetrics',
+        component: () => import('../views/stats/LlmMetrics.vue'),
+        meta: { title: 'LLM 重试指标', icon: 'MagicStick', group: '数据分析' },
+      },
+      {
         path: 'channels',
         name: 'Channels',
         component: () => import('../views/channel/ChannelManagement.vue'),
@@ -109,6 +127,12 @@ const routes = [
         meta: { title: '通知管理', icon: 'Bell', group: '系统配置', requireRole: 'admin' },
       },
       {
+        path: 'auto-review',
+        name: 'AutoReviewConfig',
+        component: () => import('../views/system/AutoReviewConfig.vue'),
+        meta: { title: '自动审批', icon: 'CircleCheck', group: '系统配置', requireRole: 'admin' },
+      },
+      {
         path: 'tools/calculator',
         name: 'ParamCalculator',
         component: () => import('../views/tools/ParamCalculator.vue'),
@@ -145,7 +169,9 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  // base: '/news/' 与 Vite base 一致，让路由路径带上 /news/ 前缀
+  // 配合 Tailscale Funnel --set-path /news/ 路径区分模式
+  history: createWebHistory('/news/'),
   routes,
 })
 

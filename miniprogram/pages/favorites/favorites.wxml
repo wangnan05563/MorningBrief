@@ -37,11 +37,11 @@
         <!-- 底部：时长 + 播放图标 -->
         <view class="item-footer">
           <view class="item-duration">
-            <image class="duration-icon" src="/images/icons/duration.png" mode="aspectFit" />
+            <image class="duration-icon" lazy-load src="/images/icons/duration.png" mode="aspectFit" />
             <text>{{fmt.time(item.duration)}}</text>
           </view>
           <view class="play-icon-small">
-            <image class="icon-text" src="/images/icons/play-mini.png" mode="aspectFit" />
+            <image class="icon-text" lazy-load src="/images/icons/play-mini.png" mode="aspectFit" />
           </view>
         </view>
       </view>

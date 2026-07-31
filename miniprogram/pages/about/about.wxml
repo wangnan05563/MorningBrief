@@ -2,9 +2,9 @@
 <view class="page-about">
   <!-- 应用信息头部 -->
   <view class="about-header">
-    <image class="app-logo" src="/images/icons/headphones.png" mode="aspectFit" />
+    <image class="app-logo" src="/images/icons/app-logo.png" mode="aspectFit" />
     <view class="app-name">MorningBrief 语音新闻</view>
-    <view class="app-version">版本 {{version}}{{buildDate ? ' · ' + buildDate : ''}}</view>
+    <view class="app-version" bindtap="onVersionTap">版本 {{version}}{{buildDate ? ' · ' + buildDate : ''}}</view>
     <view class="app-desc">{{description}}</view>
   </view>
 

@@ -3,10 +3,92 @@
 使用 pydantic-settings 从环境变量加载配置，统一入口避免散落的 os.getenv 调用。
 按职责分组，便于维护时定位配置项。
 """
+import socket
 from functools import lru_cache
 from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def detect_lan_ip() -> str:
+    """通过 UDP socket 探测本机局域网 IP（不实际发送数据包）。
+
+    原理：UDP connect 不发起握手，仅更新 socket 的本地路由表，
+    从而拿到出口网卡的 IP。比 gethostbyname(gethostname()) 更可靠，
+    后者在 Windows 上常返回 127.0.0.1 或虚拟网卡 IP。
+
+    失败时回退到 127.0.0.1，保证开发工具内可用。
+    """
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            # 8.8.8.8 是 Google DNS，仅用于路由查询，不会真正发包
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+        finally:
+            s.close()
+        # 排除回环地址，没有有效局域网 IP 时回退
+        if ip and not ip.startswith("127."):
+            return ip
+    except OSError:
+        # 无网络环境（离线开发）会抛 OSError，忽略并回退
+        pass
+    return "127.0.0.1"
+
+
+def get_all_lan_ips() -> list[str]:
+    """获取本机所有 IPv4 地址（排除回环、Tailscale、APIPA）。
+
+    用于真机调试模式：后端通过 /api/health 暴露所有局域网 IP，
+    小程序从 Tailscale 引导地址拉取后加入候选，实现自动发现。
+
+    排除规则：
+    - 127.x.x.x：回环地址
+    - 100.64-127.x.x.x：Tailscale CGNAT 段，真机通常不可达
+    - 169.254.x.x：APIPA 自动配置地址（无 DHCP 时分配）
+    """
+    ips: set[str] = set()
+    # 方式 1：getaddrinfo 获取 hostname 绑定的所有 IP
+    # Windows 上通常能返回所有网卡的 IP
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if ip and not ip.startswith("127."):
+                ips.add(ip)
+    except OSError:
+        pass
+    # 方式 2：UDP connect 获取默认路由出口 IP（补充方式 1 可能遗漏的网卡）
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            if ip and not ip.startswith("127."):
+                ips.add(ip)
+        finally:
+            s.close()
+    except OSError:
+        pass
+
+    def _is_lan_ip(ip: str) -> bool:
+        """过滤回环、Tailscale CGNAT、APIPA 地址。"""
+        if ip.startswith("127."):
+            return False
+        if ip.startswith("169.254."):
+            return False
+        # Tailscale CGNAT 段：100.64.0.0 - 100.127.255.255
+        if ip.startswith("100."):
+            parts = ip.split(".")
+            if len(parts) == 4:
+                try:
+                    second = int(parts[1])
+                    if 64 <= second <= 127:
+                        return False
+                except ValueError:
+                    pass
+        return True
+
+    return [ip for ip in ips if _is_lan_ip(ip)]
 
 
 class Settings(BaseSettings):
@@ -31,6 +113,8 @@ class Settings(BaseSettings):
     # 留空时回退到 http://localhost:8000（仅开发工具可用）
     # 真机测试需设为电脑局域网 IP，如 http://10.232.253.113:8000
     AUDIO_BASE_URL: str = ""
+    # 项目仓库地址（用于检查更新），留空时不检查更新
+    REPO_URL: str = ""
 
     # ---- SQLite 数据库（V1.2 替代 MySQL） ----
     # 路径策略：开发态用相对路径 ./data/news.db；
@@ -56,6 +140,9 @@ class Settings(BaseSettings):
     # ---- 微信小程序 ----
     WX_APPID: str = ""
     WX_SECRET: str = ""
+    # 微信公众平台 API（jscode2session / cgi-bin/token / msg_sec_check）
+    # 仅在微信变更域名时才需修改，默认值对齐官方文档
+    WX_API_BASE: str = "https://api.weixin.qq.com"
 
     # ---- 通义千问 LLM API ----
     LLM_API_KEY: str = ""
@@ -71,6 +158,9 @@ class Settings(BaseSettings):
     ALIYUN_TTS_SAMPLE_RATE: int = 44100
     ALIYUN_TTS_FORMAT: str = "mp3"
     ALIYUN_TTS_TIMEOUT_SEC: int = 60
+    # 阿里云 NLS 网关地址（异步长文本 TTS 入口）
+    # 仅在阿里云变更域名/区域时才需修改，默认值对齐 NLS 官方文档
+    ALIYUN_TTS_ENDPOINT: str = "https://nls-gateway.cn-shanghai.aliyuncs.com/rest/v1/tts/async"
     # 音量/语速/基频调节（NLS tts_request 参数）
     # volume: [0, 100]，默认 50；speech_rate/pitch_rate: [-500, 500]，默认 0
     ALIYUN_TTS_VOLUME: int = 50
@@ -96,6 +186,9 @@ class Settings(BaseSettings):
     TENCENT_TTS_VOICE_TYPE: int = 101011
     TENCENT_TTS_VOLUME: int = 0     # 音量 [-10, 10]，0 为默认
     TENCENT_TTS_SPEED: int = 0      # 语速 [-2, 6]，0 为默认
+    # 腾讯云 TTS 服务 endpoint（云 API 3.0 入口）
+    # 仅在腾讯云变更域名时才需修改，默认值对齐官方文档
+    TENCENT_TTS_ENDPOINT: str = "https://tts.tencentcloudapi.com/"
 
     # ---- 腾讯云 COS（对象存储 + C 端 API 共享层） ----
     COS_SECRET_ID: str = ""
@@ -140,6 +233,29 @@ class Settings(BaseSettings):
     # rewriter 按此时长 + TTS 实际语速反算所需字数，动态调整段数与每段字数
     TARGET_DURATION_SEC: int = 600
 
+    # ---- 播放统计 ----
+    # 播放计数阈值（秒）：用户收听超过此值才计入 play_count，避免误触点击也算播放量
+    # 30 秒阈值覆盖用户切歌/试听前几秒退出的场景，是真实收听意图的最低门槛
+    PLAY_COUNT_THRESHOLD_SEC: int = 30
+
+    # ---- 音频码率配置 ----
+    # 语音播报场景 64kbps 已足够（MP3 单声道 44100Hz），128kbps 是音乐标准过度
+    # 64k 相比 128k 文件体积减半，下载时间减半，对 Tailscale Funnel 链路收益显著
+    # 如需提升音质可调高至 96k 或 128k
+    AUDIO_BITRATE: str = "64k"
+
+    # ---- HLS 分片配置（V1.3 新增） ----
+    # 开启后拼接阶段会同步生成 m3u8 + ts 分片，小程序设置 protocol='hls' 可分片流式播放，
+    # 首字延迟从 mp3 整文件下载的 300-1000ms 降到 200-500ms（仅需下载首个 ts 分片）
+    # 关闭时仅生成 mp3，小程序回退到 audio_url 播放
+    HLS_ENABLE: bool = True
+    # 单分片时长（秒）：HLS 规范推荐 6-10s，过短分片数过多元数据开销大，过长首字延迟增加
+    # 10 分钟节目 + 6s 分片 = 100 个 ts，元数据占比约 2%
+    HLS_SEGMENT_SEC: int = 6
+    # HLS 播放列表类型：vod（点播，固定时长）/ event（直播事件，分片只增不删）
+    # 节目是固定时长的录音，用 vod 让播放器支持任意 seek
+    HLS_PLAYLIST_TYPE: str = "vod"
+
     # ---- 背景音乐（BGM）配置 ----
     # BGM 文件路径：绝对路径或相对项目根目录的路径。文件不存在时降级为无 BGM 模式
     # （仅插入段间静音过渡，不叠加背景音）
@@ -157,10 +273,27 @@ class Settings(BaseSettings):
     CRAWLER_DEDUP_TTL_DAYS: int = 3
     CRAWLER_QPS_DEFAULT: int = 1
     CRAWLER_USER_AGENT: str = "MorningBriefBot/1.0"
+    # 文章最大年龄（天）：published_at 超过此值的 entries 视为历史存量并过滤
+    # 背景：部分 RSS 源（如人民网 ent/culture）更新缓慢，长期返回 1-3 年前的历史文章，
+    # 首次入库后 dedup 锁住 URL，导致后续爬取 0 入库（wf-20260728-0011 故障根因）。
+    # 过滤后若 0 条则降级保留全部（避免阻断），并 WARNING 告警提示源质量问题
+    CRAWLER_MAX_ARTICLE_AGE_DAYS: int = 14
 
     # ---- 日志 ----
     LOG_LEVEL: str = "INFO"
     LOG_DIR: str = "./logs"             # V1.2：改为 exe 同级相对路径
+
+    # ---- FFmpeg 依赖 ----
+    # BtbN/FFmpeg-Builds 共享构建下载源（gpl-shared，含 ffmpeg.exe/ffprobe.exe + DLL）
+    # 大陆访问 GitHub 较慢时可切换镜像源
+    FFMPEG_DOWNLOAD_URL: str = (
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/"
+        "ffmpeg-master-latest-win64-gpl-shared.zip"
+    )
+    # 下载超时（秒）：GitHub release 经 CDN 分发，通常较快但需容错大文件场景
+    FFMPEG_DOWNLOAD_TIMEOUT_SEC: int = 300
+    # subprocess 检测超时（秒）：未安装时 Windows 报错很快，已安装时 -version 秒回
+    FFMPEG_CHECK_TIMEOUT_SEC: int = 10
 
     # ---- API 限流（对标 17_xianyu anti_detect 滑动窗口） ----
     # 每分钟全局请求上限，防止恶意刷接口触发工作流
@@ -202,6 +335,14 @@ class Settings(BaseSettings):
     # 大日志文件阈值（MB），超限可清理
     MAINTENANCE_LARGE_LOG_MB: int = 10
 
+    # ---- 自动审批模块（V1.4 新增） ----
+    # 自动审批统计查询默认时间范围（天），未指定 start_date 时回溯 N 天
+    AUTO_REVIEW_STATS_DEFAULT_DAYS: int = 7
+    # 自动审批执行超时（秒）：超时则视为失败，触发告警与手动干预流程
+    AUTO_REVIEW_EXECUTION_TIMEOUT_SEC: int = 30
+    # 自动审批失败时是否自动通知管理员（通过 NotifierHub 推送）
+    AUTO_REVIEW_NOTIFY_ON_FAILURE: bool = True
+
     # ---- 派生属性 ----
     @property
     def sqlite_url(self) -> str:
@@ -222,6 +363,21 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.APP_ENV == "development"
+
+    @property
+    def audio_base_url_resolved(self) -> str:
+        """音频/封面静态资源最终生效的对外访问 URL。
+
+        解析优先级：
+        1. 显式配置的 AUDIO_BASE_URL（.env 中非空值）—— 生产环境必须配置公网域名
+        2. 自动检测的本机局域网 IP + APP_PORT —— 开发环境零配置即可真机调试
+
+        设计原因：硬编码 IP 在切换 WiFi/路由器后会失效（如 192.168.1.65 → 192.168.0.65），
+        导致小程序"网络异常"。留空触发自动检测可避免此问题。
+        """
+        if self.AUDIO_BASE_URL:
+            return self.AUDIO_BASE_URL.rstrip("/")
+        return f"http://{detect_lan_ip()}:{self.APP_PORT}"
 
 
 @lru_cache

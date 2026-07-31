@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 设置按钮图标：白色齿轮，用于彩色背景的主按钮
+     图标来源：Tabler Icons (MIT License) - settings
+     使用场景：index/history 页"去设置偏爱频道"按钮 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <path d="M 10.325 4.317 c 0.426 -1.756 2.924 -1.756 3.35 0 a 1.724 1.724 0 0 0 2.573 1.066 c 1.543 -0.943 3.31 0.826 2.37 2.37 a 1.724 1.724 0 0 0 1.065 2.572 c 1.756 0.426 1.756 2.924 0 3.35 a 1.724 1.724 0 0 0 -1.066 2.573 c 0.943 1.543 -0.826 3.31 -2.37 2.37 a 1.724 1.724 0 0 0 -2.572 1.065 c -0.426 1.756 -2.924 1.756 -3.35 0 a 1.724 1.724 0 0 0 -2.573 -1.066 c -1.543 0.943 -3.31 -0.826 -2.37 -2.37 a 1.724 1.724 0 0 0 -1.065 -2.572 c -1.756 -0.426 -1.756 -2.924 0 -3.35 a 1.724 1.724 0 0 0 1.066 -2.573 c -0.943 -1.543 0.826 -3.31 2.37 -2.37 c 1 0.608 2.296 0.07 2.572 -1.065 Z" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="12" cy="12" r="3" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

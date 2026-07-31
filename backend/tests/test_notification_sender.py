@@ -241,7 +241,8 @@ async def test_send_no_webhook_returns_failed(db_session):
         result = await sender.send_workflow_event("workflow.pending_review", "wf-1")
 
     assert result["status"] == "failed"
-    assert "Webhook" in result["message"] or "webhook" in result["message"]
+    # 多渠道架构下，无任何渠道配置时返回"未配置任何通知渠道"
+    assert "未配置" in result["message"] or "webhook" in result["message"].lower()
 
 
 # ====================== send_test 测试 ======================

@@ -174,9 +174,16 @@ def test_is_newer_with_v_prefix():
 
 @pytest.fixture(autouse=True)
 def _reset_cache():
-    """每个测试前后清空 about 模块缓存，保证测试间隔离。"""
+    """每个测试前后清空 about 模块缓存，保证测试间隔离。
+
+    同时 patch 仓库地址常量：REPO_URL 默认为空时 check-update 端点会提前降级返回，
+    导致 mock 的 _fetch_latest_release 从未被调用，故测试需模拟已配置仓库场景。
+    """
     _reset_cache_for_test()
-    yield
+    with patch("app.routers.admin.about._REPO_URL", "https://github.com/test/repo"), \
+         patch("app.routers.admin.about._RELEASES_API", "https://github.com/test/repo/releases/latest"), \
+         patch("app.routers.admin.about._RELEASE_URL", "https://github.com/test/repo/releases"):
+        yield
     _reset_cache_for_test()
 
 

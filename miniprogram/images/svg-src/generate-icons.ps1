@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Stop'
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $iconsDir = Join-Path $scriptRoot '..\icons'
@@ -33,6 +33,10 @@ $iconConfigs = @(
     @{ Svg = 'music.svg';                 Out = 'music.png';                  Size = 96 }
     @{ Svg = 'newspaper.svg';             Out = 'newspaper.png';              Size = 96 }
     @{ Svg = 'radio.svg';                 Out = 'radio.png';                  Size = 96 }
+    # 应用 logo：96x96，关于页/开屏页品牌标识
+    @{ Svg = 'app-logo.svg';             Out = 'app-logo.png';               Size = 96 }
+    # 小程序主图标：512x512，上传至微信后台解决"最近使用"空白图标
+    @{ Svg = 'app-icon.svg';             Out = 'app-icon.png';               Size = 512 }
 )
 
 Write-Host "SVG Source: $svgSrcDir"

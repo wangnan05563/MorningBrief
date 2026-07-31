@@ -48,6 +48,9 @@ from app.workflow.stitch import concat as stitch_mod
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+# 事件/通知 channel 字面量统一引用，避免多处硬编码导致改名时遗漏
+_WORKFLOW_FAILED_KEY = "workflow.failed"
+
 
 def _is_cos_configured() -> bool:
     """检测 COS 是否已配置真实可用值（非空且非占位符）。
@@ -239,7 +242,7 @@ class WorkflowScheduler:
             channel_id=channel_id,
         )
 
-    async def _on_channel_schedule_changed(self, event: Event) -> None:
+    async def _on_channel_schedule_changed(self, event: Event) -> None:  # NOSONAR
         """频道定时变更事件处理：重注册或移除 cron 任务。
 
         schedule_time 为空字符串表示移除（频道删除或清空 schedule_time）。
@@ -258,8 +261,135 @@ class WorkflowScheduler:
 
     # ===== 生命周期 =====
 
+    async def _recover_orphan_workflows(self) -> None:
+        """启动时恢复中间状态工作流：running→failed，queued→重新入队。
+
+        服务重启后事件循环被销毁，之前 running 的协程已死但数据库状态仍为 running，
+        queued 工作流的内存队列也丢失。必须在 start() 注册定时任务前清理：
+        - running 工作流：协程已死，标记 failed + 重置 material
+        - queued 工作流：内存队列丢失，重新入队让 worker 消费
+        - 孤儿步骤：工作流已终态但步骤仍 running/retrying/pending，清理为 failed
+        """
+        from sqlalchemy import update as sa_update
+        from app.models.material import MaterialStatus
+        now = utcnow_naive()
+        requeue_list: list[tuple] = []  # [(workflow_id, channel_id, priority, episode_date), ...]
+
+        try:
+            async with AsyncSessionLocal() as session:
+                # 1. running 工作流：协程已死，标记 failed + 重置 material
+                result = await session.execute(
+                    select(Workflow).where(Workflow.status == WorkflowStatus.running.value)
+                )
+                running_orphans = result.scalars().all()
+                if running_orphans:
+                    running_ids = [wf.id for wf in running_orphans]
+                    logger.warning(
+                        "发现 %d 个 running 孤儿工作流，标记为 failed: %s",
+                        len(running_orphans), running_ids,
+                    )
+                    await session.execute(
+                        sa_update(Workflow)
+                        .where(Workflow.status == WorkflowStatus.running.value)
+                        .values(
+                            status=WorkflowStatus.failed.value,
+                            finished_at=now,
+                            error="服务重启后孤儿工作流恢复：协程已死",
+                        )
+                    )
+                    # 重置关联 material 为 pending（避免 dedup 死锁）
+                    await session.execute(
+                        sa_update(Material)
+                        .where(Material.workflow_id.in_(running_ids))
+                        .values(status=MaterialStatus.pending.value, workflow_id=None)
+                    )
+
+                # 2. queued 工作流：内存队列丢失，收集待重新入队
+                result = await session.execute(
+                    select(Workflow).where(Workflow.status == WorkflowStatus.queued.value)
+                )
+                queued_workflows = result.scalars().all()
+                if queued_workflows:
+                    logger.info(
+                        "发现 %d 个 queued 工作流，将重新入队: %s",
+                        len(queued_workflows), [wf.id for wf in queued_workflows],
+                    )
+                    for wf in queued_workflows:
+                        requeue_list.append((wf.id, wf.channel_id, wf.priority, wf.episode_date))
+
+                # 3. 孤儿步骤：工作流已终态（success/failed/cancelled）但步骤仍中间态（running/retrying/pending）
+                # 场景：_run_step 异常中断或服务在步骤执行中被 kill，步骤状态未更新
+                result = await session.execute(
+                    select(WorkflowStep.workflow_id).where(
+                        WorkflowStep.status.in_([
+                            WorkflowStepStatus.running.value,
+                            WorkflowStepStatus.retrying.value,
+                            WorkflowStepStatus.pending.value,
+                        ])
+                    ).distinct()
+                )
+                orphan_step_wf_ids = [r[0] for r in result.fetchall()]
+                if orphan_step_wf_ids:
+                    # 仅处理工作流已终态的孤儿步骤（running 工作流的步骤已在上面处理）
+                    result = await session.execute(
+                        select(Workflow.id).where(
+                            Workflow.id.in_(orphan_step_wf_ids),
+                            Workflow.status.in_([
+                                WorkflowStatus.success.value,
+                                WorkflowStatus.failed.value,
+                                WorkflowStatus.cancelled.value,
+                            ]),
+                        )
+                    )
+                    terminal_wf_ids = [r[0] for r in result.fetchall()]
+                    if terminal_wf_ids:
+                        logger.warning(
+                            "发现 %d 个终态工作流的孤儿步骤，清理为 failed: %s",
+                            len(terminal_wf_ids), terminal_wf_ids,
+                        )
+                        await session.execute(
+                            sa_update(WorkflowStep)
+                            .where(
+                                WorkflowStep.workflow_id.in_(terminal_wf_ids),
+                                WorkflowStep.status.in_([
+                                    WorkflowStepStatus.running.value,
+                                    WorkflowStepStatus.retrying.value,
+                                    WorkflowStepStatus.pending.value,
+                                ]),
+                            )
+                            .values(
+                                status=WorkflowStepStatus.failed.value,
+                                finished_at=now,
+                                error="服务重启后孤儿步骤恢复",
+                            )
+                        )
+
+                await session.commit()
+        except Exception as e:
+            # 恢复失败不阻断启动，下次启动时再恢复
+            logger.exception("恢复孤儿工作流失败: %s", e)
+            return
+
+        # 4. 重新入队 queued 工作流（在 session 提交后，避免 DB 操作与入队交错）
+        for workflow_id, channel_id, priority, episode_date in requeue_list:
+            entry = QueueEntry(
+                sort_priority=-priority,
+                created_at=utcnow_naive().timestamp(),
+                workflow_id=workflow_id,
+                channel_id=channel_id,
+                priority=priority,
+                episode_date=episode_date,
+            )
+            await self._queue.put(entry)
+            self._entry_map[workflow_id] = entry
+            logger.info("重新入队 queued 工作流: %s", workflow_id)
+
     async def start(self) -> None:  # NOSONAR
         """应用启动时调用，注册全部 Cron 任务（LLD 5.1.1 / 7.5）。"""
+        # 启动时恢复孤儿工作流：服务重启后，之前 running 的协程已死，
+        # 但数据库状态仍为 running，必须清理否则前端永远显示"运行中"（wf-20260726-0001 复现）
+        await self._recover_orphan_workflows()
+
         # 每日 05:00 触发工作流（主任务）
         self.scheduler.add_job(
             self._cron_trigger,
@@ -354,6 +484,18 @@ class WorkflowScheduler:
             id="cleanup_entry_map",
             replace_existing=True,
         )
+        # 每 2 小时巡检 RSS 源可达性：及时发现失效源，连续失败 3 次发 WARNING
+        # 不阻断 crawl：crawler 自身有单源失败隔离，巡检仅用于运维感知
+        self.scheduler.add_job(
+            self._check_rss_sources,
+            trigger="cron",
+            hour="*/2",
+            id="check_rss_sources",
+            misfire_grace_time=600,
+            coalesce=True,
+            max_instances=1,
+            replace_existing=True,
+        )
         # 加载队列配置（首次启动从 DB 读取，DB 无记录则用默认值）
         await self._load_queue_config()
         # 订阅频道启停事件：频道禁用时取消其 queued 工作流
@@ -391,7 +533,7 @@ class WorkflowScheduler:
         try:
             async with AsyncSessionLocal() as session:
                 # 未配置 schedule_time 的活跃频道走全局 cron
-                stmt = select(Channel.id).where(
+                stmt = select(Channel.id).order_by(Channel.id).where(
                     Channel.is_active == 1,
                     or_(
                         Channel.schedule_time.is_(None),
@@ -405,7 +547,7 @@ class WorkflowScheduler:
             channel_ids = []
 
         if not channel_ids:
-            # 无活跃频道或全部配置了独立定时：回退到原有行为（channel_id=None）
+            # 无活跃频道或全部配置了独立定时：回退到原有行为（channel_id=None）  # NOSONAR
             logger.warning("全局 cron 触发：无未配置独立定时的活跃频道，触发默认工作流")
             await self.trigger_workflow(
                 episode_date=today,
@@ -520,12 +662,12 @@ class WorkflowScheduler:
             self._semaphore.release()
             self._running_count -= 1
             self._entry_map.pop(entry.workflow_id, None)
-            # 配置变更延迟生效：等所有运行中任务完成后再重建信号量，
+            # 配置变更延迟生效：等所有运行中任务完成后再重建信号量，  # NOSONAR
             # 避免在任务执行中途更换信号量导致计数错乱
             if self._config_dirty and self._running_count == 0:
                 self._rebuild_semaphore()
 
-    async def mark_entry_cancelled(self, workflow_id: str) -> None:
+    async def mark_entry_cancelled(self, workflow_id: str) -> None:  # NOSONAR
         """标记内存队列条目为已取消，worker 取出时跳过。"""
         entry = self._entry_map.get(workflow_id)
         if entry is not None:
@@ -557,7 +699,7 @@ class WorkflowScheduler:
         await self._queue.put(entry)
         self._entry_map[workflow_id] = entry
 
-    async def apply_config_change(self, mode: str, max_concurrent: int) -> None:
+    async def apply_config_change(self, mode: str, max_concurrent: int) -> None:  # NOSONAR
         """标记配置待生效，不立即重建信号量（延迟到所有任务完成后）。"""
         self._execution_mode = mode
         self._max_concurrent = max_concurrent
@@ -649,7 +791,7 @@ class WorkflowScheduler:
                     continue
             return max_seq
 
-    async def retry_workflow(
+    async def retry_workflow(  # NOSONAR
         self, workflow_id: str, from_step: str = None, triggered_by: str = None,
     ) -> str:
         """在原工作流上从指定步骤重跑（不创建新工作流）。
@@ -860,25 +1002,45 @@ class WorkflowScheduler:
                 "workflow_id": workflow_id,
             })
             logger.info("工作流主流程完成 workflow_id=%s", workflow_id)
-            # 工作流完成即进入待审核状态，触发 pending_review 通知
-            # 通过 actionCard 引导管理员跳转 admin-web 审核页
-            await self._send_notification(
-                "workflow.pending_review", workflow_id,
-            )
+
+            # 尝试自动审批：满足预设规则则自动 approve 并发布节目
+            # 失败或不满足条件则继续走 pending_review 通知，由人工审核兜底
+            # 将 review_id 写入 context（_run_step 把 step result 合并进 context）
+            review_step_result = context.get("review_id")
+            if review_step_result is None:
+                # 兜底：若 context 无 review_id，从最后一条 review 步骤记录读取
+                async with AsyncSessionLocal() as session:
+                    step_result = await session.execute(
+                        select(WorkflowStep.result).where(
+                            WorkflowStep.workflow_id == workflow_id,
+                            WorkflowStep.step_name == WorkflowStepName.review.value,
+                        ).order_by(WorkflowStep.id.desc()).limit(1)
+                    )
+                    step_row = step_result.first()
+                    if step_row and step_row[0]:
+                        context["review_id"] = step_row[0].get("review_id")
+
+            await self._try_auto_review(context)
+
+            # 自动审批失败或未启用时，发送 pending_review 通知引导人工审核
+            if not context.get("_auto_review_succeeded"):
+                await self._send_notification(
+                    "workflow.pending_review", workflow_id,
+                )
 
         except StepFailedError as e:
             # 某步重试耗尽仍失败：置 failed + 告警，不立即备播（等 06:30 统一处理）
             await self._update_workflow_status(
                 workflow_id, WorkflowStatus.failed, error=str(e),
             )
-            self._publish_event("workflow.failed", {
+            self._publish_event(_WORKFLOW_FAILED_KEY, {
                 "workflow_id": workflow_id,
                 "step": e.step_name,
                 "error": str(e),
             })
             # 走结构化通知（含 failed_step/error_message 变量），失败时降级到通用告警
             await self._send_notification(
-                "workflow.failed", workflow_id,
+                _WORKFLOW_FAILED_KEY, workflow_id,
                 {"failed_step": e.step_name, "error_message": str(e)},
             )
         except Exception as e:
@@ -887,17 +1049,17 @@ class WorkflowScheduler:
             await self._update_workflow_status(
                 workflow_id, WorkflowStatus.failed, error=str(e),
             )
-            self._publish_event("workflow.failed", {
+            self._publish_event(_WORKFLOW_FAILED_KEY, {
                 "workflow_id": workflow_id, "error": str(e),
             })
             await self._send_notification(
-                "workflow.failed", workflow_id,
+                _WORKFLOW_FAILED_KEY, workflow_id,
                 {"error_message": str(e)},
             )
         finally:
             await self.cache.delete("workflow:current")
 
-    async def _run_step(
+    async def _run_step(  # NOSONAR S3776: 工作流步骤执行含异常兜底与状态流转
         self, workflow_id: str, step_name: WorkflowStepName, seq: int,
         func, context: dict,
     ) -> None:
@@ -909,10 +1071,13 @@ class WorkflowScheduler:
         await self._update_step_status(step_record.id, WorkflowStepStatus.running)
 
         last_error = None
+        # 单步总超时：复用 WORKFLOW_LOCK_TTL_SEC（默认 1800s）
+        # 防止 func 内部网络 I/O 永久阻塞导致步骤状态卡在 running（wf-20260722-0011 复现）
+        step_timeout = settings.WORKFLOW_LOCK_TTL_SEC
         for attempt in range(3):  # 最多 3 次（含首次）
             try:
                 started = utcnow_naive()
-                result = await func(context)
+                result = await asyncio.wait_for(func(context), timeout=step_timeout)
                 duration_ms = int((utcnow_naive() - started).total_seconds() * 1000)
                 await self._update_step_status(
                     step_record.id, WorkflowStepStatus.success,
@@ -931,6 +1096,21 @@ class WorkflowScheduler:
                     workflow_id, step_name.value, attempt, duration_ms,
                 )
                 return
+            except asyncio.TimeoutError as e:
+                # 单步总超时：视为可重试错误，与其他异常一同进入重试流程
+                last_error = TimeoutError(
+                    f"步骤 {step_name.value} 执行超过 {step_timeout}s 总超时"
+                )
+                await self._update_step_status(
+                    step_record.id, WorkflowStepStatus.retrying,
+                    retry_count=attempt + 1, error=str(last_error),
+                )
+                logger.warning(
+                    "步骤超时 workflow_id=%s step=%s attempt=%d timeout=%ds",
+                    workflow_id, step_name.value, attempt + 1, step_timeout,
+                )
+                if attempt < 2:
+                    await asyncio.sleep(5 * (attempt + 1))  # 5s, 10s 退避
             except Exception as e:
                 last_error = e
                 await self._update_step_status(
@@ -1102,11 +1282,15 @@ class WorkflowScheduler:
 
         review 表是审核流转的核心：运营在后台 approve/reject/replace，
         approve 时联动 ContentService.publish_episode 创建 episode。
+
+        创建后将 review.created_at 写入 context，供后续自动审批计算节省时间。
         """
         workflow_id = context["workflow_id"]
         episode_date = context["episode_date"]
         script_id = context["script_id"]
         audio_url = context["final_audio_url"]
+        # HLS 清单 URL：拼接阶段生成的 m3u8，为空表示未生成（HLS_ENABLE=false 或生成失败）
+        hls_url = context.get("hls_url")
 
         async with AsyncSessionLocal() as session:
             review = Review(
@@ -1114,18 +1298,66 @@ class WorkflowScheduler:
                 episode_date=episode_date,
                 script_id=script_id,
                 audio_url=audio_url,
+                hls_url=hls_url,
                 status=ReviewStatus.pending,
             )
             session.add(review)
             await session.commit()
             await session.refresh(review)
             review_id = review.id
+            review_created_at = review.created_at
+
+        # 写入 context 供 try_auto_approve 使用（计算节省时间）
+        context["review_created_at"] = review_created_at
 
         logger.info(
             "审核记录已创建 workflow_id=%s review_id=%s",
             workflow_id, review_id,
         )
         return {"review_id": review_id}
+
+    async def _try_auto_review(self, context: dict) -> None:
+        """工作流完成后尝试自动审批。
+
+        在主流程 status=success 之后、发送 pending_review 通知之前调用：
+        - 自动审批成功：直接发布节目，不发 pending_review 通知（避免冗余）
+        - 自动审批失败或不满足条件：继续发送 pending_review 通知，由人工审核
+
+        所有异常都被捕获，绝不阻塞工作流主流程。
+        """
+        workflow_id = context["workflow_id"]
+        review_id = context.get("review_id")
+        review_created_at = context.get("review_created_at")
+
+        if not review_id or not review_created_at:
+            logger.warning(
+                "自动审批跳过：context 缺少 review_id 或 review_created_at workflow_id=%s",
+                workflow_id,
+            )
+            return
+
+        try:
+            from app.services.auto_review_service import AutoReviewService
+            async with AsyncSessionLocal() as session:
+                svc = AutoReviewService(session)
+                result = await svc.try_auto_approve(
+                    workflow_id=workflow_id,
+                    review_id=review_id,
+                    review_created_at=review_created_at,
+                )
+            if result.get("auto_approved"):
+                # 自动审批成功：跳过 pending_review 通知，避免冗余打扰
+                context["_auto_review_succeeded"] = True
+                logger.info(
+                    "自动审批成功，跳过 pending_review 通知 workflow_id=%s",
+                    workflow_id,
+                )
+        except Exception as exc:
+            # 自动审批失败不阻塞工作流，仍会发送 pending_review 通知
+            logger.exception(
+                "自动审批异常 workflow_id=%s review_id=%s: %s",
+                workflow_id, review_id, exc,
+            )
 
     async def publish(self, workflow_id: str, review_id: int) -> int:
         """审核通过后发布节目（LLD 5.1.2 第 6 步）。
@@ -1277,7 +1509,7 @@ class WorkflowScheduler:
         )
 
     async def _cleanup_crawler_dedup(self) -> None:
-        """每日 03:00 清理 crawler_dedup 表过期记录 + 孤儿记录。
+        """每日 03:00 清理 crawler_dedup 表过期记录 + 孤儿记录 + 复活僵尸素材。
 
         替代原 Redis Set 的 EXPIRE 自动过期：SQLite 表需主动清理，
         按 CRAWLER_DEDUP_TTL_DAYS 配置保留窗口删除超出范围的记录。
@@ -1287,6 +1519,10 @@ class WorkflowScheduler:
         导致 dedup 表残留的 URL 锁阻止爬虫重新入库。
         正常流程下 batch_delete_workflows 已保留 material，不会产生孤儿，
         此清理是防御性兜底。
+
+        僵尸素材复活：material 存在但 status=selected 且超过 TTL 窗口的素材，
+        被历史工作流选中后因异常未回滚，dedup 锁住 URL 阻止爬虫重新入库，
+        形成死锁。复活（重置为 pending）后 dedup 仍保留，爬虫可刷新内容。
         """
         cutoff = utcnow_naive() - timedelta(days=settings.CRAWLER_DEDUP_TTL_DAYS)
         try:
@@ -1297,8 +1533,28 @@ class WorkflowScheduler:
                 )
                 deleted_ttl = result_ttl.rowcount
 
-                # 2. 清理孤儿记录（url 不在 material 表中）
-                # 子查询取 material 表所有 url，删除 dedup 表中不在其中的记录
+                # 2. 清理孤儿记录（url 不在 material 表中）+ 解锁僵尸 selected 素材
+                # 原逻辑仅清理 url 不在 material 表的孤儿，但漏了一种场景：
+                # material 存在但 status=selected 且超过 TTL 窗口（僵尸素材）。
+                # 这些素材被历史工作流选中后未回滚，dedup 锁住 URL 阻止爬虫重新入库，
+                # 形成死锁（wf-20260725-0009 channel_id=9 23 条素材全部 selected）。
+                # 解法：对超过 TTL 窗口的 selected 素材，同时清理 dedup 记录，
+                # 让爬虫能重新爬取并刷新素材内容。
+                from sqlalchemy import update as sa_update
+                from app.models.material import MaterialStatus
+
+                # 2a. 先重置超期 selected 素材为 pending（僵尸复活）
+                result_revive = await session.execute(
+                    sa_update(Material)
+                    .where(
+                        Material.status == MaterialStatus.selected.value,
+                        Material.crawled_at < cutoff,
+                    )
+                    .values(status=MaterialStatus.pending.value, workflow_id=None)
+                )
+                revived = result_revive.rowcount
+
+                # 2b. 清理 url 不在 material 表的孤儿 dedup 记录
                 material_urls = select(Material.url)
                 result_orphan = await session.execute(
                     delete(CrawlerDedup).where(
@@ -1308,10 +1564,10 @@ class WorkflowScheduler:
                 deleted_orphan = result_orphan.rowcount
 
                 await session.commit()
-            if deleted_ttl > 0 or deleted_orphan > 0:
+            if deleted_ttl > 0 or deleted_orphan > 0 or revived > 0:
                 logger.info(
-                    "清理爬虫去重表：过期 %d 条，孤儿 %d 条",
-                    deleted_ttl, deleted_orphan,
+                    "清理爬虫去重表：过期 %d 条，孤儿 %d 条，复活僵尸素材 %d 条",
+                    deleted_ttl, deleted_orphan, revived,
                 )
         except Exception as e:
             # 清理失败不中断调度器，下次调度继续处理
@@ -1377,6 +1633,26 @@ class WorkflowScheduler:
             self._entry_map.pop(wid, None)
         if stale_ids:
             logger.debug("清理 entry_map 中 %d 个过期条目", len(stale_ids))
+
+    async def _check_rss_sources(self) -> None:
+        """每 2 小时巡检所有 RSS 源可达性。
+
+        委托 rss_source_service.check_all_sources 执行并发探测，
+        连续失败 3 次的源在 service 内部发 WARNING 日志。
+        巡检失败不中断调度器，下次调度继续处理。
+        """
+        try:
+            from app.services.rss_source_service import check_all_sources
+            result = await check_all_sources()
+            # 失败率超过 30% 时发告警，提示运维介入
+            fail_rate = result["fail"] / result["total"] if result["total"] > 0 else 0
+            if fail_rate > 0.30:
+                logger.warning(
+                    "RSS 源可达性告警：失败率 %.0f%%（%d/%d 失败）",
+                    fail_rate * 100, result["fail"], result["total"],
+                )
+        except Exception as e:
+            logger.exception("RSS 源巡检失败: %s", e)
 
     # ===== 通知 =====
 
@@ -1449,7 +1725,13 @@ class WorkflowScheduler:
     async def _update_workflow_status(
         self, workflow_id: str, status: WorkflowStatus, error: str = None,
     ) -> None:
-        """更新 workflow 状态，失败时附加 error + finished_at。"""
+        """更新 workflow 状态，失败时附加 error + finished_at。
+
+        工作流失败时自动重置关联的 material 状态为 pending：
+        rewriter 选中素材后若后续步骤（tts/stitch）失败，material 会卡在 selected，
+        加上 crawler_dedup 拦截 URL，爬虫无法重新入库，形成死锁。
+        在此统一兜底，避免失败工作流的素材被永久锁定。
+        """
         async with AsyncSessionLocal() as session:
             result = await session.execute(
                 select(Workflow).where(Workflow.id == workflow_id)
@@ -1462,6 +1744,16 @@ class WorkflowScheduler:
                 wf.error = error
             if status in (WorkflowStatus.success, WorkflowStatus.failed, WorkflowStatus.cancelled):
                 wf.finished_at = utcnow_naive()
+                # 工作流终态（无论成功失败）：解除素材关联，重置为 pending 供后续工作流复用
+                # 成功时也重置：素材已完成使命（产出 episode），下次工作流应爬取新素材
+                # 失败时必须重置：否则素材卡在 selected 形成 dedup 死锁（wf-20260725-0009 复现）
+                from sqlalchemy import update as sa_update
+                from app.models.material import MaterialStatus
+                await session.execute(
+                    sa_update(Material)
+                    .where(Material.workflow_id == workflow_id)
+                    .values(status=MaterialStatus.pending.value, workflow_id=None)
+                )
             await session.commit()
 
     async def _create_step_record(

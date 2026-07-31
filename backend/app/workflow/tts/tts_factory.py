@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 _provider_cache: dict[str, TTSProvider] = {}
 
 
-def _create_aliyun() -> TTSProvider:
+def _create_aliyun() -> "Union[TTSProvider, AliyunSpeechClient]":
     """创建阿里云 NLS TTS provider。"""
     from app.workflow.tts.aliyun_client import AliyunSpeechClient
     settings = get_settings()

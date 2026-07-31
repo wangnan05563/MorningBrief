@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MorningBrief 小程序主图标：耳机 + 中央声波，体现"用耳朵听新闻"
+     配色：薄荷青到蜜桃粉对角渐变背景 + 白色主体，延续 tabBar 设计语言
+     用途：上传至微信公众平台后台作为小程序图标（解决"最近使用"空白图标）
+     规范：512x512 高清源，内容置于安全区内，微信自动圆角裁切 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="appIconBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7DD3DD"/>
+      <stop offset="50%" stop-color="#7ECEC1"/>
+      <stop offset="100%" stop-color="#FFB5A7"/>
+    </linearGradient>
+    <linearGradient id="earCupGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F0FBFA"/>
+    </linearGradient>
+  </defs>
+  <!-- 圆角方形背景（安全区留白 16px） -->
+  <rect x="16" y="16" width="480" height="480" rx="112" ry="112" fill="url(#appIconBg)"/>
+  <!-- 耳机头梁弧线 -->
+  <path d="M 136 296 C 136 200 192 136 256 136 C 320 136 376 200 376 296"
+        fill="none" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round"/>
+  <!-- 耳机左罩 -->
+  <rect x="100" y="284" width="72" height="112" rx="32" ry="32" fill="url(#earCupGrad)"/>
+  <!-- 耳机右罩 -->
+  <rect x="340" y="284" width="72" height="112" rx="32" ry="32" fill="url(#earCupGrad)"/>
+  <!-- 中央声波：三线递增，象征正在播报 -->
+  <line x1="226" y1="212" x2="226" y2="276" stroke="#FFFFFF" stroke-width="13" stroke-linecap="round" opacity="0.88"/>
+  <line x1="256" y1="190" x2="256" y2="298" stroke="#FFFFFF" stroke-width="13" stroke-linecap="round"/>
+  <line x1="286" y1="212" x2="286" y2="276" stroke="#FFFFFF" stroke-width="13" stroke-linecap="round" opacity="0.88"/>
+</svg>

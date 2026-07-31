@@ -6,7 +6,7 @@
   </view>
   <view class="episode-title">{{episode.title}}</view>
   <view class="episode-duration">
-    <image class="duration-icon" src="/images/icons/duration.png" mode="aspectFit" />
+    <image class="duration-icon" lazy-load src="/images/icons/duration.png" mode="aspectFit" />
     <text>时长 {{fmt.time(episode.duration)}}</text>
   </view>
 

@@ -9,6 +9,7 @@
 
 所有路径均通过 resolve_data_dir() 派生，避免硬编码。
 """
+import json
 import logging
 from pathlib import Path
 
@@ -21,7 +22,7 @@ from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
 from app.database import get_db
-from app.models import Workflow
+from app.models import AuditLog, Workflow
 from app.paths import resolve_data_dir
 
 logger = logging.getLogger(__name__)
@@ -149,6 +150,7 @@ async def stream_episode(
 async def delete_tts(
     workflow_id: str,
     filename: str,
+    db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
     """删除单个 TTS 片段音频（仅管理员）。"""
@@ -158,6 +160,15 @@ async def delete_tts(
         raise NotFoundError("音频文件不存在")
 
     file_path.unlink()
+    # 审计日志：TTS 片段删除影响工作流音频拼接，记录操作人与文件路径便于追溯
+    db.add(AuditLog(
+        category="audio",
+        action="delete_tts",
+        target=f"{workflow_id}/{filename}",
+        operator=admin.username,
+        detail=json.dumps({"workflow_id": workflow_id, "filename": filename}, ensure_ascii=False),
+    ))
+    await db.commit()
     return success(data={"deleted": filename})
 
 
@@ -182,4 +193,13 @@ async def delete_episode(
         raise NotFoundError("成品音频尚未生成")
 
     ep_path.unlink()
+    # 审计日志：成品音频删除影响节目播放，记录操作人与文件路径便于追溯
+    db.add(AuditLog(
+        category="audio",
+        action="delete_episode",
+        target=str(ep_path),
+        operator=admin.username,
+        detail=json.dumps({"workflow_id": workflow_id, "path": str(ep_path)}, ensure_ascii=False),
+    ))
+    await db.commit()
     return success(data={"deleted": _rel_path(ep_path)})

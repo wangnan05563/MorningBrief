@@ -1,4 +1,6 @@
 """B 端队列管理路由。"""
+import json
+
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.response import success, error
 from app.database import get_db
+from app.models import AuditLog
 from app.services.queue_service import QueueService
 
 router = APIRouter(prefix="/admin/api/v1/queue", tags=["B端-队列管理"])
@@ -40,14 +43,28 @@ async def list_queue_tasks(
     priority: int | None = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    sort_by: str | None = Query(
+        None,
+        description="排序字段：channel_name/priority/status/started_at。留空走默认排序",
+    ),
+    sort_order: str | None = Query(
+        None,
+        pattern="^(asc|desc)$",
+        description="排序方向：asc/desc。留空走默认排序",
+    ),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(get_current_admin),
 ):
-    """队列任务列表。admin + operator 均可查看。"""
+    """队列任务列表。admin + operator 均可查看。
+
+    默认排序：failed 状态最新优先 + started_at 倒序。
+    指定 sort_by/sort_order 后按单一字段排序，方向由 sort_order 决定。
+    """
     svc = QueueService(db)
     items, total = await svc.list_queue_tasks(
         status=status, channel_id=channel_id, priority=priority,
         page=page, size=size,
+        sort_by=sort_by, sort_order=sort_order,
     )
     return success(data={"items": items, "total": total, "page": page, "size": size})
 
@@ -64,6 +81,15 @@ async def cancel_task(
         await svc.cancel_task(workflow_id=workflow_id)
     except ValueError as e:
         return error(code=400, message=str(e))
+    # 审计日志：取消任务影响工作流执行顺序，记录操作人便于追溯异常取消
+    db.add(AuditLog(
+        category="queue",
+        action="cancel",
+        target=workflow_id,
+        operator=admin.username,
+        detail=json.dumps({"workflow_id": workflow_id}, ensure_ascii=False),
+    ))
+    await db.commit()
     return success(data={"cancelled": True})
 
 
@@ -80,6 +106,15 @@ async def update_priority(
         await svc.update_priority(workflow_id=workflow_id, priority=req.priority)
     except ValueError as e:
         return error(code=400, message=str(e))
+    # 审计日志：优先级调整影响任务执行顺序，记录新优先级便于追溯排队异常
+    db.add(AuditLog(
+        category="queue",
+        action="update_priority",
+        target=workflow_id,
+        operator=admin.username,
+        detail=json.dumps({"workflow_id": workflow_id, "priority": req.priority}, ensure_ascii=False),
+    ))
+    await db.commit()
     return success(data={"updated": True})
 
 
@@ -101,6 +136,15 @@ async def retry_task(
         wf_id = await svc.retry_task(workflow_id=workflow_id)
     except (ValueError, ParamError) as e:
         return error(code=400, message=str(e))
+    # 审计日志：重试任务会重新消耗 AI 预算，记录操作人便于事后用量核对
+    db.add(AuditLog(
+        category="queue",
+        action="retry",
+        target=wf_id,
+        operator=admin.username,
+        detail=json.dumps({"workflow_id": wf_id}, ensure_ascii=False),
+    ))
+    await db.commit()
     return success(data={"workflow_id": wf_id, "status": "queued"})
 
 

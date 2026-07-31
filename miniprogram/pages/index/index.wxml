@@ -3,7 +3,7 @@
   <!-- 顶部工具栏：搜索 + 频道切换 + 睡眠定时器 -->
   <view class="top-bar" wx:if="{{!loading}}">
     <view class="top-action" bindtap="onSearch">
-      <image class="action-icon" src="/images/icons/search.png" mode="aspectFit" />
+      <image class="action-icon" lazy-load src="/images/icons/search.png" mode="aspectFit" />
     </view>
     <scroll-view scroll-x class="channel-bar" wx:if="{{channels.length > 0}}">
       <view
@@ -15,7 +15,7 @@
       >{{item.name}}</view>
     </scroll-view>
     <view class="top-action" bindtap="onSleepTimer">
-      <image class="action-icon" src="{{sleepActive ? '/images/icons/alarm.png' : '/images/icons/moon.png'}}" mode="aspectFit" />
+      <image class="action-icon" lazy-load src="{{sleepActive ? '/images/icons/alarm.png' : '/images/icons/moon.png'}}" mode="aspectFit" />
     </view>
   </view>
 
@@ -24,22 +24,42 @@
     <text>{{sleepLabel}}</text>
   </view>
 
-  <!-- 加载中状态 -->
-  <view class="loading-mask" wx:if="{{loading}}">
-    <text>正在加载今日要闻...</text>
+  <!-- 骨架屏：3 个节目行占位，shimmer 动画 -->
+  <view class="skeleton-wrap" wx:if="{{loading}}">
+    <view class="skeleton-card" wx:for="{{[1,2,3]}}" wx:key="*this">
+      <view class="skeleton-cover shimmer"></view>
+      <view class="skeleton-main">
+        <view class="skeleton-title shimmer"></view>
+        <view class="skeleton-sub shimmer"></view>
+      </view>
+      <view class="skeleton-play shimmer"></view>
+    </view>
   </view>
 
   <!-- === 今日节目列表（统一布局，点击跳转 detail 页） === -->
   <block wx:elif="{{!loading}}">
+    <!-- "我的偏爱"未设置时的引导设置提示 -->
+    <view class="card preferred-empty-card" wx:if="{{isPreferredMode && preferredEmpty}}">
+      <image class="preferred-empty-icon" lazy-load src="/images/icons/radio.png" mode="aspectFit" />
+      <view class="preferred-empty-title">还没有偏爱频道</view>
+      <view class="preferred-empty-desc">勾选喜爱的频道，这里会只展示你关心的内容</view>
+      <view class="btn-primary preferred-empty-btn" bindtap="onTapPreferredSettings">
+        <view class="btn-content">
+          <image class="btn-icon" src="/images/icons/btn-settings.png" mode="aspectFit" />
+          <text>去设置偏爱频道</text>
+        </view>
+      </view>
+    </view>
+
     <view class="greeting-card" wx:if="{{todayList.length > 0}}">
-      <text class="greeting-title">今日共 {{todayList.length}} 个频道已更新</text>
+      <text class="greeting-title">{{isPreferredMode ? '我的偏爱 · 今日 ' + todayList.length + ' 个节目' : '今日共 ' + todayList.length + ' 个频道已更新'}}</text>
       <text class="greeting-subtitle">{{todayDateText}} · 挑选你感兴趣的频道收听</text>
     </view>
 
     <!-- 继续播放：展示上次播放过的频道与进度（任务3续播） -->
     <view class="card continue-card" wx:if="{{lastPlayedEpisode}}" bindtap="onTapContinue">
       <view class="continue-icon-wrap">
-        <image class="continue-icon" src="{{(isPlaying && currentEpisodeId === lastPlayedEpisode.id) ? '/images/icons/pause.png' : '/images/icons/play-mini.png'}}" mode="aspectFit" />
+        <image class="continue-icon" lazy-load src="{{(isPlaying && currentEpisodeId === lastPlayedEpisode.id) ? '/images/icons/pause.png' : '/images/icons/play-mini.png'}}" mode="aspectFit" />
       </view>
       <view class="continue-info">
         <text class="continue-label">继续播放</text>
@@ -47,12 +67,12 @@
         <text class="continue-meta" wx:if="{{lastPlayedEpisode.channel_name}}">{{lastPlayedEpisode.channel_name}} · 已播 {{fmt.time(lastPlayedEpisode.currentTime)}}</text>
         <text class="continue-meta" wx:else>已播 {{fmt.time(lastPlayedEpisode.currentTime)}}</text>
       </view>
-      <image class="continue-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
+      <image class="continue-arrow" lazy-load src="/images/icons/chevron-right.png" mode="aspectFit" />
     </view>
 
     <!-- 节目列表：每频道一行 + 播放量/时长小图标 -->
     <view
-      class="card episode-row-card"
+      class="card episode-row-card {{item.played ? 'played' : ''}}"
       wx:for="{{todayList}}"
       wx:key="id"
       data-id="{{item.id}}"
@@ -61,22 +81,24 @@
       <view class="row-cover">
         <text class="row-cover-channel">{{item.channel_name || '节目'}}</text>
         <text class="row-cover-date">{{item.date_label || ''}}</text>
+        <!-- 已播放角标：与未播放的卡片形成视觉区分 -->
+        <text class="played-badge" wx:if="{{item.played}}">已播放</text>
       </view>
       <view class="row-main">
         <text class="row-title">{{item.title || (item.date_label + ' · ' + (item.channel_name || '节目'))}}</text>
         <view class="row-stats">
           <view class="row-stat">
-            <image class="row-stat-icon" src="/images/icons/play-mini.png" mode="aspectFit" />
+            <image class="row-stat-icon" lazy-load src="/images/icons/play-mini.png" mode="aspectFit" />
             <text>{{item.play_count || 0}} 播放</text>
           </view>
           <view class="row-stat">
-            <image class="row-stat-icon" src="/images/icons/duration.png" mode="aspectFit" />
+            <image class="row-stat-icon" lazy-load src="/images/icons/duration.png" mode="aspectFit" />
             <text>{{item.duration_label || '00:00'}}</text>
           </view>
         </view>
       </view>
       <view class="row-play" data-id="{{item.id}}" catchtap="onPlayEpisode">
-        <image class="row-play-icon" src="{{(isPlaying && currentEpisodeId === item.id) ? '/images/icons/pause.png' : '/images/icons/play.png'}}" mode="aspectFit" />
+        <image class="row-play-icon" lazy-load src="{{(isPlaying && currentEpisodeId === item.id) ? '/images/icons/pause.png' : '/images/icons/play.png'}}" mode="aspectFit" />
       </view>
     </view>
 

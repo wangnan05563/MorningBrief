@@ -38,6 +38,12 @@ class SaveConfigBody(BaseModel):
     published_enabled: bool = False
     dingtalk_webhook: str = ""
     dingtalk_secret: str = ""
+    wecom_webhook: str = ""
+    email_smtp_host: str = ""
+    email_smtp_port: int = 587
+    email_smtp_user: str = ""
+    email_smtp_password: str = ""
+    email_to: str = ""
     admin_base_url: str = ""
 
 

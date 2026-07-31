@@ -16,6 +16,7 @@ from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
 from app.database import get_db
 from app.models import Comment, CommentLike, Episode, EpisodeStatus, User
+from app.services.user_service import get_user_openid
 
 router = APIRouter(prefix="/api/v1/comments", tags=["C端-评论"])
 
@@ -32,20 +33,11 @@ class CommentRequest(BaseModel):
     user_avatar: str | None = Field(None, max_length=512, description="前端附带的头像 URL（可选）")
 
 
-async def _get_user_openid(db: AsyncSession, user_id: int) -> str:
-    """根据 User.id 查询 openid，作为 comment.user_id 存储。
+async def _get_user_profile(db: AsyncSession, user_id: int) -> tuple[str, str, str]:
+    """根据 User.id 查询 openid + nickname + avatar，避免多次往返。
 
-    与 favorites.py 保持一致的转换逻辑。
+    返回三元组（openid, nickname, avatar），nickname 缺省回退为"匿名听众"。
     """
-    result = await db.execute(select(User.openid).where(User.id == user_id))
-    openid = result.scalar_one_or_none()
-    if openid is None:
-        raise NotFoundError("用户不存在")
-    return openid
-
-
-async def _get_user_profile(db: AsyncSession, user_id: int) -> tuple[str, str]:
-    """根据 User.id 查询 openid + nickname + avatar，避免多次往返。"""
     result = await db.execute(
         select(User.openid, User.nickname, User.avatar).where(User.id == user_id)
     )
@@ -74,7 +66,7 @@ async def list_comments(
     # 当前用户的 openid（用于查 liked 状态）
     user_openid = None
     if user is not None:
-        user_openid = await _get_user_openid(db, user.user_id)
+        user_openid = await get_user_openid(db, user.user_id)
 
     offset = (page - 1) * size
     list_stmt = (
@@ -185,7 +177,7 @@ async def like_comment(
     db: AsyncSession = Depends(get_db),
 ):
     """点赞评论：幂等，已点赞则直接返回成功。"""
-    openid = await _get_user_openid(db, user.user_id)
+    openid = await get_user_openid(db, user.user_id)
 
     # 校验评论存在
     comment = (
@@ -220,7 +212,7 @@ async def unlike_comment(
     db: AsyncSession = Depends(get_db),
 ):
     """取消点赞：幂等，未点赞也返回成功。"""
-    openid = await _get_user_openid(db, user.user_id)
+    openid = await get_user_openid(db, user.user_id)
 
     comment = (
         await db.execute(select(Comment).where(Comment.id == comment_id))

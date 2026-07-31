@@ -70,6 +70,10 @@ async def normalize_loudness(audio_bytes: bytes, target_lufs: int = -16) -> byte
 
     统一各段响度到 target_lufs，避免拼接后段间音量跳变。
     同时统一采样率/声道/码率，为后续拼接做准备。
+
+    为什么读 settings.AUDIO_BITRATE：原本硬编码 128k，导致 TTS 段以 128kbps 落盘，
+    拼接时再重编码到 64kbps——既浪费存储/带宽，又造成二次有损压缩。
+    统一码率后 TTS 段与拼接产物码率一致，拼接环节无需二次重编码。
     """
     in_path = _write_temp(audio_bytes, ".mp3")
     out_path = in_path.replace(".mp3", "_norm.mp3")
@@ -78,7 +82,7 @@ async def normalize_loudness(audio_bytes: bytes, target_lufs: int = -16) -> byte
         "-af", f"loudnorm=I={target_lufs}:TP=-1.5:LRA=11",
         "-ar", str(settings.ALIYUN_TTS_SAMPLE_RATE),
         "-ac", "1",
-        "-b:a", "128k",
+        "-b:a", settings.AUDIO_BITRATE,
         out_path,
     ]
     try:
@@ -95,6 +99,10 @@ async def trim_silence(audio_bytes: bytes, threshold_db: int = -50) -> bytes:
 
     threshold_db 为负数 dB，去除低于该阈值的静音段，
     避免拼接处出现明显停顿。
+
+    为什么显式指定 -b:a：ffmpeg 在仅做剪切（无重编码滤镜）时，
+    对 mp3 输出默认使用 128kbps，会破坏与 normalize_loudness 设定的 64kbps 一致性。
+    此处与 normalize_loudness 使用同一码率，保证整条链路码率统一。
     """
     in_path = _write_temp(audio_bytes, ".mp3")
     out_path = in_path.replace(".mp3", "_trim.mp3")
@@ -104,6 +112,7 @@ async def trim_silence(audio_bytes: bytes, threshold_db: int = -50) -> bytes:
         "-af",
         f"silenceremove=start_periods=1:start_threshold={threshold_db}dB:"
         f"stop_periods=-1:stop_threshold={threshold_db}dB:stop_duration=0.3",
+        "-b:a", settings.AUDIO_BITRATE,
         out_path,
     ]
     try:

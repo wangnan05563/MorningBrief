@@ -1,37 +1,36 @@
-<!-- 播放队列 -->
+<!-- 播放队列页：样式与详情页队列弹窗完全一致（复用 .queue-modal-* / .qm-item-* 类名） -->
 <view class="page-queue">
-  <!-- 顶部操作 -->
-  <view class="queue-header" wx:if="{{queue.length > 0}}">
-    <text class="queue-count">共 {{queue.length}} 首</text>
-    <text class="clear-btn" bindtap="onClear">清空</text>
+  <!-- 顶部操作栏（与详情页弹窗头部同款） -->
+  <view class="queue-modal-header" wx:if="{{queue.length > 0}}">
+    <text class="queue-modal-title">播放队列</text>
+    <text class="queue-modal-count">{{queue.length}} 首</text>
+    <view class="queue-modal-close clear-btn" bindtap="onClear">清空</view>
   </view>
 
   <!-- 空状态 -->
-  <view class="empty-state" wx:if="{{queue.length === 0}}">
-    <image class="empty-icon-img" src="/images/icons/music.png" mode="aspectFit" />
+  <view class="queue-modal-empty" wx:if="{{queue.length === 0}}">
+    <image class="empty-icon-img" lazy-load src="/images/icons/music.png" mode="aspectFit" />
     <text>播放队列为空</text>
     <text class="empty-desc">在历史列表中点击节目即可加入队列</text>
   </view>
 
-  <!-- 队列列表 -->
-  <block wx:else>
-    <view class="queue-list">
-      <view
-        class="card queue-item {{index === currentIndex ? 'current' : ''}}"
-        wx:for="{{queue}}"
-        wx:key="index"
-        data-index="{{index}}"
-        bindtap="onTapItem"
-      >
-        <view class="item-index">
-          <image wx:if="{{index === currentIndex}}" class="playing-icon" src="/images/icons/play-mini.png" mode="aspectFit" />
-          <text wx:else>{{index + 1}}</text>
-        </view>
-        <view class="item-info">
-          <text class="item-title">{{item.title}}</text>
-          <text class="item-date">{{item.date}}</text>
-        </view>
+  <!-- 队列列表：与详情页弹窗列表项完全一致 -->
+  <scroll-view scroll-y class="queue-page-list" wx:else>
+    <view
+      class="queue-modal-item {{index === currentIndex ? 'current' : ''}}"
+      wx:for="{{queue}}"
+      wx:key="index"
+      data-index="{{index}}"
+      bindtap="onTapItem"
+    >
+      <view class="qm-item-index">
+        <image wx:if="{{index === currentIndex}}" class="qm-playing-icon" lazy-load src="/images/icons/play-mini.png" mode="aspectFit" />
+        <text wx:else>{{index + 1}}</text>
+      </view>
+      <view class="qm-item-info">
+        <text class="qm-item-title">{{item.title}}</text>
+        <text class="qm-item-date">{{item.date}}</text>
       </view>
     </view>
-  </block>
+  </scroll-view>
 </view>

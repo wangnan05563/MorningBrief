@@ -1,0 +1,1 @@
+﻿import subprocess, sys; r = subprocess.run([sys.executable, '-m', 'pytest', 'tests/test_health.py', '-v', '--tb=long'], capture_output=True, text=True, cwd='.'); print('STDOUT:', r.stdout); print('STDERR:', r.stderr); print('RETURNCODE:', r.returncode)
