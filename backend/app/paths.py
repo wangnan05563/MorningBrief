@@ -1,4 +1,4 @@
-"""路径解析模块（V1.2 新增）。
+﻿"""路径解析模块（V1.2 新增）。
 
 核心问题：PyInstaller 打包后 __file__ 指向临时解压目录，
 用户数据（SQLite、日志、.env）必须放在 exe 同级目录，否则升级后丢失。
@@ -84,11 +84,16 @@ def resolve_ffmpeg_path() -> str:
 
     优先使用项目自带的 ffmpeg.exe（./ffmpeg/bin/），保证滤镜支持一致性
     （loudnorm/silenceremove 等滤镜需要完整构建，精简版 ffmpeg 不支持）。
+    打包模式下 ffmpeg 在 _internal/ffmpeg/bin/ 下，需额外检查。
     仅当项目未附带 ffmpeg 时，才回退到系统 PATH。
     """
-    bundled = get_app_root() / "ffmpeg" / "bin" / "ffmpeg.exe"
-    if bundled.exists():
-        return str(bundled)
+    app_root = get_app_root()
+    for candidate in [
+        app_root / "ffmpeg" / "bin" / "ffmpeg.exe",
+        app_root / "_internal" / "ffmpeg" / "bin" / "ffmpeg.exe",
+    ]:
+        if candidate.exists():
+            return str(candidate)
     return "ffmpeg"
 
 
@@ -96,10 +101,15 @@ def resolve_ffprobe_path() -> str:
     """FFprobe 可执行文件路径。
 
     与 resolve_ffmpeg_path 对称：优先项目自带，回退 PATH。
+    打包模式下 ffprobe 在 _internal/ffmpeg/bin/ 下，需额外检查。
     """
-    bundled = get_app_root() / "ffmpeg" / "bin" / "ffprobe.exe"
-    if bundled.exists():
-        return str(bundled)
+    app_root = get_app_root()
+    for candidate in [
+        app_root / "ffmpeg" / "bin" / "ffprobe.exe",
+        app_root / "_internal" / "ffmpeg" / "bin" / "ffprobe.exe",
+    ]:
+        if candidate.exists():
+            return str(candidate)
     return "ffprobe"
 
 

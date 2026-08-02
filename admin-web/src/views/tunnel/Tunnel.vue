@@ -19,7 +19,7 @@
               <el-icon><CopyDocument /></el-icon>
               <span>复制</span>
             </el-button>
-            <el-button link type="primary" @click="openUrl(status.public_url)">
+            <el-button link type="primary" @click="openUrl(status.public_url + (status.path_prefix || ''))">
               <el-icon><Link /></el-icon>
               <span>打开</span>
             </el-button>
@@ -365,6 +365,12 @@ const routeLoading = ref(false)
 let pollTimer = null
 
 const isRunning = computed(() => status.value?.status === 'running')
+const apiBaseURL = computed(() => {
+  const url = status.value?.public_url
+  const prefix = status.value?.path_prefix || ''
+  if (url) return url + prefix + 'admin/api/v1'
+  return '/news/admin/api/v1'
+})
 const isNamedTunnel = computed(() =>
   config.value?.tunnel_mode === 'named' && config.value?.hostname
 )

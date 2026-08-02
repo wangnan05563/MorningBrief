@@ -229,6 +229,8 @@ class TunnelService:
             "hostname": cfg.get("hostname", ""),
             "cert_file": cfg.get("cert_file", ""),
             "cert_file_configured": bool(cfg.get("cert_file", "")),
+            # Tailscale path prefix for dynamic URL computation
+            "path_prefix": cfg.get("path_prefix", ""),
         }
 
     def save_config(self, body: dict) -> None:

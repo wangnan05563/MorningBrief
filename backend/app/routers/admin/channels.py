@@ -43,6 +43,7 @@ class ChannelCreateRequest(BaseModel):
     rss_sources: str | None = None
     # 频道关键词过滤（逗号分隔，如 "游戏,主机,PS5"），为空表示不过滤
     keywords: str | None = None
+    min_duration_sec: int | None = None
     # 频道创建时是否自动调用 AI 生成提示词
     auto_generate_prompts: bool = False
 
@@ -146,6 +147,7 @@ def _channel_to_dict(ch) -> dict:
         "enable_thinking_question": ch.enable_thinking_question,
         "rss_sources": ch.rss_sources,
         "keywords": ch.keywords,
+        "min_duration_sec": ch.min_duration_sec,
         "created_at": ch.created_at.isoformat() if ch.created_at else None,
         "updated_at": ch.updated_at.isoformat() if ch.updated_at else None,
     }
@@ -194,6 +196,7 @@ async def create_channel(
             enable_thinking_question=req.enable_thinking_question,
             rss_sources=req.rss_sources,
             keywords=req.keywords,
+            min_duration_sec=req.min_duration_sec,
         )
     except ValueError as e:
         return error(code=400, message=str(e))

@@ -97,6 +97,7 @@ async def tunnel_status(
         "status": svc.status,
         "public_url": svc.public_url,
         "provider": svc.provider_name,
+        "path_prefix": svc.get_config().get("path_prefix", ""),
     })
 
 
@@ -117,6 +118,7 @@ async def tunnel_start(
             "status": svc.status,
             "public_url": url,
             "provider": svc.provider_name,
+            "path_prefix": svc.get_config().get("path_prefix", ""),
         })
     except BinaryDownloadError as e:
         # 下载失败：返回手动放置指引，前端渲染下载链接和路径

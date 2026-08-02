@@ -35,6 +35,7 @@ class LLMConfigBody(BaseModel):
     timeout_sec: int = 30
     retry_attempts: int = 3
     target_duration_sec: int = 600
+    segment_gap_sec: float = 0.5
 
 
 class TTSConfigBody(BaseModel):

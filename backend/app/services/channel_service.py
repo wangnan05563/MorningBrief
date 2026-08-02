@@ -62,11 +62,12 @@ class ChannelService:
         enable_thinking_question: Optional[int] = None,
         rss_sources: Optional[str] = None,
         keywords: Optional[str] = None,
+        min_duration_sec: Optional[int] = None,
     ) -> Channel:
         """新增频道。name 唯一约束，冲突抛 ValueError。
 
         支持 schedule_time（定时触发）与 4 个提示词字段 + BGM 配置 + 段间静音 + 思考问题开关
-        + RSS 源白名单 + 关键词过滤，均为可选。
+        + RSS 源白名单 + 关键词过滤 + 最短时长，均为可选。
         """
         channel = Channel(
             name=name, description=description, is_active=1,
@@ -81,6 +82,7 @@ class ChannelService:
             enable_thinking_question=enable_thinking_question,
             rss_sources=rss_sources,
             keywords=keywords,
+            min_duration_sec=min_duration_sec,
         )
         self.db.add(channel)
         try:
@@ -93,7 +95,7 @@ class ChannelService:
         logger.info("新增频道 channel_id=%s name=%s schedule=%s", channel.id, name, schedule_time)
         return channel
 
-    async def update_channel( # NOSONAR
+    async def update_channel(  # NOSONAR
         self, channel_id: int, name: Optional[str] = None, # NOSONAR
         description: Optional[str] = None, is_active: Optional[int] = None,
         schedule_time: Optional[str] = None,
@@ -107,6 +109,7 @@ class ChannelService:
         enable_thinking_question: Optional[int] = None,
         rss_sources: Optional[str] = None,
         keywords: Optional[str] = None,
+        min_duration_sec: Optional[int] = None,
     ) -> Channel:
         """修改频道。显式设置 updated_at（SQLite 不支持 ON UPDATE）。
 
@@ -151,6 +154,8 @@ class ChannelService:
             channel.rss_sources = rss_sources
         if keywords is not None:
             channel.keywords = keywords
+        if min_duration_sec is not None:
+            channel.min_duration_sec = min_duration_sec
         channel.updated_at = utcnow_naive()
 
         try:

@@ -34,7 +34,7 @@ const DEFAULT_PORT = 8000;
 // 生产环境 API 基础地址：Tailscale Funnel 配置了 /news/ 前缀代理到本地 8000 端口
 // 实际转发规则：https://desktop-g10o4nl.tailbca47.ts.net/news/* → http://127.0.0.1:8000/*
 // 故 API 路径为 /news/api/v1，音频路径为 /news/audio/...
-const PROD_API_BASE_URL = 'https://desktop-g10o4nl.tailbca47.ts.net/news/api/v1';
+const PROD_API_BASE_URL = 'https://win-20260220ins.tailbca47.ts.net/news/api/v1';
 const COMMON_HOST_SUFFIXES = [1, 2, 3, 10, 100, 101, 102, 103, 104, 105, 200];
 
 function isValidBaseUrl(url) {
