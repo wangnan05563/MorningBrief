@@ -290,6 +290,38 @@ foreach ($d in @("$distDir\logs", "$distDir\data\audio_cache")) {
     New-Item -ItemType Directory -Force $d | Out-Null
 }
 Write-OK "运行时目录已创建"
+
+# 5.3.0 Sync DB from backend to dist
+Write-Host "  [5.3.0] Sync DB..."
+$dbSrc = "$repoRoot\\backend\\data\\news.db"
+$dbDst = "$distDir\\data\\news.db"
+if ((Test-Path $dbSrc) -and (Test-Path "$distDir\\data")) {
+    $srcLen = (Get-Item $dbSrc).Length
+    if (Test-Path $dbDst) {
+        $dstLen = (Get-Item $dbDst).Length
+    } else {
+        $dstLen = 0
+    }
+    if ($srcLen -ge 1MB -and $srcLen -ne $dstLen) {
+        Copy-Item $dbSrc $dbDst -Force
+        Write-OK "DB synced ($([math]::Round($srcLen/1MB,1)) MB)"
+    }
+}
+
+# 5.3.2 Copy BGM preset files
+Write-Host "  [5.3.2] Copy BGM preset files..."
+$bgmSrc = "$repoRoot\\backend\\data\\bgm\\preset"
+$bgmDst = "$distDir\\data\\bgm\\preset"
+if (Test-Path $bgmSrc) {
+    # Remove existing file with same name (from previous buggy build) before creating directory
+    if (Test-Path $bgmDst -PathType Leaf) { Remove-Item -Force $bgmDst }
+    New-Item -ItemType Directory -Force (Split-Path $bgmDst) | Out-Null
+    Copy-Item -Recurse -Force "$bgmSrc\\*" $bgmDst
+    $bgmCount = (Get-ChildItem $bgmDst -File).Count
+    Write-OK "BGM preset copied ($bgmCount files)"
+} else {
+    Write-Warn "BGM preset source not found: $bgmSrc"
+}
 # 5.3.1 Seed 默认管理员（首次启动即可登录）
 Write-Host "  [5.3.1] 初始化默认管理员..."
 $dbPath = "$distDir\data\news.db"
@@ -433,4 +465,5 @@ Write-Host "    1. 编辑 dist\MorningBrief\.env 填入实际密钥（JWT_SECRET
 Write-Host "    2. 双击 dist\MorningBrief\MorningBrief.exe 启动服务（SQLite 嵌入式，无需外部数据库）"
 Write-Host "    3. 访问 http://127.0.0.1:8000/docs"
 Write-Host "========================================" -ForegroundColor Green
+
 

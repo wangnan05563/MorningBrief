@@ -791,7 +791,9 @@ class TailscaleProvider(TunnelProvider):
                         handlers = cfg["Handlers"]
                         break
             if not isinstance(handlers, dict) or self._path_prefix not in handlers:
-                return None
+                # fallback: Funnel已启用，直接构造URL
+                logger.info("[tailscale] Handlers check failed", self._path_prefix)
+                return f"https://{host}{self._path_prefix}"
             return f"https://{host}{self._path_prefix}"
 
         # 根路径模式（旧行为）：URL 不含路径前缀

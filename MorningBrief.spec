@@ -1,4 +1,4 @@
-# -*- mode: python ; coding: utf-8 -*-
+﻿# -*- mode: python ; coding: utf-8 -*-
 """
 MorningBrief PyInstaller 打包配置
 
@@ -116,7 +116,17 @@ for src, dst in explicit_datas:
 a = Analysis(
     [os.path.join(_backend_dir, 'launcher.py')],
     pathex=[_backend_dir],
-    binaries=[],
+    binaries=[
+        (os.path.join(_backend_dir, 'ffmpeg', 'bin', 'ffmpeg.exe'), 'ffmpeg/bin'),
+        (os.path.join(_backend_dir, 'ffmpeg', 'bin', 'ffprobe.exe'), 'ffmpeg/bin'),
+        (os.path.join(_backend_dir, 'ffmpeg', 'bin', 'avutil-61.dll'), 'ffmpeg/bin'),
+        (os.path.join(_backend_dir, 'ffmpeg', 'bin', 'avcodec-63.dll'), 'ffmpeg/bin'),
+        (os.path.join(_backend_dir, 'ffmpeg', 'bin', 'avformat-63.dll'), 'ffmpeg/bin'),
+        (os.path.join(_backend_dir, 'ffmpeg', 'bin', 'avdevice-63.dll'), 'ffmpeg/bin'),
+        (os.path.join(_backend_dir, 'ffmpeg', 'bin', 'avfilter-12.dll'), 'ffmpeg/bin'),
+        (os.path.join(_backend_dir, 'ffmpeg', 'bin', 'swresample-7.dll'), 'ffmpeg/bin'),
+        (os.path.join(_backend_dir, 'ffmpeg', 'bin', 'swscale-10.dll'), 'ffmpeg/bin'),
+    ],
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],

@@ -256,6 +256,7 @@ async def _migrate_channel_schema() -> None:  # NOSONAR
             ("enable_thinking_question", "INTEGER"),
             ("rss_sources", "TEXT"),
             ("keywords", "TEXT"),
+            ("min_duration_sec", "INTEGER"),
         ]
         added = 0
         for col_name, col_type in new_columns:
@@ -296,6 +297,28 @@ async def _migrate_material_schema() -> None:  # NOSONAR
         logger.warning("[startup] material 表迁移失败: %s", e)
     finally:
         conn.close()
+
+async def _migrate_cover_url_column() -> None:  # NOSONAR
+    """For material table migration: add cover_url column (idempotent).    SQLite create_all does not modify existing table structure.    cover_url stores the og:image cover URL for frontend segment images.    """
+    import sqlite3
+    from app.paths import resolve_db_path
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(material)")
+        existing_cols = {row[1] for row in cur.fetchall()}
+
+        if "cover_url" not in existing_cols:
+            cur.execute("ALTER TABLE material ADD COLUMN cover_url VARCHAR(512)")
+            conn.commit()
+            logger.info("[startup] material migration done, added cover_url column")
+    except Exception as e:
+        logger.warning("[startup] material cover_url migration failed: %s", e)
+    finally:
+        conn.close()
+
 
 
 async def _migrate_hls_url_columns() -> None:  # NOSONAR
@@ -576,6 +599,13 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
         await _migrate_material_schema()
     except Exception as e:
         logger.warning("[startup] material 表迁移失败: %s", e)
+
+    # material table cover_url column migration (idempotent)
+    try:
+        await _migrate_cover_url_column()
+    except Exception as e:
+        logger.warning("[startup] material cover_url migration failed: %s", e)
+
 
     # episode/review 表 hls_url 列迁移（幂等追加，用于 HLS 分片播放）
     try:

@@ -48,6 +48,10 @@ class Channel(Base):
     # 频道关键词过滤（逗号分隔，如 "游戏,主机,PS5,Xbox,任天堂"）
     # crawler 入库前按关键词过滤标题/内容，为空表示不关键词过滤
     keywords: Mapped[Optional[str]] = mapped_column(Text, comment="频道关键词过滤（逗号分隔）")
+    # 频道级最短时长（秒）：为空时使用全局 settings.TARGET_DURATION_SEC×0.80 作为下限
+    # 冷门/小众频道素材稀疏时，可设置较短时长避免 padding 补足后仍不足下限的问题
+    # 例如教育资讯可设为 300（下限 240s），体育速递可设为 360（下限 288s）
+    min_duration_sec: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     # SQLite 不支持 ON UPDATE，updated_at 由 ChannelService.update_channel 显式维护
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
