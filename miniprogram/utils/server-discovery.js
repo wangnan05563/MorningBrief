@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 后端服务地址自动发现模块
  *
  * 解决问题：硬编码 IP 在切换 WiFi/路由器后失效，导致小程序"网络异常"。
@@ -189,7 +189,7 @@ function probeCandidate(url) {
             if (res.statusCode === 401) {
               console.log('[server-discovery] 探测成功(401):', url);
               resolve(url);
-            } else if (data && typeof data.code !== 'undefined') {
+            } else if (data && typeof data.code === "number" && data.data !== null && typeof data.data === "object") {
               console.log('[server-discovery] 探测成功:', url, '->', res.statusCode, 'code:', data.code);
               resolve(url);
             } else {
@@ -313,13 +313,13 @@ async function discoverServer() {
     const probed = await probeCandidate(userInput);
     if (probed) {
       console.log('[server-discovery] 用户输入地址探测成功:', userInput);
-      setManualBaseUrl(userInput);
+      wx.removeStorageSync(STORAGE_KEY_MANUAL);
       setLastSuccessBaseUrl(userInput);
       return userInput;
     }
     console.warn('[server-discovery] 用户输入地址探测失败:', userInput);
     wx.showToast({ title: '该地址不可达，请检查 IP 和网络', icon: 'none', duration: 3000 });
-    setManualBaseUrl(userInput);
+    wx.removeStorageSync(STORAGE_KEY_MANUAL);
   }
   // 兜底优先级（开发者工具/其他）：公网域名 > 首个候选地址 > localhost
   const fallback = PROD_API_BASE_URL || candidates[0] || `http://127.0.0.1:${DEFAULT_PORT}${API_PREFIX}`;
