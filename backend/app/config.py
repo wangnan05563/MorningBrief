@@ -5,6 +5,7 @@
 """
 import socket
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -95,7 +96,11 @@ class Settings(BaseSettings):
     """全局配置，字段与 backend/.env.example 一一对应。"""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # 用绝对路径避免依赖 CWD：start.ps1 的 WorkingDirectory 是项目根目录，
+        # 而 launcher.py 的 os.chdir(app_dir) 在 uvicorn 导入 main.py 后才执行，
+        # 模块级 settings = get_settings() 可能先于 CWD 切换时被调用，导致 .env 加载不到。
+        # Path(__file__).resolve().parent.parent = backend/ 目录
+        env_file=str(Path(__file__).resolve().parent.parent / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
