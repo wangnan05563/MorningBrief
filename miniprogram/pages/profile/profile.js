@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 个人中心：用户信息 + 收听统计 + 功能入口
  *
  * V1.3：
@@ -251,6 +251,8 @@ Page({
    * 缓存后弱网/token 失效场景下能显示上次成功获取的数据，而非 0
    */
   async loadStats() {
+    // 无 token 时跳过：避免对未认证接口发请求触发 401 + refreshToken 风暴
+    if (!getToken()) { return; }
     try {
       const stats = await fetchUserStats();
       if (!stats) {

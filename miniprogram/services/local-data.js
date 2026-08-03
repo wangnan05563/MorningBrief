@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 本地数据存储服务：播放进度、收藏、播放历史
  *
  * 设计原则：
@@ -225,6 +225,7 @@ async function getFavoriteList() {
       }
     } catch (e) { /* 读取失败走后端 */ }
   }
+  
   // 本地无：从后端读取并缓存
   try {
     const res = await getFavorites();
@@ -353,6 +354,7 @@ async function getHistory(page = 1, size = 20) {
       }
     } catch (e) { /* 读取失败走后端 */ }
   }
+  if (!openid) { return { list: [], total: 0 }; }
   // 本地无：从后端读取并缓存
   try {
     const res = await fetchRecentPlaylogs(page, size);
@@ -393,6 +395,9 @@ async function getPlayedHistorySet() {
       }
     } catch (e) { /* 读取失败走后端 */ }
   }
+  // 无 token 时直接返回空集合，避免对未认证接口发无意义请求
+  const { getToken } = require('./auth');
+  if (!getToken()) { return new Set(); }
   // 本地无：从后端读取（拉取较大批量构建集合）
   try {
     const res = await fetchRecentPlaylogs(1, 100);

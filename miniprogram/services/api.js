@@ -189,8 +189,8 @@ function _rawRequest(options) {
       timeout: REQUEST_TIMEOUT_MS,
       success: async (res) => {
         // 401 自动重登一次：排除登录接口本身、且仅重试一次、且请求允许重试
-        // _allowRetry=false 的请求（如进度上报/播放进度查询）失败时直接 reject，
-        // 避免触发 refreshToken 浪费 wx.login code（这类请求失败用户无感知）
+        // 进度上报/播放进度查询已放开 _allowRetry 限制，auth.js 的并发+冷却保护
+        // 可防止频繁 login，无需在调用方层面禁用重试
         if (res.statusCode === 401 && !url.startsWith('/auth/') && !_retried && options._allowRetry !== false) {
           try {
             await refreshToken();
@@ -279,13 +279,16 @@ const searchEpisodes = (keyword, page = 1, size = 20) =>
 
 // === 播放日志接口 ===
 
-/** 上报播放进度（允许失败，不影响播放；_allowRetry=false 避免 401 触发 refreshToken 浪费 wx.login code） */
+/** 上报播放进度（允许失败，不影响播放）
+ * 不放 _allowRetry=false：token 过期时也需要触发 refreshToken，
+ * 否则进度上报持续 401 且永远不会恢复（auth.js 已有并发+冷却保护，不会频繁 login） */
 const reportPlayProgress = (data) =>
-  request({ url: '/playlogs/progress', method: 'POST', data, _allowRetry: false }).catch(() => {});
+  request({ url: '/playlogs/progress', method: 'POST', data }).catch(() => {});
 
-/** 查询某节目播放进度（断点续播，允许失败；_allowRetry=false 同上） */
+/** 查询某节目播放进度（断点续播，允许失败）
+ * 不放 _allowRetry=false：与 reportPlayProgress 同理，token 过期时需能触发 refreshToken */
 const fetchPlayProgress = (episodeId) =>
-  request({ url: '/playlogs/progress/' + episodeId, _allowRetry: false }).catch(() => null);
+  request({ url: '/playlogs/progress/' + episodeId }).catch(() => null);
 
 /** 最近播放记录（按 episode 去重；首页展示用，401 时不重试避免刷屏 invalid code）
  * 30s 节流 + 30s 缓存：throttle 保证 tab 切换短时间内不重复发请求，
