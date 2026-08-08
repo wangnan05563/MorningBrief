@@ -142,12 +142,52 @@
 | 129 | 敏感关键词列表可配置（token/secret/key/password/appkey 等） | ✅ 通过 / ❌ 违规 | - | `credential_masking_regex_check.sensitive_keywords` |
 | 129 | 统一函数名 mask_sensitive | ✅ 通过 / ❌ 违规 | - | `credential_masking_regex_check.unified_function_name` |
 
+## V3.0 2026-08-05 会话复盘审查结果（维度 196-202）
+
+> 对应 `config.yaml` 各节点，详见 SKILL.md "V3.0 2026-08-05 会话复盘新增审查维度"。
+
+| 维度 | 审查项 | 状态 | 违规位置 | 配置节点 |
+|------|--------|------|----------|----------|
+| 196 | except 块保留 traceback / 子进程启动转专用异常 | ✅ 通过 / ❌ 违规 | - | `exception_swallow_check` |
+| 197 | wait_for/create_task 包裹函数 except Exception 前补 CancelledError | ✅ 通过 / ❌ 违规 | - | `cancelled_error_guard_check` |
+| 198 | 同步函数内 create_task 模块级集合保活 + 运行循环守卫 + 测试禁用 | ✅ 通过 / ❌ 违规 | - | `fire_and_forget_keepalive_check` |
+| 199 | _build_info.py 禁止硬编码 unknown/日期；生成器被构建/发布脚本调用 | ✅ 通过 / ❌ 违规 | - | `build_metadata_single_source_check` |
+| 200 | 删除/重命名公共 API 后 grep 旧名 0 匹配；矛盾注释清理 | ✅ 通过 / ❌ 违规 | - | `alias_rename_completeness_check` |
+| 201 | 依赖模块级文件路径/单例的测试重定向 tmp_path，不依赖 unlink 成功 | ✅ 通过 / ❌ 违规 | - | `test_isolation_safe_delete_check` |
+| 202 | installer.iss 含 SetupIconFile；spec 与 iss 模板一致 | ✅ 通过 / ❌ 违规 | - | `packaging_config_completeness_check` |
+
+## V3.1 2026-08-05 段间静音/bgm_gap_mode 复盘审查结果（维度 205-206）
+
+> 对应 `config.yaml` 各节点，详见 SKILL.md "V3.1 2026-08-05 段间静音/bgm_gap_mode 复盘新增审查维度"。
+> 对应 news-code-dev 诊断标准 DS-15 / DS-16。
+
+| 维度 | 审查项 | 状态 | 违规位置 | 配置节点 |
+|------|--------|------|----------|----------|
+| 205 | 媒体开关字段有 silence/bridge 双模式 + amix duration=first 真静音 | ✅ 通过 / ❌ 违规 | - | `bgm_gap_mode_check` |
+| 205 | 全局默认/频道覆盖双路径（非 None 覆盖 settings.*，None 继承） | ✅ 通过 / ❌ 违规 | - | `bgm_gap_mode_check.channel_override` |
+| 205 | 新增列幂等迁移（PRAGMA table_info 检测后 ALTER TABLE） | ✅ 通过 / ❌ 违规 | - | `bgm_gap_mode_check.idempotent_migration` |
+| 206 | 校验器语义：空串→None(继承)；去空格归一化；非法→ValueError | ✅ 通过 / ❌ 违规 | - | `validator_semantic_check` |
+| 206 | 校验器行为与测试断言一致（期望 None 不抛错；期望抛错须拒绝） | ✅ 通过 / ❌ 违规 | - | `validator_semantic_check.test_alignment` |
+
+## 问题定性（真缺陷 / 误报 / 环境制品）
+
+> V3.0 增强：每条问题必须归入以下三类之一，避免把"环境制品"误判为"代码失败"或把"grep 误报"计入缺陷。
+
+| 定性 | 定义 | 处理方式 |
+|------|------|----------|
+| 真缺陷 | 违反硬约束或明确反模式，需代码修复 | 计入阻塞/严重统计，给出修复建议 |
+| 误报 | grep 信号命中但人工确认非问题（如 `get_settings` 触发 `os_getenv_direct`） | 记录 `false_positive_hints` 理由，不计入缺陷 |
+| 环境制品 | safe-delete 拦截 teardown、`test_ai_budget` 的 `unlink` 残留等，与改动无关 | 单独归类并注明"非代码失败"，不计入缺陷 |
+
 ## 详细问题列表
 
 ### 🔴 阻塞问题（必须修复）
 
 1. **问题描述**：[具体问题描述]
    - **位置**：`backend/app/xxx.py` 第 X 行
+   - **问题定性**：[真缺陷 / 误报 / 环境制品]
+   - **适用场景**：[该规则适用的上下文，取自 DS 标准维度 4]
+   - **不适用场景**：[该规则不适用的上下文]
    - **当前代码**：
      ```python
      # 问题代码示例
@@ -156,8 +196,9 @@
      ```python
      # 修复后的代码示例
      ```
-   - **参考规范**：[对应 SKILL.md 维度章节]
+   - **参考规范**：[对应 SKILL.md 维度章节 / news-code-dev DS-x]
    - **配置节点**：[对应 config.yaml 节点]
+   - **严重级别判定理由**：[为何判为 CRITICAL/HIGH——如"CancelledError 逃逸导致静默失败不可观测"]
 
 ### 🟠 严重问题（强烈建议修复）
 
@@ -279,6 +320,38 @@ pwsh .trae/skills/news-backend-code-review/scripts/auto-scan.ps1
 | 内部接口鉴权检查 | 暴露内部 API 的项目（`routers/internal/`） | 无内部接口的项目 |
 | 裸 SQL 注入检查 | 用 SQLAlchemy `text()` 的项目 | 纯 ORM 查询、纯参数化查询 |
 | print 语句检查 | 所有生产项目 | 一次性脚本、debug 临时调试 |
+
+## V3.1 段间静音/bgm_gap_mode 四维度复盘（DS-15 / DS-16）
+
+> 基于本次段间静音/bgm_gap_mode 特性开发全流程的复盘，沉淀可复用的工作流模板与判断逻辑。
+
+### 维度 1：成功执行任务的完整步骤
+1. 复现"看似无效"：用真实函数生成 gap/main 音频，验证静音时长参数真正落地（排除陈旧残留冒充新产出，见 DS-7）。
+2. 定位根因：默认 bridge 模式让 BGM 在段间连续叠加，`amix` 把静音段淹没 → 改为真静音 `amix=inputs=2:duration=first`。
+3. 特征开关化：将静音语义做成可开关 `bgm_gap_mode`(silence/bridge)，全局默认 + 频道级覆盖（双路径）。
+4. 幂等迁移：新增列用 `PRAGMA table_info` 检测后 `ALTER TABLE ADD COLUMN`。
+5. 校验器语义对齐：空串/None→继承 None；去空格合法值→归一化；其余→ValueError。
+6. 测试 + 构建双验证：后端 pytest（受管 venv）+ 前端 `vite build`（独立输出目录避开 safe-delete 拦截）。
+
+### 维度 2：任务执行过程中的不确定性与失败点
+| 失败点 | 触发条件 | 影响 | 根因 | 修复方式 |
+|--------|----------|------|------|----------|
+| 静音"看似无效" | 默认 bridge 模式 BGM 连续叠加 | 设 2.5s 听起来像 0.5s | bridge 掩盖静音 | 真静音 amix duration=first（DS-15） |
+| 校验器/测试语义错位 | 校验器空串抛错但测试期望 None | 单测 3 失败 | 空串语义未约定为继承 | 空串→None + 重写测试（DS-16） |
+| `vite build` 清理被拦截 | safe-delete 拦截 emptyDir 批量删 dist | 本地构建验证受阻 | 批量删除被 FAIL CLOSED | 用全新输出目录（如 dist_bgmcheck）绕过 |
+
+### 维度 3：可抽象的固定流程与判断逻辑
+| 模板 | 核心判断信号 | 落地方式 |
+|------|--------------|----------|
+| 媒体开关真静音检测 | grep 媒体开关无 silence/bridge 双模式 + amix 无 duration=first | DS-15：`bgm_gap_mode_check` |
+| 双路径覆盖检测 | grep 取值未走 `channel.x or settings.X` | DS-15：`bgm_gap_mode_check.channel_override` |
+| 校验器语义检测 | grep 校验器空串抛错 / 合法值未归一化 / 与测试断言矛盾 | DS-16：`validator_semantic_check` |
+
+### 维度 4：适用场景与不适用场景
+| 模板 | 适用场景 | 不适用场景 |
+|------|----------|------------|
+| 媒体开关真静音 | 媒体处理有"看似不生效"历史的特性（静音/BGM/混音开关） | 非媒体纯逻辑特性、无物理产出物可查 |
+| 校验器语义对齐 | 所有带枚举/开关的 Pydantic Body 字段（含频道级覆盖字段） | 纯无约束字符串、必填不可空字段 |
 
 ## 配置变更点
 

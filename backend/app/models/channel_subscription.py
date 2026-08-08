@@ -11,7 +11,7 @@ from typing import Optional
 from sqlalchemy import Integer, DateTime, Index, UniqueConstraint, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.database import Base
 
 
@@ -33,5 +33,5 @@ class ChannelSubscription(Base):
         comment="频道 ID"
     )
     created_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, default=utcnow_naive, comment="订阅时间"
+        DateTime, default=localnow_naive, comment="订阅时间"
     )

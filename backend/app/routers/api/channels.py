@@ -32,7 +32,9 @@ async def list_channels(
     result = await db.execute(
         select(Channel)
         .where(Channel.is_active == 1)
-        .order_by(Channel.id.asc())
+        # 展示顺序：display_order 升序（运营在频道管理后台可控），相等时按 id 兜底。
+        # 小程序首页/历史页 tab 直接按此返回顺序渲染，无需改小程序即可调整 tab 顺序。
+        .order_by(Channel.display_order.asc(), Channel.id.asc())
     )
     channels = result.scalars().all()
 
@@ -42,6 +44,7 @@ async def list_channels(
             "name": ch.name,
             "description": ch.description or "",
             "is_subscribed": False,
+            "display_order": ch.display_order,
         }
         for ch in channels
     ]

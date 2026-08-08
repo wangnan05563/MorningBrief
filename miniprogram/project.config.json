@@ -36,7 +36,10 @@
   "simulatorPluginLibVersion": {},
   "packOptions": {
     "ignore": [
-      {"type": "folder", "value": "images/svg-src"}
+      {
+        "type": "folder",
+        "value": "images/svg-src"
+      }
     ],
     "include": []
   },

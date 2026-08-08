@@ -12,7 +12,7 @@ from typing import Optional
 from sqlalchemy import Integer, String, DateTime, Text, UniqueConstraint, Index, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.database import Base
 
 
@@ -35,7 +35,7 @@ class Comment(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False, comment="评论内容")
     like_count: Mapped[int] = mapped_column(Integer, default=0, comment="点赞数")
     created_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, default=utcnow_naive, comment="评论时间"
+        DateTime, default=localnow_naive, comment="评论时间"
     )
 
 
@@ -53,5 +53,5 @@ class CommentLike(Base):
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, comment="用户 openid")
     comment_id: Mapped[int] = mapped_column(Integer, nullable=False, comment="评论 ID")
     created_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, default=utcnow_naive, comment="点赞时间"
+        DateTime, default=localnow_naive, comment="点赞时间"
     )

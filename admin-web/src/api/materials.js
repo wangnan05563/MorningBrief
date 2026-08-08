@@ -5,8 +5,8 @@
  */
 import api from '../api'
 
-export const listMaterials = (workflowId, page = 1, size = 20) =>
-  api.get('/materials', { params: { workflow_id: workflowId, page, size } })
+export const listMaterials = (params = {}) =>
+  api.get('/materials', { params })
 
 export const getMaterial = (id) => api.get(`/materials/${id}`)
 

@@ -3,8 +3,8 @@ name: "news-frontend-code-review"
 description: "对 MorningBrief 项目前端代码（admin-web/src/ 下 Vue 3/Element Plus 文件 + miniprogram/ 下微信小程序文件）进行全面评审与逻辑审查，覆盖组件规范、状态管理、API 契约、路由设计、类型安全、性能、可访问性、前后端字段契约、小程序生命周期、音频播放管理等维度。当用户要求'审查/检查/走查/把关/review/评估/看看对不对/规范不规范'前端 Vue/JS 代码、'.vue/.js 文件修改'、'迭代发布前前端走查'，或提到'前端评审/frontend review/Vue 代码审查/小程序代码审查'时调用。仅审查前端文件；纯后端 .py 文件审查请改用 news-backend-code-review。"
 whenToUse: "需要审查 MorningBrief 前端代码（admin-web/src/ 下 .vue/.js 文件 + miniprogram/ 下 .js/.wxml/.wxss 文件）是否符合项目规范"
 triggers: "前端代码 走查/审查/审核/把关/review/检查/评估 | .vue/.js 文件 修改/变更/迭代 走查 | 迭代发布前 前端 代码 走查 | 这段前端代码 写得对不对/规范不规范 | Vue/小程序 代码 review | 页面/组件/Store/路由 代码 审查"
-version: "3.0.0"
-updated: "2026-07-31"
+version: "3.1.0"
+updated: "2026-08-05"
 config: "config.yaml"
 scripts: "scripts/auto-scan.ps1"
 template: "templates/report-template.md"
@@ -156,3 +156,39 @@ pwsh .trae/skills/news-frontend-code-review/scripts/auto-scan.ps1
 - [_shared/references/](../_shared/references/) — 跨技能共享主题
 - [news-code-dev](../news-code-dev/SKILL.md) — 项目开发技能（编码规范）
 - [config.yaml](config.yaml) — 审查配置（规则/硬约束/阈值/字段契约）
+
+---
+
+## V3.0 2026-08-05 会话复盘新增前端审查维度（FE-196~FE-200）
+
+> 来源：打包模式三面板空白、关于页版本失真、HLS 首播冷启动失败、微信剪贴板隐私未声明四类真实问题。对应 news-code-dev 诊断标准 DS-5 / DS-6 / DS-13 / DS-14（详见 news-code-dev `references/diagnostic-standards.md`）。
+> 所有规则参数通过 `config.yaml` 对应节点管理；报告中违规条目标注 `[V3.0 新增]`。
+> **配置落地**：FE-196~FE-200 的五个 `config.yaml` 节点（`remote_resource_display_check` / `build_metadata_display_check` / `packaging_fallback_ui_check` / `hls_cold_start_retry_check` / `wechat_privacy_scope_check`）已补齐；V3.1 新增 FE-201 节点 `backend_switch_field_passthrough_check`。审查时直接读取对应节点，无硬编码新增。
+
+| 维度 | 审查项 | 严重级别 | 对应 DS | 配置节点 |
+|------|--------|----------|---------|----------|
+| FE-196 | 远程资源字段契约展示一致性：远程 `path` 返回语义值（如 `"云端(COS)"`）、`size_bytes=0` 前端正确展示（不为空/异常）、删除按钮 `v-if` 排除远程 | HIGH | DS-5 | `remote_resource_display_check` |
+| FE-197 | 关于页/版本真实发布日展示：GitHub ISO → UTC+8 转换（`_formatPublishedAt`）；检查更新基于真实 version；非法输入防御 | MEDIUM | DS-6 | `build_metadata_display_check` |
+| FE-198 | 打包模式回退 UI 一致性：详情页素材/TTS/成品面板在 COS 回退下可展示；远程 blob 走代理；`activePanels` 懒加载 | HIGH | DS-5 | `packaging_fallback_ui_check` |
+| FE-199 | HLS 首播冷启动静默重试与降级：音频 `onError` 首播必须有静默重试分支（`MAX_HLS_RETRY`）；重试耗尽回退 mp3 直链；首播失败不得中断连续 loading | HIGH | DS-13 | `hls_cold_start_retry_check` |
+| FE-200 | 微信隐私合规 scope 声明：敏感 API（`setClipboardData` 等）调用前必须 `requirePrivacyAuthorize`；后台声明对应 scope（剪贴板读写共用「剪贴板」scope） | CRITICAL | DS-14 | `wechat_privacy_scope_check` |
+| FE-201 | 后端新增开关/枚举字段的前端透传与列表列展示：通用 axios 透传包装不得丢字段；新字段须在列表新增展示列与编辑控件；后端继承语义（NULL/None）与前端"继承/自定义"往返一致 | HIGH | DS-15 | `backend_switch_field_passthrough_check` |
+
+### 审查结果呈现优化（V3.0）
+
+与后端审查保持一致，报告（`templates/report-template.md`）增强：
+
+1. **问题定性分层**：每条问题标注 `真缺陷 / 误报 / 环境制品`（如 safe-delete 拦截前端构建清理属环境制品，非代码失败）。
+2. **适用/不适用场景字段**：每条问题补充 `适用场景` 与 `不适用场景`（取自 DS 标准维度 4）。
+3. **严重级别判定理由**：阻塞级须写明"为什么阻塞"，而非仅给标签。
+4. **与整体工作流一致**：修复建议优先指向 news-code-dev 的 DS 标准与 meta-rules 编号；新增规则须在 `config.yaml` 有对应节点（无硬编码新增）。
+
+## V3.1 2026-08-05 段间静音/bgm_gap_mode 复盘新增前端审查维度（FE-201）
+
+> 来源：段间静音做成可开关 `bgm_gap_mode`(silence/bridge) 后，前端须保证通用 axios 透传不丢新字段，并在列表/编辑表单显式展示与编辑该开关；后端 `NULL`（继承全局）与前端"继承/自定义"往返一致。对应 news-code-dev 诊断标准 DS-15（媒体特性可开关化与真静音实现）。
+> 所有规则参数通过 `config.yaml` 对应节点管理；报告中违规条目标注 `[V3.1 新增]`。
+
+| 维度 | 审查项 | 严重级别 | 对应 DS | 配置节点 |
+|------|--------|----------|---------|----------|
+| FE-201 | 通用 axios 透传包装不得丢弃后端新增字段（snake_case 直传）；后端新增开关/枚举字段须在列表新增展示列 | HIGH | DS-15 | `backend_switch_field_passthrough_check.passthrough_no_drop` |
+| FE-201 | 后端新增开关字段须在编辑表单提供控件（如下拉 silence/bridge）；后端 `NULL` 表示"继承全局"，前端须支持"继承/自定义"往返（`inherit` → `null`） | HIGH | DS-15 | `backend_switch_field_passthrough_check.inherit_null_roundtrip` |

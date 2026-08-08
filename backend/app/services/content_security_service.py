@@ -18,7 +18,7 @@ import httpx
 from cachetools import TTLCache
 
 from app.config import get_settings
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -126,7 +126,7 @@ class ContentSecurityService:
             return {
                 "safe": True,
                 "detail": [],
-                "checked_at": utcnow_naive().isoformat(),
+                "checked_at": localnow_naive().isoformat(),
                 "skipped": True,
                 "error": "内容为空，跳过检测",
             }
@@ -137,7 +137,7 @@ class ContentSecurityService:
             return {
                 "safe": True,
                 "detail": [],
-                "checked_at": utcnow_naive().isoformat(),
+                "checked_at": localnow_naive().isoformat(),
                 "skipped": True,
                 "error": "微信 access_token 未配置或获取失败",
             }
@@ -162,7 +162,7 @@ class ContentSecurityService:
             return {
                 "safe": True,
                 "detail": [],
-                "checked_at": utcnow_naive().isoformat(),
+                "checked_at": localnow_naive().isoformat(),
                 "skipped": True,
                 "error": f"网络异常: {e}",
             }
@@ -171,12 +171,12 @@ class ContentSecurityService:
             return {
                 "safe": True,
                 "detail": [],
-                "checked_at": utcnow_naive().isoformat(),
+                "checked_at": localnow_naive().isoformat(),
                 "skipped": True,
                 "error": f"调用异常: {e}",
             }
 
-        checked_at = utcnow_naive().isoformat()
+        checked_at = localnow_naive().isoformat()
 
         # errcode=0 表示检测通过（无违规）
         # errcode=0 时 result 数组中每项的 suggest 字段指示处理建议

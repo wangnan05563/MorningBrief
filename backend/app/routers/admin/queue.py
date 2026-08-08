@@ -2,7 +2,7 @@
 import json
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AdminPayload, get_current_admin, require_admin
@@ -23,6 +23,26 @@ class ConfigUpdateRequest(BaseModel):
     """更新队列配置请求体。"""
     execution_mode: str = Field(pattern="^(serial|parallel)$")
     max_concurrent: int = Field(ge=1, le=5)
+
+
+class BatchDeleteTasksRequest(BaseModel):
+    """批量删除队列任务请求体。复用 workflows 批量删除的 ID 约束语义。"""
+    workflow_ids: list[str] = Field(
+        ..., min_length=1, max_length=100, description="待删除任务(workflow) ID 列表"
+    )
+
+    @field_validator("workflow_ids")
+    @classmethod
+    def normalize_ids(cls, v: list[str]) -> list[str]:
+        """去空白 + 去重 + 拒绝空串，保证下游 service 拿到规范 ID 列表。"""
+        cleaned = [s.strip() for s in v if s and s.strip()]
+        if not cleaned:
+            raise ValueError("workflow_ids 不能全为空")
+        # 去重：同一 ID 重复传入无意义且会放大删除范围
+        unique = list(dict.fromkeys(cleaned))
+        if len(unique) != len(cleaned):
+            raise ValueError("workflow_ids 包含重复 ID")
+        return unique
 
 
 @router.get("/stats")
@@ -67,6 +87,35 @@ async def list_queue_tasks(
         sort_by=sort_by, sort_order=sort_order,
     )
     return success(data={"items": items, "total": total, "page": page, "size": size})
+
+
+@router.post("/tasks/batch-delete")
+async def batch_delete_tasks(
+    req: BatchDeleteTasksRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """批量删除队列任务（仅管理员）。
+
+    委托 WorkflowService 执行事务级联删除：running/queued 状态拒绝删除，
+    其余状态级联清理 play_log/play_progress → episode → review → script
+    → workflow_step → workflow，素材重置为 pending 保留。
+    任一 ID 不存在或含运行中/排队中则整批回滚。
+    """
+    svc = QueueService(db)
+    data = await svc.batch_delete_tasks(req.workflow_ids)
+    # 审计日志：批量删除为不可恢复的级联删除，记录操作人与目标 ID 便于追溯
+    db.add(AuditLog(
+        category="queue",
+        action="batch_delete",
+        target="tasks",
+        operator=admin.username,
+        detail=json.dumps(
+            {"workflow_ids": req.workflow_ids, "result": data}, ensure_ascii=False
+        ),
+    ))
+    await db.commit()
+    return success(data=data)
 
 
 @router.post("/tasks/{workflow_id}/cancel")

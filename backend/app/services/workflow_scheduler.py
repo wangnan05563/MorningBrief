@@ -26,7 +26,7 @@ from app.cache.manager import cache
 from app.config import get_settings
 from app.core.event_bus import Event, get_event_bus
 from app.core.exceptions import ParamError
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.database import AsyncSessionLocal
 from app.models import Episode, EpisodeStatus, Review, ReviewStatus, Script, Workflow, WorkflowStep
 from app.models import CrawlerDedup, Material
@@ -155,7 +155,7 @@ class WorkflowScheduler:
                         Workflow.id.in_(cancelled_ids),
                         Workflow.status == WorkflowStatus.queued.value,
                     )
-                    .values(status=WorkflowStatus.cancelled.value, finished_at=utcnow_naive())
+                    .values(status=WorkflowStatus.cancelled.value, finished_at=localnow_naive())
                 )
                 await session.execute(stmt)
                 await session.commit()
@@ -272,7 +272,7 @@ class WorkflowScheduler:
         """
         from sqlalchemy import update as sa_update
         from app.models.material import MaterialStatus
-        now = utcnow_naive()
+        now = localnow_naive()
         requeue_list: list[tuple] = []  # [(workflow_id, channel_id, priority, episode_date), ...]
 
         try:
@@ -374,7 +374,7 @@ class WorkflowScheduler:
         for workflow_id, channel_id, priority, episode_date in requeue_list:
             entry = QueueEntry(
                 sort_priority=-priority,
-                created_at=utcnow_naive().timestamp(),
+                created_at=localnow_naive().timestamp(),
                 workflow_id=workflow_id,
                 channel_id=channel_id,
                 priority=priority,
@@ -612,7 +612,7 @@ class WorkflowScheduler:
                     status=WorkflowStatus.queued.value,
                     channel_id=channel_id,
                     priority=priority,
-                    started_at=utcnow_naive(),
+                    started_at=localnow_naive(),
                 )
                 session.add(wf)
                 await session.commit()
@@ -620,7 +620,7 @@ class WorkflowScheduler:
             # 入队 PriorityQueue（sort_priority 为负数实现 DESC 最小堆）
             entry = QueueEntry(
                 sort_priority=-priority,
-                created_at=utcnow_naive().timestamp(),
+                created_at=localnow_naive().timestamp(),
                 workflow_id=workflow_id,
                 channel_id=channel_id,
                 priority=priority,
@@ -690,7 +690,7 @@ class WorkflowScheduler:
             channel_id = wf.channel_id
         entry = QueueEntry(
             sort_priority=-priority,
-            created_at=utcnow_naive().timestamp(),
+            created_at=localnow_naive().timestamp(),
             workflow_id=workflow_id,
             channel_id=channel_id,
             priority=priority,
@@ -760,7 +760,7 @@ class WorkflowScheduler:
         for wf in workflows:
             entry = QueueEntry(
                 sort_priority=-wf.priority,
-                created_at=wf.started_at.timestamp() if wf.started_at else utcnow_naive().timestamp(),
+                created_at=wf.started_at.timestamp() if wf.started_at else localnow_naive().timestamp(),
                 workflow_id=wf.id,
                 channel_id=wf.channel_id,
                 priority=wf.priority,
@@ -890,7 +890,7 @@ class WorkflowScheduler:
         # 入队当前工作流（参考 requeue_with_priority 的入队逻辑）
         entry = QueueEntry(
             sort_priority=-priority,
-            created_at=utcnow_naive().timestamp(),
+            created_at=localnow_naive().timestamp(),
             workflow_id=workflow_id,
             channel_id=channel_id,
             priority=priority,
@@ -1076,9 +1076,9 @@ class WorkflowScheduler:
         step_timeout = settings.WORKFLOW_LOCK_TTL_SEC
         for attempt in range(3):  # 最多 3 次（含首次）
             try:
-                started = utcnow_naive()
+                started = localnow_naive()
                 result = await asyncio.wait_for(func(context), timeout=step_timeout)
-                duration_ms = int((utcnow_naive() - started).total_seconds() * 1000)
+                duration_ms = int((localnow_naive() - started).total_seconds() * 1000)
                 await self._update_step_status(
                     step_record.id, WorkflowStepStatus.success,
                     result=result, retry_count=attempt, _duration_ms=duration_ms,
@@ -1111,6 +1111,25 @@ class WorkflowScheduler:
                 )
                 if attempt < 2:
                     await asyncio.sleep(5 * (attempt + 1))  # 5s, 10s 退避
+            except asyncio.CancelledError:
+                # Python 3.14: CancelledError 继承自 BaseException，
+                # 普通 except Exception 无法捕获。步骤协程被取消（如 wait_for
+                # 超时取消内部协程、或工作流任务被外部取消）时会逃逸到任务层，
+                # 导致 workflow 以空 error 静默失败且 failed_step 为空。
+                # 此处转为可读失败并带上 exc_info，便于定位根因；取消不可重试。
+                logger.error(
+                    "步骤被取消 workflow_id=%s step=%s attempt=%d（CancelledError）",
+                    workflow_id, step_name.value, attempt + 1, exc_info=True,
+                )
+                last_error = RuntimeError(
+                    f"步骤 {step_name.value} 被取消（可能单步超时 {step_timeout}s "
+                    f"或任务被外部取消）"
+                )
+                await self._update_step_status(
+                    step_record.id, WorkflowStepStatus.failed,
+                    retry_count=attempt + 1, error=str(last_error),
+                )
+                break
             except Exception as e:
                 last_error = e
                 await self._update_step_status(
@@ -1120,6 +1139,7 @@ class WorkflowScheduler:
                 logger.warning(
                     "步骤重试 workflow_id=%s step=%s attempt=%d error=%s",
                     workflow_id, step_name.value, attempt + 1, e,
+                    exc_info=True,
                 )
                 if attempt < 2:
                     await asyncio.sleep(5 * (attempt + 1))  # 5s, 10s 退避
@@ -1132,6 +1152,11 @@ class WorkflowScheduler:
             details = getattr(last_error, "failure_details", None)
             if details:
                 failed_result = {"failure_details": details}
+        logger.error(
+            "步骤最终失败 workflow_id=%s step=%s attempt=%d: %s",
+            workflow_id, step_name.value, attempt, last_error,
+            exc_info=last_error if last_error is not None else False,
+        )
         await self._update_step_status(
             step_record.id, WorkflowStepStatus.failed,
             error=str(last_error), result=failed_result,
@@ -1470,7 +1495,7 @@ class WorkflowScheduler:
                 channel_id=channel_id,
                 is_backup=1,
                 status=EpisodeStatus.published,
-                published_at=utcnow_naive(),
+                published_at=localnow_naive(),
             )
             session.add(backup)
             await session.commit()
@@ -1524,7 +1549,7 @@ class WorkflowScheduler:
         被历史工作流选中后因异常未回滚，dedup 锁住 URL 阻止爬虫重新入库，
         形成死锁。复活（重置为 pending）后 dedup 仍保留，爬虫可刷新内容。
         """
-        cutoff = utcnow_naive() - timedelta(days=settings.CRAWLER_DEDUP_TTL_DAYS)
+        cutoff = localnow_naive() - timedelta(days=settings.CRAWLER_DEDUP_TTL_DAYS)
         try:
             async with AsyncSessionLocal() as session:
                 # 1. 清理过期记录（TTL 窗口外）
@@ -1743,7 +1768,7 @@ class WorkflowScheduler:
             if error:
                 wf.error = error
             if status in (WorkflowStatus.success, WorkflowStatus.failed, WorkflowStatus.cancelled):
-                wf.finished_at = utcnow_naive()
+                wf.finished_at = localnow_naive()
                 # 工作流终态（无论成功失败）：解除素材关联，重置为 pending 供后续工作流复用
                 # 成功时也重置：素材已完成使命（产出 episode），下次工作流应爬取新素材
                 # 失败时必须重置：否则素材卡在 selected 形成 dedup 死锁（wf-20260725-0009 复现）
@@ -1765,7 +1790,7 @@ class WorkflowScheduler:
                 workflow_id=workflow_id,
                 step_name=step_name,
                 status=WorkflowStepStatus.pending,
-                started_at=utcnow_naive(),
+                started_at=localnow_naive(),
             )
             session.add(step)
             await session.commit()
@@ -1793,7 +1818,7 @@ class WorkflowScheduler:
             if error:
                 step.error = error
             if status in (WorkflowStepStatus.success, WorkflowStepStatus.failed):
-                step.finished_at = utcnow_naive()
+                step.finished_at = localnow_naive()
             await session.commit()
 
 

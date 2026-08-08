@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import UserPayload, get_current_user
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.database import get_db
 from app.models import Subscription, ChannelSubscription, Channel, User
 
@@ -47,7 +47,7 @@ async def record_message_subscription(
         user_id=user.user_id,
         template_id=req.template_id,
         openid=openid,
-        subscribed_at=utcnow_naive(),
+        subscribed_at=localnow_naive(),
         used=0,
     )
     db.add(sub)
@@ -84,7 +84,7 @@ async def subscribe_channel(
     new_sub = ChannelSubscription(
         user_id=user.user_id,
         channel_id=channel_id,
-        created_at=utcnow_naive(),
+        created_at=localnow_naive(),
     )
     db.add(new_sub)
     await db.commit()

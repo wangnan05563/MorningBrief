@@ -43,6 +43,9 @@
             @click="openRelease"
           >
             有新版本 ({{ updateState.latest }})
+            <span v-if="updateState.publishedAt" class="update-sub">
+              发布于 {{ _formatPublishedAt(updateState.publishedAt) }}
+            </span>
           </el-button>
           <el-button
             v-else
@@ -255,6 +258,21 @@ async function loadAbout() {
   }
 }
 
+// 将 GitHub 的 ISO 时间（如 2026-07-20T00:00:00Z）转为 YYYY-MM-DD（UTC+8）
+// 检查更新拿到真实发布时间时，用于把「发布于」显示为 release 实际发布日，
+// 而非过期的打包 build_date 硬编码值。
+function _formatPublishedAt(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  // 转 UTC+8 后取日期部分，与后端 _CST 时区保持一致
+  const cst = new Date(d.getTime() + 8 * 60 * 60 * 1000)
+  const y = cst.getUTCFullYear()
+  const m = String(cst.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(cst.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 // 内部检查实现：自动/手动共用，避免重复代码
 async function performCheck() {
   if (isChecking) return // 已有检查在进行中，跳过
@@ -269,6 +287,27 @@ async function performCheck() {
         latest: res.latest,
         publishedAt: res.published_at,
       }
+    } else if (res.source === 'remote' && res.published_at) {
+      // 已是最新但拿到了远端发布时间：把当前版本的「发布于」日期替换为
+      // 本次 release 的真实发布时间，避免显示过期的 build_date 硬编码值
+      info.value = {
+        ...info.value,
+        build_date: _formatPublishedAt(res.published_at),
+      }
+      updateState.value = { kind: 'latest' }
+      // 清理上一次未触发的定时器，避免堆叠多个 timer
+      if (latestTimer) {
+        clearTimeout(latestTimer)
+        latestTimer = null
+      }
+      // 3s 后自动回 idle，让按钮恢复可点击的初始态
+      // 仅当当前仍为 latest 时才回退，避免覆盖 newer/error 终态
+      latestTimer = setTimeout(() => {
+        latestTimer = null
+        if (updateState.value.kind === 'latest') {
+          updateState.value = { kind: 'idle' }
+        }
+      }, 3000)
     } else {
       updateState.value = { kind: 'latest' }
       // 清理上一次未触发的定时器，避免堆叠多个 timer
@@ -441,6 +480,13 @@ onUnmounted(() => {
 
 .update-btn-wrap {
   flex-shrink: 0;
+
+  .update-sub {
+    margin-left: 6px;
+    font-size: 12px;
+    opacity: 0.85;
+    font-weight: 400;
+  }
 }
 
 .meta-card {

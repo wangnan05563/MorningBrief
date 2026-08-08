@@ -61,7 +61,7 @@ class BackupService:
         - 失败时抛异常，由调用方决定重试/告警策略
         """
         # 时间戳用本地时区（Asia/Shanghai），便于运维识别备份归属的工作日
-        # 数据库内时间用 UTC（见 utcnow_naive），但文件名用本地时间更直观
+        # 数据库内时间用 UTC，但文件名用本地时间更直观
         from app.config import get_settings
         settings = get_settings()
         tz_name = settings.APP_TIMEZONE

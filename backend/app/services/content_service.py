@@ -11,7 +11,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache.manager import cache as cache_manager
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.models import Episode, Script, Review, EpisodeStatus
 
 # 缓存 TTL（秒）：与数据变更频率匹配
@@ -438,7 +438,7 @@ class ContentService:
             status=EpisodeStatus.published,
             workflow_id=workflow_id,
             channel_id=channel_id,
-            published_at=utcnow_naive(),
+            published_at=localnow_naive(),
         )
         self.db.add(episode)
         await self.db.commit()

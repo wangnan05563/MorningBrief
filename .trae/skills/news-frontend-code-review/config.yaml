@@ -86,6 +86,10 @@ checklist:
   globaldata_sync: true
   lifecycle_reload: true
   edit_integrity_verify: true
+  detail_panel_lazy_load: true
+  remote_audio_proxy_playback: true
+  remote_resource_delete_protect: true
+  field_contract_display: true
 hard_constraints:
   rules:
   - name: miniprogram_circular_require_top
@@ -311,6 +315,26 @@ hard_constraints:
     severity: HIGH
     auto_fix: false
     category: lifecycle_reload
+  # === 2026-08-05 新增：V3.0 会话复盘前端审查规则（FE-196~FE-198）===
+  # 对应 news-code-dev 诊断标准 DS-5 / DS-6；所有阈值/字段名通过本节点管理，禁止硬编码业务值
+  - name: remote_resource_display_consistency
+    pattern: size_bytes(?!/s*0)|path\s*===?\s*null|v-if=["']!?row\.remote["']
+    message: 远程（云端 COS）资源：path 须返回语义值（如 "云端(COS)"）而非 null；size_bytes 未知须置 0 且前端正确展示；删除/本地操作按钮须 v-if 排除远程项
+    severity: HIGH
+    auto_fix: false
+    category: remote_resource_display
+  - name: build_metadata_real_publish_date
+    pattern: build_date|git_sha
+    message: 关于页版本展示须把 GitHub ISO 转 UTC+8（_formatPublishedAt），检查更新基于真实 version；禁止直接展示硬编码 build_date
+    severity: MEDIUM
+    auto_fix: false
+    category: build_metadata_display
+  - name: packaging_fallback_ui_consistency
+    pattern: list_audio|audio_url|activePanels|proxy_audio
+    message: 打包（COS）模式下详情页素材/TTS/成品面板须能从 DB 远程 URL 回退展示；远程 blob 走 proxy_audio 代理；面板须 activePanels 懒加载
+    severity: HIGH
+    auto_fix: false
+    category: packaging_fallback_ui
   block_on_violation: true
 abstraction_thresholds:
   inline_style_repeat: 3
@@ -1864,3 +1888,209 @@ cross_project_frontend_adaptation:
     - "auth_model"
     - "slow_operation_timeout"
   severity: "HIGH"
+
+# ============================================================
+# V3.0 2026-08-05 会话复盘新增前端审查配置（FE-196~FE-200）
+# 来源：打包模式面板空白 / 关于页版本失真 / HLS 首播冷启动 / 微信剪贴板隐私
+# 对应 news-code-dev 诊断标准 DS-5 / DS-6 / DS-13 / DS-14
+# 所有规则参数通过本节点管理，无硬编码业务值；报告违规标注 [V3.0 新增]
+# ============================================================
+
+# ---- 维度 FE-196：远程资源字段契约展示一致性（对应 DS-5）----
+# 背景：打包模式（sys.frozen + COS 已配置）本地无副本，远程 URL 已在 DB；
+#       前端只读本地目录会返回空，且远程 path/size_bytes/删除按钮处理不当导致面板空白或异常
+# 规则：远程 path 返回语义值（如「云端(COS)」）；size_bytes 未知置 0 前端展示不为空/异常；
+#       删除按钮 v-if 排除远程项；远程 blob 必须走 SSRF 白名单代理端点
+remote_resource_display_check:
+  enabled: true
+  # 对应维度：FE-196
+  severity: HIGH
+  # 远程资源语义 path（命中任一即视为远程来源标记）
+  remote_semantic_path_values:
+    - "云端(COS)"
+    - "COS"
+    - "remote"
+  # 远程文件 size_bytes 未知必须置 0（禁止展示为异常/空）
+  require_remote_size_zero: true
+  # 删除按钮必须 v-if 排除远程项（!row.remote / !item.remote）
+  require_delete_v_if_remote_excluded: true
+  delete_exclude_signal: 'v-if=.!.*remote'
+  # 远程 blob 必须走代理端点而非直链（SSRF 域名白名单）
+  require_remote_blob_proxy: true
+  remote_proxy_endpoint: "/api/audio/proxy"
+  # 判断信号
+  signals:
+    - '云端\(COS\)|path.*COS|row\.remote'
+    - 'size_bytes'
+    - 'v-if=.!.*remote'
+    - 'proxy\?url='
+  # 反模式（远程项仍暴露删除按钮 / size_bytes 未处理）
+  anti_patterns:
+    - 'delete.*v-if(?!.*remote)'
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/views/**/*.vue"
+    - "admin-web/src/views/**/*.js"
+    - "miniprogram/pages/**/*.wxml"
+    - "miniprogram/pages/**/*.js"
+
+# ---- 维度 FE-197：关于页/版本真实发布日展示（对应 DS-6）----
+# 背景：_build_info.py 写死默认常量（git_sha="unknown" / build_date 固定 / version 兜底 1.0.0），
+#       关于页永远 unknown、版本永远显示发布于某固定日，检查更新基于过期 version 不可靠
+# 规则：GitHub ISO 必须转 UTC+8（_formatPublishedAt）；检查更新基于真实 version；
+#       禁止写死默认常量；ISO 解析失败兜底防御
+build_metadata_display_check:
+  enabled: true
+  # 对应维度：FE-197
+  severity: MEDIUM
+  # GitHub ISO 必须为 UTC+8 展示（_formatPublishedAt）
+  require_iso_to_utc8: true
+  iso_convert_function_pattern: '_formatPublishedAt'
+  # 检查更新必须基于真实 version（禁止过期兜底 version="1.0.0"）
+  require_real_version_check: true
+  # 禁止写死默认常量
+  forbid_hardcoded_defaults: true
+  hardcoded_default_patterns:
+    - 'git_sha="unknown"'
+    - 'build_date='
+    - 'version="1.0.0"'
+  # 非法输入防御（ISO 解析失败兜底，不抛异常）
+  require_invalid_input_guard: true
+  # 判断信号
+  signals:
+    - '_formatPublishedAt'
+    - 'git_sha|build_date|version'
+    - 'checkUpdate|检查更新'
+  # 反模式（写死默认值）
+  anti_patterns:
+    - 'git_sha="unknown"'
+    - 'version="1.0.0"'
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/views/**/*.vue"
+    - "admin-web/src/views/**/*.js"
+    - "miniprogram/pages/**/*.js"
+
+# ---- 维度 FE-198：打包模式回退 UI 一致性（对应 DS-5）----
+# 背景：详情页素材/TTS/成品三面板在 COS 回退下仍须可展示；
+#       远程 blob 必须走代理；activePanels 懒加载避免首屏拉空
+# 规则：面板在回退下可渲染；远程 blob 走代理端点；activePanels 懒加载
+packaging_fallback_ui_check:
+  enabled: true
+  # 对应维度：FE-198
+  severity: HIGH
+  # 详情页素材/TTS/成品面板在 COS 回退下必须可展示（非空面板）
+  require_panels_render_in_fallback: true
+  # 远程 blob 必须走代理端点
+  require_remote_blob_proxy: true
+  remote_proxy_endpoint: "/api/audio/proxy"
+  # activePanels 懒加载（避免打包模式首屏拉空）
+  require_active_panels_lazy: true
+  active_panels_signal: 'activePanels'
+  # 判断信号
+  signals:
+    - 'activePanels'
+    - 'is_cos_configured|sys\.frozen'
+    - 'proxy\?url='
+    - 'remote:true|row\.remote'
+  # 扫描范围
+  scan_files:
+    - "admin-web/src/views/**/*.vue"
+    - "admin-web/src/views/**/*.js"
+
+# ---- 维度 FE-199：HLS 首播冷启动静默重试与降级（对应 DS-13）----
+# 背景：小程序 BackgroundAudioManager 首次播放 HLS(m3u8) 常因连接建立慢/解码冷启动首播 onError 失败，
+#       但切集/重试后又能成功（"播放失败→成功"）。首播失败不得直接弹错、不得中断连续 loading
+# 规则：onError 首播必须有静默重试分支；重试耗尽回退 mp3 直链；首播失败不得中断 loading
+hls_cold_start_retry_check:
+  enabled: true
+  # 对应维度：FE-199
+  severity: HIGH
+  # 音频 onError 首播必须有静默重试分支
+  require_silent_retry_on_first_play: true
+  max_hls_retry_default: 1
+  retry_count_signal: 'MAX_HLS_RETRY'
+  # 重试耗尽必须回退 mp3 直链
+  require_mp3_fallback: true
+  mp3_fallback_signal: '_applyProtocol|mp3Url'
+  # 首播失败不得中断连续 loading 态
+  forbid_loading_interrupt_on_first_fail: true
+  # 判断信号
+  signals:
+    - 'onError'
+    - 'MAX_HLS_RETRY|currentRetry'
+    - 'mp3Url|_applyProtocol'
+    - 'BackgroundAudioManager'
+  # 反模式（onError 直接 showToast 并停 loading，首播冷启动被误判致命）
+  anti_patterns:
+    - 'onError[\\s\\S]*?showToast'
+    - 'showToast[\\s\\S]*?loading=false'
+  # 扫描范围
+  scan_files:
+    - "miniprogram/services/**/*.js"
+    - "miniprogram/utils/**/*.js"
+    - "miniprogram/pages/**/*.js"
+
+# ---- 维度 FE-200：微信隐私合规 scope 声明（对应 DS-14）----
+# 背景：小程序调用 setClipboardData/getClipboardData 等隐私接口前未在微信后台声明对应 scope，
+#       真机报 setClipboardData:fail api scope is not declared in the privacy agreement
+# 规则：敏感 API 调用前必须 requirePrivacyAuthorize；后台声明对应 scope
+#       （注意：剪贴板读写共用「剪贴板」scope，非「写入剪贴板」/ setClipboardData 字面量）
+wechat_privacy_scope_check:
+  enabled: true
+  # 对应维度：FE-200
+  severity: CRITICAL
+  # 受管敏感 API 调用前必须 requirePrivacyAuthorize / onNeedPrivacyAuthorization
+  require_privacy_authorize_before_sensitive: true
+  privacy_authorize_signal: 'requirePrivacyAuthorize|onNeedPrivacyAuthorization'
+  # 受管敏感 API 清单（命中即需后台 scope 声明 + 调用前授权）
+  sensitive_apis:
+    - 'setClipboardData'
+    - 'getClipboardData'
+    - 'chooseLocation'
+    - 'chooseAddress'
+    - 'getLocation'
+  # 后台 scope 名称映射（名称必须与微信后台一致）
+  backend_scope_name_map:
+    setClipboardData: "剪贴板"
+    getClipboardData: "剪贴板"
+  # 判断信号
+  signals:
+    - 'setClipboardData|getClipboardData'
+    - 'requirePrivacyAuthorize|onNeedPrivacyAuthorization'
+  # 反模式（直接调用敏感 API 且无授权流程包裹）
+  anti_patterns:
+    - 'setClipboardData\\('
+  # 扫描范围
+  scan_files:
+    - "miniprogram/pages/**/*.js"
+    - "miniprogram/utils/**/*.js"
+    - "miniprogram/services/**/*.js"
+
+# ---- 维度 FE-201：后端新增开关/枚举字段的前端透传与列表列展示（对应 DS-15）----
+# 背景：段间静音做成可开关 bgm_gap_mode(silence/bridge) 后，前端通用 axios 透传若裁剪字段，
+#       或列表/编辑表单遗漏该开关，会导致开关状态不可见不可改；
+#       后端 NULL（继承全局）须在前端"继承/自定义"往返一致（inherit → null）。
+# 规则：透传包装不得丢字段；新开关字段须在列表新增展示列并在表单提供控件；inherit→null 往返一致。
+backend_switch_field_passthrough_check:
+  enabled: true
+  severity: HIGH
+  category: field_contract
+  # 通用 axios 透传包装不得丢弃后端新增字段（snake_case 直传，不做字段裁剪）
+  passthrough_no_drop: true
+  passthrough_wrapper_pattern: 'return res\.data|return response\.data|response\.data'
+  # 后端新增开关/枚举字段须在列表新增展示列
+  require_list_column: true
+  # 后端新增开关字段须在编辑表单提供控件（如下拉 silence/bridge）
+  require_edit_control: true
+  # 后端 NULL 表示继承全局，前端须支持"继承/自定义"往返（inherit → null）
+  inherit_null_roundtrip: true
+  # 待核查的后端开关/枚举字段（命中须在列表/表单覆盖，按项目实际字段配置，非技能硬编码逻辑）
+  watch_switch_fields:
+  - "bgm_gap_mode"
+  # 扫描文件
+  scan_files:
+  - "admin-web/src/**/*.vue"
+  - "admin-web/src/utils/request.js"
+  not_applicable_scenarios:
+  - "后端字段已在前端硬编码映射的遗留接口"

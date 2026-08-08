@@ -15,6 +15,21 @@
             <span v-else class="text-muted">默认</span>
           </template>
         </el-table-column>
+        <el-table-column label="段间静音" width="120">
+          <template #default="{ row }">
+            <span v-if="row.segment_gap_sec !== null && row.segment_gap_sec !== undefined">
+              {{ row.segment_gap_sec }}s
+            </span>
+            <span v-else class="text-muted">继承全局</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="段间BGM" width="120">
+          <template #default="{ row }">
+            <span v-if="row.bgm_gap_mode === 'bridge'">BGM桥接</span>
+            <span v-else-if="row.bgm_gap_mode === 'silence'">真实静音</span>
+            <span v-else class="text-muted">继承全局</span>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <!-- active-value/inactive-value 必须匹配后端整数 0/1，否则 el-switch 用 === 比较始终判定为 inactive -->
@@ -26,6 +41,9 @@
               @change="(val) => handleToggle(row, val)"
             />
           </template>
+        </el-table-column>
+        <el-table-column label="展示排序" width="100" align="center">
+          <template #default="{ row }">{{ row.display_order ?? 0 }}</template>
         </el-table-column>
         <el-table-column label="创建时间" min-width="170">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
@@ -56,6 +74,16 @@
         </el-form-item>
         <el-form-item label="启用">
           <el-switch v-model="form.is_active" :active-value="1" :inactive-value="0" />
+        </el-form-item>
+        <el-form-item label="展示排序">
+          <el-input-number
+            v-model="form.display_order"
+            :min="0"
+            :step="1"
+            controls-position="right"
+            style="width: 160px"
+          />
+          <span class="form-tip">数值越小越靠前（小程序/首页 tab 顺序），默认 0</span>
         </el-form-item>
 
         <!-- 新增频道时可选 AI 自动生成提示词 -->
@@ -173,14 +201,42 @@
         <!-- 音频节奏区：段间静音 + 思考问题开关 -->
         <el-divider content-position="left">音频节奏</el-divider>
         <el-form-item label="段间静音">
-          <el-slider
-            v-model="form.segment_gap_sec"
-            :min="0"
-            :max="3"
-            :step="0.1"
-            style="width: 280px"
-          />
-          <span class="form-tip">TTS 段落之间的停顿时长（秒），BGM 在此时段自然浮现</span>
+          <div class="gap-controls">
+            <el-checkbox
+              v-model="form.inherit_segment_gap"
+              style="margin-right: 12px"
+            >
+              继承全局（AI 服务页设置）
+            </el-checkbox>
+            <el-slider
+              v-model="form.segment_gap_sec"
+              :min="0"
+              :max="3"
+              :step="0.1"
+              :disabled="form.inherit_segment_gap"
+              style="width: 240px"
+            />
+          </div>
+          <span class="form-tip">TTS 段落之间的停顿时长（秒），BGM 在此时段自然浮现；勾选继承后回退到 AI 服务页的全局段间静音</span>
+        </el-form-item>
+        <el-form-item label="段间 BGM">
+          <div class="gap-controls">
+            <el-checkbox
+              v-model="form.inherit_bgm_gap"
+              style="margin-right: 12px"
+            >
+              继承全局
+            </el-checkbox>
+            <el-select
+              v-model="form.bgm_gap_mode"
+              :disabled="form.inherit_bgm_gap"
+              style="width: 200px"
+            >
+              <el-option label="真实静音（推荐）" value="silence" />
+              <el-option label="BGM 桥接（旧版）" value="bridge" />
+            </el-select>
+          </div>
+          <span class="form-tip">段间静音处 BGM 的处理方式：真实静音=停顿可感知；BGM 桥接=旧版 BGM 铺满（无停顿感）</span>
         </el-form-item>
         <el-form-item label="结尾思考">
           <el-switch
@@ -302,6 +358,8 @@ const form = reactive({
   name: '',
   description: '',
   is_active: 1,
+  // 展示排序权重：数值越小越靠前（对应小程序/首页 tab 顺序），默认 0
+  display_order: 0,
   schedule_time: '',
   intro_prompt: '',
   outro_prompt: '',
@@ -314,6 +372,13 @@ const form = reactive({
   bgm_volume: 0.15,
   // 段间静音时长（秒），null 时后端使用全局 SEGMENT_GAP_SEC
   segment_gap_sec: 0.5,
+  // 是否继承全局段间静音（AI 服务页配置）：勾选时提交 null，让该频道回退到全局值，
+  // 否则频道始终使用自身 segment_gap_sec，会完全遮蔽 AI 服务页的全局设置
+  inherit_segment_gap: false,
+  // 段间 BGM 模式：'silence'=真实静音（默认），'bridge'=BGM 桥接（旧版）
+  bgm_gap_mode: 'silence',
+  // 是否继承全局段间 BGM 模式（settings.BGM_GAP_MODE）：勾选时提交 null，回退全局
+  inherit_bgm_gap: true,
   // 是否在每段新闻末尾追加思考问题（1=开启，0=关闭）
   enable_thinking_question: 1,
   // 频道专属 RSS 源（数组，空数组表示使用全部源）
@@ -366,6 +431,7 @@ function resetForm() {
   form.name = ''
   form.description = ''
   form.is_active = 1
+  form.display_order = 0
   form.schedule_time = ''
   form.intro_prompt = ''
   form.outro_prompt = ''
@@ -375,6 +441,9 @@ function resetForm() {
   form.bgm_path = null
   form.bgm_volume = 0.15
   form.segment_gap_sec = 0.5
+  form.inherit_segment_gap = false
+  form.bgm_gap_mode = 'silence'
+  form.inherit_bgm_gap = true
   form.enable_thinking_question = 1
   form.rss_sources = []
   form.keywords = ''
@@ -398,6 +467,8 @@ function openEdit(row) {
   form.name = row.name
   form.description = row.description || ''
   form.is_active = row.is_active ? 1 : 0
+  // 展示排序权重：后端未返回时回退 0，保持与默认值一致
+  form.display_order = row.display_order ?? 0
   form.schedule_time = row.schedule_time || ''
   form.intro_prompt = row.intro_prompt || ''
   form.outro_prompt = row.outro_prompt || ''
@@ -406,7 +477,12 @@ function openEdit(row) {
   form.auto_generate_prompts = false
   form.bgm_path = row.bgm_path || null
   form.bgm_volume = row.bgm_volume !== null && row.bgm_volume !== undefined ? row.bgm_volume : 0.15
+  // 频道未显式配置段间静音（NULL）即视为继承全局，勾选"继承全局"
+  form.inherit_segment_gap = (row.segment_gap_sec === null || row.segment_gap_sec === undefined)
   form.segment_gap_sec = row.segment_gap_sec !== null && row.segment_gap_sec !== undefined ? row.segment_gap_sec : 0.5
+  // 频道未显式配置段间 BGM 模式（NULL）即视为继承全局
+  form.inherit_bgm_gap = (row.bgm_gap_mode === null || row.bgm_gap_mode === undefined)
+  form.bgm_gap_mode = row.bgm_gap_mode || 'silence'
   form.enable_thinking_question = row.enable_thinking_question !== null && row.enable_thinking_question !== undefined ? row.enable_thinking_question : 1
   // RSS 源：后端存储为 JSON 数组字符串，前端解析为数组用于多选绑定
   try {
@@ -436,6 +512,7 @@ async function handleSubmit() {
         name: form.name,
         description: form.description,
         is_active: form.is_active,
+        display_order: form.display_order,
         schedule_time: form.schedule_time || '',
         intro_prompt: form.intro_prompt,
         outro_prompt: form.outro_prompt,
@@ -443,7 +520,11 @@ async function handleSubmit() {
         rewrite_template: form.rewrite_template,
         bgm_path: form.bgm_path || '',
         bgm_volume: form.bgm_volume,
-        segment_gap_sec: form.segment_gap_sec,
+        // 勾选继承全局时提交 null，让频道回退到 AI 服务页的全局段间静音；
+        // 否则使用本页滑块值，覆盖全局配置
+        segment_gap_sec: form.inherit_segment_gap ? null : form.segment_gap_sec,
+        // 段间 BGM 模式：继承全局则提交 null，否则提交具体模式
+        bgm_gap_mode: form.inherit_bgm_gap ? null : form.bgm_gap_mode,
         enable_thinking_question: form.enable_thinking_question,
         rss_sources: rssSourcesJson,
         keywords: form.keywords || '',
@@ -454,11 +535,15 @@ async function handleSubmit() {
       await createChannel({
         name: form.name,
         description: form.description,
+        display_order: form.display_order,
         schedule_time: form.schedule_time || null,
         auto_generate_prompts: form.auto_generate_prompts,
         bgm_path: form.bgm_path || null,
         bgm_volume: form.bgm_volume,
-        segment_gap_sec: form.segment_gap_sec,
+        // 新增频道同样支持继承全局段间静音（提交 null）
+        segment_gap_sec: form.inherit_segment_gap ? null : form.segment_gap_sec,
+        // 段间 BGM 模式：继承全局则提交 null，否则提交具体模式
+        bgm_gap_mode: form.inherit_bgm_gap ? null : form.bgm_gap_mode,
         enable_thinking_question: form.enable_thinking_question,
         rss_sources: rssSourcesJson,
         keywords: form.keywords || '',
@@ -677,6 +762,14 @@ onMounted(() => {
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+  }
+
+  // 段间静音控制区：复选框 + 滑块横向排列，对齐基线
+  .gap-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: nowrap;
   }
 
   // AI 推荐理由：弱化背景突出文本，BGM/RSS 推荐共用此类

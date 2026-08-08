@@ -18,7 +18,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BizError
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.database import AsyncSessionLocal
 from app.models import (
     AutoReviewConfig, AutoReviewStat, Review, WorkflowStep,
@@ -87,7 +87,7 @@ class AutoReviewService:
             keyword_whitelist or [], ensure_ascii=False,
         )
         config.updated_by = operator
-        config.updated_at = utcnow_naive()
+        config.updated_at = localnow_naive()
 
         # 配置变更记录审计日志，便于追溯谁在何时切换了开关
         self.db.add(AuditLog(
@@ -332,7 +332,7 @@ class AutoReviewService:
         """
         from app.services.content_service import ContentService
 
-        now = utcnow_naive()
+        now = localnow_naive()
         trigger_reason_json = json.dumps(matched_rules, ensure_ascii=False)
 
         async with AsyncSessionLocal() as session:
@@ -460,9 +460,9 @@ class AutoReviewService:
         返回：总数、成功数、失败数、成功率、平均节省时间、总节省时间。
         """
         if start_date is None:
-            start_date = utcnow_naive().date() - timedelta(days=7)
+            start_date = localnow_naive().date() - timedelta(days=7)
         if end_date is None:
-            end_date = utcnow_naive().date() + timedelta(days=1)
+            end_date = localnow_naive().date() + timedelta(days=1)
 
         start_dt = datetime.combine(start_date, datetime.min.time())
         end_dt = datetime.combine(end_date, datetime.min.time())

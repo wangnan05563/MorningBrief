@@ -7,6 +7,8 @@ import {
   workflowTriggerResponse,
   workflowBatchDeleteResponse,
   channelsListResponse,
+  materialsListResponse,
+  workflowAudioResponse,
 } from './helpers/mock'
 
 /**
@@ -37,9 +39,20 @@ test.describe('工作流监控', () => {
       await route.fulfill({ json: channelsListResponse })
     })
 
-    // 工作流列表接口：glob 尾部需带 * 以匹配查询参数 ?page=1&size=20
-    await page.route('**/admin/api/v1/workflows*', async (route) => {
-      await route.fulfill({ json: workflowListResponse })
+    // 注意：具体接口（素材 / 音频 / 详情 / 触发）必须在 workflows* catch-all
+    // 之前注册——Playwright 按注册顺序匹配、先匹配先处理，否则 catch-all 会
+    // 抢先拦截 /workflows/wf-001/audio 等请求并返回列表数据，导致详情/产物面板
+    // 拿到错误结构。
+
+    // 素材列表接口（工作流详情页「爬虫采集·素材」面板）
+    await page.route('**/admin/api/v1/materials**', async (route) => {
+      await route.fulfill({ json: materialsListResponse })
+    })
+
+    // 工作流音频接口（「语音合成·TTS 片段」「音频拼接·成品」面板）
+    // 模拟打包态/COS 模式：返回 remote:true 的云端音频，验证回退逻辑
+    await page.route('**/admin/api/v1/workflows/wf-001/audio', async (route) => {
+      await route.fulfill({ json: workflowAudioResponse })
     })
 
     // 工作流详情接口
@@ -50,6 +63,11 @@ test.describe('工作流监控', () => {
     // 触发接口
     await page.route('**/admin/api/v1/workflows/trigger', async (route) => {
       await route.fulfill({ json: workflowTriggerResponse })
+    })
+
+    // 工作流列表接口（catch-all，放在最后）：glob 尾部带 * 以匹配查询参数
+    await page.route('**/admin/api/v1/workflows*', async (route) => {
+      await route.fulfill({ json: workflowListResponse })
     })
   })
 
@@ -227,5 +245,33 @@ test.describe('工作流监控', () => {
 
     // 即使路由守卫拦截，按钮也不应渲染
     await expect(page.getByRole('button', { name: '批量删除' })).toHaveCount(0, { timeout: 30000 })
+  })
+
+  // 验证修复：打包态/COS 模式下，本地 audio_cache 为空，list_audio 回退到 DB
+  // 持久化的 audio_url（remote:true），详情页三面板仍能展示内容、且远程对象不渲染删除按钮。
+  test('打包态(COS)下工作流详情三面板可展示内容', async ({ page }) => {
+    await setLoginState(page, 'admin')
+    await page.goto('/workflows/wf-001')
+
+    await expect(page.getByText('工作流详情').first()).toBeVisible({ timeout: 30000 })
+
+    // 1) 爬虫采集 · 素材：展开后展示 2 条素材
+    await page.locator('.el-collapse-item__header', { hasText: '爬虫采集 · 素材' }).click()
+    await expect(page.getByText('测试素材一：AI 芯片突破')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('测试素材二：新能源政策')).toBeVisible({ timeout: 30000 })
+
+    // 2) 语音合成 · TTS 片段：展开后展示 2 个远程片段（seg_1.mp3 / seg_2.mp3）
+    await page.locator('.el-collapse-item__header', { hasText: '语音合成 · TTS 片段' }).click()
+    await expect(page.getByText('seg_1.mp3')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('seg_2.mp3')).toBeVisible({ timeout: 30000 })
+    // 远程对象不应渲染「删除」按钮（v-if="!row.remote"）
+    await expect(
+      page.locator('.el-collapse-item').filter({ hasText: '语音合成' }).getByRole('button', { name: '删除' }),
+    ).toHaveCount(0, { timeout: 30000 })
+
+    // 3) 音频拼接 · 成品：展开后展示「已生成」，且远程成品不渲染「删除成品」按钮
+    await page.locator('.el-collapse-item__header', { hasText: '音频拼接 · 成品' }).click()
+    await expect(page.getByText('已生成')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByRole('button', { name: '删除成品' })).toHaveCount(0, { timeout: 30000 })
   })
 })

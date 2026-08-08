@@ -38,11 +38,20 @@ async def run_ffmpeg(cmd: list[str]) -> None:
     超时强制 kill 子进程,避免僵尸进程持续占用 CPU。
     """
     logger.info("执行 FFmpeg: %s", " ".join(cmd))
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except Exception as exc:
+        # 子进程启动阶段可能因环境问题（句柄耗尽/路径异常/事件循环未挂载
+        # child watcher 等）直接抛异常，且其 str() 可能为空，导致上层只记录
+        # 到空错误、无法定位 stitch 失败根因。这里统一转成带类型与信息的
+        # StitchError，保证错误描述永远非空且含真实异常类型。
+        raise StitchError(
+            f"FFmpeg 启动失败({type(exc).__name__}): {exc} | cmd={' '.join(cmd)}"
+        ) from exc
     try:
         _, stderr = await asyncio.wait_for(
             proc.communicate(), timeout=FFMPEG_TIMEOUT_SEC
@@ -201,41 +210,85 @@ async def generate_silence(duration_sec: float, output_path: str) -> None:
     await run_ffmpeg(cmd)
 
 
-async def mix_bgm(
-    main_path: str, bgm_path: str, output_path: str, volume: float = 0.15
+async def build_bgm_overlay(
+    bgm_path: str,
+    seg_durations: list[float],
+    gap_path: str,
+    volume: float,
+    output_path: str,
+    tmp_dir: str,
 ) -> None:
-    """将 BGM 以低音量叠加到主音频上。
+    """构建与 TTS 分段对齐的 BGM 叠加轨：播报段叠加 BGM，段间静音处为纯静音。
 
-    BGM 处理流程：
-    1. stream_loop=-1 无限循环 BGM（BGM 通常短于主音频）
-    2. -t 与主音频等长，截断循环 BGM
-    3. volume 滤镜调整 BGM 音量（默认 0.15，TTS 播报期间垫底）
-    4. amix 合并主音频 + BGM，主音频权重 1.0，BGM 权重由 volume 控制
-
-    TTS 段间静音处主音频无声，BGM 自然变成主音，实现衔接处"背景音并发大音量"效果。
-    无需复杂的时间段音量调节，利用主音频自身的静音结构自然过渡。
+    修复背景：原 mix_bgm 将 BGM 以固定音量均匀铺满整段主音频（含段间静音），
+    导致频道"段间静音"设置被 BGM 掩盖——用户听到的是 BGM 桥接而非停顿，
+    误以为设置"未生效"。本函数改为按分段切片：
+    - 每段播报叠加连续切片后的 BGM（保持 BGM 连续、自然浮现）
+    - 段间静音处直接复用 gap_path（纯静音）
+    最终叠加轨与主音频 amix，段间即真实停顿，使"段间静音"可被听觉感知。
 
     Args:
-        main_path: 主音频路径（TTS 段 + 段间静音拼接后的完整音频）
-        bgm_path: BGM 文件路径（任意长度，会循环到主音频长度）
-        output_path: 混音输出路径
-        volume: BGM 音量（0.0-1.0），建议 0.10-0.20
+        bgm_path: BGM 文件绝对路径
+        seg_durations: 各 TTS 分段时长（秒），用于切片长度与连续偏移
+        gap_path: 段间静音文件（generate_silence 产物），直接复用为叠加轨的静音段
+        volume: BGM 音量（0.0-1.0）
+        output_path: 叠加轨输出路径
+        tmp_dir: 临时目录（切片文件写入此处，随主流程统一清理）
     """
-    # 先探测主音频时长，用于截断循环 BGM
-    main_duration = await get_audio_duration(main_path)
-    cmd = [
-        resolve_ffmpeg_path(), "-y",
-        "-i", main_path,
-        "-stream_loop", "-1", "-i", bgm_path,
-        "-filter_complex",
-        f"[1:a]volume={volume}[bgm];[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=0[out]",
-        "-map", _FFMPEG_OUT_LABEL,
-        "-t", str(main_duration),
+    bgm_len = await get_audio_duration(bgm_path)
+    parts: list[str] = []
+    offset = 0.0
+    n = len(seg_durations)
+    for i, dur in enumerate(seg_durations):
+        dur = float(dur)
+        slice_path = str(Path(tmp_dir) / f"bgm_slice_{i}.mp3")
+        # 连续偏移取模 BGM 长度，配合 -stream_loop -1 跨循环 seek，保证 BGM 连续不跳变
+        start = offset % bgm_len if bgm_len > 0 else 0.0
+        cmd = [
+            resolve_ffmpeg_path(), "-y",
+            "-stream_loop", "-1",
+            "-ss", f"{start:.3f}",
+            "-i", bgm_path,
+            "-t", f"{dur:.3f}",
+            "-af", f"volume={volume}",
+            "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
+            "-ar", "44100", "-ac", "1",
+            slice_path,
+        ]
+        await run_ffmpeg(cmd)
+        parts.append(slice_path)
+        # 段间插入纯静音（最后一段后无需）
+        if i < n - 1:
+            parts.append(gap_path)
+        offset += dur
+    # 拼接 [bgm_slice0][silence][bgm_slice1]... 为叠加轨
+    await run_ffmpeg(build_concat_cmd(parts, output_path))
+
+
+async def build_bgm_bridge(
+    main_path: str, bgm_path: str, volume: float, output_path: str, tmp_dir: str,
+) -> None:
+    """旧版 BGM 桥接：将循环 BGM 以固定音量均匀铺满整段主音频（含段间静音）。
+
+    作为 bgm_gap_mode='bridge' 的可选模式保留：
+    段间静音处表现为 BGM 桥接而非停顿，复现"段间静音"被 BGM 掩盖的旧听感。
+    """
+    main_dur = await get_audio_duration(main_path)
+    bgm_looped = str(Path(tmp_dir) / "bgm_looped.mp3")
+    # 循环 BGM 到主音频长度（多循环覆盖，amix duration=first 截断到主音频）
+    await run_ffmpeg([
+        resolve_ffmpeg_path(), "-y", "-stream_loop", "-1", "-i", bgm_path,
+        "-t", f"{main_dur:.3f}", "-af", f"volume={volume}",
         "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-        "-ar", "44100", "-ac", "1",
-        output_path,
-    ]
-    await run_ffmpeg(cmd)
+        "-ar", "44100", "-ac", "1", bgm_looped,
+    ])
+    await run_ffmpeg([
+        resolve_ffmpeg_path(), "-y",
+        "-i", main_path, "-i", bgm_looped,
+        "-filter_complex", "amix=inputs=2:duration=first",
+        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
+        "-ar", "44100", "-ac", "1", output_path,
+    ])
 
 
 async def adjust_tempo(input_path: str, output_path: str, tempo: float) -> None:

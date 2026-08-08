@@ -32,6 +32,7 @@ class MaterialCreateRequest(BaseModel):
     便于后续按来源类型筛选与统计。
     """
     workflow_id: str
+    channel_id: Optional[int] = None
     source: str
     title: str
     content: str
@@ -66,13 +67,15 @@ def _material_to_dict(m: Material) -> dict:
         "crawled_at": m.crawled_at.isoformat() if m.crawled_at else None,
         "category": m.category,
         "status": m.status,
+        "channel_id": m.channel_id,
         "workflow_id": m.workflow_id,
     }
 
 
 @router.get("")
 async def list_materials(
-    workflow_id: str = Query(None, description="按工作流 ID 过滤"),
+    workflow_id: str = Query(None, description="按工作流 ID 过滤（运行期临时关联，终态后释放，详情页改用 channel_id）"),
+    channel_id: int = Query(None, description="按频道 ID 过滤（素材本质是频道级素材池，详情页用此查询）"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -81,13 +84,21 @@ async def list_materials(
     """素材分页列表。
 
     列表仅返回摘要字段，content 全文走详情接口获取，避免单次响应过大。
+
+    过滤策略：素材属于「频道级素材池」（channel_id 始终有值，workflow_id 仅为
+    运行期临时关联，工作流终态后由调度器重置为 NULL）。详情页展示某工作流的
+    爬虫素材时，应传 channel_id 查询该频道素材池，而非 workflow_id——否则已完成
+    工作流的素材因 workflow_id 被释放而全部落空，导致面板空白。
     """
-    # 基础查询条件：workflow_id 可选过滤
+    # 基础查询条件：workflow_id / channel_id 可选过滤（AND）
     base_query = select(Material)
     count_query = select(func.count(Material.id))
     if workflow_id:
         base_query = base_query.where(Material.workflow_id == workflow_id)
         count_query = count_query.where(Material.workflow_id == workflow_id)
+    if channel_id is not None:
+        base_query = base_query.where(Material.channel_id == channel_id)
+        count_query = count_query.where(Material.channel_id == channel_id)
 
     total = (await db.execute(count_query)).scalar() or 0
 
@@ -148,6 +159,7 @@ async def create_material(
 
     m = Material(
         workflow_id=req.workflow_id,
+        channel_id=req.channel_id,
         source=req.source,
         source_type=req.source_type,
         title=req.title,

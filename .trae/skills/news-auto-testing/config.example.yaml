@@ -1810,3 +1810,49 @@ field_contract_check:
   report_columns: ["api_endpoint", "field_name", "backend_definition", "frontend_usage", "status", "severity", "suggestion"]
   # 跨技能联动：与前端代码审查的字段对配置保持一致
   cross_reference_config: "news-frontend-code-review/config.yaml#field_contract_frontend"
+
+# === 2026-08-05 新增：后端 pytest 测试配置（双轨约定：后端改动走 pytest）===
+# 所有参数通过本区块管理，技能本身不含硬编码命令；适配不同项目的 venv / 解释器 / 测试框架
+backend_test:
+  # 是否启用后端 pytest 阶段（阶段 99）
+  enabled: true
+  # 显式 Python 解释器路径（受管 venv，避免 PATH 解析到无 pytest 的系统 Python）
+  # 不同项目可覆盖为自身 venv 路径或容器内固定路径
+  python_path: "backend/.venv/Scripts/python.exe"
+  # pytest 命令模板（占位符：{python_path} / {test_dir} / {extra_args}）
+  pytest_command: '"{python_path}" -m pytest {test_dir} -q {extra_args}'
+  # 测试目录（相对项目根）
+  test_dir: "backend/tests"
+  # 隔离策略：依赖模块级文件路径/单例的测试须 tmp_path + monkeypatch 重定向
+  isolation_strategy: "tmp_path_and_monkeypatch"
+  # 默认额外参数（可按需追加 -x / --tb=short / --cov）
+  default_extra_args: "--tb=short"
+  # 不适用场景：纯前端改动（此时 enabled=false，仅跑 Playwright）
+
+# === 2026-08-05 新增：重命名/别名完整性验证（阶段 100）===
+rename_verification:
+  enabled: true
+  # 待核查的旧名清单（重命名后必须全仓库 0 匹配）
+  deprecated_names:
+  - "utcnow_naive"
+  # 扫描范围（相对项目根）
+  scan_paths:
+  - "backend"
+  - "docs"
+  # 允许保留旧名的例外目录（历史审计日志，有意保留原貌）
+  preserve_paths:
+  - "docs/sonar-reports"
+  # 矛盾注释信号（指向已删除别名的失效引用）
+  stale_comment_pattern: "与\\s+\\w+\\s+保持一致|见\\s+\\w+（"
+
+# === 2026-08-05 新增：测试隔离加固 / safe-delete 环境制品（阶段 101）===
+test_isolation:
+  enabled: true
+  # 已知 safe-delete 环境制品用例（teardown 依赖删除，与代码改动无关，报告中单独归类）
+  known_environment_artifacts:
+  - "test_fix_integration.py::TestUserAvatar::test_upload_avatar_success"
+  # 隔离要求：测试用 unlink/os.remove 不得依赖其成功（须 tmp_path + monkeypatch 重定向）
+  require_tmp_path_redirect: true
+  # Playwright 唯一输出目录（规避 safe-delete 拦截 test-results 清理导致的启动崩溃）
+  playwright_unique_output: true
+  playwright_output_template: "test-results-{timestamp}"

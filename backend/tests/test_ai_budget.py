@@ -7,6 +7,7 @@
 - reset_budget：清空内存与文件
 - 跨日 rollover：新日清空并回填
 """
+import asyncio
 import json
 import time
 from unittest.mock import patch
@@ -17,8 +18,18 @@ from app.core import ai_budget
 
 
 @pytest.fixture(autouse=True)
-def _reset_ai_budget():
-    """每个测试前重置预算模块全局状态，保证隔离。"""
+def _reset_ai_budget(tmp_path, monkeypatch):
+    """每个测试前重置预算模块全局状态，保证隔离。
+
+    把预算文件重定向到 tmp_path：safe-delete 沙箱会拦截 unlink，
+    原本 reset_budget 的 file.unlink() 失效会导致 data/ai_budget.json
+    残留，下一个用例 rollover 时 _load_today_from_file 回填陈旧记录，
+    造成 total_calls 计数泄漏（期望 1 实得 2）。重定向到 tmp_path 后
+    读写完全隔离，不再依赖 unlink 是否成功。
+    """
+    monkeypatch.setattr(
+        ai_budget, "_budget_file_path", lambda: tmp_path / "ai_budget.json"
+    )
     ai_budget.reset_budget()
     ai_budget._last_persist_date = ""  # 强制下次触发 rollover
     yield
@@ -165,3 +176,47 @@ def test_get_today_summary_includes_limits():
     assert "daily_token_limit" in summary["limits"]
     assert "daily_cost_limit_usd" in summary["limits"]
     assert "rate_limit_per_min" in summary["limits"]
+
+
+async def test_record_call_dispatches_db_usage(monkeypatch):
+    """record_call 在事件循环中应把用量 fire-and-forget 写入 DB（验证 wiring）。
+
+    此前 record_call 只更新内存预算 + JSON 文件，从不调用 record_usage，
+    导致 ai_usage_log 永远为空、/usage 恒为 0。本次修复在 record_call 末尾
+    派发后台任务调 AIConfigService.record_usage。该路径在测试环境默认禁用，
+    本测试显式开启并断言 record_usage 被以正确参数调用，从而验证
+    「统计逻辑 → 数据落库」这一此前缺失的链路真实接通。
+    """
+    from app.services.ai_config_service import AIConfigService
+
+    captured = []
+
+    async def _fake_record_usage(
+        self,
+        service_type: str,
+        model: str,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        char_count: int = 0,
+    ) -> None:
+        captured.append(
+            (service_type, model, input_tokens, output_tokens, char_count)
+        )
+
+    monkeypatch.setattr(AIConfigService, "record_usage", _fake_record_usage)
+    # 测试环境默认禁用派发，显式开启以覆盖真实路径
+    monkeypatch.setattr(ai_budget, "_DB_USAGE_DISPATCH_ENABLED", True)
+
+    # record_call 是同步函数，但在运行中的事件循环内调用会派发后台任务
+    ai_budget.record_call(
+        "llm", "qwen-max", input_tokens=10, output_tokens=5
+    )
+
+    # 等待 fire-and-forget 后台任务被事件循环调度完成
+    for _ in range(100):
+        if captured:
+            break
+        await asyncio.sleep(0.01)
+
+    assert captured, "record_call 未派发 DB 用量写入"
+    assert captured[0] == ("llm", "qwen-max", 10, 5, 0)

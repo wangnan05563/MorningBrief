@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.exceptions import BizError, ParamError
+from app.core.timeutil import localnow_naive
 from app.models.ai_config import AIConfig, AIUsageLog
 
 logger = logging.getLogger(__name__)
@@ -1025,6 +1026,10 @@ class AIConfigService:
         cost = _estimate_cost(
             service_type, model, input_tokens, output_tokens, char_count
         )
+        # created_at 显式设为本地 naive 时间（localnow_naive）：模型列
+        # server_default=func.now() 在 SQLite 下返回 UTC，而 get_usage_summary 的
+        # today 区间用本地 naive 日期切分，若不显式置本地时间会造成约 8 小时
+        # （UTC vs 本地）归属偏差。项目约定统一用本地日期做按日分桶。
         log = AIUsageLog(
             service_type=service_type,
             model=model,
@@ -1032,6 +1037,7 @@ class AIConfigService:
             output_tokens=output_tokens,
             char_count=char_count,
             cost_usd=cost,
+            created_at=localnow_naive(),
         )
         self.db.add(log)
         await self.db.commit()

@@ -346,14 +346,21 @@ def _strip_markdown_residue(text: str) -> str:
     """防御性清洗 content 字段中残留的 Markdown 标记。
 
     场景：LLM 偶发违反"禁止输出 Markdown 标记"约束，在 content 中留下
-    未闭合的 ** 加粗或 # 标题符号。TTS 朗读时会念出"星号星号"或"井号"，
-    严重影响听感。此处做兜底清理，仅清理已知模式，不破坏正文标点。
+    加粗/斜体/标题/列表等符号。TTS 朗读时会念出"星号星号""星号""井号"，
+    严重影响听感。此处做兜底清理，仅清理已知模式，不破坏正文标点与数学表达。
 
     清理范围：
     - **xxx** 闭合加粗 → 保留内部文字 xxx
     - **xxx 未闭合加粗 → 保留内部文字 xxx（移除开头的 **）
     - 孤立的 **（未成对）→ 直接移除
     - 行首 # / ## / ### 等 Markdown 标题符号 + 空格 → 移除符号保留标题文字
+    - 行首列表符号（* / - / + 后跟空格）→ 移除标记保留正文（LLM 偶发输出列表）
+    - 成对斜体 *文字* / _文字_ → 移除分隔符保留内部文字
+      （仅当分隔符两侧均非数字/字母时清理，保护数学乘号 1*2*3、a*b、3 * 4）
+
+    注意单星号 * 的处理：早期版本完全放过单个 *（担心误伤数学乘号），
+    导致斜体/列表残留的单个 * 被 TTS 念成"星号"。现改为"数学安全"策略：
+    两侧都被数字/字母紧邻的 * 视为乘号保留，其余 Markdown 用法的 * 一律清理。
     """
     if not text:
         return text
@@ -365,6 +372,25 @@ def _strip_markdown_residue(text: str) -> str:
     text = text.replace("**", "")
     # 清理行首 Markdown 标题符号（# / ## / ### 后跟空格）
     text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    # 清理行首列表符号（* / - / + 后跟空格）→ 仅移除标记保留正文
+    text = re.sub(r"^\s*[\*\-\+]\s+", "", text, flags=re.MULTILINE)
+    # 单星号 * 处理（数学安全策略）：
+    # 1. 先保护"数学乘号"（两侧均为数字/字母，允许中间空格，如 1*2*3 / 3 * 4 / a*b），
+    #    用占位符暂存，避免被后续清理误删。
+    #    注：不能用 \w 边界判断——Python \w 在 Unicode 模式下含汉字，会导致中文后的
+    #    斜体 * 因"其后为汉字"而被判定为边界外而不匹配，斜体清理整体失效。
+    # 2. 成对斜体分隔符 *文字* / _文字_ → 移除分隔符保留内部文字。
+    # 3. 清理剩余孤立单个 *（未成对残留 / LLM 噪声），数学乘号已用占位符保护不受影响。
+    # 4. 恢复数学乘号占位符。
+    _math_asterisk = re.compile(r"([0-9A-Za-z])(\s*)\*(\s*)(?=[0-9A-Za-z])")
+    # 用私有区字符作占位符（正常文本绝不会出现），避免与正文冲突
+    _math_ph = ""
+    text = _math_asterisk.sub(
+        lambda m: m.group(1) + m.group(2) + _math_ph + m.group(3), text
+    )
+    text = re.sub(r"(\*|_)([^*\n_]+?)\1", r"\2", text)
+    text = text.replace("*", "")
+    text = text.replace(_math_ph, "*")
     return text
 
 
@@ -732,6 +758,21 @@ async def _rewrite_one(  # NOSONAR S3776: 双层过滤改写主逻辑，职责�
         raise LLMContentError(
             f"JSON 解析失败: {e}，raw 前300字: {raw[:300]}"
         ) from e
+
+    # 防御性清洗 content 字段中残留的 Markdown 标记
+    # 关键修复：主解析路径（正常生成 ~95%+ 走这里）此前从未调用 _strip_markdown_residue，
+    # 导致 ** / 单个 * 等符号直达 TTS 被念成"星号星号"/"星号"（见 wf-0011 同类问题）。
+    # 仅"字数不足重试"分支走 _parse_llm_response 才清洗，覆盖面严重不足。
+    # 此处与主/次路径统一清洗，保证任何路径返回的 content 都已去 Markdown。
+    if isinstance(data, dict) and isinstance(data.get("content"), str):
+        original = data["content"]
+        cleaned = _strip_markdown_residue(original)
+        if cleaned != original:
+            logger.warning(
+                "LLM 输出 content 含 Markdown 残留，已清洗 material_id=%s",
+                material["id"],
+            )
+            data["content"] = cleaned
 
     # 第二层过滤：生成后词表扫描
     content = data.get("content", "")

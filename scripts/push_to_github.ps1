@@ -27,6 +27,24 @@ Write-Host ""
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
+# 发布前刷新构建元信息（git_sha / build_date / version），确保推送到仓库的
+# backend/app/_build_info.py 反映本次发布，而非长期未更新的过期默认值。
+# 生成器为纯标准库脚本，优先用 build venv 的 python，回退系统 python。
+$buildInfoScript = "backend\build_info.py"
+if (Test-Path $buildInfoScript) {
+    $biPy = ".\.venv-build\Scripts\python.exe"
+    if (-not (Test-Path $biPy)) { $biPy = "python" }
+    Write-Host "[0/6] 刷新构建元信息（_build_info.py）..." -ForegroundColor Yellow
+    & $biPy $buildInfoScript
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  build_info.py 执行失败，将沿用仓库内已有 _build_info.py" -ForegroundColor Red
+    } else {
+        Write-Host "  构建元信息已刷新" -ForegroundColor DarkGray
+    }
+} else {
+    Write-Host "[0/6] build_info.py 不存在，跳过元信息刷新" -ForegroundColor DarkGray
+}
+
 $ExcludePatterns = @(
     '\.git[\\/]',
     '__pycache__',

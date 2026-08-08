@@ -40,6 +40,19 @@ mcp_tools:
     browser: "chromium"
     # 浏览器安装命令（用于首次安装）
     install_command: "npx playwright install chromium"
+    # 操作超时（毫秒）
+    action_timeout_ms: 30000
+    # 页面导航/网络请求超时（毫秒）
+    navigation_timeout_ms: 30000
+    # 元素定位失败重试次数（每次重试前自动等待稳定）
+    retries: 2
+    # 输出目录策略（沙箱安全删除绕过）
+    #   fixed      -> 固定目录 test-results（部分沙箱会在启动时尝试删除，可能崩溃）
+    #   timestamped-> 每次运行使用唯一目录 test-results-<timestamp>，避免与沙箱安全删除冲突
+    output_dir_strategy: "timestamped"
+    output_dir_template: "test-results-{timestamp}"
+    # 时间戳格式（strftime，用于 output_dir_template 的 {timestamp}）
+    output_dir_timestamp_fmt: "%Y%m%d%H%M%S"
   # Chrome DevTools 配置
   chrome_devtools:
     # 导航超时（毫秒）
@@ -144,6 +157,21 @@ pages:
     expected_texts: ["工作流监控"]
     requires_auth: true
     skip: false
+
+  - name: "队列管理"
+    path: "/queue"
+    expected_title: ""
+    expected_texts: ["队列管理", "等待中", "执行中"]
+    requires_auth: true
+    skip: false
+    # 页面内按钮交互测试清单
+    buttons:
+      - name: "批量删除"
+        uid_hint: "批量删除"
+        expected_action: "dialog_open"
+        close_after: true
+        close_button_hint: "取消"
+        skip: false
 
   - name: "内网穿透"
     path: "/tunnel"
@@ -271,6 +299,34 @@ api_endpoints:
     requires_auth: true
     expected_status: 200
     expected_code: 0
+    skip: false
+
+  # --- 队列管理 API ---
+  - name: "队列统计"
+    method: "GET"
+    path: "/admin/api/v1/queue/stats"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  - name: "队列任务列表"
+    method: "GET"
+    path: "/admin/api/v1/queue/tasks?page=1&size=20"
+    requires_auth: true
+    expected_status: 200
+    expected_code: 0
+    skip: false
+
+  - name: "队列批量删除"
+    method: "POST"
+    path: "/admin/api/v1/queue/tasks/batch-delete"
+    requires_auth: true
+    expected_status: 200
+    # 正常请求体（终态 workflow ID）：期望整批成功，code=0
+    body_template: '{"workflow_ids":["__QUEUE_BATCH_DELETE_ID__"]}'
+    # 含运行中/排队中任务时后端拒绝（整批回滚），code 非 0，属预期业务校验
+    acceptable_codes: [0, 400]
     skip: false
 
   - name: "隧道状态"
@@ -1026,6 +1082,33 @@ tool_bug_signatures:
       - "重启 Edge 重新生成用户配置"
     severity: "WARN"
     issue_class: "tool_layer_bug"
+  # Playwright 沙箱安全删除绕过（启动清理固定 test-results 目录时崩溃）
+  - name: "Playwright sandbox safe-delete crash"
+    tool: "playwright"
+    signature_keywords:
+      - "safe-delete"
+      - "EBUSY"
+      - "resource busy or locked"
+      - "cannot remove test-results"
+    action: "use_timestamped_output_dir"
+    fix_steps:
+      - "将 mcp_tools.playwright.output_dir_strategy 设为 timestamped"
+      - "每次运行生成唯一目录 test-results-<timestamp>（由 output_dir_template 控制）"
+      - "避免复用固定 test-results 目录被沙箱启动清理占用"
+    severity: "WARN"
+    issue_class: "tool_layer_bug"
+  # Playwright 路由 mock 顺序错误（通配覆盖具体接口）
+  - name: "Playwright route order conflict"
+    tool: "playwright"
+    signature_keywords:
+      - "route mock returned catch-all body for specific id"
+      - "workflows* matched before workflows/{id}"
+    action: "reorder_route_registration"
+    fix_steps:
+      - "将含 {id} 的具体路由 route() 注册放在 **/workflows* 通配路由之前"
+      - "遵循 config.yaml#route_mock_order 的 require_specific_before_catchall 规则"
+    severity: "FAIL"
+    issue_class: "tool_layer_bug"
 
 # --- 真机测试预检 ---
 # 真机测试前的环境预检项（仅真机测试时启用）
@@ -1256,6 +1339,10 @@ service_mode_detection:
     - "backend/app/**/*.py"
     - "admin-web/src/**/*.{vue,js,ts}"
   rebuild_command: "构建打包.bat"
+  # exe 模式存储行为备注（影响测试断言预期，对应 news-code-dev R186-R187）
+  # exe 模式（sys.frozen）下 is_cos_configured() 为真时仅写云端，列表接口应回退 DB audio_url
+  # （path=云端(COS)），不可断言本地 data/audio_cache 文件存在
+  exe_storage_note: "exe 模式 COS 已配置时仅写云端，列表接口回退 DB audio_url（path=云端(COS)），测试不得断言本地文件存在"
 
 # API 登录协议适配（覆盖 credentials.admin 默认值）
 login_protocol:
@@ -1276,6 +1363,28 @@ route_verification:
     workflow: "/api/internal"
   require_strict_match: true
   allow_suffix_only: false
+
+# 路由 mock 注册顺序（Playwright route 按注册顺序匹配，先注册者优先）
+# 对应 news-code-dev R186-R187 / 后端维度 136 / 前端维度 118 打包模式列表回退
+route_mock_order:
+  enabled: true
+  # 通配(catch-all)路由必须在具体路由之后注册，否则具体接口会被通配覆盖
+  require_specific_before_catchall: true
+  # 具体路由匹配特征（含路径参数 {id} 或明确资源 ID）
+  specific_route_patterns:
+    - "/admin/api/v1/workflows/[0-9]+"
+    - "/admin/api/v1/workflows/{id}"
+    - "/admin/api/v1/audio/segments/[0-9]+"
+  # 通配路由匹配特征（**/ 前缀或 * 通配）
+  catchall_route_patterns:
+    - "**/admin/api/v1/workflows*"
+    - "**/admin/api/v1/audio*"
+  # 判断信号：通配路由出现在具体路由之前注册（命中即 FAIL）
+  conflict_signal: "route\\(.*workflows\\*.*\\).*(before|precedes).*route\\(.*workflows/\\{id\\}"
+  # 严重级别
+  severity_on_wrong_order: "FAIL"
+  # 修复建议
+  fix_hint: "将含 {id} 的具体路由 route() 注册放在 **/workflows* 通配路由之前"
 
 # SonarQube 二次扫描回归
 sonarqube_regression:
@@ -1654,6 +1763,14 @@ python_env_test_check:
   enabled: true
   # 是否强制要求显式 Python 路径
   require_explicit_python_path: true
+  # 项目 venv 优先发现顺序（命中即作为 {python_path} 首选，避免误用系统/受管 Python）
+  # 本项目的 pytest 实际运行在 backend/.venv，而非受管 venv 3.13.12 或系统 Python3.14
+  prefer_venv_over_system: true
+  venv_discovery:
+    - "backend/.venv/Scripts/python.exe"   # Windows
+    - "backend/.venv/bin/python"            # Linux / macOS
+  # 系统 Python 仅作为 venv 全部未命中时的 fallback
+  system_python_path: "F:\\Program Files\\Python3.14\\python.exe"
   # 系统 Python 路径（可被项目配置覆盖）
   system_python_path: "F:\\Program Files\\Python3.14\\python.exe"
   # 必需测试依赖清单
@@ -3774,3 +3891,143 @@ shared_state_testing:
     pass_criteria:
     - "onShow 检测到状态变更后调用对应模式的加载函数"
     - "禁止仅同步状态而不触发加载"
+
+# ============================================================
+# 2026-08-05 会话复盘新增：部署层/小程序合规专项测试（阶段 102-105）
+# 来源：frozen 模式 .env 加载失败（appid missing）、安装包 .env 被 Excludes
+#       静默丢弃、HLS 首播冷启动失败、微信剪贴板隐私 scope 未声明四类真实问题。
+# 对应 news-code-dev 诊断标准 DS-11 / DS-12 / DS-13 / DS-14。
+# 所有阈值/路径/反模式均通过本区块管理，无硬编码业务值；通用性：
+# trigger_on_files 可适配任意项目路径，signals 反模式可扩展。
+# ============================================================
+
+# ---- 阶段 102：frozen 模式配置加载路径解析测试（DS-11）----
+frozen_config_load_test:
+  description: "frozen 模式（PyInstaller 冻结 exe）配置加载路径解析验证（DS-11）"
+  enabled: true
+  severity: CRITICAL
+  category: "config_driven"
+  rule_ref: "DS-11"
+  trigger_on_files:
+  - "backend/**/config.py"
+  - "backend/**/settings.py"
+  signals:
+  - id: "no_frozen_fallback"
+    description: "config.py 的 env_file 为相对/固定路径，且整个文件无 getattr(sys, 'frozen') 回退分支"
+    pattern: "(?s)env_file\\s*=\\s*[^\\n]*(?!(.|\\n)*getattr\\(sys\\))"
+    severity_on_match: "FAIL"
+  - id: "relative_env_file_breaks_in_exe"
+    description: "env_file 依赖 cwd 相对路径（冻结 exe 下 _MEIPASS 解析失败，读不到 .env）"
+    pattern: "env_file\\s*=\\s*[\"']\\.{0,2}/"
+    severity_on_match: "WARN"
+  test_steps:
+  - "读取 backend config.py，定位 SettingsConfigDict(env_file=...) 的解析来源"
+  - "确认存在 getattr(sys, 'frozen') 分支，冻结模式回退到 sys.executable 同级 .env"
+  - "模拟 sys.frozen=True，验证 .env 路径解析为 sys.executable 父目录"
+  pass_criteria:
+  - "config.py 在冻结模式下通过 sys.executable 同级目录解析 .env"
+  - "非冻结模式回退开发态相对路径"
+  - "禁止仅依赖 cwd 相对 env_file（exe 模式读不到 WX_APPID 等表现 appid missing）"
+  applicable_scenarios:
+  - "PyInstaller / Nuitka 冻结exe部署"
+  not_applicable_scenarios:
+  - "纯源码运行（无 sys.frozen 分支需求）"
+
+# ---- 阶段 103：安装包配置完整性测试（DS-12）----
+installer_secret_completeness_test:
+  description: "安装包/构建配置完整性验证（DS-12）：.env 不得被 Excludes 静默丢弃"
+  enabled: true
+  severity: CRITICAL
+  category: "packaging"
+  rule_ref: "DS-12"
+  trigger_on_files:
+  - "installer.iss"
+  - "build/**/*.ps1"
+  - "build/**/*.py"
+  - "scripts/**/*.ps1"
+  signals:
+  - id: "excludes_env"
+    description: "installer.iss 用 Excludes 静默丢弃 .env / 密钥文件"
+    pattern: "Excludes:.*\\.env"
+    severity_on_match: "FAIL"
+  - id: "no_explicit_env_source"
+    description: "installer.iss 未显式 Source 包含 .env（仅依赖目录通配可能遗漏隐藏文件）"
+    pattern: "(?s)Source:.*\\.env(?!(.|\\n)*Excludes:.*\\.env)"
+    severity_on_match: "FAIL"
+  - id: "no_attrib_unhide"
+    description: "构建脚本拷贝 .env 后无 attrib -H 去隐藏属性（隐藏文件不被打包）"
+    pattern: "\\.env(?!(.|\\n)*attrib\\s+-H)"
+    severity_on_match: "WARN"
+  test_steps:
+  - "检查 installer.iss 是否 Excludes .env / 密钥"
+  - "检查 installer.iss Source 列表是否显式包含 .env（而非仅目录通配）"
+  - "检查构建脚本拷贝 .env 后是否执行 attrib -H 去隐藏属性"
+  pass_criteria:
+  - "installer.iss 不 Excludes .env"
+  - "installer.iss 显式 Source 包含 .env"
+  - "构建脚本拷贝 .env 后执行 attrib -H"
+  applicable_scenarios:
+  - "含 .env / 密钥的安装包（Inno Setup 等）"
+  not_applicable_scenarios:
+  - "配置全部环境变量注入、无 .env 文件"
+
+# ---- 阶段 104：小程序 HLS 首播冷启动静默重试测试（DS-13）----
+miniprogram_playback_coldstart_test:
+  description: "小程序 HLS 首播冷启动静默重试与降级验证（DS-13）"
+  enabled: true
+  severity: HIGH
+  category: "miniprogram_audio"
+  rule_ref: "DS-13"
+  trigger_on_files:
+  - "miniprogram/**/*.js"
+  signals:
+  - id: "onerror_direct_toast"
+    description: "音频 onError 直接 showToast，且无 MAX_HLS_RETRY / mp3Url / _applyProtocol 静默重试或回退分支"
+    pattern: "(?s)onError\\([^)]*\\)\\s*\\{[^}]*?wx\\.showToast(?![\\s\\S]*?(MAX_HLS_RETRY|mp3Url|_applyProtocol))"
+    severity_on_match: "FAIL"
+  - id: "loading_stop_on_first_fail"
+    description: "首播失败即停 loading（loading=false 紧跟 onError），冷启动被误判致命"
+    pattern: "(?s)onError[\\s\\S]*?loading\\s*=\\s*false"
+    severity_on_match: "WARN"
+  test_steps:
+  - "定位小程序音频播放 onError 处理，确认首播失败有静默重试分支（MAX_HLS_RETRY）"
+  - "确认重试耗尽回退 mp3 直链（_applyProtocol / mp3Url）"
+  - "确认首播失败期间 loading 保持连续（不中断）"
+  pass_criteria:
+  - "音频 onError 首播失败静默重试一次，不弹错"
+  - "重试耗尽回退 mp3 直链"
+  - "首播失败不中断连续 loading 态"
+  applicable_scenarios:
+  - "小程序 / H5 使用 BackgroundAudioManager 播 HLS(m3u8) 流式音频"
+  not_applicable_scenarios:
+  - "纯本地 mp3 直链、无流式协议协商"
+
+# ---- 阶段 105：微信隐私合规 scope 声明测试（DS-14）----
+wechat_privacy_scope_test:
+  description: "微信隐私合规 scope 声明验证（DS-14）：敏感 API 调用前须授权"
+  enabled: true
+  severity: CRITICAL
+  category: "miniprogram_privacy"
+  rule_ref: "DS-14"
+  trigger_on_files:
+  - "miniprogram/**/*.js"
+  signals:
+  - id: "clipboard_without_authorize"
+    description: "直接调用 setClipboardData 且无 requirePrivacyAuthorize 授权流程包裹"
+    pattern: "(?s)setClipboardData\\([^)]*\\)(?![\\s\\S]*?requirePrivacyAuthorize)"
+    severity_on_match: "FAIL"
+  - id: "getclipboard_without_authorize"
+    description: "直接调用 getClipboardData 且无 requirePrivacyAuthorize 授权流程包裹"
+    pattern: "(?s)getClipboardData\\([^)]*\\)(?![\\s\\S]*?requirePrivacyAuthorize)"
+    severity_on_match: "FAIL"
+  test_steps:
+  - "grep 小程序 setClipboardData / getClipboardData 调用点"
+  - "确认每个敏感 API 调用前触发 requirePrivacyAuthorize / onNeedPrivacyAuthorization"
+  - "核对微信后台隐私清单含「剪贴板」scope（读写共用，非「写入剪贴板」字面量）"
+  pass_criteria:
+  - "敏感 API 调用前完成隐私授权流程"
+  - "微信后台声明对应 scope（剪贴板读写共用「剪贴板」scope）"
+  applicable_scenarios:
+  - "微信小程序调用 setClipboardData / getClipboardData / 位置 / 相册等需隐私声明的接口"
+  not_applicable_scenarios:
+  - "非微信平台、或接口不在微信隐私接口清单内"

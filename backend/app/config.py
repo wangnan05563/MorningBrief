@@ -4,11 +4,28 @@
 按职责分组，便于维护时定位配置项。
 """
 import socket
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _resolve_env_file() -> str:
+    """运行时解析 .env 路径，兼容开发态与打包态。
+
+    旧逻辑用 Path(__file__).resolve().parent.parent / ".env" 拼绝对路径。
+    打包（PyInstaller）后 __file__ 指向 _MEIPASS 临时解压目录，
+    该目录不存在 .env，导致打包态下所有配置项（含 WX_APPID/WX_SECRET）
+    全部走默认值空字符串，表现为小程序微信登录报 "appid missing"。
+
+    修复：打包态改为读 exe 同级目录的 .env（dist/MorningBrief/.env 或安装目录），
+    与 app/paths.py 的 resolve_env_path() 语义一致；开发态仍读 backend/.env。
+    """
+    if getattr(sys, "frozen", False):
+        return str(Path(sys.executable).parent / ".env")
+    return str(Path(__file__).resolve().parent.parent / ".env")
 
 
 def detect_lan_ip() -> str:
@@ -96,11 +113,10 @@ class Settings(BaseSettings):
     """全局配置，字段与 backend/.env.example 一一对应。"""
 
     model_config = SettingsConfigDict(
-        # 用绝对路径避免依赖 CWD：start.ps1 的 WorkingDirectory 是项目根目录，
-        # 而 launcher.py 的 os.chdir(app_dir) 在 uvicorn 导入 main.py 后才执行，
-        # 模块级 settings = get_settings() 可能先于 CWD 切换时被调用，导致 .env 加载不到。
-        # Path(__file__).resolve().parent.parent = backend/ 目录
-        env_file=str(Path(__file__).resolve().parent.parent / ".env"),
+        # .env 路径运行时解析：开发态读 backend/.env，打包态读 exe 同级 .env。
+        # 避免依赖 CWD，且修复打包态下 __file__ 指向 _MEIPASS 临时目录导致
+        # .env 加载不到、WX_APPID 等配置落空的问题（见 _resolve_env_file）。
+        env_file=_resolve_env_file(),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -271,6 +287,9 @@ class Settings(BaseSettings):
     BGM_VOLUME: float = 0.15
     # TTS 段间过渡时长（秒）：段与段之间插入的静音长度，BGM 在此时段显现
     SEGMENT_GAP_SEC: float = 0.5
+    # 段间 BGM 模式（全局默认，频道可覆盖）：
+    #   "silence" = 段间真实静音（停顿可感知，推荐）；"bridge" = 段间 BGM 桥接（旧版行为）
+    BGM_GAP_MODE: str = "silence"
 
     # ---- 爬虫配置 ----
     # 去重表保留天数：3 天后过期，允许爬虫重新爬取同源新闻

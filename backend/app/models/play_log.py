@@ -31,7 +31,7 @@ class PlayLog(Base):
     )
     duration: Mapped[Optional[int]] = mapped_column(Integer, comment="本次会话已播放时长（秒）")
     completed: Mapped[Optional[int]] = mapped_column(SmallInteger, default=0)
-    # played_at 必须由业务代码显式赋值 utcnow_naive()（本地 naive datetime），
+    # played_at 必须由业务代码显式赋值 localnow_naive()（本地 naive datetime），
     # 禁止用 server_default=func.now()：SQLite func.now() 返回 UTC，
     # 与 stats_service 用 datetime.combine(target_date) 本地时间切分窗口冲突，
     # 会导致凌晨 0-8 点数据查不到（R162/R170 时区一致性）

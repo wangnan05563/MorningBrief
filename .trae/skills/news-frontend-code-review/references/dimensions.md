@@ -1048,10 +1048,52 @@
 #### 维度 118：素材面板空数据后端根因排查
 
 - 【强制】素材面板空数据时，前端应显示后端诊断信息（crawl 步骤状态、素材总数）
+- 【强制】素材面板空数据须区分「dev 空」与「打包模式空」：exe 模式 COS 已配置时本地无副本，须确认后端 list_audio 已回退 DB 远程 URL（path=云端(COS)），而非前端渲染问题
 - 【强制】素材面板应调用 API 获取 total 字段，而非仅依赖列表长度判断
 - 判断信号：grep 素材面板组件无 `total` 字段读取 → 违规
 - **严重级别**：MEDIUM
 - 配置节点：`config.yaml#frontend_empty_data_diagnosis_check`
+
+### 维度 119：详情面板懒加载
+
+> 来源：2026-08-05 复盘（规范 R192）。详情页三面板数据量大，一次性加载增加首屏耗时与接口压力。
+
+**配置节点**：`config.yaml#checklist` → `detail_panel_lazy_load`
+
+- 【强制】工作流详情页素材/TTS/成品面板须用 `activePanels` + 变更处理器按需加载，禁止 `onMounted`/`created` 一次性拉全
+- 判断信号：grep 详情页 `onMounted`/`created` 同时拉取素材+TTS+成品且无面板激活判断 → 违规
+- **严重级别**：HIGH
+
+### 维度 120：远程音频代理播放
+
+> 来源：2026-08-05 复盘（规范 R193）。直连 COS 公网 URL 暴露签名且无法做 SSRF 收敛与统一鉴权。
+
+**配置节点**：`config.yaml#checklist` → `remote_audio_proxy_playback`
+
+- 【强制】远程（云端）音频必须经由 `proxy_audio` 端点播放，禁止前端直接拼接 COS 公网 URL
+- 不适用：本地 `/audio/<key>` 直读
+- 判断信号：grep 前端 `new Audio(`/`<audio src=` 直接拼接 `cos`/`.myqcloud.com` URL → 违规
+- **严重级别**：HIGH
+
+### 维度 121：远程资源删除保护
+
+> 来源：2026-08-05 复盘（规范 R194）。云端对象与本地文件生命周期不同，前端误删无法本地恢复。
+
+**配置节点**：`config.yaml#checklist` → `remote_resource_delete_protect`
+
+- 【强制】`path` 标记远程（云端）的资源前端禁用删除/本地文件操作
+- 判断信号：grep 前端对 `item.path === "云端(COS)"` 仍渲染删除按钮 → 违规
+- **严重级别**：HIGH
+
+### 维度 122：字段契约展示一致性
+
+> 来源：2026-08-05 复盘（规范 R195/R191）。远程项 `size_bytes=0` 若直接渲染会误判无数据。
+
+**配置节点**：`config.yaml#checklist` → `field_contract_display`
+
+- 【强制】前端对 `size_bytes=0`（远程）与 `path="云端(COS)"` 须正确展示语义标签，禁止显示 0/空误判无数据
+- 判断信号：grep 前端直接渲染 `item.size_bytes` 未区分本地/远程 → 违规
+- **严重级别**：MEDIUM
 
 ---
 
@@ -1082,4 +1124,65 @@
 | 104-108 | `icon_library_existence_check` 等 | AI 配置持久化 |
 | 109-112 | `blob_response_interceptor_check` 等 | 响应处理与按需加载 |
 | 113-116 | `frontend_computed_naming_safety` 等 | 跨项目移植与编码规范 |
-| 117-118 | `frontend_empty_data_diagnosis_check` | 空数据分层诊断 |
+| 117-118 | `frontend_empty_data_diagnosis_check` | 空数据分层诊断（含打包模式 COS 根因） |
+| 119-122 | `detail_panel_lazy_load` / `remote_audio_proxy_playback` / `remote_resource_delete_protect` / `field_contract_display` | 打包模式面板懒加载/远程资源 |
+| FE-196~FE-200 | `remote_resource_display_check` / `build_metadata_display_check` / `packaging_fallback_ui_check` / `hls_cold_start_retry_check` / `wechat_privacy_scope_check` | V3.0 会话复盘（DS-5/6/13/14） |
+| FE-201 | `backend_switch_field_passthrough_check` | V3.1 会话复盘（DS-15 媒体特性可开关化与真静音） |
+
+---
+
+## V3.0 2026-08-05 会话复盘新增前端审查维度（FE-196~FE-200）
+
+> 来源：打包模式三面板空白、关于页版本失真、HLS 首播冷启动失败、微信剪贴板隐私未声明四类真实问题。完整规则、判断信号与代码示例见 news-code-dev `references/diagnostic-standards.md` 的 DS-5 / DS-6 / DS-13 / DS-14；参数全部由 `config.yaml` 对应节点管理（无硬编码）。
+
+### 维度 FE-196：远程资源字段契约展示一致性（DS-5）
+**配置节点**：`config.yaml#remote_resource_display_check`
+- 【强制】远程来源 `path` 返回语义值（如「云端(COS)」）；`size_bytes` 未知须置 0 且前端展示不为空/异常；删除按钮 `v-if` 排除远程项（`!row.remote`）；远程 blob 走 SSRF 白名单代理端点
+- 判断信号：grep `云端(COS)`/`path.*COS`/`row.remote`；`size_bytes`；`v-if=.!.*remote`；`proxy?url=`
+- 严重级别：HIGH
+- 适用/不适用：适用 exe/打包部署且 COS 已配置；不适用纯开发模式（本地优先）
+
+### 维度 FE-197：关于页/版本真实发布日展示（DS-6）
+**配置节点**：`config.yaml#build_metadata_display_check`
+- 【强制】GitHub ISO 必须转 UTC+8（`_formatPublishedAt`）；检查更新必须基于真实 version；禁止写死 `git_sha="unknown"`/`build_date`/`version="1.0.0"`；ISO 解析失败兜底防御
+- 判断信号：grep `_formatPublishedAt`；`git_sha|build_date|version`；`checkUpdate`
+- 严重级别：MEDIUM
+- 适用/不适用：适用有版本发布流程的项目；不适用一次性无发布脚本
+
+### 维度 FE-198：打包模式回退 UI 一致性（DS-5）
+**配置节点**：`config.yaml#packaging_fallback_ui_check`
+- 【强制】详情页素材/TTS/成品面板在 COS 回退下必须可展示（非空面板）；远程 blob 走代理端点；`activePanels` 懒加载避免首屏拉空
+- 判断信号：grep `activePanels`；`is_cos_configured|sys.frozen`；`proxy?url=`；`remote:true|row.remote`
+- 严重级别：HIGH
+- 适用/不适用：同 FE-196
+
+### 维度 FE-199：HLS 首播冷启动静默重试与降级（DS-13）
+**配置节点**：`config.yaml#hls_cold_start_retry_check`
+- 【强制】小程序 `BackgroundAudioManager` 首播 HLS(m3u8) `onError` 必须有静默重试分支（`MAX_HLS_RETRY=1`，不弹错、不中断 loading）；重试耗尽回退 mp3 直链
+- 判断信号：grep `onError`/`MAX_HLS_RETRY`/`currentRetry`/`mp3Url|_applyProtocol`/`BackgroundAudioManager`
+- 反模式：`onError` 直接 `showToast` 并 `loading=false`（首播冷启动被误判致命）
+- 严重级别：HIGH
+- 适用/不适用：适用小程序/H5 播 HLS 流式音频；不适用纯本地 mp3 直链
+
+### 维度 FE-200：微信隐私合规 scope 声明（DS-14）
+**配置节点**：`config.yaml#wechat_privacy_scope_check`
+- 【强制】敏感 API（`setClipboardData`/`getClipboardData`/位置/相册等）调用前必须 `requirePrivacyAuthorize`/`onNeedPrivacyAuthorization`；后台须声明对应 scope（剪贴板读写共用「剪贴板」scope，非「写入剪贴板」/ `setClipboardData` 字面量）
+- 判断信号：grep `setClipboardData|getClipboardData`；`requirePrivacyAuthorize|onNeedPrivacyAuthorization`
+- 反模式：直接 `setClipboardData(` 且无授权流程包裹
+- 严重级别：CRITICAL（真机报 `setClipboardData:fail api scope is not declared in the privacy agreement`）
+- 适用/不适用：适用微信小程序调用隐私接口；不适用非微信平台
+
+---
+
+## V3.1 2026-08-05 段间静音/bgm_gap_mode 复盘新增前端审查维度（FE-201）
+
+> 来源：段间静音做成可开关 `bgm_gap_mode`(silence/bridge) 后，前端须保证通用 axios 透传不丢新字段，并在列表/编辑表单显式展示与编辑该开关；后端 `NULL`（继承全局）与前端"继承/自定义"往返一致。完整规则与代码示例见 news-code-dev `references/diagnostic-standards.md` 的 DS-15；参数全部由 `config.yaml` 对应节点管理（无硬编码）。
+
+### 维度 FE-201：后端新增开关/枚举字段的前端透传与列表列展示（DS-15）
+**配置节点**：`config.yaml#backend_switch_field_passthrough_check`
+- 【强制】通用 axios 透传包装（取 `response.data` 直传）不得裁剪/重命名后端新增字段（snake_case 直传）；后端新增开关/枚举字段（如 `bgm_gap_mode`）须在列表新增展示列，并在编辑表单提供控件（如下拉 silence/bridge）
+- 【强制】后端 `NULL` 表示"继承全局"，前端编辑表单须提供"继承"选项，选择时回传 `null`，避免频道误覆盖全局默认（inherit→null 往返一致）
+- 判断信号：grep 透传包装 `return res.data|return response.data`；列表/表单是否覆盖 `watch_switch_fields` 中字段；表单是否建模"继承"语义
+- 反模式：透传裁剪字段导致开关不可见；表单硬编码具体值、无"继承"选项导致全局默认被静默覆盖
+- 严重级别：HIGH
+- 适用/不适用：适用后端新增开关/枚举字段需前端展示编辑；不适用后端字段已在前端硬编码映射的遗留接口

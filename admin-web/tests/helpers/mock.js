@@ -441,6 +441,69 @@ export const workflowRetryResponse = {
   data: { new_workflow_id: 'wf-004' },
 }
 
+// 素材列表：按 workflow_id 过滤，覆盖工作流详情页「爬虫采集·素材」面板
+export const materialsListResponse = {
+  code: 0,
+  message: 'success',
+  data: {
+    total: 2,
+    list: [
+      {
+        id: 1,
+        source: '人民网',
+        title: '测试素材一：AI 芯片突破',
+        summary: '摘要内容一',
+        category: '科技',
+        status: 'selected',
+        crawled_at: '2026-07-08T05:05:00',
+        url: 'https://example.com/1',
+      },
+      {
+        id: 2,
+        source: '新华网',
+        title: '测试素材二：新能源政策',
+        summary: '摘要内容二',
+        category: '财经',
+        status: 'selected',
+        crawled_at: '2026-07-08T05:06:00',
+        url: 'https://example.com/2',
+      },
+    ],
+  },
+}
+
+// 工作流音频列表：模拟【打包态/COS 模式】——本地 audio_cache 为空，
+// TTS 片段与成品仅存于云端（remote: true）。验证 list_audio 回退到 DB 持久化
+// 的 audio_url 后，详情页「语音合成·TTS 片段」「音频拼接·成品」面板仍能展示。
+export const workflowAudioResponse = {
+  code: 0,
+  message: 'success',
+  data: {
+    tts_dir: [
+      {
+        name: 'seg_1.mp3',
+        // 远端对象未知真实字节数，后端置 0（前端展示"大小未知"）
+        size_bytes: 0,
+        url: 'https://morbucket.cos.ap-beijing.myqcloud.com/tts/wf-001/1_abc.mp3',
+        remote: true,
+      },
+      {
+        name: 'seg_2.mp3',
+        size_bytes: 0,
+        url: 'https://morbucket.cos.ap-beijing.myqcloud.com/tts/wf-001/2_def.mp3',
+        remote: true,
+      },
+    ],
+    episode_file: {
+      // 远端模式无本地路径，后端返回可读文案而非 null
+      path: '云端(COS)',
+      exists: true,
+      remote: true,
+      url: 'https://morbucket.cos.ap-beijing.myqcloud.com/episodes/20260708/tech_wf-001.mp3',
+    },
+  },
+}
+
 // 批量删除成功响应：返回被删除的 workflow_id 列表
 export const workflowBatchDeleteResponse = {
   code: 0,

@@ -14,7 +14,7 @@ from typing import Optional
 from sqlalchemy import String, Text, DateTime, Index
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.database import Base
 
 
@@ -40,5 +40,5 @@ class Feedback(Base):
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, comment="反馈创建时间")
     # 同步到 SQLite 的时间（用于排查同步延迟问题）
     synced_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, default=utcnow_naive, comment="同步入库时间"
+        DateTime, default=localnow_naive, comment="同步入库时间"
     )

@@ -12,5 +12,8 @@ export const listQueueTasks = (params) => api.get('/queue/tasks', { params, sile
 export const cancelTask = (id) => api.post(`/queue/tasks/${id}/cancel`)
 export const updatePriority = (id, priority) => api.put(`/queue/tasks/${id}/priority`, { priority })
 export const retryTask = (id) => api.post(`/queue/tasks/${id}/retry`)
+// 批量删除队列任务：委托后端 WorkflowService 事务级联删除（running/queued 拒绝）
+export const batchDeleteTasks = (workflowIds) =>
+  api.post('/queue/tasks/batch-delete', { workflow_ids: workflowIds })
 export const getQueueConfig = () => api.get('/queue/config')
 export const updateQueueConfig = (data) => api.put('/queue/config', data)

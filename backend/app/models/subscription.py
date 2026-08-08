@@ -11,7 +11,7 @@ from typing import Optional
 from sqlalchemy import Integer, String, DateTime, Index, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.database import Base
 
 
@@ -33,7 +33,7 @@ class Subscription(Base):
     # 用户的 openid，推送时直接使用，避免再联表查询
     openid: Mapped[str] = mapped_column(String(64), nullable=False, comment="用户 openid")
     subscribed_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow_naive, comment="用户授权时间"
+        DateTime, default=localnow_naive, comment="用户授权时间"
     )
     # 0=未推送（待发送），1=已推送（已消费） # NOSONAR
     used: Mapped[int] = mapped_column(Integer, default=0, comment="是否已推送：0=未推送 1=已推送")

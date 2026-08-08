@@ -1,10 +1,10 @@
 ---
 name: "news-auto-testing"
-description: "前端自动化测试：使用 Playwright MCP + Chrome DevTools MCP 对 Web 应用做全面功能/性能/API 测试。当用户要求'测试前端/全面测试/系统测试/回归测试'或提到 'news-auto-testing / 前端测试' 时调用。"
+description: "前后端自动化测试：后端改动走 pytest、前端改动走 Playwright MCP + Chrome DevTools MCP，对 Web 应用做全面功能/性能/API 测试。当用户要求'测试/全面测试/系统测试/回归测试/全量测试'或提到 'news-auto-testing / 自动化测试' 时调用。"
 whenToUse: "需要前端测试/全面测试/回归测试/性能测试时使用"
 triggers: "测试前端/全面测试/系统测试/回归测试/API测试/性能测试 | news-auto-testing | 前端测试"
-version: "3.0.0"
-updated: "2026-07-31"
+version: "3.1.0"
+updated: "2026-08-05"
 config: "config.yaml"
 ---
 
@@ -18,7 +18,7 @@ config: "config.yaml"
 - 模板：`config.example.yaml`
 - 实际：`config.yaml`（从模板复制后按项目修改）
 
-配置文件分为 39 个区块：
+配置文件分为 50 个区块（含 2026-08-05 新增的部署层/小程序合规专项）：
 
 | 区块 | 作用 |
 |------|------|
@@ -65,6 +65,13 @@ config: "config.yaml"
 | `function_symmetry_check` | 模块级函数对称性预检（导入符号存在性验证、对称函数对检查） |
 | `service_restart_verification` | 服务重启加载新代码验证（停止旧服务→启动新服务→openapi.json 端点验证） |
 | `auth_verification_matrix` | API 认证验证矩阵（带 token 200 + 不带 token 401 + 可选过期/无效 token） |
+| `backend_test` | 后端 pytest 测试配置（双轨约定：venv 解释器解析 + pytest 命令模板 + 隔离策略） |
+| `rename_verification` | 重命名/别名完整性验证（deprecated_names 全仓库 0 匹配 + preserve_paths 豁免） |
+| `test_isolation` | 测试隔离加固 / safe-delete 环境制品分类（tmp_path 重定向 + 唯一输出目录 + 白名单归类） |
+| `frozen_config_load_test` | frozen 模式配置加载路径解析测试（DS-11：sys.frozen 回退 sys.executable 同级 .env） |
+| `installer_secret_completeness_test` | 安装包配置完整性测试（DS-12：installer.iss 不 Excludes .env、显式 Source 包含、attrib -H） |
+| `miniprogram_playback_coldstart_test` | 小程序 HLS 首播冷启动静默重试与降级测试（DS-13：onError 静默重试 + mp3 回退 + 连续 loading） |
+| `wechat_privacy_scope_test` | 微信隐私合规 scope 声明测试（DS-14：敏感 API 调用前 requirePrivacyAuthorize + 后台 scope 声明） |
 
 ## Input / Output 契约
 
@@ -79,9 +86,23 @@ config: "config.yaml"
 - 控制台摘要（通过/失败/阻塞问题数）
 - 退出码：0=全部通过 / 1=有 FAIL / 2=有阻塞问题
 
+## 测试范围双轨约定（后端 pytest + 前端 Playwright）
+
+> 2026-08-05 优化：明确"后端改动 → pytest；前端改动 → Playwright"的双轨约定，避免前端专用技能误用于纯后端回归。
+
+- **范围判定**（见 [testing-playbook.md](references/testing-playbook.md) 维度 3 T1）：
+  - 改动为 `backend/**/*.py` → 执行后端 pytest（阶段 99，由 `config.yaml#backend_test` 驱动）。
+  - 改动为 `admin-web/src/**` / `miniprogram/**` → 执行 Playwright 页面/API 测试（阶段 2-4）。
+  - 两者皆有 → 全量（阶段 99 + 阶段 2-4）。
+- **执行模式**：`--scope=backend` / `--scope=frontend` / `--scope=all`（默认 all）。
+- **safe-delete 环境制品处理**（维度 2/3）：WorkBuddy safe-delete shim 会拦截 `unlink`/`Remove-Item`（FAIL CLOSED），导致两类伪失败：
+  1. 测试 teardown 删文件被拦截 → 残留文件被"按日 rollover 回填"造成计数泄漏（如 `test_ai_budget` 历史 `assert 2==1`）。
+  2. Playwright 启动删 `test-results` 崩溃；`vite build` 的 `emptyDir` 批量删除受阻。
+  - 处理：测试中用 `tmp_path` + `monkeypatch` 重定向模块级文件路径（阶段 101）；Playwright 用 `--output=test-results-$(date +%s)` 唯一目录；已知 teardown 依赖删除的用例列入 `known_environment_artifacts` 白名单，报告中单独归类"环境制品"，不计入代码失败。
+
 ## 测试流程
 
-默认执行 6 个核心阶段，辅助阶段（7-95，共 89 个）按 `config.yaml` 各区块的 `enabled` 字段按需激活。完整阶段定义见 [stages.md](references/stages.md)。
+默认执行 6 个核心阶段，辅助阶段（7-105，共 99 个）按 `config.yaml` 各区块的 `enabled` 字段按需激活。完整阶段定义见 [stages.md](references/stages.md)。新增阶段 99（后端 pytest 执行）、阶段 100（重命名完整性 grep 验证）、阶段 101（测试隔离加固）对应 `backend_test` / `rename_verification` / `test_isolation` 配置区块；阶段 102-105（部署层/小程序合规专项）对应 `frozen_config_load_test` / `installer_secret_completeness_test` / `miniprogram_playback_coldstart_test` / `wechat_privacy_scope_test` 配置区块。
 
 ### 阶段 1：环境预检
 
@@ -314,6 +335,7 @@ P0 失败阻塞后续低优先级用例；未标注 `priority` 的用例按 `def
 
 ## 参考
 
-- [stages.md](references/stages.md) — 全部 95 个测试阶段详解（含判断逻辑、触发条件、配置节点）
+- [stages.md](references/stages.md) — 全部 105 个测试阶段详解（含判断逻辑、触发条件、配置节点）
+- [testing-playbook.md](references/testing-playbook.md) — 测试流程四维度复盘与最佳实践（后端 pytest / 前端 Playwright 双轨、safe-delete 环境制品、重命名完整性、测试隔离）
 - [config.example.yaml](config.example.yaml) — 配置模板（所有阈值、页面清单、修复策略的默认值）
 - [_shared/references/](../_shared/references/) — 跨技能共享主题（PowerShell 兼容性、编码规范等）

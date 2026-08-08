@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import UserPayload, get_current_user
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.database import get_db
 from app.models import Feedback
 from app.services.user_service import get_user_openid
@@ -55,8 +55,8 @@ async def submit_feedback(
         content=req.content.strip(),
         contact=req.contact.strip() if req.contact else None,
         status="pending",
-        created_at=utcnow_naive(),
-        synced_at=utcnow_naive(),
+        created_at=localnow_naive(),
+        synced_at=localnow_naive(),
     )
     db.add(feedback)
     await db.commit()

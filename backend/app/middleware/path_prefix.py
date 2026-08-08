@@ -1,4 +1,4 @@
-"""路径前缀重写中间件。
+﻿"""路径前缀重写中间件。
 
 直接访问后端时（非通过 Tailscale Funnel / Vite proxy），
 浏览器按 Vite base='/news/' 请求 /news/admin/api/...，
@@ -23,6 +23,7 @@ class PathPrefixMiddleware:
             path = scope.get("path", "")
             # 仅剥离 API 路径的 /news 前缀：
             # 静态资源 /news/assets 已有独立挂载，SPA 路由由 fallback 处理
-            if path.startswith("/news/admin/api/") or path.startswith("/news/api/"):
+            if path.startswith("/news/admin/api/") or path.startswith("/news/api/") or path.startswith("/news/audio/") or path.startswith("/news/bgm/") or path.startswith("/news/avatars/"):
                 scope["path"] = path[5:]
         await self.app(scope, receive, send)
+

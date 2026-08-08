@@ -1,6 +1,6 @@
 ﻿# 测试阶段详解
 
-> 本文档包含全部 95 个测试阶段的详细定义，从 SKILL.md 迁移而来。
+> 本文档包含全部 101 个测试阶段的详细定义，从 SKILL.md 迁移而来。
 
 
 ## 核心阶段（1-6，默认执行）
@@ -3210,4 +3210,266 @@ stage_46_aggregated_seq_independence:
 **判断标准**：
 - PASS：onShow 同步状态后立即触发数据重载
 - FAIL：仅同步状态不重载，UI 显示旧数据
+
+
+## 2026-08-05 新增：打包模式/路由顺序/测试环境专项（阶段 96-98）
+
+> 来源：打包模式空列表缺陷全量测试复盘。配置节点见 `config.yaml` 对应字段，技能本身不硬编码任何路径/版本。
+
+### 阶段 96：Playwright 输出目录沙箱安全删除绕过
+
+**测试目标**：避免 Playwright 在部分沙箱中启动时尝试安全删除固定 `test-results` 目录导致崩溃。
+
+**配置节点**：`mcp_tools.playwright.output_dir_strategy` / `output_dir_template` / `output_dir_timestamp_fmt`，工具层特征见 `tool_bug_signatures.Playwright sandbox safe-delete crash`。
+
+**信号**：启动 Playwright 时报 `safe-delete` / `EBUSY` / `cannot remove test-results`。
+
+**测试步骤**：
+1. 读取 config.yaml，确认 `output_dir_strategy == "timestamped"`
+2. 运行时将 `{timestamp}` 按 `output_dir_timestamp_fmt` 展开，生成唯一目录（如 `test-results-20260805100146`）
+3. 启动 Playwright，确认不再复用固定 `test-results` 目录
+
+**判断标准**：
+- PASS：每次运行使用唯一输出目录，启动清理不再崩溃
+- FAIL：复用固定目录且启动崩溃
+
+### 阶段 97：路由 mock 注册顺序（具体优先于通配）
+
+**测试目标**：Playwright `route()` 按注册顺序匹配，通配路由必须晚于具体路由注册，否则含 `{id}` 的接口会被通配覆盖返回错误数据。
+
+**配置节点**：`route_mock_order.require_specific_before_catchall` / `specific_route_patterns` / `catchall_route_patterns`，工具层特征见 `tool_bug_signatures.Playwright route order conflict`。
+
+**信号**：对 `/admin/api/v1/workflows/{id}` 的请求被 `**/admin/api/v1/workflows*` 通配路由拦截并返回列表页 mock 体。
+
+**测试步骤**：
+1. 读取 config.yaml，确认具体路由（含 `{id}`）在通配路由之前注册
+2. 对具体接口发起请求，验证返回的是具体 mock 而非通配 mock
+3. 若命中 `conflict_signal`，按 `fix_hint` 重排注册顺序后回归
+
+**判断标准**：
+- PASS：具体接口走具体 mock，通配接口走通配 mock，互不干扰
+- FAIL：通配覆盖具体接口，返回错误响应体
+
+### 阶段 98：测试 Python 环境 venv 优先选择
+
+**测试目标**：本项目 pytest 实际运行于 `backend/.venv`，而非受管 venv 3.13.12 或系统 Python3.14；必须显式选择正确解释器，否则依赖缺失/版本不符。
+
+**配置节点**：`python_env_test_check.venv_discovery` / `prefer_venv_over_system` / `system_python_path`（作为 fallback），命令模板 `{python_path}` 由发现结果填充。
+
+**信号**：执行 `pytest` 报 `ModuleNotFoundError: pytest` 或 `pytest-asyncio` 缺失；或测试连接到错误 Python 版本。
+
+**测试步骤**：
+1. 按 `venv_discovery` 顺序探测 `backend/.venv/Scripts/python.exe`（Windows）/ `backend/.venv/bin/python`（Linux/macOS）
+2. 命中即作为 `{python_path}`；全部未命中才回退 `system_python_path`
+3. 用解析出的 `{python_path}` 执行 `verify_command` 校验 pytest 版本
+4. 执行 `test_run_command`（模板内含 `{python_path}`）
+
+**判断标准**：
+- PASS：使用 `backend/.venv` 解释器，pytest 及测试依赖齐全
+- FAIL：误用系统/受管 Python 导致依赖缺失或断言环境不符
+
+### 阶段 96-98 配置节点速查
+
+| 阶段 | 配置节点 | 关键开关 | 关联规范/维度 |
+|------|----------|----------|---------------|
+| 96 | `mcp_tools.playwright.output_dir_strategy` | `timestamped` | 工具层 bug 特征库 |
+| 97 | `route_mock_order.require_specific_before_catchall` | `true` | 后端维度 136 / 前端维度 118 |
+| 98 | `python_env_test_check.venv_discovery` | `backend/.venv` 优先 | news-code-dev R186 复盘 |
+
+---
+
+## 2026-08-05 新增：后端 pytest 双轨 / 重命名完整性 / 测试隔离（阶段 99-101）
+
+> 来源：测试过程四维度复盘（见 testing-playbook.md）+ news-code-dev 诊断标准 DS-8（全量重命名完整性）、DS-9（测试隔离与状态防泄漏）。
+> 三项均为 config-driven，技能本身不硬编码任何路径/版本/旧名清单，可适配不同后端项目的 pytest 套件与重命名治理。
+
+### 阶段 99：后端 pytest 套件执行（对应 news-code-dev DS-9 / 测试双轨约定）
+
+**配置节点**：`config.yaml#backend_test`
+
+**为什么**：后端改动必须通过 pytest 回归，而非误用前端 Playwright 技能。项目 pytest 实际运行于 `backend/.venv`（受管 venv），直接使用系统 Python 会 `ModuleNotFoundError: pytest`。需先解析 `{python_path}` 并校验 pytest 就绪，再展开命令模板执行，避免环境错配。
+
+**触发条件**：`backend_test.enabled=true` 且改动含 `backend/**/*.py`（见 SKILL.md 测试范围双轨约定 scope=backend/all）。
+
+**测试步骤**：
+```
+1. 读取 config.yaml#backend_test 获取：
+   - python_path（显式解释器路径，默认 backend/.venv/Scripts/python.exe）
+   - pytest_command（命令模板，含 {python_path}/{test_dir}/{extra_args} 占位符）
+   - test_dir（测试目录，默认 backend/tests）
+   - isolation_strategy（隔离策略，默认 tmp_path_and_monkeypatch）
+   - default_extra_args（默认额外参数，如 --tb=short）
+2. 解析解释器：
+   a. 用解析出的 {python_path} 执行 verify_command（如 -c "import pytest; print(pytest.__version__)"）
+   b. 失败 → FAIL（前置条件不满足，报告缺失 venv / 依赖）
+3. 展开 pytest_command 模板：
+   a. 替换 {python_path} / {test_dir} / {extra_args}（extra_args 可由 --scope 参数或 default_extra_args 拼接）
+   b. 在项目根目录执行（cwd = 项目根）
+4. 解析结果：
+   a. 捕获 passed / failed / error 计数
+   b. 解析失败用例名（test_file.py::Class::method）
+5. 隔离校验：
+   a. 按 isolation_strategy 要求，检查失败用例是否因未用 tmp_path+monkeypatch 重定向模块级路径导致
+   b. 属隔离类失败 → 归类为 environment / 环境制品，不计入代码缺陷
+6. 输出报告：PASS（全部通过）/ FAIL（failed/error>0）
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| pytest 就绪 + passed 全过 + 0 failed/error | PASS |
+| pytest 未就绪（venv/依赖缺失） | FAIL（前置条件不满足） |
+| failed/error > 0 且为真实断言失败 | FAIL（code_defect） |
+| failed 用例因未隔离（依赖 unlink 成功） | WARN → 归类为 environment，要求修复测试隔离 |
+
+**与阶段 98 关系**：阶段 98 负责"选对 venv"，阶段 99 负责"用该 venv 跑 pytest 并解析结果"，两者衔接构成后端回归双步。
+
+**适用场景**：所有后端 Python 改动回归；引入新 pytest 套件的项目（覆盖 python_path / test_dir 即可）。
+**不适用场景**：纯前端改动（admin-web/src / miniprogram）时 `backend_test.enabled=false`，仅跑 Playwright（阶段 2-4）。
+
+---
+
+### 阶段 100：重命名/别名完整性 grep 验证（对应 news-code-dev DS-8）
+
+**配置节点**：`config.yaml#rename_verification`
+
+**为什么**：全量重命名（如 `utcnow_naive` → `localnow_naive`）若未彻底，会留下半吊子引用，导致"函数已删但旧名仍在调用/注释"的混淆，甚至 import 失败。须确保 `deprecated_names` 在扫描范围内 0 匹配，仅 `preserve_paths` 豁免（如历史审计日志有意保留原貌）。
+
+**触发条件**：`rename_verification.enabled=true` 且本次改动含"全量重命名/别名移除"动作（见 testing-playbook.md 维度：重命名完整性验证阶段）。
+
+**测试步骤**：
+```
+1. 读取 config.yaml#rename_verification 获取：
+   - deprecated_names（待核查旧名清单，如 [utcnow_naive]）
+   - scan_paths（扫描范围，如 [backend, docs]）
+   - preserve_paths（豁免目录，如 [docs/sonar-reports]）
+   - stale_comment_pattern（失效引用注释信号，如指向已删除别名的"与 X 保持一致"）
+2. 对每个 deprecated_name 在 scan_paths 执行 grep（排除 preserve_paths）：
+   a. 命中 → 记录（文件路径 + 行号 + 旧名）
+   b. 全部命中数汇总
+3. 失效注释检查：
+   a. 在 scan_paths 内 grep stale_comment_pattern
+   b. 命中 → WARN（可能指向已删除别名的失效引用，需人工确认）
+4. 输出残留清单 + 失效注释清单
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| scan_paths 内 deprecated_names 0 匹配 + 无失效注释 | PASS |
+| scan_paths 内命中 deprecated_name | FAIL（重命名不完整） |
+| preserve_paths 内命中 deprecated_name | SKIP（白名单豁免，不阻断） |
+| 命中 stale_comment_pattern 失效引用注释 | WARN（需人工确认是否仍有效） |
+
+**配置示例**：见 `config.yaml#rename_verification`（deprecated_names / scan_paths / preserve_paths / stale_comment_pattern 全部 config 驱动，无硬编码）。
+
+**适用场景**：全量重命名、别名移除、弃用函数清理后的一致性校验；任意项目可复用（覆盖 deprecated_names 即可）。
+**不适用场景**：局部小改动（单文件重命名）；无重命名动作的纯新增功能（enabled=false 跳过）。
+
+---
+
+### 阶段 101：测试隔离加固 / safe-delete 环境制品（对应 news-code-dev DS-9）
+
+**配置节点**：`config.yaml#test_isolation`
+
+**为什么**：WorkBuddy safe-delete 安全删除 shim 为 FAIL CLOSED（拦截 `unlink`/`Remove-Item`/`emptyDir`），导致两类伪失败：① 测试 teardown 删文件被拦截 → 残留文件被"按日 rollover 回填"造成计数泄漏（如 `test_ai_budget` 历史 `assert 2==1`）；② Playwright 启动删 `test-results` 崩溃、`vite build` 的 `emptyDir` 批量删除受阻。须显式重定向 + 唯一目录 + 白名单归类，避免把环境制品误判为代码失败。
+
+**触发条件**：`test_isolation.enabled=true`（默认开启，所有含文件/目录操作的测试场景）。
+
+**测试步骤**：
+```
+1. 读取 config.yaml#test_isolation 获取：
+   - known_environment_artifacts（已知 safe-delete 环境制品用例清单）
+   - require_tmp_path_redirect（是否要求 tmp_path+monkeypatch 重定向模块级文件操作）
+   - playwright_unique_output（是否要求唯一输出目录）
+   - playwright_output_template（唯一目录模板，如 test-results-{timestamp}）
+2. 隔离要求校验：
+   a. require_tmp_path_redirect=true 时，检查测试中 unlink/os.remove 是否经 tmp_path+monkeypatch 重定向
+   b. 仍依赖 unlink 成功 → FAIL（隔离不达标，环境制品会污染）
+3. Playwright 输出隔离：
+   a. playwright_unique_output=true 时，确认运行用 playwright_output_template 展开的唯一目录
+   b. 关联阶段 96（Playwright 输出目录沙箱安全删除绕过）确认不再复用固定 test-results
+4. 环境制品归类：
+   a. 将 known_environment_artifacts 中用例的失败/残留单独归类为"环境制品"
+   b. 报告中单列一节，不计入 code_defect / 不触发代码修复流程
+5. 输出隔离校验结果
+```
+
+**判断逻辑**：
+
+| 条件 | 严重级别 |
+|------|---------|
+| 隔离要求满足（tmp_path 重定向）+ Playwright 唯一目录 + 环境制品单独归类 | PASS |
+| 测试依赖 unlink 成功且未重定向 | FAIL（隔离不达标） |
+| 环境制品被误计入代码失败（未单列） | WARN（报告呈现问题，要求修正归类） |
+| Playwright 复用固定 test-results 目录导致启动崩溃 | FAIL（关联阶段 96 未生效） |
+
+**与阶段 96/99 联动**：阶段 96 解决 Playwright 启动期 safe-delete 崩溃；阶段 99 执行 pytest 时按本阶段要求校验隔离；本阶段兜底 teardown 期 safe-delete 拦截导致的计数泄漏与归类。
+
+**适用场景**：所有含文件/目录创建删除的测试；Playwright/vite 构建清理场景；引入新测试需 tmp_path 隔离的项目。
+**不适用场景**：纯内存计算测试（无文件操作）；只读测试（无 teardown 删除）。
+
+### 阶段 99-101 配置节点速查
+
+| 阶段 | 配置节点 | 关键开关 | 关联规范/维度 |
+|------|----------|----------|---------------|
+| 99 | `backend_test` | `python_path` / `pytest_command` 模板 / `test_dir` / `isolation_strategy` | news-code-dev DS-9 / 测试双轨约定 |
+| 100 | `rename_verification` | `deprecated_names` / `scan_paths` / `preserve_paths` / `stale_comment_pattern` | news-code-dev DS-8 |
+| 101 | `test_isolation` | `known_environment_artifacts` / `require_tmp_path_redirect` / `playwright_unique_output` | news-code-dev DS-9 / 阶段 96 |
+
+## 2026-08-05 新增：部署层 / 小程序合规专项（阶段 102-105）
+
+> 来源：frozen 模式 .env 加载失败（appid missing）、安装包 .env 被 Excludes 静默丢弃、HLS 首播冷启动失败、微信剪贴板隐私 scope 未声明四类真实问题。对应 news-code-dev 诊断标准 DS-11 / DS-12 / DS-13 / DS-14。所有阈值/路径/反模式均由 `config.yaml` 对应区块管理，无硬编码业务值；`trigger_on_files` 与 signals 可适配任意项目。
+
+### 阶段 102：frozen 模式配置加载路径解析测试（对应 DS-11）
+- **配置节点**：`config.yaml#frozen_config_load_test`
+- **触发**：`backend/**/config.py` / `backend/**/settings.py` 变更
+- **判断逻辑**：
+  - 【FAIL】`config.py` 的 `env_file` 为相对/固定路径，且整个文件无 `getattr(sys, "frozen")` 回退分支（exe 模式读不到 `.env`，表现 appid missing）
+  - 【WARN】`env_file` 依赖 cwd 相对路径（冻结 exe 下 `_MEIPASS` 解析失败）
+- **测试步骤**：定位 `SettingsConfigDict(env_file=...)` → 确认存在 `sys.frozen` 分支回退 `sys.executable` 同级 `.env` → 模拟冻结模式验证路径解析
+- **通过标准**：冻结模式经 `sys.executable` 同级解析 `.env`；非冻结回退开发态路径；禁止仅依赖 cwd 相对 `env_file`
+- **适用/不适用**：适用 PyInstaller/Nuitka 冻结 exe；不适用纯源码运行
+
+### 阶段 103：安装包配置完整性测试（对应 DS-12）
+- **配置节点**：`config.yaml#installer_secret_completeness_test`
+- **触发**：`installer.iss` / `build/**` / `scripts/**` 变更
+- **判断逻辑**：
+  - 【FAIL】`installer.iss` 用 `Excludes` 静默丢弃 `.env` / 密钥
+  - 【FAIL】`installer.iss` 未显式 `Source` 包含 `.env`
+  - 【WARN】构建脚本拷贝 `.env` 后无 `attrib -H` 去隐藏属性
+- **测试步骤**：检查 `Excludes` 是否含 `.env` → 检查 `Source` 是否显式包含 `.env` → 检查拷贝后是否 `attrib -H`
+- **通过标准**：不 `Excludes` `.env`；显式 `Source` 包含 `.env`；拷贝后 `attrib -H`
+- **适用/不适用**：适用含 `.env`/密钥的安装包；不适用配置全环境变量注入
+
+### 阶段 104：小程序 HLS 首播冷启动静默重试测试（对应 DS-13）
+- **配置节点**：`config.yaml#miniprogram_playback_coldstart_test`
+- **触发**：`miniprogram/**/*.js` 变更
+- **判断逻辑**：
+  - 【FAIL】音频 `onError` 直接 `showToast`，且无 `MAX_HLS_RETRY` / `mp3Url` / `_applyProtocol` 静默重试或回退分支
+  - 【WARN】首播失败即停 `loading`（`onError` 紧跟 `loading=false`）
+- **测试步骤**：定位 `onError` 处理 → 确认首播失败静默重试（`MAX_HLS_RETRY`）→ 确认耗尽回退 mp3 直链 → 确认 `loading` 保持连续
+- **通过标准**：首播失败静默重试一次不弹错；耗尽回退 mp3；不中断连续 loading
+- **适用/不适用**：适用小程序/H5 播 HLS(m3u8) 流式音频；不适用纯本地 mp3 直链
+
+### 阶段 105：微信隐私合规 scope 声明测试（对应 DS-14）
+- **配置节点**：`config.yaml#wechat_privacy_scope_test`
+- **触发**：`miniprogram/**/*.js` 变更
+- **判断逻辑**：
+  - 【FAIL】直接调用 `setClipboardData` 且无 `requirePrivacyAuthorize` 授权流程包裹
+  - 【FAIL】直接调用 `getClipboardData` 且无 `requirePrivacyAuthorize` 授权流程包裹
+- **测试步骤**：grep `setClipboardData`/`getClipboardData` 调用点 → 确认调用前有 `requirePrivacyAuthorize`/`onNeedPrivacyAuthorization` → 核对后台隐私清单含「剪贴板」scope（读写共用，非「写入剪贴板」字面量）
+- **通过标准**：敏感 API 调用前完成隐私授权；后台声明对应 scope
+- **适用/不适用**：适用微信小程序调用隐私接口；不适用非微信平台
+
+### 阶段 102-105 配置节点速查
+
+| 阶段 | 配置节点 | 关键开关 | 关联规范 |
+|------|----------|----------|----------|
+| 102 | `frozen_config_load_test` | `no_frozen_fallback` / `relative_env_file_breaks_in_exe` signals / `applicable_scenarios` | news-code-dev DS-11 |
+| 103 | `installer_secret_completeness_test` | `excludes_env` / `no_explicit_env_source` / `no_attrib_unhide` signals | news-code-dev DS-12 |
+| 104 | `miniprogram_playback_coldstart_test` | `onerror_direct_toast` / `loading_stop_on_first_fail` signals | news-code-dev DS-13 |
+| 105 | `wechat_privacy_scope_test` | `clipboard_without_authorize` / `getclipboard_without_authorize` signals | news-code-dev DS-14 |
 

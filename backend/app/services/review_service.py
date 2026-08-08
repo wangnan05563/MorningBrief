@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import BizError, NotFoundError
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.models import Review
 from app.models.review import ReviewStatus
 
@@ -126,7 +126,7 @@ class ReviewService:
         if review.status != ReviewStatus.pending:
             raise BizError(code=400, message="该审核记录已处理")
 
-        now = utcnow_naive()
+        now = localnow_naive()
 
         if action == "approve":
             review.status = ReviewStatus.approved

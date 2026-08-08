@@ -253,10 +253,14 @@ async def _migrate_channel_schema() -> None:  # NOSONAR
             ("bgm_path", "TEXT"),
             ("bgm_volume", "REAL"),
             ("segment_gap_sec", "REAL"),
+            ("bgm_gap_mode", "TEXT"),
             ("enable_thinking_question", "INTEGER"),
             ("rss_sources", "TEXT"),
             ("keywords", "TEXT"),
             ("min_duration_sec", "INTEGER"),
+            # 展示排序权重：缓存命中判定以现有列集合为准，新增列需追加到此列表
+            # NOT NULL DEFAULT 0 回填存量频道，避免 NULL 排序歧义
+            ("display_order", "INTEGER NOT NULL DEFAULT 0"),
         ]
         added = 0
         for col_name, col_type in new_columns:

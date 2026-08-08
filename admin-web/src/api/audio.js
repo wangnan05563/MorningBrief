@@ -62,12 +62,30 @@ async function handleBlobError(err, retryFn) {
 export const listAudioFiles = (workflowId) =>
   api.get(`/workflows/${workflowId}/audio`)
 
-// 获取 TTS 音频 blob URL（供 <audio src> 播放）
-export async function getTtsAudioUrl(workflowId, filename) {
+// 代理播放远端（COS / CDN）音频：后端鉴权拉取后以 blob 回传，规避浏览器 CORS / 私有桶问题
+// 打包态（COS 已配置）下 TTS 片段 / 成品仅存云端，本地 audio_cache 为空，必须走代理
+export async function getAudioProxyUrl(workflowId, remoteUrl) {
   const fetch = () => api.get(
-    `/workflows/${workflowId}/audio/tts/${filename}`,
-    BLOB_CONFIG,
+    `/workflows/${workflowId}/audio/proxy`,
+    { ...BLOB_CONFIG, params: { url: remoteUrl } },
   )
+  try {
+    const res = await fetch()
+    return URL.createObjectURL(res)
+  } catch (err) {
+    return await handleBlobError(err, async () => {
+      const res = await fetch()
+      return URL.createObjectURL(res)
+    })
+  }
+}
+
+// 获取 TTS 音频 blob URL（供 <audio src> 播放）
+// remote=true 时走代理（COS 远端对象），否则走本地 audio_cache 端点
+export async function getTtsAudioUrl(workflowId, filename, remoteUrl = null) {
+  const fetch = () => remoteUrl
+    ? api.get(`/workflows/${workflowId}/audio/proxy`, { ...BLOB_CONFIG, params: { url: remoteUrl } })
+    : api.get(`/workflows/${workflowId}/audio/tts/${filename}`, BLOB_CONFIG)
   try {
     const res = await fetch()
     return URL.createObjectURL(res)
@@ -81,11 +99,11 @@ export async function getTtsAudioUrl(workflowId, filename) {
 }
 
 // 获取成品音频 blob URL
-export async function getEpisodeAudioUrl(workflowId) {
-  const fetch = () => api.get(
-    `/workflows/${workflowId}/audio/episode`,
-    BLOB_CONFIG,
-  )
+// 传入 remoteUrl 时（打包态 COS 对象）走代理，否则走本地 endpoint
+export async function getEpisodeAudioUrl(workflowId, remoteUrl = null) {
+  const fetch = () => remoteUrl
+    ? api.get(`/workflows/${workflowId}/audio/proxy`, { ...BLOB_CONFIG, params: { url: remoteUrl } })
+    : api.get(`/workflows/${workflowId}/audio/episode`, BLOB_CONFIG)
   try {
     const res = await fetch()
     return URL.createObjectURL(res)
