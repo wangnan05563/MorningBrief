@@ -30,22 +30,24 @@ sys.path.insert(0, str(Path(__file__).parent))
 from app.workflow.llm.rewriter import _strip_markdown_residue
 
 
-def clean_segments(segments_json: str) -> tuple[str, int]:
+def clean_segments(segments_json: str) -> tuple[str, int, int]:
     """清洗 segments JSON 中每个 seg 的 content 字段。
 
     Returns:
-        (清洗后的 JSON 字符串, 清洗掉的 ** 总数)
+        (清洗后的 JSON 字符串, 移除的 * 字符总数, 移除的 ** 加粗对数)
     """
     segs = json.loads(segments_json)
-    removed_count = 0
+    star_removed = 0
+    dbl_removed = 0
     for seg in segs:
         if isinstance(seg, dict) and isinstance(seg.get("content"), str):
             original = seg["content"]
             cleaned = _strip_markdown_residue(original)
             if cleaned != original:
-                removed_count += original.count("**") - cleaned.count("**")
+                star_removed += original.count("*") - cleaned.count("*")
+                dbl_removed += original.count("**") - cleaned.count("**")
                 seg["content"] = cleaned
-    return json.dumps(segs, ensure_ascii=False), removed_count
+    return json.dumps(segs, ensure_ascii=False), star_removed, dbl_removed
 
 
 def main():
@@ -73,37 +75,46 @@ def main():
     ).fetchall()
 
     affected = []
-    total_full_text_md = 0
-    total_segments_md = 0
+    total_full_text_star = 0
+    total_segments_star = 0
+    total_full_text_dbl = 0
+    total_segments_dbl = 0
 
     for r in rows:
         full_text = r["full_text"] or ""
         segments = r["segments"] or "[]"
 
-        ft_md_before = full_text.count("**")
+        ft_star_before = full_text.count("*")
         cleaned_ft = _strip_markdown_residue(full_text)
-        ft_md_after = cleaned_ft.count("**")
-        ft_removed = ft_md_before - ft_md_after
+        ft_star_after = cleaned_ft.count("*")
+        ft_star_removed = ft_star_before - ft_star_after
+        ft_dbl_removed = full_text.count("**") - cleaned_ft.count("**")
 
-        cleaned_seg_json, seg_removed = clean_segments(segments)
+        cleaned_seg_json, seg_star_removed, seg_dbl_removed = clean_segments(segments)
 
-        if ft_removed > 0 or seg_removed > 0:
+        if ft_star_removed > 0 or seg_star_removed > 0:
             affected.append({
                 "id": r["id"],
                 "workflow_id": r["workflow_id"],
                 "full_text_before": full_text,
                 "full_text_after": cleaned_ft,
-                "ft_removed": ft_removed,
+                "ft_star_removed": ft_star_removed,
                 "segments_after": cleaned_seg_json,
-                "seg_removed": seg_removed,
+                "seg_star_removed": seg_star_removed,
             })
-            total_full_text_md += ft_removed
-            total_segments_md += seg_removed
+            total_full_text_star += ft_star_removed
+            total_segments_star += seg_star_removed
+            total_full_text_dbl += ft_dbl_removed
+            total_segments_dbl += seg_dbl_removed
+
+    total_star = total_full_text_star + total_segments_star
+    total_dbl = total_full_text_dbl + total_segments_dbl
+    total_single = total_star - 2 * total_dbl  # 单 * 斜体/列表残留（主因）
 
     print(f"受影响 script 数: {len(affected)} / 总计 {len(rows)}")
-    print(f"full_text 清洗 ** 总数: {total_full_text_md}")
-    print(f"segments  清洗 ** 总数: {total_segments_md}")
-    print(f"合计清洗 ** 总数: {total_full_text_md + total_segments_md}")
+    print(f"移除 * 字符总数: {total_star}")
+    print(f"  其中 ** 加粗残留（对）: {total_dbl}  → 占 {2*total_dbl} 个字符")
+    print(f"  其中 单 * 斜体/列表残留（主因）: {total_single} 个字符")
     print()
 
     if not affected:
@@ -115,7 +126,8 @@ def main():
     print("===== 受影响样本（前 5 个）=====")
     for a in affected[:5]:
         print(f"  script_id={a['id']:<4} wf={a['workflow_id']:<20} "
-              f"full_text 清洗 {a['ft_removed']} 处 / segments 清洗 {a['seg_removed']} 处")
+              f"full_text 移除 {a['ft_star_removed']} 个 * / "
+              f"segments 移除 {a['seg_star_removed']} 个 *")
 
     if args.dry_run:
         print("\n[dry-run] 未实际更新数据库。去掉 --dry-run 参数以执行清洗。")
@@ -136,7 +148,7 @@ def main():
     conn.commit()
     conn.close()
     print(f"\n[完成] 共清洗 {updated} 份文稿，"
-          f"移除 {total_full_text_md + total_segments_md} 处 ** 残留")
+          f"移除 {total_star} 个 * 字符（含 {total_dbl} 对 ** 与 {total_single} 个单 *）")
 
 
 if __name__ == "__main__":

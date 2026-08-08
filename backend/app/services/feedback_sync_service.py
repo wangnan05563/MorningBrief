@@ -19,7 +19,7 @@ from typing import Optional
 
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.cos.client import cos_client
 from app.database import AsyncSessionLocal
 from app.models.feedback import Feedback
@@ -34,20 +34,20 @@ def _parse_created_at(raw: Optional[str]) -> Optional[datetime]:
     """解析 SCF 写入的 ISO 8601 时间字符串为 naive datetime。
 
     SCF 端用 datetime.now(timezone.utc).isoformat() 写入，带时区信息；
-    SQLite DATETIME 列无时区，需存 naive UTC，与 utcnow_naive 保持一致。
+    SQLite DATETIME 列无时区，需存 naive UTC（与 SCF 写入的 UTC 源保持一致）。
     """
     if not raw:
         return None
     try:
         # fromisoformat 在 Python 3.11+ 支持带时区的 ISO 字符串
         dt = datetime.fromisoformat(raw)
-        # 统一转为 naive UTC（先转 UTC 再剥除时区信息，保持与 utcnow_naive 一致）
+        # 统一转为 naive UTC（先转 UTC 再剥除时区信息）
         if dt.tzinfo is not None:
             dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
         return dt
     except (ValueError, TypeError):
         logger.warning("反馈 created_at 解析失败，使用当前时间回退: %s", raw)
-        return utcnow_naive()
+        return localnow_naive()
 
 
 class FeedbackSyncService:
@@ -118,7 +118,7 @@ class FeedbackSyncService:
                     contact=payload.get("contact"),
                     status="pending",
                     created_at=_parse_created_at(payload.get("created_at")),
-                    synced_at=utcnow_naive(),
+                    synced_at=localnow_naive(),
                 ).on_conflict_do_nothing(index_elements=["id"])
 
                 async with AsyncSessionLocal() as session:

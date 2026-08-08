@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache.manager import cache
 from app.config import get_settings
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.database import engine
 from app.models import (
     AIUsageLog,
@@ -227,7 +227,7 @@ class MaintenanceService:
         """
         # days 最小值保护：防止 0/负值导致删全表
         days = max(1, days)
-        cutoff = utcnow_naive() - timedelta(days=days)
+        cutoff = localnow_naive() - timedelta(days=days)
         cleaned: list[str] = []
         errors: list[str] = []
         total_deleted = 0
@@ -448,7 +448,7 @@ class MaintenanceService:
 
     async def _cleanup_expired_blacklist(self, dry_run: bool) -> int:
         """清理过期 JWT 黑名单（按 expires_at 字段，不按 days）。"""
-        now = utcnow_naive()
+        now = localnow_naive()
         if dry_run:
             result = await self.db.execute(
                 select(func.count()).select_from(JwtBlacklist).where(

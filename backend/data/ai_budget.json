@@ -1,0 +1,904 @@
+{
+  "records": [
+    {
+      "timestamp": 1785916757.1636763,
+      "service_type": "llm",
+      "model": "qwen-max",
+      "input_tokens": 100,
+      "output_tokens": 50,
+      "char_count": 0,
+      "cost_usd": 0.0007
+    },
+    {
+      "timestamp": 1785963614.577985,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1050,
+      "output_tokens": 429,
+      "char_count": 0,
+      "cost_usd": 0.000267
+    },
+    {
+      "timestamp": 1785963634.7982764,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 776,
+      "output_tokens": 618,
+      "char_count": 0,
+      "cost_usd": 0.000282
+    },
+    {
+      "timestamp": 1785963674.8888862,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1557,
+      "output_tokens": 3240,
+      "char_count": 0,
+      "cost_usd": 0.001125
+    },
+    {
+      "timestamp": 1785963678.2261856,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1283,
+      "output_tokens": 1203,
+      "char_count": 0,
+      "cost_usd": 0.000516
+    },
+    {
+      "timestamp": 1785963678.7493074,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1108,
+      "output_tokens": 676,
+      "char_count": 0,
+      "cost_usd": 0.000344
+    },
+    {
+      "timestamp": 1785963684.0651615,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 4216,
+      "output_tokens": 452,
+      "char_count": 0,
+      "cost_usd": 0.000717
+    },
+    {
+      "timestamp": 1785963686.0969427,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1546,
+      "output_tokens": 739,
+      "char_count": 0,
+      "cost_usd": 0.000423
+    },
+    {
+      "timestamp": 1785963691.6430874,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1232,
+      "output_tokens": 730,
+      "char_count": 0,
+      "cost_usd": 0.000377
+    },
+    {
+      "timestamp": 1785963695.9000742,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1731,
+      "output_tokens": 1007,
+      "char_count": 0,
+      "cost_usd": 0.000524
+    },
+    {
+      "timestamp": 1785963696.7098262,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1178,
+      "output_tokens": 2296,
+      "char_count": 0,
+      "cost_usd": 0.000808
+    },
+    {
+      "timestamp": 1785963702.9373355,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1934,
+      "output_tokens": 444,
+      "char_count": 0,
+      "cost_usd": 0.000395
+    },
+    {
+      "timestamp": 1785963718.398931,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1688,
+      "output_tokens": 1593,
+      "char_count": 0,
+      "cost_usd": 0.000682
+    },
+    {
+      "timestamp": 1785963721.406137,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1668,
+      "output_tokens": 1326,
+      "char_count": 0,
+      "cost_usd": 0.000605
+    },
+    {
+      "timestamp": 1785963726.741061,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1586,
+      "output_tokens": 3806,
+      "char_count": 0,
+      "cost_usd": 0.001288
+    },
+    {
+      "timestamp": 1785963765.01353,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1558,
+      "output_tokens": 2883,
+      "char_count": 0,
+      "cost_usd": 0.001025
+    },
+    {
+      "timestamp": 1785963773.734687,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1339,
+      "output_tokens": 1410,
+      "char_count": 0,
+      "cost_usd": 0.000582
+    },
+    {
+      "timestamp": 1785963777.9727414,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1546,
+      "output_tokens": 473,
+      "char_count": 0,
+      "cost_usd": 0.000349
+    },
+    {
+      "timestamp": 1785963811.5538182,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 823,
+      "output_tokens": 2458,
+      "char_count": 0,
+      "cost_usd": 0.000803
+    },
+    {
+      "timestamp": 1785963812.6745527,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1878,
+      "output_tokens": 2766,
+      "char_count": 0,
+      "cost_usd": 0.001037
+    },
+    {
+      "timestamp": 1785963857.6649165,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1497,
+      "output_tokens": 1473,
+      "char_count": 0,
+      "cost_usd": 0.000622
+    },
+    {
+      "timestamp": 1785963876.6803575,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 3093,
+      "output_tokens": 784,
+      "char_count": 0,
+      "cost_usd": 0.000653
+    },
+    {
+      "timestamp": 1785963903.4882815,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1459,
+      "output_tokens": 417,
+      "char_count": 0,
+      "cost_usd": 0.000321
+    },
+    {
+      "timestamp": 1785963912.6280365,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1498,
+      "output_tokens": 3042,
+      "char_count": 0,
+      "cost_usd": 0.001061
+    },
+    {
+      "timestamp": 1785963928.3259034,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1219,
+      "output_tokens": 2626,
+      "char_count": 0,
+      "cost_usd": 0.000906
+    },
+    {
+      "timestamp": 1785963994.2453911,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1668,
+      "output_tokens": 1847,
+      "char_count": 0,
+      "cost_usd": 0.000751
+    },
+    {
+      "timestamp": 1785964026.806724,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 3370,
+      "output_tokens": 2959,
+      "char_count": 0,
+      "cost_usd": 0.0013
+    },
+    {
+      "timestamp": 1785964040.5777855,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1460,
+      "output_tokens": 2325,
+      "char_count": 0,
+      "cost_usd": 0.000855
+    },
+    {
+      "timestamp": 1785964059.0471244,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1500,
+      "output_tokens": 452,
+      "char_count": 0,
+      "cost_usd": 0.000337
+    },
+    {
+      "timestamp": 1785964063.4684455,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 75,
+      "cost_usd": 0.0021
+    },
+    {
+      "timestamp": 1785964065.5610209,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 437,
+      "cost_usd": 0.012236
+    },
+    {
+      "timestamp": 1785964065.928423,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 491,
+      "cost_usd": 0.013748
+    },
+    {
+      "timestamp": 1785964068.7521536,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 356,
+      "cost_usd": 0.009968
+    },
+    {
+      "timestamp": 1785964071.5478,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 408,
+      "cost_usd": 0.011424
+    },
+    {
+      "timestamp": 1785964072.051939,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 347,
+      "cost_usd": 0.009716
+    },
+    {
+      "timestamp": 1785964074.6997886,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 52,
+      "cost_usd": 0.001456
+    },
+    {
+      "timestamp": 1785964076.174136,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 484,
+      "cost_usd": 0.013552
+    },
+    {
+      "timestamp": 1785964077.6639414,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1592,
+      "output_tokens": 456,
+      "char_count": 0,
+      "cost_usd": 0.000351
+    },
+    {
+      "timestamp": 1785964078.2303574,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 549,
+      "cost_usd": 0.015372
+    },
+    {
+      "timestamp": 1785964098.5718093,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1974,
+      "output_tokens": 440,
+      "char_count": 0,
+      "cost_usd": 0.0004
+    },
+    {
+      "timestamp": 1785964156.0211873,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 723,
+      "output_tokens": 392,
+      "char_count": 0,
+      "cost_usd": 0.000211
+    },
+    {
+      "timestamp": 1785964177.7779334,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1093,
+      "output_tokens": 2151,
+      "char_count": 0,
+      "cost_usd": 0.000755
+    },
+    {
+      "timestamp": 1785964181.460566,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1714,
+      "output_tokens": 1021,
+      "char_count": 0,
+      "cost_usd": 0.000526
+    },
+    {
+      "timestamp": 1785964184.3620002,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 100,
+      "cost_usd": 0.0028
+    },
+    {
+      "timestamp": 1785964187.3207374,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 466,
+      "cost_usd": 0.013048
+    },
+    {
+      "timestamp": 1785964192.021183,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 349,
+      "cost_usd": 0.009772
+    },
+    {
+      "timestamp": 1785964192.218084,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 446,
+      "cost_usd": 0.012488
+    },
+    {
+      "timestamp": 1785964193.414613,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 371,
+      "cost_usd": 0.010388
+    },
+    {
+      "timestamp": 1785964197.4977572,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 403,
+      "cost_usd": 0.011284
+    },
+    {
+      "timestamp": 1785964198.5825665,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 325,
+      "cost_usd": 0.0091
+    },
+    {
+      "timestamp": 1785964203.1447651,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 403,
+      "cost_usd": 0.011284
+    },
+    {
+      "timestamp": 1785964205.7234907,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 79,
+      "cost_usd": 0.002212
+    },
+    {
+      "timestamp": 1785964206.145359,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 427,
+      "cost_usd": 0.011956
+    },
+    {
+      "timestamp": 1785964208.8869133,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 383,
+      "cost_usd": 0.010724
+    },
+    {
+      "timestamp": 1785964215.7424603,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1708,
+      "output_tokens": 2522,
+      "char_count": 0,
+      "cost_usd": 0.000945
+    },
+    {
+      "timestamp": 1785964219.044692,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 93,
+      "cost_usd": 0.002604
+    },
+    {
+      "timestamp": 1785964222.0746849,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 394,
+      "cost_usd": 0.011032
+    },
+    {
+      "timestamp": 1785964223.4317412,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 447,
+      "cost_usd": 0.012516
+    },
+    {
+      "timestamp": 1785964226.2182598,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 498,
+      "cost_usd": 0.013944
+    },
+    {
+      "timestamp": 1785964227.3101952,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 473,
+      "cost_usd": 0.013244
+    },
+    {
+      "timestamp": 1785964228.0952845,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 438,
+      "cost_usd": 0.012264
+    },
+    {
+      "timestamp": 1785964229.6710513,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 64,
+      "cost_usd": 0.001792
+    },
+    {
+      "timestamp": 1785964230.5499632,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 360,
+      "cost_usd": 0.01008
+    },
+    {
+      "timestamp": 1785964231.1641653,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 384,
+      "cost_usd": 0.010752
+    },
+    {
+      "timestamp": 1785964260.5342827,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1234,
+      "output_tokens": 912,
+      "char_count": 0,
+      "cost_usd": 0.000428
+    },
+    {
+      "timestamp": 1785964346.67002,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 536,
+      "output_tokens": 159,
+      "char_count": 0,
+      "cost_usd": 0.00012
+    },
+    {
+      "timestamp": 1785964367.4143193,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1502,
+      "output_tokens": 1853,
+      "char_count": 0,
+      "cost_usd": 0.000729
+    },
+    {
+      "timestamp": 1785964388.2602022,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1893,
+      "output_tokens": 1641,
+      "char_count": 0,
+      "cost_usd": 0.000724
+    },
+    {
+      "timestamp": 1785964394.356505,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1498,
+      "output_tokens": 815,
+      "char_count": 0,
+      "cost_usd": 0.000438
+    },
+    {
+      "timestamp": 1785964403.1554964,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1187,
+      "output_tokens": 383,
+      "char_count": 0,
+      "cost_usd": 0.000273
+    },
+    {
+      "timestamp": 1785964414.91875,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 677,
+      "output_tokens": 258,
+      "char_count": 0,
+      "cost_usd": 0.000167
+    },
+    {
+      "timestamp": 1785964429.8791406,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 2590,
+      "output_tokens": 1162,
+      "char_count": 0,
+      "cost_usd": 0.000688
+    },
+    {
+      "timestamp": 1785964455.7739987,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1638,
+      "output_tokens": 788,
+      "char_count": 0,
+      "cost_usd": 0.00045
+    },
+    {
+      "timestamp": 1785964465.5841823,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1602,
+      "output_tokens": 2289,
+      "char_count": 0,
+      "cost_usd": 0.000865
+    },
+    {
+      "timestamp": 1785964507.6219387,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1025,
+      "output_tokens": 318,
+      "char_count": 0,
+      "cost_usd": 0.000233
+    },
+    {
+      "timestamp": 1785964514.664147,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 3138,
+      "output_tokens": 381,
+      "char_count": 0,
+      "cost_usd": 0.000546
+    },
+    {
+      "timestamp": 1785964528.740654,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1569,
+      "output_tokens": 2368,
+      "char_count": 0,
+      "cost_usd": 0.000883
+    },
+    {
+      "timestamp": 1785964531.2329323,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 104,
+      "cost_usd": 0.002912
+    },
+    {
+      "timestamp": 1785964535.2894673,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 389,
+      "cost_usd": 0.010892
+    },
+    {
+      "timestamp": 1785964536.6315002,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 382,
+      "cost_usd": 0.010696
+    },
+    {
+      "timestamp": 1785964536.7066934,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 410,
+      "cost_usd": 0.01148
+    },
+    {
+      "timestamp": 1785964539.0625253,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 67,
+      "cost_usd": 0.001876
+    },
+    {
+      "timestamp": 1785964541.0288386,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 389,
+      "cost_usd": 0.010892
+    },
+    {
+      "timestamp": 1785964541.0623946,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1491,
+      "output_tokens": 2522,
+      "char_count": 0,
+      "cost_usd": 0.000915
+    },
+    {
+      "timestamp": 1785964556.9105594,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1808,
+      "output_tokens": 1520,
+      "char_count": 0,
+      "cost_usd": 0.000679
+    },
+    {
+      "timestamp": 1785964591.171976,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1965,
+      "output_tokens": 943,
+      "char_count": 0,
+      "cost_usd": 0.000539
+    },
+    {
+      "timestamp": 1785964635.335972,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 984,
+      "output_tokens": 600,
+      "char_count": 0,
+      "cost_usd": 0.000306
+    },
+    {
+      "timestamp": 1785964644.657617,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1071,
+      "output_tokens": 3133,
+      "char_count": 0,
+      "cost_usd": 0.001027
+    },
+    {
+      "timestamp": 1785964669.9494853,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1916,
+      "output_tokens": 280,
+      "char_count": 0,
+      "cost_usd": 0.000347
+    },
+    {
+      "timestamp": 1785964716.28394,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 109,
+      "cost_usd": 0.003052
+    },
+    {
+      "timestamp": 1785964719.6319337,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 295,
+      "cost_usd": 0.00826
+    },
+    {
+      "timestamp": 1785964723.8600137,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 436,
+      "cost_usd": 0.012208
+    },
+    {
+      "timestamp": 1785964723.9016795,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 321,
+      "cost_usd": 0.008988
+    },
+    {
+      "timestamp": 1785964725.285956,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 260,
+      "cost_usd": 0.00728
+    },
+    {
+      "timestamp": 1785964727.461379,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 88,
+      "cost_usd": 0.002464
+    },
+    {
+      "timestamp": 1785964728.5104914,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 296,
+      "cost_usd": 0.008288
+    },
+    {
+      "timestamp": 1785964728.7806168,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 353,
+      "cost_usd": 0.009884
+    },
+    {
+      "timestamp": 1785964764.9649248,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1219,
+      "output_tokens": 302,
+      "char_count": 0,
+      "cost_usd": 0.000255
+    },
+    {
+      "timestamp": 1785964938.1170166,
+      "service_type": "llm",
+      "model": "deepseek-v4-flash",
+      "input_tokens": 1031,
+      "output_tokens": 962,
+      "char_count": 0,
+      "cost_usd": 0.000414
+    },
+    {
+      "timestamp": 1785965005.2050972,
+      "service_type": "tts",
+      "model": "xiaoyun",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "char_count": 81,
+      "cost_usd": 0.002268
+    }
+  ]
+}

@@ -230,6 +230,25 @@ if ($SkipSPA -and (Test-Path $spaIndex)) {
     }
 }
 
+# ============== 3.5 生成构建元信息（git_sha / build_date / version） ==============
+
+Write-Step "[3.5/6] 生成构建元信息（_build_info.py）"
+
+# 在 PyInstaller 打包前刷新版本/日期/SHA，避免「关于」页显示过期的
+# git_sha=unknown 与固定 build_date。生成器优先读 backend/VERSION，
+# 否则取最近 git tag，再否则兜底 1.0.0；SHA 取自 git rev-parse。
+$buildInfoScript = "$backendDir\build_info.py"
+if (Test-Path $buildInfoScript) {
+    & $buildPython $buildInfoScript
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "build_info.py 执行失败，继续使用 _build_info.py 默认值"
+    } else {
+        Write-OK "构建元信息已刷新"
+    }
+} else {
+    Write-Warn "build_info.py 不存在，跳过元信息生成（关于页 SHA/日期将为默认值）"
+}
+
 # ============== 4. PyInstaller 打包 ==============
 
 Write-Step "[4/6] 执行 PyInstaller 打包"
@@ -252,22 +271,31 @@ Write-OK "PyInstaller 打包完成"
 
 Write-Step "[5/6] 复制外置资源"
 
-# 5.1 .env 配置文件模板
-# 外置到 exe 同目录，用户运行前编辑填入实际密钥
+# 5.1 .env 配置文件
+# 外置到 exe 同目录，优先使用 .env 中的真实密钥
 Write-Host "  [5.1] 复制 .env 模板..."
-$envTemplate = "$backendDir\.env.example"
+$envTemplate = "$backendDir\.env"
 if (Test-Path $envTemplate) {
     Copy-Item -Force $envTemplate "$distDir\.env"
-    Write-OK ".env 模板已复制"
+    Write-OK ".env 配置文件已复制"
 
     # V1.2 起 .env 已无 MYSQL_*/REDIS_* 配置（改为 SQLITE_*/CACHE_*），无需替换
-    $envContent = Get-Content "$distDir\.env" -Raw
+    $envContent = Get-Content "$distDir\.env" -Raw -Encoding UTF8
     # 日志目录改为相对路径（exe 同目录下的 logs）
     $envContent = $envContent -replace 'LOG_DIR=/app/logs', 'LOG_DIR=./logs'
-    Set-Content -Path "$distDir\.env" -Value $envContent -Encoding UTF8
+    # 必须以 UTF-8（无 BOM）写回：显式指定编码，否则 PowerShell 默认按系统 ANSI/GBK 读取，
+    # 会把 UTF-8 中文误判为 GBK，写出后 .env 中文注释变成乱码
+    [System.IO.File]::WriteAllText("$distDir\.env", $envContent, (New-Object System.Text.UTF8Encoding($false)))
     Write-OK ".env 已适配 exe 模式"
+
+    # 去除 .env 的隐藏属性：Windows 下 .env 可能被标记为隐藏，导致资源管理器手动复制
+    # 或个别打包方式漏掉该文件，部署后 exe 同级无 .env，WX_APPID 落空
+    # （小程序微信登录报 appid missing）。installer.iss 已显式 Source 包含 .env，
+    # 此处再去掉隐藏属性作为双保险。
+    attrib -H "$distDir\.env" 2>$null
+    Write-Host "  [5.1b] 已去除 .env 隐藏属性" -ForegroundColor DarkGray
 } else {
-    Write-Warn ".env.example 不存在，跳过 .env 复制"
+    Write-Warn ".env 不存在，跳过 .env 复制"
 }
 
 # 5.2 前端 SPA 产物
@@ -406,6 +434,8 @@ AppVersion={#MyAppVersion}
 AppPublisher=MorningBrief
 DefaultDirName={autopf}\MorningBrief
 DefaultGroupName=MorningBrief
+; 复用产品图标（assets\MorningBrief.ico，与 exe 同源），避免安装包显示 Inno 默认图标
+SetupIconFile=assets\MorningBrief.ico
 UninstallDisplayIcon={app}\MorningBrief.exe
 OutputDir=dist
 OutputBaseFilename=MorningBrief-Setup-v{#MyAppVersion}
@@ -435,8 +465,13 @@ Filename: "{app}\MorningBrief.exe"; Description: "启动 MorningBrief"; Flags: n
         Write-Warn "Inno Setup 不可用，跳过安装包制作"
         Write-Host "  手动安装: https://jrsoftware.org/isdl.php" -ForegroundColor DarkGray
     } else {
-        # 版本号：从 requirements.txt 或固定 1.0.0
+        # 版本号：优先读取 backend/VERSION（与关于页/检查更新同源），缺失时兜底 1.0.0
+        $versionFile = "$backendDir\VERSION"
         $version = "1.0.0"
+        if (Test-Path $versionFile) {
+            $verLine = (Get-Content $versionFile -Encoding UTF8 | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') } | Select-Object -First 1)
+            if ($verLine) { $version = $verLine.Trim() }
+        }
         Write-Host "  版本号: $version"
         Write-Host "  编译安装包..."
         & $iscc /DMyAppVersion=$version installer.iss
@@ -465,5 +500,6 @@ Write-Host "    1. 编辑 dist\MorningBrief\.env 填入实际密钥（JWT_SECRET
 Write-Host "    2. 双击 dist\MorningBrief\MorningBrief.exe 启动服务（SQLite 嵌入式，无需外部数据库）"
 Write-Host "    3. 访问 http://127.0.0.1:8000/docs"
 Write-Host "========================================" -ForegroundColor Green
+
 
 

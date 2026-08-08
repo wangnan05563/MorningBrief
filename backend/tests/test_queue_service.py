@@ -29,7 +29,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.models import Workflow
 from app.models.channel import Channel
 from app.models.workflow import (
@@ -64,7 +64,22 @@ async def _create_queued_workflow(
         status=WorkflowStatus.queued,
         channel_id=channel_id,
         priority=priority,
-        started_at=started_at or utcnow_naive(),
+        started_at=started_at or localnow_naive(),
+    )
+    db.add(wf)
+    await db.commit()
+    return wf
+
+
+async def _create_workflow(db, wid, status, episode_date=None, priority=5):
+    """创建指定状态的 workflow，用于批量删除测试。"""
+    wf = Workflow(
+        id=wid,
+        episode_date=episode_date or date.today(),
+        source=WorkflowSource.cron,
+        status=status,
+        priority=priority,
+        started_at=localnow_naive(),
     )
     db.add(wf)
     await db.commit()
@@ -176,7 +191,7 @@ async def test_queue_priority():
     from app.services.workflow_scheduler import QueueEntry
 
     q: asyncio.PriorityQueue = asyncio.PriorityQueue()
-    base_time = utcnow_naive()
+    base_time = localnow_naive()
     entries = [
         QueueEntry(sort_priority=-5, created_at=base_time.timestamp(),
                    workflow_id="wf-1", priority=5),
@@ -241,15 +256,15 @@ async def test_queue_restart(db_session, monkeypatch):
 
     await _create_queued_workflow(
         db_session, "wf-restart-1", priority=5,
-        started_at=utcnow_naive() - timedelta(seconds=30),
+        started_at=localnow_naive() - timedelta(seconds=30),
     )
     await _create_queued_workflow(
         db_session, "wf-restart-2", priority=8,
-        started_at=utcnow_naive() - timedelta(seconds=20),
+        started_at=localnow_naive() - timedelta(seconds=20),
     )
     await _create_queued_workflow(
         db_session, "wf-restart-3", priority=3,
-        started_at=utcnow_naive() - timedelta(seconds=10),
+        started_at=localnow_naive() - timedelta(seconds=10),
     )
 
     _patch_sessionlocal(monkeypatch, db_session)
@@ -279,7 +294,7 @@ async def test_cancel_task(db_session, monkeypatch):
     _patch_sessionlocal(monkeypatch, db_session)
 
     entry = QueueEntry(
-        sort_priority=-5, created_at=utcnow_naive().timestamp(),
+        sort_priority=-5, created_at=localnow_naive().timestamp(),
         workflow_id="wf-cancel-1", priority=5,
     )
     workflow_scheduler._entry_map["wf-cancel-1"] = entry
@@ -309,7 +324,7 @@ async def test_update_priority(db_session, monkeypatch):
     _patch_sessionlocal(monkeypatch, db_session)
 
     old_entry = QueueEntry(
-        sort_priority=-5, created_at=utcnow_naive().timestamp(),
+        sort_priority=-5, created_at=localnow_naive().timestamp(),
         workflow_id="wf-prio-1", priority=5,
     )
     workflow_scheduler._entry_map["wf-prio-1"] = old_entry
@@ -347,7 +362,7 @@ async def test_retry_task(db_session, monkeypatch):
         source=WorkflowSource.cron,
         status=WorkflowStatus.failed,
         priority=5,
-        started_at=utcnow_naive(),
+        started_at=localnow_naive(),
     )
     db_session.add(wf)
     await db_session.commit()
@@ -444,7 +459,7 @@ async def test_cron_check_multi_channel(db_session):
         wf = Workflow(
             id=wid, episode_date=today, source=WorkflowSource.cron,
             status=WorkflowStatus.queued, channel_id=ch_id, priority=5,
-            started_at=utcnow_naive(),
+            started_at=localnow_naive(),
         )
         db_session.add(wf)
     await db_session.commit()
@@ -518,3 +533,43 @@ async def test_batch_delete_queued(db_session):
     with pytest.raises(BizError) as exc_info:
         await svc.batch_delete_workflows(["wf-bdel-1", "wf-bdel-2"])
     assert "排队" in exc_info.value.message or "取消" in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_batch_delete_tasks(db_session):
+    """QueueService.batch_delete_tasks 委托 WorkflowService 级联删除终态任务。
+
+    - running/queued 状态随整批回滚（委托方统一拒绝）
+    - success/failed 终态可删除，且 Workflow 行被物理删除
+    - 混合请求（含 queued）时整批回滚，已成功态任务也不被删
+    """
+    from app.core.exceptions import BizError
+
+    await _create_workflow(db_session, "wf-qdel-1", WorkflowStatus.success)
+    await _create_workflow(db_session, "wf-qdel-2", WorkflowStatus.failed)
+    # queued 状态混入：应当整批回滚
+    await _create_queued_workflow(db_session, "wf-qdel-3")
+
+    svc = QueueService(db_session)
+
+    # 混合请求含 queued → 整批回滚，success/failed 也不删
+    with pytest.raises(BizError):
+        await svc.batch_delete_tasks(["wf-qdel-1", "wf-qdel-3"])
+
+    db_session.expire_all()
+    assert await db_session.get(Workflow, "wf-qdel-1") is not None
+    assert await db_session.get(Workflow, "wf-qdel-3") is not None
+
+    # 关闭上方 SELECT 自动开启的 pending 事务，避免与下一次 batch_delete 的
+    # 内部 async with self.db.begin() 冲突（InvalidRequestError: transaction already begun）
+    await db_session.rollback()
+
+    # 纯终态请求 → 成功删除
+    result = await svc.batch_delete_tasks(["wf-qdel-1", "wf-qdel-2"])
+    assert set(result["deleted"]) == {"wf-qdel-1", "wf-qdel-2"}
+
+    db_session.expire_all()
+    assert await db_session.get(Workflow, "wf-qdel-1") is None
+    assert await db_session.get(Workflow, "wf-qdel-2") is None
+    # queued 任务未被波及
+    assert await db_session.get(Workflow, "wf-qdel-3") is not None

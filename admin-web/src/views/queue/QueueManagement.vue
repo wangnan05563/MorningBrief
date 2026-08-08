@@ -85,6 +85,21 @@
             <el-option v-for="p in 10" :key="p" :label="`优先级 ${p}`" :value="p" />
           </el-select>
         </el-col>
+        <!-- 批量删除：仅 admin 可见，未选中时禁用；选中时显示计数 -->
+        <el-col :span="6" class="batch-delete-col" v-if="canOperate">
+          <el-button
+            type="danger"
+            :icon="Delete"
+            :disabled="selectedRows.length === 0 || deleting"
+            :loading="deleting"
+            @click="handleBatchDelete"
+          >
+            批量删除
+          </el-button>
+          <span v-if="selectedRows.length > 0" class="selected-count">
+            已选 {{ selectedRows.length }} 项
+          </span>
+        </el-col>
       </el-row>
     </el-card>
 
@@ -93,11 +108,15 @@
       <el-table
         ref="tableRef"
         :data="tasks"
+        row-key="id"
         v-loading="loading"
         stripe
         :default-sort="defaultSort"
         @sort-change="handleSortChange"
+        @selection-change="handleSelectionChange"
       >
+        <!-- 多选列：row-key + reserve-selection 保证轮询刷新后勾选状态按 id 保留 -->
+        <el-table-column type="selection" width="48" :reserve-selection="true" />
         <el-table-column prop="channel_name" label="频道" min-width="120" sortable="custom" />
         <el-table-column prop="priority" label="优先级" width="90" sortable="custom" />
         <el-table-column prop="status" label="状态" width="100" sortable="custom">
@@ -206,12 +225,14 @@
 defineOptions({ name: 'QueueManagement' })
 import { ref, reactive, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
+import { Delete } from '@element-plus/icons-vue'
 import {
   getQueueStats,
   listQueueTasks,
   cancelTask,
   updatePriority,
   retryTask,
+  batchDeleteTasks,
   getQueueConfig,
   updateQueueConfig,
 } from '../../api/queue'
@@ -272,6 +293,10 @@ const userSort = ref(null)
 const tableRef = ref(null)
 // 防止 sort() 恢复视觉时触发 sort-change → loadTasks → sort() 无限循环
 let isRestoringSort = false
+
+// 批量删除状态：selectedRows 保存选中行，deleting 控制按钮 loading/禁用
+const selectedRows = ref([])
+const deleting = ref(false)
 
 // 详情抽屉
 const detailVisible = ref(false)
@@ -469,6 +494,47 @@ function openDetail(row) {
   detailVisible.value = true
 }
 
+// 多选变化：el-table 的 selection-change 事件，rows 为当前选中行数组
+function handleSelectionChange(rows) {
+  selectedRows.value = rows
+}
+
+async function handleBatchDelete() {
+  const ids = selectedRows.value.map((r) => r.id)
+  if (ids.length === 0) return
+
+  // 二次确认：显示具体数量让用户明确操作范围，避免误删
+  try {
+    await ElMessageBox.confirm(
+      `确认删除选中的 ${ids.length} 个任务？\n\n将删除：稿件、审核、节目及播放记录。\n将保留：素材（重置为待处理状态）。\n\n此操作不可撤销。`,
+      '危险操作',
+      { type: 'warning', confirmButtonText: '确定删除', cancelButtonText: '取消' },
+    )
+  } catch {
+    // 用户点取消，静默退出
+    return
+  }
+
+  deleting.value = true
+  try {
+    const data = await batchDeleteTasks(ids)
+    const deletedCount = data.deleted?.length || ids.length
+    ElMessage.success(`已删除 ${deletedCount} 个任务`)
+
+    // 重置选中状态：避免删除后 selectedRows 仍引用已删记录
+    tableRef.value?.clearSelection()
+    selectedRows.value = []
+
+    // 刷新列表与统计：删除后总数减少，可能需要页码修正
+    await Promise.all([loadTasks(), loadStats()])
+  } catch (e) {
+    // 后端拒绝（如含 running/queued 任务）时响应拦截器已弹错误提示，此处兜底
+    console.warn('handleBatchDelete failed:', e)
+  } finally {
+    deleting.value = false
+  }
+}
+
 // 轮询策略：有 queued/running 任务时 5s 轮询，否则降到 30s 减少无效请求
 // 页面不可见时不轮询，避免最小化窗口时产生无效请求
 // SSE 正常推送时轮询仍保留作为兜底（SSE 断开时仍能感知状态变化）
@@ -610,6 +676,20 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+// 批量删除列：按钮与选中计数右对齐，与筛选下拉区分
+.batch-delete-col {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+
+  // 选中计数：与按钮区分，用次要文字色避免抢眼
+  .selected-count {
+    font-size: 13px;
+    color: $color-text-secondary;
+  }
 }
 
 .priority-popover {

@@ -1,0 +1,3 @@
+file 'D://code//otherProjects//20_News//_gaptest//tone1.wav'
+file 'D://code//otherProjects//20_News//_gaptest//silence.wav'
+file 'D://code//otherProjects//20_News//_gaptest//tone2.wav'

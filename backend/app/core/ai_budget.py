@@ -25,7 +25,9 @@ threading.Lock 在单线程事件循环中不会真正阻塞，仅起内存屏�
 from __future__ import annotations
 
 import atexit
+import asyncio
 import json
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -76,6 +78,15 @@ _last_persist_date: str = ""  # 上次持久化的日期，跨日时清空内存
 # 持久化缓冲区与上次刷盘时间（必须在 _lock 内访问，避免并发竞态）
 _pending_records: list[_UsageRecord] = []
 _last_flush_time: float = 0.0
+
+# fire-and-forget 写库任务保活集合。asyncio 不持有 create_task 结果的强引用，
+# 若仅局部变量引用，任务可能被 GC 而静默不执行。done_callback 在完成后自动移除。
+_db_usage_tasks: set[asyncio.Future] = set()
+
+# 测试环境（pytest 在 sys.modules 中）禁用 fire-and-forget 写库：避免异步测试路径
+# 触发 record_call 时打开 AsyncSessionLocal() 写入真实 app DB，或产生
+# "task was destroyed but it is pending" 告警。生产环境（无 pytest）保持启用。
+_DB_USAGE_DISPATCH_ENABLED = "pytest" not in sys.modules
 
 
 def _today_key() -> str:
@@ -224,6 +235,12 @@ def record_call(
     if flush_batch:
         _persist_records(flush_batch)
 
+    # 触发 DB 持久化（供 /usage 历史统计接口）。fire-and-forget，不阻塞预算路径：
+    # 仅当存在运行中的事件循环（生产异步上下文）才派发后台任务；同步单元测试 /
+    # 脚本上下文无 loop，直接跳过——该写入仅用于统计，不可影响预算实时拦截，
+    # 也不可在无 loop 时抛 RuntimeError。
+    _dispatch_db_usage(record)
+
     return {
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
@@ -231,6 +248,52 @@ def record_call(
         "service_type": service_type,
         "model": model,
     }
+
+
+def _dispatch_db_usage(record: _UsageRecord) -> None:
+    """把用量异步写入 ai_usage_log 表（fire-and-forget）。
+
+    根因：record_call 是工作流记录 AI 用量的唯一入口，但此前只更新内存预算 +
+    JSON 文件，从不写 ai_usage_log，导致 GET /admin/api/v1/ai/usage
+    （AIConfigService.get_usage_summary）永远查不到数据，前端「用量统计」全 0。
+
+    这里在预算路径之外，把同一笔用量异步写入 DB，供历史统计接口消费。
+
+    安全约束：
+    - 仅当存在运行中的事件循环（asyncio.get_running_loop）才派发，否则
+      （同步单测 / CLI 脚本）直接跳过——该写入仅用于统计，不可影响预算实时
+      拦截，也不可在无 loop 时抛 RuntimeError。
+    - 写库失败仅记 warning，绝不向上抛，避免拖垮主生成流程。
+    - 任务加入 _db_usage_tasks 保活，避免被 GC 静默丢弃。
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    if not _DB_USAGE_DISPATCH_ENABLED:
+        return
+    task = loop.create_task(_persist_usage_to_db(record))
+    _db_usage_tasks.add(task)
+    task.add_done_callback(_db_usage_tasks.discard)
+
+
+async def _persist_usage_to_db(record: _UsageRecord) -> None:
+    """后台任务：用独立会话把用量写入 ai_usage_log。"""
+    try:
+        from app.database import AsyncSessionLocal
+        from app.services.ai_config_service import AIConfigService
+
+        async with AsyncSessionLocal() as session:
+            svc = AIConfigService(session)
+            await svc.record_usage(
+                service_type=record.service_type,
+                model=record.model,
+                input_tokens=record.input_tokens,
+                output_tokens=record.output_tokens,
+                char_count=record.char_count,
+            )
+    except Exception:
+        logger.warning("AI 用量写库失败（不影响主流程）", exc_info=True)
 
 
 def get_today_summary() -> dict[str, Any]:

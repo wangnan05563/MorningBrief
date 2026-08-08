@@ -40,6 +40,9 @@ class Channel(Base):
     bgm_volume: Mapped[Optional[float]] = mapped_column(default=None)
     # 频道级段间静音时长（秒）：为空时使用全局 settings.SEGMENT_GAP_SEC
     segment_gap_sec: Mapped[Optional[float]] = mapped_column(default=None)
+    # 频道级段间 BGM 模式："silence"=段间真实静音（默认）；"bridge"=段间 BGM 桥接（旧版）；
+    # 为空(None)时回退到全局 settings.BGM_GAP_MODE
+    bgm_gap_mode: Mapped[Optional[str]] = mapped_column(String(16), default=None)
     # 是否在每段新闻末尾追加思考问题（0=关闭，1=开启，None=开启默认行为） # NOSONAR
     enable_thinking_question: Mapped[Optional[int]] = mapped_column(default=None)
     # 频道专属 RSS 源列表（JSON 数组，存储 rss.yaml 中的 source name，如 ["人民网-国内"]）
@@ -52,6 +55,10 @@ class Channel(Base):
     # 冷门/小众频道素材稀疏时，可设置较短时长避免 padding 补足后仍不足下限的问题
     # 例如教育资讯可设为 300（下限 240s），体育速递可设为 360（下限 288s）
     min_duration_sec: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # 展示排序权重：值越小越靠前；相等时按 id 升序兜底。
+    # 运营在频道管理后台调整此值即可控制小程序 tab 顺序，无需改动小程序（适配动态增删频道）。
+    # 存量频道迁移时回填 0，保持原有按 id 的展示顺序。
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     # SQLite 不支持 ON UPDATE，updated_at 由 ChannelService.update_channel 显式维护
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

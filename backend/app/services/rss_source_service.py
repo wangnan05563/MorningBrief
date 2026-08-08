@@ -19,7 +19,7 @@ from typing import Any, Optional
 import httpx
 import yaml
 
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.paths import resolve_rss_sources_path
 
 logger = logging.getLogger(__name__)
@@ -212,7 +212,7 @@ async def check_all_sources() -> dict:
     # 合并到全局状态字典
     # 项目约定：所有时间字段存为本地 naive datetime（香港 UTC+8），
     # isoformat() 输出无时区后缀，前端按本地时区解析与 crawled_at 等字段一致
-    now = utcnow_naive().isoformat()
+    now = localnow_naive().isoformat()
     ok_count = 0
     fail_count = 0
     source_list = []

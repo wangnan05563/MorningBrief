@@ -61,6 +61,12 @@ let lastReportedPosition = -1;
 // 为什么需要：NotSupportedError 是浏览器媒体元素的未捕获 Promise rejection，
 // 不触发 BackgroundAudioManager.onError，用户无任何反馈
 let fallbackTimeoutTimer = null;
+// HLS 静默重试次数：会话首次播放时 BackgroundAudioManager 的 HLS 协议栈冷启动，
+// 偶发 errCode:0 src:null 的加载失败（第二集同链路却成功，证明是冷启动而非硬故障）。
+// 立即静默重试一次即可命中，避免"先弹失败又播放成功"的割裂体验；
+// 重试仍失败再降级 mp3（MAX_HLS_RETRY 控制重试上限，防无限循环）。
+let hlsRetryCount = 0;
+const MAX_HLS_RETRY = 1;
 
 /**
  * 读取用户设置中的默认倍速与自动连播开关
@@ -175,50 +181,32 @@ function initPlayer() {
   // BackgroundAudioManager 在 src 加载失败时不会触发 onPause，仅触发 onError，
   // 若不在此处重置状态，UI 上的 isPlaying 会一直停留在 true
   audioManager.onError((err) => {
-    console.error('[audio] 播放错误:', JSON.stringify(err), '| protocol:', currentProtocol);
     stopProgressReport();
     // 清除加载标记：错误后允许重新播放
     loadingEpisodeId = null;
     loadingEpisodeUrl = null;
-    // 错误发生时 loading 必然结束，避免菊花残留
-    setWaiting(false);
 
-    // HLS → mp3 fallback：真机调试模式下 BackgroundAudioManager 对 HLS 支持有限，
-    // COS 域名也可能未配置在小程序后台合法域名导致 m3u8 加载失败。
-    // 此处检测到 HLS 失败且 episode 有 audio_url 时自动切换到 mp3 整文件重试一次。
-    // 避免无限重试：仅 currentProtocol === 'hls' 时触发，切换后 currentProtocol 改为 'audio'
-    if (currentProtocol === 'hls' && currentEpisode && currentEpisode.audio_url) {
-      console.warn('[audio] HLS 播放失败，降级到 mp3 整文件:', currentEpisode.audio_url);
-      currentProtocol = 'audio';
-      // 重新设置 src 为 mp3 整文件 URL
-      // protocol 改为 audio：BackgroundAudioManager 按 mp3 协议处理
-      if (typeof audioManager.protocol !== 'undefined') {
-        try { audioManager.protocol = 'audio'; } catch (e) {}
+    // HLS 链路：会话首次播放时 HLS 协议栈冷启动偶发失败（errCode:0 src:null），
+    // 第二集同链路却成功，证明是冷启动而非硬故障。
+    // 处理策略：先静默重试一次 HLS（命中则用户无感知）；重试仍失败再降级 mp3；
+    // 二者均非"致命错误"——不打 error 级日志、不弹失败 toast，避免割裂体验。
+    if (currentProtocol === 'hls' && currentEpisode && currentEpisode.hls_url) {
+      if (hlsRetryCount < MAX_HLS_RETRY) {
+        hlsRetryCount += 1;
+        console.warn('[audio] HLS 首次加载失败，静默重试一次:', currentEpisode.hls_url,
+          '| err:', JSON.stringify(err));
+        _retryHls(currentEpisode);
+        return;
       }
-      audioManager.src = currentEpisode.audio_url;
-      const fallbackPlay = audioManager.play();
-      if (fallbackPlay && typeof fallbackPlay.catch === 'function') {
-        fallbackPlay.catch((e) => console.log('[audio] fallback play() 被中断（可忽略）:', e && e.message));
-      }
-      // 超时保护：mp3 也可能加载失败（NotSupportedError 不触发 onError）
-      // 8s 内 onPlay 未触发则判定失败，给用户明确反馈而非无限等待
-      clearTimeout(fallbackTimeoutTimer);
-      fallbackTimeoutTimer = setTimeout(() => {
-        // onPlay 已触发时 loadingEpisodeId 已被清空，此处检查避免误报
-        if (loadingEpisodeId === currentEpisode.id) {
-          console.error('[audio] mp3 fallback 超时：8s 内未开始播放');
-          loadingEpisodeId = null;
-          loadingEpisodeUrl = null;
-          setWaiting(false);
-          currentEpisode = null;
-          currentProtocol = '';
-          notifyErrorListeners({ errCode: -1, errMsg: '音频加载超时，请检查网络后重试' });
-          wx.showToast({ title: '音频加载超时，请检查网络后重试', icon: 'none' });
-        }
-      }, 8000);
+      console.warn('[audio] HLS 重试仍失败，降级到 mp3 整文件:', currentEpisode.audio_url);
+      _fallbackToMp3(currentEpisode);
       return;
     }
 
+    // 真正致命的播放错误（非 HLS / HLS 无 mp3 兜底源）：重置状态并通知页面
+    console.error('[audio] 播放错误:', JSON.stringify(err), '| protocol:', currentProtocol);
+    // 错误发生时 loading 必然结束，避免菊花残留
+    setWaiting(false);
     currentEpisode = null;
     currentProtocol = '';
     notifyErrorListeners(err);
@@ -409,6 +397,93 @@ function _pickPlayableUrl(episode) {
 }
 
 /**
+ * 安全地设置 BackgroundAudioManager.protocol（基础库 2.41.0+ 支持 HLS）
+ * 旧版基础库无该属性时 try-catch 静默忽略，回退到 URL 后缀自动识别。
+ * 抽成独立函数避免 playEpisode / _retryHls / _fallbackToMp3 三处重复。
+ * @param {string} protocol - 'audio' / 'hls'
+ */
+function _applyProtocol(protocol) {
+  if (typeof audioManager.protocol !== 'undefined') {
+    try { audioManager.protocol = protocol; } catch (e) {
+      console.log('[audio] protocol 设置失败（旧版基础库可忽略）:', e && e.message);
+    }
+  }
+}
+
+/**
+ * HLS 静默重试一次（应对会话首次播放的协议栈冷启动偶发失败）
+ *
+ * 为什么需要：真机首播 HLS 偶发 errCode:0 src:null，但同一会话后续 HLS 播放稳定成功，
+ * 说明是冷启动而非 HLS 硬故障。onError 中先调用本函数重试一次，命中则用户无感知；
+ * 4s 内 onPlay 仍未触发（HLS 真不可用或卡死）再降级 mp3。
+ *
+ * onPlay 触发时会清空 fallbackTimeoutTimer，故定时器能走到回调即说明 HLS 仍未起播。
+ * @param {Object} episode - 当前节目（需含 hls_url）
+ */
+function _retryHls(episode) {
+  currentProtocol = 'hls';
+  _applyProtocol('hls');
+  // 保持 loading 菊花连续，避免重试瞬间闪烁让用户误以为失败了
+  setWaiting(true);
+  audioManager.src = episode.hls_url;
+  const p = audioManager.play();
+  if (p && typeof p.catch === 'function') {
+    p.catch((e) => console.log('[audio] retry HLS play() 被中断（可忽略）:', e && e.message));
+  }
+  clearTimeout(fallbackTimeoutTimer);
+  fallbackTimeoutTimer = setTimeout(() => {
+    // 已切到别的节目则忽略本次超时，避免覆盖新的播放
+    if (currentEpisode !== episode) return;
+    console.warn('[audio] HLS 重试超时，降级到 mp3');
+    _fallbackToMp3(episode);
+  }, 4000);
+}
+
+/**
+ * 降级到 mp3 整文件播放（HLS 重试耗尽或不可用时的最终兜底）
+ *
+ * 无 audio_url 时可降级源耗尽，按真正致命错误处理（通知页面 + 失败 toast）。
+ * 有 audio_url 时切换协议并重新设置 src；8s 内 onPlay 未触发则判定 mp3 也失败，
+ * 给明确反馈而非无限等待（NotSupportedError 不触发 onError，需要此保护）。
+ * @param {Object} episode - 当前节目
+ */
+function _fallbackToMp3(episode) {
+  // 无 mp3 兜底源：真正失败
+  if (!episode || !episode.audio_url) {
+    setWaiting(false);
+    currentEpisode = null;
+    currentProtocol = '';
+    notifyErrorListeners({ errCode: -1, errMsg: '音频加载失败' });
+    wx.showToast({ title: '音频加载失败，请稍后重试', icon: 'none' });
+    return;
+  }
+  currentProtocol = 'audio';
+  _applyProtocol('audio');
+  setWaiting(true);
+  audioManager.src = episode.audio_url;
+  const fallbackPlay = audioManager.play();
+  if (fallbackPlay && typeof fallbackPlay.catch === 'function') {
+    fallbackPlay.catch((e) => console.log('[audio] fallback play() 被中断（可忽略）:', e && e.message));
+  }
+  // 超时保护：mp3 也可能加载失败（NotSupportedError 不触发 onError）
+  // 8s 内 onPlay 未触发则判定失败，给用户明确反馈而非无限等待
+  clearTimeout(fallbackTimeoutTimer);
+  fallbackTimeoutTimer = setTimeout(() => {
+    // onPlay 已触发时 loadingEpisodeId 已被清空，此处检查避免误报
+    if (loadingEpisodeId === episode.id) {
+      console.error('[audio] mp3 fallback 超时：8s 内未开始播放');
+      loadingEpisodeId = null;
+      loadingEpisodeUrl = null;
+      setWaiting(false);
+      currentEpisode = null;
+      currentProtocol = '';
+      notifyErrorListeners({ errCode: -1, errMsg: '音频加载超时，请检查网络后重试' });
+      wx.showToast({ title: '音频加载超时，请检查网络后重试', icon: 'none' });
+    }
+  }, 8000);
+}
+
+/**
  * 播放指定节目（自动断点续播）
  * @param {Object} episode - 节目对象 { id, title, audio_url, hls_url? }
  *
@@ -451,6 +526,8 @@ async function playEpisode(episode) {
   }
   loadingEpisodeId = episode.id;
   loadingEpisodeUrl = picked.url;
+  // 重置 HLS 静默重试计数：每首新节目都拥有完整的重试预算
+  hlsRetryCount = 0;
 
   console.log('[audio] playEpisode called:', episode.title, 'src:', picked.url, 'protocol:', picked.protocol);
   currentEpisode = episode;
@@ -476,11 +553,7 @@ async function playEpisode(episode) {
   // 显式声明 protocol 让播放器按 HLS 协议处理 m3u8，避免部分基础库
   // 因 URL 后缀识别失败而走 mp3 整文件下载路径。旧版基础库无 protocol
   // 属性时 try-catch 静默忽略，回退到自动识别（仍可正常播放 m3u8）
-  if (typeof audioManager.protocol !== 'undefined') {
-    try { audioManager.protocol = picked.protocol; } catch (e) {
-      console.log('[audio] protocol 设置失败（旧版基础库可忽略）:', e && e.message);
-    }
-  }
+  _applyProtocol(picked.protocol);
   audioManager.src = picked.url;
   // play() 返回 Promise，若未 resolve 就被 pause() 打断会抛 DOMException
   // （"The play() request was interrupted by a call to pause()"）

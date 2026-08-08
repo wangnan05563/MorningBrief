@@ -194,7 +194,7 @@
               </el-table-column>
               <el-table-column label="操作" width="80" fixed="right">
                 <template #default="{ row }">
-                  <el-button size="small" link type="danger" @click="handleDeleteTts(row.name)">删除</el-button>
+                  <el-button v-if="!row.remote" size="small" link type="danger" @click="handleDeleteTts(row.name)">删除</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -233,7 +233,7 @@
                   </el-button>
                 </div>
                 <div class="panel-toolbar">
-                  <el-button size="small" type="danger" :icon="Delete" @click="handleDeleteEpisode">删除成品</el-button>
+                  <el-button v-if="!audioFiles.episode?.remote" size="small" type="danger" :icon="Delete" @click="handleDeleteEpisode">删除成品</el-button>
                 </div>
               </template>
               <el-empty v-else-if="!audioFiles.loading" description="尚未生成成品音频" />
@@ -501,7 +501,13 @@ const materialsPage = ref(1)
 async function loadMaterials() {
   materials.value.loading = true
   try {
-    const data = await listMaterials(route.params.id, materialsPage.value)
+    // 素材是「频道级素材池」：按当前工作流的 channel_id 查询，而非 workflow_id
+    // （workflow_id 终态后被调度器释放为 NULL，按它查必然为空）
+    const data = await listMaterials({
+      channel_id: detail.value.channel_id,
+      page: materialsPage.value,
+      size: 20,
+    })
     materials.value.list = data.list || []
     materials.value.total = data.total || 0
   } catch { /* 拦截器已提示 */ } finally {
@@ -565,7 +571,11 @@ async function saveMaterial() {
       await updateMaterial(materialDialog.value.id, f)
       ElMessage.success('素材已更新')
     } else {
-      await createMaterial({ ...f, workflow_id: route.params.id })
+      await createMaterial({
+        ...f,
+        workflow_id: route.params.id,
+        channel_id: detail.value.channel_id,
+      })
       ElMessage.success('素材已新增')
     }
     materialDialog.value.visible = false
@@ -697,11 +707,14 @@ function formatFileSize(bytes) {
 }
 
 // 按需加载 TTS 音频 blob URL：首次点击播放时拉取，后续直接使用缓存的 blobUrl
+// remote=true 时（打包态 COS 对象）走代理端点，否则走本地 audio_cache 端点
 async function ensureTtsBlob(row) {
   if (row.blobUrl) return
   row.loading = true
   try {
-    row.blobUrl = await getTtsAudioUrl(route.params.id, row.name)
+    row.blobUrl = row.remote && row.url
+      ? await getTtsAudioUrl(route.params.id, row.name, row.url)
+      : await getTtsAudioUrl(route.params.id, row.name)
   } catch (err) {
     // blob 请求为 silent，需手动提示
     ElMessage.error(err.message || '音频加载失败')
@@ -711,11 +724,15 @@ async function ensureTtsBlob(row) {
 }
 
 // 按需加载成品音频 blob URL
+// 传入 remoteUrl 时（打包态 COS 对象）走代理，否则走本地 endpoint
 async function ensureEpisodeBlob() {
   if (episodePlayer.value.blobUrl) return
   episodePlayer.value.loading = true
   try {
-    episodePlayer.value.blobUrl = await getEpisodeAudioUrl(route.params.id)
+    const ep = audioFiles.value.episode
+    episodePlayer.value.blobUrl = ep?.remote && ep?.url
+      ? await getEpisodeAudioUrl(route.params.id, ep.url)
+      : await getEpisodeAudioUrl(route.params.id)
   } catch (err) {
     ElMessage.error(err.message || '成品音频加载失败')
   } finally {

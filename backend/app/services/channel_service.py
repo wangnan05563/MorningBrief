@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache.manager import cache as cache_manager
 from app.core.event_bus import Event, get_event_bus
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.models.channel import Channel
 from app.models.workflow import Workflow
 
@@ -45,9 +45,14 @@ class ChannelService:
         return await self.db.get(Channel, channel_id)
 
     async def invalidate_list_cache(self) -> None:
-        """频道增删改后失效列表缓存。"""
+        """频道增删改后失效列表缓存。
+
+        同时失效 C 端频道列表缓存（api:channels:list_active），
+        保证小程序 tab 在后台调整频道/排序后及时刷新（TTL 兜底 60s）。
+        """
         await self.cache.delete("channels:list:all")
         await self.cache.delete("channels:list:active")
+        await self.cache.delete("api:channels:list_active")
 
     async def create_channel(
         self, name: str, description: str = "",
@@ -59,15 +64,17 @@ class ChannelService:
         bgm_path: Optional[str] = None,
         bgm_volume: Optional[float] = None,
         segment_gap_sec: Optional[float] = None,
+        bgm_gap_mode: Optional[str] = None,
         enable_thinking_question: Optional[int] = None,
         rss_sources: Optional[str] = None,
         keywords: Optional[str] = None,
         min_duration_sec: Optional[int] = None,
+        display_order: int = 0,
     ) -> Channel:
         """新增频道。name 唯一约束，冲突抛 ValueError。
 
         支持 schedule_time（定时触发）与 4 个提示词字段 + BGM 配置 + 段间静音 + 思考问题开关
-        + RSS 源白名单 + 关键词过滤 + 最短时长，均为可选。
+        + RSS 源白名单 + 关键词过滤 + 最短时长 + 展示排序权重，均为可选。
         """
         channel = Channel(
             name=name, description=description, is_active=1,
@@ -79,10 +86,12 @@ class ChannelService:
             bgm_path=bgm_path,
             bgm_volume=bgm_volume,
             segment_gap_sec=segment_gap_sec,
+            bgm_gap_mode=bgm_gap_mode,
             enable_thinking_question=enable_thinking_question,
             rss_sources=rss_sources,
             keywords=keywords,
             min_duration_sec=min_duration_sec,
+            display_order=display_order,
         )
         self.db.add(channel)
         try:
@@ -106,10 +115,12 @@ class ChannelService:
         bgm_path: Optional[str] = None,
         bgm_volume: Optional[float] = None,
         segment_gap_sec: Optional[float] = None,
+        bgm_gap_mode: Optional[str] = None,
         enable_thinking_question: Optional[int] = None,
         rss_sources: Optional[str] = None,
         keywords: Optional[str] = None,
         min_duration_sec: Optional[int] = None,
+        display_order: Optional[int] = None,
     ) -> Channel:
         """修改频道。显式设置 updated_at（SQLite 不支持 ON UPDATE）。
 
@@ -148,6 +159,8 @@ class ChannelService:
             channel.bgm_volume = bgm_volume
         if segment_gap_sec is not None:
             channel.segment_gap_sec = segment_gap_sec
+        if bgm_gap_mode is not None:
+            channel.bgm_gap_mode = bgm_gap_mode
         if enable_thinking_question is not None:
             channel.enable_thinking_question = enable_thinking_question
         if rss_sources is not None:
@@ -156,7 +169,9 @@ class ChannelService:
             channel.keywords = keywords
         if min_duration_sec is not None:
             channel.min_duration_sec = min_duration_sec
-        channel.updated_at = utcnow_naive()
+        if display_order is not None:
+            channel.display_order = display_order
+        channel.updated_at = localnow_naive()
 
         try:
             await self.db.commit()

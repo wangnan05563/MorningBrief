@@ -254,7 +254,7 @@ $port = 8000
 $envFile = Join-Path $ProjectRoot "backend\.env"
 if ($mode -eq "exe") { $envFile = Join-Path (Split-Path $ExePath) ".env" }
 if (Test-Path $envFile) {
-    $envContent = Get-Content $envFile -ErrorAction SilentlyContinue
+    $envContent = Get-Content $envFile -ErrorAction SilentlyContinue -Encoding UTF8
     $portLine = $envContent | Where-Object { $_ -match '^\s*APP_PORT\s*=' }
     if ($portLine -match 'APP_PORT\s*=\s*(\d+)') { $port = [int]$Matches[1] }
     # APP_HOST=0.0.0.0 是服务端绑定地址，客户端健康检查必须用 127.0.0.1

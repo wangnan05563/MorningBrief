@@ -1699,3 +1699,283 @@ px vite build 确认构建通过
 - **真实案例**：onShow 同步了 preferredIds 但未调用 loadHistory，导致历史页"我的偏爱"未展示任何信息。
 
 ---
+
+## 新增经验教训：打包模式空列表缺陷与全量测试（2026-08-05 复盘）
+
+### 四维度复盘总览
+
+#### 维度 1：成功执行任务的完整步骤（编码任务）
+
+1. **现象复现** → 区分 dev 模式正常 / exe 模式三面板为空，初步判定为存储路径差异
+2. **分层诊断** → 现象层 → 数据层 → 接口层（`list_audio` 返回空）→ 存储层（COS 已配置 → 无本地副本）
+3. **模式开关确认** → `sys.frozen` 判定 exe；`is_cos_configured()` 判定 COS 是否启用
+4. **修复 `list_audio`** → 本地缓存空时回退 DB 持久化远程 URL（`Script.segments[].audio_url`、`Episode/Review.audio_url`）
+5. **新增 `proxy_audio`** → SSRF 域名白名单 + `asyncio.to_thread` 包裹同步 COS SDK + `StreamingResponse` 1MB 分块
+6. **修复前端面板** → `path="云端(COS)"`、远程项禁用删除、远程音频走代理播放
+7. **后端 code review** → 关闭 async 阻塞 / size_bytes / 流式 / 远程 path / 日志 5 类问题
+8. **全量回归** → 后端 374 passed、前端 58 passed
+
+#### 维度 2：不确定性与失败点
+
+| 失败点 | 触发条件 | 根因 | 修复 |
+|--------|----------|------|------|
+| 列表查不到内容 | exe + COS 已配置，本地缓存空，接口只查本地 | 无 DB 远程 URL 回退 | `list_audio` 回退 |
+| 异步路由阻塞 | 同步 COS SDK 直接在 async 路由调用 | 未 `to_thread` | `await asyncio.to_thread(...)` |
+| 二进制被信封包裹 | 音频响应走 `success({})` | 复用 JSON 统一响应 | 原始 `StreamingResponse` |
+| 远程项被误删 | 前端对云端资源提供删除 | 未区分本地/远程 | 远程标记 + 删除保护 |
+| 测试误报 | 仅 dev 模式测试，未覆盖 exe | 未识别服务模式 | 服务模式自动检测 |
+
+#### 维度 3：可抽象的固定流程与判断逻辑
+
+```
+打包模式空列表诊断（命中即停）：
+  面板空 → 前端收到 items？否 → 接口层
+    本地缓存空？是 → 回退 DB 远程 URL？否 → 修复 list_audio
+    COS 已配置？是 → exe 双写缺失 → 本地缺失→云端回退
+音频代理实现判断：
+  grep 同步 SDK 调用 → 在 to_thread 内？否 → CRITICAL
+  grep 二进制响应 success() 包裹？是 → 改原始 StreamingResponse
+  grep 代理外部 URL 域名白名单？否 → SSRF 风险
+```
+
+#### 维度 4：适用与不适用场景
+
+| 流程 | 适用场景 | 不适用场景 |
+|------|----------|------------|
+| 本地缺失→云端回退 | COS/OSS/S3 已配置、本地无副本的列表接口 | 纯本地文件服务 |
+| 同步 SDK → to_thread | FastAPI async 路由调同步第三方 SDK | 同步框架 / SDK 已 async |
+| 二进制原始响应 | 音频/图片/文件下载端点 | JSON API |
+| SSRF 域名白名单 | 代理/中转外部 URL 的端点 | 仅本地静态资源 |
+| 服务模式自动检测 | dev/exe/docker 多模式项目 | 单模式项目 |
+
+---
+
+## 规范 73：打包模式路径解析（对应 R186）
+
+**PyInstaller exe 模式下 COS 已配置，上传只落云端无本地副本；列表接口必须做「本地缺失→云端回退」的分支，禁止假设本地缓存一定存在。**
+
+- **为什么**：dev 模式工作流上传会双写（本地 `data/audio_cache` + 云端），但 exe 模式 `is_cos_configured()` 为真时只上传云端。若列表接口只查本地缓存，exe 模式下三面板全空，且是「dev 正常 / 打包后异常」的隐蔽问题。
+- **判断信号**：grep 列表接口中 `is_cos_configured()` 已配置但无本地回退分支（本地空即 `return []`）
+- **适用**：任何支持 exe / dev 多模式部署、且依赖外部存储的项目
+- **不适用**：纯本地文件服务、无云端双写
+- **正确做法**：
+  ```python
+  # ✅ 正确：本地缺失回退云端 DB URL
+  items = []
+  for seg in segments:
+      local_path = resolve_local_audio(seg.key)
+      if local_path and os.path.exists(local_path):
+          items.append({"path": f"/audio/{seg.key}", "size_bytes": os.path.getsize(local_path)})
+      elif seg.audio_url:  # 云端回退
+          items.append({"path": "云端(COS)", "url": seg.audio_url, "size_bytes": 0})
+  return items
+
+  # ❌ 错误：本地空即返回空
+  if not os.path.exists(local_path):
+      continue  # exe 模式下全部跳过 → 面板空
+  ```
+- **真实案例**：exe 模式工作流详情页素材/TTS/成品三面板为空，根因是 `list_audio` 只查 `data/audio_cache`，而 COS 配置后无本地副本。
+
+## 规范 74：外部存储列表回退（对应 R187）
+
+**列表类接口（音频素材 / TTS 片段 / 成品）在本地缓存为空时，必须回退到 DB 持久化的远程 URL，禁止返回 null 或空数组。**
+
+- **为什么**：前端面板数据来源是接口返回的 items。若接口只信本地缓存，外部存储已配置时本地无副本，前端拿到空数组，用户看不到任何内容，且后端日志无任何报错（最隐蔽的一类问题）。
+- **判断信号**：grep `list_audio` / `list_*` 中本地空后直接 `return []` 无 DB URL 回退
+- **适用**：任何「本地 + 云端」双存储的列表接口
+- **不适用**：纯本地存储、无云端回退需求
+- **正确做法**：
+  ```python
+  # ✅ 正确：DB 持久化 URL 作为回退真相源
+  def list_audio(wf_id):
+      items = []
+      for seg in get_segments(wf_id):
+          local = local_cache.get(seg.key)
+          if local:
+              items.append(local_item(seg.key, local))
+          elif seg.audio_url:  # DB 持久化远程 URL
+              items.append(remote_item(seg))
+      return items  # 即使本地全空，云端项仍返回
+
+  # ❌ 错误：本地无则静默跳过
+  for seg in segs:
+      if seg.key in local_cache:
+          items.append(...)
+  return items  # 云端项全部丢失
+  ```
+- **真实案例**：见规范 73，三面板空的根因即此。
+
+## 规范 75：同步 SDK 异步安全（对应 R188）
+
+**在 FastAPI async 路由 / async 服务方法中调用同步第三方 SDK（腾讯云 COS `qcloud_cos`、requests 等）必须用 `await asyncio.to_thread(...)` 包裹，禁止直接在事件循环中阻塞。**
+
+- **为什么**：同步 SDK 内部是阻塞 IO，直接在 async 函数调用会占用事件循环单线程，导致同进程内其他请求被串行化、超时甚至死锁。COS SDK 没有 async 版本，必须用 `to_thread` 卸载到线程池。
+- **判断信号**：grep `cos_client.get_object` / `uploader.*put_object` 出现在 `async def` 函数体内且非 `asyncio.to_thread` 包裹
+- **适用**：FastAPI async 路由、async 服务方法调用任意同步第三方 SDK
+- **不适用**：Flask 等同步框架、SDK 本身提供 async 接口
+- **正确做法**：
+  ```python
+  # ✅ 正确：同步 SDK 卸载到线程池
+  @router.get("/proxy_audio")
+  async def proxy_audio(key: str):
+      client = _get_client()  # 复用单例 client
+      resp = await asyncio.to_thread(client.get_object, Bucket=..., Key=key)
+      return StreamingResponse(iter_stream(resp), media_type="audio/mpeg")
+
+  # ❌ 错误：事件循环内同步阻塞
+  @router.get("/proxy_audio")
+  async def proxy_audio(key: str):
+      resp = client.get_object(Bucket=..., Key=key)  # 阻塞事件循环
+      return Response(resp["Body"].read())
+  ```
+- **真实案例**：`proxy_audio` 初版在 async 路由直接调 `cos_client.get_object`，代码 review 标记为 CRITICAL，改为 `to_thread` 后并发吞吐恢复。
+
+## 规范 76：二进制流式响应契约（对应 R189）
+
+**音频 / 图片 / 文件下载类端点必须返回原始 `StreamingResponse` / `FileResponse`，禁止用统一 `success({code,message,data})` 信封包裹；前端用 `responseType: 'blob'` 消费。**
+
+- **为什么**：二进制响应一旦被 JSON 信封包裹，前端 `responseType: 'blob'` 解析的是被 JSON 字符串化的二进制，产生乱码或解码失败；且大文件一次性 `Response` 读全量内存峰值高、易超时。
+- **判断信号**：grep `return success(` 包裹 `.mp3`/`.wav`/`.png` 响应体，或 `Response(content=bytes)` 一次性读全量
+- **适用**：音频 / 视频 / 图片 / 任意二进制文件下载端点
+- **不适用**：JSON API、分页列表
+- **正确做法**：
+  ```python
+  # ✅ 正确：原始流式响应
+  def _iter_chunks(resp, chunk=1024*1024):
+      for chunk in resp["Body"].iter_stream(chunk):
+          yield chunk
+  return StreamingResponse(_iter_chunks(resp), media_type="audio/mpeg")
+
+  # 前端
+  axios.get(url, { responseType: "blob" }).then(r => new Blob([r.data]))
+
+  # ❌ 错误：被 JSON 信封包裹 + 一次性读全量
+  data = resp["Body"].read()  # 大文件内存峰值高
+  return success(data=data)   # blob 解析失败
+  ```
+- **真实案例**：音频代理初版用 `Response` 一次性读全量且考虑过统一响应，review 后改为 1MB 分块 `StreamingResponse`。
+
+## 规范 77：音频代理 SSRF 防护（对应 R190）
+
+**代理 / 中转外部音频 URL 的端点必须校验域名白名单（仅允许存储服务域名），复用已初始化的 client 单例，禁止透传任意 host。**
+
+- **为什么**：音频代理端点若接收任意外部 URL 并由服务端发起请求，攻击者可借机探测内网（`http://169.254.169.254` 元数据、内网服务），构成 SSRF。域名白名单 + 复用 `uploader._get_client` 是最小信任面。
+- **判断信号**：grep 代理端点中对传入 URL 未做域名白名单校验（`allowed_hosts` / `in COS_DOMAINS`）
+- **适用**：任何代理 / 中转任意外部 URL 的端点
+- **不适用**：仅服务本地静态资源（如 `/audio/<key>` 直读本地文件）
+- **正确做法**：
+  ```python
+  # ✅ 正确：域名白名单 + 复用 client
+  ALLOWED_HOSTS = {"<bucket>.cos.ap-guangzhou.myqcloud.com"}
+  def _safe_host(url: str) -> str:
+      host = urlparse(url).netloc
+      if host not in ALLOWED_HOSTS:
+          raise BusinessError(400, "非法音频域名")
+      return host
+
+  @router.get("/proxy_audio")
+  async def proxy_audio(url: str):
+      _safe_host(url)
+      client = _get_client()  # 复用 uploader 的单例 client
+      resp = await asyncio.to_thread(client.get_object, ...)
+      ...
+  ```
+- **真实案例**：`proxy_audio` 增加 `_get_client` 复用 + 域名白名单，避免每次新建 client 且杜绝 SSRF。
+
+## 规范 78：字段契约(size_bytes/远程 path)（对应 R191）
+
+**远程（云端）资源在列表接口中 `path` 字段必须返回语义值（如 `"云端(COS)"`），`size_bytes` 在远程时返回 0（或标记 unknown），前端据此判断走代理播放而非本地读大小。**
+
+- **为什么**：前端面板用 `path` 判断资源位置、`size_bytes` 判断是否需要显示时长/大小。若远程项 `path` 仍返回本地路径或 `size_bytes` 返回 None，前端会显示异常或尝试本地读取。
+- **判断信号**：grep 列表接口中远程项 `path` 未返回语义值（仍拼本地路径）/ `size_bytes` 为 None
+- **适用**：本地 + 云端双存储的列表接口
+- **不适用**：纯本地、字段语义单一
+- **正确做法**：
+  ```python
+  # ✅ 正确：远程项 path 语义化、size_bytes=0
+  if seg.audio_url:
+      items.append({"path": "云端(COS)", "url": seg.audio_url, "size_bytes": 0})
+  # ❌ 错误：远程项 path 留空或拼本地路径
+  items.append({"path": "", "size_bytes": None})
+  ```
+- **真实案例**：修复后 `proxy_audio` + 前端 `workflowAudioResponse` mock 中 `path="云端(COS)"`、`size_bytes=0`，面板正确展示云端标签。
+
+## 规范 79：详情面板懒加载（对应 R192）
+
+**工作流详情页的素材 / TTS 片段 / 成品等大列表面板必须用 `activePanels` + 变更处理器按需加载，禁止一次性加载全部面板数据。**
+
+- **为什么**：三面板数据量大（每段音频、每个成品），一次性加载增加首屏耗时与接口压力；懒加载只在用户展开面板时请求，体验与性能更优。
+- **判断信号**：grep 详情页 `onMounted` / `created` 中同时拉取素材+TTS+成品且无面板激活判断
+- **适用**：多面板详情页、数据量大的列表
+- **不适用**：单面板、数据量小
+- **正确做法**：
+  ```vue
+  <!-- ✅ 正确：面板激活时按需加载 -->
+  <el-collapse v-model="activePanels" @change="handlePanelChange">
+    <el-collapse-item name="materials">...</el-collapse-item>
+  </el-collapse>
+  async function handlePanelChange(names: string[]) {
+    if (names.includes("materials") && !materialsLoaded) {
+      materials.value = await api.listAudio(wfId)
+    }
+  }
+  ```
+- **真实案例**：`WorkflowDetail.vue` 改为 `activePanels` + `handlePanelChange` 懒加载三面板。
+
+## 规范 80：远程音频代理播放（对应 R193）
+
+**远程（云端 COS）音频必须经由 `proxy_audio` 代理端点播放，禁止前端直接拼接 COS 公网 URL（含签名）播放。**
+
+- **为什么**：直连 COS URL 会暴露带签名的临时链接、且无法做 SSRF 收敛与统一鉴权；通过代理端点统一出流，前端只持有 `proxy_audio?url=<db_url>`。
+- **判断信号**：grep 前端 `new Audio(` / `<audio src=` 直接拼接 `cos` / `.myqcloud.com` URL
+- **适用**：远程存储音频 / 文件播放
+- **不适用**：本地 `/audio/<key>` 直读
+- **正确做法**：
+  ```javascript
+  // ✅ 正确：走代理端点
+  const src = `/admin/api/v1/audio/proxy?url=${encodeURIComponent(item.url)}`
+  audioPlayer.src = src
+
+  // ❌ 错误：直连 COS
+  audioPlayer.src = item.url  // 暴露签名 URL，无 SSRF 收敛
+  ```
+- **真实案例**：`WorkflowDetail.vue` 远程项 `src` 改为 `proxy_audio` 端点。
+
+## 规范 81：远程资源删除保护（对应 R194）
+
+**`path` 标记为远程（云端）的资源，前端必须禁用删除 / 本地文件操作，避免误删云端对象且无法本地恢复。**
+
+- **为什么**：云端对象与本地文件生命周期不同，前端若对远程项提供删除，会直接调后端删除云端对象，且本地无副本无法恢复。UI 上必须隐藏删除入口。
+- **判断信号**：grep 前端对 `item.path === "云端(COS)"` 仍渲染删除按钮 / 调用本地删除
+- **适用**：本地 + 云端双存储的资源列表
+- **不适用**：纯本地资源（可任意删除）
+- **正确做法**：
+  ```vue
+  <!-- ✅ 正确：远程项隐藏删除 -->
+  <el-button v-if="item.path !== '云端(COS)'" @click="deleteItem(item)">删除</el-button>
+
+  <!-- ❌ 错误：远程项也可删 -->
+  <el-button @click="deleteItem(item)">删除</el-button>
+  ```
+- **真实案例**：`WorkflowDetail.vue` 远程项删除按钮加 `v-if` 保护。
+
+## 规范 82：字段契约展示一致性（对应 R195）
+
+**前端对 `size_bytes=0`（远程）与 `path="云端(COS)"` 等语义字段必须正确展示：远程项显示「云端」标签而非空大小，避免显示异常或「无数据」误判。**
+
+- **为什么**：前端若直接用 `size_bytes` 渲染时长/大小，远程项 `size_bytes=0` 会显示为 0 秒或空，用户误以为数据缺失。需按 `path` 语义分支展示。
+- **判断信号**：grep 前端直接渲染 `item.size_bytes` 未区分本地/远程
+- **适用**：本地 + 云端双存储的前端展示
+- **不适用**：字段语义单一
+- **正确做法**：
+  ```vue
+  <!-- ✅ 正确：按 path 语义分支 -->
+  <span v-if="item.path === '云端(COS)'">云端</span>
+  <span v-else>{{ formatDuration(item.size_bytes) }}</span>
+
+  <!-- ❌ 错误：远程项显示 0 -->
+  <span>{{ item.size_bytes }} bytes</span>  <!-- 远程项显示 0 -->
+  ```
+- **真实案例**：前端面板对远程项展示「云端(COS)」标签，本地项展示时长。
+
+---

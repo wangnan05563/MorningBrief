@@ -8,24 +8,35 @@
 旧版 final.mp3 已废弃，查找时按 workflow_id 后缀匹配。
 
 所有路径均通过 resolve_data_dir() 派生，避免硬编码。
+
+打包模式兼容：COS 已配置时（生产/打包态），TTS 片段与成品仅上传云端，本地
+audio_cache 为空。此时 list_audio 回退到 DB 持久化的 audio_url（Script 分段 /
+Episode / Review），保证工作流详情页的「语音合成·TTS 片段」「音频拼接·成品」
+面板在打包态也能展示内容；播放通过 /audio/proxy 代理远端 COS 对象。
 """
+import asyncio
 import json
 import logging
 from pathlib import Path
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
 from app.database import get_db
-from app.models import AuditLog, Workflow
+from app.models import AuditLog, Episode, Review, Script, Workflow
 from app.paths import resolve_data_dir
 
 logger = logging.getLogger(__name__)
+
+# 模块级配置单例（与运行时其他模块共享同一实例）
+settings = get_settings()
 
 router = APIRouter(prefix="/admin/api/v1/workflows", tags=["B端-音频管理"])
 
@@ -77,7 +88,11 @@ async def list_audio(
 
     返回 TTS 片段目录与成品音频的存在状态。
     成品路径需要通过 workflow.episode_date 派生，工作流不存在时 episode_file 为 null。
+
+    打包态兼容：COS 已配置时本地 audio_cache 为空，回退到 DB 持久化的 audio_url
+    （Script 分段 / Episode / Review），使详情页在打包态也能展示 TTS 片段与成品。
     """
+    # 1) 本地 TTS 目录（开发态 / COS 未配置时的主路径）
     tts_dir = _tts_dir(workflow_id)
     tts_files = []
     if tts_dir.exists():
@@ -88,19 +103,66 @@ async def list_audio(
                     "name": f.name,
                     "size_bytes": f.stat().st_size,
                     "url": f"/admin/api/v1/workflows/{workflow_id}/audio/tts/{f.name}",
+                    "remote": False,
                 })
 
-    # 成品音频按 workflow_id 后缀匹配（命名含频道名+workflow_id）
+    # 2) 本地 TTS 为空（COS 已配置/打包态）：回退到稿件分段持久化的 audio_url
+    if not tts_files:
+        scr_result = await db.execute(select(Script).where(Script.workflow_id == workflow_id))
+        script = scr_result.scalar_one_or_none()
+        if script and script.segments:
+            for seg in script.segments:
+                if not isinstance(seg, dict):
+                    continue
+                u = seg.get("audio_url")
+                if not u:
+                    continue
+                seq = seg.get("seq", "?")
+                tts_files.append({
+                    "name": f"seg_{seq}.mp3",
+                    # 远端对象不知道真实字节数，置 0（前端展示"大小未知"），
+                    # 避免把 duration 秒误当作字节数回填到 size_bytes 字段
+                    "size_bytes": 0,
+                    "url": u,
+                    "remote": bool(urlparse(u).scheme in ("http", "https")),
+                })
+
+    # 3) 成品音频：优先本地 glob（命名含频道名+workflow_id）
     result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
     wf = result.scalar_one_or_none()
     episode_file_info = None
+    # episode_date 可能为 None（异常工作流 / Workflow 记录缺失），统一兜底避免 500
+    episode_date_str = None
     if wf is not None:
-        episode_date_str = wf.episode_date.strftime("%Y%m%d")
-        ep_path = _find_episode_file(episode_date_str, workflow_id)
+        try:
+            episode_date_str = wf.episode_date.strftime("%Y%m%d") if wf.episode_date else None
+        except Exception:
+            episode_date_str = None
+    ep_path = _find_episode_file(episode_date_str, workflow_id) if episode_date_str else None
+    if ep_path:
         episode_file_info = {
-            "path": _rel_path(ep_path) if ep_path else None,
-            "exists": ep_path.is_file() if ep_path else False,
+            "path": _rel_path(ep_path),
+            "exists": ep_path.is_file(),
+            "remote": False,
+            "url": None,
         }
+    else:
+        # 本地无成品（COS 模式 / Workflow 记录缺失）：回退到 episode / review 持久化的
+        # audio_url。回退不依赖 Workflow 是否存在，避免「工作流记录缺失但成品已生成」
+        # 时面板空白。
+        ep_result = await db.execute(select(Episode).where(Episode.workflow_id == workflow_id))
+        ep = ep_result.scalars().first()
+        if ep is None:
+            rev_result = await db.execute(select(Review).where(Review.workflow_id == workflow_id))
+            ep = rev_result.scalars().first()
+        if ep and ep.audio_url:
+            episode_file_info = {
+                # 远端模式下无本地路径，置为可读文案，避免前端渲染出字面 null
+                "path": "云端(COS)",
+                "exists": True,
+                "remote": bool(urlparse(ep.audio_url).scheme in ("http", "https")),
+                "url": ep.audio_url,
+            }
 
     return success(data={
         "tts_dir": tts_files,
@@ -144,6 +206,64 @@ async def stream_episode(
         raise NotFoundError("成品音频尚未生成")
 
     return FileResponse(path=str(ep_path), media_type="audio/mpeg")
+
+
+@router.get("/{workflow_id}/audio/proxy")
+async def proxy_audio(
+    workflow_id: str,
+    url: str = Query(..., description="远端音频地址（COS / CDN），仅允许项目配置的 COS 域名"),
+    admin: AdminPayload = Depends(get_current_admin),
+):
+    """代理播放远端（COS / CDN）音频，避免浏览器直连 COS 的 CORS / 鉴权问题。
+
+    打包态（COS 已配置）下 TTS 片段与成品仅存于云端，本地 audio_cache 为空，
+    前端无法用 /audio/tts/{filename} 直读，故通过此后端代理拉取 COS 对象并以
+    blob 形式回传。SSRF 防护：仅放行项目配置的 COS 存储桶域名与 CDN 域名。
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise BizError(code=400, message="非法音频地址")
+
+    # 仅允许项目配置的 COS 域名，防止被当作通用代理发起 SSRF
+    allowed_hosts = set()
+    if settings.COS_BUCKET and settings.COS_REGION:
+        allowed_hosts.add(f"{settings.COS_BUCKET}.cos.{settings.COS_REGION}.myqcloud.com")
+    if settings.COS_CDN_DOMAIN:
+        cdn_netloc = urlparse(settings.COS_CDN_DOMAIN).netloc
+        if cdn_netloc:
+            allowed_hosts.add(cdn_netloc)
+    if parsed.netloc not in allowed_hosts:
+        raise BizError(code=400, message="非法音频地址")
+
+    key = parsed.path.lstrip("/")
+    if not key:
+        raise BizError(code=400, message="非法音频地址")
+
+    # 复用 TTS uploader 的 COS 客户端（携带项目凭证，支持私有桶）
+    from app.workflow.tts.uploader import _get_client
+
+    async def _stream_cos(stream):
+        # COS SDK 为同步库，分块读取必须在 asyncio.to_thread 内进行，避免阻塞事件循环
+        while True:
+            chunk = await asyncio.to_thread(stream.read, 1024 * 1024)
+            if not chunk:
+                break
+            yield chunk
+
+    try:
+        client = _get_client()
+        # get_object 仅建立流式请求；若对象不存在 / 无权访问，此处即抛错并映射为 404，
+        # 避免在已发送 200 响应头后再断流导致客户端收到截断的损坏音频
+        resp = await asyncio.to_thread(
+            client.get_object, Bucket=settings.COS_BUCKET, Key=key
+        )
+        stream = resp["Body"].get_raw_stream()
+    except Exception as e:  # NOSONAR 统一兜底为 404，避免泄露内部错误
+        logger.warning("音频代理失败 workflow_id=%s key=%s", workflow_id, key, exc_info=True)
+        raise NotFoundError("音频获取失败")
+
+    # 分块流式返回，避免 10MB+ 成品一次性读入内存拉高并发内存峰值
+    return StreamingResponse(_stream_cos(stream), media_type="audio/mpeg")
 
 
 @router.delete("/{workflow_id}/audio/tts/{filename}")

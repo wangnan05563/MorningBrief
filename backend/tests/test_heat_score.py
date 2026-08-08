@@ -73,7 +73,7 @@ def test_recency_score_boundaries():
     """
     assert _recency_score(None) == 0.5
 
-    # 用 datetime.now() 与生产代码 utcnow_naive()（返回本地时间）对齐，
+    # 用 datetime.now() 与生产代码 localnow_naive()（返回本地时间）对齐，
     # 避免 datetime.utcnow()（UTC）与本地时间 8 小时差导致 flaky
     now = datetime.now()
     # 容忍微秒精度误差，用近似断言

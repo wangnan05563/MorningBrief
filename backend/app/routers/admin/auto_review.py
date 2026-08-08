@@ -165,12 +165,12 @@ async def retry_failed_auto_review(
         )
 
     # 执行重试：复用 AutoReviewService.try_auto_approve
-    from app.core.timeutil import utcnow_naive
+    from app.core.timeutil import localnow_naive
     svc = AutoReviewService(db)
     result_data = await svc.try_auto_approve(
         workflow_id=stat.workflow_id,
         review_id=stat.review_id,
-        review_created_at=review.created_at or utcnow_naive(),
+        review_created_at=review.created_at or localnow_naive(),
     )
 
     # 审计日志：记录手动重试操作

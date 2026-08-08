@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BizError
 from app.core.security import create_access_token, verify_password, hash_password
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.models import AdminUser
 from app.services.blacklist_service import add_to_blacklist
 
@@ -41,7 +41,7 @@ class AdminService:
             },
         )
 
-        admin.last_login_at = utcnow_naive()
+        admin.last_login_at = localnow_naive()
         await self.db.commit()
 
         return {

@@ -12,7 +12,7 @@ from typing import Optional
 from sqlalchemy import Integer, String, DateTime, UniqueConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.database import Base
 
 
@@ -31,5 +31,5 @@ class Favorite(Base):
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, comment="用户 openid")
     episode_id: Mapped[int] = mapped_column(Integer, nullable=False, comment="节目 ID")
     created_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, default=utcnow_naive, comment="收藏时间"
+        DateTime, default=localnow_naive, comment="收藏时间"
     )

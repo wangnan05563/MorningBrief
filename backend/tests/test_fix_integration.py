@@ -301,10 +301,17 @@ class TestUserAvatar:
     """
 
     @pytest.mark.asyncio
-    async def test_upload_avatar_success(self, client, db_session):
+    async def test_upload_avatar_success(self, client, db_session, tmp_path, monkeypatch):
         """上传合法 jpg 图片，返回 /avatars/{filename} URL。"""
         from io import BytesIO
-        from app.paths import resolve_avatar_dir
+        import app.routers.api.users as users_router
+
+        # 重定向头像落盘到临时目录：① 避免污染真实 data/avatars；
+        # ② 临时目录位于 OS TEMP 下，safe-delete 守卫允许清理——
+        # 否则全量运行时 saved.unlink 被守卫拦截（SAFE_DELETE_FAIL_CLOSED）导致用例失败。
+        avatar_dir = tmp_path / "avatars"
+        avatar_dir.mkdir()
+        monkeypatch.setattr(users_router, "resolve_avatar_dir", lambda: avatar_dir)
 
         user, _ = await _seed_user_and_episode(db_session, "F")
         headers = _user_headers(user.id)
@@ -324,11 +331,11 @@ class TestUserAvatar:
         assert url.endswith(".jpg")
         assert f"{user.id}_" in url
 
-        # 验证文件已写入磁盘
+        # 验证文件已写入磁盘（落盘到临时目录，断言与实际写入路径一致）
         filename = url.split("/")[-1]
-        saved = resolve_avatar_dir() / filename
+        saved = avatar_dir / filename
         assert saved.exists(), f"头像文件应写入磁盘: {saved}"
-        # 清理测试文件，避免污染 data/avatars 目录
+        # 清理测试文件（临时目录，守卫允许删除）
         saved.unlink(missing_ok=True)
 
     @pytest.mark.asyncio

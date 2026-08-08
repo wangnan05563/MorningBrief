@@ -192,6 +192,56 @@ def _summarize_segment_failures(
     return "\n".join(lines)
 
 
+async def _persist_segment_audio_urls(
+    script_id: int,
+    audio_segments: list[dict],
+    workflow_id: str,
+    session=None,
+) -> None:
+    """把每段的 COS audio_url 写回 script.segments，按 seg_seq 匹配。
+
+    COS 模式下本地 audio_cache/tts 目录为空，详情页 list_audio 接口回退读取
+    script.segments[].audio_url 展示 TTS 片段；若此处不回写，分段无 audio_url，
+    导致「语音合成 · TTS 片段」面板在 COS 模式（已配置 COS_BUCKET）下恒为空。
+    本地模式下列表走本地目录不受影响，此处回写仅为补齐 COS 兜底的必要数据，
+    并让每个分段对应的云端音频地址持久化，便于重生成/审核复用。
+
+    session 为 None 时使用模块级 AsyncSessionLocal（生产路径）；
+    传入 session 时复用（测试路径，便于隔离），调用方负责生命周期。
+    回写失败仅告警、不抛异常，避免中断 TTS 主流程（音频已上传成功）。
+    """
+    if not audio_segments:
+        return
+    own_session = session is None
+    if own_session:
+        session = AsyncSessionLocal()
+    try:
+        scr = (await session.execute(
+            select(Script).where(Script.id == script_id)
+        )).scalar_one_or_none()
+        if scr is None:
+            return
+        segs = scr.segments or []
+        url_by_seq = {a["seg_seq"]: a["audio_url"] for a in audio_segments}
+        changed = False
+        for seg in segs:
+            u = url_by_seq.get(seg.get("seq"))
+            if u:
+                seg["audio_url"] = u
+                changed = True
+        if changed:
+            scr.segments = segs
+            await session.commit()
+    except Exception:  # 回写失败为可选兜底，禁止中断 TTS 主流程；logger.exception 保留 traceback 便于排查
+        logger.exception(
+            "TTS audio_url 回写 script 失败 workflow_id=%s script_id=%s",
+            workflow_id, script_id,
+        )
+    finally:
+        if own_session:
+            await session.close()
+
+
 async def synthesize(workflow_id: str, script_id: int) -> dict:
     """TTS 主入口。
 
@@ -261,6 +311,10 @@ async def synthesize(workflow_id: str, script_id: int) -> dict:
         raise TTSError(
             f"TTS 成功率过低: {success}/{total}（< 50%）\n失败明细:\n{summary}"
         )
+
+    # 4.5 回写 audio_url 到 script.segments（按 seg_seq 匹配），补齐 COS 模式详情页兜底数据
+    if audio_segments:
+        await _persist_segment_audio_urls(script_id, audio_segments, workflow_id)
 
     # 5. 按 seg_seq 升序返回，便于后续按顺序拼接
     audio_segments.sort(key=lambda x: x["seg_seq"])

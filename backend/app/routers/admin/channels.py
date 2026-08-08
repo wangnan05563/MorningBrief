@@ -37,6 +37,8 @@ class ChannelCreateRequest(BaseModel):
     bgm_volume: float | None = None
     # 频道级段间静音时长（秒），为空使用全局配置
     segment_gap_sec: float | None = None
+    # 频道级段间 BGM 模式："silence"=真实静音；"bridge"=BGM 桥接；None=继承全局
+    bgm_gap_mode: str | None = None
     # 每段新闻末尾是否追加思考问题，None=默认开启 # NOSONAR
     enable_thinking_question: int | None = None
     # 频道专属 RSS 源列表（JSON 数组字符串，如 '["游民星空-资讯"]'），为空使用全部源
@@ -44,6 +46,8 @@ class ChannelCreateRequest(BaseModel):
     # 频道关键词过滤（逗号分隔，如 "游戏,主机,PS5"），为空表示不过滤
     keywords: str | None = None
     min_duration_sec: int | None = None
+    # 展示排序权重：值越小越靠前；相等时按 id 兜底。运营可调整以控制小程序 tab 顺序
+    display_order: int = 0
     # 频道创建时是否自动调用 AI 生成提示词
     auto_generate_prompts: bool = False
 
@@ -84,6 +88,19 @@ class ChannelCreateRequest(BaseModel):
             raise ValueError("bgm_volume 必须在 0.0-1.0 之间")
         return v
 
+    @field_validator("bgm_gap_mode")
+    @classmethod
+    def validate_bgm_gap_mode(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if v == "":
+            # 空字符串视为"继承全局"：兜底前端 inherit_bgm_gap 发送 null 之外的脏输入
+            return None
+        if v not in ("silence", "bridge"):
+            raise ValueError("bgm_gap_mode 仅支持 silence / bridge")
+        return v
+
 
 class ChannelUpdateRequest(BaseModel):
     """修改频道请求体。"""
@@ -98,9 +115,13 @@ class ChannelUpdateRequest(BaseModel):
     bgm_path: str | None = None
     bgm_volume: float | None = None
     segment_gap_sec: float | None = None
+    # 频道级段间 BGM 模式："silence"=真实静音；"bridge"=BGM 桥接；None=继承全局
+    bgm_gap_mode: str | None = None
     enable_thinking_question: int | None = None
     rss_sources: str | None = None
     keywords: str | None = None
+    # 展示排序权重：值越小越靠前；相等时按 id 兜底。运营可调整以控制小程序 tab 顺序
+    display_order: int | None = None
 
     @field_validator("schedule_time")
     @classmethod
@@ -128,6 +149,19 @@ class ChannelUpdateRequest(BaseModel):
             raise ValueError("bgm_volume 必须在 0.0-1.0 之间")
         return v
 
+    @field_validator("bgm_gap_mode")
+    @classmethod
+    def validate_bgm_gap_mode(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if v == "":
+            # 空字符串视为"继承全局"：兜底前端 inherit_bgm_gap 发送 null 之外的脏输入
+            return None
+        if v not in ("silence", "bridge"):
+            raise ValueError("bgm_gap_mode 仅支持 silence / bridge")
+        return v
+
 
 def _channel_to_dict(ch) -> dict:
     """统一频道序列化，避免列表/详情接口字段不一致。"""
@@ -144,10 +178,12 @@ def _channel_to_dict(ch) -> dict:
         "bgm_path": ch.bgm_path,
         "bgm_volume": ch.bgm_volume,
         "segment_gap_sec": ch.segment_gap_sec,
+        "bgm_gap_mode": ch.bgm_gap_mode,
         "enable_thinking_question": ch.enable_thinking_question,
         "rss_sources": ch.rss_sources,
         "keywords": ch.keywords,
         "min_duration_sec": ch.min_duration_sec,
+        "display_order": ch.display_order,
         "created_at": ch.created_at.isoformat() if ch.created_at else None,
         "updated_at": ch.updated_at.isoformat() if ch.updated_at else None,
     }
@@ -193,10 +229,12 @@ async def create_channel(
             bgm_path=req.bgm_path,
             bgm_volume=req.bgm_volume,
             segment_gap_sec=req.segment_gap_sec,
+            bgm_gap_mode=req.bgm_gap_mode,
             enable_thinking_question=req.enable_thinking_question,
             rss_sources=req.rss_sources,
             keywords=req.keywords,
             min_duration_sec=req.min_duration_sec,
+            display_order=req.display_order,
         )
     except ValueError as e:
         return error(code=400, message=str(e))
@@ -244,9 +282,11 @@ async def update_channel(
             bgm_path=req.bgm_path,
             bgm_volume=req.bgm_volume,
             segment_gap_sec=req.segment_gap_sec,
+            bgm_gap_mode=req.bgm_gap_mode,
             enable_thinking_question=req.enable_thinking_question,
             rss_sources=req.rss_sources,
             keywords=req.keywords,
+            display_order=req.display_order,
         )
     except ValueError as e:
         return error(code=400, message=str(e))

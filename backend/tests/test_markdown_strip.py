@@ -51,9 +51,27 @@ class TestMarkdownStrip:
         """空字符串输入应返回空字符串。"""
         assert _strip_markdown_residue("") == ""
 
-    def test_single_asterisk_not_stripped(self):
-        """单个 * 不被清理：可能是数学表达式（如 1*2*3）。"""
+    def test_math_asterisk_preserved(self):
+        """数学乘号 * 必须保留：两侧均紧邻数字/字母时视为运算而非 Markdown。
+
+        早期版本为"不误伤数学表达"而完全放过单个 *，导致 Markdown 斜体/列表残留的
+        单个 * 被 TTS 念成"星号"（用户反馈的 * * 音）。现改为数学安全策略：
+        仅当 * 两侧均非数字/字母时才清理，乘号 1*2*3、a*b、3 * 4 均保留。
+        """
         assert _strip_markdown_residue("计算 1*2*3=6 的结果") == "计算 1*2*3=6 的结果"
+        assert _strip_markdown_residue("面积 3 * 4=12") == "面积 3 * 4=12"
+        assert _strip_markdown_residue("变量 a*b 的乘积") == "变量 a*b 的乘积"
+
+    def test_single_asterisk_bullet_stripped(self):
+        """行首列表符号 * / - / + 必须清理：避免被 TTS 念成"星号"。"""
+        assert _strip_markdown_residue("* 要点一\n* 要点二") == "要点一\n要点二"
+        assert _strip_markdown_residue("- 列表项") == "列表项"
+        assert _strip_markdown_residue("+ 加号列表") == "加号列表"
+
+    def test_italic_single_asterisk_stripped(self):
+        """成对斜体 *文字* / _文字_ 必须清理分隔符：保留内部文字，避免念"星号"。"""
+        assert _strip_markdown_residue("*重要*消息来了") == "重要消息来了"
+        assert _strip_markdown_residue("这是_强调_内容") == "这是强调内容"
 
     def test_mixed_closed_and_unclosed_bold(self):
         """混合场景：闭合 **xxx** + 未闭合 **yyy → 分别处理。"""

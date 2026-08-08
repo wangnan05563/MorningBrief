@@ -3800,3 +3800,121 @@ logger.info("请求参数: %s", mask_sensitive(f"token={api_key}&user={user}"))
   - grep `% len(` 在风格库选择中 → 合规
 - 严重级别：MEDIUM（高频词重复率影响内容质量，非功能性问题）
 
+### 维度 136：打包模式外部存储回退与路径解析
+
+> 来源：2026-08-05 复盘（规范 R186/R187/R191）。exe 模式 COS 已配置时只上传云端无本地副本，列表接口只查本地缓存会导致三面板全空。
+
+**配置节点**：`config.yaml#review_dimensions` → `RD-BE-27`
+
+- 【强制】列表接口（素材/TTS/成品）本地缓存为空时须回退 DB 持久化远程 URL（Script.segments.audio_url / Episode.audio_url / Review.audio_url），禁止 return []
+- 【强制】远程项 path 须返回语义值（如 `云端(COS)`），size_bytes 远程时为 0 且前端须正确展示
+- 不适用：纯本地文件服务、无云端双写
+- 判断信号：
+  - grep `list_audio` 本地空后直接 `return []` 无 `audio_url` 回退 → 违规
+  - grep `is_cos_configured()` 已配置但列表接口无本地缺失分支 → 违规
+  - grep 远程项 `path` 为 None/空或 `size_bytes` 为 None → 违规
+- 严重级别：CRITICAL（exe 模式三面板全空，且 dev 正常易漏测）
+
+### 维度 137：异步路由同步 SDK 调用
+
+> 来源：2026-08-05 复盘（规范 R188）。同步第三方 SDK（腾讯云 COS qcloud_cos）在 FastAPI async 路由直接调用会阻塞事件循环。
+
+**配置节点**：`config.yaml#review_dimensions` → `RD-BE-28`
+
+- 【强制】async 函数内同步 SDK 调用（cos_client.get_object / uploader.put_object 等）必须用 `await asyncio.to_thread(...)` 包裹
+- 不适用：Flask 等同步框架、SDK 本身提供 async 接口
+- 判断信号：
+  - grep `cos_client.` / `uploader.*get_object` 出现在 `async def` 且非 `asyncio.to_thread` → 违规
+  - grep `await asyncio.to_thread` 包裹同步 SDK → 合规
+- 严重级别：CRITICAL（阻塞事件循环导致并发请求串行化/超时）
+
+### 维度 138：二进制流式响应契约
+
+> 来源：2026-08-05 复盘（规范 R189）。二进制音频/文件响应被 success() 信封包裹会导致前端 blob 解析失败。
+
+**配置节点**：`config.yaml#review_dimensions` → `RD-BE-29`
+
+- 【强制】音频/图片/文件下载端点返回原始 `StreamingResponse` / `FileResponse`，禁止 `success({data: bytes})` 信封
+- 【强制】大文件用 `StreamingResponse` 分块（如 1MB）返回，禁止一次性读全量字节
+- 不适用：JSON API、分页列表
+- 判断信号：
+  - grep `return success(` 包裹 `.mp3`/`.wav`/音频响应体 → 违规
+  - grep `StreamingResponse|FileResponse` 用于二进制下载 → 合规
+- 严重级别：HIGH（blob 解析失败 / 大文件内存峰值）
+
+### 维度 139：音频代理 SSRF 防护
+
+> 来源：2026-08-05 复盘（规范 R190）。代理外部音频 URL 的端点若透传任意 host 构成 SSRF（内网探测）。
+
+**配置节点**：`config.yaml#review_dimensions` → `RD-BE-30`
+
+- 【强制】代理外部 URL 的端点须校验域名白名单（仅允许存储服务域名），禁止透传任意 host
+- 【强制】复用已初始化的 client 单例（如 uploader._get_client），禁止每次新建
+- 判断信号：
+  - grep 代理端点对传入 URL 无域名白名单校验 → 违规
+  - grep 复用 `_get_client` 单例 → 合规
+- 严重级别：CRITICAL（SSRF 可探测内网元数据）
+
+---
+
+## V3.0 会话复盘新增维度（196–204）
+
+> 来源：2026-08-05 会话（两轮）解决的真实问题。完整规则、判断信号与代码示例见 news-code-dev `references/diagnostic-standards.md` 的 DS-1~DS-14；评审要点概览见本技能 `SKILL.md` 的 V3.0 维度表；参数全部由 `config.yaml` 对应节点管理（无硬编码）。
+
+### 维度 196：异常吞没 / traceback 保留（DS-1）
+**配置节点**：`config.yaml#exception_swallow_check`
+- 【强制】`except` 块不得仅记录 `str(e)` 而无 `exc_info`；子进程/SDK 启动异常须转专用异常（带异常类型 + cmd）
+- 判断信号：grep `except Exception` 后仅 `logger.warning(f"...{e}")`/`str(e)` 且无 `exc_info`；`create_subprocess_exec` 外层无 try/except
+- 严重级别：HIGH
+
+### 维度 197：CancelledError 逃逸防护（DS-2）
+**配置节点**：`config.yaml#cancelled_error_guard_check`
+- 【强制】`asyncio.wait_for`/`create_task` 包裹函数中，`except Exception` 之前必须补 `except asyncio.CancelledError`（Python 3.12+ 中为 BaseException 子类）
+- 判断信号：grep `wait_for`/`create_task` 包裹函数，`except` 顺序为 `Exception` 在前且无 `CancelledError` 分支
+- 严重级别：CRITICAL
+
+### 维度 198：fire-and-forget 保活与守卫（DS-3）
+**配置节点**：`config.yaml#fire_and_forget_keepalive_check`
+- 【强制】同步签名函数内派发后台协程须模块级集合保活 + `get_running_loop()` 守卫 + 测试环境禁用
+- 判断信号：grep 同步函数内 `create_task` 无 `_tasks.add(...)` / 无 `get_running_loop()` 守卫
+- 严重级别：HIGH
+
+### 维度 199：构建/发布元数据单一真相源（DS-6）
+**配置节点**：`config.yaml#build_metadata_single_source_check`
+- 【强制】`_build_info.py` 禁止硬编码 `git_sha="unknown"`/`build_date`；生成器须被构建/发布脚本调用
+- 判断信号：grep `git_sha="unknown"` / 硬编码 `build_date=` / `_build_info.py` 未被生成器覆盖
+- 严重级别：HIGH
+
+### 维度 200：全量重命名/别名移除完整性（DS-8）
+**配置节点**：`config.yaml#alias_rename_completeness_check`
+- 【强制】删除/重命名公共 API 后 grep 全仓库旧名须 0 匹配；矛盾注释须清理
+- 判断信号：grep 旧名非零匹配（API import + `default=` + `()` 调用 + 注释）
+- 严重级别：CRITICAL
+
+### 维度 201：测试隔离与状态防泄漏（DS-9）
+**配置节点**：`config.yaml#test_isolation_safe_delete_check`
+- 【强制】依赖模块级文件路径/单例的测试须 `tmp_path` + `monkeypatch` 重定向，不得依赖 `unlink()` 成功
+- 判断信号：测试用 `unlink()`/`os.remove()` 且依赖其成功；模块级路径未重定向 `tmp_path`
+- 严重级别：HIGH（safe-delete 拦截属环境制品，报告单独归类）
+
+### 维度 202：安装包/构建配置完整性（DS-10）
+**配置节点**：`config.yaml#packaging_config_completeness_check`
+- 【强制】Inno Setup 必须 `SetupIconFile` 复用产品图标；spec 与 iss 模板须一致
+- 判断信号：grep `installer.iss` 无 `SetupIconFile`；`MorningBrief.ico` 有效多尺寸 ICO
+- 严重级别：MEDIUM
+
+### 维度 203：frozen 模式配置加载路径解析（DS-11）
+**配置节点**：`config.yaml#frozen_config_load_check`
+- 【强制】PyInstaller 冻结 exe 的配置加载须按 `sys.frozen` 回退到 `sys.executable` 同级解析 `.env`；禁止依赖 cwd 的相对 `env_file`
+- 判断信号：grep `config.py` 的 `env_file` 为相对/固定路径且无 `getattr(sys, "frozen")` 分支
+- 严重级别：CRITICAL（exe 模式读不到 `WX_APPID` 等表现 appid missing）
+- 适用/不适用：适用 PyInstaller/Nuitka 冻结 exe；不适用纯源码运行
+
+### 维度 204：安装包配置完整性（DS-12）
+**配置节点**：`config.yaml#installer_secret_completeness_check`
+- 【强制】`installer.iss` 不得 `Excludes` 静默丢弃 `.env`/密钥；须显式 `Source:` 包含 `.env`；构建脚本拷贝后须 `attrib -H` 去隐藏属性
+- 判断信号：grep `Excludes:.*\.env`；或 `Source:` 列表无 `.env`；构建脚本拷贝 `.env` 后无 `attrib -H`
+- 严重级别：CRITICAL（代码已修仍 appid missing 的常见部署层根因）
+- 适用/不适用：适用含 `.env`/密钥的安装包；不适用配置全环境变量注入
+
+

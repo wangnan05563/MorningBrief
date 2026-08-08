@@ -3,8 +3,8 @@ name: "news-code-dev"
 description: "MorningBrief 项目的标准化开发技能，覆盖后端(FastAPI/SQLAlchemy)、前端(Vue 3/Element Plus/小程序)、工作流编排(LLM/TTS)、测试、优化和缺陷修复。同时包含 20_News 项目编码规范与部署标准（数据库初始化、多模式部署、环境配置、安全认证、前后端交互）。当用户要求'开发新功能/添加接口/修改代码/修复bug/重构/优化性能/写测试/部署排查'时调用。"
 whenToUse: "需要开发新功能、修复缺陷、优化代码或编写测试时使用"
 triggers: "开发新功能/添加接口/修改代码/修复bug/重构/优化性能/写测试/部署排查 | 开发/实现/添加/修改/修复/优化/重构/部署 | 后端/前端/小程序/工作流/测试/数据库 开发"
-version: "3.0.0"
-updated: "2026-07-31"
+version: "3.2.0"
+updated: "2026-08-05"
 config: "config/project-config.json"
 ---
 
@@ -104,7 +104,7 @@ news-code-dev/
 
 ## 核心规则速查
 
-以下为 185 条元规范的精简版，详细规则和完整上下文请参考 [meta-rules.md](references/meta-rules.md)。
+以下为项目编码规范的精简速查（规则持续增补，当前 #1–#199），详细规则和完整上下文请参考 [meta-rules.md](references/meta-rules.md) 与 [diagnostic-standards.md](references/diagnostic-standards.md)。
 
 | # | 规范 | 判断信号（grep） | 优先级 |
 |---|------|------------------|--------|
@@ -260,6 +260,32 @@ news-code-dev/
 | 183 | HTTP 编码探测 fallback | `resp.text` 或 `resp.encoding` 无 charset_normalizer fallback | HIGH |
 | 184 | 启停脚本 PID 文件三级兜底 | stop 脚本仅用 PID 文件查找进程无兜底 | HIGH |
 | 185 | 风格库顺序轮换去重 | `random.choice` 或 `candidates[0]` 在风格库选择中 | MEDIUM |
+| 186 | 打包模式路径解析 | 列表接口中 `is_cos_configured()` 已配置但无本地回退分支 | CRITICAL |
+| 187 | 外部存储列表回退 | `list_audio` 本地缓存空后直接 `return []` 无 DB 远程 URL 回退 | CRITICAL |
+| 188 | 同步 SDK 异步安全 | `cos_client`/`uploader` 同步调用出现在 `async def` 且非 `to_thread` | CRITICAL |
+| 189 | 二进制流式响应契约 | `return success(` 包裹 `.mp3`/`.wav` 音频响应体 | HIGH |
+| 190 | 音频代理 SSRF 防护 | 代理外部音频 URL 无域名白名单校验（任意 host 透传） | CRITICAL |
+| 191 | 字段契约(size_bytes/远程 path) | 远程资源 `path` 未返回语义值（如 `"云端(COS)"`）/ `size_bytes` 未处理 | HIGH |
+| 192 | 详情面板懒加载 | 详情页素材/TTS/成品面板一次性加载无 `activePanels` + 变更处理器 | HIGH |
+| 193 | 远程音频代理播放 | 远程(云端)音频直接拼接 COS URL，未走 `proxy_audio` 端点 | HIGH |
+| 194 | 远程资源删除保护 | `path` 含云端标记但仍渲染删除/本地操作按钮 | HIGH |
+| 195 | 字段契约展示一致性 | 前端对 `size_bytes=0`/远程 `path` 标签未正确展示（显示为空/异常） | MEDIUM |
+| 196 | frozen 模式配置加载路径解析 | `config.py` 的 `env_file` 为相对/固定路径、未用 `sys.executable` 同级解析（`sys.frozen` 时 `_MEIPASS` 无 `.env`） | CRITICAL |
+| 197 | 安装包配置完整性 | `installer.iss` 的 `Excludes` 含 `.env`/密钥、或 `Source:` 未显式包含 `.env`、构建脚本未 `attrib -H` | CRITICAL |
+| 198 | HLS 首播冷启动静默重试 | 小程序音频 `onError` 无静默重试分支、无 mp3 回退、首播失败即停 loading/弹错误 | HIGH |
+| 199 | 微信隐私合规 scope 声明 | `setClipboardData`/`getClipboardData` 调用前未 `requirePrivacyAuthorize`、后台未声明「剪贴板」scope | CRITICAL |
+| 200 | TTS 朗读禁止透传 markdown 标记 | rewriter/synthesize 输出含 `**`/`*` 等标记未 strip 即送 TTS（导致朗读星号） | HIGH |
+| 201 | 列表/面板空数据分层诊断 | 面板/列表空直接改渲染，未先查数据源（查询维度 / 字段回写 / 缓存兜底） | HIGH |
+| 202 | TTS 合成后 audio_url 回写 | synthesize 成功未将 COS URL 回写 `script.segments[].audio_url`（按 seg_seq 匹配） | HIGH |
+| 203 | 素材池查询维度正确 | `Material.workflow_id` 过滤而忽略 `channel_id`（素材是频道级池，终态 workflow_id 置 NULL） | CRITICAL |
+| 204 | 历史数据回填安全闭环 | 回填脚本无 `--dry-run` 预览 / 无自动备份 / 会删除记录 / 非幂等 | HIGH |
+| 205 | broad except 保留 traceback | `except` 块用 `logger.warning("…%s",e)` 丢栈；`# NOSONAR` 写在非 `def` 行 | HIGH |
+| 206 | COS list_objects 健壮性 | 列举按 `NextMarker` 续传（无 Delimiter 时不返回）；列举未 `try/except` 保护瞬时错误 | MEDIUM |
+| 207 | 频道 tab 动态生成 | 前端/小程序硬编码频道名列表（非来自后端 `/channels` 动态渲染） | CRITICAL |
+| 208 | 后端可控排序/开关字段全链 | 新增"运营可调、前端免发版"字段未走 model+迁移+排序返回+缓存失效+前端控件 | HIGH |
+| 209 | 前端字段契约透传 | 通用 axios 包装丢后端新增 snake_case 字段；列表无展示列 / 表单无控件 | HIGH |
+| 210 | 测试落盘隔离 | 测试对 `data/` 下文件 `unlink`/`write` 未重定向 `tmp_path`（被 safe-delete 守卫拦截） | HIGH |
+| 211 | 全量测试 flake 判别 | 全量偶发失败直接定性回归，未先单跑失败用例判别 flake/真缺陷 | HIGH |
 
 **SQ 闭环补充**（SonarQube 相关实践要点）：
 - NOSONAR 注释必须加在 `def` 行（末行 `# NOSONAR` 不生效）
@@ -270,10 +296,69 @@ news-code-dev/
 
 **状态分类**：CRITICAL（必须遵守）/ HIGH（强烈建议）/ MEDIUM（建议）
 
+## 2026-08-08 会话提炼编码规范（R200–R211）
+
+> 来源：本会话连续解决的 7 类真实问题（TTS 星号、详情页双面板空、COS 历史 audio_url 回填、
+> 代码审查发现、头像测试 flake、小程序频道 tab 动态、admin-web 展示排序）。
+> 以下为标准整合，每条含**判断信号 + 适用/不适用场景**，与 `news-backend-code-review`（维度 207–213）、
+> `news-frontend-code-review`（FE-202–FE-205）、`news-auto-testing`（flake/隔离流程）交叉引用。
+
+### 1. 面板/列表"显示为空"——分层诊断（R201 / R202 / R203）
+
+**固定流程（禁止直接定性渲染 bug）**：
+1. 先确认前端是否真收到空（axios 解包后 `data` 是否空、请求参数是否正确）。
+2. 再查数据源：DB 该实体是否真有数据？过滤条件字段是否与存储语义匹配？
+   - 素材类：是**频道级池** → 按 `channel_id` 查；`workflow_id` 在终态被置 NULL，不能用它过滤。
+   - 音频类：COS 模式下本地 `tts/` 目录为空 → 必须回写 `script.segments[].audio_url`，否则详情页无兜底。
+3. 最后查渲染：`wx:for` / `v-for` 遍历字段名是否与响应字段一致。
+
+**判断逻辑**：面板空 + DB 有数据 → 不是渲染问题，是**查询维度 / 字段回写**问题；COS 已配置但 segment 无 `audio_url` → 补回写逻辑，不是"音频丢了"。
+
+**适用**：任何"列表/面板空""数据不显示"。**不适用**：明确的 404/500 接口错误（直接查路由）。
+
+### 2. TTS 朗读禁止透传 markdown 标记（R200）
+
+LLM 改写输出（含 `**`/`*`/列表符）不得原样送 TTS；在 rewriter 或 synthesize 边界做 strip。
+历史脏数据用 `--dry-run` 预览 + 自动备份的回填脚本清洗（见 R204）。
+
+### 3. 历史数据回填安全闭环（R204）
+
+回填脚本必须：`--dry-run` 预览影响面 → 自动备份 DB/文件 → 实际执行（**只填缺失、不删、幂等、分批、进度日志**）
+→ 二次 `--dry-run` 复核归零。异常项单独 `try/except` 跳过，不中断整批。
+
+### 4. 后端可控排序/开关字段全链（R207 / R208 / R209）
+
+让"运营可调、前端免发版"的字段（如频道 `display_order`、媒体开关）落地全链：
+1. model 加字段（`NOT NULL DEFAULT`，避免 NULL 排序歧义）。
+2. `main.py` 幂等迁移（`PRAGMA table_info` 检测后 `ALTER TABLE ADD COLUMN`）。
+3. 列表接口按该字段排序返回 + 返回体带字段。
+4. Service `create`/`update` 透传 + 失效对应缓存（与 admin `cache_manager` 同一单例）。
+5. 前端：列表加展示列 + 表单加控件 + 通用 axios **直传不丢字段**（snake_case）。
+
+**判断逻辑**：改动只影响展示顺序/开关 → 优先做"后端字段 + 缓存失效"，**最小化前端改动**。
+**适用**：需运营可调、前端免发版。**不适用**：纯展示性、与后端无关的 UI 状态。
+
+### 5. 错误处理与日志（R205，强化 #14）
+
+`except Exception` 兜底块必须 `logger.exception(...)` 保留 traceback；`# NOSONAR` 必须写在 `def` 行（末行不生效）。
+预期可恢复、需吞掉的单点错误仍应 `logger.warning` 带上下文，但不得静默丢弃栈。
+
+### 6. COS list_objects 健壮性（R206）
+
+COS v1 `list_objects` 无 `Delimiter` 时不返回 `NextMarker` → 回退到**末位 Key** 续传；列举必须 `try/except` 保护，
+瞬时错误只跳过该工作流而非中断整批回填。
+
+### 7. 测试隔离与 flake 判别（R210 / R211，详见 news-auto-testing）
+
+- 测试内对 `data/` 下文件的 `unlink`/`write` 必须重定向到 `tmp_path`（OS-TEMP 路径 safe-delete 守卫放行，非 TEMP 路径 FAIL CLOSED）。
+- 全量偶发 1 failed：**先单跑该用例**——通过=预存 flake（顺序/共享状态）→ 修根因；失败=真缺陷→定位代码。
+- 全量 pytest 前设独立 `TEMP`（如 `backend/.pytest_tmp`），避开 pytest 自身 numbered-tempdir GC 触发守卫。
+
 ## 参考
 
 - [meta-rules.md](references/meta-rules.md) — 元规范完整规则与上下文
 - [coding-standards.md](references/coding-standards.md) — 各语言详细编码规范
 - [lessons-learned.md](references/lessons-learned.md) — 历史复盘与经验教训
+- [diagnostic-standards.md](references/diagnostic-standards.md) — 会话复盘提炼的诊断与编码标准（DS-1~DS-16：异常处理/时区/打包回退/元数据/重命名/测试隔离/安装包图标/frozen 配置加载/安装包配置完整性/HLS 冷启动/微信隐私合规/媒体特性可开关化与真静音/枚举校验器语义对齐，含四维度复盘）
 - [faq.md](references/faq.md) — 常见问题解答
 - [_shared/references/](../_shared/references/) — 跨技能共享主题

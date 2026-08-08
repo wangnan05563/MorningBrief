@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager
 
 from app.core.exceptions import ParamError
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.models.channel import Channel
 from app.models.queue_config import QueueConfig
 from app.models.workflow import (
@@ -148,7 +148,7 @@ class QueueService:
         stmt = (
             update(Workflow)
             .where(Workflow.id == workflow_id, Workflow.status == WorkflowStatus.queued.value)
-            .values(status=WorkflowStatus.cancelled.value, finished_at=utcnow_naive())
+            .values(status=WorkflowStatus.cancelled.value, finished_at=localnow_naive())
         )
         result = await self.db.execute(stmt)
         await self.db.commit()
@@ -238,6 +238,18 @@ class QueueService:
         )
         return wf_id
 
+    async def batch_delete_tasks(self, workflow_ids: list[str]) -> dict:
+        """批量删除队列任务（委托 WorkflowService 执行事务级联删除）。
+
+        队列任务本质是 Workflow 记录，复用 workflow 批量删除的完整级联逻辑
+        （play_log/play_progress → episode → review → script → material 重置 pending
+         → workflow_step → workflow），避免重复实现导致逻辑漂移。
+        running/queued 状态由 WorkflowService 统一拒绝（worker 可能正在写或即将取出）。
+        任一 ID 不存在或含 blocked 状态则整批回滚，绝不留下部分删除的孤儿数据。
+        """
+        from app.services.workflow_service import WorkflowService
+        return await WorkflowService(self.db).batch_delete_workflows(workflow_ids)
+
     async def get_queue_config(self) -> dict:
         """获取执行模式配置。首次调用时自动初始化默认配置。"""
         config = await self.db.get(QueueConfig, 1)
@@ -277,7 +289,7 @@ class QueueService:
             self.db.add(config)
         config.execution_mode = mode
         config.max_concurrent = max_concurrent
-        config.updated_at = utcnow_naive()
+        config.updated_at = localnow_naive()
         await self.db.commit()
 
         # 通知调度器更新内存配置（延迟生效）

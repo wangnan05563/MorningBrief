@@ -16,7 +16,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.cos.client import cos_client, is_cos_configured
 from app.models import PlayLog, PlayProgress, User
 
@@ -51,7 +51,7 @@ class PlayService:
         # 项目约定：所有时间字段存为本地 naive datetime（香港 UTC+8，无夏令时）
         # 与 PlayProgress 其他表、StatsService 趋势切分逻辑一致，避免 UTC vs 本地 8 小时偏差
         # C 端读 COS 对象的 updated_at 直接展示，本地时间无需前端再转时区
-        now_str = utcnow_naive().isoformat()
+        now_str = localnow_naive().isoformat()
         completed_flag = 1 if completed else 0
         payload = {
             "user_id": user_id,
@@ -86,7 +86,7 @@ class PlayService:
             position=position,
             duration=duration,
             completed=completed_flag,
-            updated_at=utcnow_naive(),
+            updated_at=localnow_naive(),
         )
         stmt = stmt.on_conflict_do_update(
             index_elements=["user_id", "episode_id"],
@@ -124,7 +124,7 @@ class PlayService:
                         position=position,
                         duration=duration,
                         completed=completed_flag,
-                        played_at=utcnow_naive(),
+                        played_at=localnow_naive(),
                     )
                 )
                 # 同步累加用户累计收听期数（与 play_count 口径一致）

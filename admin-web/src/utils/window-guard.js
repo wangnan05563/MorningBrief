@@ -197,7 +197,13 @@ function _installHooks() {
   XMLHttpRequest.prototype.send = function (body) {
     if (this._guardBlocked) {
       console.debug('[window-guard] 页面隐藏时阻止 XHR.send:', this._guardUrl)
-      // 不调用原始 send，请求被静默丢弃
+      // 主动触发 error 事件，让 axios 的 Promise 能够 reject，
+      // 否则调用方的 loading 状态永远无法解除（如登录按钮卡死）
+      const errorEvent = new Event('error')
+      this.dispatchEvent(errorEvent)
+      // 同时标记 readyState 为 DONE，确保 onreadystatechange 也能触发
+      this.readyState = 4
+      this.dispatchEvent(new Event('readystatechange'))
       return
     }
     return _orig.xhrSend.call(this, body)

@@ -17,7 +17,7 @@ from typing import Optional
 
 from app.config import get_settings
 from app.core.simhash import compute
-from app.core.timeutil import utcnow_naive
+from app.core.timeutil import localnow_naive
 from app.database import AsyncSessionLocal
 from app.models import Material, Channel
 from app.models.material import MaterialSourceType, MaterialStatus
@@ -88,7 +88,7 @@ async def _insert_material(prepared: dict, workflow_id: str, session, channel_id
         simhash=simhash,
         workflow_id=workflow_id,
         channel_id=channel_id,
-        crawled_at=utcnow_naive(),
+        crawled_at=localnow_naive(),
         cover_url=prepared.get("cover_url"),
     )
     session.add(material)
@@ -422,7 +422,7 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
     # published_at 为 None 的条目保留（无法判断年龄，可能只是源未提供发布时间）。
     max_age_days = settings.CRAWLER_MAX_ARTICLE_AGE_DAYS
     if max_age_days > 0 and all_entries:
-        age_cutoff = utcnow_naive() - timedelta(days=max_age_days)
+        age_cutoff = localnow_naive() - timedelta(days=max_age_days)
 
         # 统计每个源的最新发布时间，更新 source_details 供前端展示源新鲜度
         source_newest: dict[str, object] = {}

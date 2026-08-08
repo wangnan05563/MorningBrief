@@ -39,7 +39,7 @@ from typing import Optional
 # 复用项目时区工具：所有时间字段存为本地 naive datetime（香港 UTC+8）
 # 避免与 stats_service 查询窗口（datetime.combine 本地时间）冲突
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from app.core.timeutil import utcnow_naive  # noqa: E402
+from app.core.timeutil import localnow_naive  # noqa: E402
 from app.paths import resolve_db_path  # noqa: E402
 
 
@@ -102,14 +102,14 @@ def _parse_updated_at(raw: object) -> str:
 
     play_progress.updated_at 由旧版 report_progress 写入，可能为：
     - datetime.now(timezone.utc) 旧版（UTC，带时区后缀或 naive UTC）
-    - utcnow_naive() 新版（本地 naive）
+    - localnow_naive() 新版（本地 naive）
     - SQLite CURRENT_TIMESTAMP（UTC 字符串）
 
     回填策略：优先尝试解析为 ISO 格式，失败则用当前本地时间兜底。
     历史时间的精度损失可接受（统计按日聚合，不依赖小时级精度）。
     """
     if raw is None:
-        return utcnow_naive().isoformat()
+        return localnow_naive().isoformat()
     s = str(raw)
     try:
         # 兼容 '2026-07-15 14:25:41.671089' 与 ISO 8601 两种格式
@@ -124,7 +124,7 @@ def _parse_updated_at(raw: object) -> str:
         return dt.isoformat()
     except (ValueError, TypeError):
         # 解析失败：用当前时间兜底，避免回填中断
-        return utcnow_naive().isoformat()
+        return localnow_naive().isoformat()
 
 
 def backfill(dry_run: bool = True, batch_size: int = 100) -> dict:

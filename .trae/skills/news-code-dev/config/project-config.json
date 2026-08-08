@@ -586,5 +586,54 @@
             "skip_phases": ["phase_2_runtime_check"],
             "note": "hotfix 可跳过运行时验证，但必须通过静态+功能验证"
         }
+    },
+    "packaging_mode_storage": {
+        "description": "打包模式(exe)路径解析与外部存储双写差异配置（R186/R187）",
+        "exe_detection": "sys.frozen",
+        "cos_configured_fn": "is_cos_configured",
+        "local_cache_dir": "data/audio_cache",
+        "static_mount_point": "/audio",
+        "severity": "CRITICAL"
+    },
+    "external_storage_list_fallback": {
+        "description": "列表接口本地空须回退 DB 持久化远程 URL（R187/R191）",
+        "enabled": true,
+        "severity": "CRITICAL",
+        "db_url_fields": ["Script.segments.audio_url", "Episode.audio_url", "Review.audio_url"],
+        "remote_path_label": "云端(COS)",
+        "remote_size_bytes": 0,
+        "fallback_when_local_empty": true
+    },
+    "binary_response_contract": {
+        "description": "二进制音频/文件响应须原始 StreamingResponse/FileResponse（R189）",
+        "enabled": true,
+        "severity": "HIGH",
+        "forbidden_envelope": true,
+        "allowed_response_types": ["StreamingResponse", "FileResponse"],
+        "stream_chunk_bytes": 1048576,
+        "media_type_by_ext": {
+            "mp3": "audio/mpeg",
+            "wav": "audio/wav",
+            "m4a": "audio/mp4"
+        }
+    },
+    "audio_proxy_ssrf": {
+        "description": "音频代理 SSRF 域名白名单 + client 复用（R190）",
+        "enabled": true,
+        "severity": "CRITICAL",
+        "allowed_domains_from_settings": true,
+        "reuse_client_fn": "uploader._get_client",
+        "block_non_allowed_host": true
+    },
+    "detail_panel_lazy_load": {
+        "description": "详情页面板懒加载配置（R192/R193/R194/R195）",
+        "enabled": true,
+        "panels": ["materials", "tts_segments", "episodes"],
+        "activation_model": "activePanels",
+        "change_handler": "handlePanelChange",
+        "remote_audio_via_proxy": true,
+        "proxy_endpoint": "/admin/api/v1/audio/proxy",
+        "remote_delete_protected": true,
+        "remote_path_label": "云端(COS)"
     }
 }

@@ -2,7 +2,7 @@
 
 流程(LLD 第 4 步 stitch):
 1. 下载 TTS 分段音频,段间插入 0.5s 静音过渡,拼接为主音频
-2. (可选)叠加低音量 BGM 垫底,TTS 段间静音处 BGM 自然浮现
+2. (可选)叠加低音量 BGM 垫底;TTS 段间静音处默认真实静音(可由 bgm_gap_mode 切换为 BGM 桥接)
 3. 查询当日广告投放,中间位置插入广告
 4. 开头/结尾广告与主音频最终拼接,加静音过渡
 5. 时长校验(目标时长 ±20%)后上传 COS,key 含频道名+workflow_id 防覆盖
@@ -34,7 +34,8 @@ from app.workflow.stitch.ffmpeg_wrapper import (
     generate_bgm_tail,
     generate_silence,
     get_audio_duration,
-    mix_bgm,
+    build_bgm_overlay,
+    build_bgm_bridge,
     run_ffmpeg,
 )
 from app.workflow.tts.uploader import upload_to_cos, upload_hls_directory
@@ -73,21 +74,33 @@ def _slugify_channel_name(name: str | None) -> str:
     return cleaned[:32] or "default"
 
 
-async def _resolve_channel_bgm(channel_id: int | None) -> tuple[str, Path | None, float, float, int | None]:  # NOSONAR
-    """解析频道级配置（BGM + 段间静音 + 最短时长，频道未配置时回退全局 settings）。
+async def _resolve_channel_bgm(channel_id: int | None) -> tuple[str, Path | None, float, float, int | None, str]:  # NOSONAR
+    """解析频道级配置（BGM + 段间静音 + 最短时长 + 段间 BGM 模式，频道未配置时回退全局 settings）。
 
-    一次查询同时取 name + bgm_path + bgm_volume + segment_gap_sec，避免多次 DB 往返。
+    一次查询同时取 name + bgm_path + bgm_volume + segment_gap_sec + bgm_gap_mode，避免多次 DB 往返。
 
     Returns:
         slug: 频道名 slug（用于 COS key 命名）
         bgm_path: BGM 文件绝对路径，None 表示无可用 BGM
         bgm_volume: BGM 音量（0.0-1.0），频道未配时取全局值
         gap_sec: 段间静音时长（秒），频道未配时取全局值
+        bgm_gap_mode: 段间 BGM 模式（"silence"/"bridge"），频道未配时取全局值
     """
     slug = "default"
     bgm_rel = (settings.BGM_PATH or "").strip()
     bgm_volume = float(getattr(settings, "BGM_VOLUME", 0.15) or 0.15)
-    gap_sec = float(getattr(settings, "SEGMENT_GAP_SEC", 0.5) or 0.5)
+    # 段间静音时长：优先用全局配置。
+    # 注意：必须区分"未配置(None)"与"显式配置为 0"——`or 0.5` 会把合法的 0.0
+    # 兜底成 0.5，导致"段间静音=0 无停顿"在全局配置下失效。
+    _gap_cfg = getattr(settings, "SEGMENT_GAP_SEC", None)
+    gap_sec = 0.5 if _gap_cfg is None else float(_gap_cfg)
+    # 段间 BGM 模式：频道级优先，未配置回退全局 settings.BGM_GAP_MODE（默认 silence）
+    _gap_mode_cfg = getattr(settings, "BGM_GAP_MODE", "silence")
+    gap_mode = "silence" if _gap_mode_cfg is None else str(_gap_mode_cfg)
+    if gap_mode not in ("silence", "bridge"):
+        gap_mode = "silence"
+    # 频道级最短时长：未配置时回退全局 target×0.80，初始化避免 channel_id=None 时 NameError
+    channel_min_duration: int | None = None
 
     if channel_id:
         try:
@@ -108,6 +121,10 @@ async def _resolve_channel_bgm(channel_id: int | None) -> tuple[str, Path | None
                         channel_min_duration = int(ch.min_duration_sec)
                     else:
                         channel_min_duration = None
+                    # 频道级段间 BGM 模式优先于全局配置
+                    if ch.bgm_gap_mode is not None:
+                        _ch_mode = str(ch.bgm_gap_mode)
+                        gap_mode = _ch_mode if _ch_mode in ("silence", "bridge") else "silence"
         except Exception as e:
             logger.warning("查询频道配置失败 channel_id=%s: %s", channel_id, e)
 
@@ -130,7 +147,7 @@ async def _resolve_channel_bgm(channel_id: int | None) -> tuple[str, Path | None
             else:
                 logger.warning("BGM 文件不存在，降级为无 BGM 模式: %s", bgm_rel)
 
-    return slug, bgm_path, bgm_volume, gap_sec, channel_min_duration
+    return slug, bgm_path, bgm_volume, gap_sec, channel_min_duration, gap_mode
 
 
 def _get_duration_range(min_duration_sec: int | None = None) -> tuple[int, int]:
@@ -213,7 +230,7 @@ async def concat(  # NOSONAR
         # TTS 段 duration 由 TTS 步骤上报，此处累加 + 段间静音得到预估总时长
         # 段间静音时长取频道级配置，回退全局 settings.SEGMENT_GAP_SEC
         seg_durations = [s.get("duration", 0) for s in segments]
-        channel_slug, bgm_path, bgm_volume, gap_sec, _min_dur = await _resolve_channel_bgm(channel_id)
+        channel_slug, bgm_path, bgm_volume, gap_sec, _min_dur, bgm_gap_mode = await _resolve_channel_bgm(channel_id)
         estimated_total = sum(seg_durations) + max(0, len(seg_durations) - 1) * gap_sec
         target_sec = getattr(settings, "TARGET_DURATION_SEC", 600) or 600
         logger.info(
@@ -223,8 +240,8 @@ async def concat(  # NOSONAR
         )
 
         # 3. 主音频拼接：TTS 段之间插入静音过渡
-        # 段间静音的作用：① 避免 TTS 段突兀衔接 ② BGM 混音时在此时段自然浮现
-        # 形成节奏感。无 BGM 时静音过渡仍提供段间停顿，提升收听体验
+        # 段间静音的作用：① 避免 TTS 段突兀衔接 ② 无 BGM 时仍提供段间停顿,提升收听体验
+        # 有 BGM 时,叠加轨在段间复用纯静音(gap_path),使停顿可被听觉感知(见 3.5)
         gap_path = str(tmp_dir / "gap.mp3")
         await generate_silence(gap_sec, gap_path)
 
@@ -239,18 +256,42 @@ async def concat(  # NOSONAR
 
         # 3.5 (可选)叠加低音量 BGM 垫底
         # 频道级 BGM 优先（channel.bgm_path + channel.bgm_volume），回退到全局配置
-        # BGM 整段循环/截断到主音频长度，TTS 段间静音处 BGM 自然变成主音
+        # bgm_gap_mode 控制段间静音处的处理：
+        #   "silence"（默认）= 按 TTS 分段切片 BGM，段间复用 gap_path 纯静音 → 真实停顿
+        #   "bridge"            = 旧版：循环 BGM 均匀铺满整段（含段间静音）→ BGM 桥接无停顿感
         if bgm_path:
-            bgm_mix_path = str(tmp_dir / "main_bgm.mp3")
-            await mix_bgm(
-                main_path, str(bgm_path), bgm_mix_path,
-                volume=bgm_volume,
-            )
-            main_path = bgm_mix_path
-            logger.info(
-                "BGM 混音完成 workflow_id=%s volume=%.2f",
-                workflow_id, bgm_volume,
-            )
+            if bgm_gap_mode == "bridge":
+                # 旧版 BGM 桥接：整段循环 BGM 均匀叠加，段间静音处表现为 BGM 桥接
+                bgm_mix_path = str(tmp_dir / "main_bgm.mp3")
+                await build_bgm_bridge(
+                    main_path, str(bgm_path), bgm_volume, bgm_mix_path, str(tmp_dir),
+                )
+                main_path = bgm_mix_path
+                logger.info(
+                    "BGM 桥接模式 workflow_id=%s volume=%.2f（段间为 BGM 桥接）",
+                    workflow_id, bgm_volume,
+                )
+            else:
+                # 默认 silence：段间真实静音
+                bgm_overlay_path = str(tmp_dir / "bgm_overlay.mp3")
+                await build_bgm_overlay(
+                    str(bgm_path), seg_durations, gap_path,
+                    bgm_volume, bgm_overlay_path, str(tmp_dir),
+                )
+                bgm_mix_path = str(tmp_dir / "main_bgm.mp3")
+                await run_ffmpeg([
+                    resolve_ffmpeg_path(), "-y",
+                    "-i", main_path, "-i", bgm_overlay_path,
+                    "-filter_complex", "amix=inputs=2:duration=first",
+                    "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
+                    "-ar", "44100", "-ac", "1",
+                    bgm_mix_path,
+                ])
+                main_path = bgm_mix_path
+                logger.info(
+                    "BGM 段间静音模式 workflow_id=%s volume=%.2f（段间静音处为纯静音）",
+                    workflow_id, bgm_volume,
+                )
         else:
             logger.info("无 BGM 配置,跳过混音 workflow_id=%s", workflow_id)
 
@@ -310,7 +351,11 @@ async def concat(  # NOSONAR
         # - 不足时优先用 BGM 自然延续兜底，无 BGM 时降级静音填充
         # 安全边界：atempo 最多 1.15x；补足最多追加 min_allowed×0.20 秒，避免无限补
         duration = await get_audio_duration(final_path)
-        min_allowed, max_allowed = _get_duration_range(channel_id)
+        # 传入频道级最短时长（_min_dur）而非 channel_id：
+        # _resolve_channel_bgm 已解析频道 min_duration_sec，此处应透传该值，
+        # 原实现误把 channel_id（小整数）当作 min_duration_sec 传入，导致
+        # 频道级最短时长配置完全失效（且 channel_id 大小被当成秒数下限）。
+        min_allowed, max_allowed = _get_duration_range(_min_dur)
         if duration > max_allowed:
             tempo_needed = duration / max_allowed
             if tempo_needed <= 1.15:

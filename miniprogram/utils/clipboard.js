@@ -74,18 +74,25 @@ function _setClipboardOnce(text) {
  * @returns {Promise<boolean>} 成功返回 true，失败返回 false（不抛错，便于调用方兜底）
  */
 async function copyText(text) {
-  // 1. 先直接尝试复制（已授权场景一步成功，省去授权检查开销）
-  if (await _setClipboardOnce(text)) return true;
+  // 若尚未授权且基础库支持隐私协议，先触发授权弹窗，避免首次 setClipboardData 静默失败
+  // 背景：真机调试下 __usePrivacyCheck__ 开启后，隐私协议未同意时 setClipboardData 会直接 fail，
+  // 先授权再复制可让首点即弹隐私弹窗、用户同意后一次成功，体验优于「先失败再重试」。
+  // 已授权用户（globalData.privacyAuthorized=true）跳过此分支，直接复制省一次 RTT。
+  const app = typeof getApp === 'function' ? getApp() : null;
+  const notAuthorized = !app || !app.globalData || !app.globalData.privacyAuthorized;
+  if (notAuthorized && typeof wx.requirePrivacyAuthorize === 'function') {
+    await ensurePrivacyAuthorized();
+    await new Promise((r) => setTimeout(r, 200));
+    if (await _setClipboardOnce(text)) return true;
+  } else if (await _setClipboardOnce(text)) {
+    return true;
+  }
 
-  // 2. 首次失败：可能是隐私授权未同意（errCode:104），主动触发授权弹窗
-  // app.js onLaunch 已同步注册 onNeedPrivacyAuthorization，此处会弹隐私协议弹窗
+  // 兜底重试：覆盖「已授权场景首调仍失败」与「授权刚生效的瞬态竞态」
   await ensurePrivacyAuthorized();
-
-  // 3. 授权后重试（延迟 200ms 等待授权状态在基础库内部生效）
   await new Promise((r) => setTimeout(r, 200));
   if (await _setClipboardOnce(text)) return true;
 
-  // 4. 仍失败：延迟 500ms 再试一次（覆盖授权刚同意的瞬态竞态）
   await new Promise((r) => setTimeout(r, 500));
   return _setClipboardOnce(text);
 }
