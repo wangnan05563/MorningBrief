@@ -121,6 +121,18 @@ const routes = [
         meta: { title: 'AI 服务', icon: 'Cpu', group: 'AI 自动化', requireRole: 'admin' },
       },
       {
+        path: 'cos-config',
+        name: 'CosConfig',
+        component: () => import('../views/cos/CosConfig.vue'),
+        meta: { title: '云端配置', icon: 'Cloudy', group: '云端存储', requireRole: 'admin' },
+      },
+      {
+        path: 'cos-files',
+        name: 'CosFiles',
+        component: () => import('../views/cos/CosFiles.vue'),
+        meta: { title: '文件管理', icon: 'Files', group: '云端存储', requireRole: 'admin' },
+      },
+      {
         path: 'notification',
         name: 'NotificationConfig',
         component: () => import('../views/notification/NotificationConfig.vue'),

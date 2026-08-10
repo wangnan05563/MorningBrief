@@ -141,8 +141,9 @@ Page({
    * 用户在 chooseAvatar 选完头像后回调
    * 返回的是微信临时文件路径（wxfile://tmp_xxx），小程序关闭后失效
    *
-   * 临时路径仅用于本会话内 UI 预览，保存时由 onConfirmEditProfile 上传到后端
-   * 持久化为 /avatars/{user_id}_{ts}.jpg，下次拉取 User.avatar 即可正常加载
+   * 临时路径仅用于本会话内 UI 预览，保存时由 onConfirmEditProfile 上传
+   * 持久化：COS 已配置走直传，返回 CDN/COS 公开直链；否则回退后端代理返回
+   * /avatars/{user_id}_{ts}.jpg，下次拉取 User.avatar 即可正常加载
    */
   onChooseAvatar(e) {
     const tempPath = (e && e.detail && e.detail.avatarUrl) || '';
@@ -178,12 +179,14 @@ Page({
   },
 
   /**
-   * 确认保存资料：头像先上传后端拿 URL，再调 updateUserProfile 写回 User 表
+   * 确认保存资料：头像先上传拿持久 URL，再调 updateUserProfile 写回 User 表
    *
-   * 流程：
-   * 1. editAvatar 是 wxfile:// 临时路径（chooseAvatar 返回）→ 先 uploadAvatar 上传后端拿持久 URL
-   *    editAvatar 已是 http/https URL（旧基础库 getUserProfile 返回的微信 CDN URL）→ 直接用
-   * 2. 拿到 avatar URL 后调 updateUserProfile 写回 User 表，评论/收藏/统计等所有读 User 表的接口都能用上
+   * 上传策略（见 services/api.js uploadAvatar）：
+   * 1. COS 已配置 → 小程序拿 PUT 预签名直传 COS，返回 CDN/COS 公开直链
+   * 2. COS 未配置 / 直传失败 → 回退后端代理上传，返回 /avatars/... 完整 URL
+   *
+   * editAvatar 已是 http/https URL（旧基础库 getUserProfile 返回的微信 CDN URL）→ 直接用
+   * 拿到 avatar URL 后调 updateUserProfile 写回 User 表，评论/收藏/统计等所有读 User 表的接口都能用上
    */
   async onConfirmEditProfile() {
     const { editAvatar, editNickname } = this.data;

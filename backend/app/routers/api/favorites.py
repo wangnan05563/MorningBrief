@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import UserPayload, get_current_user, get_optional_user
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
+from app.core.write_gate import write_lock
 from app.database import get_db
 from app.models import Favorite, Episode, EpisodeStatus
 from app.services.user_service import get_user_openid
@@ -107,9 +108,10 @@ async def add_favorite(
         return success(data={"success": True, "favorite_id": fav.id, "already_favorited": True})
 
     new_fav = Favorite(user_id=openid, episode_id=req.episode_id)
-    db.add(new_fav)
-    await db.commit()
-    await db.refresh(new_fav)
+    async with write_lock():
+        db.add(new_fav)
+        await db.commit()
+        await db.refresh(new_fav)
     return success(data={"success": True, "favorite_id": new_fav.id, "already_favorited": False})
 
 
@@ -122,13 +124,14 @@ async def remove_favorite(
     """取消收藏：幂等，不存在也返回成功。"""
     openid = await get_user_openid(db, user.user_id)
 
-    await db.execute(
-        delete(Favorite).where(
-            Favorite.user_id == openid,
-            Favorite.episode_id == episode_id,
+    async with write_lock():
+        await db.execute(
+            delete(Favorite).where(
+                Favorite.user_id == openid,
+                Favorite.episode_id == episode_id,
+            )
         )
-    )
-    await db.commit()
+        await db.commit()
     return success(data={"success": True})
 
 

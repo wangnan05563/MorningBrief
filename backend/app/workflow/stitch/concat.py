@@ -55,10 +55,6 @@ ABSOLUTE_MIN_DURATION_SEC = 180
 MID_AD_INSERT_AT_DEFAULT = 300
 # 广告与主音频之间的静音过渡时长(秒)
 SILENCE_DURATION = 0.5
-# 素材稀缺场景的段数判定阈值：总段数（含 intro/outro）< 5 即视为稀缺
-# 对应正文段 < 3（与 rewriter.MIN_VALID_SEGMENTS 对齐）
-# 稀缺场景下放宽 padding 上限，允许用 BGM/静音补足全部缺口
-SPARSE_SEGMENT_THRESHOLD = 5
 
 
 def _slugify_channel_name(name: str | None) -> str:
@@ -381,19 +377,18 @@ async def concat(  # NOSONAR
             # 无 BGM 时降级静音填充（最后选择，仅保证不失败，体验略差）
             # 场景：rewriter 5.6 字数补足仍不够（LLM 严重不遵守字数约束 / selected 素材耗尽）
             shortfall = (min_allowed - duration) + 2
-            # 上限保护：单次最多补 target×0.30 秒，超出说明 rewriter 严重失效，应直接失败暴露问题
-            # 例外：素材稀缺场景（总段数 < SPARSE_SEGMENT_THRESHOLD，即正文段 < 3）时
-            # rewriter 已动态下调段数下限，此处同步放宽 padding 上限到全部缺口，
-            # 避免短节目因 padding 不足而拼接失败（R23 自动调整 / R110 自动降级）
-            max_supplement = int(target_sec * 0.30)
-            if len(segments) < SPARSE_SEGMENT_THRESHOLD:
-                logger.warning(
-                    "素材稀缺场景（总段数 %d < %d），放宽 padding 上限从 %ds 到 %ds",
-                    len(segments), SPARSE_SEGMENT_THRESHOLD,
-                    max_supplement, shortfall,
+            # 严重失效检测：原时长不足下限的一半，说明 rewriter 严重失效
+            # （素材极度稀缺 / 字数严重不足），应直接失败暴露问题，而非用大量 BGM 静音硬凑。
+            # 否则一律补足到下限 + 2s 缓冲，保证拼接不失败：
+            # - 频道级 min_duration_sec 已下调下限的冷门频道，自然只补到更低的下限，
+            #   不会出现"短节目被大量 BGM 硬凑"；
+            # - 素材稀缺日（如本例 247s vs 480s 下限）也不会因 padding 上限而拼接失败。
+            if duration < min_allowed * 0.5:
+                raise StitchError(
+                    f"节目时长 {duration}s 严重不足（< 下限 {min_allowed}s 的 50%），"
+                    f"疑似 rewriter 严重失效或素材极度稀缺，已停止拼接"
                 )
-                max_supplement = shortfall
-            supplement_sec = min(shortfall, max_supplement)
+            supplement_sec = shortfall
 
             logger.warning(
                 "时长不足兜底 workflow_id=%s 时长=%ds < 下限=%ds，补足 %ds（BGM=%s）",

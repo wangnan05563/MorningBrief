@@ -118,6 +118,7 @@ const groupConfig = [
   { name: '广告管理', icon: 'PictureFilled' },
   { name: '数据分析', icon: 'DataLine' },
   { name: 'AI 自动化', icon: 'Monitor' },
+  { name: '云端存储', icon: 'Cloudy' },
   { name: '系统配置', icon: 'Setting' },
   { name: '维护工具', icon: 'Tools' },
   { name: '帮助', icon: 'QuestionFilled' },

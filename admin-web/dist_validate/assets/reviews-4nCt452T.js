@@ -1,1 +1,0 @@
-import{a as t}from"./index-DSJkOyuy.js";const o=(e={})=>t.get("/reviews",{params:e}),l=(e,i,s=null,n=null)=>t.post(`/reviews/${e}/action`,{action:i,reason:s,segment_id:n}),c=(e,i,s=null)=>t.post("/reviews/batch-action",{review_ids:e,action:i,reason:s});export{c as b,l as h,o as l};

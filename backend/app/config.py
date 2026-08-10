@@ -142,8 +142,19 @@ class Settings(BaseSettings):
     #   打包后由 app/paths.py.resolve_db_path() 解析为 exe 同级 ./data/news.db
     SQLITE_DB_PATH: str = "./data/news.db"
     SQLITE_JOURNAL_MODE: str = "WAL"     # WAL 模式：读不阻塞写
-    SQLITE_BUSY_TIMEOUT_MS: int = 5000   # 写冲突时自动等待 5 秒
+    # 写冲突时自动等待时间（毫秒）。
+    # P1 安全网：P0-1 已用全局写锁把应用层提交串行化，正常不会出现并发写竞争；
+    # 此处保留合理余量，兜底极端场景（如启动迁移/后台落库与请求写短暂重叠）下的 BUSY 等待，
+    # 避免瞬时 BUSY 直接报错。过长会掩盖真实死锁，10s 是安全上限。
+    SQLITE_BUSY_TIMEOUT_MS: int = 10000  # 写冲突时自动等待 10 秒（原 5000）
     SQLITE_SYNCHRONOUS: str = "NORMAL"   # NORMAL：性能与持久性平衡（WAL 下安全）
+
+    # ---- 水平扩展（只读场景） ----
+    # uvicorn worker 数。默认 1：单进程事件循环 + 进程内写锁 + 进程内 TTLCache，
+    # 三者强耦合，workers>1 会破坏"全局写锁串行化"与"缓存一致性"（各 worker 独立缓存/锁）。
+    # 因此 workers>1 仅在【纯读 / 几乎无写】或已切换到 MySQL+Redis 共享态（见架构决策）时安全。
+    # 当前默认 1；如需读扩展，请同步将缓存/写锁改为 Redis/分布式锁后再调大。
+    UVICORN_WORKERS: int = 1
 
     # ---- 缓存（V1.2 替代 Redis，进程内 TTLCache 无需外部配置） ----
     CACHE_DEFAULT_TTL_SEC: int = 300     # 默认 TTL 5 分钟
@@ -190,7 +201,10 @@ class Settings(BaseSettings):
     TTS_RETRY_ATTEMPTS: int = 3
 
     # ---- TTS Provider 选择（前端可在 ai_config 表覆盖） ----
-    # 可选值：aliyun / edge / tencent；edge 为微软免费方案，无需 API Key
+    # 可选值：aliyun / edge / tencent / kokoro / piper
+    # - edge：微软免费方案，无需 API Key（云端，需联网）
+    # - kokoro：Apache 2.0 本地离线神经网络 TTS，免费高质量，需 pip install kokoro misaki[zh]
+    # - piper：MIT 本地离线轻量 TTS，免费，需 pip install piper-tts + 下载语音模型
     TTS_PROVIDER: str = "aliyun"
 
     # ---- Edge-TTS（微软免费方案，无需 API Key） ----
@@ -210,6 +224,36 @@ class Settings(BaseSettings):
     # 腾讯云 TTS 服务 endpoint（云 API 3.0 入口）
     # 仅在腾讯云变更域名时才需修改，默认值对齐官方文档
     TENCENT_TTS_ENDPOINT: str = "https://tts.tencentcloudapi.com/"
+
+    # ---- Kokoro TTS（Apache 2.0 本地离线神经网络 TTS，免费高质量） ----
+    # 启用需：pip install kokoro misaki[zh]（中文 G2P），首次使用会从 HuggingFace
+    # 下载模型权重（中文 ~165MB），之后完全离线。详见 requirements-tts-extra.txt
+    # 语言代码：z=中文普通话 / a=美式 / b=英式 / e=西 / f=法 / h=印地 / i=意 / j=日 / p=葡
+    KOKORO_LANG: str = "z"
+    # 音色 ID（须与 lang 匹配）：z 系 zf_*(女)/zm_*(男)，如 zf_xiaoxiao(新闻女声)
+    KOKORO_VOICE: str = "zf_xiaoxiao"
+    # 语速倍率（>1 加快，<1 减慢），0 视为默认 1.0
+    KOKORO_SPEED: float = 1.0
+
+    # ---- Piper TTS（MIT 本地离线轻量 TTS，免费） ----
+    # 启用需：pip install piper-tts，并下载语音模型（python -m piper.download_voices <voice>）
+    # 模型为 .onnx + .onnx.json 文件，置于 PIPER_VOICE_DIR 目录
+    # 中文推荐：zh_CN-huayan-medium（女声，22050Hz）
+    PIPER_VOICE: str = "zh_CN-huayan-medium"
+    # 模型文件目录（含 {PIPER_VOICE}.onnx 与 .onnx.json），相对/绝对路径皆可
+    PIPER_VOICE_DIR: str = "./models/piper"
+    # 语速（length_scale，>1 变慢，<1 变快），0 视为默认 1.0
+    PIPER_LENGTH_SCALE: float = 1.0
+    # 音量 [0, 1]，0 视为默认 0.5
+    PIPER_VOLUME: float = 0.5
+    # 音色随机性（noise_scale），影响自然度，默认 0.667
+    PIPER_NOISE_SCALE: float = 0.667
+
+    # ---- TTS 交叉音色（段落间轮流换声，避免同质化） ----
+    # JSON 字符串：{"enabled": bool, "strategy": "round_robin"|"random"|"interval",
+    # "interval": int, "voices": {provider: [voice_key, ...]}}
+    # 仅 edge/aliyun/tencent/kokoro 支持多音色；piper 为单说话人模型，交叉音色不生效（参数被忽略）。
+    TTS_CROSS_VOICE: str = "{}"
 
     # ---- 腾讯云 COS（对象存储 + C 端 API 共享层） ----
     COS_SECRET_ID: str = ""

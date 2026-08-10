@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 
 _TTL_CHANNELS = 300
 
+# 更新操作的哨兵：区分"调用方未传该字段（保持原值）"与"显式传 None（清空为继承动态）"
+# material_lookback_days 的语义里 None=继承系统动态回溯，前端"取消勾选自定义"会显式发 null，
+# 故不能用 None 既当默认值又当清空值；用独立哨兵让 null 能被真正写入。
+_UNSET = object()
+
 
 class ChannelService:
     """频道管理服务（基于传入的 AsyncSession，无独立状态）。"""
@@ -70,11 +75,12 @@ class ChannelService:
         keywords: Optional[str] = None,
         min_duration_sec: Optional[int] = None,
         display_order: int = 0,
+        material_lookback_days: Optional[int] = None,
     ) -> Channel:
         """新增频道。name 唯一约束，冲突抛 ValueError。
 
         支持 schedule_time（定时触发）与 4 个提示词字段 + BGM 配置 + 段间静音 + 思考问题开关
-        + RSS 源白名单 + 关键词过滤 + 最短时长 + 展示排序权重，均为可选。
+        + RSS 源白名单 + 关键词过滤 + 最短时长 + 展示排序权重 + 素材周期回溯天数，均为可选。
         """
         channel = Channel(
             name=name, description=description, is_active=1,
@@ -92,6 +98,7 @@ class ChannelService:
             keywords=keywords,
             min_duration_sec=min_duration_sec,
             display_order=display_order,
+            material_lookback_days=material_lookback_days,
         )
         self.db.add(channel)
         try:
@@ -121,6 +128,7 @@ class ChannelService:
         keywords: Optional[str] = None,
         min_duration_sec: Optional[int] = None,
         display_order: Optional[int] = None,
+        material_lookback_days: Optional[int] = _UNSET,
     ) -> Channel:
         """修改频道。显式设置 updated_at（SQLite 不支持 ON UPDATE）。
 
@@ -171,6 +179,9 @@ class ChannelService:
             channel.min_duration_sec = min_duration_sec
         if display_order is not None:
             channel.display_order = display_order
+        # material_lookback_days 用哨兵区分：未传(_UNSET)保持原值；显式传 None 则清空为继承动态
+        if material_lookback_days is not _UNSET:
+            channel.material_lookback_days = material_lookback_days
         channel.updated_at = localnow_naive()
 
         try:

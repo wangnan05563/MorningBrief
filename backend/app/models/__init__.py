@@ -69,6 +69,8 @@ from app.models.notification_log import NotificationLog
 # 自动审批模块（配置表 + 统计表）
 from app.models.auto_review_config import AutoReviewConfig
 from app.models.auto_review_stat import AutoReviewStat
+# 云端 COS 配置（V1.5 新增，key-value，支持前端热更新）
+from app.models.cos_config import CosConfig
 
 __all__ = [
     # 业务表
@@ -120,4 +122,6 @@ __all__ = [
     # 自动审批模块
     "AutoReviewConfig",
     "AutoReviewStat",
+    # 云端 COS 配置
+    "CosConfig",
 ]

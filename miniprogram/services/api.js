@@ -385,21 +385,75 @@ const updateUserProfile = (data) =>
   request({ url: '/users/profile', method: 'PUT', data });
 
 /**
- * 上传用户头像到后端，返回可访问的完整 URL
+ * 向后端申请 COS 上传预签名凭证（C 端）
  *
- * wx.uploadFile 不走 request 封装，需手动构造 URL 与 header。
- * 后端返回相对路径（如 /avatars/xxx.jpg），此处拼接 baseUrl 后返回完整 URL，
- * 让 User.avatar 持久化的是完整 URL，所有 <image src> 与评论接口都无需再拼接。
+ * COS 未配置时后端返回 { cos_enabled: false }，本函数返回 null，
+ * 调用方据此回退到后端代理上传（legacyUploadAvatar）。
  *
- * @param {string} filePath - wx.chooseAvatar 返回的临时文件路径（wxfile://tmp_xxx）
+ * @param {{ filename: string, content_type?: string }} data
+ * @returns {Promise<Object|null>} { cos_enabled, upload_url, object_url, key, content_type } 或 null
+ */
+const presignCosUpload = (data) =>
+  request({ url: '/cos/presign-upload', method: 'POST', data }).catch(() => null);
+
+/**
+ * 把本地临时文件直传到 COS（PUT 预签名 URL）
+ *
+ * 微信 wx.uploadFile 仅支持 POST，无法直接 PUT 预签名 URL，故用
+ * wx.getFileSystemManager().readFile 读出 ArrayBuffer，再 wx.request PUT。
+ * COS 预签名 URL 自带鉴权，无需额外 token。
+ *
+ * @param {string} filePath 本地临时路径（wxfile://tmp_xxx）
+ * @param {string} uploadUrl PUT 预签名 URL
+ * @param {string} contentType 上传 Content-Type（COS 未签入签名，可自由带）
+ * @returns {Promise<void>} 成功 resolve；失败 reject（由调用方决定回退）
+ */
+function putFileToCos(filePath, uploadUrl, contentType) {
+  return new Promise((resolve, reject) => {
+    const fs = wx.getFileSystemManager();
+    fs.readFile({
+      filePath,
+      success: (readRes) => {
+        wx.request({
+          url: uploadUrl,
+          method: 'PUT',
+          data: readRes.data, // ArrayBuffer
+          header: { 'Content-Type': contentType || 'image/jpeg' },
+          timeout: REQUEST_TIMEOUT_MS,
+          success: (res) => {
+            // COS PUT 成功返回 200（body 为空或 XML）
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              resolve();
+            } else {
+              reject(new Error('COS 上传失败: HTTP ' + res.statusCode));
+            }
+          },
+          fail: (err) => reject(new Error((err && err.errMsg) || 'COS 上传失败')),
+        });
+      },
+      fail: (err) => reject(new Error((err && err.errMsg) || '读取头像文件失败')),
+    });
+  });
+}
+
+/**
+ * 从临时路径推断一个合法图片文件名（仅用于后端扩展名白名单校验）
+ * wx.chooseAvatar 返回的临时路径通常无扩展名，回退为 .jpg。
+ */
+function _cosFileName(filePath) {
+  const m = /\.(jpg|jpeg|png|webp|gif)$/i.exec(filePath || '');
+  return m ? 'avatar' + m[1].toLowerCase() : 'avatar.jpg';
+}
+
+/**
+ * 旧路径：头像经后端代理上传到 data/avatars 磁盘，返回可访问完整 URL
+ *
+ * @param {string} filePath 本地临时路径
+ * @param {string} hostRoot 后端 host root（去掉 /api/v1）
+ * @param {string} token 登录 token（Bearer）
  * @returns {Promise<string>} 头像完整 URL（如 http://host/avatars/1_1740000000.jpg）
  */
-function uploadAvatar(filePath) {
-  // 延迟 require：api.js 加载时 auth 模块可能尚未就绪，运行时再拿 getToken
-  const { getToken } = require('./auth');
-  // getBaseUrl() 返回 'http://host/api/v1'，去掉 /api/v1 得到 host root
-  // host root 即可访问 /avatars/ 静态挂载（main.py 中 /avatars 与 /api 同级）
-  const hostRoot = getBaseUrl().replace(/\/api\/v1\/?$/, '');
+function legacyUploadAvatar(filePath, hostRoot, token) {
   const url = hostRoot + '/api/v1/users/avatar';
   return new Promise((resolve, reject) => {
     wx.uploadFile({
@@ -407,15 +461,12 @@ function uploadAvatar(filePath) {
       filePath,
       name: 'file',
       header: {
-        // 后端 get_current_user 依赖 Authorization: Bearer <token> 校验
-        Authorization: 'Bearer ' + (getToken() || ''),
+        Authorization: 'Bearer ' + (token || ''),
       },
       success: (res) => {
-        // 后端返回统一格式 { code: 0, data: { url: '/avatars/xxx' } }
         try {
           const body = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
           if (body && body.code === 0 && body.data && body.data.url) {
-            // 拼接成完整 URL：User.avatar 存完整 URL，<image src> 直接可用
             resolve(hostRoot + body.data.url);
           } else {
             reject(new Error((body && body.message) || '头像上传失败'));
@@ -424,12 +475,64 @@ function uploadAvatar(filePath) {
           reject(new Error('头像上传响应解析失败'));
         }
       },
-      fail: (err) => {
-        reject(new Error((err && err.errMsg) || '头像上传失败'));
-      },
+      fail: (err) => reject(new Error((err && err.errMsg) || '头像上传失败')),
     });
   });
 }
+
+/**
+ * 上传用户头像，返回可访问的完整 URL
+ *
+ * 优先走 COS 直传（流量不经后端磁盘代理）：
+ *   1. 向后端申请 PUT 预签名 URL（COS 已配置时）
+ *   2. 小程序读文件二进制 PUT 直传到 COS
+ *   3. 上传成功返回 COS/CDN 公开直链 object_url
+ *
+ * 以下情况回退到后端代理上传（legacyUploadAvatar，保证功能不中断）：
+ *   - COS 未配置（后端返回 cos_enabled=false）
+ *   - 预签名申请失败 / 直传失败（网络抖动等）
+ *
+ * @param {string} filePath - wx.chooseAvatar 返回的临时文件路径（wxfile://tmp_xxx）
+ * @returns {Promise<string>} 头像完整 URL
+ */
+function uploadAvatar(filePath) {
+  // 延迟 require：api.js 加载时 auth 模块可能尚未就绪，运行时再拿 getToken
+  const { getToken } = require('./auth');
+  const hostRoot = getBaseUrl().replace(/\/api\/v1\/?$/, '');
+  const token = getToken() || '';
+
+  return (async () => {
+    // 1) 申请 COS 预签名（COS 未配置时返回 null -> 直接走回退）
+    let ticket = null;
+    try {
+      ticket = await presignCosUpload({
+        filename: _cosFileName(filePath),
+        content_type: 'image/jpeg',
+      });
+    } catch (e) {
+      ticket = null;
+    }
+
+    // 2) COS 直传（仅当后端声明已配置且返回了上传 URL）
+    if (ticket && ticket.cos_enabled && ticket.upload_url) {
+      try {
+        await putFileToCos(
+          filePath,
+          ticket.upload_url,
+          ticket.content_type || 'image/jpeg'
+        );
+        // 上传成功后返回公开可访问地址（CDN/cos 直链）
+        if (ticket.object_url) return ticket.object_url;
+      } catch (e) {
+        console.warn('COS 直传失败，回退后端代理上传:', e);
+      }
+    }
+
+    // 3) 回退：后端代理上传（旧路径，开发态/未配置 COS 时使用）
+    return legacyUploadAvatar(filePath, hostRoot, token);
+  })();
+}
+
 
 module.exports = {
   request,

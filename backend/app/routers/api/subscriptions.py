@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import UserPayload, get_current_user
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
+from app.core.write_gate import write_lock
 from app.core.timeutil import localnow_naive
 from app.database import get_db
 from app.models import Subscription, ChannelSubscription, Channel, User
@@ -50,9 +51,10 @@ async def record_message_subscription(
         subscribed_at=localnow_naive(),
         used=0,
     )
-    db.add(sub)
-    await db.commit()
-    await db.refresh(sub)
+    async with write_lock():
+        db.add(sub)
+        await db.commit()
+        await db.refresh(sub)
 
     return success(data={"success": True, "subscription_id": sub.id})
 
@@ -71,23 +73,25 @@ async def subscribe_channel(
     if ch_result.scalar_one_or_none() is None:
         raise NotFoundError("频道不存在或已停用")
 
-    # 幂等检查
-    existing = await db.execute(
-        select(ChannelSubscription).where(
-            ChannelSubscription.user_id == user.user_id,
-            ChannelSubscription.channel_id == channel_id,
-        )
-    )
-    if existing.scalar_one_or_none() is not None:
-        return success(data={"success": True, "already_subscribed": True})
-
+    # 幂等检查 + 插入必须在同一把全局写锁内：否则并发订阅会同时通过检查、
+    # 先后插入触发 channel_subscription UNIQUE 冲突 → 500（压测实测 4-5% 写错误）。
+    # 锁内先查后插，保证任一时刻只有一个事务能插入该 (user,channel) 组合。
     new_sub = ChannelSubscription(
         user_id=user.user_id,
         channel_id=channel_id,
         created_at=localnow_naive(),
     )
-    db.add(new_sub)
-    await db.commit()
+    async with write_lock():
+        existing = await db.execute(
+            select(ChannelSubscription).where(
+                ChannelSubscription.user_id == user.user_id,
+                ChannelSubscription.channel_id == channel_id,
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            return success(data={"success": True, "already_subscribed": True})
+        db.add(new_sub)
+        await db.commit()
 
     return success(data={"success": True, "already_subscribed": False})
 
@@ -99,11 +103,12 @@ async def unsubscribe_channel(
     db: AsyncSession = Depends(get_db),
 ):
     """取消订阅频道：幂等，不存在也返回成功。"""
-    await db.execute(
-        delete(ChannelSubscription).where(
-            ChannelSubscription.user_id == user.user_id,
-            ChannelSubscription.channel_id == channel_id,
+    async with write_lock():
+        await db.execute(
+            delete(ChannelSubscription).where(
+                ChannelSubscription.user_id == user.user_id,
+                ChannelSubscription.channel_id == channel_id,
+            )
         )
-    )
-    await db.commit()
+        await db.commit()
     return success(data={"success": True})

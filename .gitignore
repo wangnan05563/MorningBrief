@@ -178,3 +178,37 @@ admin-web/vite.config.js.timestamp-*.mjs
 /sonar-*.txt
 /pytest-output.log
 .workbuddy
+
+# 2026-08-08 清理补充：根目录 _ 前缀调试脚本（patch/modify/fix 临时）
+/_*.py
+/_*.ps1
+/patch_*.py
+/patch_*.ps1
+
+# 2026-08-08 清理补充：回归测试日志
+/backend-regression.log
+/backend_test_output.log
+/frontend-final.log
+/frontend-regression*.log
+/jmeter.log
+/sonar-rescan.log
+/sonar_scan.log
+/vite-dev.log
+
+# 2026-08-08 清理补充：admin-web 多次验证构建产物目录
+admin-web/dist_*/
+
+# 2026-08-08 清理补充：_gaptest 音频临时测试目录
+/_gaptest/
+
+# 2026-08-08 清理补充：数据库备份模式（backup_service 自动生成）
+backend/data/*.db.bak_*
+backend/data/morningbrief.db
+
+# 2026-08-08 清理补充：后端根目录调试/验证/迁移一次性脚本
+backend/diag_*.py
+backend/verify_*.py
+backend/backfill_*.py
+backend/migrate_*.py
+backend/_*.py
+backend/pytest*.log

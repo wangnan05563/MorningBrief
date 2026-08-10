@@ -19,6 +19,7 @@ TTL_TODAY = 3600   # 今日节目 1 小时
 TTL_DETAIL = 1800  # 节目详情 30 分钟
 TTL_LIST = 600     # 列表 10 分钟
 TTL_SCRIPT = 1800  # 稿件 30 分钟
+TTL_SEARCH = 60    # 搜索 60 秒：FTS5/LIKE 每次全查询，短 TTL 吸收重复/热点关键词
 
 
 class ContentService:
@@ -195,7 +196,15 @@ class ContentService:
         if not keyword or page < 1 or size < 1:
             return {"total": 0, "list": []}
 
+        # cache-aside：相同关键词+分页命中缓存，吸收热点搜索与翻页重复查询
+        # TTL_SEARCH=60s 短窗口，发布新节目后最多 60s 内可搜到（publish_episode 也主动失效）
+        cache_key = f"episode:search:{keyword}:{page}:{size}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
         offset = (page - 1) * size
+        data = None
 
         # 尝试 FTS5 全文检索（性能最优）
         try:
@@ -244,49 +253,53 @@ class ContentService:
                 for r in rows
             ]
 
-            return {"total": total, "list": list_data}
+            data = {"total": total, "list": list_data}
         except Exception:
             # FTS5 不可用或 MATCH 语法错误（含特殊字符），降级到 LIKE
             # 为什么不向上抛：搜索是低频但容错性要求高的场景，降级保证可用性
             pass
 
-        # 降级：LIKE 模糊匹配（原 MVP 实现）
-        escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        pattern = f"%{escaped}%"
+        if data is None:
+            # 降级：LIKE 模糊匹配（原 MVP 实现）
+            escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped}%"
 
-        count_result = await self.db.execute(
-            select(func.count(Episode.id)).where(
-                Episode.status == EpisodeStatus.published,
-                Episode.title.like(pattern, escape="\\"),
+            count_result = await self.db.execute(
+                select(func.count(Episode.id)).where(
+                    Episode.status == EpisodeStatus.published,
+                    Episode.title.like(pattern, escape="\\"),
+                )
             )
-        )
-        total = count_result.scalar() or 0
+            total = count_result.scalar() or 0
 
-        result = await self.db.execute(
-            select(Episode)
-            .where(
-                Episode.status == EpisodeStatus.published,
-                Episode.title.like(pattern, escape="\\"),
+            result = await self.db.execute(
+                select(Episode)
+                .where(
+                    Episode.status == EpisodeStatus.published,
+                    Episode.title.like(pattern, escape="\\"),
+                )
+                .order_by(Episode.date.desc(), Episode.id.desc())
+                .offset(offset)
+                .limit(size)
             )
-            .order_by(Episode.date.desc(), Episode.id.desc())
-            .offset(offset)
-            .limit(size)
-        )
-        episodes = result.scalars().all()
+            episodes = result.scalars().all()
 
-        list_data = [
-            {
-                "id": ep.id,
-                "date": ep.date.isoformat() if ep.date else None,
-                "title": ep.title,
-                "duration": ep.duration,
-                "cover_url": ep.cover_url,
-                "categories": ep.categories or [],
-            }
-            for ep in episodes
-        ]
+            list_data = [
+                {
+                    "id": ep.id,
+                    "date": ep.date.isoformat() if ep.date else None,
+                    "title": ep.title,
+                    "duration": ep.duration,
+                    "cover_url": ep.cover_url,
+                    "categories": ep.categories or [],
+                }
+                for ep in episodes
+            ]
 
-        return {"total": total, "list": list_data}
+            data = {"total": total, "list": list_data}
+
+        await self.cache.set(cache_key, data, ttl=TTL_SEARCH)
+        return data
 
     async def get_script(self, episode_id: int) -> dict | None:  # NOSONAR
         """稿件全文，懒加载：先查 episode 拿 script_id，再查 script 表。
@@ -451,6 +464,7 @@ class ContentService:
         await self.cache.delete("episode:today:all")
         await self.cache.delete_pattern("episode:today:ch:*")
         await self.cache.delete_pattern("episode:list:page:*")
+        await self.cache.delete_pattern("episode:search:*")
 
         return episode.id
 

@@ -48,6 +48,8 @@ class ChannelCreateRequest(BaseModel):
     min_duration_sec: int | None = None
     # 展示排序权重：值越小越靠前；相等时按 id 兜底。运营可调整以控制小程序 tab 顺序
     display_order: int = 0
+    # 频道级素材周期回溯天数：当日素材不足时自动放宽到最近 N 天选材；为空回退动态值
+    material_lookback_days: int | None = None
     # 频道创建时是否自动调用 AI 生成提示词
     auto_generate_prompts: bool = False
 
@@ -101,6 +103,17 @@ class ChannelCreateRequest(BaseModel):
             raise ValueError("bgm_gap_mode 仅支持 silence / bridge")
         return v
 
+    @field_validator("material_lookback_days")
+    @classmethod
+    def validate_material_lookback_days(cls, v: int | None) -> int | None:
+        if v is None:
+            return None
+        if v < 1:
+            raise ValueError("material_lookback_days 必须为正整数（≥1）")
+        if v > 90:
+            raise ValueError("material_lookback_days 超出上限 90 天")
+        return v
+
 
 class ChannelUpdateRequest(BaseModel):
     """修改频道请求体。"""
@@ -122,6 +135,8 @@ class ChannelUpdateRequest(BaseModel):
     keywords: str | None = None
     # 展示排序权重：值越小越靠前；相等时按 id 兜底。运营可调整以控制小程序 tab 顺序
     display_order: int | None = None
+    # 频道级素材周期回溯天数：当日素材不足时自动放宽到最近 N 天选材；为空回退动态值
+    material_lookback_days: int | None = None
 
     @field_validator("schedule_time")
     @classmethod
@@ -162,6 +177,17 @@ class ChannelUpdateRequest(BaseModel):
             raise ValueError("bgm_gap_mode 仅支持 silence / bridge")
         return v
 
+    @field_validator("material_lookback_days")
+    @classmethod
+    def validate_material_lookback_days(cls, v: int | None) -> int | None:
+        if v is None:
+            return None
+        if v < 1:
+            raise ValueError("material_lookback_days 必须为正整数（≥1）")
+        if v > 90:
+            raise ValueError("material_lookback_days 超出上限 90 天")
+        return v
+
 
 def _channel_to_dict(ch) -> dict:
     """统一频道序列化，避免列表/详情接口字段不一致。"""
@@ -184,6 +210,7 @@ def _channel_to_dict(ch) -> dict:
         "keywords": ch.keywords,
         "min_duration_sec": ch.min_duration_sec,
         "display_order": ch.display_order,
+        "material_lookback_days": ch.material_lookback_days,
         "created_at": ch.created_at.isoformat() if ch.created_at else None,
         "updated_at": ch.updated_at.isoformat() if ch.updated_at else None,
     }
@@ -235,6 +262,7 @@ async def create_channel(
             keywords=req.keywords,
             min_duration_sec=req.min_duration_sec,
             display_order=req.display_order,
+            material_lookback_days=req.material_lookback_days,
         )
     except ValueError as e:
         return error(code=400, message=str(e))
@@ -287,6 +315,7 @@ async def update_channel(
             rss_sources=req.rss_sources,
             keywords=req.keywords,
             display_order=req.display_order,
+            material_lookback_days=req.material_lookback_days,
         )
     except ValueError as e:
         return error(code=400, message=str(e))

@@ -1,0 +1,1 @@
+Error generating the report: org.apache.jmeter.report.dashboard.GenerationException: Cannot assign "${jmeter.reportgenerator.apdex_satisfied_threshold}" to property "set_satisfied_threshold" (mapped as "setSatisfiedThreshold"), skip it

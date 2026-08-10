@@ -6,6 +6,8 @@
 - POST /admin/api/v1/ai/test-llm   测试 LLM 连接
 - POST /admin/api/v1/ai/test-tts   测试 TTS 连接
 - POST /admin/api/v1/ai/preview-tts  TTS 试音（用当前表单参数合成测试音频）
+- POST /admin/api/v1/ai/download-tts-models 触发下载本地离线 TTS 模型（Kokoro/Piper）
+- GET  /admin/api/v1/ai/download-tts-models/status 查询下载进度（前端轮询）
 - GET  /admin/api/v1/ai/usage      用量统计（历史，来自 DB）
 - GET  /admin/api/v1/ai/budget     实时预算摘要（来自内存，含限额信息）
 - GET  /admin/api/v1/ai/presets    LLM 提供商预设
@@ -14,9 +16,10 @@
 
 所有端点需要管理员权限，防止运营误改 AI 配置。
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import Response
 from pydantic import BaseModel
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.ai_budget import get_today_summary, reset_budget
@@ -24,6 +27,7 @@ from app.core.auth import require_admin, AdminPayload
 from app.core.response import error, success
 from app.database import get_db
 from app.services.ai_config_service import AIConfigService
+from app.services.tts_model_manager import get_download_status, run_download
 
 router = APIRouter(prefix="/admin/api/v1/ai", tags=["B端-AI服务"])
 
@@ -65,6 +69,20 @@ class TTSConfigBody(BaseModel):
     tencent_voice_type: int = 101011
     tencent_volume: int = 0
     tencent_speed: int = 0
+    # Kokoro TTS 字段（本地离线，免费高质量）
+    kokoro_lang: str = "z"
+    kokoro_voice: str = "zf_xiaoxiao"
+    kokoro_speed: float = 1.0
+    # Piper TTS 字段（本地离线，轻量免费）
+    piper_voice: str = "zh_CN-huayan-medium"
+    piper_voice_dir: str = "./models/piper"
+    piper_length_scale: float = 1.0
+    piper_volume: float = 0.5
+    piper_noise_scale: float = 0.667
+    # TTS 交叉音色（段落间轮流换声，避免同质化）
+    # 结构：{"enabled": bool, "strategy": "round_robin"|"random"|"interval",
+    # "interval": int, "voices": {provider: [voice_key, ...]}}
+    cross_voice: Optional[dict] = None
 
 
 class SaveConfigBody(BaseModel):
@@ -92,6 +110,12 @@ class TestTTSBody(BaseModel):
     tencent_secret_key: str = ""
     tencent_region: str = ""
     tencent_voice_type: int = 0
+    # Kokoro
+    kokoro_lang: str = ""
+    kokoro_voice: str = ""
+    # Piper
+    piper_voice: str = ""
+    piper_voice_dir: str = ""
 
 
 class PreviewTTSBody(BaseModel):
@@ -117,6 +141,31 @@ class PreviewTTSBody(BaseModel):
     tencent_voice_type: int = 0
     tencent_volume: int = 0
     tencent_speed: int = 0
+    # Kokoro
+    kokoro_lang: str = ""
+    kokoro_voice: str = ""
+    kokoro_speed: float = 0.0
+    # Piper
+    piper_voice: str = ""
+    piper_voice_dir: str = ""
+    piper_length_scale: float = 0.0
+    piper_volume: float = 0.0
+    piper_noise_scale: float = 0.0
+
+
+class DownloadTTSModelsBody(BaseModel):
+    """触发下载 TTS 模型（Kokoro/Piper 本地离线引擎）。
+
+    仅支持 kokoro / piper 两个本地引擎；其他 provider 无需下载模型。
+    字段透传当前表单值，独立于已保存配置。
+    """
+    provider: str = "piper"
+    # Kokoro 参数
+    kokoro_lang: str = ""
+    kokoro_voice: str = ""
+    # Piper 参数
+    piper_voice: str = ""
+    piper_voice_dir: str = "./models/piper"
 
 
 @router.get("/config")
@@ -187,6 +236,10 @@ async def test_tts(
         tencent_secret_key=body.tencent_secret_key,
         tencent_region=body.tencent_region,
         tencent_voice_type=body.tencent_voice_type,
+        kokoro_lang=body.kokoro_lang,
+        kokoro_voice=body.kokoro_voice,
+        piper_voice=body.piper_voice,
+        piper_voice_dir=body.piper_voice_dir,
     )
     return success(data=result)
 
@@ -223,6 +276,14 @@ async def preview_tts(
             tencent_voice_type=body.tencent_voice_type,
             tencent_volume=body.tencent_volume,
             tencent_speed=body.tencent_speed,
+            kokoro_lang=body.kokoro_lang,
+            kokoro_voice=body.kokoro_voice,
+            kokoro_speed=body.kokoro_speed,
+            piper_voice=body.piper_voice,
+            piper_voice_dir=body.piper_voice_dir,
+            piper_length_scale=body.piper_length_scale,
+            piper_volume=body.piper_volume,
+            piper_noise_scale=body.piper_noise_scale,
         )
     except ValueError as e:
         return error(400, str(e), http_status=400)
@@ -230,6 +291,53 @@ async def preview_tts(
         return error(500, f"试音合成失败: {e}", http_status=500)
 
     return Response(content=audio, media_type="audio/mpeg")
+
+
+@router.post("/download-tts-models")
+async def download_tts_models(
+    body: DownloadTTSModelsBody,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """触发下载本地离线 TTS 模型（Kokoro / Piper）。
+
+    模型下载耗时较长（Piper 几十~上百 MB，Kokoro 权重 ~165MB），接口立即返回
+    「已启动」，实际下载在后台任务执行，前端通过 /download-tts-models/status
+    轮询进度。
+
+    仅 kokoro / piper 需要下载；其他 provider 返回错误提示。
+    """
+    provider = body.provider
+    if provider not in ("kokoro", "piper"):
+        return error(400, f"provider={provider} 无需下载模型（仅 kokoro/piper 为本地离线引擎）", http_status=400)
+
+    # 后台触发下载（接口立即返回）
+    background_tasks.add_task(
+        run_download,
+        provider,
+        kokoro_lang=body.kokoro_lang,
+        kokoro_voice=body.kokoro_voice,
+        piper_voice=body.piper_voice,
+        piper_voice_dir=body.piper_voice_dir,
+    )
+    return success(
+        data={"provider": provider, "started": True},
+        message=f"{provider} 模型下载已启动，请在页面查看进度",
+    )
+
+
+@router.get("/download-tts-models/status")
+async def download_tts_models_status(
+    provider: str = "piper",
+    admin: AdminPayload = Depends(require_admin),
+):
+    """查询 TTS 模型下载状态（前端轮询）。
+
+    返回 {status, message, progress, updated_at}，status ∈
+    idle | downloading | success | failed。
+    """
+    return success(data=get_download_status(provider))
 
 
 @router.get("/usage")

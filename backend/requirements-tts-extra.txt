@@ -1,0 +1,13 @@
+# ==== 可选 TTS 引擎（仅启用 Kokoro / Piper 时需要） ====
+# 这些依赖体积较大（含模型推理框架），默认不计入主构建 requirements.txt，
+# 以避免单文件 exe 打包体积暴增。仅在打算使用本地离线 TTS 引擎时安装：
+#   pip install -r requirements-tts-extra.txt
+# 并另行下载模型权重（见 .env.example 中 KOKORO_*/PIPER_* 注释）。
+
+# Kokoro（Apache 2.0 本地离线神经网络 TTS，82M 参数，质量对标/超越 Edge-TTS）
+kokoro>=0.9.4
+# 中文 G2P（Mandarin 音素化）；英文/日文分别需要 misaki[en] / misaki[ja]
+misaki[zh]>=0.9.4
+
+# Piper（MIT 本地离线轻量 TTS，模型 40-100MB，CPU 实时因子 <0.2）
+piper-tts>=1.2.0

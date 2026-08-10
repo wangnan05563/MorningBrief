@@ -110,9 +110,65 @@ sys.modules.setdefault("openai", _oai_mod)
 
 # ---- qcloud_cos ----
 # tts/uploader.py 中 from qcloud_cos import CosConfig, CosS3Client
+# 真实包未安装时启用以下桩；真实包已安装则 setdefault 不覆盖，跑真实 SDK。
+# 桩需实现 cos/client.py 的 CosClientWrapper 实际调用的全部方法（put_object /
+# get_object / delete_object / list_objects / head_object / get_presigned_download_url
+# / copy_object / delete_objects / object_exists），否则测试环境 is_cos_configured()
+# 为真时会抛 AttributeError，被业务层捕获降级但刷出误导性 WARNING。
+class _FakeCosS3Client:
+    """qcloud_cos.CosS3Client 测试桩：方法均为无副作用占位，返回 wrapper 期望的形状。"""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def put_object(self, **kwargs):
+        return None
+
+    def get_object(self, **kwargs):
+        from io import BytesIO
+
+        return {"Body": BytesIO(b""), "Content-Length": 0}
+
+    def delete_object(self, **kwargs):
+        return None
+
+    def list_objects(self, **kwargs):
+        return {
+            "Contents": [],
+            "CommonPrefixes": [],
+            "IsTruncated": False,
+            "Name": "",
+            "Prefix": "",
+            "Marker": "",
+            "MaxKeys": 1000,
+            "Delimiter": "",
+            "EncodingType": "",
+        }
+
+    def head_object(self, **kwargs):
+        return {
+            "Content-Length": 0,
+            "Last-Modified": "Wed, 01 Jan 2025 00:00:00 GMT",
+            "Content-Type": "application/octet-stream",
+            "ETag": '"fakeetag"',
+        }
+
+    def get_presigned_download_url(self, **kwargs):
+        return "https://examplebucket.cos.example.com/fake-presigned"
+
+    def copy_object(self, **kwargs):
+        return None
+
+    def delete_objects(self, **kwargs):
+        return None
+
+    def object_exists(self, **kwargs):
+        return False
+
+
 _cos_mod = types.ModuleType("qcloud_cos")
 _cos_mod.CosConfig = type("CosConfig", (), {"__init__": lambda self, **k: None})
-_cos_mod.CosS3Client = type("CosS3Client", (), {"__init__": lambda self, *a, **k: None})
+_cos_mod.CosS3Client = _FakeCosS3Client
 sys.modules.setdefault("qcloud_cos", _cos_mod)
 
 

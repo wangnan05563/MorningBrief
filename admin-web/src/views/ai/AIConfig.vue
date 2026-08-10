@@ -139,13 +139,71 @@
               />
             </el-select>
             <el-tag
-              v-if="ttsForm.provider === 'edge'"
+              v-if="['edge', 'kokoro', 'piper'].includes(ttsForm.provider)"
               type="success"
               style="margin-left: 12px"
             >
               免费 · 无需 API Key
             </el-tag>
           </div>
+
+          <!-- TTS 交叉音色（段落间轮流换声，避免同质化） -->
+          <el-divider content-position="left">交叉音色（段落轮流换声，避免同质化）</el-divider>
+          <el-form :model="ttsForm.cross_voice" label-width="120px" class="config-form">
+            <el-form-item label="启用交叉音色">
+              <el-switch v-model="ttsForm.cross_voice.enabled" />
+              <span class="field-tip" style="margin-left: 12px;">
+                开启后，稿件各段落将按所选策略轮流使用不同音色，避免单一音色同质化
+              </span>
+            </el-form-item>
+            <el-form-item label="切换策略">
+              <el-select v-model="ttsForm.cross_voice.strategy" style="width: 220px">
+                <el-option label="轮流（段落依次轮换）" value="round_robin" />
+                <el-option label="随机（避免相邻重复）" value="random" />
+                <el-option label="每隔 N 段切换" value="interval" />
+              </el-select>
+              <el-input-number
+                v-if="ttsForm.cross_voice.strategy === 'interval'"
+                v-model="ttsForm.cross_voice.interval"
+                :min="1" :max="20" :step="1"
+                controls-position="right"
+                style="margin-left: 12px; width: 140px;"
+              />
+              <span v-if="ttsForm.cross_voice.strategy === 'interval'" class="field-tip" style="margin-left: 8px;">段</span>
+            </el-form-item>
+            <el-form-item label="音色组合">
+              <el-select
+                v-model="currentCrossVoiceList"
+                multiple
+                filterable
+                collapse-tags
+                collapse-tags-tooltip
+                :disabled="crossVoiceDisabledForProvider"
+                placeholder="选择 2 个及以上音色"
+                style="width: 520px;"
+              >
+                <el-option
+                  v-for="v in voices"
+                  :key="v.key"
+                  :label="v.label"
+                  :value="v.key"
+                />
+              </el-select>
+              <span class="field-tip" style="margin-left: 12px;">
+                至少选 2 个；当前引擎：{{ ttsForm.provider }}
+                <template v-if="crossVoiceDisabledForProvider">（Piper 为单说话人模型，交叉音色不生效）</template>
+              </span>
+            </el-form-item>
+            <el-alert
+              v-if="crossVoiceInsufficientForProvider"
+              type="warning"
+              :closable="false"
+              show-icon
+              title="交叉音色当前不会生效"
+              description="已启用交叉音色，但当前引擎「{{ ttsForm.provider }}」下仅选了不足 2 个音色；保存后合成将回退为单音色。请至少选择 2 个音色后再保存。"
+              style="margin-top: 4px;"
+            />
+          </el-form>
 
           <!-- 阿里云 NLS 配置 -->
           <el-form
@@ -363,6 +421,167 @@
             </el-form-item>
           </el-form>
 
+          <!-- Kokoro TTS 配置（Apache 2.0 本地离线，免费高质量） -->
+          <el-form
+            v-else-if="ttsForm.provider === 'kokoro'"
+            :model="ttsForm"
+            label-width="120px"
+            class="config-form"
+          >
+            <el-alert
+              type="success"
+              :closable="false"
+              style="margin-bottom: 16px"
+            >
+              Kokoro 是基于 Apache 2.0 开源许可证的本地离线神经网络 TTS（82M 参数），
+              完全免费、无需 API Key、不依赖任何云服务、不联网。中文音质自然度
+              对标或优于 Edge-TTS。启用前需安装依赖并首次下载模型权重（见部署文档）。
+            </el-alert>
+            <el-form-item label="语言">
+              <el-select v-model="ttsForm.kokoro_lang" style="width: 240px">
+                <el-option label="中文普通话 (z)" value="z" />
+                <el-option label="美式英语 (a)" value="a" />
+                <el-option label="英式英语 (b)" value="b" />
+                <el-option label="西班牙语 (e)" value="e" />
+                <el-option label="法语 (f)" value="f" />
+                <el-option label="印地语 (h)" value="h" />
+                <el-option label="意大利语 (i)" value="i" />
+                <el-option label="日语 (j)" value="j" />
+                <el-option label="巴西葡萄牙语 (p)" value="p" />
+              </el-select>
+              <div class="field-tip">语言代码须与下方音色匹配（如中文配 zf_*/zm_*）</div>
+            </el-form-item>
+            <el-form-item label="音色">
+              <el-select v-model="ttsForm.kokoro_voice" style="width: 380px">
+                <el-option
+                  v-for="v in voices"
+                  :key="v.key"
+                  :label="v.label"
+                  :value="v.key"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="语速">
+              <el-slider
+                v-model="ttsForm.kokoro_speed"
+                :min="0.5" :max="2.0" :step="0.05"
+                show-input
+                style="max-width: 500px"
+              />
+              <span class="field-tip">倍率，1.0 为正常，&gt;1 加快，&lt;1 减慢</span>
+            </el-form-item>
+            <el-form-item label="模型下载">
+              <el-button
+                type="warning"
+                plain
+                :loading="downloadingTts"
+                @click="handleDownloadTtsModels"
+              >
+                下载模型
+              </el-button>
+              <el-tag
+                v-if="ttsDownloadStatus"
+                :type="ttsDownloadStatus.status === 'success' ? 'success' : (ttsDownloadStatus.status === 'failed' ? 'danger' : 'info')"
+                style="margin-left: 12px"
+              >
+                {{ ttsDownloadStatus.message }}
+                <span v-if="downloadPercent != null">（{{ downloadPercent }}%）</span>
+              </el-tag>
+              <div class="field-tip">
+                首次使用需从 HuggingFace 下载模型权重（中文 ~165MB），之后完全离线。
+                若提示未安装 kokoro，请先 <code>pip install kokoro misaki[zh]</code>。
+              </div>
+            </el-form-item>
+          </el-form>
+
+          <!-- Piper TTS 配置（MIT 本地离线，轻量免费） -->
+          <el-form
+            v-else-if="ttsForm.provider === 'piper'"
+            :model="ttsForm"
+            label-width="120px"
+            class="config-form"
+          >
+            <el-alert
+              type="success"
+              :closable="false"
+              style="margin-bottom: 16px"
+            >
+              Piper 是基于 MIT 开源许可证的本地离线轻量 TTS，完全免费、无需 API Key、
+              不联网。模型仅 40-100MB，CPU 实时因子 &lt;0.2，适合资源受限设备部署。
+              启用前需安装 piper-tts 并下载语音模型（.onnx + .onnx.json）。
+            </el-alert>
+            <el-form-item label="音色模型">
+              <el-select v-model="ttsForm.piper_voice" style="width: 360px">
+                <el-option
+                  v-for="v in voices"
+                  :key="v.key"
+                  :label="v.label"
+                  :value="v.key"
+                />
+              </el-select>
+              <div class="field-tip">
+                也可点击下方「下载模型」按钮在后台自动拉取（无需登录服务器）
+              </div>
+            </el-form-item>
+            <el-form-item label="模型目录">
+              <el-input
+                v-model="ttsForm.piper_voice_dir"
+                placeholder="./models/piper"
+              />
+              <div class="field-tip">
+                存放 {音色}.onnx 与 {音色}.onnx.json 的目录（相对/绝对路径皆可）
+              </div>
+            </el-form-item>
+            <el-form-item label="语速">
+              <el-slider
+                v-model="ttsForm.piper_length_scale"
+                :min="0.5" :max="2.0" :step="0.05"
+                show-input
+                style="max-width: 500px"
+              />
+              <span class="field-tip">length_scale，1.0 正常，&gt;1 变慢，&lt;1 变快</span>
+            </el-form-item>
+            <el-form-item label="音量">
+              <el-slider
+                v-model="ttsForm.piper_volume"
+                :min="0" :max="1" :step="0.05"
+                show-input
+                style="max-width: 500px"
+              />
+            </el-form-item>
+            <el-form-item label="自然度">
+              <el-slider
+                v-model="ttsForm.piper_noise_scale"
+                :min="0" :max="1" :step="0.01"
+                show-input
+                style="max-width: 500px"
+              />
+              <span class="field-tip">noise_scale，影响音色随机性/自然度</span>
+            </el-form-item>
+            <el-form-item label="模型下载">
+              <el-button
+                type="warning"
+                plain
+                :loading="downloadingTts"
+                @click="handleDownloadTtsModels"
+              >
+                下载模型
+              </el-button>
+              <el-tag
+                v-if="ttsDownloadStatus"
+                :type="ttsDownloadStatus.status === 'success' ? 'success' : (ttsDownloadStatus.status === 'failed' ? 'danger' : 'info')"
+                style="margin-left: 12px"
+              >
+                {{ ttsDownloadStatus.message }}
+                <span v-if="downloadPercent != null">（{{ downloadPercent }}%）</span>
+              </el-tag>
+              <div class="field-tip">
+                下载 .onnx + .onnx.json 到上方「模型目录」。支持 HF_ENDPOINT 镜像（如
+                https://hf-mirror.com）以适配网络受限环境。
+              </div>
+            </el-form-item>
+          </el-form>
+
           <!-- 试音区域（三套 Provider 共用） -->
           <div class="preview-section">
             <div class="preset-section" style="border-bottom: none; padding-bottom: 0; margin-bottom: 12px;">
@@ -483,7 +702,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { ElMessage, ElMessageBox } from '../../utils/message'
@@ -543,6 +762,24 @@ const ttsForm = ref({
   tencent_voice_type: 101011,
   tencent_volume: 0,
   tencent_speed: 0,
+  // Kokoro TTS（本地离线，免费高质量）
+  kokoro_lang: 'z',
+  kokoro_voice: 'zf_xiaoxiao',
+  kokoro_speed: 1.0,
+  // Piper TTS（本地离线，轻量免费）
+  piper_voice: 'zh_CN-huayan-medium',
+  piper_voice_dir: './models/piper',
+  piper_length_scale: 1.0,
+  piper_volume: 0.5,
+  piper_noise_scale: 0.667,
+  // TTS 交叉音色（段落间轮流换声，避免同质化）
+  // voices 按 provider 维度存音色 key 列表；strategy: round_robin/random/interval
+  cross_voice: {
+    enabled: false,
+    strategy: 'round_robin',
+    interval: 2,
+    voices: {},
+  },
 })
 const showTtsKey = ref(false)
 const showTtsAppkey = ref(false)
@@ -557,6 +794,8 @@ const ttsProviders = [
   { key: 'aliyun', label: '阿里云 NLS（付费，需 API Key）' },
   { key: 'edge', label: 'Edge-TTS（免费，微软神经网络音色）' },
   { key: 'tencent', label: '腾讯云 TTS（付费，可复用 COS 凭证）' },
+  { key: 'kokoro', label: 'Kokoro（免费开源，本地离线神经网络）' },
+  { key: 'piper', label: 'Piper（免费开源，本地离线轻量）' },
 ]
 
 // TTS 风格预设：按 provider 提供不同的参数组合
@@ -580,15 +819,129 @@ const ttsPresets = {
     { name: '活泼播报', volume: 60, speech_rate: 100, pitch_rate: 50 },
     { name: '柔和轻语', volume: 40, speech_rate: -50, pitch_rate: -30 },
   ],
+  kokoro: [
+    { name: '标准', speed: 1.0 },
+    { name: '沉稳新闻', speed: 0.9 },
+    { name: '活泼播报', speed: 1.15 },
+    { name: '柔和轻语', speed: 0.85 },
+  ],
+  piper: [
+    { name: '标准', length_scale: 1.0 },
+    { name: '沉稳新闻', length_scale: 1.1 },
+    { name: '活泼播报', length_scale: 0.9 },
+    { name: '柔和轻语', length_scale: 1.05 },
+  ],
 }
 
 // 当前 provider 对应的预设列表
 const currentTtsPresets = computed(() => ttsPresets[ttsForm.value.provider] || [])
 
+// 交叉音色：当前 provider 选中的音色列表（按 provider 维度隔离存储）
+const currentCrossVoiceList = computed({
+  get() {
+    const cv = ttsForm.value.cross_voice
+    return (cv && cv.voices && cv.voices[ttsForm.value.provider]) || []
+  },
+  set(val) {
+    if (!ttsForm.value.cross_voice.voices) ttsForm.value.cross_voice.voices = {}
+    ttsForm.value.cross_voice.voices[ttsForm.value.provider] = val || []
+  },
+})
+// Piper 为单说话人模型，交叉音色不生效（参数被忽略），给出提示
+const crossVoiceDisabledForProvider = computed(
+  () => ttsForm.value.provider === 'piper',
+)
+// 已启用交叉音色但当前引擎可选音色不足 2 个时告警，避免保存后静默 no-op
+const crossVoiceInsufficientForProvider = computed(() => {
+  if (!ttsForm.value.cross_voice.enabled) return false
+  if (ttsForm.value.provider === 'piper') return false
+  return (currentCrossVoiceList.value || []).length < 2
+})
+
 // 试音相关状态
 const previewText = ref('大家好，欢迎收听今日新闻早报。以下是本期为您精选的头条资讯。')
 const previewing = ref(false)
 const previewAudioUrl = ref('')
+
+// TTS 模型下载（Kokoro/Piper 本地离线引擎）状态
+const downloadingTts = ref(false)
+const ttsDownloadStatus = ref(null)
+let ttsDownloadTimer = null
+
+// 下载进度百分比（仅下载中展示）
+const downloadPercent = computed(() => {
+  const s = ttsDownloadStatus.value
+  if (s && s.status === 'downloading' && s.progress != null) {
+    return Math.round(s.progress * 100)
+  }
+  return null
+})
+
+// 停止进度轮询
+function stopDownloadPolling() {
+  if (ttsDownloadTimer) {
+    clearInterval(ttsDownloadTimer)
+    ttsDownloadTimer = null
+  }
+}
+
+// 触发下载并轮询进度
+async function handleDownloadTtsModels() {
+  const f = ttsForm.value
+  if (f.provider !== 'kokoro' && f.provider !== 'piper') {
+    ElMessage.info('该 TTS 引擎无需下载模型')
+    return
+  }
+  downloadingTts.value = true
+  ttsDownloadStatus.value = { status: 'downloading', message: '正在启动下载...', progress: 0 }
+
+  const payload = { provider: f.provider }
+  if (f.provider === 'kokoro') {
+    payload.kokoro_lang = f.kokoro_lang
+    payload.kokoro_voice = f.kokoro_voice
+  } else {
+    payload.piper_voice = f.piper_voice
+    payload.piper_voice_dir = f.piper_voice_dir
+  }
+
+  try {
+    await api.post('/ai/download-tts-models', payload)
+  } catch (e) {
+    downloadingTts.value = false
+    ttsDownloadStatus.value = {
+      status: 'failed',
+      message: e.response?.data?.message || e.message || '启动下载失败',
+    }
+    return
+  }
+
+  // 启动后轮询状态（2s），直到 success/failed
+  stopDownloadPolling()
+  ttsDownloadTimer = setInterval(async () => {
+    try {
+      const st = await api.get('/ai/download-tts-models/status', {
+        params: { provider: f.provider },
+        silent: true,
+      })
+      ttsDownloadStatus.value = st
+      if (st.status === 'success' || st.status === 'failed') {
+        stopDownloadPolling()
+        downloadingTts.value = false
+        if (st.status === 'success') {
+          ElMessage.success('TTS 模型下载完成')
+        } else {
+          ElMessage.error(st.message || 'TTS 模型下载失败')
+        }
+      }
+    } catch (e) {
+      // 轮询静默失败：继续下一次轮询，不阻断用户操作
+      if (e.response?.status === 401) {
+        stopDownloadPolling()
+        downloadingTts.value = false
+      }
+    }
+  }, 2000)
+}
 
 // 用量统计
 const usageLoading = ref(false)
@@ -685,6 +1038,10 @@ async function loadVoices(provider) {
 // 切换 TTS Provider：重新加载音色列表并清空测试结果
 async function handleProviderChange(provider) {
   ttsTestResult.value = null
+  // 清空下载状态与轮询，避免跨引擎显示错误状态
+  stopDownloadPolling()
+  downloadingTts.value = false
+  ttsDownloadStatus.value = null
   // 清空试音音频，避免切换 provider 后播放上一个引擎的音频
   if (previewAudioUrl.value) {
     URL.revokeObjectURL(previewAudioUrl.value)
@@ -797,6 +1154,12 @@ async function handleTestTTS() {
       payload.tencent_secret_key = f.tencent_secret_key
       payload.tencent_region = f.tencent_region
       payload.tencent_voice_type = f.tencent_voice_type
+    } else if (f.provider === 'kokoro') {
+      payload.kokoro_lang = f.kokoro_lang
+      payload.kokoro_voice = f.kokoro_voice
+    } else if (f.provider === 'piper') {
+      payload.piper_voice = f.piper_voice
+      payload.piper_voice_dir = f.piper_voice_dir
     }
     const data = await api.post('/ai/test-tts', payload)
     ttsTestResult.value = data
@@ -821,6 +1184,10 @@ function applyTtsPreset(preset) {
     f.aliyun_volume = preset.volume
     f.aliyun_speech_rate = preset.speech_rate
     f.aliyun_pitch_rate = preset.pitch_rate
+  } else if (f.provider === 'kokoro') {
+    f.kokoro_speed = preset.speed
+  } else if (f.provider === 'piper') {
+    f.piper_length_scale = preset.length_scale
   }
   ElMessage.success(`已应用「${preset.name}」预设，点击试音听效果`)
 }
@@ -863,6 +1230,16 @@ async function handlePreviewTTS() {
       payload.tencent_voice_type = f.tencent_voice_type
       payload.tencent_volume = f.tencent_volume
       payload.tencent_speed = f.tencent_speed
+    } else if (f.provider === 'kokoro') {
+      payload.kokoro_lang = f.kokoro_lang
+      payload.kokoro_voice = f.kokoro_voice
+      payload.kokoro_speed = f.kokoro_speed
+    } else if (f.provider === 'piper') {
+      payload.piper_voice = f.piper_voice
+      payload.piper_voice_dir = f.piper_voice_dir
+      payload.piper_length_scale = f.piper_length_scale
+      payload.piper_volume = f.piper_volume
+      payload.piper_noise_scale = f.piper_noise_scale
     }
     const blob = await api.post('/ai/preview-tts', payload, {
       responseType: 'blob',
@@ -946,6 +1323,10 @@ function applyCalculatorParams() {
 onMounted(async () => {
   await loadConfig()
   applyCalculatorParams()
+})
+
+onUnmounted(() => {
+  stopDownloadPolling()
 })
 </script>
 
