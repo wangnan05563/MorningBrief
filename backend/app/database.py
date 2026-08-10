@@ -29,6 +29,9 @@ engine = create_async_engine(
     settings.sqlite_url,
     echo=settings.APP_DEBUG,
     # SQLite 在 WAL 模式下支持多连接并发读，check_same_thread=False 允许跨线程
+    # 注意：SQLite 异步引擎默认 NullPool（每次 checkout 新建连接、checkin 即释放），
+    # 不接收 pool_size/max_overflow 等 QueuePool 参数；WAL 下多独立连接可并发读，
+    # 写则经全局写锁串行化（单写者上限）。多连接并发是 SQLite 嵌入式设计的预期行为。
     connect_args={"check_same_thread": False},
 )
 

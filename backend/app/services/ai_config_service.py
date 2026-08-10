@@ -64,6 +64,18 @@ CONFIG_KEY_MAP = {
     "tencent_tts_voice_type": "TENCENT_TTS_VOICE_TYPE",
     "tencent_tts_volume": "TENCENT_TTS_VOLUME",
     "tencent_tts_speed": "TENCENT_TTS_SPEED",
+    # Kokoro TTS（Apache 2.0 本地离线，免费高质量）
+    "kokoro_lang": "KOKORO_LANG",
+    "kokoro_voice": "KOKORO_VOICE",
+    "kokoro_speed": "KOKORO_SPEED",
+    # Piper TTS（MIT 本地离线，轻量免费）
+    "piper_voice": "PIPER_VOICE",
+    "piper_voice_dir": "PIPER_VOICE_DIR",
+    "piper_length_scale": "PIPER_LENGTH_SCALE",
+    "piper_volume": "PIPER_VOLUME",
+    "piper_noise_scale": "PIPER_NOISE_SCALE",
+    # TTS 交叉音色（段落间轮流换声，避免同质化）：JSON 字符串，按 provider 维度存音色列表
+    "tts_cross_voice": "TTS_CROSS_VOICE",
     # 节目时长目标（秒）：与稿件字数反向关联，控制 rewriter 字数与 stitch 范围
     "target_duration_sec": "TARGET_DURATION_SEC",
     # TTS 段间静音时长（秒）：拼接时每段新闻之间的留白，影响节奏感与 BGM 浮现
@@ -95,6 +107,10 @@ INT_KEYS = {
 # 需要转为 float 类型的配置项（如段间静音时长，需支持小数精度）
 FLOAT_KEYS = {
     "segment_gap_sec",
+    "kokoro_speed",
+    "piper_length_scale",
+    "piper_volume",
+    "piper_noise_scale",
 }
 
 # ---- LLM 提供商预设 ----
@@ -190,6 +206,52 @@ def _mask_key(key: str) -> str:
 def _is_masked(value: str) -> bool:
     """判断前端回传值是否为脱敏值（未修改）。"""
     return value.startswith("****")
+
+
+def _parse_cross_voice(raw) -> dict:
+    """解析交叉音色配置 JSON，返回带默认值的规范化结构。
+
+    结构：{"enabled": bool, "strategy": str, "interval": int,
+           "voices": {provider: [voice_key, ...]}}
+    解析失败时返回全默认（disabled），不抛异常，保证前端表单始终可渲染、
+    synthesizer 永远拿到合法结构。
+
+    Args:
+        raw: JSON 字符串或已解析的 dict（前端可能直接传对象）。
+    """
+    defaults = {
+        "enabled": False,
+        "strategy": "round_robin",
+        "interval": 2,
+        "voices": {},
+    }
+    if not raw:
+        return defaults
+    if isinstance(raw, str):
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("交叉音色配置 JSON 解析失败，使用默认关闭")
+            return defaults
+    elif isinstance(raw, dict):
+        data = raw
+    else:
+        return defaults
+    if not isinstance(data, dict):
+        return defaults
+    voices = data.get("voices")
+    norm_voices: dict[str, list] = {}
+    if isinstance(voices, dict):
+        for k, v in voices.items():
+            if isinstance(v, list):
+                # 仅保留非空字符串音色 key，过滤 None/数字等非法项，保证落库结构干净
+                norm_voices[str(k)] = [x for x in v if isinstance(x, str) and x]
+    return {
+        "enabled": bool(data.get("enabled", False)),
+        "strategy": str(data.get("strategy", "round_robin")),
+        "interval": int(data.get("interval", 2) or 2),
+        "voices": norm_voices,
+    }
 
 
 def _estimate_cost(
@@ -408,6 +470,19 @@ class AIConfigService:
             "tencent_voice_type": _get_int("tencent_tts_voice_type", "TENCENT_TTS_VOICE_TYPE", 101011),
             "tencent_volume": _get_int("tencent_tts_volume", "TENCENT_TTS_VOLUME", 0),
             "tencent_speed": _get_int("tencent_tts_speed", "TENCENT_TTS_SPEED", 0),
+            # Kokoro TTS（本地离线，免费高质量）
+            "kokoro_lang": _get("kokoro_lang", "KOKORO_LANG", "z"),
+            "kokoro_voice": _get("kokoro_voice", "KOKORO_VOICE", "zf_xiaoxiao"),
+            "kokoro_speed": _get_float("kokoro_speed", "KOKORO_SPEED", 1.0),
+            # Piper TTS（本地离线，轻量免费）
+            "piper_voice": _get("piper_voice", "PIPER_VOICE", "zh_CN-huayan-medium"),
+            "piper_voice_dir": _get("piper_voice_dir", "PIPER_VOICE_DIR", "./models/piper"),
+            "piper_length_scale": _get_float("piper_length_scale", "PIPER_LENGTH_SCALE", 1.0),
+            "piper_volume": _get_float("piper_volume", "PIPER_VOLUME", 0.5),
+            "piper_noise_scale": _get_float("piper_noise_scale", "PIPER_NOISE_SCALE", 0.667),
+            # TTS 交叉音色（段落间轮流换声，避免同质化）
+            # 解析 JSON 字符串为对象返回前端；缺省/解析失败回退到关闭的默认结构
+            "cross_voice": _parse_cross_voice(_get("tts_cross_voice", "TTS_CROSS_VOICE", "{}")),
         }
 
         return {"llm": llm_config, "tts": tts_config}
@@ -466,7 +541,7 @@ class AIConfigService:
 
         # TTS 配置变更时清空 provider 工厂缓存，确保下次合成使用新配置
         # edge_* 前缀覆盖 Edge-TTS 的 config_key（voice/rate/volume/pitch）
-        if any(k.startswith(("tts_", "edge_", "tencent_tts_")) for k in updates):
+        if any(k.startswith(("tts_", "edge_", "tencent_tts_", "kokoro_", "piper_")) for k in updates):
             try:
                 from app.workflow.tts.tts_factory import invalidate
                 invalidate()
@@ -581,6 +656,39 @@ class AIConfigService:
             result["tencent_tts_volume"] = str(config["tencent_volume"])
         if "tencent_speed" in config:
             result["tencent_tts_speed"] = str(config["tencent_speed"])
+
+        # Kokoro TTS（本地离线，免费高质量）
+        if "kokoro_lang" in config:
+            result["kokoro_lang"] = config["kokoro_lang"]
+        if "kokoro_voice" in config:
+            result["kokoro_voice"] = config["kokoro_voice"]
+        if "kokoro_speed" in config:
+            # 0 视为默认 1.0，统一标准化避免把 0 当成静音
+            result["kokoro_speed"] = str(config["kokoro_speed"] or 1.0)
+
+        # Piper TTS（本地离线，轻量免费）
+        if "piper_voice" in config:
+            result["piper_voice"] = config["piper_voice"]
+        if "piper_voice_dir" in config:
+            result["piper_voice_dir"] = config["piper_voice_dir"]
+        if "piper_length_scale" in config:
+            result["piper_length_scale"] = str(config["piper_length_scale"] or 1.0)
+        if "piper_volume" in config:
+            result["piper_volume"] = str(config["piper_volume"] or 0.5)
+        if "piper_noise_scale" in config:
+            result["piper_noise_scale"] = str(config["piper_noise_scale"] or 0.667)
+
+        # TTS 交叉音色（段落间轮流换声）：前端传对象，规范化后序列化为 JSON 字符串存储
+        if "cross_voice" in config:
+            cv = config["cross_voice"]
+            if cv is None:
+                # 显式清空
+                result["tts_cross_voice"] = "{}"
+            else:
+                # 先规范化再序列化，保证落库结构稳定（去除非法字段/类型）
+                result["tts_cross_voice"] = json.dumps(
+                    _parse_cross_voice(cv), ensure_ascii=False
+                )
 
         return result
 
@@ -722,12 +830,18 @@ class AIConfigService:
         tencent_secret_key: str = "",
         tencent_region: str = "",
         tencent_voice_type: int = 0,
+        kokoro_lang: str = "",
+        kokoro_voice: str = "",
+        piper_voice: str = "",
+        piper_voice_dir: str = "",
     ) -> dict:
         """测试 TTS 连接，按 provider 分支选择测试逻辑。
 
         aliyun：发送最小化合成请求验证 token/appkey 有效性（不等待合成完成）
         edge：合成一句测试文本验证网络连通性（Edge-TTS 无鉴权概念）
         tencent：合成一句测试文本验证凭证有效性
+        kokoro：合成一句测试文本验证本地模型是否可用（完全离线）
+        piper：合成一句测试文本验证本地模型文件是否可用（完全离线）
 
         脱敏值（****开头）视为未修改，回退到已保存配置。
         """
@@ -742,6 +856,10 @@ class AIConfigService:
                 tencent_secret_id, tencent_secret_key,
                 tencent_region, tencent_voice_type,
             )
+        elif provider == "kokoro":
+            return await self._test_kokoro(kokoro_lang, kokoro_voice)
+        elif provider == "piper":
+            return await self._test_piper(piper_voice, piper_voice_dir)
         return {"success": False, "message": f"未知的 TTS provider: {provider}"}
 
     async def _test_aliyun(self, api_key: str, appkey: str) -> dict:
@@ -883,6 +1001,50 @@ class AIConfigService:
             "message": "腾讯云 TTS 连接失败，请检查凭证与音色配置",
         }
 
+    async def _test_kokoro(self, lang: str, voice: str) -> dict:
+        """测试 Kokoro 本地模型是否可用（合成一句测试文本，完全离线）。"""
+        try:
+            from app.workflow.tts.kokoro_client import KokoroProvider
+        except ImportError as e:
+            return {"success": False, "message": f"kokoro 模块加载失败: {e}"}
+
+        lang = lang or None
+        voice = voice or None
+        try:
+            provider = KokoroProvider(lang=lang, voice=voice)
+        except Exception as e:
+            return {"success": False, "message": f"Kokoro 初始化失败（依赖/模型缺失）: {e}"}
+
+        ok = await provider.test_connection()
+        if ok:
+            return {"success": True, "message": "Kokoro 连接成功（本地离线，免费）"}
+        return {
+            "success": False,
+            "message": "Kokoro 连接失败，请确认已安装 kokoro misaki[zh] 且模型可加载",
+        }
+
+    async def _test_piper(self, voice: str, voice_dir: str) -> dict:
+        """测试 Piper 本地模型文件是否可用（合成一句测试文本，完全离线）。"""
+        try:
+            from app.workflow.tts.piper_client import PiperProvider
+        except ImportError as e:
+            return {"success": False, "message": f"piper-tts 模块加载失败: {e}"}
+
+        voice = voice or None
+        voice_dir = voice_dir or None
+        try:
+            provider = PiperProvider(voice=voice, voice_dir=voice_dir)
+        except Exception as e:
+            return {"success": False, "message": f"Piper 初始化失败（依赖/模型缺失）: {e}"}
+
+        ok = await provider.test_connection()
+        if ok:
+            return {"success": True, "message": "Piper 连接成功（本地离线，免费）"}
+        return {
+            "success": False,
+            "message": "Piper 连接失败，请确认已安装 piper-tts 且模型文件存在",
+        }
+
     # ---- 试音合成 ----
 
     async def preview_tts(
@@ -908,6 +1070,16 @@ class AIConfigService:
         tencent_voice_type: int = 0,
         tencent_volume: int = 0,
         tencent_speed: int = 0,
+        # Kokoro 参数
+        kokoro_lang: str = "",
+        kokoro_voice: str = "",
+        kokoro_speed: float = 0.0,
+        # Piper 参数
+        piper_voice: str = "",
+        piper_voice_dir: str = "",
+        piper_length_scale: float = 0.0,
+        piper_volume: float = 0.0,
+        piper_noise_scale: float = 0.0,
     ) -> bytes:
         """用传入的临时参数合成试音音频（不依赖已保存配置）。
 
@@ -938,6 +1110,15 @@ class AIConfigService:
                 text, tencent_secret_id, tencent_secret_key,
                 tencent_region, tencent_voice_type,
                 tencent_volume, tencent_speed,
+            )
+        elif provider == "kokoro":
+            return await self._preview_kokoro(
+                text, kokoro_lang, kokoro_voice, kokoro_speed,
+            )
+        elif provider == "piper":
+            return await self._preview_piper(
+                text, piper_voice, piper_voice_dir,
+                piper_length_scale, piper_volume, piper_noise_scale,
             )
         raise ValueError(f"未知的 TTS provider: {provider}")
 
@@ -1007,6 +1188,33 @@ class AIConfigService:
             speed=speed,
         )
         return await provider.synthesize(text, format="mp3", sample_rate=16000)
+
+    async def _preview_kokoro(
+        self, text, lang, voice, speed,
+    ) -> bytes:
+        """Kokoro 试音：用临时参数创建实例合成（完全离线）。"""
+        from app.workflow.tts.kokoro_client import KokoroProvider
+        provider = KokoroProvider(
+            lang=lang or None,
+            voice=voice or None,
+            speed=speed or None,
+        )
+        return await provider.synthesize(text, format="wav", sample_rate=24000)
+
+    async def _preview_piper(
+        self, text, voice, voice_dir,
+        length_scale, volume, noise_scale,
+    ) -> bytes:
+        """Piper 试音：用临时参数创建实例合成（完全离线）。"""
+        from app.workflow.tts.piper_client import PiperProvider
+        provider = PiperProvider(
+            voice=voice or None,
+            voice_dir=voice_dir or None,
+            length_scale=length_scale or None,
+            volume=volume or None,
+            noise_scale=noise_scale or None,
+        )
+        return await provider.synthesize(text, format="wav", sample_rate=22050)
 
     # ---- 用量记录 ----
 
@@ -1142,13 +1350,18 @@ class AIConfigService:
         provider = provider or get_settings().TTS_PROVIDER or "aliyun"
 
         if provider == "edge":
+            # 以下音色 ID 均与微软官方 zh-CN Neural 目录一致（已用 edge-tts --list-voices 实时核对）。
+            # 注意：XiaomengNeural / YunfengNeural 在早期博客中常见，但当前线上服务已不存在，
+            # 选中后会触发 NoAudioReceived，故已从列表移除。
             return [
-                {"key": "zh-CN-XiaoxiaoNeural", "label": "晓晓（标准女声，与阿里云 xiaoyun 听感接近）"},
-                {"key": "zh-CN-YunyangNeural", "label": "云扬（新闻男声，业界新闻播报标杆）"},
-                {"key": "zh-CN-XiaoyiNeural", "label": "晓伊（温柔女声）"},
-                {"key": "zh-CN-YunxiNeural", "label": "云希（沉稳男声）"},
-                {"key": "zh-CN-XiaomengNeural", "label": "晓梦（甜美女声）"},
-                {"key": "zh-CN-YunfengNeural", "label": "云枫（磁性男声）"},
+                {"key": "zh-CN-XiaoxiaoNeural", "label": "晓晓（标准女声·温暖·新闻/小说，默认）"},
+                {"key": "zh-CN-YunyangNeural", "label": "云扬（新闻男声·专业可靠，业界新闻播报标杆）"},
+                {"key": "zh-CN-XiaoyiNeural", "label": "晓伊（活泼女声·卡通/小说）"},
+                {"key": "zh-CN-YunxiNeural", "label": "云希（阳光男声·小说）"},
+                {"key": "zh-CN-YunjianNeural", "label": "云健（男声·激情·体育/小说）"},
+                {"key": "zh-CN-YunxiaNeural", "label": "云夏（可爱男声·卡通/小说）"},
+                {"key": "zh-CN-liaoning-XiaobeiNeural", "label": "晓蓓（女声·东北话·幽默）"},
+                {"key": "zh-CN-shaanxi-XiaoniNeural", "label": "晓妮（女声·陕西话·明亮）"},
             ]
         elif provider == "tencent":
             return [
@@ -1158,6 +1371,26 @@ class AIConfigService:
                 {"key": "501001", "label": "智兰（资讯女声，大模型音色，24k）"},
                 {"key": "101001", "label": "智瑜（情感女声）"},
                 {"key": "101004", "label": "智云（通用男声）"},
+            ]
+        # Kokoro（本地离线，免费高质量；须与 lang 匹配）
+        elif provider == "kokoro":
+            return [
+                {"key": "zf_xiaobei", "label": "zf_xiaobei（女声·温柔甜美，有声书/客服）"},
+                {"key": "zf_xiaoni", "label": "zf_xiaoni（女声·清亮活泼，短视频）"},
+                {"key": "zf_xiaoxiao", "label": "zf_xiaoxiao（女声·成熟稳重，新闻播报·默认）"},
+                {"key": "zf_xiaoyi", "label": "zf_xiaoyi（女声·专业正式，教程）"},
+                {"key": "zm_yunjian", "label": "zm_yunjian（男声·青春活力，游戏）"},
+                {"key": "zm_yunxi", "label": "zm_yunxi（男声·温柔细腻，有声小说）"},
+                {"key": "zm_yunxia", "label": "zm_yunxia（男声·成熟稳重，企业）"},
+                {"key": "zm_yunyang", "label": "zm_yunyang（男声·浑厚有力，纪录片旁白）"},
+            ]
+        # Piper（本地离线，轻量免费；模型需另行下载）
+        elif provider == "piper":
+            return [
+                {"key": "zh_CN-huayan-medium", "label": "zh_CN-huayan-medium（中文女声·medium·默认）"},
+                {"key": "zh_CN-huayan-x_low", "label": "zh_CN-huayan-x_low（中文女声·x_low 更小更快）"},
+                {"key": "zh_CN-chenyang-medium", "label": "zh_CN-chenyang-medium（中文男声·medium）"},
+                {"key": "zh_CN-lessac-medium", "label": "zh_CN-lessac-medium（中文·medium）"},
             ]
         # 默认阿里云
         return [

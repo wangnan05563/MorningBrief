@@ -145,6 +145,7 @@ from app.routers.api.comments import router as c_comments_router
 from app.routers.api.channels import router as c_channels_router
 from app.routers.api.subscriptions import router as c_subscriptions_router
 from app.routers.api.users import router as c_users_router
+from app.routers.api.cos import router as c_cos_router
 
 # B 端路由（运营后台）
 from app.routers.admin.auth import router as b_auth_router
@@ -172,6 +173,7 @@ from app.routers.admin.auto_review import router as b_auto_review_router
 from app.routers.admin.backup import router as b_backup_router
 # 通知管理（钉钉消息通知，仅 admin）
 from app.routers.admin.notification import router as b_notification_router
+from app.routers.admin.cos import router as b_cos_router
 # 内部路由（工作流调度）
 from app.routers.internal.workflow import router as internal_workflow_router
 
@@ -261,6 +263,8 @@ async def _migrate_channel_schema() -> None:  # NOSONAR
             # 展示排序权重：缓存命中判定以现有列集合为准，新增列需追加到此列表
             # NOT NULL DEFAULT 0 回填存量频道，避免 NULL 排序歧义
             ("display_order", "INTEGER NOT NULL DEFAULT 0"),
+            # 频道级素材周期回溯天数：为空时回退 rewriter 动态值（3/7/14 天）
+            ("material_lookback_days", "INTEGER"),
         ]
         added = 0
         for col_name, col_type in new_columns:
@@ -651,6 +655,15 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
     except Exception as e:
         logger.warning("[startup] 加载 AI 配置失败，使用 .env 默认值: %s", e)
 
+    # 从 SQLite 加载 COS 配置覆盖到 Settings 单例（前端「云端配置」页修改热生效）
+    from app.services.cos_config_service import CosConfigService
+    try:
+        async with AsyncSessionLocal() as session:
+            cos_svc = CosConfigService(session)
+            await cos_svc.apply_config_to_settings()
+    except Exception as e:
+        logger.warning("[startup] 加载 COS 配置失败，使用 .env 默认值: %s", e)
+
     # 初始化通知预设模板（幂等：已存在的 event_type 跳过）
     # 与 AI 配置同一 session，避免重复创建连接
     try:
@@ -666,6 +679,10 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
     # 启动 APScheduler 定时任务（工作流调度 + 播放日志落库 + 黑名单清理）
     from app.services.workflow_scheduler import workflow_scheduler
     await workflow_scheduler.start()
+
+    # 启动播放进度写缓冲的周期 flush（P1 优化：进程内聚合 + 定时批量落库）
+    from app.services.play_write_buffer import play_write_buffer
+    await play_write_buffer.start()
 
     # 启动 EventBus 后台消费任务（工作流状态事件分发）
     # create_task 保留引用到 app.state，避免被 GC 回收导致任务中途取消
@@ -709,6 +726,10 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
         logger.warning("[shutdown] 停止内网穿透隧道失败: %s", e)
 
     await workflow_scheduler.stop()
+
+    # 停止播放进度写缓冲并执行最终 flush（先停，避免关闭后仍有事件入队）
+    from app.services.play_write_buffer import play_write_buffer
+    await play_write_buffer.stop()
 
     # 停止 EventBus：设置 _running=False，run_forever 下次轮询时退出
     from app.core.event_bus import get_event_bus
@@ -772,6 +793,8 @@ def create_app() -> FastAPI:  # NOSONAR
     app.include_router(c_channels_router)
     app.include_router(c_subscriptions_router)
     app.include_router(c_users_router)
+    # C 端 COS 直传（预签名上传）
+    app.include_router(c_cos_router)
 
     # B 端（运营后台）
     app.include_router(b_auth_router)
@@ -795,6 +818,8 @@ def create_app() -> FastAPI:  # NOSONAR
     app.include_router(b_backup_router)
     # 通知管理（钉钉消息通知）
     app.include_router(b_notification_router)
+    # 云端存储 COS 配置与管理
+    app.include_router(b_cos_router)
     # 关于页面（系统元信息 + 检查更新）
     app.include_router(b_about_router)
     # 内部（工作流调度）

@@ -14,6 +14,7 @@ from sqlalchemy import select
 
 from app.models import Episode, EpisodeStatus, PlayLog, User
 from app.services.play_service import PlayService
+from app.services.play_write_buffer import play_write_buffer
 
 
 async def _seed_user_episode(db_session, user_openid="wx-play-001", ep_title="测试节目"):
@@ -50,6 +51,7 @@ async def test_report_progress_below_threshold_no_playlog(db_session):
     )
 
     # PlayLog 不应有记录
+    await play_write_buffer.flush(session=db_session)
     logs = (await db_session.execute(
         select(PlayLog).where(PlayLog.user_id == user.id)
     )).scalars().all()
@@ -73,6 +75,7 @@ async def test_report_progress_above_threshold_inserts_playlog(db_session):
         listened_seconds=0,
     )
 
+    await play_write_buffer.flush(session=db_session)
     logs = (await db_session.execute(
         select(PlayLog).where(PlayLog.user_id == user.id, PlayLog.episode_id == episode.id)
     )).scalars().all()
@@ -91,6 +94,7 @@ async def test_report_progress_dedup_no_double_count(db_session):
     await svc.report_progress(user.id, episode.id, 35, 600, False, 0)
     # 第二次：60s，已存在记录，不应再插入也不应再 +1
     await svc.report_progress(user.id, episode.id, 60, 600, False, 0)
+    await play_write_buffer.flush(session=db_session)
 
     logs = (await db_session.execute(
         select(PlayLog).where(PlayLog.user_id == user.id, PlayLog.episode_id == episode.id)
@@ -109,6 +113,7 @@ async def test_report_progress_completed_updates_flag_no_recount(db_session):
     await svc.report_progress(user.id, episode.id, 35, 600, False, 0)
     # 再完播
     await svc.report_progress(user.id, episode.id, 600, 600, True, 0)
+    await play_write_buffer.flush(session=db_session)
 
     logs = (await db_session.execute(
         select(PlayLog).where(PlayLog.user_id == user.id, PlayLog.episode_id == episode.id)
@@ -130,6 +135,7 @@ async def test_report_progress_listened_seconds_accumulates(db_session):
     await svc.report_progress(user.id, episode.id, 25, 600, False, listened_seconds=25)
     # 第二次上报增量 40s
     await svc.report_progress(user.id, episode.id, 65, 600, False, listened_seconds=40)
+    await play_write_buffer.flush(session=db_session)
 
     await db_session.refresh(user)
     assert user.total_listen_duration == 65
@@ -141,6 +147,7 @@ async def test_report_progress_zero_listened_seconds_no_accumulate(db_session):
     user, episode = await _seed_user_episode(db_session)
     svc = PlayService(db_session)
     await svc.report_progress(user.id, episode.id, 35, 600, False, listened_seconds=0)
+    await play_write_buffer.flush(session=db_session)
 
     await db_session.refresh(user)
     assert (user.total_listen_duration or 0) == 0
@@ -165,6 +172,7 @@ async def test_report_progress_different_episodes_count_separately(db_session):
     svc = PlayService(db_session)
     await svc.report_progress(user.id, ep1.id, 40, 600, False, 0)
     await svc.report_progress(user.id, ep2.id, 50, 600, False, 0)
+    await play_write_buffer.flush(session=db_session)
 
     await db_session.refresh(user)
     # 两个节目各计一次

@@ -30,7 +30,7 @@ from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
 from app.database import get_db
-from app.models import AuditLog, Episode, Review, Script, Workflow
+from app.models import AuditLog, Episode, Review, Script, Workflow, WorkflowStep
 from app.paths import resolve_data_dir
 
 logger = logging.getLogger(__name__)
@@ -106,26 +106,58 @@ async def list_audio(
                     "remote": False,
                 })
 
-    # 2) 本地 TTS 为空（COS 已配置/打包态）：回退到稿件分段持久化的 audio_url
+    # 2) 本地 TTS 为空（COS 已配置/打包态）：回退到持久化的 audio_url
+    #    数据源优先级：
+    #    ① workflow_step(step_name='tts').result.audio_segments —— TTS 步骤必然落库，
+    #       即便工作流最终失败（rewrite 重跑覆盖 script.segments 导致 audio_url 丢失）
+    #       也能可靠还原，是最权威的兜底来源；
+    #    ② script.segments[].audio_url —— 兼容旧数据与本地模式。
     if not tts_files:
-        scr_result = await db.execute(select(Script).where(Script.workflow_id == workflow_id))
-        script = scr_result.scalar_one_or_none()
-        if script and script.segments:
-            for seg in script.segments:
-                if not isinstance(seg, dict):
-                    continue
-                u = seg.get("audio_url")
-                if not u:
-                    continue
-                seq = seg.get("seq", "?")
-                tts_files.append({
-                    "name": f"seg_{seq}.mp3",
-                    # 远端对象不知道真实字节数，置 0（前端展示"大小未知"），
-                    # 避免把 duration 秒误当作字节数回填到 size_bytes 字段
-                    "size_bytes": 0,
-                    "url": u,
-                    "remote": bool(urlparse(u).scheme in ("http", "https")),
-                })
+        # 2a) 优先用 TTS 步骤结果（含 COS url + duration，失败工作流同样可靠）
+        try:
+            ws_result = await db.execute(
+                select(WorkflowStep).where(
+                    WorkflowStep.workflow_id == workflow_id,
+                    WorkflowStep.step_name == "tts",
+                ).order_by(WorkflowStep.id.desc()).limit(1)
+            )
+            ws = ws_result.scalar_one_or_none()
+            if ws and ws.result:
+                res = ws.result if isinstance(ws.result, dict) else json.loads(ws.result)
+                for a in (res.get("audio_segments") or []):
+                    u = a.get("audio_url")
+                    if not u:
+                        continue
+                    seq = a.get("seg_seq", "?")
+                    tts_files.append({
+                        "name": f"seg_{seq}.mp3",
+                        # 远端对象不知道真实字节数，置 0（前端展示"大小未知"），
+                        # 避免把 duration 秒误当作字节数回填到 size_bytes 字段
+                        "size_bytes": 0,
+                        "url": u,
+                        "remote": bool(urlparse(u).scheme in ("http", "https")),
+                    })
+        except Exception as e:  # 解析失败不阻塞，继续走 script 兜底
+            logger.warning("读取 workflow_step tts 结果失败 workflow_id=%s: %s", workflow_id, e)
+
+        # 2b) script.segments 兜底（兼容旧数据 / 本地模式）
+        if not tts_files:
+            scr_result = await db.execute(select(Script).where(Script.workflow_id == workflow_id))
+            script = scr_result.scalar_one_or_none()
+            if script and script.segments:
+                for seg in script.segments:
+                    if not isinstance(seg, dict):
+                        continue
+                    u = seg.get("audio_url")
+                    if not u:
+                        continue
+                    seq = seg.get("seq", "?")
+                    tts_files.append({
+                        "name": f"seg_{seq}.mp3",
+                        "size_bytes": 0,
+                        "url": u,
+                        "remote": bool(urlparse(u).scheme in ("http", "https")),
+                    })
 
     # 3) 成品音频：优先本地 glob（命名含频道名+workflow_id）
     result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))

@@ -6,11 +6,16 @@
 """
 import asyncio
 import logging
+import random
 import re
 import time
 import uuid
 
 from sqlalchemy import select
+# 从 attributes 子模块直接导入：sqlalchemy.orm.__init__ 在某些环境下未导出
+# flag_modified（如本仓库测试 venv 的 SQLAlchemy 2.0.25），而 attributes 是定义所在模块，
+# 两种环境均可正常导入，避免 ImportError 导致 synthesizer 模块无法加载。
+from sqlalchemy.orm.attributes import flag_modified
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -145,9 +150,11 @@ async def synthesize_segment(text: str, voice: str = None) -> bytes:
         )
 
         # 调用成功后记录用量（按字符数计费）
+        # model 标签如实反映「provider:voice」，便于用量统计区分引擎与具体音色；
+        # 交叉音色未启用或 provider 为单说话人模型时 voice 为 None，标 default。
         record_call(
             service_type="tts",
-            model=settings.ALIYUN_TTS_VOICE,
+            model=f"{settings.TTS_PROVIDER}:{voice or 'default'}",
             char_count=len(text),
         )
 
@@ -231,6 +238,9 @@ async def _persist_segment_audio_urls(
                 changed = True
         if changed:
             scr.segments = segs
+            # 就地修改 JSON 列表后若重新赋同一对象，SQLAlchemy 可能因身份未变而不标记脏，
+            # 导致 UPDATE 不发出、audio_url 回写丢失（失败工作流常见）。强制标记脏确保落库。
+            flag_modified(scr, "segments")
             await session.commit()
     except Exception:  # 回写失败为可选兜底，禁止中断 TTS 主流程；logger.exception 保留 traceback 便于排查
         logger.exception(
@@ -240,6 +250,45 @@ async def _persist_segment_audio_urls(
     finally:
         if own_session:
             await session.close()
+
+
+def assign_cross_voices(total: int, cfg: dict, provider: str) -> list:
+    """根据交叉音色配置，为 total 个段落（按播放顺序编号 0..total-1）计算各自使用的音色 key。
+
+    Returns:
+        长度 = total 的列表，每个元素为音色 key（str）或 None（使用默认音色）。
+        当未启用、或当前 provider 音色不足 2 个时，全部返回 None（保持原有单音色行为）。
+
+    Args:
+        total: 段落数
+        cfg: 解析后的交叉音色配置（_parse_cross_voice 结果），结构见 ai_config_service._parse_cross_voice
+        provider: 当前 TTS provider（edge/aliyun/tencent/kokoro/piper）
+    """
+    if not cfg or not cfg.get("enabled"):
+        return [None] * total
+    voices = (cfg.get("voices") or {}).get(provider) or []
+    if len(voices) < 2:
+        # 音色不足 2 个无法交替，回退默认音色（含 Piper 单说话人模型场景）
+        return [None] * total
+    strategy = cfg.get("strategy", "round_robin")
+    interval = max(1, int(cfg.get("interval") or 1))
+    n = len(voices)
+    assigned: list = []
+    prev = None
+    for i in range(total):
+        if strategy == "interval":
+            idx = (i // interval) % n
+        elif strategy == "random":
+            # 随机但避免与上一段落同音色，提升交替感、避免相邻重复
+            choices = [v for v in voices if v != prev] or voices
+            chosen = random.choice(choices)
+            prev = chosen
+            assigned.append(chosen)
+            continue
+        else:  # round_robin（默认）
+            idx = i % n
+        assigned.append(voices[idx])
+    return assigned
 
 
 async def synthesize(workflow_id: str, script_id: int) -> dict:
@@ -269,13 +318,32 @@ async def synthesize(workflow_id: str, script_id: int) -> dict:
     if not segments:
         raise TTSError(f"稿件无分段 script_id={script_id}")
 
+    # 按播放顺序（seg_seq）排序，保证交叉音色在真实播放顺序上交替
+    segments = sorted(segments, key=lambda s: s.get("seq", 0))
+
     total = len(segments)
     logger.info("待合成分段 %d 段", total)
 
+    # 交叉音色：按 provider + 策略为每段计算音色（禁用或不足 2 音色则全程默认音色）
+    cross_cfg = None
+    try:
+        # 懒导入避免与 ai_config_service 的潜在循环依赖
+        from app.services.ai_config_service import _parse_cross_voice
+        cross_cfg = _parse_cross_voice(settings.TTS_CROSS_VOICE)
+    except Exception:  # 解析失败不应阻断整期合成
+        logger.exception("交叉音色配置解析失败，回退默认单音色")
+        cross_cfg = None
+    voice_plan = assign_cross_voices(total, cross_cfg, settings.TTS_PROVIDER)
+    if any(voice_plan):
+        logger.info(
+            "交叉音色已启用 provider=%s 策略=%s 段落分配=%s",
+            settings.TTS_PROVIDER, cross_cfg.get("strategy"), voice_plan,
+        )
+
     # 2. 并发合成所有分段（return_exceptions 隔离单段失败，避免整批中断）
     tasks = [
-        synthesize_segment(seg.get("content", ""), voice=None)
-        for seg in segments
+        synthesize_segment(seg.get("content", ""), voice=voice_plan[i])
+        for i, seg in enumerate(segments)
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 

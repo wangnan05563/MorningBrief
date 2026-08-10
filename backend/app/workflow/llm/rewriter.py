@@ -1125,13 +1125,19 @@ def _assemble_script(
     }
 
 
-async def _fetch_materials(date_str: str, channel_id: int = None) -> list[dict]:
+async def _fetch_materials(
+    date_str: str, channel_id: int = None, material_lookback_days: int = None
+) -> list[dict]:
     """查询当日 pending 素材，当日不足 SELECT_MIN_N 条时回溯最近 N 天。
 
-    N 按频道入库频率动态计算（_calc_dynamic_fallback_days）：
-    - 高频道道（≥5 天/周有入库）：3 天回溯，避免拉入过旧素材
-    - 中频道道（2-4 天/周）：7 天回溯，覆盖周末场景
-    - 低频道道（0-1 天/周）：14 天回溯，避免无素材可用
+    N 的优先级：频道显式配置的 material_lookback_days > 按入库频率动态计算
+    （_calc_dynamic_fallback_days）：
+    - 频道已配置 material_lookback_days（>0）：直接使用该天数放宽选材时间范围，
+      从上游扩展时间跨度获取更多素材，避免依赖 stitch 的 BGM/静音补足凑短节目
+    - 未配置时（None）：按频道入库频率动态计算
+      - 高频道道（≥5 天/周有入库）：3 天回溯，避免拉入过旧素材
+      - 中频道道（2-4 天/周）：7 天回溯，覆盖周末场景
+      - 低频道道（0-1 天/周）：14 天回溯，避免无素材可用
 
     按 crawled_at 当日筛选，避免历史积压素材混入当日节目。
     status=pending 确保不重复消费已被选题的素材。
@@ -1164,10 +1170,15 @@ async def _fetch_materials(date_str: str, channel_id: int = None) -> list[dict]:
         result = await session.execute(stmt)
         rows = list(result.scalars().all())
 
-        # 当日 pending 素材不足时，按频道入库频率动态回溯
+        # 当日 pending 素材不足时，按"配置优先、动态兜底"的回溯天数放宽选材时间范围
         # 场景：RSS 源周末/夜间/稀疏日，单日仅 1-2 条素材，
         # 改写后段数 < MIN_VALID_SEGMENTS 必然失败，提前回溯兜底
-        fallback_days = await _calc_dynamic_fallback_days(channel_id)
+        # 优先使用频道显式配置的 material_lookback_days（运营可在频道编辑页设定），
+        # 未配置时回退到按频道入库频率动态计算的 _calc_dynamic_fallback_days（3/7/14 天）
+        if material_lookback_days is not None and material_lookback_days > 0:
+            fallback_days = material_lookback_days
+        else:
+            fallback_days = await _calc_dynamic_fallback_days(channel_id)
         if len(rows) < SELECT_MIN_N and fallback_days > 0:
             fb_start = datetime.combine(
                 day - timedelta(days=fallback_days), datetime.min.time()
@@ -1267,7 +1278,7 @@ async def _fetch_channel_prompts(channel_id: int) -> dict:
 
     Returns:
         {name, description, intro_prompt, outro_prompt, constraint_prompt,
-         rewrite_template, enable_thinking_question}
+         rewrite_template, enable_thinking_question, material_lookback_days}
         频道不存在或字段为空时对应值为 None
     """
     from app.models import Channel
@@ -1282,6 +1293,7 @@ async def _fetch_channel_prompts(channel_id: int) -> dict:
                 "constraint_prompt": None,
                 "rewrite_template": None,
                 "enable_thinking_question": None,
+                "material_lookback_days": None,
             }
         return {
             "name": ch.name,
@@ -1292,6 +1304,8 @@ async def _fetch_channel_prompts(channel_id: int) -> dict:
             "rewrite_template": ch.rewrite_template,
             # None=默认开启，0=关闭，1=开启；统一转为 bool
             "enable_thinking_question": ch.enable_thinking_question != 0,
+            # None=未配置，rewriter 回退到 _calc_dynamic_fallback_days 的动态值
+            "material_lookback_days": ch.material_lookback_days,
         }
 
 
@@ -1437,8 +1451,17 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
     )
 
     # 1. 拉取当日 pending 素材（频道级隔离：channel_id 非空时仅查本频道素材）
-    materials = await _fetch_materials(date_str, channel_id)
-    logger.info("当日 pending 素材 %d 条（channel_id=%s）", len(materials), channel_id)
+    # 频道显式配置 material_lookback_days 时优先使用，否则 rewriter 动态计算回溯天数
+    material_lookback_days = (
+        channel_prompts.get("material_lookback_days") if channel_prompts else None
+    )
+    materials = await _fetch_materials(
+        date_str, channel_id, material_lookback_days=material_lookback_days
+    )
+    logger.info(
+        "当日 pending 素材 %d 条（channel_id=%s lookback=%s）",
+        len(materials), channel_id, material_lookback_days,
+    )
 
     if not materials:
         # 查询 material 表诊断信息，帮助定位根因
@@ -1458,9 +1481,13 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
             status_rows = (await session.execute(status_stmt)).all()
             status_dist = dict(status_rows) if status_rows else {}
         channel_hint = f"频道 channel_id={channel_id} " if channel_id is not None else "全局"
-        # 动态回溯天数由 _calc_dynamic_fallback_days 按频道入库频率计算（3/7/14 天三档）
-        # 此处复用同一函数获取实际回溯天数，避免错误消息与实际行为不符误导运维
-        actual_fallback_days = await _calc_dynamic_fallback_days(channel_id)
+        # 实际回溯天数优先取频道显式配置，否则复用动态计算（3/7/14 天三档）
+        # 错误消息需与实际选材行为一致，避免误导运维
+        actual_fallback_days = (
+            material_lookback_days
+            if (material_lookback_days is not None and material_lookback_days > 0)
+            else await _calc_dynamic_fallback_days(channel_id)
+        )
         raise LLMError(
             f"当日 {date_str} 无 pending 素材（回溯 {actual_fallback_days} 天亦无），"
             f"无法改写。{channel_hint}material 表共 {total_count} 条，"

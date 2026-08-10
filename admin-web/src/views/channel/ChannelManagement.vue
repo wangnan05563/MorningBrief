@@ -45,6 +45,12 @@
         <el-table-column label="展示排序" width="100" align="center">
           <template #default="{ row }">{{ row.display_order ?? 0 }}</template>
         </el-table-column>
+        <el-table-column label="素材回溯(天)" width="110" align="center">
+          <template #default="{ row }">
+            <span v-if="row.material_lookback_days != null">{{ row.material_lookback_days }}</span>
+            <span v-else class="text-muted">继承动态</span>
+          </template>
+        </el-table-column>
         <el-table-column label="创建时间" min-width="170">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
@@ -84,6 +90,26 @@
             style="width: 160px"
           />
           <span class="form-tip">数值越小越靠前（小程序/首页 tab 顺序），默认 0</span>
+        </el-form-item>
+        <el-form-item label="素材回溯">
+          <div class="lookback-wrap">
+            <el-checkbox v-model="form.lookbackEnabled">自定义素材回溯天数</el-checkbox>
+            <el-input-number
+              v-model="form.material_lookback_days"
+              :min="1"
+              :max="90"
+              :step="1"
+              :disabled="!form.lookbackEnabled"
+              controls-position="right"
+              style="width: 160px"
+            />
+            <el-tooltip
+              content="当天 pending 素材不足时，系统自动将选材时间范围放宽到最近 N 天。不勾选则继承系统动态回溯（按频道近 7 天入库频率 3/7/14 天），避免短节目依赖 BGM 补足。"
+              placement="top"
+            >
+              <span class="form-tip" style="cursor: help">范围 1-90 天，留空继承动态</span>
+            </el-tooltip>
+          </div>
         </el-form-item>
 
         <!-- 新增频道时可选 AI 自动生成提示词 -->
@@ -385,6 +411,10 @@ const form = reactive({
   rss_sources: [],
   // 频道关键词过滤（逗号分隔字符串，空表示不过滤）
   keywords: '',
+  // 素材周期回溯天数：null（配合 lookbackEnabled=false）表示继承系统动态回溯；
+  // 勾选自定义后由 el-input-number 写入 1-90，提交时透传给后端 material_lookback_days
+  material_lookback_days: null,
+  lookbackEnabled: false,
 })
 
 const rules = {
@@ -447,6 +477,9 @@ function resetForm() {
   form.enable_thinking_question = 1
   form.rss_sources = []
   form.keywords = ''
+  // 素材回溯：默认不勾选自定义，material_lookback_days 置 null 表示继承动态回溯
+  form.material_lookback_days = null
+  form.lookbackEnabled = false
   promptCollapse.value = ['intro']
   showAudioPlayer.value = false
   bgmRecommendReason.value = ''
@@ -491,6 +524,12 @@ function openEdit(row) {
     form.rss_sources = []
   }
   form.keywords = row.keywords || ''
+  // 素材回溯：后端返回 null 表示继承动态回溯，对应不勾选自定义；
+  // 非 null 则回填天数并勾选自定义，使 el-input-number 可编辑
+  form.material_lookback_days = (row.material_lookback_days !== null && row.material_lookback_days !== undefined)
+    ? row.material_lookback_days
+    : null
+  form.lookbackEnabled = form.material_lookback_days !== null
   promptCollapse.value = ['intro']
   showAudioPlayer.value = false
   bgmRecommendReason.value = ''
@@ -528,6 +567,8 @@ async function handleSubmit() {
         enable_thinking_question: form.enable_thinking_question,
         rss_sources: rssSourcesJson,
         keywords: form.keywords || '',
+        // 素材回溯：未勾选自定义则提交 null 继承动态；勾选则用 el-input-number 的值
+        material_lookback_days: form.lookbackEnabled ? form.material_lookback_days : null,
       })
       ElMessage.success('已更新')
     } else {
@@ -547,6 +588,8 @@ async function handleSubmit() {
         enable_thinking_question: form.enable_thinking_question,
         rss_sources: rssSourcesJson,
         keywords: form.keywords || '',
+        // 素材回溯：未勾选自定义则提交 null 继承动态；勾选则用填写的天数
+        material_lookback_days: form.lookbackEnabled ? form.material_lookback_days : null,
       })
       ElMessage.success('已创建')
     }
@@ -770,6 +813,14 @@ onMounted(() => {
     align-items: center;
     gap: 4px;
     flex-wrap: nowrap;
+  }
+
+  // 素材回溯控制区：复选框 + 数字输入 + 提示横向排列
+  .lookback-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
   // AI 推荐理由：弱化背景突出文本，BGM/RSS 推荐共用此类

@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import UserPayload, get_current_user
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
+from app.core.write_gate import write_lock
 from app.core.timeutil import localnow_naive
 from app.database import get_db
 from app.models import Feedback
@@ -58,7 +59,8 @@ async def submit_feedback(
         created_at=localnow_naive(),
         synced_at=localnow_naive(),
     )
-    db.add(feedback)
-    await db.commit()
+    async with write_lock():
+        db.add(feedback)
+        await db.commit()
 
     return success(data={"success": True, "feedback_id": feedback.id})

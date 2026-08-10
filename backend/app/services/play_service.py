@@ -18,7 +18,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.core.timeutil import localnow_naive
 from app.cos.client import cos_client, is_cos_configured
+from app.core.write_gate import write_lock
 from app.models import PlayLog, PlayProgress, User
+from app.services.play_write_buffer import play_write_buffer
 
 # 落库单批上限：与 APScheduler 每 1 分钟调度周期配合，避免单次事务过大
 FLUSH_BATCH = 500
@@ -47,11 +49,14 @@ class PlayService:
         - 首次达到阈值：插入 PlayLog，play_count +1
         - 后续上报：仅更新 completed 标志（完播时），不重复计数
         - listened_seconds 增量累加到 User.total_listen_duration，避免 sum(position) 语义错误
+
+        P0-1 优化：SQLite 写（步骤 2-4）统一纳入全局写锁串行化，任意时刻仅一个写事务
+        提交，从机制上消除压测实测的 database is locked（67,186 次 / 写错误率 59%）。
+        COS 主路径在锁外，网络 IO 不串行化。
         """
         # 项目约定：所有时间字段存为本地 naive datetime（香港 UTC+8，无夏令时）
-        # 与 PlayProgress 其他表、StatsService 趋势切分逻辑一致，避免 UTC vs 本地 8 小时偏差
-        # C 端读 COS 对象的 updated_at 直接展示，本地时间无需前端再转时区
-        now_str = localnow_naive().isoformat()
+        now = localnow_naive()
+        now_str = now.isoformat()
         completed_flag = 1 if completed else 0
         payload = {
             "user_id": user_id,
@@ -62,7 +67,7 @@ class PlayService:
             "updated_at": now_str,
         }
 
-        # 1. 写 COS 对象（C 端主路径，云函数直读断点续播）
+        # 1. 写 COS 对象（C 端主路径，云函数直读断点续播）— 在写锁之外，网络 IO 不串行化
         # COS 未配置时静默降级，不阻断播放进度记录
         try:
             cos_key = f"play_progress/{user_id}/{episode_id}.json"
@@ -79,97 +84,20 @@ class PlayService:
             else:
                 logger.debug("COS put_object 跳过（未配置），仅写 SQLite: {}", e)
 
-        # 2. upsert SQLite play_progress 表（B 端备用，每用户每节目仅一条记录）
-        stmt = sqlite_insert(PlayProgress).values(
-            user_id=user_id,
-            episode_id=episode_id,
-            position=position,
-            duration=duration,
-            completed=completed_flag,
-            updated_at=localnow_naive(),
-        )
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["user_id", "episode_id"],
-            set_={
-                "position": stmt.excluded.position,
-                "duration": stmt.excluded.duration,
-                "completed": stmt.excluded.completed,
-                "updated_at": stmt.excluded.updated_at,
-            },
-        )
-        await self.db.execute(stmt)
-
-        # 3. PlayLog upsert：position 达到阈值时记录/更新（每用户每节目去重一条）
-        # 为什么改 upsert：旧逻辑仅 completed=True 时 insert，未完播不计 play_count，
-        # 用户听了几秒退出 play_count 永远为 0。改为 position >= 阈值即记录，
-        # 完播时仅更新 completed 标志，避免重复计数。
-        # 阈值通过 Settings.PLAY_COUNT_THRESHOLD_SEC 配置（默认 30 秒），避免硬编码
-        threshold = get_settings().PLAY_COUNT_THRESHOLD_SEC
-        should_clear_cache = False
-        if position >= threshold:
-            existing = await self.db.execute(
-                select(PlayLog).where(
-                    PlayLog.user_id == user_id,
-                    PlayLog.episode_id == episode_id,
-                )
-            )
-            log_row = existing.scalar_one_or_none()
-            if log_row is None:
-                # 首次达到阈值：插入一条 PlayLog，play_count +1
-                # played_at 记录首次达到阈值的时间，用于"最近播放"排序
-                self.db.add(
-                    PlayLog(
-                        user_id=user_id,
-                        episode_id=episode_id,
-                        position=position,
-                        duration=duration,
-                        completed=completed_flag,
-                        played_at=localnow_naive(),
-                    )
-                )
-                # 同步累加用户累计收听期数（与 play_count 口径一致）
-                await self.db.execute(
-                    update(User)
-                    .where(User.id == user_id)
-                    .values(total_listen_count=User.total_listen_count + 1)
-                )
-                # 首次记录触发缓存清除：play_count 实际变化，需让列表刷新
-                should_clear_cache = True
-            elif completed and not log_row.completed:
-                # 已有记录且本次完播：仅更新 completed 标志，不重复计数
-                # position/duration 同步更新为完播时的最终值
-                log_row.completed = 1
-                log_row.position = position
-                log_row.duration = duration
-            # 其他情况（已有记录且未完播）：不重复 insert，避免灌入大量未完播记录
-
-        # 4. 累加用户累计收听时长（任务7）
-        # 为什么用增量累加而非 sum(position)：PlayProgress.position 是最后位置（upsert 覆盖），
-        # 重新听同一段只会覆盖不会累加，sum 会严重低估实际收听时长。
-        # 前端计算本次上报周期内的增量 listened_seconds 透传，后端直接累加到 User 字段。
-        if listened_seconds > 0:
-            await self.db.execute(
-                update(User)
-                .where(User.id == user_id)
-                .values(
-                    total_listen_duration=User.total_listen_duration + listened_seconds
-                )
-            )
-
-        await self.db.commit()
-
-        # 5. 首次达到阈值时清除节目列表缓存，让下次请求拿到最新 play_count
-        # 为什么放 commit 后：缓存失效必须在数据落库之后，避免并发请求读到旧值再回填缓存
-        # 为什么只在首次记录时清除：后续上报不改变 play_count，无需频繁清缓存
-        if should_clear_cache:
-            try:
-                from app.cache.manager import cache as cache_manager
-                await cache_manager.delete("episode:today:all")
-                await cache_manager.delete_pattern("episode:today:ch:*")
-                await cache_manager.delete_pattern("episode:list:page:*")
-            except Exception as e:
-                # 缓存失效失败不阻断主流程：下次缓存 TTL 过期后自然刷新
-                logger.debug("清除节目列表缓存失败（不阻断）: {}", e)
+        # 2. SQLite 写改为缓冲聚合（P1 优化）：COS 续播位置已立即落盘（步骤1），
+        #    此处仅把 SQLite 侧的进度/play_count/收听时长入队，由 PlayWriteBuffer
+        #    定时批量落库。把 N 次上报 → 1 次批量事务，显著降低全局写锁竞争与提交频率。
+        #    语义变化：play_count 与收听时长变为秒级最终一致（≤BUFFER_FLUSH_INTERVAL）；
+        #    续播位置因 COS 实时写入不受影响。缓存失效也在批量落库后统一处理。
+        await play_write_buffer.add({
+            "user_id": user_id,
+            "episode_id": episode_id,
+            "position": position,
+            "duration": duration,
+            "completed": completed_flag,
+            "listened_seconds": listened_seconds,
+            "now": now,
+        })
 
     async def get_progress(self, user_id: int, episode_id: int) -> dict | None:
         """查询播放进度：优先读 COS 对象，回退查 SQLite play_progress 表。"""
@@ -253,8 +181,10 @@ class PlayService:
                 continue
 
         if rows:
-            await self.db.execute(insert(PlayLog), rows)
-            await self.db.commit()
+            # 与全局写锁互斥，避免后台批量落库与请求路径/缓冲落库并发写竞争
+            async with write_lock():
+                await self.db.execute(insert(PlayLog), rows)
+                await self.db.commit()
 
         # 并发删除已入库的 COS 对象：gather + return_exceptions 确保单条失败不阻断其他删除
         # COS 默认 QPS 100，FLUSH_BATCH 上限 500 不会触发限流；

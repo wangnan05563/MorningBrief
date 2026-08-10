@@ -16,6 +16,7 @@ from datetime import date
 import pytest
 
 from app.core.security import create_access_token
+from app.services.play_write_buffer import play_write_buffer
 
 
 async def _seed_user_and_episode(db_session, name_prefix="ch"):
@@ -129,6 +130,10 @@ class TestPlaylogProgress:
             headers=headers,
         )
         assert r2.status_code == 200
+
+        # 缓冲落库：report_progress 经 PlayWriteBuffer 异步聚合，测试内需显式 flush
+        # 到当前 db_session 才能立即观察到 User.total_listen_duration 的变化
+        await play_write_buffer.flush(session=db_session)
 
         # 刷新 user，验证 total_listen_duration 已累加 25+40=65
         await db_session.refresh(user)

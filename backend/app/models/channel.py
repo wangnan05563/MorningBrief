@@ -59,6 +59,12 @@ class Channel(Base):
     # 运营在频道管理后台调整此值即可控制小程序 tab 顺序，无需改动小程序（适配动态增删频道）。
     # 存量频道迁移时回填 0，保持原有按 id 的展示顺序。
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # 频道级素材周期回溯天数：当日 pending 素材不足 SELECT_MIN_N 时，
+    # 自动将选材时间范围放宽至最近 N 天内的素材（向上游扩展时间跨度获取更多素材，
+    # 而非依赖 stitch 的 BGM/静音补足，从选材侧杜绝短节目场景）。
+    # 为空(None)时，rewriter 回退到 _calc_dynamic_fallback_days 的动态值（按频道入库频率 3/7/14 天）。
+    # 例如素材稀疏的频道可设为 14~30，避免单日素材不足导致工作流失败。
+    material_lookback_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     # SQLite 不支持 ON UPDATE，updated_at 由 ChannelService.update_channel 显式维护
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

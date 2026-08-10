@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import UserPayload, get_current_user, get_optional_user
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
+from app.core.write_gate import write_lock
 from app.database import get_db
 from app.models import Comment, CommentLike, Episode, EpisodeStatus, User
 from app.services.user_service import get_user_openid
@@ -156,9 +157,10 @@ async def create_comment(
         content=req.content,
         like_count=0,
     )
-    db.add(new_comment)
-    await db.commit()
-    await db.refresh(new_comment)
+    async with write_lock():
+        db.add(new_comment)
+        await db.commit()
+        await db.refresh(new_comment)
     return success(data={
         "id": new_comment.id,
         "episode_id": new_comment.episode_id,
@@ -198,10 +200,11 @@ async def like_comment(
     if existing:
         return success(data={"liked": True, "like_count": comment.like_count})
 
-    # 新增点赞记录 + 计数 +1
-    db.add(CommentLike(user_id=openid, comment_id=comment_id))
-    comment.like_count = (comment.like_count or 0) + 1
-    await db.commit()
+    # 新增点赞记录 + 计数 +1（串行化提交，消除并发写锁竞争）
+    async with write_lock():
+        db.add(CommentLike(user_id=openid, comment_id=comment_id))
+        comment.like_count = (comment.like_count or 0) + 1
+        await db.commit()
     return success(data={"liked": True, "like_count": comment.like_count})
 
 
@@ -220,15 +223,16 @@ async def unlike_comment(
     if comment is None:
         raise NotFoundError("评论不存在")
 
-    # 删除点赞记录（无论是否存在都执行，DELETE 幂等）
-    result = await db.execute(
-        delete(CommentLike).where(
-            CommentLike.user_id == openid,
-            CommentLike.comment_id == comment_id,
+    # 删除点赞记录（无论是否存在都执行，DELETE 幂等）— 串行化提交
+    async with write_lock():
+        result = await db.execute(
+            delete(CommentLike).where(
+                CommentLike.user_id == openid,
+                CommentLike.comment_id == comment_id,
+            )
         )
-    )
-    # rowcount > 0 表示实际删除了记录，才需要减计数
-    if result.rowcount and (comment.like_count or 0) > 0:
-        comment.like_count = comment.like_count - 1
-        await db.commit()
+        # rowcount > 0 表示实际删除了记录，才需要减计数
+        if result.rowcount and (comment.like_count or 0) > 0:
+            comment.like_count = comment.like_count - 1
+            await db.commit()
     return success(data={"liked": False, "like_count": comment.like_count})

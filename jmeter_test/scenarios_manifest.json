@@ -1,0 +1,122 @@
+[
+    {
+        "id":  "S0_baseline",
+        "ramp":  5,
+        "threads":  10,
+        "scenario":  "baseline",
+        "throughput":  100,
+        "duration":  60
+    },
+    {
+        "id":  "S1_read_50",
+        "ramp":  30,
+        "threads":  50,
+        "scenario":  "read",
+        "throughput":  999999,
+        "duration":  120
+    },
+    {
+        "id":  "S1_read_100",
+        "ramp":  30,
+        "threads":  100,
+        "scenario":  "read",
+        "throughput":  999999,
+        "duration":  120
+    },
+    {
+        "id":  "S1_read_200",
+        "ramp":  30,
+        "threads":  200,
+        "scenario":  "read",
+        "throughput":  999999,
+        "duration":  120
+    },
+    {
+        "id":  "S1_read_500",
+        "ramp":  60,
+        "threads":  500,
+        "scenario":  "read",
+        "throughput":  999999,
+        "duration":  120
+    },
+    {
+        "id":  "S2_write_50",
+        "ramp":  30,
+        "threads":  50,
+        "scenario":  "write",
+        "throughput":  999999,
+        "duration":  120
+    },
+    {
+        "id":  "S2_write_100",
+        "ramp":  30,
+        "threads":  100,
+        "scenario":  "write",
+        "throughput":  999999,
+        "duration":  120
+    },
+    {
+        "id":  "S2_write_200",
+        "ramp":  30,
+        "threads":  200,
+        "scenario":  "write",
+        "throughput":  999999,
+        "duration":  120
+    },
+    {
+        "id":  "S3_admin_50",
+        "ramp":  30,
+        "threads":  50,
+        "scenario":  "admin",
+        "throughput":  999999,
+        "duration":  120
+    },
+    {
+        "id":  "S3_admin_100",
+        "ramp":  30,
+        "threads":  100,
+        "scenario":  "admin",
+        "throughput":  999999,
+        "duration":  120
+    },
+    {
+        "id":  "S3_admin_200",
+        "ramp":  30,
+        "threads":  200,
+        "scenario":  "admin",
+        "throughput":  999999,
+        "duration":  120
+    },
+    {
+        "id":  "S4_peak_500",
+        "ramp":  60,
+        "threads":  500,
+        "scenario":  "peak",
+        "throughput":  999999,
+        "duration":  240
+    },
+    {
+        "id":  "S4_peak_800",
+        "ramp":  60,
+        "threads":  800,
+        "scenario":  "peak",
+        "throughput":  999999,
+        "duration":  240
+    },
+    {
+        "id":  "S4_peak_1000",
+        "ramp":  90,
+        "threads":  1000,
+        "scenario":  "peak",
+        "throughput":  999999,
+        "duration":  240
+    },
+    {
+        "id":  "S5_soak",
+        "ramp":  60,
+        "threads":  200,
+        "scenario":  "soak",
+        "throughput":  999999,
+        "duration":  1800
+    }
+]

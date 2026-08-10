@@ -68,12 +68,38 @@ def _create_tencent() -> TTSProvider:
     )
 
 
+def _create_kokoro() -> TTSProvider:
+    """创建 Kokoro 本地离线 TTS provider（Apache 2.0，免费高质量）。"""
+    from app.workflow.tts.kokoro_client import KokoroProvider
+    settings = get_settings()
+    return KokoroProvider(
+        lang=settings.KOKORO_LANG,
+        voice=settings.KOKORO_VOICE,
+        speed=settings.KOKORO_SPEED,
+    )
+
+
+def _create_piper() -> TTSProvider:
+    """创建 Piper 本地离线 TTS provider（MIT，轻量免费）。"""
+    from app.workflow.tts.piper_client import PiperProvider
+    settings = get_settings()
+    return PiperProvider(
+        voice=settings.PIPER_VOICE,
+        voice_dir=settings.PIPER_VOICE_DIR,
+        length_scale=settings.PIPER_LENGTH_SCALE,
+        volume=settings.PIPER_VOLUME,
+        noise_scale=settings.PIPER_NOISE_SCALE,
+    )
+
+
 # Provider 注册表：key = 配置值，value = 工厂函数
 # 新增 provider 时在此注册即可，无需修改 get_tts_provider 逻辑
 _PROVIDER_REGISTRY = {
     "aliyun": _create_aliyun,
     "edge": _create_edge,
     "tencent": _create_tencent,
+    "kokoro": _create_kokoro,
+    "piper": _create_piper,
 }
 
 
