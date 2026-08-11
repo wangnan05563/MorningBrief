@@ -13,7 +13,7 @@
 
 **改动逻辑正确，无 CRITICAL / 阻塞性缺陷，零回归。**
 
-验证：`py_compile` 全过；新增 cross-voice 测试 15 项全绿（8 + 7）。
+验证：`py_compile` 全过；cross-voice 测试 **17 项全绿**（8 + 7 原始 + 2 收尾补充）；**全量后端测试 508 passed / 0 failed（零回归）**。
 
 ## 已确认正确的关键不变量
 
@@ -36,16 +36,20 @@
 - **修复**：改为 `model=f"{settings.TTS_PROVIDER}:{voice or 'default'}"`，如实反映「引擎:音色」。
   无测试断言旧标签，低级低风险；复测 15 项 cross-voice 用例仍全绿。
 
-### P3 — 启用但当前 provider 音色不足时的静默 no-op（建议，未改）
-- 若管理端开启交叉音色、为 `edge` 选了 2 个音色，但当前 `TTS_PROVIDER` 是 `tencent` 且未给 tencent 选音色，`assign_cross_voices` 返回全 `None`，配置 `enabled:true` 实际不生效且无任何告警。
-- **建议**：前端在 `enabled && 当前 provider 的 voices 数量 < 2` 时加 `el-alert` 提示，避免运营困惑。
+### P3 — 启用但当前 provider 音色不足时的静默 no-op（已闭环）
+- **原建议**：管理端开启交叉音色、为 `edge` 选了 2 个音色，但当前 `TTS_PROVIDER` 是 `tencent` 且未给 tencent 选音色时，`assign_cross_voices` 返回全 `None`，配置 `enabled:true` 实际不生效且无告警。
+- **收尾（前端告警）**：`AIConfig.vue` 新增 `crossVoiceInsufficientForProvider` computed（`enabled` 且非 `piper` 且当前 provider 已选音色 < 2 → true），并在交叉音色分区「音色组合」表单项后追加 `el-alert`（warning、`:closable=false`、show-icon），提示「已启用交叉音色但当前引擎仅选不足 2 个音色，保存后将回退单音色」。
+- **验证**：`vite build` 成功（AIConfig chunk 31.49kB，较 31.18kB +0.31kB）。
 
-### P3 — `random` 策略未固定随机种子（信息项，未改）
-- `assign_cross_voices` 的 `random.choice` 未种子化，同稿件重合成可能换声。
-- TTS 场景下「每次不同声」可接受，仅影响可复现性；测试已用 `FakeRandom` monkeypatch 覆盖。
+### P3 — `random` 策略未固定随机种子（已闭环）
+- **原信息项**：`random.choice` 未种子化，同稿件重合成可能换声，仅影响可复现性。
+- **收尾（确定性可复现）**：新增模块级专用 `_cross_voice_rng = random.Random()`；调用前以输入派生种子重置：`seed_src = "|".join(voices) + f"#{total}#{provider}"`，取 `md5(seed_src).digest()[:8]` 转 int 作为 seed。同一配置 → 同一声音分配（可复现），不影响全局 `random` 状态；不相邻重复约束（循环内排除 `prev`）保留。
+- **验证**：新增 `test_random_strategy_is_deterministic`（同输入两次调用 ==、不相邻重复）全绿。
 
-### P3 — `interval` 默认值双写（无害，未改）
-- `_parse_cross_voice` 默认 `interval=2`，`assign_cross_voice` 内用 `or 1`。因 `_parse_cross_voice` 总是把 interval 归一为存在值（默认 2），`or 1` 实际不触发，属冗余防御，无功能影响。
+### P3 — `interval` 默认值双写（已闭环）
+- **原无害项**：`_parse_cross_voice` 默认 `interval=2`，`assign_cross_voice` 内 `or 1`，冗余防御。
+- **收尾（统一真相源）**：改为区分「缺失 → 缺省 2」「0/负 → clamp 下界 1」：`raw_interval = cfg.get("interval"); interval = 2 if raw_interval is None else max(1, int(raw_interval))`，消除双默认不一致。
+- **验证**：新增 `test_interval_default_when_missing`（缺失 interval → 每 2 段 `["a","a","b","b","a","a"]`）全绿；既有 `test_interval_strategy_clamps_minimum`（interval=0 → clamp 到 1）仍绿。
 
 ## 附：本次改动文件清单
 - 新增：`backend/tests/test_synthesizer_cross_voice.py`、`backend/tests/test_cross_voice_config.py`

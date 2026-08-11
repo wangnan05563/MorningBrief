@@ -265,6 +265,13 @@ async def _migrate_channel_schema() -> None:  # NOSONAR
             ("display_order", "INTEGER NOT NULL DEFAULT 0"),
             # 频道级素材周期回溯天数：为空时回退 rewriter 动态值（3/7/14 天）
             ("material_lookback_days", "INTEGER"),
+            # 业务范围扩展 MVP 字段：
+            # selection_strategy=选题策略(heat/outline/manual)，为空回退 heat
+            # enable_ad=是否投放广告(1/0)，课程频道设 0 关广告
+            # manual_material_ids=manual 选题的素材 ID 列表(JSON 文本)
+            ("selection_strategy", "TEXT"),
+            ("enable_ad", "INTEGER"),
+            ("manual_material_ids", "TEXT"),
         ]
         added = 0
         for col_name, col_type in new_columns:
@@ -324,6 +331,34 @@ async def _migrate_cover_url_column() -> None:  # NOSONAR
             logger.info("[startup] material migration done, added cover_url column")
     except Exception as e:
         logger.warning("[startup] material cover_url migration failed: %s", e)
+    finally:
+        conn.close()
+
+
+async def _migrate_material_dedup_column() -> None:  # NOSONAR
+    """素材表结构迁移：为 material 表追加 dedup_key 列（幂等）。
+
+    配合 MVP 输入适配器（文档上传 / 手动录入，source_type=list）：
+    list 类型素材无真实 URL，用正文 content_hash 作为去重键，
+    查重判定由 url 唯一约束改为 (source_type, dedup_key)。
+    SQLite create_all 不修改已存在表结构，需显式 ALTER TABLE。
+    """
+    import sqlite3
+    from app.paths import resolve_db_path
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(material)")
+        existing_cols = {row[1] for row in cur.fetchall()}
+
+        if "dedup_key" not in existing_cols:
+            cur.execute("ALTER TABLE material ADD COLUMN dedup_key VARCHAR(64)")
+            conn.commit()
+            logger.info("[startup] material 表迁移完成，新增 dedup_key 列")
+    except Exception as e:
+        logger.warning("[startup] material dedup_key 迁移失败: %s", e)
     finally:
         conn.close()
 
@@ -611,6 +646,7 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
     # material table cover_url column migration (idempotent)
     try:
         await _migrate_cover_url_column()
+        await _migrate_material_dedup_column()
     except Exception as e:
         logger.warning("[startup] material cover_url migration failed: %s", e)
 

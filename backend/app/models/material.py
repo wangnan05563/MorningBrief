@@ -57,3 +57,9 @@ class Material(Base):
     # 封面图 URL：article_parser 从 og:image 提取，小程序文稿页按段展示
     # 仅存原站 URL 不下载，避免爬虫耗时与存储成本；原站删图时小程序自然降级为纯文本
     cover_url: Mapped[Optional[str]] = mapped_column(String(512), comment="封面图 URL（og:image）")
+    # 去重键（MVP 输入适配器）：list 类型素材（手动录入/文档上传）无真实 URL，
+    # 用正文 content_hash 作为去重键；rss 类型可空（沿用 url 唯一约束）。
+    # 唯一性判定：list 类型按 (source_type, dedup_key) 查重，rss 类型按 url 查重。
+    dedup_key: Mapped[Optional[str]] = mapped_column(
+        String(64), comment="去重键：list 类型存 content_hash，rss 类型为空"
+    )

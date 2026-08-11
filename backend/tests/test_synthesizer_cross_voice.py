@@ -45,23 +45,43 @@ def test_interval_strategy_clamps_minimum():
 def test_random_strategy_avoids_adjacent_repeat():
     cfg = {"enabled": True, "strategy": "random", "voices": {"edge": ["a", "b"]}}
 
-    # 固定 random.choice 行为以确定性验证「避免相邻重复」逻辑
+    # 固定 RNG 行为以确定性验证「避免相邻重复」逻辑
     class FakeRandom:
+        def seed(self, *args, **kwargs):  # 调用方在循环前重置种子，这里 no-op
+            pass
+
         def choice(self, seq):
             # 调用方已排除 prev，seq 至少 1 个元素；返回首个即得到 a,b,a,b...
             return seq[0]
 
     import app.workflow.tts.synthesizer as syn
 
-    orig = syn.random
-    syn.random = FakeRandom()
+    orig = syn._cross_voice_rng
+    syn._cross_voice_rng = FakeRandom()
     try:
         plan = assign_cross_voices(6, cfg, "edge")
     finally:
-        syn.random = orig
+        syn._cross_voice_rng = orig
 
     assert plan == ["a", "b", "a", "b", "a", "b"]
     assert all(v in ("a", "b") for v in plan)
+
+
+def test_random_strategy_is_deterministic():
+    # 修复后：random 策略由「输入派生确定性种子」驱动，同一配置两次调用结果一致（可复现）
+    cfg = {"enabled": True, "strategy": "random", "voices": {"edge": ["a", "b", "c"]}}
+    p1 = assign_cross_voices(9, cfg, "edge")
+    p2 = assign_cross_voices(9, cfg, "edge")
+    assert p1 == p2
+    # 不相邻重复约束始终成立
+    assert all(p1[i] != p1[i + 1] for i in range(len(p1) - 1))
+
+
+def test_interval_default_when_missing():
+    # 修复后：interval 缺失时缺省为 2（对齐 _parse_cross_voice / 前端默认），而非每 1 段切换
+    cfg = {"enabled": True, "strategy": "interval", "voices": {"edge": ["a", "b"]}}
+    plan = assign_cross_voices(6, cfg, "edge")
+    assert plan == ["a", "a", "b", "b", "a", "a"]
 
 
 def test_piper_single_voice_no_cross():

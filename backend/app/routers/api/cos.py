@@ -20,6 +20,8 @@ from pydantic import BaseModel
 from app.core.auth import UserPayload, require_user
 from app.core.exceptions import BizError, ParamError
 from app.core.response import success
+from app.config import get_settings
+from app.core.exceptions import ParamError
 from app.cos.client import (
     build_object_url,
     cos_client,
@@ -28,18 +30,15 @@ from app.cos.client import (
 
 router = APIRouter(prefix="/api/v1/cos", tags=["C端-云端存储"])
 
-# 与 users.py 头像约束保持一致：微信 chooseAvatar 仅返回 jpg/png/webp/gif
-_AVATAR_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
-# 预签名有效期上下限：防止前端传过长/过短导致安全或易用性问题
-_PRESIGN_MIN_EXPIRED = 60
-_PRESIGN_MAX_EXPIRED = 1800
-
 
 class CosPresignUploadRequest(BaseModel):
     """申请上传预签名 URL 请求体。"""
     filename: str
     content_type: str | None = None
     expired: int = 300
+    # 文件字节大小（可选）：预签名场景服务端读不到 body，仅能声明式上限校验；
+    # 不传则不校验（兼容旧客户端），传了超过 COS_AVATAR_MAX_SIZE_MB 即拒绝。
+    file_size: int | None = None
 
 
 @router.post("/presign-upload")
@@ -59,14 +58,29 @@ async def presign_upload(
     if not is_cos_configured():
         return success(data={"cos_enabled": False})
 
+    settings = get_settings()
+    # 扩展名白名单从配置读取（维度 10：阈值不硬编码）
+    allowed = {
+        e.strip().lower()
+        for e in settings.COS_AVATAR_ALLOWED_EXTS.split(",")
+        if e.strip()
+    }
+
     # 文件名安全化处理：basename 防路径穿越（../ 或绝对路径）+ 扩展名白名单
     raw = os.path.basename(req.filename or "")
     if not raw:
         raise ParamError("文件名不能为空")
     ext = os.path.splitext(raw)[1].lower()
-    if ext not in _AVATAR_ALLOWED_EXTS:
+    if ext not in allowed:
         raise ParamError(
-            f"不支持的图片格式：{ext}，允许：{', '.join(sorted(_AVATAR_ALLOWED_EXTS))}"
+            f"不支持的图片格式：{ext}，允许：{', '.join(sorted(allowed))}"
+        )
+
+    # 声明式大小上限（预签名场景服务端读不到 body，依赖客户端带 file_size）
+    max_bytes = settings.COS_AVATAR_MAX_SIZE_MB * 1024 * 1024
+    if req.file_size and req.file_size > max_bytes:
+        raise ParamError(
+            f"文件过大（{req.file_size} 字节），上限 {max_bytes} 字节"
         )
 
     # Key 强制落在本人前缀下：user:{user_id}/{timestamp}{ext}
@@ -78,7 +92,10 @@ async def presign_upload(
     if not key.startswith(prefix):
         raise ParamError("非法上传路径")
 
-    expired = max(_PRESIGN_MIN_EXPIRED, min(req.expired or 300, _PRESIGN_MAX_EXPIRED))
+    expired = max(
+        settings.COS_PRESIGN_MIN_EXPIRED,
+        min(req.expired or 300, settings.COS_PRESIGN_MAX_EXPIRED),
+    )
     content_type = req.content_type or "image/jpeg"
 
     upload_url = await cos_client.get_presigned_upload_url(

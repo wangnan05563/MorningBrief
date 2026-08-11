@@ -569,7 +569,7 @@ class WorkflowScheduler:
     async def trigger_workflow(
         self, episode_date: date, source: str,
         channel_id: Optional[int] = None, priority: int = 5,
-        triggered_by: str = None,
+        triggered_by: str = None, skip_crawl: bool = False,
     ) -> str:
         """触发工作流，返回 workflow_id。
 
@@ -579,6 +579,8 @@ class WorkflowScheduler:
             channel_id: 频道归属，频道禁用时据此取消排队
             priority: 优先级 0-10，默认 5（越大越先执行）
             triggered_by: 手动触发时记录 admin username
+            skip_crawl: 业务范围扩展——文档上传/手动选题场景跳过爬虫步骤
+                （素材已在 T3 入库），预置成功 crawl 步骤使 _run_workflow 从 rewrite 开始
 
         Returns:
             workflow_id（如 wf-20260708-0001）
@@ -616,6 +618,25 @@ class WorkflowScheduler:
                 )
                 session.add(wf)
                 await session.commit()
+
+                # 业务范围扩展：文档上传/手动选题场景跳过爬虫（素材已在 T3 入库），
+                # 预置一条成功的 crawl 步骤，_run_workflow 据此跳过 crawl、从 rewrite 开始
+                if skip_crawl:
+                    seed = WorkflowStep(
+                        workflow_id=workflow_id,
+                        step_name=WorkflowStepName.crawl.value,
+                        status=WorkflowStepStatus.success.value,
+                        result={},
+                        started_at=localnow_naive(),
+                        finished_at=localnow_naive(),
+                        retry_count=0,
+                    )
+                    session.add(seed)
+                    await session.commit()
+                    logger.info(
+                        "跳过爬虫步骤（skip_crawl）workflow_id=%s channel_id=%s",
+                        workflow_id, channel_id,
+                    )
 
             # 入队 PriorityQueue（sort_priority 为负数实现 DESC 最小堆）
             entry = QueueEntry(

@@ -261,6 +261,19 @@ class Settings(BaseSettings):
     COS_REGION: str = "ap-guangzhou"
     COS_BUCKET: str = ""
     COS_CDN_DOMAIN: str = ""
+    # UGC 直传对象是否公开读（默认 True）。C 端头像等 UGC 直传以"公开可读"为前提：
+    #   True  → Bucket/对象公开读，build_object_url 返回公开直链（<image src> 直接可用）；
+    #   False → Bucket 私有读，build_object_url 回退预签名私有 URL（有时效，
+    #           与 cos_storage_service.get_download_url 口径一致），避免公开直链 403。
+    COS_OBJECTS_PUBLIC_READ: bool = True
+    # C 端 UGC（头像）直传允许的文件扩展名白名单（逗号分隔，含点，大小写不敏感）
+    COS_AVATAR_ALLOWED_EXTS: str = ".jpg,.jpeg,.png,.webp,.gif"
+    # 预签名 URL 有效期上下限（秒）：防前端传过长/过短导致安全或易用性问题
+    COS_PRESIGN_MIN_EXPIRED: int = 60
+    COS_PRESIGN_MAX_EXPIRED: int = 1800
+    # 头像单文件上限（MB）：预签名场景服务端读不到 body，仅能声明式校验
+    # （申请时由客户端带 file_size），纵深防御依赖 Bucket Policy 强制大小/类型
+    COS_AVATAR_MAX_SIZE_MB: int = 5
 
     # ---- 云函数 SCF（V1.2 新增：C 端 5 个接口承载层） ----
     SCF_REGION: str = "ap-guangzhou"

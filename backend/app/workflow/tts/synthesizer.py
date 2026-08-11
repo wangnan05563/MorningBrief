@@ -5,6 +5,7 @@
 失败段跳过并告警，成功率 < 50% 视为整期失败。
 """
 import asyncio
+import hashlib
 import logging
 import random
 import re
@@ -252,6 +253,11 @@ async def _persist_segment_audio_urls(
             await session.close()
 
 
+# 交叉音色 random 策略专用 RNG：固定实例，调用前以「输入派生种子」重置，
+# 保证同一配置稳定产出同一声音分配（可复现），且不影响全局 random 状态/其他模块。
+_cross_voice_rng = random.Random()
+
+
 def assign_cross_voices(total: int, cfg: dict, provider: str) -> list:
     """根据交叉音色配置，为 total 个段落（按播放顺序编号 0..total-1）计算各自使用的音色 key。
 
@@ -271,7 +277,19 @@ def assign_cross_voices(total: int, cfg: dict, provider: str) -> list:
         # 音色不足 2 个无法交替，回退默认音色（含 Piper 单说话人模型场景）
         return [None] * total
     strategy = cfg.get("strategy", "round_robin")
-    interval = max(1, int(cfg.get("interval") or 1))
+    # interval 缺省 2（对齐 _parse_cross_voice 与前端默认）；
+    # 非法/缺失值统一 clamp 下界为 1（每段切换，避免 interval<=0 退化）。
+    raw_interval = cfg.get("interval")
+    interval = 2 if raw_interval is None else max(1, int(raw_interval))
+
+    # random 策略：用「输入派生确定性种子」重置专用 RNG，保证可复现且听感有变化；
+    # 不相邻重复约束在循环内通过排除 prev 实现。
+    if strategy == "random":
+        seed_src = "|".join(voices) + f"#{total}#{provider}"
+        _cross_voice_rng.seed(
+            int.from_bytes(hashlib.md5(seed_src.encode("utf-8")).digest()[:8], "big")
+        )
+
     n = len(voices)
     assigned: list = []
     prev = None
@@ -281,7 +299,7 @@ def assign_cross_voices(total: int, cfg: dict, provider: str) -> list:
         elif strategy == "random":
             # 随机但避免与上一段落同音色，提升交替感、避免相邻重复
             choices = [v for v in voices if v != prev] or voices
-            chosen = random.choice(choices)
+            chosen = _cross_voice_rng.choice(choices)
             prev = chosen
             assigned.append(chosen)
             continue

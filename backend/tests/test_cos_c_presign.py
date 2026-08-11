@@ -11,6 +11,8 @@ COS 客户端方法通过 monkeypatch cos_client 单例替换为 AsyncMock，无
 - 扩展名白名单：拒绝 .exe
 - 空文件名拒绝
 - CDN 域名已配置时 object_url 走 CDN 直链
+- file_size 超过 COS_AVATAR_MAX_SIZE_MB 上限拒绝（400）
+- COS_OBJECTS_PUBLIC_READ=False（私有读）时 object_url 回退预签名私有 URL
 """
 import pytest
 from unittest.mock import AsyncMock
@@ -140,3 +142,40 @@ def test_presign_cdn_object_url(client, user_token, cos_configured, monkeypatch)
     )
     data = resp.json()["data"]
     assert data["object_url"] == f"https://cdn.example.com/{data['key']}"
+
+
+def test_presign_rejects_oversized_file(client, user_token, cos_configured, monkeypatch):
+    # 已配置上限默认 5MB；声明 6MB 应被拒绝（预签名场景服务端读不到 body，
+    # 只能依赖客户端声明式 file_size 上限校验）
+    monkeypatch.setattr(
+        cos_client_mod.cos_client,
+        "get_presigned_upload_url",
+        AsyncMock(return_value="https://x/put"),
+    )
+    resp = client.post(
+        "/api/v1/cos/presign-upload",
+        json={"filename": "a.jpg", "file_size": 6 * 1024 * 1024},
+        headers=_user_headers(user_token),
+    )
+    assert resp.status_code == 400
+
+
+def test_presign_private_read_falls_back_presigned(
+    client, user_token, cos_configured, monkeypatch
+):
+    # Bucket 私有读：object_url 回退预签名私有 URL（与 get_download_url 口径一致），
+    # 避免公开直链 403。验证 HIGH 修复后语义统一。
+    monkeypatch.setattr(cos_configured, "COS_OBJECTS_PUBLIC_READ", False)
+    monkeypatch.setattr(
+        cos_client_mod.cos_client,
+        "get_presigned_upload_url",
+        AsyncMock(return_value="https://x/put"),
+    )
+    resp = client.post(
+        "/api/v1/cos/presign-upload",
+        json={"filename": "a.jpg"},
+        headers=_user_headers(user_token),
+    )
+    data = resp.json()["data"]
+    assert data["cos_enabled"] is True
+    assert "presigned" in data["object_url"]

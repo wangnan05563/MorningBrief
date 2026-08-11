@@ -43,6 +43,7 @@ class PlayWriteBuffer:
         self._lock = asyncio.Lock()  # 保护 _buf 与 _flushing 标志
         self._flushing = False
         self._task = None
+        self._bg_tasks: set = set()  # 保留异步 flush 任务引用，防被 GC 提前回收
         self._stop = False
 
     async def add(self, event: dict) -> None:
@@ -55,7 +56,11 @@ class PlayWriteBuffer:
             await self.flush()
         elif size >= BUFFER_FLUSH_SIZE:
             # 达到批量阈值，fire-and-forget 异步 flush（不阻塞上报请求）
-            asyncio.create_task(self._safe_flush())
+            # 保留任务引用到 _bg_tasks，避免事件循环回收未完成的 task 导致
+            # "Task was destroyed but it is pending" 警告与潜在丢数据（维度 198）
+            task = asyncio.create_task(self._safe_flush())
+            self._bg_tasks.add(task)
+            task.add_done_callback(self._bg_tasks.discard)
 
     async def start(self) -> None:
         """启动周期 flush 后台任务（在 lifespan 中调用）。"""
