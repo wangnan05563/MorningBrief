@@ -927,17 +927,33 @@ def _parse_llm_response(raw: str, material_id: int) -> dict:  # NOSONAR S3776: L
     return parsed
 
 
-def _select_top_materials(materials: list[dict], top_n: int = SELECT_TOP_N) -> list[dict]:
-    """按品类分组选题，保证多样性与数量充足（LLD 5.3.2）。
+def _select_top_materials(
+    materials: list[dict], top_n: int = SELECT_TOP_N,
+    strategy: str = "heat", manual_ids: list[int] | None = None,
+) -> list[dict]:
+    """选题（按策略分支）。
 
     策略：
-    1. 按品类分组，每品类按热度降序
-    2. 轮询各品类取热度最高的 1 篇（第一轮保证品类覆盖）
-    3. 若总量不足 top_n，第二轮从各品类补取次高热度的素材
-    4. 单品类素材池很大时仍受 top_n 上限约束
-
-    避免单一品类（如爬虫未分类导致全归"综合"）只能取 2 篇 < MIN_VALID_SEGMENTS 的缺陷。
+    - heat（默认，存量兼容）：按品类分组，每品类按热度降序轮询取 top_n（LLD 5.3.2）
+    - outline：按素材入库顺序（id 升序=文档章节顺序）取前 top_n，用于专业资料语音课
+    - manual：按 manual_ids 指定顺序选题，用于运营手动指定素材
     """
+
+    # 业务范围扩展：outline / manual 选题策略（heat 走下方原有品类热度逻辑）
+    if strategy == "outline":
+        # 按文档章节顺序（素材入库 id 升序）选题，取前 top_n 条
+        ordered = sorted(materials, key=lambda m: m.get("id") or 0)
+        return ordered[:top_n]
+    if strategy == "manual":
+        # 按 manual_ids 指定顺序选题（仅保留列表中且已在待选素材内的 id）
+        if manual_ids:
+            by_id = {m["id"]: m for m in materials}
+            selected = [by_id[i] for i in manual_ids if i in by_id]
+            logger.info("manual 选题：指定 {} 个 ID，命中 {} 条", len(manual_ids), len(selected))
+            return selected[:top_n]
+        logger.warning("manual 选题但 manual_material_ids 为空，返回空选")
+        return []
+
     by_category = defaultdict(list)
     for m in materials:
         cat = m.get("category") or "未分类"
@@ -1125,8 +1141,48 @@ def _assemble_script(
     }
 
 
+def _parse_material_ids(raw: str | None) -> list[int] | None:
+    """解析 manual 选题策略的素材 ID 列表（JSON 数组文本）。
+
+    返回归一化的 int 列表；空/非法输入返回 None（manual 退化为空选）。
+    """
+    if not raw or not raw.strip():
+        return None
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        logger.warning("manual_material_ids 解析失败，非 JSON: {}", raw[:80])
+        return None
+    if not isinstance(data, list):
+        return None
+    ids: list[int] = []
+    for x in data:
+        try:
+            ids.append(int(x))
+        except (ValueError, TypeError):
+            continue
+    return ids or None
+
+
+def _material_to_public_dict(r) -> dict:
+    """ORM Material 行 → 改写流程使用的公开 dict（与 _fetch_materials 保持一致）。"""
+    return {
+        "id": r.id,
+        "source": r.source,
+        "title": r.title,
+        "content": r.content,
+        "url": r.url,
+        "published_at": r.published_at,
+        "category": r.category,
+        "workflow_id": r.workflow_id,
+        # 封面图透传到 segment，小程序文稿页按段展示
+        "cover_url": r.cover_url,
+    }
+
+
 async def _fetch_materials(
-    date_str: str, channel_id: int = None, material_lookback_days: int = None
+    date_str: str, channel_id: int = None, material_lookback_days: int = None,
+    strategy: str = "heat",
 ) -> list[dict]:
     """查询当日 pending 素材，当日不足 SELECT_MIN_N 条时回溯最近 N 天。
 
@@ -1152,6 +1208,23 @@ async def _fetch_materials(
     专门频道 RSS 不可达时让工作流显式失败，由运维介入修复源配置，
     而非用不相关内容掩盖问题。
     """
+    # 业务范围扩展：outline/manual 选题不按"当日 crawled_at"过滤，
+    # 而是按频道 + status=pending 取全部素材（文档上传可能发生在非节目日），
+    # 按 id 升序返回，供 outline 按章节顺序 / manual 按指定 ID 顺序选题。
+    if strategy in ("outline", "manual"):
+        async with AsyncSessionLocal() as session:
+            stmt = select(Material).where(Material.status == MaterialStatus.pending)
+            if channel_id is not None:
+                stmt = stmt.where(Material.channel_id == channel_id)
+            stmt = stmt.order_by(Material.id.asc())
+            result = await session.execute(stmt)
+            rows = list(result.scalars().all())
+        logger.info(
+            "outline/manual 选题：取频道全部 pending 素材 %d 条（channel_id=%s, strategy=%s）",
+            len(rows), channel_id, strategy,
+        )
+        return [_material_to_public_dict(r) for r in rows]
+
     async with AsyncSessionLocal() as session:
         day = date.fromisoformat(date_str)
         start = datetime.combine(day, datetime.min.time())
@@ -1208,21 +1281,7 @@ async def _fetch_materials(
 
         # ORM 对象转 dict，便于热度计算与并发传递
         # 注：schema 未含 source_authority 字段，heat_score 内部默认 0.5
-        return [
-            {
-                "id": r.id,
-                "source": r.source,
-                "title": r.title,
-                "content": r.content,
-                "url": r.url,
-                "published_at": r.published_at,
-                "category": r.category,
-                "workflow_id": r.workflow_id,
-                # 封面图透传到 segment，小程序文稿页按段展示
-                "cover_url": r.cover_url,
-            }
-            for r in rows
-        ]
+        return [_material_to_public_dict(r) for r in rows]
 
 
 async def _calc_dynamic_fallback_days(channel_id: int | None) -> int:
@@ -1294,6 +1353,8 @@ async def _fetch_channel_prompts(channel_id: int) -> dict:
                 "rewrite_template": None,
                 "enable_thinking_question": None,
                 "material_lookback_days": None,
+                "selection_strategy": None,
+                "manual_material_ids": None,
             }
         return {
             "name": ch.name,
@@ -1306,6 +1367,9 @@ async def _fetch_channel_prompts(channel_id: int) -> dict:
             "enable_thinking_question": ch.enable_thinking_question != 0,
             # None=未配置，rewriter 回退到 _calc_dynamic_fallback_days 的动态值
             "material_lookback_days": ch.material_lookback_days,
+            # 业务范围扩展：选题策略（None=heat 兼容），manual 的素材 ID 列表
+            "selection_strategy": ch.selection_strategy,
+            "manual_material_ids": _parse_material_ids(ch.manual_material_ids),
         }
 
 
@@ -1431,12 +1495,15 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
     if channel_id:
         channel_prompts = await _fetch_channel_prompts(channel_id)
         logger.info(
-            "频道提示词 channel_id=%s intro=%s outro=%s template=%s",
+            "频道提示词 channel_id=%s intro=%s outro=%s template=%s strategy=%s",
             channel_id,
             bool(channel_prompts["intro_prompt"]),
             bool(channel_prompts["outro_prompt"]),
             bool(channel_prompts["rewrite_template"]),
+            channel_prompts.get("selection_strategy"),
         )
+    # 选题策略：None/空 → heat（存量兼容）；outline=文档章节顺序；manual=手动指定 ID
+    selection_strategy = (channel_prompts or {}).get("selection_strategy") or "heat"
 
     # 0.5 读取目标时长 + TTS 语速倍率，反算每段目标字数
     # 数学关系：总字数 = 目标时长 × 基础语速 × 倍率 / 60
@@ -1456,7 +1523,8 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         channel_prompts.get("material_lookback_days") if channel_prompts else None
     )
     materials = await _fetch_materials(
-        date_str, channel_id, material_lookback_days=material_lookback_days
+        date_str, channel_id, material_lookback_days=material_lookback_days,
+        strategy=selection_strategy,
     )
     logger.info(
         "当日 pending 素材 %d 条（channel_id=%s lookback=%s）",
@@ -1495,14 +1563,19 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
             f"请检查爬虫是否正常运行、RSS 源配置是否可达"
         )
 
-    # 2. 选题：按品类分组，每品类选 1-2 篇热度最高
-    selected = _select_top_materials(materials, top_n=SELECT_TOP_N)
-    logger.info("选题 %d 条（按热度排序）", len(selected))
+    # 2. 选题：按策略分支（heat=品类热度 / outline=文档章节顺序 / manual=指定 ID）
+    selected = _select_top_materials(
+        materials, top_n=SELECT_TOP_N,
+        strategy=selection_strategy,
+        manual_ids=channel_prompts.get("manual_material_ids") if channel_prompts else None,
+    )
+    logger.info("选题 %d 条（策略=%s）", len(selected), selection_strategy)
 
     # 2.3 AI 相关性筛选：批量判断选题素材是否与频道主题相关
     # 作为关键词过滤的第二道防线，处理关键词无法覆盖的语义相关性
     # 筛选失败时降级为全部保留（不阻断工作流）
-    if channel_prompts and channel_prompts.get("name"):
+    # 业务范围扩展：outline/manual 为结构化资料场景，按大纲/指定顺序选题，跳过新闻语义的相关性筛选
+    if channel_prompts and channel_prompts.get("name") and selection_strategy == "heat":
         selected = await _filter_materials_by_relevance(
             selected,
             channel_prompts["name"],

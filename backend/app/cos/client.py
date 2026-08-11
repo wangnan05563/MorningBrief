@@ -217,21 +217,37 @@ def build_object_url(Key: str) -> str:
     """拼出对象可公开访问的 URL（CDN 直链优先，否则 COS 默认域名）。
 
     与 cos_storage_service.get_download_url 的 CDN 逻辑保持一致口径。
-    用于预签名上传成功后，前端/小程序直接持此 URL 作为头像等资源的访问地址
-    （前提是 Bucket/对象为公开读，或通过 CDN 回源公开访问）。
+    用于预签名上传成功后，前端/小程序直接持此 URL 作为头像等资源的访问地址。
+
+    访问策略由 ``COS_OBJECTS_PUBLIC_READ`` 决定（消除无 CDN 时与
+    get_download_url 的语义分叉）：
+    - True（默认）：Bucket/对象公开读 → 返回公开直链（<image src> 直接可用）；
+    - False：Bucket 私有读 → 回退预签名私有 URL（有时效，与 get_download_url
+      口径一致），避免私有读时公开直链 403。C 端 UGC 直传本就以公开读为前提，
+      私有读下 object_url 有时效，仅作兜底。
     """
     from urllib.parse import urlparse
 
-    settings = get_settings()
-    cdn = (settings.COS_CDN_DOMAIN or "").strip()
+    cfg = get_settings()
+    cdn = (cfg.COS_CDN_DOMAIN or "").strip()
     if cdn:
         parsed = urlparse(cdn)
         netloc = parsed.netloc or cdn
         scheme = parsed.scheme or "https"
         return f"{scheme}://{netloc.rstrip('/')}/{Key.lstrip('/')}"
-    return (
-        f"https://{settings.COS_BUCKET}.cos.{settings.COS_REGION}.myqcloud.com/"
-        f"{Key.lstrip('/')}"
+    if cfg.COS_OBJECTS_PUBLIC_READ:
+        return (
+            f"https://{cfg.COS_BUCKET}.cos.{cfg.COS_REGION}.myqcloud.com/"
+            f"{Key.lstrip('/')}"
+        )
+    # 私有读兜底：回退预签名私有 URL，避免公开直链 403（注意有时效）
+    logger.warning(
+        "[cos] COS_OBJECTS_PUBLIC_READ=False 但 C 端直传需要公开可读，"
+        "object_url 回退预签名私有 URL（有时效），请确认部署契约"
+    )
+    client = _get_cos_client()
+    return client.get_presigned_download_url(
+        Bucket=cfg.COS_BUCKET, Key=Key, Expired=300
     )
 
 

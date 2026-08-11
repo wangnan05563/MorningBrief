@@ -8,7 +8,7 @@
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +17,8 @@ from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.exceptions import NotFoundError, BizError
 from app.core.response import success
 from app.database import get_db
-from app.models import AuditLog, Material
+from app.models import AuditLog, Material, MaterialSourceType
+from app.services.document_ingest import parse_document, compute_content_hash, UnsupportedFormatError
 
 router = APIRouter(prefix="/admin/api/v1/materials", tags=["B端-素材管理"])
 
@@ -70,6 +71,65 @@ def _material_to_dict(m: Material) -> dict:
         "channel_id": m.channel_id,
         "workflow_id": m.workflow_id,
     }
+
+
+async def _persist_material(
+    db: AsyncSession,
+    *,
+    channel_id: int | None,
+    source: str,
+    title: str,
+    content: str,
+    category: str | None = None,
+    source_type: str = MaterialSourceType.list.value,
+    url: str | None = None,
+    dedup_key: str | None = None,
+) -> Material:
+    """入库单条素材，按 source_type 选择去重策略（list 用 dedup_key，rss 用 url）。
+
+    list 类型无真实 URL，url 用合成值 list://{channel_id}/{dedup_key[:16]} 满足
+    NOT NULL + 唯一约束；去重判定走 (source_type, dedup_key)，与 rss 的 url 唯一键解耦。
+    """
+    if source_type == MaterialSourceType.list.value:
+        key = dedup_key or compute_content_hash(content)
+        dup = await db.execute(
+            select(Material.id).where(
+                Material.source_type == MaterialSourceType.list.value,
+                Material.dedup_key == key,
+            )
+        )
+        if dup.scalar_one_or_none() is not None:
+            raise BizError(code=409, message="素材内容已存在（重复上传）")
+        synthetic_url = f"list://{channel_id or 0}/{key[:16]}"
+        m = Material(
+            channel_id=channel_id,
+            source=source,
+            source_type=source_type,
+            title=title,
+            content=content,
+            url=synthetic_url,
+            dedup_key=key,
+            category=category,
+        )
+    else:
+        if not url:
+            raise BizError(code=400, message="rss 类型素材必须提供 url")
+        dup = await db.execute(select(Material.id).where(Material.url == url))
+        if dup.scalar_one_or_none() is not None:
+            raise BizError(code=409, message="URL 已存在")
+        m = Material(
+            channel_id=channel_id,
+            source=source,
+            source_type=source_type,
+            title=title,
+            content=content,
+            url=url,
+            category=category,
+        )
+    db.add(m)
+    await db.commit()
+    await db.refresh(m)
+    return m
 
 
 @router.get("")
@@ -149,28 +209,25 @@ async def create_material(
 ):
     """手动新增素材。
 
-    url 唯一性先查重再插入，避免依赖数据库 IntegrityError 兜底，
-    返回更友好的业务错误码。
+    去重按 source_type 分流：rss 走 url 唯一约束，list 走 dedup_key。
+    workflow_id 为运行期临时关联，可空。
     """
-    # 查重放在事务前，命中则直接拒绝，省一次写操作
-    dup = await db.execute(select(Material.id).where(Material.url == req.url))
-    if dup.scalar_one_or_none() is not None:
-        raise BizError(code=409, message="URL 已存在")
-
-    m = Material(
-        workflow_id=req.workflow_id,
+    m = await _persist_material(
+        db,
         channel_id=req.channel_id,
         source=req.source,
-        source_type=req.source_type,
         title=req.title,
         content=req.content,
-        url=req.url,
         category=req.category,
-        # status 走模型默认值 pending，无需显式传
+        source_type=req.source_type,
+        url=req.url if req.source_type == MaterialSourceType.rss.value else None,
+        dedup_key=compute_content_hash(req.content) if req.source_type == MaterialSourceType.list.value else None,
     )
-    db.add(m)
-    await db.commit()
-    await db.refresh(m)
+    # 回填运行期关联（文档上传场景无 workflow，留空）
+    if req.workflow_id:
+        m.workflow_id = req.workflow_id
+        await db.commit()
+        await db.refresh(m)
     return success(data=_material_to_dict(m))
 
 
@@ -230,3 +287,39 @@ async def delete_material(
     ))
     await db.commit()
     return success(data={"deleted": material_id})
+
+
+@router.post("/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    channel_id: int = Form(..., description="目标课程/资料频道 ID"),
+    source: str = Form("文档上传", description="素材来源名称"),
+    category: Optional[str] = Form(None, description="可选分类"),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """上传专业资料文档，解析为章节素材批量入库（MVP 输入适配器）。
+
+    支持 .txt / .md；.pdf / .docx / .html 需安装对应解析库（见 UnsupportedFormatError 提示）。
+    每个章节作为一条 source_type=list 素材入库，按 content_hash 去重，避免重复上传。
+    """
+    raw = await file.read()
+    try:
+        chapters = parse_document(file.filename or "document.txt", raw)
+    except UnsupportedFormatError as e:
+        raise BizError(code=400, message=str(e))
+
+    created = []
+    for ch in chapters:
+        m = await _persist_material(
+            db,
+            channel_id=channel_id,
+            source=source,
+            title=ch.title,
+            content=ch.content,
+            category=category,
+            source_type=MaterialSourceType.list.value,
+            dedup_key=compute_content_hash(ch.content),
+        )
+        created.append(_material_to_dict(m))
+    return success(data={"count": len(created), "list": created})

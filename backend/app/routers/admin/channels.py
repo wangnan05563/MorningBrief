@@ -50,6 +50,12 @@ class ChannelCreateRequest(BaseModel):
     display_order: int = 0
     # 频道级素材周期回溯天数：当日素材不足时自动放宽到最近 N 天选材；为空回退动态值
     material_lookback_days: int | None = None
+    # 业务范围扩展：选题策略 heat(默认)/outline/manual；课程/资料频道用 outline
+    selection_strategy: str | None = None
+    # 是否投放广告：1=投放(默认，兼容存量)，0=关闭；课程/资料频道设 0 实现零广告
+    enable_ad: int | None = None
+    # manual 选题策略的素材 ID 列表（JSON 数组文本），仅 selection_strategy=manual 时生效
+    manual_material_ids: str | None = None
     # 频道创建时是否自动调用 AI 生成提示词
     auto_generate_prompts: bool = False
 
@@ -114,6 +120,25 @@ class ChannelCreateRequest(BaseModel):
             raise ValueError("material_lookback_days 超出上限 90 天")
         return v
 
+    @field_validator("selection_strategy")
+    @classmethod
+    def validate_selection_strategy(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        v = v.strip()
+        if v not in ("heat", "outline", "manual"):
+            raise ValueError("selection_strategy 仅支持 heat / outline / manual")
+        return v
+
+    @field_validator("enable_ad")
+    @classmethod
+    def validate_enable_ad(cls, v: int | None) -> int | None:
+        if v is None:
+            return None
+        if v not in (0, 1):
+            raise ValueError("enable_ad 仅支持 0 / 1")
+        return v
+
 
 class ChannelUpdateRequest(BaseModel):
     """修改频道请求体。"""
@@ -137,6 +162,12 @@ class ChannelUpdateRequest(BaseModel):
     display_order: int | None = None
     # 频道级素材周期回溯天数：当日素材不足时自动放宽到最近 N 天选材；为空回退动态值
     material_lookback_days: int | None = None
+    # 业务范围扩展：选题策略 heat(默认)/outline/manual；课程/资料频道用 outline
+    selection_strategy: str | None = None
+    # 是否投放广告：1=投放(默认，兼容存量)，0=关闭；课程/资料频道设 0 实现零广告
+    enable_ad: int | None = None
+    # manual 选题策略的素材 ID 列表（JSON 数组文本），仅 selection_strategy=manual 时生效
+    manual_material_ids: str | None = None
 
     @field_validator("schedule_time")
     @classmethod
@@ -188,6 +219,25 @@ class ChannelUpdateRequest(BaseModel):
             raise ValueError("material_lookback_days 超出上限 90 天")
         return v
 
+    @field_validator("selection_strategy")
+    @classmethod
+    def validate_selection_strategy(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        v = v.strip()
+        if v not in ("heat", "outline", "manual"):
+            raise ValueError("selection_strategy 仅支持 heat / outline / manual")
+        return v
+
+    @field_validator("enable_ad")
+    @classmethod
+    def validate_enable_ad(cls, v: int | None) -> int | None:
+        if v is None:
+            return None
+        if v not in (0, 1):
+            raise ValueError("enable_ad 仅支持 0 / 1")
+        return v
+
 
 def _channel_to_dict(ch) -> dict:
     """统一频道序列化，避免列表/详情接口字段不一致。"""
@@ -211,6 +261,9 @@ def _channel_to_dict(ch) -> dict:
         "min_duration_sec": ch.min_duration_sec,
         "display_order": ch.display_order,
         "material_lookback_days": ch.material_lookback_days,
+        "selection_strategy": ch.selection_strategy,
+        "enable_ad": ch.enable_ad,
+        "manual_material_ids": ch.manual_material_ids,
         "created_at": ch.created_at.isoformat() if ch.created_at else None,
         "updated_at": ch.updated_at.isoformat() if ch.updated_at else None,
     }
@@ -263,6 +316,9 @@ async def create_channel(
             min_duration_sec=req.min_duration_sec,
             display_order=req.display_order,
             material_lookback_days=req.material_lookback_days,
+            selection_strategy=req.selection_strategy,
+            enable_ad=req.enable_ad,
+            manual_material_ids=req.manual_material_ids,
         )
     except ValueError as e:
         return error(code=400, message=str(e))
@@ -316,6 +372,9 @@ async def update_channel(
             keywords=req.keywords,
             display_order=req.display_order,
             material_lookback_days=req.material_lookback_days,
+            selection_strategy=req.selection_strategy,
+            enable_ad=req.enable_ad,
+            manual_material_ids=req.manual_material_ids,
         )
     except ValueError as e:
         return error(code=400, message=str(e))

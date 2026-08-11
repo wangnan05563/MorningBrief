@@ -292,9 +292,24 @@ async def concat(  # NOSONAR
             logger.info("无 BGM 配置,跳过混音 workflow_id=%s", workflow_id)
 
         # 4. 查询当日广告投放,需独立 db session(本模块不在请求上下文中)
-        async with AsyncSessionLocal() as db:
-            ad_service = AdService(db)
-            placements = await ad_service.get_active_placements(episode_date)
+        # 课程/资料频道 enable_ad=0 时跳过广告查询，实现零广告（业务范围扩展 T8）
+        placements = {}
+        enable_ad = 1
+        if channel_id:
+            try:
+                async with AsyncSessionLocal() as db:
+                    ch = await db.get(Channel, channel_id)
+                    # None/缺失 → 默认投放(1)，兼容存量频道；仅显式 0 才关广告
+                    enable_ad = ch.enable_ad if (ch and ch.enable_ad is not None) else 1
+            except Exception as e:
+                logger.warning("查询频道 enable_ad 失败 channel_id=%s: %s", channel_id, e)
+                enable_ad = 1
+        if enable_ad:
+            async with AsyncSessionLocal() as db:
+                ad_service = AdService(db)
+                placements = await ad_service.get_active_placements(episode_date)
+        else:
+            logger.info("频道关闭广告(enable_ad=0),跳过广告插入 workflow_id=%s", workflow_id)
 
         # 5. 中间广告插入(insert_at=300s),缺位则跳过
         mid_ad = placements.get("mid")

@@ -446,6 +446,23 @@ function _cosFileName(filePath) {
 }
 
 /**
+ * 取本地临时文件字节大小（用于向后端声明 file_size，做预签名上限校验）
+ * 取不到时返回 null（后端不校验），不阻断上传流程。
+ *
+ * @param {string} filePath 本地临时路径
+ * @returns {Promise<number|null>}
+ */
+function _cosFileSize(filePath) {
+  return new Promise((resolve) => {
+    wx.getFileSystemManager().getFileInfo({
+      filePath,
+      success: (res) => resolve(res.size || null),
+      fail: () => resolve(null),
+    });
+  });
+}
+
+/**
  * 旧路径：头像经后端代理上传到 data/avatars 磁盘，返回可访问完整 URL
  *
  * @param {string} filePath 本地临时路径
@@ -505,9 +522,13 @@ function uploadAvatar(filePath) {
     // 1) 申请 COS 预签名（COS 未配置时返回 null -> 直接走回退）
     let ticket = null;
     try {
+      const size = await _cosFileSize(filePath);
       ticket = await presignCosUpload({
         filename: _cosFileName(filePath),
         content_type: 'image/jpeg',
+        // 声明文件大小，使后端 COS_AVATAR_MAX_SIZE_MB 上限校验生效
+        // （预签名场景服务端读不到 body，只能依赖此声明式校验）
+        file_size: size || undefined,
       });
     } catch (e) {
       ticket = null;

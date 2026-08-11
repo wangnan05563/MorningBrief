@@ -50,6 +50,11 @@ async def serialized_write(
     :param session: 可选。提供时复用调用方 session 跑 fn（用于测试等需在同一
         连接/事务内观察落库结果的场景）；为 None 时使用全局 ``AsyncSessionLocal()``
         （生产默认行为，连接独立文件库）。
+
+    重入约束：不可在已持有 ``_write_lock`` 的协程内调用本函数（例如
+    ``async with write_lock: ...`` 内部再调 ``serialized_write``），否则会因
+    同一把锁重入而永久死锁。若需复用现有 session 做串行提交，直接用 ``write_lock``
+    上下文本身，不要嵌套调用本函数。
     """
     async with _write_lock:
         own_session = session is None

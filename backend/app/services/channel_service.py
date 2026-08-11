@@ -76,6 +76,9 @@ class ChannelService:
         min_duration_sec: Optional[int] = None,
         display_order: int = 0,
         material_lookback_days: Optional[int] = None,
+        selection_strategy: Optional[str] = None,
+        enable_ad: Optional[int] = None,
+        manual_material_ids: Optional[str] = None,
     ) -> Channel:
         """新增频道。name 唯一约束，冲突抛 ValueError。
 
@@ -99,6 +102,9 @@ class ChannelService:
             min_duration_sec=min_duration_sec,
             display_order=display_order,
             material_lookback_days=material_lookback_days,
+            selection_strategy=selection_strategy,
+            enable_ad=enable_ad,
+            manual_material_ids=manual_material_ids,
         )
         self.db.add(channel)
         try:
@@ -129,6 +135,9 @@ class ChannelService:
         min_duration_sec: Optional[int] = None,
         display_order: Optional[int] = None,
         material_lookback_days: Optional[int] = _UNSET,
+        selection_strategy: Optional[str] = None,
+        enable_ad: Optional[int] = None,
+        manual_material_ids: Optional[str] = None,
     ) -> Channel:
         """修改频道。显式设置 updated_at（SQLite 不支持 ON UPDATE）。
 
@@ -182,6 +191,12 @@ class ChannelService:
         # material_lookback_days 用哨兵区分：未传(_UNSET)保持原值；显式传 None 则清空为继承动态
         if material_lookback_days is not _UNSET:
             channel.material_lookback_days = material_lookback_days
+        if selection_strategy is not None:
+            channel.selection_strategy = selection_strategy
+        if enable_ad is not None:
+            channel.enable_ad = enable_ad
+        if manual_material_ids is not None:
+            channel.manual_material_ids = manual_material_ids
         channel.updated_at = localnow_naive()
 
         try:

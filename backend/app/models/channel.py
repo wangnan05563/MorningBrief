@@ -65,6 +65,15 @@ class Channel(Base):
     # 为空(None)时，rewriter 回退到 _calc_dynamic_fallback_days 的动态值（按频道入库频率 3/7/14 天）。
     # 例如素材稀疏的频道可设为 14~30，避免单日素材不足导致工作流失败。
     material_lookback_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # 选题策略（业务范围扩展 MVP）：heat=按热度（默认，存量兼容）/outline=按文档章节顺序/
+    # manual=按手动指定素材 ID 列表。为空(None)时回退 heat。
+    selection_strategy: Mapped[Optional[str]] = mapped_column(String(16), default=None)
+    # 是否投放广告：1=投放（默认，存量兼容）/0=不投放（课程/资料频道关广告）。
+    # concat.py 据此跳过 AdService 调用，实现零广告。
+    enable_ad: Mapped[Optional[int]] = mapped_column(Integer, default=1)
+    # manual 选题策略的素材 ID 列表（JSON 数组文本，如 "[12,13,14]"）。
+    # 仅当 selection_strategy=manual 时读取，按列表顺序选题；为空则 manual 退化为空选。
+    manual_material_ids: Mapped[Optional[str]] = mapped_column(Text, comment="manual 选题策略的素材 ID 列表（JSON 数组）")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     # SQLite 不支持 ON UPDATE，updated_at 由 ChannelService.update_channel 显式维护
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

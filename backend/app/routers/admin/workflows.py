@@ -26,8 +26,14 @@ class RetryRequest(BaseModel):
 
 
 class TriggerRequest(BaseModel):
-    """手动触发请求体。channel_id 可选，携带时使用频道级提示词。"""
+    """手动触发请求体。channel_id 可选，携带时使用频道级提示词。
+
+    skip_crawl：文档上传/手动选题场景为 True，跳过爬虫步骤（素材已入库），
+    工作流从 rewrite 开始。episode_date：可选节目日期，默认今天。
+    """
     channel_id: int | None = None
+    skip_crawl: bool = False
+    episode_date: date | None = None
 
 
 class BatchDeleteRequest(BaseModel):
@@ -130,14 +136,17 @@ async def trigger_workflow(
     """手动触发工作流（运营后台调用）。
 
     支持携带 channel_id，rewrite 步骤据此读取频道级提示词。
+    skip_crawl=True 时跳过爬虫（文档上传场景，素材已入库），
+    episode_date 可指定节目日期（默认今天）。
     """
     from app.services.workflow_scheduler import workflow_scheduler
 
     workflow_id = await workflow_scheduler.trigger_workflow(
-        episode_date=date.today(),
+        episode_date=req.episode_date or date.today(),
         source="manual",
         channel_id=req.channel_id,
         triggered_by=admin.username,
+        skip_crawl=req.skip_crawl,
     )
     # 审计日志：手动触发区别于 cron 自动触发，记录操作人便于追溯异常触发的来源
     db.add(AuditLog(
@@ -145,7 +154,12 @@ async def trigger_workflow(
         action="trigger",
         target=workflow_id,
         operator=admin.username,
-        detail=json.dumps({"channel_id": req.channel_id, "workflow_id": workflow_id}, ensure_ascii=False),
+        detail=json.dumps({
+            "channel_id": req.channel_id,
+            "workflow_id": workflow_id,
+            "skip_crawl": req.skip_crawl,
+            "episode_date": (req.episode_date or date.today()).isoformat(),
+        }, ensure_ascii=False),
     ))
     await db.commit()
     return success(data={"workflow_id": workflow_id, "status": "running"})
