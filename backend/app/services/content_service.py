@@ -8,11 +8,12 @@ from datetime import date
 
 from loguru import logger
 from sqlalchemy import select, func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache.manager import cache as cache_manager
 from app.core.timeutil import localnow_naive
-from app.models import Episode, Script, Review, EpisodeStatus
+from app.models import Episode, Script, Review, EpisodeStatus, Channel
 
 # 缓存 TTL（秒）：与数据变更频率匹配
 TTL_TODAY = 3600   # 今日节目 1 小时
@@ -187,24 +188,59 @@ class ContentService:
         await self.cache.set(cache_key, data, ttl=TTL_LIST)
         return data
 
-    async def search_episodes(self, keyword: str, page: int, size: int) -> dict:
+    # FR-MC-07 D1 修正(R1)：前端「课程」筛选含 audiobook（与首页分组一致），
+    # 后端按聚合组过滤，避免有声书频道在「课程」筛选下被遗漏。
+    # 仅 news/course/audiobook 三类；course 聚合组显式纳入 audiobook。
+    _CHANNEL_TYPE_GROUP = {
+        "course": ["course", "audiobook"],
+    }
+
+    async def search_episodes(
+        self, keyword: str, page: int, size: int, channel_type: str | None = None
+    ) -> dict:
         """节目搜索：优先用 FTS5 全文索引，回退到 LIKE 模糊匹配。
 
         FTS5 性能比 LIKE 高 10-100 倍（走倒排索引而非全表扫描）。
         关键词含双引号或特殊字符时 FTS5 MATCH 可能报错，降级为 LIKE。
+
+        channel_type（FR-MC-07 / D1，P1）：按频道类型过滤（news/course/audiobook）。
+        先查该类型（含聚合组）下已启用的频道 id 集合，再过滤 episode.channel_id IN (...)。
+        course 筛选按聚合组展开为 course + audiobook（R1 修正）。
+        channel_ids 来自本库查询的整数，非用户输入，内插到 raw SQL 安全。
+        同时为每个结果附加 channel_type / channel_name，供前端类型标签展示。
         """
         if not keyword or page < 1 or size < 1:
             return {"total": 0, "list": []}
 
-        # cache-aside：相同关键词+分页命中缓存，吸收热点搜索与翻页重复查询
+        # 按频道类型过滤：解析该类型（含聚合组）下的频道 id 集合
+        ch_ids: list = []
+        if channel_type:
+            type_filter = self._CHANNEL_TYPE_GROUP.get(channel_type, [channel_type])
+            ch_result = await self.db.execute(
+                select(Channel.id).where(
+                    Channel.channel_type.in_(type_filter), Channel.is_active == 1
+                )
+            )
+            ch_ids = [r[0] for r in ch_result.all()]
+            if not ch_ids:
+                return {"total": 0, "list": []}
+
+        # cache-aside：相同关键词+分页+类型命中缓存，吸收热点搜索与翻页重复查询
         # TTL_SEARCH=60s 短窗口，发布新节目后最多 60s 内可搜到（publish_episode 也主动失效）
-        cache_key = f"episode:search:{keyword}:{page}:{size}"
+        cache_key = f"episode:search:{keyword}:{page}:{size}:{channel_type or 'all'}"
         cached = await self.cache.get(cache_key)
         if cached:
             return cached
 
         offset = (page - 1) * size
         data = None
+
+        # FTS5 路径附加的频道类型过滤子句（channel_id 来自 episode 表，可直接 IN）
+        ch_filter = (
+            f"AND episode.channel_id IN ({','.join(str(c) for c in ch_ids)})"
+            if ch_ids
+            else ""
+        )
 
         # 尝试 FTS5 全文检索（性能最优）
         try:
@@ -215,24 +251,29 @@ class ContentService:
             # 双引号包裹让 FTS5 把关键词作为 phrase 查询，避免被分词
             fts_query = f'"{keyword}"'
 
-            # 总数（FTS5 JOIN episode 过滤已发布）
+            # 总数（FTS5 JOIN episode 过滤已发布 + 类型）
             count_sql = sql_text(
                 "SELECT COUNT(*) FROM episode_fts fts "
                 "JOIN episode ON episode.id = fts.rowid "
-                "WHERE episode_fts MATCH :q "
-                "AND episode.status = 'published'"
+                "LEFT JOIN channel c ON c.id = episode.channel_id "
+                f"WHERE episode_fts MATCH :q "
+                "AND episode.status = 'published' "
+                f"{ch_filter}"
             )
             count_result = await self.db.execute(count_sql, {"q": fts_query})
             total = count_result.scalar() or 0
 
-            # 分页（按 date 倒序）
+            # 分页（按 date 倒序），并取频道类型/名称用于前端标签
             list_sql = sql_text(
                 "SELECT episode.id, episode.date, episode.title, "
-                "episode.duration, episode.cover_url, episode.categories "
+                "episode.duration, episode.cover_url, episode.categories, "
+                "c.id, c.channel_type, c.name "
                 "FROM episode_fts fts "
                 "JOIN episode ON episode.id = fts.rowid "
-                "WHERE episode_fts MATCH :q "
+                "LEFT JOIN channel c ON c.id = episode.channel_id "
+                f"WHERE episode_fts MATCH :q "
                 "AND episode.status = 'published' "
+                f"{ch_filter} "
                 "ORDER BY episode.date DESC, episode.id DESC "
                 "LIMIT :limit OFFSET :offset"
             )
@@ -244,45 +285,61 @@ class ContentService:
             list_data = [
                 {
                     "id": r[0],
-                    "date": r[1].isoformat() if r[1] else None,
+                    # raw SQL 返回的 episode.date 是 SQLite TEXT 字符串（无 ORM 类型映射），
+                    # 直接作为 ISO 字符串返回；防御 date/datetime 对象来源时再 isoformat。
+                    "date": r[1].isoformat() if hasattr(r[1], "isoformat") else (r[1] or None),
                     "title": r[2],
                     "duration": r[3],
                     "cover_url": r[4],
                     "categories": r[5] or [],
+                    "channel_id": r[6],
+                    "channel_type": r[7] or "news",
+                    "channel_name": r[8] or "",
                 }
                 for r in rows
             ]
 
             data = {"total": total, "list": list_data}
-        except Exception:
-            # FTS5 不可用或 MATCH 语法错误（含特殊字符），降级到 LIKE
-            # 为什么不向上抛：搜索是低频但容错性要求高的场景，降级保证可用性
-            pass
+        except SQLAlchemyError as e:
+            # FTS5 不可用 / MATCH 语法错误（含特殊字符）/ 表缺失等 DB 错误，
+            # 降级到 LIKE 保证可用性。收窄为 SQLAlchemyError：避免吞掉编程错误
+            # （如结果字段类型异常），真实 bug 应向上抛而非被静默成空结果。
+            # exc_info=True 保留可观测性，便于发现 FTS5 持续不可用或查询缺陷。
+            logger.warning("search_episodes FTS5 查询异常，降级 LIKE: %s", e, exc_info=True)
+
+        # FTS5 默认 unicode61 分词器不索引中文（CJK 不被识别为词），导致中文关键词
+        # MATCH 命中为 0。原实现只在 FTS5 抛异常时降级，中文搜索因此静默返回空。
+        # 这里在 FTS5 命中为空时也降级到 LIKE：LIKE 是 FTS5 的超集匹配，空结果补查
+        # 无副作用，却能让中文搜索真正可用（TTL 60s 吸收重复/热点 miss）。
+        if data is not None and data.get("total", 0) == 0:
+            data = None
 
         if data is None:
-            # 降级：LIKE 模糊匹配（原 MVP 实现）
+            # 降级：LIKE 模糊匹配（原 MVP 实现），JOIN channel 取类型/名称
             escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             pattern = f"%{escaped}%"
 
+            like_where = [
+                Episode.status == EpisodeStatus.published,
+                Episode.title.like(pattern, escape="\\"),
+            ]
+            if ch_ids:
+                like_where.append(Episode.channel_id.in_(ch_ids))
+
             count_result = await self.db.execute(
-                select(func.count(Episode.id)).where(
-                    Episode.status == EpisodeStatus.published,
-                    Episode.title.like(pattern, escape="\\"),
-                )
+                select(func.count(Episode.id)).where(*like_where)
             )
             total = count_result.scalar() or 0
 
             result = await self.db.execute(
-                select(Episode)
-                .where(
-                    Episode.status == EpisodeStatus.published,
-                    Episode.title.like(pattern, escape="\\"),
-                )
+                select(Episode, Channel.id, Channel.channel_type, Channel.name)
+                .join(Channel, Channel.id == Episode.channel_id, isouter=True)
+                .where(*like_where)
                 .order_by(Episode.date.desc(), Episode.id.desc())
                 .offset(offset)
                 .limit(size)
             )
-            episodes = result.scalars().all()
+            rows = result.all()
 
             list_data = [
                 {
@@ -292,8 +349,11 @@ class ContentService:
                     "duration": ep.duration,
                     "cover_url": ep.cover_url,
                     "categories": ep.categories or [],
+                    "channel_id": ch_id,
+                    "channel_type": (ch_type if ch_type else None) or "news",
+                    "channel_name": (ch_name if ch_name else None) or "",
                 }
-                for ep in episodes
+                for ep, ch_id, ch_type, ch_name in rows
             ]
 
             data = {"total": total, "list": list_data}
