@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import delete, select, func, text
+from sqlalchemy import delete, select, func, text, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache.manager import cache
@@ -31,11 +31,19 @@ from app.core.timeutil import localnow_naive
 from app.database import engine
 from app.models import (
     AIUsageLog,
+    AutoReviewStat,
+    Comment,
     CrawlerDedup,
+    Episode,
+    Favorite,
     JwtBlacklist,
+    NotificationLog,
     PlayLog,
+    PlayProgress,
     Review,
+    Script,
     Workflow,
+    WorkflowStep,
 )
 from app.models.audit_log import AuditLog
 from app.paths import get_app_root, resolve_data_dir, resolve_db_path, resolve_log_dir
@@ -380,9 +388,12 @@ class MaintenanceService:
     async def _cleanup_workflows(
         self, cutoff: datetime, dry_run: bool
     ) -> int:
-        """清理旧工作流记录（级联删除 workflow_step）。
+        """清理旧工作流记录，并级联清理其全部子表。
 
-        workflow_step 通过外键 cascade=all,delete-orphan 自动级联删除。
+        子表（Script/Review/Episode/AutoReviewStat/NotificationLog/WorkflowStep/
+        PlayLog/PlayProgress/Comment/Favorite）的 workflow_id 多为普通字符串列
+        （非外键），或直接以 episode_id 关联，删 Workflow 不会自动清理，须手动按
+        workflow_id / script_id / episode_id 级联删除，否则悬空数据随定时清理累积。
         仅清理已完结状态（success/failed/cancelled），running 状态不清理。
         """
         from app.models.workflow import WorkflowStatus
@@ -409,6 +420,75 @@ class MaintenanceService:
         wf_ids = [row[0] for row in result.all()]
         if not wf_ids:
             return 0
+
+        # 级联清理子表：子表的 workflow_id 多为普通字符串列（非外键），
+        # 删 Workflow 不会自动清理，须手动按 workflow_id 删除，否则数据悬空累积。
+        # 删除顺序：播放数据/评论/收藏 → Episode → AutoReviewStat → Review →
+        #           NotificationLog → Script → Workflow
+        # Episode/Review 同时按 script_id 清理，覆盖 workflow_id 为 NULL 的历史孤儿
+        # （避免删 Script 时触发 FOREIGN KEY constraint failed）。
+        script_result = await self.db.execute(
+            select(Script.id).where(Script.workflow_id.in_(wf_ids))
+        )
+        script_ids = [row[0] for row in script_result.all()]
+
+        ep_result = await self.db.execute(
+            select(Episode.id).where(
+                or_(
+                    Episode.workflow_id.in_(wf_ids),
+                    Episode.script_id.in_(script_ids),
+                )
+            )
+        )
+        episode_ids = [row[0] for row in ep_result.all()]
+
+        if episode_ids:
+            # Comment/Favorite/PlayProgress 的 episode_id 是普通列（无 FK），须随 Episode 清理
+            await self.db.execute(
+                delete(Comment).where(Comment.episode_id.in_(episode_ids))
+            )
+            await self.db.execute(
+                delete(Favorite).where(Favorite.episode_id.in_(episode_ids))
+            )
+            await self.db.execute(
+                delete(PlayLog).where(PlayLog.episode_id.in_(episode_ids))
+            )
+            await self.db.execute(
+                delete(PlayProgress).where(PlayProgress.episode_id.in_(episode_ids))
+            )
+
+        await self.db.execute(
+            delete(Episode).where(
+                or_(
+                    Episode.workflow_id.in_(wf_ids),
+                    Episode.script_id.in_(script_ids),
+                )
+            )
+        )
+        # AutoReviewStat.review_id 是 RESTRICT 外键指向 review.id，须在 Review 之前清理
+        await self.db.execute(
+            delete(AutoReviewStat).where(AutoReviewStat.workflow_id.in_(wf_ids))
+        )
+        await self.db.execute(
+            delete(Review).where(
+                or_(
+                    Review.workflow_id.in_(wf_ids),
+                    Review.script_id.in_(script_ids),
+                )
+            )
+        )
+        await self.db.execute(
+            delete(NotificationLog).where(NotificationLog.workflow_id.in_(wf_ids))
+        )
+        await self.db.execute(
+            delete(Script).where(Script.workflow_id.in_(wf_ids))
+        )
+
+        # workflow_step 虽定义 cascade=all,delete-orphan，但此处是 Core 级
+        # bulk delete(Workflow)，不会触发 ORM 级联，须显式按 workflow_id 清理
+        await self.db.execute(
+            delete(WorkflowStep).where(WorkflowStep.workflow_id.in_(wf_ids))
+        )
         # workflow_step 通过 cascade 自动删除，无需手动清理
         result = await self.db.execute(
             delete(Workflow).where(Workflow.id.in_(wf_ids))
