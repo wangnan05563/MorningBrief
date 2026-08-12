@@ -212,3 +212,6 @@ backend/backfill_*.py
 backend/migrate_*.py
 backend/_*.py
 backend/pytest*.log
+temp
+reports
+jmeter_test
