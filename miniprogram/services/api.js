@@ -11,6 +11,8 @@
  */
 
 const { PROD_API_BASE_URL, isRelease } = require('../utils/server-discovery');
+// 频道类型 → 皮肤/文案映射（FR-MC-08）：类型归一化与缺省值集中在此
+const skin = require('../utils/skin');
 
 // 按编译环境切换 API 域名：release 为正式版编译产物，其余（develop/trial）走开发环境
 // 真机测试时需确保手机与电脑在同一局域网，后端服务可被手机访问
@@ -273,9 +275,12 @@ const fetchHistory = (page, size = 20, channelId, sortOrder) => {
   return request({ url: '/episodes/history', data });
 };
 
-/** 节目搜索（按标题模糊匹配） */
-const searchEpisodes = (keyword, page = 1, size = 20) =>
-  request({ url: '/episodes/search', data: { keyword, page, size } });
+/** 节目搜索（按标题模糊匹配）。channelType 可选：按频道类型过滤（FR-MC-07） */
+const searchEpisodes = (keyword, page = 1, size = 20, channelType) =>
+  request({
+    url: '/episodes/search',
+    data: channelType ? { keyword, page, size, channel_type: channelType } : { keyword, page, size },
+  });
 
 // === 播放日志接口 ===
 
@@ -348,13 +353,76 @@ const unlikeComment = (commentId) =>
 
 // === 频道接口 ===
 
+// 频道元信息缓存：fetchChannels 归一化后按 id 索引，供各页 O(1) 查类型/皮肤
+// 与 app.globalData.channelsMeta 双写，跨页可直接读 globalData
+const _channelMetaMap = new Map();
+
+/**
+ * 频道对象归一化（FR-MC-01 / FR-MC-12）：
+ * 把后端可能缺失的扩展字段补安全默认值，确保所有消费方拿到结构一致的频道对象。
+ * - channel_type 缺失/未知 → 'news'（向后兼容存量频道）
+ * - type_label 缺失 → 按类型推导
+ * - disclaimer_level 缺失 → 'none'
+ * - cover_url / episode_count 缺失 → 空 / 0
+ * @param {Object} ch - 后端频道对象
+ * @returns {Object} 归一化后的频道对象
+ */
+function normalizeChannel(ch) {
+  if (!ch) return ch;
+  const type = skin.normalizeType(ch.channel_type);
+  return {
+    ...ch,
+    channel_type: type,
+    type_label: ch.type_label || skin.getChannelTypeLabel(type),
+    cover_url: ch.cover_url || '',
+    disclaimer_level: skin.getDisclaimerLevel(ch.disclaimer_level),
+    selection_strategy: ch.selection_strategy || 'heat',
+    episode_count: ch.episode_count || 0,
+  };
+}
+
+/** 获取频道元信息（归一化后），无则返回 null */
+function getChannelMeta(id) {
+  if (id == null) return null;
+  return _channelMetaMap.get(id) || null;
+}
+
+/** 取频道业务类型，缺省 'news' */
+function channelType(id) {
+  const meta = getChannelMeta(id);
+  return meta ? meta.channel_type : 'news';
+}
+
+/**
+ * 获取课程进度聚合（P1，依赖后端 D：GET /api/v1/courses/{channel_id}/progress）
+ * 后端未实现时 resolve(null)，调用方回退纯前端聚合（MVP 可接受）
+ */
+const fetchCourseProgress = (channelId) =>
+  request({ url: '/courses/' + channelId + '/progress' }).catch(() => null);
+
 /** 获取已启用频道列表（带 is_subscribed 字段）
  * 60s 缓存 + 30s 节流：频道列表极少变化，首页 onLoad + 切换频道胶囊可能多次调用，
  * cache 走数据缓存，throttle 走请求去重，避免 tab 切换短时间内重复请求
+ * 返回对象额外经 normalizeChannel 处理（补 channel_type 等扩展字段）
  */
 const fetchChannels = () =>
   throttle('channels', 30000, () =>
-    request({ url: '/channels', cache: true, cacheTTL: 60 })
+    request({ url: '/channels', cache: true, cacheTTL: 60 }).then((res) => {
+      const list = (res && res.list) || [];
+      const normalized = list.map(normalizeChannel);
+      // 刷新模块级 + globalData 缓存
+      _channelMetaMap.clear();
+      normalized.forEach((c) => _channelMetaMap.set(c.id, c));
+      try {
+        const app = getApp();
+        if (app && app.globalData) {
+          app.globalData.channelsMeta = Object.fromEntries(_channelMetaMap);
+        }
+      } catch (e) {
+        // getApp 在极端时机可能抛错，忽略不影响主流程
+      }
+      return { ...(res || {}), list: normalized };
+    })
   );
 
 // === 订阅接口 ===
@@ -374,6 +442,121 @@ const subscribeChannel = (channelId) =>
 /** 取消订阅频道 */
 const unsubscribeChannel = (channelId) =>
   request({ url: '/subscriptions/channels/' + channelId, method: 'DELETE' });
+
+// 订阅消息模板映射缓存（按 channel_type），FR-MC-06：后端按类型下发，小程序不写死
+let _subscribeTemplates = null;
+
+/**
+ * 获取订阅消息模板映射（按 channel_type：news/course/audiobook）
+ * 后端 SUBSCRIBE_TEMPLATE_IDS 配置下发；缓存避免每次订阅都请求。
+ * @returns {Promise<Object>} { news, course, audiobook }（仅含已配置类型）
+ */
+const fetchSubscribeTemplates = () =>
+  request({ url: '/subscriptions/templates', cache: true, cacheTTL: 300 })
+    .then((res) => {
+      const t = (res && res.templates) || {};
+      _subscribeTemplates = t;
+      return t;
+    })
+    .catch(() => ({}));
+
+/**
+ * 按频道类型请求订阅消息授权（FR-MC-06）
+ * 模板 id 由后端按 channel_type 下发，小程序不写死。
+ * 用户授权成功后记录到后端（recordSubscribeMessage），用于新章节/新节目推送。
+ *
+ * 设计要点（与后端 subscriptions 路由一致）：订阅消息授权与频道订阅是两个独立概念。
+ * 即使用户拒绝消息授权，也不应回滚已完成的频道订阅。
+ *
+ * @param {string} type channel_type: 'news' | 'course' | 'audiobook'
+ * @param {Object} [opts]
+ * @param {Function} [opts.onRejected] 用户拒绝 / 模板未配置时回调（调用方决定是否回滚 UI 开关）
+ */
+const requestSubscribeMessageByType = async (type, opts = {}) => {
+  const tpls = _subscribeTemplates || (await fetchSubscribeTemplates());
+  const tid = (tpls && tpls[type]) || (tpls && tpls['news']) || '';
+  if (!tid) {
+    wx.showToast({ title: '通知模板未配置', icon: 'none' });
+    if (opts.onRejected) opts.onRejected();
+    return;
+  }
+  wx.requestSubscribeMessage({
+    tmplIds: [tid],
+    success: async (res) => {
+      // res[tmplId] === 'accept' 表示用户授权成功
+      if (res && res[tid] === 'accept') {
+        try {
+          await recordSubscribeMessage(tid);
+        } catch (err) {
+          console.error('记录订阅授权失败:', err);
+        }
+      } else {
+        // 用户拒绝本次授权：不影响既有的频道订阅关系
+        if (opts.onRejected) opts.onRejected();
+      }
+    },
+    fail: () => {
+      if (opts.onRejected) opts.onRejected();
+    },
+  });
+};
+
+/**
+ * 我的订阅频道列表（FR-MC-05）：返回当前用户已订阅频道（含 channel_type 等元信息）。
+ * 归一化后刷新 _channelMetaMap / globalData.channelsMeta，使课程路由/皮肤在 profile 也能正确工作。
+ */
+const fetchMySubscriptions = () =>
+  request({ url: '/subscriptions/channels' })
+    .then((res) => {
+      const list = (res && res.list) || [];
+      const normalized = list.map(normalizeChannel);
+      normalized.forEach((c) => _channelMetaMap.set(c.id, c));
+      try {
+        const app = getApp();
+        if (app && app.globalData) {
+          app.globalData.channelsMeta = Object.fromEntries(_channelMetaMap);
+        }
+      } catch (e) { /* getApp 极端时机忽略 */ }
+      return { ...(res || {}), list: normalized };
+    })
+    .catch(() => ({ list: [] }));
+
+// 章节「已学完」判定阈值：统一收敛到 services/constants（与后端 _COMPLETE_RATIO 保持一致）
+const { COURSE_COMPLETE_RATIO } = require('./constants');
+
+/**
+ * 计算课程本地学习进度（FR-MC-05 / 复用 course.js 算法）：
+ * 取章节列表（published_at 升序）→ 逐章查本地 playlogs 进度 → 聚合已学完数/完成度。
+ * 后端进度聚合（COS→DB）未就绪时，本地进度即真相源；失败回退 {0,0,0}。
+ * @param {number|string} channelId
+ * @returns {Promise<{total:number, learned:number, percent:number}>}
+ */
+const computeCourseLocalProgress = async (channelId) => {
+  // 延迟 require 避免与 local-data 的循环依赖在模块初始化期互相阻塞
+  const localData = require('../services/local-data');
+  try {
+    const res = await fetchHistory(1, 50, channelId, 'asc');
+    const list = (res && res.list) || [];
+    let learned = 0;
+    const total = list.length;
+    for (const ep of list) {
+      try {
+        const p = await localData.getProgress(ep.id);
+        if (p) {
+          const ratio = p.duration ? p.position / p.duration : 0;
+          if (p.completed || ratio >= COURSE_COMPLETE_RATIO) learned += 1;
+        }
+      } catch (e) { /* 单章进度失败忽略 */ }
+    }
+    return {
+      total,
+      learned,
+      percent: total ? Math.round((learned / total) * 100) : 0,
+    };
+  } catch (e) {
+    return { total: 0, learned: 0, percent: 0 };
+  }
+};
 
 // === 用户中心接口 ===
 
@@ -583,10 +766,18 @@ module.exports = {
   unlikeComment,
   // 频道
   fetchChannels,
+  getChannelMeta,
+  channelType,
+  normalizeChannel,
+  fetchCourseProgress,
+  fetchMySubscriptions,
+  computeCourseLocalProgress,
   // 订阅
   recordSubscribeMessage,
   subscribeChannel,
   unsubscribeChannel,
+  fetchSubscribeTemplates,
+  requestSubscribeMessageByType,
   // 用户中心
   fetchUserStats,
   updateUserProfile,

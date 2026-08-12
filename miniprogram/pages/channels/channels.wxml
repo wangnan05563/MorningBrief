@@ -23,7 +23,10 @@
       >
         <!-- 频道信息：点击切换到该频道 -->
         <view class="channel-info" data-id="{{item.id}}" bindtap="onTapChannel">
-          <view class="channel-name">{{item.name}}</view>
+          <view class="channel-name">
+            {{item.name}}
+            <text wx:if="{{item.type_label && item.type_label !== '资讯'}}" class="channel-type-tag">{{item.type_label}}</text>
+          </view>
           <view class="channel-desc">{{item.description || '精彩内容，等你来听'}}</view>
         </view>
 

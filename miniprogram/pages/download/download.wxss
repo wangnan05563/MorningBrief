@@ -1,0 +1,122 @@
+/* 我的下载页样式（复用全局浅色主题：主色 #5BA89B，辅粉 #FF6B8A） */
+.download-page {
+  min-height: 100vh;
+  background: #FFF5F7;
+  padding: 24rpx;
+}
+
+/* 顶部统计条 */
+.stat-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 28rpx;
+  margin-bottom: 16rpx;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(91, 168, 155, 0.08);
+}
+.stat-info {
+  display: flex;
+  flex-direction: column;
+}
+.stat-count {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #2D3A36;
+}
+.stat-size {
+  font-size: 24rpx;
+  color: #A0AEC0;
+  margin-top: 6rpx;
+}
+.stat-clear {
+  padding: 12rpx 28rpx;
+  border-radius: 32rpx;
+  background: #FFEBEE;
+  color: #E57373;
+  font-size: 24rpx;
+}
+
+/* 分组 */
+.dl-group {
+  margin-bottom: 24rpx;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 10rpx rgba(91, 168, 155, 0.06);
+}
+.group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 28rpx;
+  border-bottom: 1rpx solid #F0F3F2;
+}
+.group-name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #2D3A36;
+}
+.group-clear {
+  font-size: 22rpx;
+  color: #E57373;
+}
+.dl-item {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 28rpx;
+  border-bottom: 1rpx solid #F5F7F6;
+}
+.dl-item:last-child {
+  border-bottom: none;
+}
+.dl-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.dl-title {
+  font-size: 28rpx;
+  color: #2D3A36;
+  line-height: 1.4;
+}
+.dl-sub {
+  font-size: 22rpx;
+  color: #A0AEC0;
+  margin-top: 6rpx;
+}
+.dl-del {
+  flex-shrink: 0;
+  margin-left: 16rpx;
+  padding: 10rpx 24rpx;
+  border-radius: 26rpx;
+  background: #FFF1F4;
+  color: #E0577F;
+  font-size: 22rpx;
+}
+
+/* 空态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 120rpx 48rpx;
+}
+.empty-icon-img {
+  width: 120rpx;
+  height: 120rpx;
+  opacity: 0.6;
+  margin-bottom: 24rpx;
+}
+.empty-title {
+  font-size: 28rpx;
+  color: #5A6A64;
+  margin-bottom: 12rpx;
+}
+.empty-desc {
+  font-size: 24rpx;
+  color: #A0AEC0;
+  text-align: center;
+  line-height: 1.6;
+}

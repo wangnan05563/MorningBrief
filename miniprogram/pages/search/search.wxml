@@ -13,6 +13,17 @@
     <image class="search-icon" lazy-load src="/images/icons/search.png" mode="aspectFit" />
   </view>
 
+  <!-- 类型筛选（FR-MC-07）：全部 / 资讯 / 课程 -->
+  <view class="filter-row">
+    <view
+      wx:for="{{filterOptions}}"
+      wx:key="type"
+      class="filter-chip {{filterType === item.type ? 'active' : ''}}"
+      data-type="{{item.type}}"
+      bindtap="onFilterType"
+    >{{item.label}}</view>
+  </view>
+
   <!-- 搜索历史（无关键词时展示） -->
   <block wx:if="{{showHistory && history.length > 0}}">
     <view class="history-section">
@@ -54,6 +65,10 @@
         </view>
         <text class="item-title">{{item.title}}</text>
         <view class="item-footer">
+          <view class="item-meta" wx:if="{{item.type_label || item.channel_name}}">
+            <text class="item-type-tag" wx:if="{{item.type_label}}">{{item.type_label}}</text>
+            <text class="item-channel" wx:if="{{item.channel_name}}">{{item.channel_name}}</text>
+          </view>
           <view class="item-duration">
             <image class="duration-icon" lazy-load src="/images/icons/duration.png" mode="aspectFit" />
             <text>{{fmt.time(item.duration)}}</text>

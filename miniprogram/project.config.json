@@ -37,8 +37,8 @@
   "packOptions": {
     "ignore": [
       {
-        "type": "folder",
-        "value": "images/svg-src"
+        "value": "images/svg-src",
+        "type": "folder"
       }
     ],
     "include": []

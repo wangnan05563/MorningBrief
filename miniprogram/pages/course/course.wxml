@@ -1,0 +1,113 @@
+<!-- 课程主页：课程封面 + 章节列表 + 学习进度（FR-MC-03 / FR-MC-04 / FR-MC-11） -->
+<view class="course-page">
+
+  <!-- 加载中骨架屏 -->
+  <view class="skeleton-wrap" wx:if="{{loading}}">
+    <view class="skeleton-head shimmer"></view>
+    <view class="skeleton-line shimmer"></view>
+    <view class="skeleton-line short shimmer"></view>
+    <view class="skeleton-card" wx:for="{{[1,2,3]}}" wx:key="*this"></view>
+  </view>
+
+  <!-- 错误态 -->
+  <view class="error-wrap" wx:elif="{{error}}">
+    <text class="error-text">{{error}}</text>
+  </view>
+
+  <block wx:else>
+    <!-- 课程头部 -->
+    <view class="course-head">
+      <image class="course-cover" lazy-load src="{{coverUrl}}" mode="aspectFill" />
+      <view class="course-head-info">
+        <text class="course-name">{{channel.name || '课程'}}</text>
+        <text class="course-desc">{{channel.description || '专业资料语音课，随时随地听学。'}}</text>
+      </view>
+      <!-- 订阅/取消订阅（FR-MC-06）：课程类频道订阅后可接收新章节推送 -->
+      <view
+        class="sub-btn {{isSubscribed ? 'subscribed' : ''}}"
+        bindtap="onToggleSubscribe"
+        wx:if="{{!loading}}"
+      >
+        <text>{{isSubscribed ? '已订阅' : '订阅'}}</text>
+      </view>
+    </view>
+
+    <!-- 学习进度 -->
+    <view class="progress-card">
+      <view class="progress-top">
+        <text class="progress-label">学习进度</text>
+        <text class="progress-num">{{learnedCount}} / {{totalCount}} 章 · {{percent}}%</text>
+      </view>
+      <view class="progress-track">
+        <view class="progress-fill" style="width: {{percent}}%;"></view>
+      </view>
+      <view class="progress-actions">
+        <view class="btn-primary" bindtap="onContinue">
+          <text>继续学习</text>
+        </view>
+        <view class="btn-ghost" bindtap="onPlayFromStart">
+          <text>从头播放</text>
+        </view>
+      </view>
+
+      <!-- 整课离线下载（FR-MC-09）：点击下载全部未下载章节 -->
+      <view class="download-all-bar {{batchDownloading ? 'loading' : ''}}" bindtap="onDownloadAll" wx:if="{{totalCount > 0}}">
+        <text class="download-all-text">⬇ 下载整门课程</text>
+        <text class="download-all-sub">{{batchDownloading ? ('下载中 ' + batchProgress + '%') : ('已下载 ' + downloadedCount + '/' + totalCount)}}</text>
+      </view>
+    </view>
+
+    <!-- 合规提示（FR-MC-11）：disclaimer_level != none 时展示 -->
+    <view class="disclaimer {{channel.disclaimer_level === 'strong' ? 'strong' : ''}}" wx:if="{{disclaimerText}}">
+      <text class="disclaimer-icon">ⓘ</text>
+      <text class="disclaimer-text">{{disclaimerText}}</text>
+    </view>
+
+    <!-- 章节列表 -->
+    <view class="chapter-section">
+      <text class="section-title">课程章节（共 {{totalCount}} 章）</text>
+
+      <view
+        class="card chapter-item {{item.status === 'finished' ? 'done' : ''}}"
+        wx:for="{{chapters}}"
+        wx:key="id"
+        data-id="{{item.id}}"
+        data-index="{{index}}"
+        bindtap="onTapChapter"
+      >
+        <view class="chapter-index {{item.status}}">
+          <text wx:if="{{item.status === 'finished'}}">✓</text>
+          <text wx:elif="{{item.status === 'learning'}}">▶</text>
+          <text wx:else>{{item.index}}</text>
+        </view>
+        <view class="chapter-main">
+          <text class="chapter-title">{{item.title || ('第' + item.index + '章')}}</text>
+          <view class="chapter-meta">
+            <text class="chapter-dur">{{item.duration_label || '00:00'}}</text>
+            <text class="chapter-status {{item.status}}" wx:if="{{item.status === 'finished'}}">已学完</text>
+            <text class="chapter-status {{item.status}}" wx:elif="{{item.status === 'learning'}}">学习中</text>
+            <text class="chapter-status {{item.status}}" wx:else>未学习</text>
+          </view>
+        </view>
+        <!-- 章节离线下载（FR-MC-09）：catchtap 不触发卡片跳转 -->
+        <view
+          class="chapter-dl {{item.downloaded ? 'done' : ''}} {{item.downloading ? 'ing' : ''}}"
+          catchtap="onTapDownloadChapter"
+          data-id="{{item.id}}"
+        >
+          <text wx:if="{{item.downloaded}}">✓ 已下载</text>
+          <text wx:elif="{{item.downloading}}">{{item.progress}}%</text>
+          <text wx:else>⬇ 下载</text>
+        </view>
+        <image class="chapter-play" lazy-load src="/images/icons/play.png" mode="aspectFit" />
+      </view>
+
+      <!-- 空态：课程尚未生成章节 -->
+      <view class="empty-state" wx:if="{{chapters.length === 0}}">
+        <image class="empty-icon-img" src="/images/icons/headphones.png" mode="aspectFit" />
+        <text class="empty-title">课程章节尚未生成</text>
+        <text class="empty-desc">课程正在制作中，敬请期待下一次更新～</text>
+      </view>
+    </view>
+  </block>
+</view>

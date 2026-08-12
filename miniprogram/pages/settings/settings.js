@@ -9,7 +9,7 @@
 const STORAGE_KEY_SETTINGS = 'news_settings';
 const { setPlaybackRate, setAutoPlayNext } = require('../../services/audio');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
-const { recordSubscribeMessage } = require('../../services/api');
+const { requestSubscribeMessageByType } = require('../../services/api');
 
 // 默认设置：用户首次进入时使用，避免空值导致 switch 显示异常
 const DEFAULT_SETTINGS = {
@@ -98,51 +98,17 @@ Page({
     const value = e.detail.value;
     this.setData({ notifyNewEpisode: value });
     this.saveSettings({ notifyNewEpisode: value });
-    // 开启通知需请求订阅消息授权（一次性模板）
-    // 模板 ID 由后端配置，此处先占位；用户拒绝授权时回滚开关
+    // 开启通知需请求订阅消息授权（一次性模板，FR-MC-06：news 类型模板由后端下发）
+    // 用户拒绝授权时回滚开关（与 V1.3 原逻辑一致）；频道订阅关系不在此处处理
     if (value) {
-      this.requestSubscribeMessage();
-    }
-    trackEvent('settings', 'change_notify', '', value ? 1 : 0);
-  },
-
-  /**
-   * 请求订阅消息授权
-   * 微信一次性订阅消息：每次发送都需要用户重新授权
-   * 模板 ID 通过 wx.requestSubscribeMessage 的 tmplIds 传入
-   */
-  requestSubscribeMessage() {
-    // 模板 ID 应在微信公众平台后台获取并配置在此处
-    // 此处使用占位符，部署时需替换为真实模板 ID
-    const TEMPLATE_ID = '';
-    if (!TEMPLATE_ID) {
-      wx.showToast({ title: '通知模板未配置', icon: 'none' });
-      // 回滚开关
-      this.setData({ notifyNewEpisode: false });
-      this.saveSettings({ notifyNewEpisode: false });
-      return;
-    }
-    wx.requestSubscribeMessage({
-      tmplIds: [TEMPLATE_ID],
-      success: async (res) => {
-        if (res[TEMPLATE_ID] === 'accept') {
-          // 授权成功：记录到后端，后续发布新节目时下发通知
-          try {
-            await recordSubscribeMessage(TEMPLATE_ID);
-          } catch (err) {
-            console.error('记录订阅授权失败:', err);
-          }
-        } else {
-          // 用户拒绝：回滚开关
+      requestSubscribeMessageByType('news', {
+        onRejected: () => {
           this.setData({ notifyNewEpisode: false });
           this.saveSettings({ notifyNewEpisode: false });
-        }
-      },
-      fail: () => {
-        this.setData({ notifyNewEpisode: false });
-        this.saveSettings({ notifyNewEpisode: false });
-      },
-    });
+        },
+      });
+    }
+    trackEvent('settings', 'change_notify', '', value ? 1 : 0);
   },
 
   /**

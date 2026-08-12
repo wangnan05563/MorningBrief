@@ -1,0 +1,49 @@
+<!-- 我的下载：离线缓存管理（FR-MC-09） -->
+<view class="download-page">
+
+  <!-- 顶部统计条 -->
+  <view class="stat-bar" wx:if="{{totalCount > 0}}">
+    <view class="stat-info">
+      <text class="stat-count">共 {{totalCount}} 章</text>
+      <text class="stat-size">占用 {{totalSizeLabel}}</text>
+    </view>
+    <view class="stat-clear" bindtap="onClearAll">
+      <text>清空全部</text>
+    </view>
+  </view>
+
+  <!-- 分组列表 -->
+  <block wx:if="{{totalCount > 0}}">
+    <view class="dl-group" wx:for="{{groups}}" wx:key="channelId" wx:for-item="group">
+      <view class="group-head">
+        <text class="group-name">{{group.channelName}}</text>
+        <text class="group-clear" catchtap="onClearChannel" data-channel-id="{{group.channelId}}">清空</text>
+      </view>
+      <view
+        class="dl-item"
+        wx:for="{{group.items}}"
+        wx:key="episodeId"
+        wx:for-item="item"
+        bindtap="onTapItem"
+        data-id="{{item.episodeId}}"
+        data-channel-id="{{item.channelId}}"
+      >
+        <view class="dl-main">
+          <text class="dl-title">{{item.title || ('章节 ' + item.episodeId)}}</text>
+          <text class="dl-sub">{{item.duration ? (item.duration + ' 秒') : ''}}{{item.size ? (' · ' + (item.size >= 1048576 ? (item.size/1048576).toFixed(1) + ' MB' : Math.ceil(item.size/1024) + ' KB')) : ''}}</text>
+        </view>
+        <view class="dl-del" catchtap="onDeleteItem" data-id="{{item.episodeId}}">
+          <text>删除</text>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <!-- 空态 -->
+  <view class="empty-state" wx:else>
+    <image class="empty-icon-img" src="/images/icons/headphones.png" mode="aspectFit" />
+    <text class="empty-title">还没有离线下载</text>
+    <text class="empty-desc">在课程页点击「下载整门课程」或单章「下载」，\n即可离线收听～</text>
+  </view>
+
+</view>
