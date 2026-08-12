@@ -176,6 +176,89 @@ const routes = [
       },
     ],
   },
+  // ===== 移动端适配模式（/m 命名空间）=====
+  // 与 PC 端共用鉴权、API 服务层与 Pinia stores；各视图懒加载，独立分包，不影响 PC 包体。
+  {
+    path: '/m/login',
+    name: 'MobileLogin',
+    component: () => import('../views/mobile/Login.vue'),
+    meta: { public: true },
+  },
+  {
+    path: '/m',
+    component: () => import('../layouts/MobileLayout.vue'),
+    redirect: '/m/home',
+    meta: { requiresAuth: true },
+    children: [
+      {
+        path: 'home',
+        name: 'MobileHome',
+        component: () => import('../views/mobile/Home.vue'),
+        meta: { title: '首页' },
+      },
+      {
+        path: 'review',
+        name: 'MobileReview',
+        component: () => import('../views/mobile/ReviewList.vue'),
+        meta: { title: '审批' },
+      },
+      {
+        path: 'message',
+        name: 'MobileMessage',
+        component: () => import('../views/mobile/Message.vue'),
+        meta: { title: '消息' },
+      },
+      {
+        path: 'mine',
+        name: 'MobileMine',
+        component: () => import('../views/mobile/Mine.vue'),
+        meta: { title: '我的' },
+      },
+      // ===== 移动端管理（仅管理员，/m 命名空间下共用 MobileLayout 标签栏） =====
+      {
+        path: 'manage',
+        name: 'MobileManage',
+        component: () => import('../views/mobile/ManageHome.vue'),
+        meta: { title: '管理', requireRole: 'admin' },
+      },
+      {
+        path: 'manage/users',
+        name: 'MobileManageUsers',
+        component: () => import('../views/mobile/ManageUsers.vue'),
+        meta: { title: '用户管理', requireRole: 'admin', hidden: true },
+      },
+      {
+        path: 'manage/feedback',
+        name: 'MobileManageFeedback',
+        component: () => import('../views/mobile/ManageFeedback.vue'),
+        meta: { title: '用户反馈', requireRole: 'admin', hidden: true },
+      },
+      {
+        path: 'manage/channels',
+        name: 'MobileManageChannels',
+        component: () => import('../views/mobile/ManageChannels.vue'),
+        meta: { title: '频道管理', requireRole: 'admin', hidden: true },
+      },
+      {
+        path: 'manage/ads',
+        name: 'MobileManageAds',
+        component: () => import('../views/mobile/ManageAds.vue'),
+        meta: { title: '广告投放', requireRole: 'admin', hidden: true },
+      },
+      {
+        path: 'manage/queue',
+        name: 'MobileManageQueue',
+        component: () => import('../views/mobile/ManageQueue.vue'),
+        meta: { title: '队列监控', requireRole: 'admin', hidden: true },
+      },
+      {
+        path: 'manage/alert',
+        name: 'MobileManageAlert',
+        component: () => import('../views/mobile/ManageAlert.vue'),
+        meta: { title: '应急停服', requireRole: 'admin', hidden: true },
+      },
+    ],
+  },
   // 404 兜底：未匹配路由统一回到审核页，避免白屏
   { path: '/:pathMatch(.*)*', redirect: '/review' },
 ]
@@ -189,7 +272,6 @@ const router = createRouter({
 
 // 全局守卫：登录校验 + 角色校验
 router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('admin_token')
   const role = localStorage.getItem('admin_role')
 
   // 公开页面直接放行
@@ -198,9 +280,10 @@ router.beforeEach((to, from, next) => {
     return
   }
 
-  // 未登录跳转登录页
-  if (!token) {
-    next('/login')
+  // 未登录跳转登录页（移动端走 /m/login，PC 走 /login，互不影响）
+  // NFR-M103：token 存于 HttpOnly Cookie（JS 不可读），以 role 作为已登录代理态
+  if (!role) {
+    next(to.path.startsWith('/m') ? '/m/login' : '/login')
     return
   }
 

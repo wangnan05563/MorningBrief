@@ -9,6 +9,19 @@
       <el-table :data="list" v-loading="loading" stripe>
         <el-table-column prop="name" label="名称" min-width="120" />
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
+        <el-table-column label="类型" width="110">
+          <template #default="{ row }">
+            <el-tag v-if="row.channel_type === 'course'" type="success" effect="plain">课程</el-tag>
+            <el-tag v-else-if="row.channel_type === 'audiobook'" type="warning" effect="plain">有声读物</el-tag>
+            <el-tag v-else effect="plain">资讯</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="广告" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.enable_ad === 0" type="info" effect="plain" size="small">关闭</el-tag>
+            <span v-else class="text-muted">投放</span>
+          </template>
+        </el-table-column>
         <el-table-column label="定时触发" width="110">
           <template #default="{ row }">
             <span v-if="row.schedule_time">{{ row.schedule_time }}</span>
@@ -115,6 +128,47 @@
         <!-- 新增频道时可选 AI 自动生成提示词 -->
         <el-form-item v-if="!editing" label="AI 生成">
           <el-checkbox v-model="form.auto_generate_prompts">创建后自动调用 AI 生成提示词</el-checkbox>
+        </el-form-item>
+
+        <!-- 扩展 / 学习频道配置区：类型、选题策略、广告、风险提示、封面 -->
+        <el-divider content-position="left">扩展 / 学习频道</el-divider>
+        <el-form-item label="频道类型">
+          <el-select v-model="form.channel_type" style="width: 200px">
+            <el-option label="资讯（默认）" value="news" />
+            <el-option label="课程" value="course" />
+            <el-option label="有声读物" value="audiobook" />
+          </el-select>
+          <span class="form-tip">课程/有声读物走章节列表 + 学习进度 UI，并自动展示合规提示</span>
+        </el-form-item>
+        <el-form-item label="类型标签">
+          <el-input v-model="form.type_label" placeholder="如：课程 / 有声读物（冗余中文标签，留空用默认映射）" style="width: 320px" />
+        </el-form-item>
+        <el-form-item label="选题策略">
+          <el-select v-model="form.selection_strategy" clearable style="width: 240px">
+            <el-option label="按热度（默认）" value="heat" />
+            <el-option label="按文档章节顺序" value="outline" />
+            <el-option label="手动指定素材" value="manual" />
+          </el-select>
+          <span class="form-tip">课程频道建议选「按文档章节顺序」；手动需配合下方素材 ID</span>
+        </el-form-item>
+        <el-form-item v-if="form.selection_strategy === 'manual'" label="素材 ID">
+          <el-input v-model="form.manual_material_ids_text" placeholder="逗号分隔的素材 ID，如：12,13,14" style="width: 320px" />
+          <span class="form-tip">仅「手动指定素材」时生效，按列表顺序选题</span>
+        </el-form-item>
+        <el-form-item label="投放广告">
+          <el-switch v-model="form.enable_ad" :active-value="1" :inactive-value="0" />
+          <span class="form-tip">课程/资料频道建议关闭，避免 AI 生成内容插播广告</span>
+        </el-form-item>
+        <el-form-item label="风险提示">
+          <el-select v-model="form.disclaimer_level" style="width: 220px">
+            <el-option label="无（资讯）" value="none" />
+            <el-option label="普通" value="normal" />
+            <el-option label="强提示（课程/资料）" value="strong" />
+          </el-select>
+          <span class="form-tip">课程/资料类须显式「强提示」：AI 生成内容不构成专业建议</span>
+        </el-form-item>
+        <el-form-item label="封面图">
+          <el-input v-model="form.cover_url" placeholder="封面图 URL（留空用类型默认封面）" style="width: 360px" />
         </el-form-item>
 
         <!-- 提示词区：折叠面板，减少视觉负担 -->
@@ -415,6 +469,21 @@ const form = reactive({
   // 勾选自定义后由 el-input-number 写入 1-90，提交时透传给后端 material_lookback_days
   material_lookback_days: null,
   lookbackEnabled: false,
+  // ===== 扩展 / 学习频道字段（多频道适配 M2 / 业务范围扩展 MVP） =====
+  // 频道类型：news(默认)/course/audiobook，驱动小程序皮肤与课程链路
+  channel_type: 'news',
+  // 类型中文标签（冗余存储，留空则用前端默认映射）
+  type_label: '',
+  // 选题策略：heat(默认)/outline(按文档章节)/manual(手动)，课程频道用 outline
+  selection_strategy: '',
+  // manual 选题策略的素材 ID 列表（逗号分隔文本，提交时序列化为 JSON 数组）
+  manual_material_ids_text: '',
+  // 是否投放广告：1=投放(默认)/0=关闭（课程/资料频道设 0 实现零广告）
+  enable_ad: 1,
+  // 风险提示等级：none(默认)/normal/strong，课程/资料类须 strong
+  disclaimer_level: 'none',
+  // 频道封面图 URL，留空用类型默认封面
+  cover_url: '',
 })
 
 const rules = {
@@ -480,6 +549,14 @@ function resetForm() {
   // 素材回溯：默认不勾选自定义，material_lookback_days 置 null 表示继承动态回溯
   form.material_lookback_days = null
   form.lookbackEnabled = false
+  // 扩展 / 学习频道字段重置为默认
+  form.channel_type = 'news'
+  form.type_label = ''
+  form.selection_strategy = ''
+  form.manual_material_ids_text = ''
+  form.enable_ad = 1
+  form.disclaimer_level = 'none'
+  form.cover_url = ''
   promptCollapse.value = ['intro']
   showAudioPlayer.value = false
   bgmRecommendReason.value = ''
@@ -530,6 +607,21 @@ function openEdit(row) {
     ? row.material_lookback_days
     : null
   form.lookbackEnabled = form.material_lookback_days !== null
+  // 扩展 / 学习频道字段回填
+  form.channel_type = row.channel_type || 'news'
+  form.type_label = row.type_label || ''
+  form.selection_strategy = row.selection_strategy || ''
+  // manual_material_ids 后端存 JSON 数组文本，解析为逗号分隔文本用于输入框
+  try {
+    const ids = row.manual_material_ids ? JSON.parse(row.manual_material_ids) : []
+    form.manual_material_ids_text = Array.isArray(ids) ? ids.join(',') : ''
+  } catch {
+    form.manual_material_ids_text = ''
+  }
+  // enable_ad 为 0 表示关闭广告，其余（1/null）均视为投放
+  form.enable_ad = (row.enable_ad === 0) ? 0 : 1
+  form.disclaimer_level = row.disclaimer_level || 'none'
+  form.cover_url = row.cover_url || ''
   promptCollapse.value = ['intro']
   showAudioPlayer.value = false
   bgmRecommendReason.value = ''
@@ -545,6 +637,25 @@ async function handleSubmit() {
   try {
     // rss_sources 数组序列化为 JSON 字符串存储，空数组序列化为 "[]"
     const rssSourcesJson = JSON.stringify(form.rss_sources || [])
+    // 扩展 / 学习频道字段：manual_material_ids 仅在 manual 策略且文本非空时
+    // 序列化为 JSON 数组；否则提交 null（清空/禁用），避免脏数据残留
+    const extPayload = {
+      channel_type: form.channel_type,
+      type_label: form.type_label || null,
+      selection_strategy: form.selection_strategy || null,
+      manual_material_ids:
+        form.selection_strategy === 'manual' && form.manual_material_ids_text
+          ? JSON.stringify(
+              form.manual_material_ids_text
+                .split(',')
+                .map((s) => parseInt(s.trim(), 10))
+                .filter((n) => !Number.isNaN(n)),
+            )
+          : null,
+      enable_ad: form.enable_ad,
+      disclaimer_level: form.disclaimer_level,
+      cover_url: form.cover_url || null,
+    }
     if (editing.value) {
       // 编辑：提交所有字段（空字符串表示清空，后端会判断）
       await updateChannel(form.id, {
@@ -569,10 +680,12 @@ async function handleSubmit() {
         keywords: form.keywords || '',
         // 素材回溯：未勾选自定义则提交 null 继承动态；勾选则用 el-input-number 的值
         material_lookback_days: form.lookbackEnabled ? form.material_lookback_days : null,
+        ...extPayload,
       })
       ElMessage.success('已更新')
     } else {
-      // 新增：仅提交基本信息 + 定时 + AI生成标志 + BGM + 数据源配置，提示词由 AI 生成或留空
+      // 新增：仅提交基本信息 + 定时 + AI生成标志 + BGM + 数据源配置 + 扩展字段，
+      // 提示词由 AI 生成或留空
       await createChannel({
         name: form.name,
         description: form.description,
@@ -590,6 +703,7 @@ async function handleSubmit() {
         keywords: form.keywords || '',
         // 素材回溯：未勾选自定义则提交 null 继承动态；勾选则用填写的天数
         material_lookback_days: form.lookbackEnabled ? form.material_lookback_days : null,
+        ...extPayload,
       })
       ElMessage.success('已创建')
     }

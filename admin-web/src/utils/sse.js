@@ -87,14 +87,15 @@ export function broadcastLocal(eventType, data) {
 }
 
 function _connect() {
-  const token = localStorage.getItem('admin_token')
-  if (!token) {
-    // 未登录不建立连接，避免 401 刷日志
+  // NFR-M103：鉴权 token 存于 HttpOnly Cookie，同源 EventSource 自动携带（withCredentials）
+  // 以非敏感的 admin_role 作为已登录代理态，避免无谓的 401 连接
+  const role = localStorage.getItem('admin_role')
+  if (!role) {
     return
   }
 
   try {
-    eventSource = new EventSource(`${SSE_ENDPOINT}?token=${encodeURIComponent(token)}`)
+    eventSource = new EventSource(SSE_ENDPOINT, { withCredentials: true })
   } catch (e) {
     console.error('[SSE] EventSource 创建失败', e)
     _scheduleReconnect()
