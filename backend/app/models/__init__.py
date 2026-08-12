@@ -71,6 +71,10 @@ from app.models.auto_review_config import AutoReviewConfig
 from app.models.auto_review_stat import AutoReviewStat
 # 云端 COS 配置（V1.5 新增，key-value，支持前端热更新）
 from app.models.cos_config import CosConfig
+# 移动端适配模块（SRS INT-M101~M105：运营设备登记 + 运营消息收件箱）
+from app.models.mobile import AdminDevice, AdminInbox
+# 系统级键值标志（应急停服 / 维护态等复用，避免为单一布尔新建专用表）
+from app.models.system_flag import SystemFlag
 
 __all__ = [
     # 业务表
@@ -124,4 +128,9 @@ __all__ = [
     "AutoReviewStat",
     # 云端 COS 配置
     "CosConfig",
+    # 移动端适配模块
+    "AdminDevice",
+    "AdminInbox",
+    # 系统级键值标志
+    "SystemFlag",
 ]

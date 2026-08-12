@@ -119,10 +119,24 @@ class AdService:
                 "position": p.position if p.position else None,
                 "start_date": p.start_date.isoformat() if p.start_date else None,
                 "end_date": p.end_date.isoformat() if p.end_date else None,
+                "enabled": p.enabled if p.enabled is not None else 1,
             }
             for p, m_name in rows
         ]
         return {"total": total, "list": list_data}
+
+    async def set_placement_enabled(self, placement_id: int, enabled: int) -> dict:
+        """投放启用/停用（M7 FR-M702 移动端启停）。
+
+        Args:
+            enabled: 1=启用，0=停用
+        """
+        p = await self.db.get(AdPlacement, placement_id)
+        if p is None:
+            raise ValueError(f"投放不存在: {placement_id}")
+        p.enabled = enabled
+        await self.db.flush()
+        return {"id": p.id, "enabled": p.enabled}
 
     async def create_placement(
         self,

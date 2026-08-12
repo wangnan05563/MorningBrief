@@ -56,6 +56,14 @@ class ChannelCreateRequest(BaseModel):
     enable_ad: int | None = None
     # manual 选题策略的素材 ID 列表（JSON 数组文本），仅 selection_strategy=manual 时生效
     manual_material_ids: str | None = None
+    # 多频道适配 M2：频道类型 news(默认)/course/audiobook，驱动小程序皮肤与课程链路
+    channel_type: str = "news"
+    # 类型中文标签（冗余存储，避免前端硬编码）：如 "资讯"/"课程"/"有声读物"
+    type_label: str | None = None
+    # 频道封面图 URL（小程序频道卡片/课程头图），为空用类型默认封面兜底
+    cover_url: str | None = None
+    # 风险提示等级 none(默认)/normal/strong：课程/资料类须显式 strong 提示
+    disclaimer_level: str = "none"
     # 频道创建时是否自动调用 AI 生成提示词
     auto_generate_prompts: bool = False
 
@@ -139,6 +147,32 @@ class ChannelCreateRequest(BaseModel):
             raise ValueError("enable_ad 仅支持 0 / 1")
         return v
 
+    @field_validator("channel_type")
+    @classmethod
+    def validate_channel_type(cls, v: str) -> str:
+        v = (v or "news").strip()
+        if v not in ("news", "course", "audiobook"):
+            raise ValueError("channel_type 仅支持 news / course / audiobook")
+        return v
+
+    @field_validator("disclaimer_level")
+    @classmethod
+    def validate_disclaimer_level(cls, v: str) -> str:
+        v = (v or "none").strip()
+        if v not in ("none", "normal", "strong"):
+            raise ValueError("disclaimer_level 仅支持 none / normal / strong")
+        return v
+
+    @field_validator("cover_url")
+    @classmethod
+    def validate_cover_url(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        v = v.strip()
+        if len(v) > 256:
+            raise ValueError("cover_url 不能超过 256 字符")
+        return v
+
 
 class ChannelUpdateRequest(BaseModel):
     """修改频道请求体。"""
@@ -168,6 +202,14 @@ class ChannelUpdateRequest(BaseModel):
     enable_ad: int | None = None
     # manual 选题策略的素材 ID 列表（JSON 数组文本），仅 selection_strategy=manual 时生效
     manual_material_ids: str | None = None
+    # 多频道适配 M2：频道类型 news/course/audiobook；课程频道须配合 selection_strategy=outline
+    channel_type: str | None = None
+    # 类型中文标签（冗余存储）
+    type_label: str | None = None
+    # 频道封面图 URL
+    cover_url: str | None = None
+    # 风险提示等级 none/normal/strong
+    disclaimer_level: str | None = None
 
     @field_validator("schedule_time")
     @classmethod
@@ -238,6 +280,36 @@ class ChannelUpdateRequest(BaseModel):
             raise ValueError("enable_ad 仅支持 0 / 1")
         return v
 
+    @field_validator("channel_type")
+    @classmethod
+    def validate_channel_type(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        v = v.strip()
+        if v not in ("news", "course", "audiobook"):
+            raise ValueError("channel_type 仅支持 news / course / audiobook")
+        return v
+
+    @field_validator("disclaimer_level")
+    @classmethod
+    def validate_disclaimer_level(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        v = v.strip()
+        if v not in ("none", "normal", "strong"):
+            raise ValueError("disclaimer_level 仅支持 none / normal / strong")
+        return v
+
+    @field_validator("cover_url")
+    @classmethod
+    def validate_cover_url(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        v = v.strip()
+        if len(v) > 256:
+            raise ValueError("cover_url 不能超过 256 字符")
+        return v
+
 
 def _channel_to_dict(ch) -> dict:
     """统一频道序列化，避免列表/详情接口字段不一致。"""
@@ -264,6 +336,10 @@ def _channel_to_dict(ch) -> dict:
         "selection_strategy": ch.selection_strategy,
         "enable_ad": ch.enable_ad,
         "manual_material_ids": ch.manual_material_ids,
+        "channel_type": ch.channel_type,
+        "type_label": ch.type_label,
+        "cover_url": ch.cover_url,
+        "disclaimer_level": ch.disclaimer_level,
         "created_at": ch.created_at.isoformat() if ch.created_at else None,
         "updated_at": ch.updated_at.isoformat() if ch.updated_at else None,
     }
@@ -319,6 +395,14 @@ async def create_channel(
             selection_strategy=req.selection_strategy,
             enable_ad=req.enable_ad,
             manual_material_ids=req.manual_material_ids,
+            channel_type=req.channel_type,
+            type_label=req.type_label,
+            cover_url=req.cover_url,
+            disclaimer_level=req.disclaimer_level,
+            intro_prompt=req.intro_prompt,
+            outro_prompt=req.outro_prompt,
+            constraint_prompt=req.constraint_prompt,
+            rewrite_template=req.rewrite_template,
         )
     except ValueError as e:
         return error(code=400, message=str(e))
@@ -375,6 +459,10 @@ async def update_channel(
             selection_strategy=req.selection_strategy,
             enable_ad=req.enable_ad,
             manual_material_ids=req.manual_material_ids,
+            channel_type=req.channel_type,
+            type_label=req.type_label,
+            cover_url=req.cover_url,
+            disclaimer_level=req.disclaimer_level,
         )
     except ValueError as e:
         return error(code=400, message=str(e))

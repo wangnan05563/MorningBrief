@@ -56,14 +56,20 @@ async def search_episodes(
     keyword: str = Query(..., min_length=1, max_length=64, description="搜索关键词"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    channel_type: str | None = Query(
+        None,
+        pattern="^(news|course|audiobook)$",
+        description="频道类型过滤（FR-MC-07）：news=资讯/course=课程/audiobook=有声读物，为空返回全部",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """节目搜索：优先 FTS5 全文索引，降级 LIKE 模糊匹配。
 
     FTS5 走倒排索引性能比 LIKE 高 10-100 倍，详见 content_service.search_episodes。
+    channel_type 按频道类型过滤（FR-MC-07 跨类型搜索）。
     """
     svc = ContentService(db)
-    data = await svc.search_episodes(keyword, page, size)
+    data = await svc.search_episodes(keyword, page, size, channel_type=channel_type)
     return success(data=data)
 
 

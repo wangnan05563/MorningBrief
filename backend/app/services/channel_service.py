@@ -79,11 +79,16 @@ class ChannelService:
         selection_strategy: Optional[str] = None,
         enable_ad: Optional[int] = None,
         manual_material_ids: Optional[str] = None,
+        channel_type: str = "news",
+        type_label: Optional[str] = None,
+        cover_url: Optional[str] = None,
+        disclaimer_level: str = "none",
     ) -> Channel:
         """新增频道。name 唯一约束，冲突抛 ValueError。
 
         支持 schedule_time（定时触发）与 4 个提示词字段 + BGM 配置 + 段间静音 + 思考问题开关
-        + RSS 源白名单 + 关键词过滤 + 最短时长 + 展示排序权重 + 素材周期回溯天数，均为可选。
+        + RSS 源白名单 + 关键词过滤 + 最短时长 + 展示排序权重 + 素材周期回溯天数 + 多频道适配
+        字段（channel_type/type_label/cover_url/disclaimer_level），均为可选。
         """
         channel = Channel(
             name=name, description=description, is_active=1,
@@ -105,6 +110,10 @@ class ChannelService:
             selection_strategy=selection_strategy,
             enable_ad=enable_ad,
             manual_material_ids=manual_material_ids,
+            channel_type=channel_type,
+            type_label=type_label,
+            cover_url=cover_url,
+            disclaimer_level=disclaimer_level,
         )
         self.db.add(channel)
         try:
@@ -138,6 +147,10 @@ class ChannelService:
         selection_strategy: Optional[str] = None,
         enable_ad: Optional[int] = None,
         manual_material_ids: Optional[str] = None,
+        channel_type: Optional[str] = None,
+        type_label: Optional[str] = None,
+        cover_url: Optional[str] = None,
+        disclaimer_level: Optional[str] = None,
     ) -> Channel:
         """修改频道。显式设置 updated_at（SQLite 不支持 ON UPDATE）。
 
@@ -197,6 +210,14 @@ class ChannelService:
             channel.enable_ad = enable_ad
         if manual_material_ids is not None:
             channel.manual_material_ids = manual_material_ids
+        if channel_type is not None:
+            channel.channel_type = channel_type
+        if type_label is not None:
+            channel.type_label = type_label
+        if cover_url is not None:
+            channel.cover_url = cover_url
+        if disclaimer_level is not None:
+            channel.disclaimer_level = disclaimer_level
         channel.updated_at = localnow_naive()
 
         try:

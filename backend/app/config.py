@@ -299,6 +299,13 @@ class Settings(BaseSettings):
     ALERT_EMAIL_SMTP_PASSWORD: str = ""
     ALERT_EMAIL_TO: str = ""
 
+    # ---- 订阅消息模板（FR-MC-06：按频道类型下发，小程序不写死） ----
+    # JSON 字符串，键为 channel_type，值为微信订阅消息模板 ID：
+    #   {"news":"tmpl_xxx","course":"tmpl_yyy","audiobook":"tmpl_zzz"}
+    # 留空表示未配置：小程序订阅时回退「通知模板未配置」，不阻断频道订阅。
+    # course/audiobook 建议分别配置「新课/新章节已上线」类模板；news 用「今日节目已更新」。
+    SUBSCRIBE_TEMPLATE_IDS: str = ""
+
     # ---- 工作流调度 ----
     WORKFLOW_CRON_HOUR: int = 5
     WORKFLOW_BACKUP_CHECK_HOUR: int = 6

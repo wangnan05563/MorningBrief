@@ -74,6 +74,16 @@ class Channel(Base):
     # manual 选题策略的素材 ID 列表（JSON 数组文本，如 "[12,13,14]"）。
     # 仅当 selection_strategy=manual 时读取，按列表顺序选题；为空则 manual 退化为空选。
     manual_material_ids: Mapped[Optional[str]] = mapped_column(Text, comment="manual 选题策略的素材 ID 列表（JSON 数组）")
+    # 频道类型（多频道适配 M2）：news=资讯(默认,存量兼容)/course=课程/audiobook=有声读物。
+    # 驱动小程序"类型→皮肤"映射；course 走章节列表+学习进度 UI，其余类型复用资讯皮肤。
+    channel_type: Mapped[str] = mapped_column(String(16), default="news", nullable=False, comment="频道类型 news/course/audiobook")
+    # 类型中文标签（冗余存储，避免前端按 type 硬编码中文）：如 "资讯"/"课程"/"有声读物"
+    type_label: Mapped[Optional[str]] = mapped_column(String(32), default=None, comment="类型中文标签（冗余）")
+    # 频道封面图 URL：小程序频道卡片/课程头图；为空时前端用类型默认封面兜底
+    cover_url: Mapped[Optional[str]] = mapped_column(String(256), default=None, comment="频道封面图 URL")
+    # 风险提示等级（多频道适配 M2）：none=无(默认,资讯)/normal=普通/strong=强提示(课程/资料)。
+    # 课程/资料类 AI 生成内容须显式提示"仅供学习参考，不构成专业建议"。
+    disclaimer_level: Mapped[str] = mapped_column(String(16), default="none", nullable=False, comment="风险提示等级 none/normal/strong")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     # SQLite 不支持 ON UPDATE，updated_at 由 ChannelService.update_channel 显式维护
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

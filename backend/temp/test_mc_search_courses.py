@@ -23,7 +23,6 @@ import shutil
 import sys
 import tempfile
 import asyncio
-import os as _os
 from datetime import date
 from pathlib import Path
 
@@ -34,7 +33,7 @@ import app.paths as paths  # noqa: E402
 BACKEND = Path(__file__).resolve().parent.parent
 REAL_DB = BACKEND / "data" / "news.db"
 # 每进程唯一临时库，避免并发运行/残留进程复用同一路径导致 SQLite 锁竞争（曾致 17min 挂死）
-TMP_DB = Path(tempfile.gettempdir()) / f"smoke_mc_news_{_os.getpid()}.db"
+TMP_DB = Path(tempfile.gettempdir()) / f"smoke_mc_news_{os.getpid()}.db"
 
 for suf in ("", "-wal", "-shm"):
     src = Path(str(REAL_DB) + suf)
@@ -198,10 +197,29 @@ with TestClient(app) as c:
     d = (r.json().get("data") or {}) if r.status_code == 200 else {}
     check("R1E news 过滤有声书关键词→total=0", d.get("total", -1) == 0, f"total={d.get('total')}")
 
+    # --- 7b. B4 验证：CJK 关键词在 course 筛选下走 LIKE 降级仍命中有声书 ---
+    # 关键词「书名」为 CJK，FTS5 MATCH 对 CJK 恒为空 → 必须触发 LIKE 降级补查。
+    r = c.get("/api/v1/episodes/search?keyword=书名&channel_type=course")
+    d = (r.json().get("data") or {}) if r.status_code == 200 else {}
+    lst = d.get("list") or []
+    check("B4 CJK 关键词(LIKE降级)命中>=1",
+          d.get("total", 0) >= 1, f"total={d.get('total')} list={[it.get('channel_name') for it in lst]}")
+    check("B4 CJK 命中项为有声书", all(it.get("channel_type") == "audiobook" for it in lst),
+          str([it.get("channel_type") for it in lst]))
+
     # --- 8. R2 修正：news 频道调用课程进度接口应 404（非课程类被拒）---
     r = c.get(f"/api/v1/courses/{ncid}/progress")
     ok = r.status_code in (200, 404) and r.json().get("code") not in (0, None)
     check("R2 news 频道→404(非课程类被拒)", ok, f"code={r.status_code} body={r.text[:120]}")
+
+# D-2 清理：with 块已关闭 TestClient 释放连接，删除本进程临时库（含 -wal/-shm）防残留累积
+for suf in ("", "-wal", "-shm"):
+    p = Path(str(TMP_DB) + suf)
+    if p.exists():
+        try:
+            p.unlink()
+        except OSError as e:
+            print(f"[warn] 临时库清理失败 {p}: {e}")
 
 print("\n=== MC SEARCH/COURSES SMOKE SUMMARY ===")
 fails = [n for n, ok in results if not ok]

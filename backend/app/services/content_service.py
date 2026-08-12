@@ -6,6 +6,8 @@ V1.2 起缓存层从 Redis 改为进程内 TTLCache：
 """
 from datetime import date
 
+import re
+
 from loguru import logger
 from sqlalchemy import select, func
 from sqlalchemy.exc import SQLAlchemyError
@@ -21,6 +23,20 @@ TTL_DETAIL = 1800  # 节目详情 30 分钟
 TTL_LIST = 600     # 列表 10 分钟
 TTL_SCRIPT = 1800  # 稿件 30 分钟
 TTL_SEARCH = 60    # 搜索 60 秒：FTS5/LIKE 每次全查询，短 TTL 吸收重复/热点关键词
+
+# CJK（中日韩）字符区间：用于判断关键词是否需要 LIKE 降级。
+# \u3400-\u4dbf 扩展A；\u4e00-\u9fff 基本汉字；\uf900-\ufaff 兼容汉字；
+# \u3040-\u30ff 日文假名；\uac00-\ud7af 韩文音节。
+_CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]")
+
+
+def _contains_cjk(text: str) -> bool:
+    """关键词是否含 CJK 字符。
+
+    FTS5 unicode61 分词器不索引 CJK，中文/日文/韩文关键词 MATCH 恒为空，
+    必须降级 LIKE 才能搜到；纯 ASCII/Latin 关键词 FTS5 已正确分词，空即真无命中。
+    """
+    return bool(_CJK_RE.search(text or ""))
 
 
 class ContentService:
@@ -307,11 +323,12 @@ class ContentService:
             # exc_info=True 保留可观测性，便于发现 FTS5 持续不可用或查询缺陷。
             logger.warning("search_episodes FTS5 查询异常，降级 LIKE: %s", e, exc_info=True)
 
-        # FTS5 默认 unicode61 分词器不索引中文（CJK 不被识别为词），导致中文关键词
-        # MATCH 命中为 0。原实现只在 FTS5 抛异常时降级，中文搜索因此静默返回空。
-        # 这里在 FTS5 命中为空时也降级到 LIKE：LIKE 是 FTS5 的超集匹配，空结果补查
-        # 无副作用，却能让中文搜索真正可用（TTL 60s 吸收重复/热点 miss）。
-        if data is not None and data.get("total", 0) == 0:
+        # B4 优化：仅在关键词含 CJK 时空结果降级 LIKE（减少纯 ASCII 合法无命中的多余查询）。
+        # FTS5 unicode61 不索引 CJK → 中文/日文/韩文关键词 MATCH 恒为空，必须 LIKE 补查；
+        # 纯 ASCII/Latin 关键词 FTS5 已正确分词，空结果即「真无命中」，无需再打一次 LIKE。
+        # 语义副作用（可接受，与本接口「优先 FTS5」设计一致）：纯 ASCII 搜索由「子串匹配」
+        # 退化为「词/短语匹配」，不再命中 keywords⊃keyword 这类子串；CJK 仍走 LIKE 子串。
+        if data is not None and data.get("total", 0) == 0 and _contains_cjk(keyword):
             data = None
 
         if data is None:
