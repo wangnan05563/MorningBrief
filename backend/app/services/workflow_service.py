@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BizError, NotFoundError, ParamError
 from app.models import (
+    AutoReviewStat,
     Episode,
     Material,
     PlayLog,
@@ -188,10 +189,13 @@ class WorkflowService:
         if not workflow_ids:
             raise ParamError("workflow_ids 不能为空")
 
-        # async with session.begin() 保证块内所有操作在同一事务中：
-        # 正常退出 → commit；抛异常 → 自动 rollback
-        async with self.db.begin():
-            # ---- 校验阶段：任一失败立即抛出，事务自动回滚 ----
+        # 单一事务保证块内所有操作原子：正常 → commit；异常 → rollback。
+        # 注意：不使用 async with self.db.begin()，因为该会话可能在请求链路上
+        # 已被前置查询（如鉴权/中间件）autobegin 过，再显式 begin() 会抛
+        # "A transaction is already begun" → 500。改为复用既有事务（autobegin 幂等）
+        # + 结束时统一 commit/rollback，任意情况下都能正确回滚，不留孤儿数据。
+        try:
+            # ---- 校验阶段：任一失败立即抛出，事务回滚 ----
             result = await self.db.execute(
                 select(Workflow.id, Workflow.status).where(Workflow.id.in_(workflow_ids))
             )
@@ -233,6 +237,12 @@ class WorkflowService:
             await self.db.execute(
                 delete(Episode).where(Episode.workflow_id.in_(workflow_ids))
             )
+            # auto_review_stat.review_id 是 RESTRICT 外键指向 review.id，
+            # 必须在删除 Review 之前清理，否则 foreign_keys=ON 下触发约束冲突 → 500。
+            # 按 workflow_id 删除可覆盖本批工作流的全部自动审批统计（含 review_id 为空的失败记录）。
+            await self.db.execute(
+                delete(AutoReviewStat).where(AutoReviewStat.workflow_id.in_(workflow_ids))
+            )
             await self.db.execute(
                 delete(Review).where(Review.workflow_id.in_(workflow_ids))
             )
@@ -253,5 +263,12 @@ class WorkflowService:
             await self.db.execute(
                 delete(Workflow).where(Workflow.id.in_(workflow_ids))
             )
+
+            # 统一提交：任一删除成功则整批生效；下方 except 负责回滚
+            await self.db.commit()
+        except Exception:
+            # 整批回滚：校验失败或删除异常都不留部分删除的孤儿数据
+            await self.db.rollback()
+            raise
 
         return {"deleted": workflow_ids}
