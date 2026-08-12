@@ -3,7 +3,7 @@ import json
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AdminPayload, get_current_admin
@@ -88,6 +88,42 @@ async def list_placements(
 ):
     svc = AdService(db)
     data = await svc.list_placements(page=page, size=size)
+    return success(data=data)
+
+
+class PlacementUpdateRequest(BaseModel):
+    """投放更新请求体（M7 FR-M702 移动端启停，当前仅暴露 enabled 安全开关）。"""
+    enabled: int
+
+    @field_validator("enabled")
+    @classmethod
+    def validate_enabled(cls, v: int) -> int:
+        if v not in (0, 1):
+            raise ValueError("enabled 仅支持 0 / 1")
+        return v
+
+
+@router.put("/placements/{placement_id}")
+async def update_placement(
+    placement_id: int,
+    req: PlacementUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(get_current_admin),
+):
+    """投放启用/停用（仅启停开关，复杂编辑走 PC）。"""
+    svc = AdService(db)
+    try:
+        data = await svc.set_placement_enabled(placement_id, req.enabled)
+    except ValueError as e:
+        return error(code=404, message=str(e))
+    db.add(AuditLog(
+        category="ad",
+        action="update_placement_enabled",
+        target=str(placement_id),
+        operator=admin.username,
+        detail=json.dumps({"enabled": req.enabled}, ensure_ascii=False),
+    ))
+    await db.commit()
     return success(data=data)
 
 

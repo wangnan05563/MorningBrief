@@ -28,7 +28,9 @@ from app.models.episode import EpisodeStatus
 
 router = APIRouter(prefix="/api/v1/courses", tags=["C端-课程"])
 
-# 章节「已学完」判定阈值：与前端 miniprogram COURSE_COMPLETE_RATIO 保持一致
+# 章节「已学完」判定阈值：前后端单一真相源。
+# 前端收敛于 miniprogram/services/constants.js 的 COURSE_COMPLETE_RATIO
+# （api.js / course.js / local-data.js 统一引用）；任何一侧调整须同步另一侧。
 _COMPLETE_RATIO = 0.95
 
 

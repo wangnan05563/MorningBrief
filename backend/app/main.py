@@ -146,6 +146,8 @@ from app.routers.api.channels import router as c_channels_router
 from app.routers.api.subscriptions import router as c_subscriptions_router
 from app.routers.api.users import router as c_users_router
 from app.routers.api.cos import router as c_cos_router
+from app.routers.api.courses import router as c_courses_router
+from app.routers.api.client_report import router as c_client_report_router
 
 # B 端路由（运营后台）
 from app.routers.admin.auth import router as b_auth_router
@@ -165,6 +167,10 @@ from app.routers.admin.events import router as b_events_router
 from app.routers.admin.feedbacks import router as b_feedbacks_router
 # 关于页面（系统元信息 + 检查更新）
 from app.routers.admin.about import router as b_about_router
+# 移动端适配路由（SRS INT-M101~M105：收件箱 / 设备登记 / 推送注册 / 首页聚合 / 应急停服）
+from app.routers.admin.mobile import router as b_mobile_router
+# 终端用户管理路由（SRS M5：检索 / 启停）
+from app.routers.admin.users import router as b_users_router
 # 数据库维护与系统清理模块（仅 admin）
 from app.routers.admin.db_admin import router as b_db_admin_router
 from app.routers.admin.maintenance import router as b_maintenance_router
@@ -272,6 +278,13 @@ async def _migrate_channel_schema() -> None:  # NOSONAR
             ("selection_strategy", "TEXT"),
             ("enable_ad", "INTEGER"),
             ("manual_material_ids", "TEXT"),
+            # 多频道适配 M2 字段：
+            # channel_type=频道类型(news/course/audiobook)，默认 news 兼容存量
+            # type_label=类型中文标签(冗余存储)；cover_url=封面图；disclaimer_level=风险提示等级
+            ("channel_type", "TEXT NOT NULL DEFAULT 'news'"),
+            ("type_label", "TEXT"),
+            ("cover_url", "TEXT"),
+            ("disclaimer_level", "TEXT NOT NULL DEFAULT 'none'"),
         ]
         added = 0
         for col_name, col_type in new_columns:
@@ -543,6 +556,53 @@ async def _migrate_fts5_index() -> None:  # NOSONAR
         conn.close()
 
 
+async def _migrate_user_disabled_column() -> None:  # NOSONAR
+    """user 表追加 disabled 列（M5 FR-M502 终端用户启停，幂等）。
+
+    SQLite create_all 不修改已存在表结构，新增字段需显式 ALTER TABLE。
+    """
+    import sqlite3
+    from app.paths import resolve_db_path
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(user)")
+        existing = {row[1] for row in cur.fetchall()}
+        if "disabled" not in existing:
+            cur.execute("ALTER TABLE user ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0")
+            conn.commit()
+            logger.info("[startup] user 表迁移完成，新增 disabled 列")
+    except Exception as e:
+        logger.warning("[startup] user 表迁移失败: %s", e)
+    finally:
+        conn.close()
+
+
+async def _migrate_adplacement_enabled_column() -> None:  # NOSONAR
+    """ad_placement 表追加 enabled 列（M7 FR-M702 投放启停，幂等）。"""
+    import sqlite3
+    from app.paths import resolve_db_path
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(ad_placement)")
+        existing = {row[1] for row in cur.fetchall()}
+        if "enabled" not in existing:
+            cur.execute(
+                "ALTER TABLE ad_placement ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1"
+            )
+            conn.commit()
+            logger.info("[startup] ad_placement 表迁移完成，新增 enabled 列")
+    except Exception as e:
+        logger.warning("[startup] ad_placement 表迁移失败: %s", e)
+    finally:
+        conn.close()
+
+
 async def _seed_default_channels() -> None:  # NOSONAR
     """首次启动自动 seed 默认频道（幂等）。
 
@@ -674,6 +734,18 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
         await _migrate_fts5_index()
     except Exception as e:
         logger.warning("[startup] FTS5 索引迁移失败: %s", e)
+
+    # user 表 disabled 列迁移（M5 FR-M502 终端用户启停）
+    try:
+        await _migrate_user_disabled_column()
+    except Exception as e:
+        logger.warning("[startup] user disabled 列迁移失败: %s", e)
+
+    # ad_placement 表 enabled 列迁移（M7 FR-M702 投放启停）
+    try:
+        await _migrate_adplacement_enabled_column()
+    except Exception as e:
+        logger.warning("[startup] ad_placement enabled 列迁移失败: %s", e)
 
     # 自动 seed 默认频道（幂等，确保工作流监控页频道选项非空）
     try:
@@ -831,6 +903,10 @@ def create_app() -> FastAPI:  # NOSONAR
     app.include_router(c_users_router)
     # C 端 COS 直传（预签名上传）
     app.include_router(c_cos_router)
+    # C 端课程进度聚合（FR-MC-04 / FR-MC-05 P1）
+    app.include_router(c_courses_router)
+    # C 端客户端告警上报（FR-MC-12 后续增强：未知 channel_type 等 best-effort 上报）
+    app.include_router(c_client_report_router)
 
     # B 端（运营后台）
     app.include_router(b_auth_router)
@@ -858,6 +934,9 @@ def create_app() -> FastAPI:  # NOSONAR
     app.include_router(b_cos_router)
     # 关于页面（系统元信息 + 检查更新）
     app.include_router(b_about_router)
+    # 移动端适配路由
+    app.include_router(b_mobile_router)
+    app.include_router(b_users_router)
     # 内部（工作流调度）
     app.include_router(internal_workflow_router)
 

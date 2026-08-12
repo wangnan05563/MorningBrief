@@ -16,8 +16,9 @@ from dataclasses import dataclass
 from typing import Optional
 
 import jwt
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request, Response
 
+from app.config import get_settings
 from app.core.exceptions import AuthError, BizPermissionError
 from app.core.security import decode_token
 from app.services.blacklist_service import is_in_blacklist
@@ -110,9 +111,16 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> UserP
     )
 
 
-async def get_current_admin(authorization: Optional[str] = Header(None)) -> AdminPayload:
-    """B 端鉴权依赖。"""
-    token = _extract_token_strict(authorization)
+async def get_current_admin(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+) -> AdminPayload:
+    """B 端鉴权依赖。优先 Authorization 头，回退 HttpOnly Cookie（NFR-M103）。"""
+    token = _extract_token(authorization)
+    if token is None:
+        token = request.cookies.get(ADMIN_TOKEN_COOKIE)
+    if token is None:
+        raise AuthError("缺少认证信息")
     try:
         payload = decode_token(token)
     except jwt.ExpiredSignatureError:
@@ -147,3 +155,43 @@ async def require_admin(admin: AdminPayload = Depends(get_current_admin)) -> Adm
 # 便捷别名
 require_user = get_current_user
 require_operator = get_current_admin
+
+
+# ===== HttpOnly Cookie 鉴权（NFR-M103 站点级迁移，2026-08-11）=====
+# B 端 admin_token 由 localStorage 迁移到 HttpOnly Cookie，避免 XSS 读取持久 token。
+# Cookie 仅同源自动携带；SameSite=Lax 缓解 CSRF；Secure 在 HTTPS（含 Funnel TLS 终止的
+# X-Forwarded-Proto）下启用，本地 HTTP 开发不置 Secure 以保证可写入。
+ADMIN_TOKEN_COOKIE = "admin_token"
+
+
+def _cookie_secure(request: Request) -> bool:
+    """仅在 HTTPS 或经反向代理声明 HTTPS 时置 Secure，避免本地 HTTP 开发无法写入 Cookie。"""
+    if request.url.scheme == "https":
+        return True
+    return request.headers.get("x-forwarded-proto", "").lower() == "https"
+
+
+def set_admin_token_cookie(response: Response, request: Request, token: str, max_age: int) -> None:
+    """登录成功时写入 HttpOnly admin_token Cookie。"""
+    response.set_cookie(
+        key=ADMIN_TOKEN_COOKIE,
+        value=token,
+        httponly=True,
+        secure=_cookie_secure(request),
+        samesite="lax",
+        max_age=max_age,
+        path="/",
+    )
+
+
+def clear_admin_token_cookie(response: Response, request: Request) -> None:
+    """登出时清除 HttpOnly admin_token Cookie。"""
+    response.set_cookie(
+        key=ADMIN_TOKEN_COOKIE,
+        value="",
+        httponly=True,
+        secure=_cookie_secure(request),
+        samesite="lax",
+        max_age=0,
+        path="/",
+    )

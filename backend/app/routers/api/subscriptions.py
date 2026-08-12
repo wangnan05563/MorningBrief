@@ -6,11 +6,14 @@
   · 频道订阅：长期关注关系，用于首页优先展示已订阅频道
 - 两者复用 /subscriptions 前缀，但子路径不同：/subscriptions/message 与 /subscriptions/channels/{id}
 """
+import json
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.core.auth import UserPayload, get_current_user
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
@@ -57,6 +60,63 @@ async def record_message_subscription(
         await db.refresh(sub)
 
     return success(data={"success": True, "subscription_id": sub.id})
+
+
+@router.get("/templates")
+async def list_subscribe_templates():
+    """订阅消息模板映射（按 channel_type）。
+
+    FR-MC-06：模板 id 由后端下发、按类型决定，小程序不写死。
+    返回 { news, course, audiobook } 映射（仅含已配置且非空的类型）。
+    公开接口：订阅消息模板 ID 属非敏感配置，无需鉴权。
+    """
+    settings = get_settings()
+    raw = getattr(settings, "SUBSCRIBE_TEMPLATE_IDS", "") or ""
+    templates: dict = {}
+    if raw.strip():
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                for key in ("news", "course", "audiobook"):
+                    val = parsed.get(key)
+                    if isinstance(val, str) and val:
+                        templates[key] = val
+        except (json.JSONDecodeError, TypeError):
+            # 配置异常时按空处理，避免整个订阅流程因模板配置错误而中断
+            pass
+    return success(data={"templates": templates})
+
+
+@router.get("/channels")
+async def list_my_subscribed_channels(
+    user: UserPayload = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """查询当前用户已订阅的频道列表（含类型元信息，供「我的课程」等聚合页使用）。
+
+    仅返回启用频道，按 display_order 升序（与 C 端频道列表顺序一致）。
+    channel_type 等为 SRS §6.1 数据契约字段，用 getattr 兜底防存量库未迁移列报错。
+    """
+    result = await db.execute(
+        select(Channel)
+        .join(ChannelSubscription, ChannelSubscription.channel_id == Channel.id)
+        .where(ChannelSubscription.user_id == user.user_id, Channel.is_active == 1)
+        .order_by(Channel.display_order.asc(), Channel.id.asc())
+    )
+    channels = result.scalars().all()
+    data = [
+        {
+            "id": ch.id,
+            "name": ch.name,
+            "description": ch.description or "",
+            "channel_type": getattr(ch, "channel_type", "news") or "news",
+            "type_label": getattr(ch, "type_label", None),
+            "cover_url": getattr(ch, "cover_url", None),
+            "disclaimer_level": getattr(ch, "disclaimer_level", "none") or "none",
+        }
+        for ch in channels
+    ]
+    return success(data={"list": data})
 
 
 @router.post("/channels/{channel_id}")

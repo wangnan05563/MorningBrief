@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import BizError, NotFoundError
 from app.core.timeutil import localnow_naive
-from app.models import Review
+from app.models import Review, Workflow, Channel, Script, Episode
 from app.models.review import ReviewStatus
 
 # 审核记录不存在的统一提示，集中管理避免多处硬编码字符串不一致
@@ -20,10 +20,26 @@ class ReviewService:
         self, status: str, page: int, size: int,
         workflow_id: str = None,
     ) -> dict:
-        """审核列表分页，status/workflow_id 为空时不过滤。"""
-        # 总数独立查询，避免扫描全部数据
+        """审核列表分页，status/workflow_id 为空时不过滤。
+
+        返回字段在桌面端既有字段基础上扩展频道/工作流/稿件上下文，
+        供移动端审核页展示「当前频道 + 工作流」标题与卡片摘要：
+        - channel_name：由 Review.workflow_id → Workflow.channel_id → Channel.name 推导
+        - workflow_name：工作流标识（如 wf-20260812-0001），Workflow 无独立 name 字段
+        - title / content_preview：由关联 Script 的分段标题与全文首段推导，便于卡片直读
+        - channel_type：频道类型（news/course/audiobook），用于移动端差异化展示
+        """
+        # 总数独立查询（仅按 Review 维度过滤），避免 join 影响计数
         count_stmt = select(func.count(Review.id))
-        list_stmt = select(Review)
+
+        # 列表联合 Workflow/Channel/Script，一次性带出上下文，避免 N+1 查询
+        # 均为 1:1 关联，LEFT OUTER JOIN 不会放大行数；孤儿记录（工作流/稿件缺失）保持 Review 行
+        list_stmt = (
+            select(Review, Workflow, Channel, Script)
+            .join(Workflow, Review.workflow_id == Workflow.id, isouter=True)
+            .join(Channel, Workflow.channel_id == Channel.id, isouter=True)
+            .join(Script, Review.script_id == Script.id, isouter=True)
+        )
 
         # status 可选过滤：传入合法值才加条件，空串视为全部
         if status:
@@ -45,22 +61,44 @@ class ReviewService:
             .offset(offset)
             .limit(size)
         )
-        reviews = result.scalars().all()
+        rows = result.all()
 
-        list_data = [
-            {
-                "id": r.id,
-                "workflow_id": r.workflow_id,
-                "episode_date": r.episode_date.isoformat() if r.episode_date else None,
-                "script_id": r.script_id,
-                "status": r.status if r.status else None,
+        list_data = []
+        for review, wf, ch, sc in rows:
+            channel_name = ch.name if ch else None
+            workflow_name = wf.id if wf else review.workflow_id
+            channel_type = (ch.type_label or ch.channel_type) if ch else None
+
+            # 稿件上下文：分段首标题作为卡片标题，全文首段作为摘要兜底
+            title = None
+            content_preview = None
+            if sc is not None:
+                segs = sc.segments
+                if isinstance(segs, list) and segs and isinstance(segs[0], dict) and segs[0].get("title"):
+                    title = segs[0]["title"]
+                full = sc.full_text or ""
+                if full:
+                    content_preview = full[:80] + ("…" if len(full) > 80 else "")
+                    if not title:
+                        first_line = full.split("\n", 1)[0].strip()
+                        title = first_line[:40] + ("…" if len(first_line) > 40 else "")
+
+            list_data.append({
+                "id": review.id,
+                "workflow_id": review.workflow_id,
+                "workflow_name": workflow_name,
+                "channel_name": channel_name,
+                "channel_type": channel_type,
+                "episode_date": review.episode_date.isoformat() if review.episode_date else None,
+                "script_id": review.script_id,
+                "status": review.status if review.status else None,
                 # 自动审批标记：前端据此显示"系统自动"标签
-                "auto_approved": bool(r.auto_approved),
-                "reviewer_name": r.reviewer_name,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-            }
-            for r in reviews
-        ]
+                "auto_approved": bool(review.auto_approved),
+                "reviewer_name": review.reviewer_name,
+                "created_at": review.created_at.isoformat() if review.created_at else None,
+                "title": title,
+                "content_preview": content_preview,
+            })
         return {"total": total, "list": list_data}
 
     async def get_review_detail(self, review_id: int) -> dict:
@@ -85,12 +123,24 @@ class ReviewService:
                 "categories": script.categories or [],
             }
 
+        # 反查关联节目（Episode.review_id），带出封面图与 HLS 音频源，
+        # 供移动端审核详情展示「图片」与更优音频播放。草稿态节目也可能已存在，故取首条
+        ep_result = await self.db.execute(
+            select(Episode).where(Episode.review_id == review.id)
+        )
+        episode = ep_result.scalars().first()
+        cover_url = episode.cover_url if episode else None
+        hls_url = episode.hls_url if episode else None
+
         return {
             "id": review.id,
             "workflow_id": review.workflow_id,
             "episode_date": review.episode_date.isoformat() if review.episode_date else None,
             "script": script_data,
             "audio_url": review.audio_url,
+            # 封面图与 HLS 音频源：移动端详情可直接展示图片、用 HLS 播放语音内容
+            "cover_url": cover_url,
+            "hls_url": hls_url,
             "status": review.status if review.status else None,
             # 自动审批标记与触发原因，详情页展示追溯信息
             "auto_approved": bool(review.auto_approved),

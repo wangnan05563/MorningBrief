@@ -33,6 +33,8 @@ class AdPlacement(Base):
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, server_default=func.now())
+    # 投放启用开关（M7 FR-M702 移动端启停）；1=启用（默认），0=停用
+    enabled: Mapped[int] = mapped_column(Integer, default=1, comment="投放启用：1=启用，0=停用")
 
     material: Mapped["AdMaterial"] = relationship(
         "AdMaterial", back_populates="placements"

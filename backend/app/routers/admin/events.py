@@ -16,7 +16,7 @@ import jwt
 from fastapi import APIRouter, Header, Query, Request
 from fastapi.responses import StreamingResponse
 
-from app.core.auth import AdminPayload
+from app.core.auth import AdminPayload, ADMIN_TOKEN_COOKIE
 from app.core.event_bus import Event, get_event_bus
 from app.core.exceptions import AuthError
 from app.core.security import decode_token
@@ -48,15 +48,18 @@ _HEARTBEAT_INTERVAL = 15.0
 async def _resolve_sse_admin(
     authorization: str | None,
     token: str | None,
+    cookie_token: str | None = None,
 ) -> AdminPayload:
-    """SSE 专用鉴权：优先 header，回退 query token。
+    """SSE 专用鉴权：优先 header，回退 query token，再回退 HttpOnly Cookie（NFR-M103）。
 
-    EventSource API 不支持自定义 header，前端通过 ?token=xxx 传递 JWT。
-    单机 exe 部署无中间日志风险；生产环境建议前置 HTTPS。
+    EventSource API 不支持自定义 header；迁移后同源连接由浏览器自动携带 Cookie，
+    前端不再拼接 ?token=xxx（避免 token 落入 URL/代理日志）。
     """
     raw = authorization
     if not raw and token:
         raw = f"Bearer {token}"
+    if not raw and cookie_token:
+        raw = f"Bearer {cookie_token}"
     if not raw:
         raise AuthError("缺少认证信息")
     raw_token = raw.removeprefix("Bearer ").strip()
@@ -93,7 +96,7 @@ async def event_stream(  # NOSONAR
     连接断开（页面关闭/路由切换）时自动取消订阅。
     """
     # SSE 专用鉴权：不能用 Depends(get_current_admin)，因 EventSource 不传 header
-    admin = await _resolve_sse_admin(authorization, token)
+    admin = await _resolve_sse_admin(authorization, token, request.cookies.get(ADMIN_TOKEN_COOKIE))
     bus = get_event_bus()
     queue: asyncio.Queue[Event] = asyncio.Queue(maxsize=_MAX_QUEUE_SIZE)
 

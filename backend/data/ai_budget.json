@@ -998,6 +998,267 @@
       "output_tokens": 0,
       "char_count": 75,
       "cost_usd": 0.0021
+    },
+    {
+      "timestamp": 1786416388.9763858,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1168,
+      "output_tokens": 570,
+      "char_count": 0,
+      "cost_usd": 0.000517
+    },
+    {
+      "timestamp": 1786416394.420487,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 5727,
+      "output_tokens": 292,
+      "char_count": 0,
+      "cost_usd": 0.001034
+    },
+    {
+      "timestamp": 1786416505.7277846,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 2058,
+      "output_tokens": 1353,
+      "char_count": 0,
+      "cost_usd": 0.00112
+    },
+    {
+      "timestamp": 1786416632.2402813,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1222,
+      "output_tokens": 865,
+      "char_count": 0,
+      "cost_usd": 0.000702
+    },
+    {
+      "timestamp": 1786416677.2903357,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1266,
+      "output_tokens": 1109,
+      "char_count": 0,
+      "cost_usd": 0.000855
+    },
+    {
+      "timestamp": 1786416911.50821,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1988,
+      "output_tokens": 1014,
+      "char_count": 0,
+      "cost_usd": 0.000907
+    },
+    {
+      "timestamp": 1786416943.6847575,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1306,
+      "output_tokens": 1048,
+      "char_count": 0,
+      "cost_usd": 0.000825
+    },
+    {
+      "timestamp": 1786417000.360253,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1168,
+      "output_tokens": 908,
+      "char_count": 0,
+      "cost_usd": 0.00072
+    },
+    {
+      "timestamp": 1786417024.5032914,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 5727,
+      "output_tokens": 283,
+      "char_count": 0,
+      "cost_usd": 0.001029
+    },
+    {
+      "timestamp": 1786417415.89414,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1222,
+      "output_tokens": 1065,
+      "char_count": 0,
+      "cost_usd": 0.000822
+    },
+    {
+      "timestamp": 1786417464.6144,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1988,
+      "output_tokens": 1153,
+      "char_count": 0,
+      "cost_usd": 0.00099
+    },
+    {
+      "timestamp": 1786417623.3196318,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1168,
+      "output_tokens": 570,
+      "char_count": 0,
+      "cost_usd": 0.000517
+    },
+    {
+      "timestamp": 1786417638.1953793,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 5727,
+      "output_tokens": 299,
+      "char_count": 0,
+      "cost_usd": 0.001038
+    },
+    {
+      "timestamp": 1786417661.9677656,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1266,
+      "output_tokens": 1190,
+      "char_count": 0,
+      "cost_usd": 0.000904
+    },
+    {
+      "timestamp": 1786417682.8570454,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 2058,
+      "output_tokens": 1233,
+      "char_count": 0,
+      "cost_usd": 0.001048
+    },
+    {
+      "timestamp": 1786417718.2019072,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1222,
+      "output_tokens": 936,
+      "char_count": 0,
+      "cost_usd": 0.000745
+    },
+    {
+      "timestamp": 1786417827.5171566,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1988,
+      "output_tokens": 1173,
+      "char_count": 0,
+      "cost_usd": 0.001002
+    },
+    {
+      "timestamp": 1786417941.3902767,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 2098,
+      "output_tokens": 1104,
+      "char_count": 0,
+      "cost_usd": 0.000977
+    },
+    {
+      "timestamp": 1786417999.3392184,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1266,
+      "output_tokens": 1741,
+      "char_count": 0,
+      "cost_usd": 0.001234
+    },
+    {
+      "timestamp": 1786521514.8948903,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1120,
+      "output_tokens": 1511,
+      "char_count": 0,
+      "cost_usd": 0.001075
+    },
+    {
+      "timestamp": 1786521550.9435673,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1308,
+      "output_tokens": 1134,
+      "char_count": 0,
+      "cost_usd": 0.000877
+    },
+    {
+      "timestamp": 1786521558.2589006,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 2758,
+      "output_tokens": 1053,
+      "char_count": 0,
+      "cost_usd": 0.001045
+    },
+    {
+      "timestamp": 1786521596.11959,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1115,
+      "output_tokens": 1082,
+      "char_count": 0,
+      "cost_usd": 0.000816
+    },
+    {
+      "timestamp": 1786521605.4340427,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1853,
+      "output_tokens": 1236,
+      "char_count": 0,
+      "cost_usd": 0.00102
+    },
+    {
+      "timestamp": 1786521607.9235287,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 5092,
+      "output_tokens": 450,
+      "char_count": 0,
+      "cost_usd": 0.001034
+    },
+    {
+      "timestamp": 1786521609.740826,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 930,
+      "output_tokens": 845,
+      "char_count": 0,
+      "cost_usd": 0.000646
+    },
+    {
+      "timestamp": 1786521610.8858788,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 3276,
+      "output_tokens": 255,
+      "char_count": 0,
+      "cost_usd": 0.000644
+    },
+    {
+      "timestamp": 1786521711.4996908,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 970,
+      "output_tokens": 1028,
+      "char_count": 0,
+      "cost_usd": 0.000762
+    },
+    {
+      "timestamp": 1786522055.2969694,
+      "service_type": "llm",
+      "model": "Qwen/Qwen3-8B",
+      "input_tokens": 1155,
+      "output_tokens": 868,
+      "char_count": 0,
+      "cost_usd": 0.000694
     }
   ]
 }

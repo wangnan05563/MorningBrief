@@ -588,6 +588,22 @@ class WorkflowScheduler:
         if not 0 <= priority <= 10:
             raise ParamError("优先级范围 0-10")
 
+        # 应急停服 / 维护态守卫（FR-M902）：维护态开启时拒绝新任务触发。
+        # 缓存化读取（TTL 5s），检查异常一律放行，绝不因维护检查失败而阻断正常生产。
+        try:
+            from app.core.exceptions import BizError
+            from app.services import mobile_service
+            async with AsyncSessionLocal() as _mdb:
+                if await mobile_service.is_maintenance_enabled(_mdb):
+                    raise BizError(
+                        code=409,
+                        message="系统处于维护/应急停服态，已暂停新任务触发",
+                    )
+        except BizError:
+            raise
+        except Exception as _maint_err:  # 维护态检查异常不阻塞正常触发
+            logger.warning("维护态检查失败，放行触发: %s", _maint_err)
+
         # trigger_lock 串行化序号生成与入队，避免并发触发产生重复 ID
         async with self._trigger_lock:
             date_str = episode_date.strftime("%Y%m%d")

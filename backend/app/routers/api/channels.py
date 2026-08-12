@@ -45,6 +45,13 @@ async def list_channels(
             "description": ch.description or "",
             "is_subscribed": False,
             "display_order": ch.display_order,
+            # 多频道适配 M2 数据契约（SRS §6.1）：类型/标签/封面/风险提示等级
+            # 用 getattr 兜底，避免存量库尚未迁移列时整条接口报错
+            "channel_type": getattr(ch, "channel_type", "news") or "news",
+            "type_label": getattr(ch, "type_label", None),
+            "cover_url": getattr(ch, "cover_url", None),
+            "disclaimer_level": getattr(ch, "disclaimer_level", "none") or "none",
+            "selection_strategy": getattr(ch, "selection_strategy", None),
         }
         for ch in channels
     ]
