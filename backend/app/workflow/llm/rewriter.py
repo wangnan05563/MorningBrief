@@ -39,6 +39,56 @@ settings = get_settings()
 # Prompt 模板与敏感词表路径（与模块同级目录）
 PROMPT_TEMPLATE_PATH = Path(__file__).parent / "prompts" / "rewrite.txt"
 SENSITIVE_WORDS_PATH = Path(__file__).parent / "sensitive_words.txt"
+PROMPTS_DIR = Path(__file__).parent / "prompts"
+
+# 课程频道默认提示词文件名（业务范围扩展 T5：channel_type=course 且频道未显式覆盖时使用）
+_COURSE_REWRITE_TEMPLATE = "rewrite_course.txt"
+_COURSE_INTRO_FILE = "course_intro.txt"
+_COURSE_OUTRO_FILE = "course_outro.txt"
+# 课程/资料类频道类型集合（与 models/channel.py channel_type 取值保持一致）
+_COURSE_CHANNEL_TYPES = frozenset({"course"})
+
+# 提示词文件内容缓存（模块加载后不变，避免每次改写重复读盘）
+_PROMPT_FILE_CACHE: dict[str, str] = {}
+
+
+def _load_prompt_file(filename: str) -> str:
+    """读取 prompts 目录下提示词文件内容（带模块级缓存）。
+
+    文件名非法或文件缺失时抛 FileNotFoundError，由调用方兜底（降级默认模板）。
+    """
+    if filename not in _PROMPT_FILE_CACHE:
+        _PROMPT_FILE_CACHE[filename] = (PROMPTS_DIR / filename).read_text(encoding="utf-8")
+    return _PROMPT_FILE_CACHE[filename]
+
+
+def _resolve_rewrite_template(template_value: str | None, channel_type: str | None) -> str | None:
+    """将 rewrite_template 解析为实际模板文本（T5 接线 + 旧路径修复）。
+
+    历史问题：频道列 rewrite_template 存的是文件名（如 "rewrite_course.txt"），
+    但 _build_prompt 直接把它当作模板原文使用，含 .format() 会因缺少 {title}
+    占位符抛错。此处统一解析：
+    - template_value 为空：course 频道自动套用 rewrite_course.txt；否则返回 None
+      （_build_prompt 回退默认 rewrite.txt）
+    - template_value 形如文件名（以 .txt 结尾且不含模板占位符 {）：解析为文件内容
+    - template_value 为原始模板文本（含 {title} 等占位符）：原样返回（向后兼容，
+      支持频道直接存整段模板的极端用法）
+
+    Args:
+        template_value: 频道 rewrite_template 列值（可能为文件名或原文，或 None）
+        channel_type: 频道类型（news/course/audiobook），用于 course 自动默认
+
+    Returns:
+        模板原文，或 None 表示使用默认 rewrite.txt
+    """
+    if not template_value:
+        if channel_type in _COURSE_CHANNEL_TYPES:
+            return _load_prompt_file(_COURSE_REWRITE_TEMPLATE)
+        return None
+    # 区分"文件名"与"原始模板文本"：模板文本必然含占位符 {，文件名不会
+    if template_value.endswith(".txt") and "{" not in template_value:
+        return _load_prompt_file(template_value)
+    return template_value
 
 # 模块加载时初始化敏感词自动机（避免每次改写重复加载）
 sensitive_filter.load_words(str(SENSITIVE_WORDS_PATH))
@@ -1050,6 +1100,7 @@ def _assemble_script(
     rate_multiplier: float = 1.0,
     intro_text: str = None,
     outro_text: str = None,
+    inject_date: bool = True,
 ) -> dict:
     """组装整稿（开场白 + 改写正文 + 结尾）。
 
@@ -1070,14 +1121,17 @@ def _assemble_script(
     # 开场白动态注入今日日期：替换 {date_placeholder} 为"今天是7月15日星期三"
     # 频道自定义文案也可使用 {date_placeholder} 占位符享受日期注入
     # 兜底：频道文案不含占位符时前置日期，确保所有频道都有日期播报
+    # 课程/资料类频道（inject_date=False）不注入日期：课程稿是稳定的教学内容，
+    # "今天是X月X日"的时效播报反而破坏讲解连贯性
     today = datetime.now()
     weekdays = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
     date_str = f"今天是{today.month}月{today.day}日{weekdays[today.weekday()]}"
-    if "{date_placeholder}" in effective_intro:
-        effective_intro = effective_intro.replace("{date_placeholder}", date_str)
-    else:
-        # 频道自定义 intro_prompt 未声明占位符，前置日期作为兜底
-        effective_intro = f"{date_str}，{effective_intro}"
+    if inject_date:
+        if "{date_placeholder}" in effective_intro:
+            effective_intro = effective_intro.replace("{date_placeholder}", date_str)
+        else:
+            # 频道自定义 intro_prompt 未声明占位符，前置日期作为兜底
+            effective_intro = f"{date_str}，{effective_intro}"
 
     # 实际播报速率 = 基础语速 × 倍率（如 210 × 1.5 = 315 字/分）
     actual_words_per_min = WORDS_PER_MINUTE * rate_multiplier
@@ -1355,6 +1409,7 @@ async def _fetch_channel_prompts(channel_id: int) -> dict:
                 "material_lookback_days": None,
                 "selection_strategy": None,
                 "manual_material_ids": None,
+                "channel_type": None,
             }
         return {
             "name": ch.name,
@@ -1370,6 +1425,8 @@ async def _fetch_channel_prompts(channel_id: int) -> dict:
             # 业务范围扩展：选题策略（None=heat 兼容），manual 的素材 ID 列表
             "selection_strategy": ch.selection_strategy,
             "manual_material_ids": _parse_material_ids(ch.manual_material_ids),
+            # 频道类型（news/course/audiobook）：course 自动套用课程模板与课程文案
+            "channel_type": ch.channel_type,
         }
 
 
@@ -1492,11 +1549,24 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
 
     # 0.3 读取频道级提示词（channel_id 为空或字段为空时，回退默认值）
     channel_prompts = None
+    channel_type = None
     if channel_id:
         channel_prompts = await _fetch_channel_prompts(channel_id)
+        channel_type = channel_prompts.get("channel_type")
+        # T5 业务范围扩展：course 频道自动套用课程模板与课程开场/结尾文案
+        # 频道显式设置的 rewrite_template/intro_prompt/outro_prompt 优先级最高，
+        # 仅当频道未显式覆盖且 channel_type=course 时启用课程默认
+        channel_prompts["rewrite_template"] = _resolve_rewrite_template(
+            channel_prompts.get("rewrite_template"), channel_type
+        )
+        if channel_type in _COURSE_CHANNEL_TYPES:
+            if not channel_prompts.get("intro_prompt"):
+                channel_prompts["intro_prompt"] = _load_prompt_file(_COURSE_INTRO_FILE)
+            if not channel_prompts.get("outro_prompt"):
+                channel_prompts["outro_prompt"] = _load_prompt_file(_COURSE_OUTRO_FILE)
         logger.info(
-            "频道提示词 channel_id=%s intro=%s outro=%s template=%s strategy=%s",
-            channel_id,
+            "频道提示词 channel_id=%s type=%s intro=%s outro=%s template=%s strategy=%s",
+            channel_id, channel_type,
             bool(channel_prompts["intro_prompt"]),
             bool(channel_prompts["outro_prompt"]),
             bool(channel_prompts["rewrite_template"]),
@@ -1631,7 +1701,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
     async def _rewrite_one_with_limit(m: dict, style_seq: int) -> dict:
         async with semaphore:
             # 按 seq 号从 style_library 轮换选取开场白/过渡词/同义词提示
-            style_hint = get_style_hint(channel_id_for_style, style_seq, total_for_style)
+            style_hint = get_style_hint(channel_id_for_style, style_seq, total_for_style, channel_type)
             return await _rewrite_one(
                 m,
                 words_per_segment=words_per_segment,
@@ -1654,7 +1724,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
             # 首次命中敏感词，带约束 prompt 二次重生成
             # style_hint 在敏感词重试时仍注入：保持风格一致性，避免重试产出与首版风格迥异
             try:
-                style_hint = get_style_hint(channel_id_for_style, i + 1, total_for_style)
+                style_hint = get_style_hint(channel_id_for_style, i + 1, total_for_style, channel_type)
                 r = await _rewrite_one(
                     m,
                     words_per_segment=words_per_segment,
@@ -1727,11 +1797,13 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         segments = segments[:target_segments]
 
     # 5. 组装整稿（频道级开场白/结尾 + 改写段），用实际语速估算时长
+    # 课程频道不注入日期播报（inject_date=False），保持讲解连贯性
     assembled = _assemble_script(
         segments,
         rate_multiplier=rate_multiplier,
         intro_text=channel_prompts["intro_prompt"] if channel_prompts else None,
         outro_text=channel_prompts["outro_prompt"] if channel_prompts else None,
+        inject_date=(channel_type not in _COURSE_CHANNEL_TYPES),
     )
 
     # 5.5 字数上限校验：LLM 常不遵守 prompt 字数约束（中文 LLM 尤甚），
@@ -1786,6 +1858,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                         rate_multiplier=rate_multiplier,
                         intro_text=channel_prompts["intro_prompt"] if channel_prompts else None,
                         outro_text=channel_prompts["outro_prompt"] if channel_prompts else None,
+                        inject_date=(channel_type not in _COURSE_CHANNEL_TYPES),
                     )
                     logger.info(
                         "补充段 %d 完成 material_id=%s 重新估算 %ds",
