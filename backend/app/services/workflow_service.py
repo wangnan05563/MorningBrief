@@ -5,7 +5,7 @@
 """
 from datetime import date
 
-from sqlalchemy import delete, select, func, update
+from sqlalchemy import delete, select, func, update, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BizError, NotFoundError, ParamError
@@ -219,12 +219,21 @@ class WorkflowService:
                 )
 
             # ---- 删除阶段：依赖反序，先删叶子表 ----
-            # 先收集 episode_ids：PlayLog/PlayProgress 通过 episode_id 关联，
-            # 必须在 Episode 删除前取出列表，否则后续无法定位播放数据
+            # 先收集 episode_ids 与 script_ids：
+            # - episode_ids 用于定位 PlayLog/PlayProgress（通过 episode_id 关联）
+            # - script_ids 用于按"父键"清理 Script 的子表（Episode/Review），
+            #   因为部分历史 Episode.workflow_id 为 NULL（早期数据未回填），
+            #   仅按 workflow_id 删会漏掉这些孤儿 Episode，导致后续删 Script 时触发
+            #   FOREIGN KEY constraint failed（前端报"数据库错误"）。按 script_id 删可覆盖之。
             ep_result = await self.db.execute(
                 select(Episode.id).where(Episode.workflow_id.in_(workflow_ids))
             )
             episode_ids = [row[0] for row in ep_result.all()]
+
+            sc_result = await self.db.execute(
+                select(Script.id).where(Script.workflow_id.in_(workflow_ids))
+            )
+            script_ids = [row[0] for row in sc_result.all()]
 
             if episode_ids:
                 await self.db.execute(
@@ -234,8 +243,13 @@ class WorkflowService:
                     delete(PlayProgress).where(PlayProgress.episode_id.in_(episode_ids))
                 )
 
+            # Episode：按 workflow_id 删除本批工作流的节目，同时按 script_id 删除
+            # 引用了本批 Script 的孤儿 Episode（含 workflow_id 为 NULL 的历史数据），
+            # 防止删 Script 时外键约束失败。
             await self.db.execute(
-                delete(Episode).where(Episode.workflow_id.in_(workflow_ids))
+                delete(Episode).where(
+                    or_(Episode.workflow_id.in_(workflow_ids), Episode.script_id.in_(script_ids))
+                )
             )
             # auto_review_stat.review_id 是 RESTRICT 外键指向 review.id，
             # 必须在删除 Review 之前清理，否则 foreign_keys=ON 下触发约束冲突 → 500。
@@ -243,8 +257,11 @@ class WorkflowService:
             await self.db.execute(
                 delete(AutoReviewStat).where(AutoReviewStat.workflow_id.in_(workflow_ids))
             )
+            # Review：同理按 workflow_id + script_id 双条件清理，确保 Script 子表清空。
             await self.db.execute(
-                delete(Review).where(Review.workflow_id.in_(workflow_ids))
+                delete(Review).where(
+                    or_(Review.workflow_id.in_(workflow_ids), Review.script_id.in_(script_ids))
+                )
             )
             await self.db.execute(
                 delete(Script).where(Script.workflow_id.in_(workflow_ids))
