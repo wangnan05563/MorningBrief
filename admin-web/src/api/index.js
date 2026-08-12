@@ -15,14 +15,13 @@ const api = axios.create({
   // 本地开发时 Vite proxy 的 rewrite 去除 /news 前缀
   baseURL: '/news/admin/api/v1',
   timeout: 15000,
+  // NFR-M103：鉴权 token 存于 HttpOnly Cookie，需随请求自动携带（同源部署自动发送）
+  withCredentials: true,
 })
 
-// 请求拦截：注入 token（延迟导入避免循环依赖）
+// 请求拦截：鉴权 token 由 HttpOnly Cookie 自动携带（NFR-M103），
+// 非浏览器 API 客户端仍可经 Authorization 头调用（后端双通道兼容）。
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('admin_token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
   return config
 })
 
@@ -51,15 +50,14 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
     if (error.response?.status === 401) {
-      // token 失效：清除本地状态
-      localStorage.removeItem('admin_token')
+      // token 失效：清除本地非敏感状态（admin_token 已存 HttpOnly Cookie，JS 不可清除）
       localStorage.removeItem('admin_username')
       localStorage.removeItem('admin_role')
-      // 页面隐藏时跳过跳转：location.href 会激活最小化窗口，
-      // 用户恢复后路由守卫基于已清空的 token 自动跳转到登录页，效果一致
-      // 路径必须带 /news 前缀：浏览器原生跳转不走 vue-router，不会自动补 base
-      if (!document.hidden && globalThis.location.pathname !== '/news/login') {
-        globalThis.location.href = '/news/login'
+      // 根据当前所在端（PC / 移动）跳转到对应登录页；路径必须带 /news 前缀
+      const isMobile = globalThis.location.pathname.startsWith('/news/m')
+      const loginPath = isMobile ? '/news/m/login' : '/news/login'
+      if (!document.hidden && globalThis.location.pathname !== loginPath) {
+        globalThis.location.href = loginPath
       }
     } else if (!error.config?.silent) {
       // silent 请求（如后台轮询）不弹 ElMessage，避免最小化时积压错误提示
