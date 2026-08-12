@@ -73,6 +73,17 @@
         >
           手动触发
         </el-button>
+        <!-- 跳过爬虫开关：文档/手动选题场景素材已入库，工作流从 rewrite 开始。
+             课程/资料类频道手动触发须开启；新闻频道开启会因无素材而失败（运营自负）。-->
+        <el-tooltip
+          content="文档/手动选题场景：素材已入库，跳过爬虫从改写开始。课程/资料类频道手动触发须开启"
+          placement="top"
+        >
+          <span class="skip-crawl-switch">
+            <el-switch v-model="skipCrawl" :active-value="true" :inactive-value="false" />
+            <span class="switch-label">跳过爬虫</span>
+          </span>
+        </el-tooltip>
         <!-- 批量删除：仅 admin 可见，未选中时禁用；选中时显示计数 -->
         <el-button
           v-if="userStore.isAdmin"
@@ -253,6 +264,8 @@ const userStore = useUserStore()
 
 const loading = ref(false)
 const triggering = ref(false)
+// 跳过爬虫开关：文档/手动选题场景素材已入库，从 rewrite 开始（默认关闭）
+const skipCrawl = ref(false)
 const deleting = ref(false)
 // 全频道触发相关状态
 const triggeringAll = ref(false)
@@ -360,9 +373,14 @@ async function loadList(silent = false) {
 async function handleTrigger() {
   // 若已选择频道筛选，触发时携带频道 ID，rewrite 步骤据此读取频道级提示词
   const channelId = filterChannelId.value
+  const skip = skipCrawl.value
   const tip = channelId
-    ? '确认立即触发该频道的工作流？将使用频道级提示词生成语音新闻。'
-    : '确认立即触发一期新闻工作流？（未选频道，使用默认提示词）'
+    ? (skip
+        ? '确认立即触发该频道的工作流（跳过爬虫，素材已入库）？将使用频道级提示词从改写开始生成内容。'
+        : '确认立即触发该频道的工作流？将使用频道级提示词生成语音新闻。')
+    : (skip
+        ? '确认立即触发工作流（跳过爬虫，素材已入库）？未选频道将使用默认提示词，可能因无素材失败。'
+        : '确认立即触发一期新闻工作流？（未选频道，使用默认提示词）')
   try {
     await ElMessageBox.confirm(tip, '提示', { type: 'warning' })
   } catch {
@@ -370,8 +388,7 @@ async function handleTrigger() {
   }
   triggering.value = true
   try {
-    const payload = channelId ? { channel_id: channelId } : {}
-    const data = await api.post('/workflows/trigger', payload)
+    const data = await triggerWorkflow(channelId, { skipCrawl: skip })
     ElMessage.success(`已触发，工作流 ID: ${data.workflow_id}`)
     page.value = 1
     await loadList()
@@ -629,6 +646,20 @@ onUnmounted(() => {
       display: flex;
       align-items: center;
       gap: 12px;
+
+      // 跳过爬虫开关：与按钮同高对齐，标签用次要文字色
+      .skip-crawl-switch {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: $color-text-secondary;
+        user-select: none;
+
+        .switch-label {
+          white-space: nowrap;
+        }
+      }
     }
 
     // 选中计数：与按钮区分，用次要文字色避免抢眼

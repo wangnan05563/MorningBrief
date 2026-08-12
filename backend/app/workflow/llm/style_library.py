@@ -343,6 +343,45 @@ _CHANNEL_STYLE_LIBRARY: dict[int, dict] = {
 }
 
 
+# ===== 课程频道词库（按 channel_type 匹配，不依赖具体 channel_id） =====
+# 课程/资料类频道（channel_type=course）与新闻频道定位不同：讲解而非播报，
+# 因此用"讲师口吻"词库，而非主播式高频口语词。课程频道 ID 不固定
+# （新建频道任意分配），故按类型而非 ID 匹配。
+_COURSE_LIBRARY: dict = {
+    "intro_candidates": [
+        "我们先来看这一节的核心要点",
+        "这节内容里，有个关键概念需要先厘清",
+        "接下来我们进入本节的重点",
+        "关于这部分，我先帮你搭个理解框架",
+        "这一讲，我们从一个常见误区说起",
+        "学这部分内容，建议大家先记住一条主线",
+        "本节我们换个角度来理解这个概念",
+        "先把前面的铺垫收一收，我们进入正题",
+    ],
+    "transition_candidates": [
+        "顺着这个思路往下看",
+        "接着刚才的话题",
+        "我们再来看下一个要点",
+        "与此相关，还有一层含义",
+        "换个角度来理解",
+        "把这个点和前面的内容联系起来",
+        "进一步展开来说",
+        "顺着逻辑往下推",
+    ],
+    "synonym_replacements": {
+        "注意": ["请大家留意", "要特别记住的是", "这里有个关键点"],
+        "我们": ["大家", "咱们"],
+        "简单来说": ["打个比方", "通俗地讲", "形象地说"],
+        "重要": ["关键", "核心", "要紧"],
+    },
+    "style_traits": (
+        "资深讲师口吻，清晰、耐心、有逻辑，像当面授课而非机械念稿；"
+        "用通俗类比解释抽象概念，首次出现的术语用一句话说明身份或含义；"
+        "层次分明，按'引入—展开—小结'组织，适合伴随式收听"
+    ),
+}
+
+
 def _get_channel_library(channel_id: Optional[int]) -> dict:
     """获取频道词库，无配置时返回默认词库。"""
     if channel_id is None or channel_id not in _CHANNEL_STYLE_LIBRARY:
@@ -359,6 +398,7 @@ def get_style_hint(
     channel_id: Optional[int],
     seq: int,
     total_segments: int = 1,
+    channel_type: Optional[str] = None,
 ) -> str:
     """构建风格提示字符串，追加到 prompt 末尾。
 
@@ -370,11 +410,18 @@ def get_style_hint(
         channel_id: 频道 ID，None 用默认词库
         seq: 当前段在整期节目中的序号（1-based）
         total_segments: 整期节目总段数，用于估算循环周期
+        channel_type: 频道类型（news/course/audiobook）。
+            channel_type=course 时优先使用课程讲师词库（不依赖具体 channel_id），
+            否则按 channel_id 匹配频道特定词库，再回退默认词库
 
     Returns:
         风格提示文本，含开场白/过渡词/同义词/风格定位四部分
     """
-    lib = _get_channel_library(channel_id)
+    # 课程频道按类型匹配讲师词库（ID 不固定），其余按 channel_id 或默认
+    if channel_type == "course":
+        lib = _COURSE_LIBRARY
+    else:
+        lib = _get_channel_library(channel_id)
 
     # seq=1 用开场白，seq>=2 用过渡词
     # 轮换策略：seq % len 选取，保证 total_segments > len 时不立即重复

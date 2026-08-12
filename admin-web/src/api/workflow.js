@@ -9,9 +9,18 @@ import api from '../api'
 /**
  * 手动触发单个频道工作流
  * @param {number|null} channelId 频道 ID，为空时使用默认提示词
+ * @param {object} [options]
+ * @param {boolean} [options.skipCrawl=false] 跳过爬虫：文档/手动选题场景素材已入库，
+ *        工作流从 rewrite 开始（跳过 crawl 步骤）。课程/资料类频道手动触发须开启。
+ * @param {string} [options.episodeDate] 节目日期 YYYY-MM-DD，默认今天
  */
-export const triggerWorkflow = (channelId) =>
-  api.post('/workflows/trigger', channelId ? { channel_id: channelId } : {})
+export const triggerWorkflow = (channelId, options = {}) => {
+  const payload = {}
+  if (channelId) payload.channel_id = channelId
+  if (options.skipCrawl) payload.skip_crawl = true
+  if (options.episodeDate) payload.episode_date = options.episodeDate
+  return api.post('/workflows/trigger', payload)
+}
 
 /**
  * 全频道触发工作流
