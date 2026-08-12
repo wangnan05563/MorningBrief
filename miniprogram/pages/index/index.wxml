@@ -6,13 +6,15 @@
       <image class="action-icon" lazy-load src="/images/icons/search.png" mode="aspectFit" />
     </view>
     <scroll-view scroll-x class="channel-bar" wx:if="{{channels.length > 0}}">
-      <view
-        wx:for="{{channels}}"
-        wx:key="id"
-        class="channel-pill {{currentChannelId === item.id ? 'active' : ''}}"
-        data-id="{{item.id}}"
-        bindtap="onSwitchChannel"
-      >{{item.name}}</view>
+      <block wx:for="{{channels}}" wx:key="id">
+        <view wx:if="{{item.isGroupLabel}}" class="channel-group-label">{{item.label}}</view>
+        <view
+          wx:else
+          class="channel-pill {{currentChannelId === item.id ? 'active' : ''}} {{item.channel_type !== 'news' ? 'course' : ''}}"
+          data-id="{{item.id}}"
+          bindtap="onSwitchChannel"
+        >{{item.name}}<text wx:if="{{item.type_label && item.type_label !== '资讯'}}" class="pill-badge">{{item.type_label}}</text></view>
+      </block>
     </scroll-view>
     <view class="top-action" bindtap="onSleepTimer">
       <image class="action-icon" lazy-load src="{{sleepActive ? '/images/icons/alarm.png' : '/images/icons/moon.png'}}" mode="aspectFit" />

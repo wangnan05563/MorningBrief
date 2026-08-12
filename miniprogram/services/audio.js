@@ -17,6 +17,8 @@
 const { fetchEpisodeDetail, fetchTodayEpisode } = require('./api');
 // local-data 封装了播放进度/历史的双写（本地+后端），按 openid 隔离
 const localData = require('./local-data');
+// 离线下载存储（FR-MC-09）：持久化已下载章节的本地路径
+const downloadStore = require('./download');
 const { isDevTools } = require('../utils/server-discovery');
 
 const STORAGE_KEY_SETTINGS = 'news_settings';
@@ -214,13 +216,13 @@ function initPlayer() {
   });
 
   audioManager.onWaiting(() => {
-    console.log('[audio] 音频加载中...');
+    console.debug('[audio] 音频加载中...');
     // 通知 UI 显示 loading 菊花：用户感知到正在缓冲
     setWaiting(true);
   });
 
   audioManager.onCanplay(() => {
-    console.log('[audio] 音频可播放了, duration:', audioManager.duration);
+    console.debug('[audio] 音频可播放了, duration:', audioManager.duration);
     // 缓冲足够：解除 loading 菊花
     setWaiting(false);
     // 重新应用倍速：部分基础库（如 3.3.4）在 canplay 后会重置 playbackRate 为 1.0，
@@ -356,11 +358,11 @@ function safePlay() {
     const p = audioManager.play();
     if (p && typeof p.catch === 'function') {
       p.catch((err) => {
-        console.log('[audio] safePlay() 被中断（可忽略）:', err && err.message);
+        console.debug('[audio] safePlay() 被中断（可忽略）:', err && err.message);
       });
     }
   } catch (e) {
-    console.log('[audio] safePlay() 同步异常（可忽略）:', e && e.message);
+    console.debug('[audio] safePlay() 同步异常（可忽略）:', e && e.message);
   }
 }
 
@@ -389,6 +391,12 @@ function _pickPlayableUrl(episode) {
   if (episode.localPath) {
     return { url: episode.localPath, protocol: 'audio' };
   }
+  // FR-MC-09：离线下载命中 → 优先用已下载本地文件，实现离线播放
+  // 课程页/下载管理页跳转播放时 episode 对象无 localPath，需查下载表
+  const dlPath = downloadStore.getDownloadLocalPath(episode.id);
+  if (dlPath) {
+    return { url: dlPath, protocol: 'audio' };
+  }
   // 开发者工具不支持 HLS：跳过 hls_url 直接用 mp3，避免 fallback 周期中的未捕获错误
   if (episode.hls_url && !isDevTools()) {
     return { url: episode.hls_url, protocol: 'hls' };
@@ -405,7 +413,7 @@ function _pickPlayableUrl(episode) {
 function _applyProtocol(protocol) {
   if (typeof audioManager.protocol !== 'undefined') {
     try { audioManager.protocol = protocol; } catch (e) {
-      console.log('[audio] protocol 设置失败（旧版基础库可忽略）:', e && e.message);
+      console.debug('[audio] protocol 设置失败（旧版基础库可忽略）:', e && e.message);
     }
   }
 }
@@ -428,7 +436,7 @@ function _retryHls(episode) {
   audioManager.src = episode.hls_url;
   const p = audioManager.play();
   if (p && typeof p.catch === 'function') {
-    p.catch((e) => console.log('[audio] retry HLS play() 被中断（可忽略）:', e && e.message));
+    p.catch((e) => console.debug('[audio] retry HLS play() 被中断（可忽略）:', e && e.message));
   }
   clearTimeout(fallbackTimeoutTimer);
   fallbackTimeoutTimer = setTimeout(() => {
@@ -463,7 +471,7 @@ function _fallbackToMp3(episode) {
   audioManager.src = episode.audio_url;
   const fallbackPlay = audioManager.play();
   if (fallbackPlay && typeof fallbackPlay.catch === 'function') {
-    fallbackPlay.catch((e) => console.log('[audio] fallback play() 被中断（可忽略）:', e && e.message));
+    fallbackPlay.catch((e) => console.debug('[audio] fallback play() 被中断（可忽略）:', e && e.message));
   }
   // 超时保护：mp3 也可能加载失败（NotSupportedError 不触发 onError）
   // 8s 内 onPlay 未触发则判定失败，给用户明确反馈而非无限等待
@@ -521,7 +529,7 @@ async function playEpisode(episode) {
   // 否则 hls_url 场景下 episode.audio_url 不变会被误判为重复调用
   const picked = _pickPlayableUrl(episode);
   if (loadingEpisodeId === episode.id && loadingEpisodeUrl === picked.url) {
-    console.log('[audio] 节目正在加载中，跳过重复调用:', episode.title);
+    console.debug('[audio] 节目正在加载中，跳过重复调用:', episode.title);
     return;
   }
   loadingEpisodeId = episode.id;
@@ -529,7 +537,7 @@ async function playEpisode(episode) {
   // 重置 HLS 静默重试计数：每首新节目都拥有完整的重试预算
   hlsRetryCount = 0;
 
-  console.log('[audio] playEpisode called:', episode.title, 'src:', picked.url, 'protocol:', picked.protocol);
+  console.debug('[audio] playEpisode called:', episode.title, 'src:', picked.url, 'protocol:', picked.protocol);
   currentEpisode = episode;
   // 记录当前协议：onError 时用于判断是否需要 HLS→mp3 fallback
   currentProtocol = picked.protocol;
@@ -561,7 +569,7 @@ async function playEpisode(episode) {
   const playPromise = audioManager.play();
   if (playPromise && typeof playPromise.catch === 'function') {
     playPromise.catch((err) => {
-      console.log('[audio] play() 被中断（可忽略）:', err && err.message);
+      console.debug('[audio] play() 被中断（可忽略）:', err && err.message);
     });
   }
 
@@ -577,7 +585,7 @@ async function playEpisode(episode) {
       pendingSeek = progress.position;
     }
   } catch (err) {
-    console.log('获取播放进度失败，从开头播放:', err.message);
+    console.debug('获取播放进度失败，从开头播放:', err.message);
   }
   // 记录播放历史：开始播放即记入本地历史（后端历史由 progress 上报自动记录）
   localData.addHistory(episode, 0);
@@ -622,7 +630,7 @@ async function _autoFillQueue(currentEp) {
     _preloadNextEpisode();
   } catch (err) {
     // 拉取失败静默降级：不阻断当前播放，仅无法自动连播
-    console.log('[audio] 自动补全队列失败（可忽略）:', err.message);
+    console.debug('[audio] 自动补全队列失败（可忽略）:', err.message);
   }
 }
 
@@ -654,7 +662,7 @@ async function _preloadNextEpisode() {
     _preloadNextAudio(fullEp);
   } catch (err) {
     // 预加载失败不影响主流程，下次 playNext 会重新 fetch
-    console.log('[audio] 预加载下一首失败（可忽略）:', err.message);
+    console.debug('[audio] 预加载下一首失败（可忽略）:', err.message);
   }
 }
 
@@ -703,6 +711,109 @@ function _preloadNextAudio(episode) {
       console.warn('[audio] 预下载下一首失败（可忽略）:', err.errMsg);
     },
   });
+}
+
+// ==================== 离线下载（FR-MC-09） ====================
+
+// 进行中的下载任务，key=episodeId，value=wx.downloadFile 返回的 task（支持取消）
+const _activeDownloads = {};
+
+/**
+ * 下载单集音频到本地持久目录（FR-MC-09）
+ * @param {Object} episode - 节目对象（需含 id / audio_url / title 等）
+ * @param {Object} [opts] - { onProgress(percent0-100), onState(stateStr) }
+ *   onState 回调状态：'downloading' | 'saving' | 'done'
+ * @returns {Promise<{localPath, size, episodeId, cached}>}
+ *   已下载则直接 resolve（幂等，cached=true）；成功返回 saveFile 的持久路径
+ */
+function downloadEpisode(episode, opts) {
+  opts = opts || {};
+  if (!episode || !episode.id) {
+    return Promise.reject(new Error('无效的下载节目'));
+  }
+  // 幂等：已下载则直接返回，避免重复下载浪费流量
+  if (downloadStore.isDownloaded(episode.id)) {
+    const rec = downloadStore.getDownload(episode.id);
+    return Promise.resolve({
+      localPath: rec.localPath,
+      size: rec.size,
+      episodeId: episode.id,
+      cached: true,
+    });
+  }
+  // 进行中：避免并发重复触发（页面连续点击 / 整课批量下载）
+  if (_activeDownloads[episode.id]) {
+    return Promise.reject(new Error('下载进行中'));
+  }
+  // 选择下载源：优先本地已解析、其次 mp3、最后 HLS（开发者工具不支持 HLS）
+  const url = episode.localPath
+    || episode.audio_url
+    || (episode.hls_url && !isDevTools() ? episode.hls_url : '');
+  if (!url) {
+    return Promise.reject(new Error('无可用音频源'));
+  }
+  if (opts.onState) opts.onState('downloading');
+  return new Promise((resolve, reject) => {
+    const task = wx.downloadFile({
+      url,
+      success: (res) => {
+        delete _activeDownloads[episode.id];
+        if (res.statusCode !== 200) {
+          reject(new Error('下载失败 HTTP ' + res.statusCode));
+          return;
+        }
+        let size = 0;
+        // 取文件大小用于占用统计；失败不阻断下载流程
+        try {
+          wx.getFileSystemManager().getFileInfo({
+            filePath: res.tempFilePath,
+            success: (info) => { size = (info && info.size) || 0; doSave(size); },
+            fail: () => { doSave(0); },
+          });
+        } catch (e) {
+          doSave(0);
+        }
+        function doSave(sz) {
+          if (opts.onState) opts.onState('saving');
+          // 持久化保存：临时文件会被清理，saveFile 后长期保留
+          wx.getFileSystemManager().saveFile({
+            tempFilePath: res.tempFilePath,
+            success: (saveRes) => {
+              const savedPath = saveRes.savedFilePath;
+              downloadStore.addDownload(episode, savedPath, sz);
+              if (opts.onState) opts.onState('done');
+              resolve({ localPath: savedPath, size: sz, episodeId: episode.id, cached: false });
+            },
+            fail: (err) => {
+              reject(new Error('保存失败：' + ((err && err.errMsg) || '')));
+            },
+          });
+        }
+      },
+      fail: (err) => {
+        delete _activeDownloads[episode.id];
+        reject(new Error('下载失败：' + ((err && err.errMsg) || '')));
+      },
+    });
+    if (task && typeof task.onProgressUpdate === 'function') {
+      task.onProgressUpdate((p) => {
+        if (opts.onProgress) opts.onProgress(Math.floor((p && p.progress) || 0));
+      });
+    }
+    _activeDownloads[episode.id] = task;
+  });
+}
+
+/**
+ * 取消进行中的下载（FR-MC-09）
+ * @param {number} episodeId
+ */
+function cancelDownload(episodeId) {
+  const task = _activeDownloads[episodeId];
+  if (task && typeof task.abort === 'function') {
+    try { task.abort(); } catch (e) { /* 忽略 */ }
+  }
+  delete _activeDownloads[episodeId];
 }
 
 // ==================== 播放队列管理 ====================
@@ -1161,7 +1272,7 @@ function seek(position) {
     try {
       const p = audioManager.play();
       if (p && typeof p.catch === 'function') {
-        p.catch((err) => console.log('[audio] seek->play() 被中断（可忽略）:', err && err.message));
+        p.catch((err) => console.debug('[audio] seek->play() 被中断（可忽略）:', err && err.message));
       }
     } catch (e) {
       console.warn('[audio] seek 时 play 失败:', e && e.message);
@@ -1209,6 +1320,9 @@ module.exports = {
   playPrev,
   playQueueAt,
   onQueueChange,
+  // 离线下载（FR-MC-09）
+  downloadEpisode,
+  cancelDownload,
   // 睡眠定时器
   startSleepTimer,
   stopSleepTimer,

@@ -1,0 +1,344 @@
+/* 课程主页样式（复用全局浅色主题：主色 #5BA89B，辅粉 #FF6B8A） */
+.course-page {
+  min-height: 100vh;
+  background: #FFF5F7;
+  padding-bottom: 40rpx;
+}
+
+/* === 骨架屏 === */
+.skeleton-wrap {
+  padding: 32rpx 24rpx;
+}
+.skeleton-head {
+  width: 100%;
+  height: 200rpx;
+  border-radius: 20rpx;
+  background: #ECEFF1;
+  margin-bottom: 24rpx;
+}
+.skeleton-line {
+  height: 32rpx;
+  border-radius: 8rpx;
+  background: #ECEFF1;
+  margin-bottom: 16rpx;
+}
+.skeleton-line.short {
+  width: 60%;
+}
+.skeleton-card {
+  height: 120rpx;
+  border-radius: 16rpx;
+  background: #ECEFF1;
+  margin-bottom: 16rpx;
+}
+.shimmer {
+  animation: shimmer 1.2s infinite linear;
+  background: linear-gradient(90deg, #ECEFF1 25%, #F5F7F8 50%, #ECEFF1 75%);
+  background-size: 400% 100%;
+}
+@keyframes shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+/* === 错误态 === */
+.error-wrap {
+  padding: 120rpx 48rpx;
+  text-align: center;
+}
+.error-text {
+  color: #E57373;
+  font-size: 28rpx;
+}
+
+/* === 课程头部 === */
+.course-head {
+  display: flex;
+  padding: 32rpx 24rpx 16rpx;
+  background: linear-gradient(135deg, #E8F5F2, #FFF5F7);
+}
+.course-cover {
+  width: 180rpx;
+  height: 180rpx;
+  border-radius: 20rpx;
+  background: #E3F1EC;
+  flex-shrink: 0;
+}
+.course-head-info {
+  flex: 1;
+  margin-left: 24rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.course-name {
+  font-size: 38rpx;
+  font-weight: 600;
+  color: #2D3A36;
+  margin-bottom: 12rpx;
+}
+.course-desc {
+  font-size: 26rpx;
+  color: #7A8A84;
+  line-height: 1.5;
+}
+
+/* 订阅按钮（FR-MC-06）：课程类频道订阅后可接收新章节推送 */
+.sub-btn {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-left: 16rpx;
+  padding: 12rpx 28rpx;
+  border-radius: 32rpx;
+  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  color: #FFFFFF;
+  font-size: 26rpx;
+}
+.sub-btn.subscribed {
+  background: #E3F1EC;
+  color: #4A7C6F;
+}
+
+/* === 学习进度卡 === */
+.progress-card {
+  margin: 24rpx;
+  padding: 28rpx;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(91, 168, 155, 0.08);
+}
+.progress-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+.progress-label {
+  font-size: 28rpx;
+  color: #2D3A36;
+  font-weight: 600;
+}
+.progress-num {
+  font-size: 24rpx;
+  color: #5BA89B;
+}
+.progress-track {
+  height: 16rpx;
+  border-radius: 8rpx;
+  background: #EEF3F1;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7ECEC1, #5BA89B);
+  border-radius: 8rpx;
+  transition: width 0.3s ease;
+}
+.progress-actions {
+  display: flex;
+  margin-top: 24rpx;
+  gap: 20rpx;
+}
+.btn-primary,
+.btn-ghost {
+  flex: 1;
+  height: 76rpx;
+  border-radius: 38rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+}
+.btn-primary {
+  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  color: #FFFFFF;
+}
+.btn-ghost {
+  background: #E3F1EC;
+  color: #4A7C6F;
+}
+
+/* === 合规提示（FR-MC-11） === */
+.disclaimer {
+  display: flex;
+  align-items: flex-start;
+  margin: 0 24rpx 8rpx;
+  padding: 20rpx 24rpx;
+  background: #FFF8E1;
+  border-radius: 16rpx;
+  border: 1rpx solid #FFE0A3;
+}
+.disclaimer.strong {
+  background: #FFEBEE;
+  border-color: #FFB4A2;
+}
+.disclaimer-icon {
+  font-size: 28rpx;
+  color: #F0A020;
+  margin-right: 12rpx;
+  line-height: 1.5;
+}
+.disclaimer.strong .disclaimer-icon {
+  color: #E57373;
+}
+.disclaimer-text {
+  flex: 1;
+  font-size: 24rpx;
+  color: #8A6D3B;
+  line-height: 1.6;
+}
+.disclaimer.strong .disclaimer-text {
+  color: #C0392B;
+}
+
+/* === 章节列表 === */
+.chapter-section {
+  padding: 16rpx 24rpx;
+}
+.section-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #2D3A36;
+  margin: 16rpx 0 16rpx;
+}
+.chapter-item {
+  display: flex;
+  align-items: center;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 10rpx rgba(91, 168, 155, 0.06);
+}
+.chapter-index {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: #E3F1EC;
+  color: #4A7C6F;
+  font-size: 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 20rpx;
+}
+.chapter-index.finished {
+  background: #5BA89B;
+  color: #FFFFFF;
+}
+.chapter-index.learning {
+  background: #FFE0A3;
+  color: #8A6D3B;
+}
+.chapter-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.chapter-title {
+  font-size: 28rpx;
+  color: #2D3A36;
+  line-height: 1.4;
+  margin-bottom: 8rpx;
+}
+.chapter-meta {
+  display: flex;
+  align-items: center;
+}
+.chapter-dur {
+  font-size: 22rpx;
+  color: #A0AEC0;
+  margin-right: 16rpx;
+}
+.chapter-status {
+  font-size: 22rpx;
+}
+.chapter-status.new {
+  color: #A0AEC0;
+}
+.chapter-status.learning {
+  color: #F0A020;
+}
+.chapter-status.finished {
+  color: #5BA89B;
+}
+.chapter-play {
+  width: 48rpx;
+  height: 48rpx;
+  flex-shrink: 0;
+}
+
+/* === 空态（复用全局组件风格） === */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 80rpx 48rpx;
+}
+.empty-icon-img {
+  width: 120rpx;
+  height: 120rpx;
+  opacity: 0.6;
+  margin-bottom: 24rpx;
+}
+.empty-title {
+  font-size: 28rpx;
+  color: #5A6A64;
+  margin-bottom: 12rpx;
+}
+.empty-desc {
+  font-size: 24rpx;
+  color: #A0AEC0;
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* === 整课离线下载条（FR-MC-09） === */
+.download-all-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20rpx;
+  padding: 20rpx 24rpx;
+  background: linear-gradient(135deg, #FFF1F4, #FFE3EA);
+  border-radius: 16rpx;
+}
+.download-all-bar.loading {
+  opacity: 0.85;
+}
+.download-all-text {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #E0577F;
+}
+.download-all-sub {
+  font-size: 22rpx;
+  color: #C98AA0;
+}
+
+/* === 章节下载按钮（FR-MC-09） === */
+.chapter-dl {
+  flex-shrink: 0;
+  min-width: 96rpx;
+  height: 52rpx;
+  margin-left: 16rpx;
+  padding: 0 18rpx;
+  border-radius: 26rpx;
+  background: #FFF1F4;
+  color: #E0577F;
+  font-size: 22rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.chapter-dl.ing {
+  background: #E3F1EC;
+  color: #4A7C6F;
+}
+.chapter-dl.done {
+  background: #E3F1EC;
+  color: #5BA89B;
+}

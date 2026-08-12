@@ -282,3 +282,89 @@
 .edit-btn-confirm .btn-icon {
   filter: brightness(0) invert(1);
 }
+
+/* 我的课程（FR-MC-05）：已订阅课程/有声读物 + 本地学习进度 */
+.course-card {
+  padding: 32rpx;
+}
+
+.course-card-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #2D3748;
+  margin-bottom: 24rpx;
+}
+
+.course-item {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 0;
+  border-bottom: 2rpx solid #F0F4F2;
+}
+
+.course-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.course-cover {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 16rpx;
+  background: #F0F4F2;
+  flex-shrink: 0;
+}
+
+.course-info {
+  flex: 1;
+  margin-left: 24rpx;
+  margin-right: 16rpx;
+  min-width: 0;
+}
+
+.course-name {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #2D3748;
+  margin-bottom: 16rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.course-progress {
+  display: flex;
+  align-items: center;
+}
+
+.course-progress-bar {
+  flex: 1;
+  height: 12rpx;
+  border-radius: 6rpx;
+  background: #E6F4F1;
+  overflow: hidden;
+}
+
+.course-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7ECEC1, #5BA89B);
+  border-radius: 6rpx;
+  transition: width 0.3s ease;
+}
+
+.course-progress-text {
+  margin-left: 16rpx;
+  font-size: 22rpx;
+  color: #A0AEC0;
+  flex-shrink: 0;
+}
+
+.course-empty {
+  padding: 40rpx 32rpx;
+}
+
+.course-empty-text {
+  font-size: 26rpx;
+  color: #A0AEC0;
+  text-align: center;
+}

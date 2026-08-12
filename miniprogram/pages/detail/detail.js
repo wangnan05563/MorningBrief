@@ -9,8 +9,16 @@
  * - 节目来源展示（FR-SUP-12）- sources 字段
  * - 埋点（FR-SUP-10）
  */
-const { fetchEpisodeDetail, fetchEpisodeScript } = require('../../services/api');
-const { fetchComments, postComment, likeComment, unlikeComment } = require('../../services/api');
+const {
+  fetchEpisodeDetail,
+  fetchEpisodeScript,
+  fetchComments,
+  postComment,
+  likeComment,
+  unlikeComment,
+  getChannelMeta,
+  channelType,
+} = require('../../services/api');
 // localData 封装收藏的双写（本地+后端），按 openid 隔离
 const localData = require('../../services/local-data');
 const {
@@ -23,6 +31,7 @@ const {
 } = require('../../services/audio');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 const { copySourceUrl } = require('../../utils/clipboard');
+const skin = require('../../utils/skin');
 
 const RATE_OPTIONS = [0.75, 1.0, 1.25, 1.5, 2.0];
 const SLEEP_PRESETS = [
@@ -62,6 +71,14 @@ Page({
     seekTimestamp: 0,          // seek后500ms内忽略onTimeUpdate覆盖
     lastProgressSaveTs: 0,     // 上次上报后端进度的节流时间戳（5s 节流），防止每次 onTimeUpdate 都打网络
     lastListenStartTs: 0,      // 本次播放周期起点（用于计算 listened_seconds 增量）
+    // 课程章节语义（FR-MC-04）：从课程主页跳转时携带，用于显示「第X章/共Y章」
+    isCourse: false,
+    courseChannelId: '',
+    courseName: '',
+    chapterLabel: '',
+    // FR-MC-11 合规提示：按频道 disclaimer_level 展示 AI 生成提示条（空串不展示）
+    disclaimerText: '',
+    disclaimerLevel: '',
     // 任务8：评论区
     comments: [],
     commentsTotal: 0,
@@ -82,6 +99,26 @@ Page({
     if (!id) {
       this.setData({ loading: false, error: '缺少节目参数' });
       return;
+    }
+    // 课程章节语义（FR-MC-04）：从课程主页跳转时携带 channelId/chapterIndex/chapterTotal
+    // 仅当频道类型为 course/audiobook 时启用，news 频道无此语义（向后兼容）
+    const channelId = options.channelId;
+    if (channelId && channelType(channelId) !== 'news') {
+      const chapterIndex = Number(options.chapterIndex) || 0;
+      const chapterTotal = Number(options.chapterTotal) || 0;
+      const meta = getChannelMeta(channelId);
+      // FR-MC-11：合规提示文案按频道 disclaimer_level 分级（none 不展示）
+      const level = (meta && meta.disclaimer_level) || 'none';
+      this.setData({
+        isCourse: true,
+        courseChannelId: channelId,
+        courseName: (meta && meta.name) || '',
+        chapterLabel: (chapterIndex && chapterTotal)
+          ? ('第 ' + chapterIndex + ' 章 / 共 ' + chapterTotal + ' 章')
+          : '',
+        disclaimerLevel: level,
+        disclaimerText: skin.getDisclaimerText(level),
+      });
     }
     this._unsubSleep = onSleepChange((status) => {
       this.setData({
@@ -117,6 +154,12 @@ Page({
         if (evt.type === 'ended') {
           this.setData({ currentTime: 0, currentTimeText: '00:00' });
           this.refreshQueueState();
+          // FR-MC-10：课程章节完播埋点（SRS §4.10 chapter_finish）
+          // 仅当本页是课程章节时上报，避免污染资讯类完播数据
+          if (this.data.isCourse) {
+            const chId = Number(this.data.courseChannelId) || 0;
+            trackEvent('course', 'chapter_finish', 'episode_' + cur.id, chId || undefined);
+          }
         }
         // play：更新 durationText（onCanplay 后 duration 才有准确值）
         if (evt.type === 'play') {
@@ -779,8 +822,12 @@ Page({
 
   onShareAppMessage() {
     const ep = this.data.episode || {};
+    // 课程章节分享用课程名而非「今日要闻」（FR-MC-08 文案通用化）
+    const title = this.data.isCourse
+      ? (this.data.courseName || ep.title || '课程')
+      : (ep.title || '今日要闻');
     return {
-      title: ep.title || '今日要闻',
+      title,
       path: '/pages/detail/detail?id=' + (ep.id || ''),
     };
   },

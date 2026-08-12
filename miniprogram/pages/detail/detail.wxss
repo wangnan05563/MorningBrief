@@ -8,6 +8,46 @@
   padding: 40rpx 32rpx;
 }
 
+/* === FR-MC-11 合规提示条（与课程页对齐） ===
+   不遮挡核心播放操作（位于信息卡与播放卡之间），且无关闭按钮不可误关 */
+.disclaimer {
+  display: flex;
+  align-items: flex-start;
+  margin: 0 24rpx 8rpx;
+  padding: 16rpx 20rpx;
+  background: #FFF7E6;
+  border: 1rpx solid #FFE0A3;
+  border-radius: 16rpx;
+}
+
+.disclaimer.strong {
+  background: #FFEBEE;
+  border-color: #FFB4A2;
+}
+
+.disclaimer-icon {
+  font-size: 28rpx;
+  color: #F0A020;
+  margin-right: 12rpx;
+  flex-shrink: 0;
+  line-height: 1.5;
+}
+
+.disclaimer.strong .disclaimer-icon {
+  color: #E57373;
+}
+
+.disclaimer-text {
+  flex: 1;
+  font-size: 24rpx;
+  color: #8A6D3B;
+  line-height: 1.5;
+}
+
+.disclaimer.strong .disclaimer-text {
+  color: #C0392B;
+}
+
 .episode-meta {
   display: flex;
   align-items: center;

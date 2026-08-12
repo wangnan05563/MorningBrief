@@ -6,6 +6,8 @@
     "pages/detail/detail",
     "pages/search/search",
     "pages/channels/channels",
+    "pages/course/course",
+    "pages/download/download",
     "pages/preferred-settings/preferred-settings",
     "pages/recent/recent",
     "pages/favorites/favorites",
@@ -20,7 +22,7 @@
   "window": {
     "backgroundTextStyle": "light",
     "navigationBarBackgroundColor": "#FFF5F7",
-    "navigationBarTitleText": "今日要闻",
+    "navigationBarTitleText": "今日节目",
     "navigationBarTextStyle": "black"
   },
   "tabBar": {

@@ -49,6 +49,33 @@
       </view>
     </view>
 
+    <!-- 我的课程（FR-MC-05）：已订阅的课程/有声读物 + 本地学习进度 -->
+    <view class="card course-card" wx:if="{{myCourses.length > 0}}">
+      <view class="course-card-title">我的课程</view>
+      <view
+        class="course-item"
+        wx:for="{{myCourses}}"
+        wx:key="id"
+        bindtap="onTapCourse"
+        data-id="{{item.id}}"
+      >
+        <image class="course-cover" src="{{item.cover_url || '/images/icons/headphones.png'}}" mode="aspectFill" />
+        <view class="course-info">
+          <view class="course-name">{{item.name}}</view>
+          <view class="course-progress">
+            <view class="course-progress-bar">
+              <view class="course-progress-fill" style="width:{{item.percent}}%"></view>
+            </view>
+            <text class="course-progress-text">{{item.learned}}/{{item.total}} · {{item.percent}}%</text>
+          </view>
+        </view>
+        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
+      </view>
+    </view>
+    <view class="card course-empty" wx:elif="{{myCoursesLoaded}}">
+      <view class="course-empty-text">尚未订阅任何课程，去首页发现课程频道吧</view>
+    </view>
+
     <!-- 功能列表 -->
     <view class="card list-card">
       <view class="list-item" bindtap="onTapSetting" data-key="recent">
@@ -61,6 +88,10 @@
       </view>
       <view class="list-item" bindtap="onTapSetting" data-key="channels">
         <text class="list-text">我的频道</text>
+        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
+      </view>
+      <view class="list-item" bindtap="onTapSetting" data-key="downloads">
+        <text class="list-text">我的下载</text>
         <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
       </view>
       <view class="list-item" bindtap="onTapSetting" data-key="preferred">

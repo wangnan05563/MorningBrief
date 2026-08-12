@@ -21,7 +21,7 @@
  */
 const { login } = require('./services/auth');
 const { initPlayer } = require('./services/audio');
-const { fetchTodayEpisode } = require('./services/api');
+const { fetchTodayEpisode, channelType } = require('./services/api');
 const { discoverServer, PROD_API_BASE_URL } = require('./utils/server-discovery');
 
 // 构建脚本可在编译期注入 VERSION / BUILD_DATE 全局变量覆盖默认值
@@ -41,6 +41,7 @@ App({
     privacyAuthorized: false, // 隐私协议是否已授权
     currentChannelId: null,   // 当前选中的频道 ID（多频道切换用，null 表示全部）
     baseUrl: null,           // 自动发现的后端 API 基础地址（含 /api/v1 前缀）
+    channelsMeta: {},         // 频道元信息缓存（id → 归一化频道对象，含 channel_type 等）
     // 偏爱频道首次引导标志：登录成功且未引导过时置 true，由首页 onShow 弹窗引导
     // 为什么放 globalData 而非直接弹窗：onLaunch 期间页面尚未加载，弹窗会失效；
     // 改为标志位让首个可见页面（index）在 onShow 中触发，时机最稳
@@ -128,6 +129,58 @@ App({
       this.checkPrivacy();
     })();
     return this.readyPromise;
+  },
+
+  /**
+   * 订阅消息通知进入（FR-MC-06）
+   * scene === 1014 表示从小程序订阅消息卡片点击进入。
+   * 后端发送时已在模板 page 字段携带目标路径（课程主页 / 资讯频道），为主要跳转机制；
+   * 此处为兜底路由：处理未带 page 或默认落到首页的场景，确保点击通知跳到正确频道。
+   *
+   * 后端可在通知 page query 中附带 ct（channel_type）以加速兜底判定；
+   * 缺省时按缓存 / 频道列表判定类型。
+   */
+  onShow(options) {
+    if (!options || options.scene !== 1014) return;
+    const q = options.query || {};
+    const channelId = q.channelId;
+    if (!channelId) return;
+
+    const routeToCourse = () => {
+      const pages = getCurrentPages();
+      const top = pages[pages.length - 1];
+      // 已在目标课程页则跳过，避免重复跳转
+      if (top && top.route === 'pages/course/course' && String((top.options || {}).channelId) === String(channelId)) {
+        return;
+      }
+      wx.navigateTo({ url: '/pages/course/course?channelId=' + channelId });
+    };
+    const routeToNews = () => {
+      this.globalData.currentChannelId = channelId;
+      wx.switchTab({ url: '/pages/index/index' });
+    };
+
+    const t = q.ct; // 后端附带 channel_type 时优先使用
+    if (t === 'course' || t === 'audiobook') {
+      routeToCourse();
+    } else if (t === 'news') {
+      routeToNews();
+    } else {
+      // 类型未知：先查缓存，缓存无则拉取频道列表后判定（一次性兜底）
+      const cached = channelType(channelId);
+      if (cached && cached !== 'news') routeToCourse();
+      else if (cached === 'news') routeToNews();
+      else {
+        const { fetchChannels } = require('./services/api');
+        fetchChannels()
+          .then(() => {
+            const ct = channelType(channelId);
+            if (ct && ct !== 'news') routeToCourse();
+            else routeToNews();
+          })
+          .catch(() => routeToNews());
+      }
+    }
   },
 
   /**

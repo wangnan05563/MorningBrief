@@ -31,6 +31,12 @@
       </view>
     </view>
 
+    <!-- 合规提示（FR-MC-11）：disclaimer_level != none 时展示，不遮挡播放操作且不可误关 -->
+    <view class="disclaimer {{disclaimerLevel === 'strong' ? 'strong' : ''}}" wx:if="{{disclaimerText}}">
+      <text class="disclaimer-icon">ⓘ</text>
+      <text class="disclaimer-text">{{disclaimerText}}</text>
+    </view>
+
     <!-- 播放控制卡片 -->
     <view class="card play-card">
       <!-- 播放错误提示：音频丢失/不可访问时持久显示，避免 toast 消失后用户不知道原因 -->

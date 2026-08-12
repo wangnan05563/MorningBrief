@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "今日要闻",
+  "navigationBarTitleText": "今日节目",
   "enablePullDownRefresh": true,
   "backgroundTextStyle": "dark",
   "usingComponents": {

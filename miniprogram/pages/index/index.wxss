@@ -328,6 +328,41 @@
   box-shadow: 0 4rpx 12rpx rgba(126, 206, 193, 0.3);
 }
 
+/* 课程类频道胶囊：用绿色系区分资讯类（FR-MC-02） */
+.channel-pill.course {
+  color: #4A7C6F;
+  background: #E3F1EC;
+}
+
+.channel-pill.course.active {
+  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  color: #FFFFFF;
+}
+
+/* 课程类胶囊角标（课/听） */
+.pill-badge {
+  display: inline-block;
+  margin-left: 8rpx;
+  padding: 0 10rpx;
+  border-radius: 16rpx;
+  font-size: 20rpx;
+  line-height: 30rpx;
+  color: #FFFFFF;
+  background: #5BA89B;
+  vertical-align: middle;
+}
+
+/* 频道分组标题（资讯 / 课程） */
+.channel-group-label {
+  display: inline-block;
+  margin-right: 12rpx;
+  padding: 0 8rpx;
+  font-size: 22rpx;
+  color: #B0BAC5;
+  line-height: 64rpx;
+  letter-spacing: 2rpx;
+}
+
 /* === 睡眠定时器状态条 === */
 .sleep-status {
   text-align: center;

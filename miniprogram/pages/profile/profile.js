@@ -7,7 +7,11 @@
  * - 接入埋点（FR-SUP-10）
  */
 const { logout, getUser, login, getToken, setToken, isLoginCoolingDown } = require('../../services/auth');
-const { fetchUserStats, updateUserProfile, uploadAvatar } = require('../../services/api');
+const { fetchUserStats, updateUserProfile, uploadAvatar, fetchMySubscriptions, computeCourseLocalProgress } = require('../../services/api');
+// 离线下载存储（FR-MC-09）：退出登录时一并清理该用户下载
+const downloadStore = require('../../services/download');
+// 本地进度/收藏聚合（FR-MC-10 修复 GAP-11 统计恒为 0 的离线兜底）
+const localData = require('../../services/local-data');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 
 Page({
@@ -18,6 +22,8 @@ Page({
     completedCount: 0,        // 完播期数
     favoriteCount: 0,         // 收藏数
     durationLabel: '0分钟',   // 格式化后的收听时长
+    myCourses: [],            // 我的课程（FR-MC-05）：已订阅的课程/有声读物频道 + 本地进度
+    myCoursesLoaded: false,   // 防止加载完成前空态闪烁
   },
 
   onShow() {
@@ -31,6 +37,8 @@ Page({
     // 为什么移除 if (userInfo) 检查：login 失败时 globalData.userInfo 为 null，
     // 旧逻辑会跳过 loadStats 导致统计永远显示 0；移除后 fetchUserStats 会触发 401→refreshToken
     this.loadStats();
+    // FR-MC-05：登录态下加载「我的课程」（已订阅的课程/有声读物 + 本地进度）
+    if (getToken()) this.loadMyCourses();
 
     if (userInfo) {
       // 头像/昵称为空时自动拉取一次：
@@ -254,27 +262,42 @@ Page({
    * 缓存后弱网/token 失效场景下能显示上次成功获取的数据，而非 0
    */
   async loadStats() {
-    // 无 token 时跳过：避免对未认证接口发请求触发 401 + refreshToken 风暴
-    if (!getToken()) { return; }
+    // 无 token 时也尝试用本地聚合展示（离线/未上报也能有数据），不再直接 return 留 0
+    if (!getToken()) {
+      this.applyStats(this._localStats());
+      return;
+    }
     try {
       const stats = await fetchUserStats();
-      if (!stats) {
-        // 接口失败或未登录：兜底读 globalData 缓存
-        const app = getApp();
-        const localStats = app.globalData.listenStats || {};
-        this.applyStats({
-          total_listen_seconds: localStats.total_listen_seconds || 0,
-          total_listen_episodes: localStats.total_listen_episodes || 0,
-          completed_episodes: localStats.completed_episodes || 0,
-          favorite_count: localStats.favorite_count || 0,
-        });
+      const hasBackendData = stats && (
+        stats.total_listen_seconds > 0 ||
+        stats.total_listen_episodes > 0 ||
+        stats.completed_episodes > 0 ||
+        stats.favorite_count > 0
+      );
+      if (!hasBackendData) {
+        // 后端聚合未就绪（GAP-11：/users/stats 常返回全 0）：用本地进度/收藏聚合兜底
+        this.applyStats(this._localStats());
         return;
       }
-      // 成功时缓存到 globalData，下次失败时用此值兜底
+      // 成功且后端有真实数据：缓存到 globalData 供下次失败兜底
       getApp().globalData.listenStats = stats;
       this.applyStats(stats);
     } catch (err) {
-      console.error('加载用户统计失败:', err);
+      console.error('加载用户统计失败，回退本地聚合:', err);
+      this.applyStats(this._localStats());
+    }
+  },
+
+  /**
+   * 本地收听统计聚合（FR-MC-10 修复 GAP-11 统计恒为 0）
+   * 后端 /users/stats 聚合为 0 / 接口失败时，用本地进度/收藏兜底，保证离线也有真实数据。
+   */
+  _localStats() {
+    try {
+      return localData.getLocalStats();
+    } catch (e) {
+      return { total_listen_seconds: 0, total_listen_episodes: 0, completed_episodes: 0, favorite_count: 0 };
     }
   },
 
@@ -421,6 +444,62 @@ Page({
     return rest ? `${h}小时${rest}分钟` : `${h}小时`;
   },
 
+  /**
+   * 加载「我的课程」（FR-MC-05）：列出已订阅的 course/audiobook 频道，
+   * 逐课聚合本地学习进度（章节已学完数/完成度）。后端进度聚合未就绪时以本地为准。
+   */
+  async loadMyCourses() {
+    if (!getToken()) return;
+    try {
+      const res = await fetchMySubscriptions();
+      const subs = (res && res.list) || [];
+      // 仅课程/有声读物类型进入「我的课程」
+      const courseChannels = subs.filter(
+        (c) => c.channel_type === 'course' || c.channel_type === 'audiobook'
+      );
+      if (!courseChannels.length) {
+        this.setData({ myCourses: [], myCoursesLoaded: true });
+        return;
+      }
+      const withProgress = await Promise.all(
+        courseChannels.map(async (ch) => {
+          const prog = await computeCourseLocalProgress(ch.id);
+          return {
+            id: ch.id,
+            name: ch.name,
+            description: ch.description || '',
+            channel_type: ch.channel_type,
+            type_label: ch.type_label || (ch.channel_type === 'course' ? '课程' : '有声读物'),
+            cover_url: ch.cover_url || '',
+            disclaimer_level: ch.disclaimer_level || 'none',
+            total: prog.total,
+            learned: prog.learned,
+            percent: prog.percent,
+          };
+        })
+      );
+      this.setData({ myCourses: withProgress, myCoursesLoaded: true });
+    } catch (e) {
+      console.warn('加载我的课程失败:', e.message || e);
+    }
+  },
+
+  /**
+   * 点击「我的课程」中的某课：跳转课程主页（复用既有课程链路）
+   */
+  onTapCourse(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+    trackEvent('profile', 'tap_my_course', 'channel_' + id);
+    wx.navigateTo({
+      url: '/pages/course/course?channelId=' + id,
+      fail: (err) => {
+        console.warn('跳转课程主页失败，降级 reLaunch:', err);
+        wx.reLaunch({ url: '/pages/course/course?channelId=' + id });
+      },
+    });
+  },
+
   onLogout() {
     wx.showModal({
       title: '退出登录',
@@ -430,7 +509,6 @@ Page({
         if (!res.confirm) return;
         // 在 logout 清除 news_user 前先取 openid，用于清理该用户的本地数据
         // 否则 logout 后 getOpenid() 返回空字符串，无法定位要清理的 key
-        const localData = require('../../services/local-data');
         const user = getUser();
         const openid = (user && user.openid) || '';
         try {
@@ -442,6 +520,7 @@ Page({
         // 清理当前用户的本地数据（进度/收藏/历史），避免下一个登录账号看到上一个账号的数据
         if (openid) {
           localData.clearByOpenid(openid);
+          downloadStore.clearByOpenid(openid);
         }
         const app = getApp();
         app.globalData.userInfo = null;
@@ -470,6 +549,7 @@ Page({
       favorites: '/pages/favorites/favorites',
       recent: '/pages/recent/recent',
       channels: '/pages/channels/channels',
+      downloads: '/pages/download/download',
       preferred: '/pages/preferred-settings/preferred-settings',
       feedback: '/pages/feedback/feedback',
       settings: '/pages/settings/settings',

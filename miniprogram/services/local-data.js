@@ -24,6 +24,8 @@ const {
   removeFavorite: apiRemoveFavorite,
   checkFavorite: apiCheckFavorite,
 } = require('./api');
+// 章节「已学完」判定阈值：统一收敛到 services/constants（与后端 _COMPLETE_RATIO 保持一致）
+const { COURSE_COMPLETE_RATIO } = require('./constants');
 
 // ==================== openid 获取 ====================
 
@@ -513,6 +515,51 @@ function clearByOpenid(openid) {
   }
 }
 
+/**
+ * 本地收听统计聚合（离线兜底，FR-MC-10 修复 GAP-11 统计恒为 0）
+ *
+ * 后端 /users/stats 聚合未就绪时常返回全 0，导致「我的」页统计恒为 0。
+ * 此处基于本地进度/收藏聚合出真实统计，纯本地读取不依赖网络：
+ * - total_listen_seconds：累计收听秒数（完播记 duration，未完播记已播 position，均不超过 duration）
+ * - total_listen_episodes：有播放进度的节目期数（position > 0 的去重数）
+ * - completed_episodes：完播期数（completed 或 进度占比 ≥ COURSE_COMPLETE_RATIO）
+ * - favorite_count：本地收藏数
+ * @returns {{total_listen_seconds:number,total_listen_episodes:number,completed_episodes:number,favorite_count:number}}
+ */
+function getLocalStats() {
+  const openid = getOpenid();
+  if (!openid) {
+    return { total_listen_seconds: 0, total_listen_episodes: 0, completed_episodes: 0, favorite_count: 0 };
+  }
+  try {
+    const progressAll = wx.getStorageSync(progressKey(openid)) || {};
+    const entries = Object.keys(progressAll).map((k) => progressAll[k]).filter(Boolean);
+    let listenedSeconds = 0;
+    let totalListenEpisodes = 0;
+    let completedEpisodes = 0;
+    for (const e of entries) {
+      const duration = Math.floor(e.duration || 0);
+      const position = Math.floor(e.position || 0);
+      const completed = !!e.completed || (duration > 0 && position / duration >= COURSE_COMPLETE_RATIO);
+      if (position > 0) totalListenEpisodes += 1;
+      if (completed) completedEpisodes += 1;
+      const listened = completed ? duration : Math.min(position, duration);
+      listenedSeconds += Math.max(0, Math.floor(listened));
+    }
+    const favorites = wx.getStorageSync(favoritesKey(openid)) || [];
+    const favoriteCount = Array.isArray(favorites) ? favorites.length : 0;
+    return {
+      total_listen_seconds: listenedSeconds,
+      total_listen_episodes: totalListenEpisodes,
+      completed_episodes: completedEpisodes,
+      favorite_count: favoriteCount,
+    };
+  } catch (e) {
+    console.warn('[local-data] 本地统计聚合失败:', e && e.message);
+    return { total_listen_seconds: 0, total_listen_episodes: 0, completed_episodes: 0, favorite_count: 0 };
+  }
+}
+
 module.exports = {
   saveProgress,
   getProgress,
@@ -523,6 +570,7 @@ module.exports = {
   addHistory,
   getHistory,
   getPlayedHistorySet,
+  getLocalStats,
   clearByOpenid,
   // 偏爱频道
   getPreferredChannels,

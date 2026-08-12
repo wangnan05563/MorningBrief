@@ -12,9 +12,11 @@
  * 数据流：globalData.todayEpisode（预加载）→ 页面 data → WXML 渲染
  * 播放器：使用 app.globalData.player（全局单例），页面只负责 UI 状态同步
  */
-const { fetchTodayEpisode, fetchEpisodeScript, fetchChannels } = require('../../services/api');
+const { fetchTodayEpisode, fetchEpisodeScript, fetchChannels, channelType } = require('../../services/api');
 // localData 封装收藏/进度/历史的双写（本地+后端），按 openid 隔离
 const localData = require('../../services/local-data');
+// 频道类型 → 文案/皮肤映射（FR-MC-08）：分组标题按类型取值
+const skin = require('../../utils/skin');
 const { playEpisode, safePlay, setQueue, setPendingSeek, seek, getPlaybackRate, setPlaybackRate, getSleepStatus, startSleepTimer, stopSleepTimer, onSleepChange, onError, getCurrentEpisode, onPlaybackChange, onTimeUpdateChange, offTimeUpdateChange } = require('../../services/audio');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 // 带 TTL 的 storage 工具：lastPlayedEpisode 是续播缓存，7 天后自动过期清理
@@ -214,11 +216,27 @@ Page({
   async loadChannels() {
     try {
       const res = await fetchChannels();
+      const list = res.list || [];
+      // 固定前置项：我的偏爱 / 全部（沿用 V1.3）
       const channels = [
-        { id: 'preferred', name: '我的偏爱' },
-        { id: null, name: '全部' },
-        ...(res.list || []),
+        { id: 'preferred', name: '我的偏爱', channel_type: 'news', type_label: '资讯' },
+        { id: null, name: '全部', channel_type: 'news', type_label: '资讯' },
       ];
+      // 按 channel_type 分组，组序固定：资讯在前，课程类（course/audiobook）在后（FR-MC-02）
+      // 新增业务类型只需在 skin.TYPE_LABELS 加分支，自动落位对应分组（FR-MC-12 防御）
+      // 类型经 normalizeType 归一化：未知/缺失一律回退 news（避免未定义类型频道被丢弃，落实防御兜底）
+      const groupOrder = ['news', 'course', 'audiobook'];
+      const grouped = {};
+      list.forEach((c) => {
+        const t = skin.normalizeType(c.channel_type);
+        (grouped[t] = grouped[t] || []).push(c);
+      });
+      groupOrder.forEach((t) => {
+        const items = grouped[t];
+        if (!items || items.length === 0) return;
+        channels.push({ id: 'group_' + t, isGroupLabel: true, label: skin.getChannelTypeLabel(t) });
+        items.forEach((c) => channels.push(c));
+      });
       this.setData({ channels });
     } catch (err) {
       console.log('加载频道列表失败:', err.message);
@@ -232,6 +250,16 @@ Page({
   async onSwitchChannel(e) {
     // 用严格判断避免 id=0 被误判为 falsy（虽然频道 id 通常从 1 开始，但防御性编程）
     const rawId = e.currentTarget.dataset.id;
+    // 分组标题（isGroupLabel）不可点，防御误触
+    const tapped = this.data.channels.find(c => c.id === rawId);
+    if (tapped && tapped.isGroupLabel) return;
+    // 课程 / 有声书频道：跳课程主页而非切换今日节目列表（FR-MC-02 / FR-MC-03）
+    // 后端未配置 channel_type 时默认 news，该分支不触发（向后兼容）
+    if (rawId && rawId !== 'preferred' && channelType(rawId) !== 'news') {
+      wx.navigateTo({ url: '/pages/course/course?channelId=' + rawId });
+      trackEvent('index', 'open_course', '', String(rawId));
+      return;
+    }
     const channelId = (rawId !== undefined && rawId !== null && rawId !== '') ? rawId : null;
     if (channelId === this.data.currentChannelId) return;
     trackEvent('index', 'switch_channel', '', String(channelId || ''));

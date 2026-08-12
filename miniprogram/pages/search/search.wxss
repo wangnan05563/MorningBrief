@@ -6,3 +6,48 @@
   height: 32rpx;
   flex-shrink: 0;
 }
+
+/* 类型筛选行（FR-MC-07） */
+.filter-row {
+  display: flex;
+  flex-direction: row;
+  gap: 16rpx;
+  padding: 16rpx 24rpx 8rpx;
+}
+.filter-chip {
+  padding: 8rpx 28rpx;
+  font-size: 26rpx;
+  color: #6b7280;
+  background: #f1f2f4;
+  border-radius: 999rpx;
+  line-height: 1.4;
+}
+.filter-chip.active {
+  color: #fff;
+  background: #5BA89B;
+}
+
+/* 搜索结果类型标签 + 频道名（FR-MC-07） */
+.item-meta {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12rpx;
+  flex: 1;
+  min-width: 0;
+}
+.item-type-tag {
+  flex-shrink: 0;
+  padding: 2rpx 12rpx;
+  font-size: 20rpx;
+  color: #5BA89B;
+  background: rgba(91, 168, 155, 0.12);
+  border-radius: 6rpx;
+}
+.item-channel {
+  font-size: 22rpx;
+  color: #9ca3af;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
