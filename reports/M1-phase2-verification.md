@@ -96,3 +96,31 @@ PYTHON=python BASE_URL=http://127.0.0.1:8000 \
 ```
 
 不传 CHANNEL_ID 时自动新建临时课程频道（名称含 `E2E_` 前缀）并打印 ID，便于事后清理。
+
+---
+
+## 9) 进程内冒烟验证（无凭证，真实 app，2026-08-11）
+
+为在不依赖外部 LLM/TTS 凭证的前提下验证全部「胶水」代码，新增 `temp/test_e2e_smoke.py`：
+
+- **隔离**：拷贝真实 `news.db` 到临时文件，`import app.paths` 后**先 monkeypatch `app.paths.resolve_db_path` 再 `from app.main import app`**（引擎在 `app.database` 导入时按 `settings.sqlite_url` = `resolve_db_path()` 惰性求值，patch 顺序关键）。原 `backend/data/news.db` 零污染。
+- **免凭证**：`app.dependency_overrides[require_admin]` **且同时 override `get_current_admin`**（列表/详情路由直接 `Depends(get_current_admin)`，漏掉会 401）。
+- **结果：13/13 PASS**
+  - A 频道创建(200) + 新字段回写 `selection_strategy`/`enable_ad`/`manual_material_ids`/`rewrite_template` + 列表交叉验证
+  - C 文档上传(multipart) → 逐章入库（`count>0`）
+  - D `skip_crawl` 触发(200 + `workflow_id`) + 预置 `crawl` 成功步（`name=crawl, status=success`）
+
+### 9.1 本轮新修的真实 bug（T5 API 缺口）
+
+`create_channel` 路由此前**只转发基础字段 + 新增三字段，漏转 `rewrite_template`/`intro_prompt`/`outro_prompt`/`constraint_prompt`**——这四个模板字段仅 `auto_generate_prompts` 分支经 `update_channel` 设置，导致课程模板无法经 create API 落地。已在 `app/routers/admin/channels.py` 的 create 调用补 4 字段转发，A6 回写通过。`update_channel` 本已正确转发，无需改动。
+
+### 9.2 验证边界（仍待部署后跑）
+
+冒烟覆盖「选题意图 → 频道 API → 上传 → skip_crawl 触发 → 预置步」全链路胶水。**课程真实内容生产**（`rewrite` 课程模板 → `tts` → `stitch` 无广告 → `publish` 可播放）仍需真实 LLM/TTS 凭证 + ffmpeg，沙箱无凭证，留待部署后跑 `scripts/e2e_course_channel.sh`。
+
+### 9.3 复跑命令
+
+```bash
+cd backend && .venv/Scripts/python.exe temp/test_e2e_smoke.py
+```
+
