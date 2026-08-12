@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import select
 
 from app.core.security import create_access_token
-from app.models import AutoReviewStat, Review, Script, Workflow
+from app.models import AutoReviewStat, Episode, Review, Script, Workflow
 from app.models.workflow import WorkflowSource, WorkflowStatus
 
 
@@ -86,6 +86,54 @@ async def test_batch_delete_cleans_auto_review_stat(client, db_session, admin_to
         select(Review).where(Review.id == review_id)
     )).scalars().all()
     assert review_left == []
+
+
+@pytest.mark.asyncio
+async def test_batch_delete_cleans_orphan_null_workflow_episode(client, db_session, admin_token, stub_blacklist):
+    """回归：Script 被 workflow_id=NULL 的孤儿 Episode 引用时批量删除不应报 FK 错误。
+
+    根因：部分历史 Episode.workflow_id 为 NULL，仅按 workflow_id 删 Episode 会漏掉，
+    删 Script 时触发 FOREIGN KEY constraint failed → 前端"数据库错误"。
+    修复后 Episode/Review 同时按 script_id 命中，可覆盖孤儿子表。
+    """
+    wid = "orphan-wf-1"
+    wf = Workflow(
+        id=wid, episode_date=date.today(),
+        source=WorkflowSource.cron, status=WorkflowStatus.success, started_at=None,
+    )
+    db_session.add(wf)
+    sc = Script(
+        workflow_id=wid, episode_date=date.today(),
+        full_text="x", segments=[{"seq": 1, "title": "t", "content": "c"}],
+    )
+    db_session.add(sc)
+    await db_session.flush()
+    # 孤儿 Episode：workflow_id=None 但 script_id 指向本批 Script（复现历史脏数据）
+    ep = Episode(
+        workflow_id=None, script_id=sc.id, date=date.today(),
+        title="孤儿节目", duration=60, audio_url="http://example.com/a.mp3",
+    )
+    db_session.add(ep)
+    await db_session.commit()
+
+    resp = client.post(
+        "/admin/api/v1/queue/tasks/batch-delete",
+        json={"workflow_ids": [wid]},
+        headers=_admin_headers(admin_token),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["code"] == 0
+
+    # 孤儿 Episode 应被级联删除（按 script_id 命中），否则旧逻辑会因 FK 冲突 500
+    ep_left = (await db_session.execute(
+        select(Episode).where(Episode.id == ep.id)
+    )).scalars().all()
+    assert ep_left == []
+    # Script 本身也应被删除
+    sc_left = (await db_session.execute(
+        select(Script).where(Script.id == sc.id)
+    )).scalars().all()
+    assert sc_left == []
 
 
 def test_batch_delete_auto_review_stat_rejects_non_admin(client, admin_token, stub_blacklist):
