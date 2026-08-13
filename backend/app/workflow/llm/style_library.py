@@ -411,14 +411,19 @@ def get_style_hint(
         seq: 当前段在整期节目中的序号（1-based）
         total_segments: 整期节目总段数，用于估算循环周期
         channel_type: 频道类型（news/course/audiobook）。
-            channel_type=course 时优先使用课程讲师词库（不依赖具体 channel_id），
-            否则按 channel_id 匹配频道特定词库，再回退默认词库
+            channel_type=course 时：若该频道已按 ID 定制专属词库则优先使用之，
+            否则使用课程讲师词库（不依赖具体 channel_id）；
+            其余频道按 channel_id 匹配频道特定词库，再回退默认词库
 
     Returns:
         风格提示文本，含开场白/过渡词/同义词/风格定位四部分
     """
-    # 课程频道按类型匹配讲师词库（ID 不固定），其余按 channel_id 或默认
-    if channel_type == "course":
+    # 课程频道：若该频道已按 ID 定制专属词库则优先使用之（与 rewrite 模板
+    # 覆盖约定对称），否则回退课程讲师词库（不依赖具体 channel_id）；
+    # 其余频道按 channel_id 或默认。
+    if channel_type == "course" and (
+        channel_id is None or channel_id not in _CHANNEL_STYLE_LIBRARY
+    ):
         lib = _COURSE_LIBRARY
     else:
         lib = _get_channel_library(channel_id)

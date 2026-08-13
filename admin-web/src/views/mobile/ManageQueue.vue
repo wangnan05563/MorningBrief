@@ -27,6 +27,15 @@
         <span class="m-q__ch">{{ t.channel_name || ('频道#' + t.channel_id) }}</span>
         <span class="m-badge" :class="statusClass(t.status)">{{ statusLabel[t.status] || t.status }}</span>
       </div>
+      <div class="m-q__no">
+        <span class="m-q__no-l">队列编号</span>
+        <button
+          type="button"
+          class="m-q__no-v"
+          @click="copyNo(t.id)"
+          :title="'点击复制队列编号'"
+        >{{ t.id }}</button>
+      </div>
       <div class="m-q__meta">
         <span>{{ t.source || '—' }}</span>
         <span>期次 {{ t.episode_date || '—' }}</span>
@@ -120,6 +129,41 @@ async function retry(t) {
   }
 }
 
+// 移动端触摸友好的「队列编号」复制：便于在工单/沟通中引用任务编号
+// 优先用 navigator.clipboard（安全上下文）；非安全上下文（http/旧 WebView）降级
+// 用 textarea + execCommand('copy') 真正写入剪贴板；都失败再提示手动复制。
+async function copyNo(id) {
+  const text = String(id)
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      ElMessage.success('已复制队列编号')
+      return
+    }
+  } catch {
+    // 落到下方 legacy 复制
+  }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.top = '-9999px'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.focus()
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    if (ok) {
+      ElMessage.success('已复制队列编号')
+      return
+    }
+  } catch {
+    // 忽略，进入下方兜底提示
+  }
+  ElMessage.info(`复制失败，请长按编号手动复制：${text}`)
+}
+
 onMounted(reload)
 </script>
 
@@ -173,6 +217,36 @@ onMounted(reload)
   font-size: 15px;
   font-weight: 600;
   color: #1f2329;
+}
+
+.m-q__no {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.m-q__no-l {
+  font-size: 12px;
+  color: #8a8f99;
+  flex: 0 0 auto;
+}
+
+.m-q__no-v {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: #1f2329;
+  background: #f5f7fa;
+  border: 1px dashed #d0d5dd;
+  border-radius: 6px;
+  padding: 3px 8px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  user-select: all;
+}
+
+.m-q__no-v:active {
+  background: #eef2f7;
 }
 
 .m-q__meta {

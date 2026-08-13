@@ -198,7 +198,9 @@ async def test_rewrite_course_pipeline_applies_template_and_no_date(course_sessi
     monkeypatch.setattr(rewriter, "_rewrite_one", fake_rewrite_one)
 
     async with course_sessionlocal() as session:
-        ch = _make_course_channel(session)
+        # 用非专属 ID（避开 _CHANNEL_STYLE_LIBRARY 中已配置的 1/2 等），
+        # 以验证 #4 回退分支：course 频道无专属词库时回退课程讲师词库
+        ch = _make_course_channel(session, id=909090)
         await session.flush()
         _add_material(session, title="第一章", url="https://doc.test/i1", channel_id=ch.id)
         _add_material(session, title="第二章", url="https://doc.test/i2", channel_id=ch.id)
@@ -247,3 +249,60 @@ async def test_rewrite_course_pipeline_applies_template_and_no_date(course_sessi
     body_titles = [s["title"] for s in segments_json
                    if s["title"] not in ("开场白", "结尾")]
     assert body_titles == ["第一章", "第二章", "第三章"]
+
+
+# ==========================================================================
+# 纯函数单元测试（无需 DB）：覆盖评审修复 #3 / #7 / #8 / #4
+# ==========================================================================
+def test_safe_load_prompt_file_missing_returns_default():
+    """#3：提示词文件缺失时 _safe_load_prompt_file 返回 default 并告警，不抛异常。
+
+    保证 course 频道在 prompts 目录漏发任一文件时降级运行（默认模板/空文案），
+    而非 500。
+    """
+    missing = "definitely_missing_prompt_xyz.txt"  # 确定不存在，且不在缓存中
+    result = rewriter._safe_load_prompt_file(missing, default="<<DEFAULT>>")
+    assert result == "<<DEFAULT>>"
+
+
+def test_resolve_rewrite_template_file_prefix():
+    """#7：显式 file: 前缀解析为文件内容（消除文件名/正文启发式歧义）。"""
+    expected = rewriter._load_prompt_file("rewrite_course.txt")
+    assert rewriter._resolve_rewrite_template("file:rewrite_course.txt", "news") == expected
+
+
+def test_assemble_script_inject_date_by_channel_type():
+    """#8：inject_date=None 时按 channel_type 兜底（course 不注入日期，news 注入）；
+
+    显式传入 inject_date 仍优先，避免未来调用方忘记传 False 导致 course 稿件
+    被错误注入"今天是X月X日"时效播报。
+    """
+    segments = [{"seq": 1, "title": "t", "content": "c", "material_id": 1}]
+    course_assembled = rewriter._assemble_script(segments, channel_type="course")
+    assert "今天是" not in course_assembled["full_text"]
+    news_assembled = rewriter._assemble_script(segments, channel_type="news")
+    assert "今天是" in news_assembled["full_text"]
+    # 显式注入优先于 channel_type 兜底
+    explicit = rewriter._assemble_script(segments, inject_date=True, channel_type="course")
+    assert "今天是" in explicit["full_text"]
+
+
+def test_get_style_hint_course_prefers_channel_specific_library(monkeypatch):
+    """#4：course 频道若该 channel_id 已定制专属词库，应优先使用之（与 rewrite 模板覆盖对称）。"""
+    from app.workflow.llm import style_library
+    custom_lib = {
+        "intro_candidates": ["自定义开场"],
+        "transition_candidates": ["自定义过渡"],
+        "synonym_replacements": {},
+        "style_traits": {"定位": "专属定制口吻"},
+    }
+    monkeypatch.setitem(style_library._CHANNEL_STYLE_LIBRARY, 999, custom_lib)
+    hint = get_style_hint(channel_id=999, seq=1, total_segments=1, channel_type="course")
+    assert "自定义开场" in hint
+    assert "讲师" not in hint  # 不应回退到 _COURSE_LIBRARY 讲师口吻
+
+
+def test_get_style_hint_course_falls_back_to_lecturer_library():
+    """#4 反向：course 频道若无专属词库，应使用课程讲师词库。"""
+    hint = get_style_hint(channel_id=None, seq=1, total_segments=1, channel_type="course")
+    assert "讲师" in hint

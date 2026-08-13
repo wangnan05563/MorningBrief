@@ -390,6 +390,8 @@ async function handleTrigger() {
   try {
     const data = await triggerWorkflow(channelId, { skipCrawl: skip })
     ElMessage.success(`已触发，工作流 ID: ${data.workflow_id}`)
+    // 触发成功后复位「跳过爬虫」开关，避免跨触发误触（尤其新闻频道）
+    skipCrawl.value = false
     page.value = 1
     await loadList()
   } finally {
