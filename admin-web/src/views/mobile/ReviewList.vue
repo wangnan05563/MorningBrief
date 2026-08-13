@@ -70,10 +70,10 @@
             loading="lazy"
           />
 
-          <!-- 语音内容（音频播放） -->
-          <div v-if="item.detail.audio_url" class="m-detail__audio">
+          <!-- 语音内容（音频播放）：优先 review.audio_url，缺省回退 episode.hls_url -->
+          <div v-if="item.detail.audio_url || item.detail.hls_url" class="m-detail__audio">
             <span class="m-detail__audio-label">语音内容</span>
-            <audio controls preload="none" :src="item.detail.audio_url"></audio>
+            <audio controls preload="none" :src="item.detail.audio_url || item.detail.hls_url"></audio>
           </div>
 
           <!-- 字段明细 -->
@@ -144,6 +144,9 @@
             </div>
           </section>
         </template>
+
+        <!-- 加载失败态：detail 为空且非加载中（拦截器已 toast，此处再给内联提示便于重试） -->
+        <div v-else class="m-detail__err">详情加载失败，点击标题重试</div>
       </div>
 
       <div class="m-review__actions">
@@ -180,18 +183,30 @@ const approving = ref(false)
 async function load() {
   loading.value = true
   try {
-    const params = { status: 'pending', page: 1, size: 20 }
-    // 作用域模式按工作流过滤，使顶部上下文与卡片一致
-    if (route.query.workflow_id) params.workflow_id = route.query.workflow_id
-    const data = await listReviews(params)
-    // 预置展开态相关字段，保证后续赋值可被 Vue 响应式追踪
-    list.value = (data.list || []).map((it) => ({
-      ...it,
-      busy: false,
-      expanded: false,
-      detail: null,
-      loadingDetail: false,
-    }))
+    // size 对齐后端 BATCH_MAX_SIZE=50（批量操作入口上限）。后端 list_reviews
+    // 用 limit(size) 不做额外截断，但若待审量 > size，单次请求会漏掉后续页；
+    // 为防御"一键全部审批"静默漏批，这里分页累加拉全所有待审（最多 4 页/200 条）。
+    const size = 50
+    const all = []
+    let page = 1
+    while (true) {
+      const params = { status: 'pending', page, size }
+      // 作用域模式按工作流过滤，使顶部上下文与卡片一致
+      if (route.query.workflow_id) params.workflow_id = route.query.workflow_id
+      const data = await listReviews(params)
+      const items = (data.list || []).map((it) => ({
+        ...it,
+        busy: false,
+        expanded: false,
+        detail: null,
+        loadingDetail: false,
+      }))
+      all.push(...items)
+      // 已取满全部(total) 或本页不足 size（末页）→ 停止；page>=4 防御异常无限循环
+      if (all.length >= (data.total || all.length) || items.length < size || page >= 4) break
+      page += 1
+    }
+    list.value = all
   } catch {
     // 错误提示由拦截器统一处理
   } finally {
@@ -199,27 +214,57 @@ async function load() {
   }
 }
 
-// 点击标题：展开/收起详情；首次展开时懒加载审核详情（完整文本/图片/字段）
+// 懒加载单条审核详情（完整文本/图片/字段），失败保留展开态且 detail 置空
+async function loadDetail(item) {
+  if (item.loadingDetail) return
+  item.loadingDetail = true
+  try {
+    item.detail = await getReview(item.id)
+  } catch {
+    // 拦截器已提示；失败保留展开态且 detail 置空以便重试
+    item.detail = null
+  } finally {
+    item.loadingDetail = false
+  }
+}
+
+// 点击标题：展开/收起详情；首次展开时懒加载审核详情
 async function toggleExpand(item) {
+  // 失败态（已展开但详情为空）：点击标题直接重试重载，而非 toggle 收起，
+  // 避免"点击标题重试"需额外点击才能重新加载（见 m-detail__err）
+  if (item.expanded && !item.detail) {
+    await loadDetail(item)
+    return
+  }
   item.expanded = !item.expanded
   if (item.expanded && !item.detail && !item.loadingDetail) {
-    item.loadingDetail = true
-    try {
-      item.detail = await getReview(item.id)
-    } catch {
-      // 拦截器已提示；保留展开态但无数据，下次点击不再重试
-      item.detail = null
-    } finally {
-      item.loadingDetail = false
-    }
+    await loadDetail(item)
   }
 }
 
 // 单条审核：通过 / 驳回
 async function act(item, action) {
+  let reason = null
+  // 驳回需采集理由（桌面端强约束的语义对齐）：弹窗输入，留空则用默认理由；
+  // 用户取消则直接返回，不改动审核状态
+  if (action === 'reject') {
+    const r = await ElMessageBox.prompt(
+      '请输入驳回理由（留空则使用默认理由）',
+      '驳回确认',
+      {
+        confirmButtonText: '确认驳回',
+        cancelButtonText: '取消',
+        inputType: 'textarea',
+        inputPlaceholder: '如：内容有误 / 需重新改写 / 信息不全',
+      },
+    ).catch(() => null)
+    if (!r) return
+    reason = (r.value && r.value.trim()) || '移动端驳回'
+  }
+
   item.busy = true
   try {
-    await handleReviewAction(item.id, action, action === 'reject' ? '移动端驳回' : null)
+    await handleReviewAction(item.id, action, reason)
     ElMessage.success(action === 'approve' ? '已通过' : '已驳回')
     await load()
   } catch {
@@ -246,7 +291,7 @@ async function approveAll() {
 
   try {
     await ElMessageBox.confirm(
-      `确认一键通过本页 ${ids.length} 条待审内容？\n通过后系统将自动发布对应节目。`,
+      `确认一键通过当前 ${ids.length} 条待审内容？\n通过后系统将自动发布对应节目。`,
       '批量审批确认',
       { type: 'warning', confirmButtonText: '确认通过', cancelButtonText: '取消' }
     )
@@ -463,6 +508,13 @@ onMounted(load)
 .m-detail__loading {
   text-align: center;
   color: #8a8f99;
+  font-size: 13px;
+  padding: 16px 0;
+}
+
+.m-detail__err {
+  text-align: center;
+  color: #f56c6c;
   font-size: 13px;
   padding: 16px 0;
 }

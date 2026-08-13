@@ -489,7 +489,6 @@ class MaintenanceService:
         await self.db.execute(
             delete(WorkflowStep).where(WorkflowStep.workflow_id.in_(wf_ids))
         )
-        # workflow_step 通过 cascade 自动删除，无需手动清理
         result = await self.db.execute(
             delete(Workflow).where(Workflow.id.in_(wf_ids))
         )

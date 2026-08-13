@@ -13,7 +13,16 @@ import pytest
 from sqlalchemy import select
 
 from app.core.security import create_access_token
-from app.models import AutoReviewStat, Episode, Review, Script, Workflow
+from app.models import (
+    AutoReviewStat,
+    Comment,
+    Episode,
+    Favorite,
+    PlayLog,
+    Review,
+    Script,
+    Workflow,
+)
 from app.models.workflow import WorkflowSource, WorkflowStatus
 
 
@@ -147,3 +156,101 @@ def test_batch_delete_auto_review_stat_rejects_non_admin(client, admin_token, st
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_batch_delete_cleans_orphan_episode_with_playlog(client, db_session, admin_token, stub_blacklist):
+    """回归 #1：Script 被 workflow_id=NULL 孤儿 Episode 引用且 Ep 带 PlayLog 时，
+    批量删除不应 FK 失败，且孤儿 Episode 与其 PlayLog 一并被清理。
+
+    旧逻辑 episode_ids 仅按 workflow_id 收集，Orphan Episode 的 PlayLog 不被清理 →
+    删 Episode 时 FOREIGN KEY constraint failed（前端"数据库错误"）。
+    修复后 episode_ids 采用与 Episode 删除相同的双条件，PlayLog 清理覆盖全部被删 Episode。
+    """
+    wid = "orphan-pl-wf-1"
+    wf = Workflow(
+        id=wid, episode_date=date.today(),
+        source=WorkflowSource.cron, status=WorkflowStatus.success, started_at=None,
+    )
+    db_session.add(wf)
+    sc = Script(
+        workflow_id=wid, episode_date=date.today(),
+        full_text="x", segments=[{"seq": 1, "title": "t", "content": "c"}],
+    )
+    db_session.add(sc)
+    await db_session.flush()
+    ep = Episode(
+        workflow_id=None, script_id=sc.id, date=date.today(),
+        title="孤儿节目", duration=60, audio_url="http://example.com/a.mp3",
+    )
+    db_session.add(ep)
+    await db_session.flush()
+    pl = PlayLog(episode_id=ep.id)
+    db_session.add(pl)
+    await db_session.commit()
+
+    resp = client.post(
+        "/admin/api/v1/queue/tasks/batch-delete",
+        json={"workflow_ids": [wid]},
+        headers=_admin_headers(admin_token),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["code"] == 0
+
+    ep_left = (await db_session.execute(
+        select(Episode).where(Episode.id == ep.id)
+    )).scalars().all()
+    assert ep_left == []
+    pl_left = (await db_session.execute(
+        select(PlayLog).where(PlayLog.id == pl.id)
+    )).scalars().all()
+    assert pl_left == []
+
+
+@pytest.mark.asyncio
+async def test_batch_delete_cleans_comment_favorite(client, db_session, admin_token, stub_blacklist):
+    """回归 #6：批量删除应一并清理被删 Episode 的 Comment/Favorite（普通列孤儿数据）。
+
+    Comment/Favorite 的 episode_id 是普通列（非外键），删 Episode 不报 FK，
+    但会指向已删 Episode 成为孤儿数据累积；与 maintenance_service 清理口径对齐。
+    """
+    wid = "cf-wf-1"
+    wf = Workflow(
+        id=wid, episode_date=date.today(),
+        source=WorkflowSource.cron, status=WorkflowStatus.success, started_at=None,
+    )
+    db_session.add(wf)
+    sc = Script(
+        workflow_id=wid, episode_date=date.today(),
+        full_text="x", segments=[{"seq": 1, "title": "t", "content": "c"}],
+    )
+    db_session.add(sc)
+    await db_session.flush()
+    ep = Episode(
+        workflow_id=wid, script_id=sc.id, date=date.today(),
+        title="节目", duration=60, audio_url="http://example.com/a.mp3",
+    )
+    db_session.add(ep)
+    await db_session.flush()
+    cm = Comment(user_id="u1", episode_id=ep.id, content="评论")
+    db_session.add(cm)
+    fv = Favorite(user_id="u1", episode_id=ep.id)
+    db_session.add(fv)
+    await db_session.commit()
+
+    resp = client.post(
+        "/admin/api/v1/queue/tasks/batch-delete",
+        json={"workflow_ids": [wid]},
+        headers=_admin_headers(admin_token),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["code"] == 0
+
+    cm_left = (await db_session.execute(
+        select(Comment).where(Comment.id == cm.id)
+    )).scalars().all()
+    assert cm_left == []
+    fv_left = (await db_session.execute(
+        select(Favorite).where(Favorite.id == fv.id)
+    )).scalars().all()
+    assert fv_left == []

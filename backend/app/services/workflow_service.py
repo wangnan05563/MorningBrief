@@ -11,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import BizError, NotFoundError, ParamError
 from app.models import (
     AutoReviewStat,
+    Comment,
     Episode,
+    Favorite,
     Material,
     PlayLog,
     PlayProgress,
@@ -184,6 +186,9 @@ class WorkflowService:
         - 素材保留并重置为 pending：素材是"原材料"，不应随工作流删除而丢失。
           重跑工作流时 rewrite 可直接复用，crawler_dedup 也保留避免重复爬取
         - SQL delete 不触发 ORM cascade，故所有从表显式删除
+        - 事务边界（重要）：本方法**只 flush 删除语句、不提交事务**。
+          调用方必须在同一个 AsyncSession 内自行 commit，否则删除在会话关闭后
+          被回滚、静默丢失（这是与 maintenance_service 不同的设计选择，调用方须遵守）。
         """
         # 空列表拒绝：避免 no-op 调用掩盖上游 bug
         if not workflow_ids:
@@ -219,28 +224,49 @@ class WorkflowService:
                 )
 
             # ---- 删除阶段：依赖反序，先删叶子表 ----
-            # 先收集 episode_ids 与 script_ids：
-            # - episode_ids 用于定位 PlayLog/PlayProgress（通过 episode_id 关联）
+            # 先收集 script_ids 与 episode_ids（注意顺序：episode_ids 的双条件
+            # 依赖 script_ids，故 script_ids 必须先算）：
             # - script_ids 用于按"父键"清理 Script 的子表（Episode/Review），
             #   因为部分历史 Episode.workflow_id 为 NULL（早期数据未回填），
             #   仅按 workflow_id 删会漏掉这些孤儿 Episode，导致后续删 Script 时触发
             #   FOREIGN KEY constraint failed（前端报"数据库错误"）。按 script_id 删可覆盖之。
-            ep_result = await self.db.execute(
-                select(Episode.id).where(Episode.workflow_id.in_(workflow_ids))
-            )
-            episode_ids = [row[0] for row in ep_result.all()]
-
+            # - episode_ids 采用与下方 Episode 删除完全相同的双条件
+            #   (workflow_id IN + script_id IN)，确保覆盖"全部将被删除的 Episode"，
+            #   否则被 OR 分支删掉的孤儿 Episode 其 PlayLog 真实外键会导致删 Episode 时
+            #   FOREIGN KEY constraint failed（前端"数据库错误"）。
             sc_result = await self.db.execute(
                 select(Script.id).where(Script.workflow_id.in_(workflow_ids))
             )
             script_ids = [row[0] for row in sc_result.all()]
 
+            ep_result = await self.db.execute(
+                select(Episode.id).where(
+                    or_(
+                        Episode.workflow_id.in_(workflow_ids),
+                        Episode.script_id.in_(script_ids),
+                    )
+                )
+            )
+            episode_ids = [row[0] for row in ep_result.all()]
+
             if episode_ids:
+                # 叶子表清理（均按 episode_id 集合批量删）：
+                # - PlayLog/PlayProgress：PlayLog.episode_id 为真实外键，必须在 Episode
+                #   删除前清干净；PlayProgress 同理（普通列）。
+                # - Comment/Favorite：episode_id 为普通列（非外键），删 Episode 不报 FK，
+                #   但会指向已删 Episode 成为孤儿数据累积，故一并清理，与
+                #   maintenance_service 清理口径保持一致。
                 await self.db.execute(
                     delete(PlayLog).where(PlayLog.episode_id.in_(episode_ids))
                 )
                 await self.db.execute(
                     delete(PlayProgress).where(PlayProgress.episode_id.in_(episode_ids))
+                )
+                await self.db.execute(
+                    delete(Comment).where(Comment.episode_id.in_(episode_ids))
+                )
+                await self.db.execute(
+                    delete(Favorite).where(Favorite.episode_id.in_(episode_ids))
                 )
 
             # Episode：按 workflow_id 删除本批工作流的节目，同时按 script_id 删除
@@ -281,8 +307,10 @@ class WorkflowService:
                 delete(Workflow).where(Workflow.id.in_(workflow_ids))
             )
 
-            # 统一提交：任一删除成功则整批生效；下方 except 负责回滚
-            await self.db.commit()
+            # 不在此处提交：本方法只负责执行级联删除语句（flush 到会话），
+            # 由调用方（queue 路由）统一 commit —— 使"级联删除 + AuditLog"
+            # 落在同一事务，原子性更好；同时避免提交整个共享会话带来的耦合。
+            # 失败时走下方 except 立即回滚并向上抛，调用方不再误提交损坏事务。
         except Exception:
             # 整批回滚：校验失败或删除异常都不留部分删除的孤儿数据
             await self.db.rollback()
