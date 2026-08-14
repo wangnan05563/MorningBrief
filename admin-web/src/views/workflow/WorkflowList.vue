@@ -123,7 +123,7 @@
         <el-table-column label="工作流 ID" width="180">
           <template #default="{ row }">
             <!-- 点击跳详情：使用 replace 避免列表页堆积历史 -->
-            <el-link type="primary" @click="goDetail(row.id)">{{ row.id }}</el-link>
+            <el-link type="primary" underline="hover" @click="goDetail(row.id)">{{ row.id }}</el-link>
           </template>
         </el-table-column>
         <el-table-column label="频道" width="130">

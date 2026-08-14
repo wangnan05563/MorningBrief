@@ -140,7 +140,8 @@ async function handleLogin() {
   try {
     await userStore.login(form.username, form.password)
     ElMessage.success('登录成功')
-    router.push('/review')
+    // 登录后跳转到审核页（懒加载分块）；catch 避免分块瞬时拉取失败冒泡为 Uncaught
+    router.push('/review').catch((err) => console.warn('[Login] 跳转被拒绝（已静默处理）:', err?.message || err))
   } catch {
     // 错误提示由 axios 拦截器统一处理
   } finally {

@@ -15,13 +15,13 @@
         <div class="path-bar">
           <el-breadcrumb separator="/">
             <el-breadcrumb-item>
-              <el-link type="primary" :underline="false" @click="navigateTo('')">桶根</el-link>
+              <el-link type="primary" underline="never" @click="navigateTo('')">桶根</el-link>
             </el-breadcrumb-item>
             <el-breadcrumb-item v-for="(seg, idx) in pathSegments" :key="idx">
               <el-link
                 v-if="idx < pathSegments.length - 1"
                 type="primary"
-                :underline="false"
+                underline="never"
                 @click="navigateToSegment(idx)"
               >{{ seg }}</el-link>
               <span v-else>{{ seg }}</span>
