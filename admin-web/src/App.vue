@@ -44,7 +44,12 @@ function resolveTarget() {
 function syncModeRoute() {
   const target = resolveTarget()
   if (target && target !== route.path) {
-    router.replace(target)
+    // 目标路由为懒加载分块；若分块瞬时拉取失败（dev HMR 中断 / 网络抖动），
+    // router.replace 返回的 Promise 会 reject。此处 catch 避免冒泡为
+    // "Uncaught (in promise) TypeError: Failed to fetch dynamically imported module"
+    router
+      .replace(target)
+      .catch((err) => console.warn('[App] 路由重定向被拒绝（已静默处理）:', err?.message || err))
   }
 }
 

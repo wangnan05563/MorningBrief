@@ -103,6 +103,7 @@
             href="https://console.cloud.tencent.com/cam/capi"
             target="_blank"
             type="primary"
+            underline="hover"
           >
             获取 API 密钥（腾讯云控制台）
           </el-link>
@@ -110,6 +111,7 @@
             href="https://console.cloud.tencent.com/cos"
             target="_blank"
             type="primary"
+            underline="hover"
             style="margin-left: 16px"
           >
             管理存储桶 COS

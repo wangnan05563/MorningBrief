@@ -31,6 +31,7 @@
               :href="currentPreset.api_key_url"
               target="_blank"
               type="primary"
+              underline="hover"
               style="margin-left: 12px"
             >
               获取 API Key
@@ -218,6 +219,7 @@
                 href="https://ram.console.aliyun.com/manage/ak"
                 target="_blank"
                 type="primary"
+                underline="hover"
                 style="margin-right: 16px"
               >
                 AccessKey 管理
@@ -226,6 +228,7 @@
                 href="https://nls-portal.console.aliyun.com/applist"
                 target="_blank"
                 type="primary"
+                underline="hover"
               >
                 NLS 项目 AppKey
               </el-link>
@@ -1021,6 +1024,8 @@ async function loadConfig() {
       const matched = presets.value.find((p) => p.base_url === llmForm.value.base_url)
       if (matched) selectedPreset.value = matched.key
     }
+  } catch (e) {
+    // 拦截器已弹出错误提示；此处兜底，防止 Promise 拒绝冒泡为 uncaught rejection
   } finally {
     loading.value = false
   }
@@ -1081,6 +1086,9 @@ async function handleSave() {
     ElMessage.success('配置已保存并热更新')
     // 保存后重新加载配置，刷新 presetConfigs 中的脱敏值
     await loadConfig()
+    saving.value = false
+  } catch (e) {
+    // 拦截器已弹出错误提示；兜底重置保存按钮 loading 态，避免界面卡死
     saving.value = false
   } finally {
     loading.value = false
@@ -1163,6 +1171,9 @@ async function handleTestTTS() {
     }
     const data = await api.post('/ai/test-tts', payload)
     ttsTestResult.value = data
+    testingTts.value = false
+  } catch (e) {
+    ttsTestResult.value = { success: false, message: e.response?.data?.message || e.message || '连接测试失败' }
     testingTts.value = false
   } finally {
     loading.value = false
@@ -1321,7 +1332,11 @@ function applyCalculatorParams() {
 }
 
 onMounted(async () => {
-  await loadConfig()
+  try {
+    await loadConfig()
+  } catch (e) {
+    // loadConfig 内部已兜底，这里防止 onMounted 异步异常冒泡为 uncaught rejection
+  }
   applyCalculatorParams()
 })
 

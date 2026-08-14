@@ -178,7 +178,8 @@ async function handleCommand(command) {
   if (command === 'logout') {
     await ElMessageBox.confirm('确认退出登录？', '提示', { type: 'warning' })
     await userStore.logout()
-    router.push('/login')
+    // 登出后跳转到登录页（公开路由）；catch 避免导航被拒绝时冒泡为 Uncaught
+    router.push('/login').catch((err) => console.warn('[Layout] 跳转被拒绝（已静默处理）:', err?.message || err))
   }
 }
 </script>

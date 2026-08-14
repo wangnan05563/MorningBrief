@@ -13,8 +13,12 @@
  *   onUnmounted(unsubscribe)
  */
 
-// SSE 端点路径（相对根路径，EventSource 不走 axios baseURL）
-const SSE_ENDPOINT = '/admin/api/v1/events/stream'
+// SSE 端点路径（相对根路径，EventSource 不走 axios baseURL）。
+// 必须带 /news 前缀：与 axios baseURL 保持一致——
+//   dev：经 Vite 代理 /news/admin/api 转发后端；
+//   生产：经 Tailscale Funnel 的 --set-path /news/ 剥离前缀。
+// 若缺 /news，dev 下不被代理（直打 Vite 返回 404/SPA 兜底）、prod 下也不在 Funnel 路径内，两端都连不上。
+const SSE_ENDPOINT = '/news/admin/api/v1/events/stream'
 
 // 心跳超时：3 次心跳间隔（15s × 3 = 45s）未收到任何事件则重连
 const HEARTBEAT_TIMEOUT_MS = 45_000

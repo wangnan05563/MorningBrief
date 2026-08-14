@@ -38,6 +38,17 @@ function _shouldBlock() {
   return document.hidden || _isRestoring || _windowBlurred
 }
 
+// 网络请求（XHR / fetch / EventSource）的阻断判定：仅在『页面真正隐藏』或『恢复保护期』时拦截。
+// 关键点：不复用 _windowBlurred。
+//   开发者工具（DevTools）打开 / 切换设备仿真时，DevTools 面板抢走焦点会使页面 window 长期处于
+//   blur 态（_windowBlurred=true），但页面本身仍可见、并非后台标签页。若据此拦截 XHR/fetch，
+//   开发期在 DevTools 内触发的请求（例如切换设备仿真后进入移动端首页拉取 dashboard-summary）
+//   会被守卫丢弃并表现为 "Network Error"。因此网络拦截只认 document.hidden / 恢复保护期。
+//   窗口激活类 API（focus/open/title 等）仍保留 _windowBlurred 拦截（那是 Edge 最小化竞态所需）。
+function _shouldBlockNetwork() {
+  return document.hidden || _isRestoring
+}
+
 // 保存所有原始方法的引用
 const _orig = {}
 
@@ -149,8 +160,8 @@ function _installHooks() {
   if (window.EventSource) {
     _orig.EventSource = window.EventSource
     window.EventSource = function (url, config) {
-      if (_shouldBlock()) {
-        console.debug('[window-guard] 页面隐藏时阻止 EventSource 创建:', url)
+      if (_shouldBlockNetwork()) {
+        console.debug('[window-guard] 页面不可见/恢复保护期时阻止 EventSource 创建:', url)
         // 返回一个已关闭的假 EventSource，防止调用方报错
         const fake = {
           readyState: _orig.EventSource.CLOSED,
@@ -174,9 +185,9 @@ function _installHooks() {
   // 返回 rejected Promise，让 axios 拦截器走 error 分支（silent 请求不弹提示）
   _orig.fetch = window.fetch.bind(window)
   window.fetch = function (input, init) {
-    if (_shouldBlock()) {
+    if (_shouldBlockNetwork()) {
       const url = typeof input === 'string' ? input : input?.url
-      console.debug('[window-guard] 页面隐藏时阻止 fetch:', url)
+      console.debug('[window-guard] 页面不可见/恢复保护期时阻止 fetch:', url)
       return Promise.reject(new TypeError('Failed to fetch: page is hidden'))
     }
     return _orig.fetch(input, init)
@@ -188,8 +199,8 @@ function _installHooks() {
   _orig.xhrSend = XMLHttpRequest.prototype.send
   XMLHttpRequest.prototype.open = function (method, url, ...rest) {
     this._guardUrl = url
-    if (_shouldBlock()) {
-      console.debug('[window-guard] 页面隐藏时阻止 XHR.open:', method, url)
+    if (_shouldBlockNetwork()) {
+      console.debug('[window-guard] 页面不可见/恢复保护期时阻止 XHR.open:', method, url)
       this._guardBlocked = true
     }
     return _orig.xhrOpen.call(this, method, url, ...rest)
