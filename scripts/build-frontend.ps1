@@ -2,7 +2,7 @@
 .SYNOPSIS
     MorningBrief 前端构建脚本（admin-web）
 .DESCRIPTION
-    构建 admin-web Vue 项目，产物输出到 admin-web/dist/。
+    构建 apps/admin-web Vue 项目，产物输出到 apps/admin-web/dist/。
     V1.2 起由 FastAPI StaticFiles 服务此目录（单机 exe 模式）。
 .PARAMETER SkipInstall
     跳过 npm 依赖安装（仅依赖无变更时用）。
@@ -26,7 +26,7 @@ function Write-OK    { param([string]$Message) Write-Host "$StepPrefix   [OK] $M
 function Write-Warn  { param([string]$Message) Write-Host "$StepPrefix   [WARN] $Message" -ForegroundColor Yellow }
 
 $Script:ProjectRoot = (Resolve-Path "$PSScriptRoot\..").Path
-$Script:FrontendDir = Join-Path $ProjectRoot "admin-web"
+$Script:FrontendDir = Join-Path $ProjectRoot "apps/admin-web"
 $Script:DistDir     = Join-Path $FrontendDir "dist"
 
 Write-Host ""
@@ -108,7 +108,7 @@ if ($nodeVersion) {
 }
 
 if (-not (Test-Path $FrontendDir)) {
-    Write-Host "[ERROR] admin-web 目录不存在: $FrontendDir" -ForegroundColor Red
+    Write-Host "[ERROR] apps/admin-web 目录不存在: $FrontendDir" -ForegroundColor Red
     exit 1
 }
 
@@ -190,12 +190,12 @@ try {
 # 校验产物
 $indexFile = Join-Path $DistDir "index.html"
 if (Test-Path $indexFile) {
-    Write-OK "构建完成，产物位于 admin-web\dist\"
+    Write-OK "构建完成，产物位于 apps/admin-web\dist\"
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Green
     Write-Host "  前端构建成功！" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
-    Write-Host "  产物目录: admin-web\dist\"
+    Write-Host "  产物目录: apps/admin-web\dist\"
     Write-Host "  部署方式: FastAPI StaticFiles 服务（单机 exe 模式）"
     Write-Host "  下一步:   运行 scripts\build-exe.ps1 打包 exe"
     Write-Host "========================================" -ForegroundColor Green

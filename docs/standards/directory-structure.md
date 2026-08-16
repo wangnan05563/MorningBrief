@@ -146,3 +146,46 @@
 | 文档 | `docs/`（含 `docs/reports/`、`docs/test-reports/`、`docs/sonar-reports/`、`docs/standards/`） | 设计/测试/评审/规范 |
 | 独立部署/运行时 | `miniprogram/`、`scf/`、`data/`、`assets/`、`node_modules/` | 各有部署或运行契约，保留根目录 |
 | 根配置 | `installer.iss`、`MorningBrief.spec`、`sonar-project.properties`、`.gitignore`、`cleanup-config.yaml` | 构建/扫描/清理配置 |
+
+---
+
+## 2026-08-16 完整分桶重组（apps / backend / scripts / docs / release / runtime）
+
+### 背景（续第一轮规范化）
+
+第一轮（上文 2026-08-16）仅做了「安全归并」（jmeter_test/reports/canvas-design 入 scripts/docs），根目录仍有 `admin-web/`、`miniprogram/`、`scf/`、`dist/`、`build/`、`assets/`、`data/`、`logs/` 共 8 个功能性目录 + `node_modules/`，顶层偏多。本轮按用户确认的「完整分桶」方案，将其归入 6 个标准顶层桶，根目录归一为 7 个目录（+ `node_modules/`）。
+
+### 执行动作（完整分桶）
+
+| 原路径 | 新路径 | 说明 |
+|---|---|---|
+| `admin-web/` | `apps/admin-web/` | 前端 Vue SPA；同步更新 ci.yml、5 个构建/打包脚本、运行时 `backend/app/paths.py:136`、`installer.iss`/`MorningBrief.spec` 图标与打包路径 |
+| `miniprogram/` | `apps/miniprogram/` | 微信小程序客户端 |
+| `scf/` | `apps/scf/` | 腾讯云 SCF，部署契约由 `scf/xxx.handler` 更新为 `apps/scf/xxx.handler` |
+| `dist/` | `release/dist/` | 打包 exe 交付物（gitignore）；`build-exe.ps1`/`installer.iss`/`MorningBrief.spec` 同步改 `release/dist/MorningBrief` |
+| `build/` | `release/build/` | PyInstaller 中间目录（gitignore）；`build-exe.ps1` 清理列表同步改 `release/build` |
+| `assets/` | `release/assets/` | 安装包图标 `MorningBrief.ico`，被 `installer.iss`/`MorningBrief.spec` 引用，改为 `release/assets/MorningBrief.ico` |
+| `data/` | `runtime/data/` | cloudflared/cpolar 隧道二进制（dev 真实库在 `backend/data/`，不在本次移动范围） |
+| `logs/` | `runtime/logs/` | 运行态日志（gitignore）；`start.ps1`/`cleanup-config.yaml` `logs_dir`/`preserve_roots`/`service_indicators` 同步改 `runtime/logs` |
+| `canvas-fonts/` | （删除） | 空目录，无引用，直接移除 |
+
+> 冻结态（exe 模式）SPA 拷贝名保持 `admin-web/dist`：`build-exe.ps1` 复制到 `release/dist/MorningBrief/admin-web/dist`，`backend/app/paths.py:126` 的 `ext_dist` 仍按 `admin-web/dist` 解析（exe 同级子目录名，与源码树位置无关）。仅开发态路径 `paths.py:136`（`app_root.parent`）改 `apps/admin-web/dist`。
+
+### 规范化目标布局（当前实际结构）
+
+| 分类 | 目录 | 备注 |
+|---|---|---|
+| 前端 | `apps/admin-web/`（即 frontend） | Vue SPA，CI/构建/运行时硬编码引用，保持原名置于 `apps/` 下 |
+| 小程序 | `apps/miniprogram/` | 微信小程序客户端，独立部署 |
+| 云函数 | `apps/scf/` | 腾讯云 SCF，部署契约 `apps/scf/xxx.handler` |
+| 后端 | `backend/` | FastAPI 应用 + `backend/app`（服务源码） |
+| 脚本 | `scripts/`（含 `scripts/jmeter_test/`、`scripts/canvas-design/`） | 构建/打包/压测/素材生成/运维工具 |
+| 构建产物/打包 | `release/dist/`（含 `release/dist/MorningBrief/` 打包 exe）、`release/build/`（PyInstaller 中间目录）、`release/assets/`（安装包图标 `MorningBrief.ico`） | 交付物与安装包资源 |
+| 运行时数据/日志 | `runtime/data/`（隧道二进制 + audio_cache）、`runtime/logs/`（运行态日志，gitignore） | 运行时产物，被 `paths.py`/`start.ps1`/`cleanup-config.yaml` 解析 |
+| 文档 | `docs/`（含 `docs/reports/`、`docs/test-reports/`、`docs/sonar-reports/`、`docs/standards/`） | 设计/测试/评审/规范 |
+| 根配置 | `installer.iss`、`MorningBrief.spec`、`sonar-project.properties`、`.gitignore`、`cleanup-config.yaml` | 构建/扫描/清理配置 |
+
+### 根目录最终形态
+
+- 目录（7）：`apps/` `backend/` `docs/` `release/` `runtime/` `scripts/` + `node_modules/`（gitignore）
+- 文件（4）：`cleanup-config.yaml` `installer.iss` `MorningBrief.spec` `sonar-project.properties`

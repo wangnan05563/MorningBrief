@@ -17,7 +17,7 @@ echo   4. PyInstaller packaging
 echo   5. Copy external resources
 echo   6. Generate installer (Inno Setup, auto-install if missing)
 echo.
-echo Output: dist\MorningBrief\MorningBrief.exe
+echo Output: release\dist\MorningBrief\MorningBrief.exe
 echo.
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build-exe.ps1" %*
@@ -34,9 +34,9 @@ echo.
 echo ========================================
 echo   Build Complete!
 echo ========================================
-echo   Output dir: dist\MorningBrief\
-echo   EXE:        dist\MorningBrief\MorningBrief.exe
-echo   Installer:  dist\MorningBrief-Setup-v*.exe (if Inno Setup enabled)
+echo   Output dir: release\dist\MorningBrief\
+echo   EXE:        release\dist\MorningBrief\MorningBrief.exe
+echo   Installer:  release\dist\MorningBrief-Setup-v*.exe (if Inno Setup enabled)
 echo.
 echo   Notes:
 echo   - V1.2: SQLite embedded + TTLCache, no MySQL/Redis/Docker needed

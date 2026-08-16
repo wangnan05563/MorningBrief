@@ -24,7 +24,7 @@ echo.
 echo ========================================
 echo   Frontend Build Complete!
 echo ========================================
-echo   Output dir: admin-web\dist\
+echo   Output dir: apps/admin-web\dist\
 echo   Served by FastAPI StaticFiles (in exe mode)
 echo ========================================
 pause

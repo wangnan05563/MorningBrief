@@ -20,7 +20,7 @@
 ### 1.2 生产环境实际指向
 
 **证据**：
-- `miniprogram/utils/config.js:17`：`cosBaseUrl: 'https://cos.example.com'`（占位符，COS 未实际接入）
+- `apps/miniprogram/utils/config.js:17`：`cosBaseUrl: 'https://cos.example.com'`（占位符，COS 未实际接入）
 - `backend/app/services/tunnel_providers.py:785`：Tailscale 启动后 `public_url = f"https://{host}{self._path_prefix}"`
 
 **结论**：生产环境 audio_url 形如：
@@ -91,7 +91,7 @@ https://desktop-g10o4nl.tailbca47.ts.net/news/audio/episodes/20260727/tech_wf-xx
 
 ### P0 - 接入 COS/CDN 分发音频（最大收益）
 
-**当前状态**：COS 客户端代码已就绪（`backend/app/cos/client.py` + `backend/app/workflow/tts/uploader.py`），但 `miniprogram/utils/config.js:17` 是占位符，COS 未实际配置。
+**当前状态**：COS 客户端代码已就绪（`backend/app/cos/client.py` + `backend/app/workflow/tts/uploader.py`），但 `apps/miniprogram/utils/config.js:17` 是占位符，COS 未实际配置。
 
 **方案**：
 1. 在 `.env` 配置真实的腾讯云 COS 凭证

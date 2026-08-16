@@ -117,7 +117,7 @@ npm run build
 cd ..
 ```
 
-确认 `docker-compose.yml` 中 nginx 服务下 `./admin-web/dist:/usr/share/nginx/html/admin:ro` 挂载行已启用（默认已启用，无需改动）。
+确认 `docker-compose.yml` 中 nginx 服务下 `./apps/admin-web/dist:/usr/share/nginx/html/admin:ro` 挂载行已启用（默认已启用，无需改动）。
 
 ### 2.3 启动服务
 
@@ -155,7 +155,7 @@ curl http://localhost/docs
    volumes:
      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
      - ./nginx/ssl:/etc/nginx/ssl:ro   # 取消该行注释
-     - ./admin-web/dist:/usr/share/nginx/html/admin:ro
+     - ./apps/admin-web/dist:/usr/share/nginx/html/admin:ro
    ```
 
 3. 修改 `nginx/nginx.conf` 中 `server_name` 为真实域名（默认 `api.example.com`）。
@@ -167,9 +167,9 @@ curl http://localhost/docs
 
 ## 4. 微信小程序发布
 
-1. 用「微信开发者工具」打开 `miniprogram/` 目录。
-2. 修改 `miniprogram/project.config.json` 中 `appid` 为真实小程序 appid（默认占位 `wx0000000000000000`）。
-3. 修改 `miniprogram/services/api.js` 中生产环境 `BASE_URL` 为真实域名：
+1. 用「微信开发者工具」打开 `apps/miniprogram/` 目录。
+2. 修改 `apps/miniprogram/project.config.json` 中 `appid` 为真实小程序 appid（默认占位 `wx0000000000000000`）。
+3. 修改 `apps/miniprogram/services/api.js` 中生产环境 `BASE_URL` 为真实域名：
 
    ```js
    const BASE_URL = (typeof __wxConfig !== 'undefined' && __wxConfig.envVersion === 'release')
@@ -213,5 +213,5 @@ curl http://localhost/admin/api/v1/workflows/today
 | `app` 容器启动失败 | 检查 `backend/.env` 是否有未替换占位符；检查 MySQL/Redis 连通性：`docker exec news_app python -c "import redis, pymysql; ..."` |
 | 工作流卡住 | 查 `workflow_step` 表当前状态；检查 LLM/TTS API 配额是否耗尽；查 `logs/` 下工作流日志 |
 | 小程序登录失败 | 确认 `WX_APPID/WX_SECRET` 正确；检查服务器到微信 `api.weixin.qq.com` 网络；确认小程序后台已配置 request 合法域名 |
-| 前端 404 | 确认 `admin-web/dist/` 存在且已构建；确认 nginx 挂载未注释 |
+| 前端 404 | 确认 `apps/admin-web/dist/` 存在且已构建；确认 nginx 挂载未注释 |
 | 502 Bad Gateway | `app` 容器未就绪或崩溃，`docker compose ps` 查状态，`docker compose logs app` 查错误 |

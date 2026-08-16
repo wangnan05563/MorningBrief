@@ -103,9 +103,9 @@ function Invoke-Safe {
 # ============================================================
 
 $Script:ProjectRoot  = (Resolve-Path "$PSScriptRoot\..").Path
-$Script:FrontendDir  = Join-Path $ProjectRoot "admin-web"
-$Script:LogsDir      = Join-Path $ProjectRoot "logs"
-$Script:DataDir      = Join-Path $ProjectRoot "data"
+$Script:FrontendDir  = Join-Path $ProjectRoot "apps/admin-web"
+$Script:LogsDir      = Join-Path $ProjectRoot "runtime\logs"
+$Script:DataDir      = Join-Path $ProjectRoot "runtime\data"
 $Script:EnvFile      = Join-Path $ProjectRoot "backend\.env"
 $Script:EnvExample   = Join-Path $ProjectRoot "backend\.env.example"
 $Script:Requirements = Join-Path $ProjectRoot "backend\requirements.txt"
@@ -240,10 +240,10 @@ Write-OK "数据目录就绪 (data/audio_cache, logs)"
 
 Write-Step "[4/6] 检查前端构建产物"
 
-# V1.2 起前端由 FastAPI StaticFiles 服务，需 admin-web/dist 存在
-$adminDist = Join-Path $ProjectRoot "admin-web\dist"
+# V1.2 起前端由 FastAPI StaticFiles 服务，需 apps/admin-web/dist 存在
+$adminDist = Join-Path $ProjectRoot "apps/admin-web\dist"
 if (Test-Path (Join-Path $adminDist "index.html")) {
-    Write-OK "前端构建产物已就绪（admin-web/dist/）"
+    Write-OK "前端构建产物已就绪（apps/admin-web/dist/）"
 } else {
     Write-Warn "前端未构建，请先运行 scripts\build-frontend.ps1"
 }
