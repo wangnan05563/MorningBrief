@@ -102,3 +102,47 @@
 1. **venv 依赖修复**（同前）：`backend` 导入报 `ModuleNotFoundError: loguru`，建议 `pip install -r backend/requirements.txt`。
 2. **周期性维护**：缓存类垃圾再生快，建议每月或每个里程碑后运行一次 workspace-cleanup。
 3. **`.tmp/`/`.run/` 待定项**：这两目录含调试脚本与运行态文件，本轮未清理；若确认其中脚本已无用，可纳入下一轮分类。
+
+---
+
+## 2026-08-16 目录重组（规范化分类评估与执行）
+
+### 背景
+
+用户要求按功能把项目重组为 6 个标准目录并评估合理性：
+
+> 前端 → `frontend`、后端 → `backend`、自动化/工具脚本 → `script`、构建产物/打包输出 → `dist`、运行日志 → `log`、项目文档 → `docs`，所有现存文件按此分类迁移。
+
+### 评估结论（是否合理）
+
+**部分合理，但不可直接套用，否则破坏构建与运行态：**
+
+1. **`admin-web` 即事实上的前端**，但被硬编码引用 10+ 处：`ci.yml`（7 处 `cd admin-web`/`npm ci`/`playwright`）、5 个构建/打包脚本（`build-exe.ps1`、`build-frontend.ps1`、`generate-icons.ps1`、`setup-env.ps1`、两个 `.bat`）、**运行时 SPA 解析器** `backend/app/paths.py:126/136`（`app_root / "admin-web" / "dist"`）、`installer.iss` 打包逻辑（`build-exe.ps1` 复制到 `dist\admin-web\dist`）。改名 `frontend` 会导致后台全 404 + 打包失败，需同步改 10+ 文件并跑通验证 → **保留原名，在文档中标注为前端目录**。
+2. **命名 `script`/`log`（单数）与生态惯例及现有 `cleanup-config.yaml`（`scripts`/`logs` 复数）冲突** → 保持复数。
+3. **6 类覆盖不全**：`miniprogram`（独立小程序客户端）、`scf`（云函数，独立部署契约 `scf/xxx.handler`）、`data`（SQLite + cloudflared/cpolar 隧道二进制）、`node_modules`（依赖）、`assets`（安装包图标，被 `installer.iss` 引用）、`canvas-design`（素材生成工具）、`jmeter_test`（压测工具）、`reports`（评审纪要）、`installer.iss`/`MorningBrief.spec`（构建配置）无归宿。
+4. **`build/` vs `dist/` 重叠**：`dist/` 已承载打包 exe（`dist/MorningBrief/`）；`build/MorningBrief/` 是 PyInstaller 中间目录（应 gitignore，非交付物）。
+
+### 执行动作（低风险的「安全归并」，未做任何破坏构建/运行态的改名）
+
+| 原路径 | 新路径 | 说明 |
+|---|---|---|
+| `jmeter_test/` | `scripts/jmeter_test/` | 性能压测工具归入脚本目录；仅 `docs` 两处引用同步更新 |
+| `reports/` | `docs/reports/` | 评审/复盘纪要归入文档目录 |
+| `canvas-design/` | `scripts/canvas-design/` | 素材生成工具（脚本 + 图片）归入脚本目录 |
+| `scf/` | **保留根目录** | 独立部署的云函数，设计文档明确为项目根目录且有 `scf/xxx.handler` 部署契约，移入 `backend/` 会破坏该契约（与 `miniprogram` 同类） |
+| `miniprogram/`、`assets/`、`data/`、`node_modules/`、`installer.iss`、`MorningBrief.spec` | **保留根目录** | 各有引用（installer.iss 引用 `assets\`、运行时二进制、依赖）或属运行时/依赖，不可移动 |
+
+- 同步修正 `.gitignore`：移除过度宽泛的 `reports`、`jmeter_test` 两行（无斜杠锚点，会误忽略新建的 `docs/reports`、`scripts/jmeter_test`），确保迁移后目录正常纳入版本控制。
+
+### 规范化目标布局（当前实际结构）
+
+| 分类 | 目录 | 备注 |
+|---|---|---|
+| 前端 | `admin-web/`（即 frontend） | Vue SPA，被 CI/构建/运行时硬编码引用，暂不改名 |
+| 后端 | `backend/` | FastAPI 应用 + `backend/app`（服务源码） |
+| 脚本 | `scripts/`（含 `scripts/jmeter_test/`、`scripts/canvas-design/`） | 构建/打包/压测/素材生成工具 |
+| 构建产物 | `dist/`（含 `dist/MorningBrief/` 打包 exe）、`build/` | 交付物，运行时伺服根 |
+| 日志 | `logs/` | 运行态日志（gitignore），运行时 `paths.py` 解析 |
+| 文档 | `docs/`（含 `docs/reports/`、`docs/test-reports/`、`docs/sonar-reports/`、`docs/standards/`） | 设计/测试/评审/规范 |
+| 独立部署/运行时 | `miniprogram/`、`scf/`、`data/`、`assets/`、`node_modules/` | 各有部署或运行契约，保留根目录 |
+| 根配置 | `installer.iss`、`MorningBrief.spec`、`sonar-project.properties`、`.gitignore`、`cleanup-config.yaml` | 构建/扫描/清理配置 |
