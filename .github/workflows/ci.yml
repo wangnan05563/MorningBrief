@@ -73,24 +73,24 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ hashFiles('admin-web/package-lock.json') }}
+          key: ${{ runner.os }}-npm-${{ hashFiles('apps/admin-web/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-npm-
 
       - name: 安装前端依赖
         # 使用 npmmirror 镜像，规避默认 registry 在 CI 环境的偶发配置问题
-        run: cd admin-web && npm ci --registry=https://registry.npmmirror.com
+        run: cd apps/admin-web && npm ci --registry=https://registry.npmmirror.com
 
       - name: 构建前端
-        run: cd admin-web && npm run build
+        run: cd apps/admin-web && npm run build
 
       - name: 安装 Playwright 浏览器
-        run: cd admin-web && npx playwright install --with-deps chromium
+        run: cd apps/admin-web && npx playwright install --with-deps chromium
 
       - name: 运行 E2E 测试
         # playwright.config.js 已配置 screenshot: only-on-failure，
         # 失败截图自动落入 test-results/ 目录，无需额外步骤
-        run: cd admin-web && npx playwright test
+        run: cd apps/admin-web && npx playwright test
 
       - name: 上传 Playwright 报告
         # always() 保证测试失败时也能拿到报告用于排查
@@ -98,7 +98,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: admin-web/playwright-report/
+          path: apps/admin-web/playwright-report/
           retention-days: 7
 
   # ==========================================================================

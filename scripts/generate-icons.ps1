@@ -5,12 +5,12 @@
     使用 .NET System.Drawing 绘制与 favicon.svg 相同的设计：
     圆角方形青色渐变背景 + 白色声波线条（播客新闻产品定位）
     生成产物：
-    - admin-web/public/favicon-16x16.png
-    - admin-web/public/favicon-32x32.png
-    - admin-web/public/apple-touch-icon.png (180x180)
-    - admin-web/public/android-chrome-192x192.png
-    - admin-web/public/android-chrome-512x512.png
-    - assets/MorningBrief.ico（多尺寸：16/32/48/64/128/256）
+    - apps/admin-web/public/favicon-16x16.png
+    - apps/admin-web/public/favicon-32x32.png
+    - apps/admin-web/public/apple-touch-icon.png (180x180)
+    - apps/admin-web/public/android-chrome-192x192.png
+    - apps/admin-web/public/android-chrome-512x512.png
+    - release/assets/MorningBrief.ico（多尺寸：16/32/48/64/128/256）
 .NOTES
     无需安装任何依赖，使用 Windows 自带 .NET GDI+。
     ICO 采用 PNG 编码（Vista+ 支持），文件更小且支持 256 色深。
@@ -108,8 +108,8 @@ function New-IconBitmap {
 # 生成 PNG 图标
 # ============================================================
 
-$publicDir = "admin-web\public"
-$assetsDir = "assets"
+$publicDir = "apps/admin-web\public"
+$assetsDir = "release/assets"
 
 # 确保目录存在
 New-Item -ItemType Directory -Force $publicDir | Out-Null

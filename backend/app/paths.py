@@ -132,8 +132,8 @@ def resolve_admin_dist() -> Path | None:
             packed = Path(meipass) / "app" / "static" / "admin" / "dist"
             if packed.exists():
                 return packed
-    # 开发态：项目根目录下的 admin-web/dist（vite 构建产物）
-    dev_dist = app_root.parent / "admin-web" / "dist"
+    # 开发态：项目根目录下的 apps/admin-web/dist（vite 构建产物）
+    dev_dist = app_root.parent / "apps" / "admin-web" / "dist"
     return dev_dist if dev_dist.exists() else None
 
 

@@ -48,8 +48,8 @@ $buildVenv      = ".venv-build"
 $buildPython    = "$buildVenv\Scripts\python.exe"
 $buildPyInstaller = "$buildVenv\Scripts\pyinstaller.exe"
 $buildReadyMark = "$buildVenv\.MorningBrief-build-ready"
-$distDir        = "dist\MorningBrief"
-$frontendDir    = "admin-web"
+$distDir        = "release\dist\MorningBrief"
+$frontendDir    = "apps/admin-web"
 $specFile       = "MorningBrief.spec"
 $backendDir     = "backend"
 
@@ -126,7 +126,7 @@ function Invoke-BuildPip {
 
 if ($Clean) {
     Write-Step "[Clean] 清理所有缓存..."
-    foreach ($p in @(".venv-build", "admin-web\node_modules", "dist", "build")) {
+    foreach ($p in @(".venv-build", "apps/admin-web\node_modules", "release/dist", "release/build")) {
         if (Test-Path $p) {
             Write-Host "  删除 $p" -ForegroundColor DarkGray
             Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue
@@ -434,10 +434,10 @@ AppVersion={#MyAppVersion}
 AppPublisher=MorningBrief
 DefaultDirName={autopf}\MorningBrief
 DefaultGroupName=MorningBrief
-; 复用产品图标（assets\MorningBrief.ico，与 exe 同源），避免安装包显示 Inno 默认图标
-SetupIconFile=assets\MorningBrief.ico
+; 复用产品图标（release\assets\MorningBrief.ico，与 exe 同源），避免安装包显示 Inno 默认图标
+SetupIconFile=release\assets\MorningBrief.ico
 UninstallDisplayIcon={app}\MorningBrief.exe
-OutputDir=dist
+OutputDir=release/dist
 OutputBaseFilename=MorningBrief-Setup-v{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
@@ -449,7 +449,7 @@ DisableProgramGroupPage=yes
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加:"
 [Files]
 ; 打包 dist/MorningBrief/ 下所有文件（排除日志和数据）
-Source: "dist\MorningBrief\*"; DestDir: "{app}"; Excludes: "*.log,logs\*,data\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "release\dist\MorningBrief\*"; DestDir: "{app}"; Excludes: "*.log,logs\*,data\*"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
 Name: "{group}\MorningBrief"; Filename: "{app}\MorningBrief.exe"
 Name: "{commondesktop}\MorningBrief"; Filename: "{app}\MorningBrief.exe"; Tasks: desktopicon
@@ -478,7 +478,7 @@ Filename: "{app}\MorningBrief.exe"; Description: "启动 MorningBrief"; Flags: n
         if ($LASTEXITCODE -ne 0) {
             Write-Warn "安装包编译失败"
         } else {
-            $setupExe = "dist\MorningBrief-Setup-v$version.exe"
+            $setupExe = "release\dist\MorningBrief-Setup-v$version.exe"
             Write-OK "安装包已生成: $setupExe"
         }
     }

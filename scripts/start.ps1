@@ -5,12 +5,12 @@
     智能启动 MorningBrief 后端服务：
     1. 优先启动开发模式（.venv + backend\launcher.py）
     2. 回退到系统 python 开发模式
-    3. 最后回退到已构建的 exe（dist\MorningBrief\MorningBrief.exe）
+    3. 最后回退到已构建的 exe（release\dist\MorningBrief\MorningBrief.exe）
     启动后写入 PID 到 .run\MorningBrief.pid，供 stop.ps1 使用。
 .PARAMETER Dev
     强制开发模式（venv 优先，回退系统 python），忽略 exe。
 .PARAMETER Exe
-    强制 exe 模式（要求 dist\MorningBrief\MorningBrief.exe 存在）。
+    强制 exe 模式（要求 release\dist\MorningBrief\MorningBrief.exe 存在）。
 .EXAMPLE
     .\start.ps1
     自动选择模式（优先 venv → 系统 python → exe）。
@@ -41,7 +41,7 @@ function Write-Err   { param([string]$Message) Write-Host "$StepPrefix   [FAIL] 
 # ============================================================
 
 $Script:ProjectRoot = (Resolve-Path "$PSScriptRoot\..").Path
-$Script:ExePath     = Join-Path $ProjectRoot "dist\MorningBrief\MorningBrief.exe"
+$Script:ExePath     = Join-Path $ProjectRoot "release\dist\MorningBrief\MorningBrief.exe"
 # 支持多种常见 venv 目录名（.venv / .venv-build / venv），按优先级取第一个存在的
 # 原因：项目构建环境可能使用 .venv-build 而非标准 .venv，避免回退到缺依赖的系统 Python
 $Script:VenvPython  = $null
@@ -59,7 +59,7 @@ $sysPyCmd = Get-Command python -ErrorAction SilentlyContinue
 if ($sysPyCmd) { $Script:SystemPython = $sysPyCmd.Source }
 $Script:RunDir      = Join-Path $ProjectRoot ".run"
 $Script:PidFile     = Join-Path $RunDir "MorningBrief.pid"
-$Script:LogFile     = Join-Path $ProjectRoot "logs\service-start.log"
+$Script:LogFile     = Join-Path $ProjectRoot "runtime\logs\service-start.log"
 
 # ============================================================
 # 模式选择
@@ -190,7 +190,7 @@ if (-not (Test-Path $RunDir)) {
 }
 
 # logs 目录（启动日志输出位置）
-$logsDir = Join-Path $ProjectRoot "logs"
+$logsDir = Join-Path $ProjectRoot "runtime\logs"
 if (-not (Test-Path $logsDir)) {
     New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
 }
@@ -208,7 +208,7 @@ Write-Step "[3/3] 启动服务进程"
 # Start-Process -RedirectStandardOutput 直接重定向，避开 cmd 引号解析
 # -PassThru 返回真正的服务进程 PID（非 cmd 包装窗口 PID），简化 PID 跟踪
 # PS 限制：-RedirectStandardOutput 与 -RedirectStandardError 不能指向同一文件
-$errLogFile = Join-Path $ProjectRoot "logs\service-error.log"
+$errLogFile = Join-Path $ProjectRoot "runtime\logs\service-error.log"
 
 try {
     if ($mode -eq "exe") {
@@ -305,7 +305,7 @@ if ($ready) {
     Write-Host "  健康检查:    $healthUrl"
     Write-Host "  API 文档:    http://${host_}:${port}/docs"
     Write-Host "  运营后台:    http://${host_}:${port}/admin/"
-    Write-Host "  日志窗口:    请查看 logs/service-start.log"
+    Write-Host "  日志窗口:    请查看 runtime/logs/service-start.log"
     Write-Host ""
     Write-Host "  停止服务:    双击 scripts\停止服务.bat" -ForegroundColor Cyan
     Write-Host "============================================================" -ForegroundColor Green
@@ -313,7 +313,7 @@ if ($ready) {
     Write-Warn "服务已启动但 30 秒内未通过健康检查"
     Write-Host "  可能仍在初始化，或 .env 配置有误" -ForegroundColor Gray
     Write-Host "  手动验证: $healthUrl" -ForegroundColor Gray
-    Write-Host "  查看日志:   请查看 logs/service-start.log" -ForegroundColor Gray
+    Write-Host "  查看日志:   请查看 runtime/logs/service-start.log" -ForegroundColor Gray
 }
 
 Write-Host ""

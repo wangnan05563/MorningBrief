@@ -13,7 +13,7 @@ MorningBrief PyInstaller 打包配置
           llm/sensitive_words.txt
           tts/voices.yaml    ← TTS 音色配置
     .env                     ← 配置文件（外置，用户编辑）
-    admin-web/dist/          ← 前端构建产物（外置，由 FastAPI StaticFiles 服务）
+    apps/admin-web/dist/      ← 前端构建产物（外置，由 FastAPI StaticFiles 服务）
 
 注意事项：
 - V1.2 起爬虫改为 httpx + selectolax，无 scrapy/playwright 动态导入
@@ -173,7 +173,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=os.path.join(_project_root, 'assets', 'MorningBrief.ico'),  # exe 应用图标
+    icon=os.path.join(_project_root, 'release', 'assets', 'MorningBrief.ico'),  # exe 应用图标
 )
 
 # ============================================================
