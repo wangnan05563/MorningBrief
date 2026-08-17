@@ -86,7 +86,7 @@ App({
           const { token, user } = await login();
           this.globalData.token = token;
           this.globalData.userInfo = user;
-          console.log('登录成功');
+          console.warn('登录成功');
           // 登录成功后检查是否需要首次偏爱频道引导
           // 放在这里而不是 onLaunch 末尾：未登录场景下 getOpenid() 返回空，
           // isPreferredChannelsOnboarded 仍能读取全局 ONBOARDED_KEY，但语义上希望引导绑定到登录态，
@@ -97,7 +97,7 @@ App({
           }
         } catch (err) {
           // 输出 baseUrl 辅助诊断：真机调试时最常见的失败原因是手机与电脑不在同一网段
-          console.log('登录未执行（可忽略，不影响播放）:', err.message, '| baseUrl:', this.globalData.baseUrl);
+          console.warn('登录未执行（可忽略，不影响播放）:', err.message, '| baseUrl:', this.globalData.baseUrl);
         }
       })();
 
@@ -106,10 +106,10 @@ App({
         // 结果存入 globalData.todayEpisode 供首页 onLoad 立即取用，避免等待 readyPromise
         try {
           this.globalData.todayEpisode = await fetchTodayEpisode();
-          console.log('预加载今日节目成功:', this.globalData.todayEpisode?.title);
+          console.warn('预加载今日节目成功:', this.globalData.todayEpisode?.title);
         } catch (err) {
           // 输出 baseUrl 辅助诊断：真机调试时最常见的失败原因是手机与电脑不在同一网段
-          console.log('预加载今日节目失败:', err.message, '| baseUrl:', this.globalData.baseUrl);
+          console.warn('预加载今日节目失败:', err.message, '| baseUrl:', this.globalData.baseUrl);
         }
       })();
 
@@ -191,7 +191,7 @@ App({
     if (typeof __wxConfig !== 'undefined' && __wxConfig.envVersion !== 'release') return;
     const updateManager = wx.getUpdateManager();
     updateManager.onCheckForUpdate((res) => {
-      if (res.hasUpdate) console.log('检测到新版本');
+      if (res.hasUpdate) console.warn('检测到新版本');
     });
     updateManager.onUpdateReady(() => {
       wx.showModal({

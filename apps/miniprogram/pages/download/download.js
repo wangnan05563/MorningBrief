@@ -29,6 +29,8 @@ Page({
       if (!map[cid]) {
         map[cid] = { channelId: cid, channelName: r.channelName || '未命名课程', items: [] };
       }
+      r.titleText = this.formatItemTitle(r);
+      r.subText = this.formatItemSub(r);
       map[cid].items.push(r);
     });
     const groups = Object.keys(map).map((k) => map[k]);
@@ -51,6 +53,26 @@ Page({
       i++;
     }
     return (i === 0 ? n : n.toFixed(1)) + ' ' + units[i];
+  },
+
+  formatItemTitle(r) {
+    return r.title || ('章节 ' + r.episodeId);
+  },
+
+  formatItemSub(r) {
+    let s = '';
+    if (r.duration) {
+      s += r.duration + ' 秒';
+    }
+    if (r.size) {
+      if (s) s += ' · ';
+      if (r.size >= 1048576) {
+        s += (r.size / 1048576).toFixed(1) + ' MB';
+      } else {
+        s += Math.ceil(r.size / 1024) + ' KB';
+      }
+    }
+    return s;
   },
 
   _fmtDur(sec) {

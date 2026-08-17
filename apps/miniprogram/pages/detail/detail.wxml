@@ -18,6 +18,43 @@
   </view>
 
   <block wx:else>
+    <!-- 顶部稿件图片轮播：进页自动从文稿解析，按出现顺序；自动播放 + 手动切换 + 加载失败占位 -->
+    <view class="card carousel-card" wx:if="{{carouselImages.length > 0}}">
+      <swiper
+        class="carousel-swiper"
+        indicator-dots="{{carouselImages.length > 1}}"
+        indicator-color="rgba(255,255,255,0.5)"
+        indicator-active-color="#7ECEC1"
+        autoplay="{{true}}"
+        interval="{{carouselInterval}}"
+        duration="{{carouselDuration}}"
+        circular="{{true}}"
+        bindchange="onCarouselChange"
+      >
+        <swiper-item
+          class="carousel-item"
+          wx:for="{{carouselImages}}"
+          wx:key="url"
+        >
+          <image
+            wx:if="{{!item.failed}}"
+            class="carousel-img"
+            src="{{item.url}}"
+            mode="aspectFill"
+            lazy-load
+            data-index="{{index}}"
+            binderror="onCarouselImageError"
+            bindtap="onPreviewCarouselImage"
+          />
+          <view wx:else class="carousel-fallback">
+            <image class="fallback-icon" src="/images/icons/alert.png" mode="aspectFit" />
+            <text class="fallback-text">图片加载失败</text>
+          </view>
+        </swiper-item>
+      </swiper>
+      <view class="carousel-counter" wx:if="{{carouselImages.length > 1}}">{{carouselIndex + 1}}/{{carouselImages.length}}</view>
+    </view>
+
     <!-- 节目信息卡片 -->
     <view class="card episode-card">
       <view class="episode-meta">
@@ -97,39 +134,45 @@
       </view>
     </view>
 
-    <!-- 稿件区域：懒加载 -->
+    <!-- 稿件区域：进页自动拉取（仅喂顶部轮播），正文仍懒加载，用户点"查看完整文稿"展开 -->
     <view class="card script-card">
       <view class="script-header">完整文稿</view>
 
-      <!-- 未加载：展示入口按钮 -->
-      <view class="script-entry" wx:if="{{!scriptLoaded}}">
-        <view class="btn-secondary script-btn" bindtap="onLoadScript">
+      <!-- 稿件加载中（进页自动拉取或用户点击展开时） -->
+      <view class="script-loading" wx:if="{{scriptLoading}}">
+        <text>文稿加载中...</text>
+      </view>
+
+      <!-- 正文已展开：优先按段渲染（含封面图），无 segments 时降级为纯文本 -->
+      <block wx:elif="{{scriptLoaded}}">
+        <block wx:if="{{segments.length > 0}}">
+          <view class="seg-block" wx:for="{{segments}}" wx:key="seq">
+            <!-- 封面图：原站防盗链/删图时 onCoverError 自然降级隐藏 -->
+            <image
+              wx:if="{{item.cover_url}}"
+              class="seg-cover"
+              src="{{item.cover_url}}"
+              mode="widthFix"
+              lazy-load
+              data-seq="{{item.seq}}"
+              binderror="onCoverError"
+            />
+            <view class="seg-title" wx:if="{{item.title}}">{{item.title}}</view>
+            <view class="seg-content">{{item.content}}</view>
+          </view>
+        </block>
+        <view class="script-body" wx:else>{{script}}</view>
+      </block>
+
+      <!-- 未展开：展示入口按钮，点击后再渲染正文（保留懒加载带宽优化） -->
+      <view class="script-entry" wx:else>
+        <view class="btn-secondary script-btn" bindtap="onShowScript">
           <view class="btn-content">
             <image class="btn-icon" src="/images/icons/btn-script-mint.png" mode="aspectFit" />
-            <text>{{scriptLoading ? '加载中...' : '查看完整文稿'}}</text>
+            <text>查看完整文稿</text>
           </view>
         </view>
       </view>
-
-      <!-- 加载完成：优先按段渲染（含封面图），无 segments 时降级为纯文本 -->
-      <block wx:elif="{{segments.length > 0}}">
-        <view class="seg-block" wx:for="{{segments}}" wx:key="seq">
-          <!-- 封面图：原站防盗链/删图时 onCoverError 自然降级隐藏 -->
-          <image
-            wx:if="{{item.cover_url}}"
-            class="seg-cover"
-            src="{{item.cover_url}}"
-            mode="widthFix"
-            lazy-load
-            data-seq="{{item.seq}}"
-            binderror="onCoverError"
-          />
-          <view class="seg-title" wx:if="{{item.title}}">{{item.title}}</view>
-          <view class="seg-content">{{item.content}}</view>
-        </view>
-      </block>
-
-      <view class="script-body" wx:else>{{script}}</view>
     </view>
 
     <!-- 节目来源（版权溯源，仅稿件加载后展示） -->

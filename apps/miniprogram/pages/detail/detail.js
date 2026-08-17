@@ -87,6 +87,12 @@ Page({
     postingComment: false,
     // 任务10：背景虚化图（取自 segments 第一张 cover_url）
     bgCoverUrl: '',
+    // 轮播图：自动从稿件内容解析出的全部图片（按文稿出现顺序），含加载失败占位标记
+    carouselImages: [],
+    carouselIndex: 0,
+    // 轮播参数（集中配置，避免 WXML 字面量魔法数字）
+    carouselInterval: 4000,
+    carouselDuration: 500,
     // 播放队列弹窗
     showQueueModal: false,
     queue: [],
@@ -183,6 +189,8 @@ Page({
     this.refreshQueueState();
     this.loadComments(id);
     this.setData({ currentRate: getPlaybackRate() });
+    // 进页即自动拉取稿件：顶部轮播图需从文稿内容解析图片，无法等用户手动点开
+    this.onLoadScript();
   },
 
   onUnload() {
@@ -451,6 +459,8 @@ Page({
       comments: [],
       commentsTotal: 0,
       bgCoverUrl: ep.cover_url || '',
+      carouselImages: [],
+      carouselIndex: 0,
       playError: '',          // 切换节目时清空上次的播放错误
       currentTime: 0,         // 重置进度条，避免显示旧节目进度
       currentTimeText: '00:00',
@@ -461,10 +471,15 @@ Page({
     // 切歌时重置 listenedSeconds 基准：下一首首次 _calcListenDelta 仅记录新 position
     // 而非沿用上一首的 lastListenStartTs，避免跨节目累加
     this._lastListenDeltaInited = false;
+    // 清空稿件缓存（含自动拉取的轮播图数据），避免旧节目正文/图片残留到新节目
+    this._scriptCache = null;
+    this._scriptFetching = null;
     this.loadDetail(ep.id);
     this.checkFavorited(ep.id);
     this.loadComments(ep.id);
     this.refreshQueueState();
+    // 切集后重新解析稿件图片填充顶部轮播（缓存已清空，会重新拉取新节目）
+    this.onLoadScript();
   },
 
   /**
@@ -501,38 +516,83 @@ Page({
   },
 
   /**
-   * 懒加载稿件：用户点击"查看完整文稿"才请求
-   * V1.3：稿件接口返回 sources 字段，展示版权溯源
+   * 拉取稿件（带缓存 + 并发去重）。
+   * 由 onLoadScript（进页自动，只喂顶部轮播）与 onShowScript（用户点开正文）共用，
+   * 避免"进页拉全文、点按钮再拉一次"的重复请求。
+   * 解析结果缓存到 this._scriptCache，正文揭示时直接复用，不再发网络请求。
+   * 注意：此方法只负责解析图片喂轮播 + 填缓存，不把正文 setData 到视图（保留懒加载）。
+   */
+  async ensureScript() {
+    if (this._scriptCache) return this._scriptCache;
+    if (this._scriptFetching) return this._scriptFetching;
+    const ep = this.data.episode;
+    if (!ep) return null;
+    this.setData({ scriptLoading: true });
+    this._scriptFetching = (async () => {
+      try {
+        const res = await fetchEpisodeScript(ep.id);
+        const content = typeof res === 'string'
+          ? res
+          : (res && (res.script || res.content)) || '';
+        const sources = (res && res.sources) || [];
+        // segments 含 cover_url，按段渲染图文；旧稿件无 segments 时降级为纯文本
+        const segments = (res && Array.isArray(res.segments)) ? res.segments : [];
+        // 轮播图：从稿件全文内嵌图片 + 分段封面图解析出全部图片，按文稿出现顺序
+        const carouselImages = this.parseImages(content, segments);
+        // 任务10：取 segments 第一张 cover_url，供揭示正文时刷新虚化背景（此处不立即 setData，避免越界改背景）
+        const firstCover = segments.find(s => s && s.cover_url);
+        this._scriptCache = { content, segments, sources, firstCover, carouselImages };
+        this.setData({
+          scriptLoading: false,
+          carouselImages,
+          carouselIndex: 0,
+        });
+        return this._scriptCache;
+      } catch (err) {
+        this.setData({ scriptLoading: false });
+        throw err;
+      }
+    })();
+    try {
+      return await this._scriptFetching;
+    } finally {
+      this._scriptFetching = null;
+    }
+  },
+
+  /**
+   * 进页自动拉取稿件：仅解析图片喂顶部轮播，正文仍懒加载（用户点"查看完整文稿"才展开）。
+   * 调用时机：onLoad 末尾、_syncToEpisode 切集后。
    */
   async onLoadScript() {
-    if (this.data.scriptLoaded || this.data.scriptLoading) return;
-    const ep = this.data.episode;
-    if (!ep) return;
-
-    this.setData({ scriptLoading: true });
     try {
-      const res = await fetchEpisodeScript(ep.id);
-      const content = typeof res === 'string'
-        ? res
-        : (res && (res.script || res.content)) || '';
-      const sources = (res && res.sources) || [];
-      // segments 含 cover_url，按段渲染图文；旧稿件无 segments 时降级为纯文本
-      const segments = (res && Array.isArray(res.segments)) ? res.segments : [];
-      this.setData({
-        script: content,
-        segments,
-        scriptLoaded: true,
-        scriptLoading: false,
-        sources,
-      });
-      // 任务10：取 segments 第一张 cover_url 作为详情页虚化背景
-      const firstCover = segments.find(s => s && s.cover_url);
-      if (firstCover) {
-        this.setData({ bgCoverUrl: firstCover.cover_url });
-      }
+      await this.ensureScript();
     } catch (err) {
       console.error('加载文稿失败:', err);
-      this.setData({ scriptLoading: false });
+      wx.showToast({ title: '文稿加载失败', icon: 'none' });
+    }
+  },
+
+  /**
+   * 用户点击"查看完整文稿"：揭示正文（复用 ensureScript 已缓存的数据，不发二次请求）。
+   * 若缓存未就绪（用户极快点击），则等待自动拉取完成后揭示，期间展示加载态。
+   * V1.3：稿件接口返回 sources 字段，随正文一并展示版权溯源。
+   */
+  async onShowScript() {
+    if (this.data.scriptLoaded) return;
+    try {
+      const cache = await this.ensureScript();
+      if (!cache) return;
+      this.setData({
+        script: cache.content,
+        segments: cache.segments,
+        sources: cache.sources,
+        scriptLoaded: true,
+        // 任务10：取 segments 第一张 cover_url 作为详情页虚化背景
+        bgCoverUrl: cache.firstCover ? cache.firstCover.cover_url : this.data.bgCoverUrl,
+      });
+    } catch (err) {
+      console.error('加载文稿失败:', err);
       wx.showToast({ title: '文稿加载失败', icon: 'none' });
     }
   },
@@ -682,6 +742,68 @@ Page({
       seg.seq === seq ? { ...seg, cover_url: '' } : seg
     );
     this.setData({ segments });
+  },
+
+  /**
+   * 解析稿件全部图片，按"文稿中出现顺序"返回 [{url, failed}]
+   * 来源两层：
+   *  1) 稿件全文（script.full_text）内嵌的 markdown 图片 ![](url) 与 HTML <img src>
+   *      —— 按文本出现先后，反映图文混排的真实顺序
+   *  2) 分段封面图 segments[].cover_url —— 按段顺序补充，去重
+   * 两层合并后去重（同一 URL 只出现一次），覆盖"全文无内嵌标记、图片仅存于分段封面"的常见情形。
+   */
+  parseImages(script, segments) {
+    const out = [];
+    const seen = Object.create(null);
+    const push = (url) => {
+      if (!url || seen[url]) return;
+      seen[url] = true;
+      out.push({ url, failed: false });
+    };
+    if (script && typeof script === 'string') {
+      let m;
+      const mdRe = /!\[[^\]]*\]\(([^)\s]+)\)/g;
+      while ((m = mdRe.exec(script)) !== null) push(m[1]);
+      const htmlRe = /<img[^>]+src=["']([^"']+)["']/gi;
+      while ((m = htmlRe.exec(script)) !== null) push(m[1]);
+    }
+    if (Array.isArray(segments)) {
+      segments.forEach((s) => { if (s && s.cover_url) push(s.cover_url); });
+    }
+    return out;
+  },
+
+  /**
+   * 轮播单图加载失败：标记 failed 触发占位视图（防盗链/删图/超时均走此降级）
+   */
+  onCarouselImageError(e) {
+    const index = e.currentTarget.dataset.index;
+    if (index === undefined || index === null) return;
+    const key = 'carouselImages[' + index + '].failed';
+    this.setData({ [key]: true });
+  },
+
+  /**
+   * 轮播切换（自动播放或手动滑动都会触发）：更新当前下标用于计数器显示
+   */
+  onCarouselChange(e) {
+    const current = e.detail && e.detail.current;
+    if (typeof current === 'number') this.setData({ carouselIndex: current });
+  },
+
+  /**
+   * 点击轮播图：全屏预览当前图片（支持左右滑动浏览全部）
+   */
+  onPreviewCarouselImage(e) {
+    const index = e.currentTarget.dataset.index;
+    if (index === undefined || index === null) return;
+    const urls = this.data.carouselImages
+      .filter((it) => it && !it.failed && it.url)
+      .map((it) => it.url);
+    const current = urls[index] || urls[0];
+    if (urls.length > 0) {
+      wx.previewImage({ current, urls });
+    }
   },
 
   formatTime(sec) {

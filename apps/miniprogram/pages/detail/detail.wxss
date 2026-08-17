@@ -175,6 +175,61 @@
   padding: 32rpx;
 }
 
+/* === 稿件图片轮播（页面顶部卡片，自适应屏宽） === */
+/* 复用全局 .card 的 24rpx 外边距 + 玻璃白底，与下方卡片对齐；
+   padding:0 + overflow:hidden 让 swiper 满铺且裁切圆角 */
+.carousel-card {
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+}
+.carousel-swiper {
+  width: 100%;
+  height: 360rpx;
+}
+.carousel-item {
+  width: 100%;
+  height: 360rpx;
+}
+.carousel-img {
+  width: 100%;
+  height: 360rpx;
+  display: block;
+  background: #EDF2F7;
+}
+/* 单图加载失败占位：居中图标 + 文案，保持轮播区域高度不塌陷 */
+.carousel-fallback {
+  width: 100%;
+  height: 360rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #EDF2F7;
+}
+.fallback-icon {
+  width: 72rpx;
+  height: 72rpx;
+  margin-bottom: 12rpx;
+  opacity: 0.5;
+}
+.fallback-text {
+  font-size: 24rpx;
+  color: #A0AEC0;
+}
+/* 轮播计数器：右下角半透明胶囊 */
+.carousel-counter {
+  position: absolute;
+  right: 20rpx;
+  bottom: 20rpx;
+  padding: 4rpx 16rpx;
+  font-size: 22rpx;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 999rpx;
+  line-height: 1.4;
+}
+
 .script-header {
   font-size: 30rpx;
   font-weight: 600;
@@ -182,13 +237,22 @@
   margin-bottom: 24rpx;
 }
 
+/* 稿件自动加载中的占位提示 */
+.script-loading {
+  padding: 40rpx 0;
+  text-align: center;
+  font-size: 26rpx;
+  color: #A0AEC0;
+}
+
+/* 正文未展开时的入口按钮（点击后再渲染正文） */
 .script-entry {
   display: flex;
   justify-content: flex-start;
   padding: 20rpx 0;
 }
 
-/* 蜜桃粉“查看文稿”按钮 */
+/* 蜜桃粉“查看文稿”按钮（复用全局 .btn-secondary 配色） */
 .script-btn {
   display: inline-block;
   padding: 20rpx 56rpx;

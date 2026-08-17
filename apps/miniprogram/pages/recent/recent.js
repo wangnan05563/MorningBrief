@@ -34,7 +34,9 @@ Page({
     try {
       // localData.getHistory 优先本地，本地无时从后端读取
       const res = await localData.getHistory(this.data.page, 20);
-      const items = res.list || [];
+      // 本地历史项存的是 id，wxml 的 data-id 与 wx:key 绑 item.episode_id，缺失会导致
+      // 点击跳转失败（评审 HIGH #2）。统一归一化 episode_id 后再拼接。
+      const items = (res.list || []).map((it) => ({ ...it, episode_id: it.episode_id ?? it.id }));
       const newList = first ? items : this.data.list.concat(items);
       this.setData({
         list: newList,
