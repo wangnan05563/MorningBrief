@@ -10,6 +10,8 @@
 const app = getApp();
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 const { getManualBaseUrl, setManualBaseUrl, normalizeBaseUrl } = require('../../utils/server-discovery');
+// 复制邮箱走隐私封装：未授权时先弹隐私协议再复制，避免真机 setClipboardData 静默失败（FE-200）
+const { copyText } = require('../../utils/clipboard');
 
 // 版本号连点触发手动配置的阈值与时间窗口
 const TAP_THRESHOLD = 5;
@@ -104,12 +106,14 @@ Page({
    * 复制邮箱到剪贴板：降低用户反馈门槛
    */
   onCopyContact() {
-    wx.setClipboardData({
-      data: this.data.contact,
-      success: () => {
+    // 统一走隐私封装的 copyText：未授权先弹隐私协议，授权后复制；失败给明确提示而非静默（评审 MEDIUM A4）
+    copyText(this.data.contact).then((ok) => {
+      if (ok) {
         wx.showToast({ title: '邮箱已复制', icon: 'success' });
         trackEvent('about', 'copy_contact');
-      },
+      } else {
+        wx.showToast({ title: '复制失败，请稍后重试', icon: 'none' });
+      }
     });
   },
 });

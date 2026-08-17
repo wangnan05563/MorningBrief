@@ -29,8 +29,8 @@
         data-channel-id="{{item.channelId}}"
       >
         <view class="dl-main">
-          <text class="dl-title">{{item.title || ('章节 ' + item.episodeId)}}</text>
-          <text class="dl-sub">{{item.duration ? (item.duration + ' 秒') : ''}}{{item.size ? (' · ' + (item.size >= 1048576 ? (item.size/1048576).toFixed(1) + ' MB' : Math.ceil(item.size/1024) + ' KB')) : ''}}</text>
+          <text class="dl-title">{{item.titleText}}</text>
+          <text class="dl-sub">{{item.subText}}</text>
         </view>
         <view class="dl-del" catchtap="onDeleteItem" data-id="{{item.episodeId}}">
           <text>删除</text>

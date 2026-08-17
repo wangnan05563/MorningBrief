@@ -71,6 +71,8 @@ Page({
   onShow() {
     // 进入页面时立即同步一次播放状态，避免从详情页返回时图标状态滞后
     this.syncPlayerState();
+    // 从详情页返回时重新读取续播缓存，确保"继续播放"卡片反映最新进度（评审 MEDIUM A6）
+    this.loadLastPlayed();
     // 从详情页返回时刷新已播放标记（详情页可能播完了新节目）
     // 节流由 services/api.js 的 fetchRecentPlaylogs throttle 统一处理，
     // 页面层不再维护各自的 30s 时间戳，避免 tab 切换时多页面节流状态不一致
@@ -112,7 +114,7 @@ Page({
       ];
       this.setData({ channels });
     } catch (err) {
-      console.log('加载频道列表失败:', err.message);
+      console.warn('加载频道列表失败:', err.message);
     }
   },
 

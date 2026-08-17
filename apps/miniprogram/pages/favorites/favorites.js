@@ -52,7 +52,11 @@ Page({
     if (!silent) this.setData({ loading: true });
     try {
       const items = await localData.getFavoriteList();
-      this.setData({ list: items, loading: false });
+      // 本地收藏项存的是 id（见 local-data.addFavorite），后端项带 episode_id；
+      // 而 wxml 的 data-id 与 wx:key 都绑 item.episode_id，本地项 episode_id 缺失会导致
+      // 点击/长按整行失效、列表 key 不稳定（评审 HIGH #2）。统一归一化 episode_id。
+      const list = items.map((it) => ({ ...it, episode_id: it.episode_id ?? it.id }));
+      this.setData({ list, loading: false });
     } catch (err) {
       this.setData({ loading: false });
       wx.showToast({ title: err.message || '加载失败', icon: 'none' });

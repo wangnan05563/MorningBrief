@@ -6,5 +6,5 @@
 from __future__ import annotations
 
 __version__ = "1.0.0"
-build_date = "2026-08-11"
-git_sha = "0dc88e2"
+build_date = "2026-08-14"
+git_sha = "a04479f"

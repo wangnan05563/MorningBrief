@@ -192,13 +192,14 @@ Page({
       // 偏爱模式下走专用刷新路径：拉全部频道今日节目 + 本地过滤
       if (this.data.isPreferredMode) {
         await this.loadPreferred();
+      } else if (!this.data.currentChannelId) {
+        // 全部模式：列表渲染走 todayList，必须复用 initData 刷新列表。
+        // 原实现把数组误塞进 episode 字段，todayList 不更新，下拉刷新无效（评审 HIGH #1）。
+        await this.initData();
       } else {
-        // 频道切换时也通过这里刷新，确保下拉始终刷新当前频道
+        // 单频道模式：渲染走 episode 播放卡片，刷新 episode 即可
         const episode = await fetchTodayEpisode(this.data.currentChannelId);
         this.setData({ episode, loading: false, error: '' });
-        if (!this.data.currentChannelId) {
-          app.globalData.todayEpisode = episode;
-        }
         if (episode) this.checkFavorited(episode.id);
       }
     } catch (err) {
@@ -239,7 +240,7 @@ Page({
       });
       this.setData({ channels });
     } catch (err) {
-      console.log('加载频道列表失败:', err.message);
+      console.warn('加载频道列表失败:', err.message);
     }
   },
 
