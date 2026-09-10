@@ -135,7 +135,7 @@ Page({
     wx.showModal({
       title: '清空搜索历史',
       content: '确定清空所有搜索历史？',
-      confirmColor: '#FF6B8A',
+      confirmColor: '#B0554A',
       success: (res) => {
         if (res.confirm) {
           wx.removeStorageSync(STORAGE_KEY_HISTORY);

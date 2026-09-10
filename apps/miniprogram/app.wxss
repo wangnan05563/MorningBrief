@@ -1,95 +1,116 @@
 /**
- * 全局样式：马卡龙配色 + 圆润字体
+ * 全局样式：商务浅白主题（Business Light）
  *
- * 配色：薄荷青主色 + 蜜桃粉辅助 + 暖灰中性
- * 圆角：全局 16px 大圆角，卡片 24px
+ * 配色（设计令牌集中在下方 page 规则，业务样式一律引用 var(--token)，禁止裸色值）：
+ * - 背景：白 / 浅灰（--bg-page #F7F8FA、--bg-card #FFFFFF、--bg-subtle #F2F4F7）
+ * - 文字：深灰近黑（--text-primary #1F2733、--text-secondary #58636F、--text-muted #98A2AE）
+ * - 点缀：低饱和商务蓝（--accent #3F6C8F），替代原薄荷青 + 蜜桃粉的双彩色方案
+ * - 语义色：低饱和砖红 / 墨绿 / 赭黄（仅用于错误、成功、警示，不做装饰）
+ *
+ * 形态：小圆角（卡片 16rpx、按钮 12-16rpx），去掉马卡龙渐变与毛玻璃，走简约专业路线。
+ *
+ * 兼容性说明：CSS 自定义属性（var()）在 WXSS 中自基础库 2.x 起支持，
+ * 本项目 project.config.json 锁定 libVersion 3.3.4，可放心使用。
  */
 
-/* === 主题色变量（WXSS 不支持变量，用 class 复用） === */
+/* === 设计令牌（Design Tokens） ===
+   所有页面样式通过 var() 引用，统一色板只在改这一处 */
 page {
-  background-color: #F9FDFB;
-  color: #4A5568;
+  /* 背景 */
+  --bg-page: #f7f8fa;
+  --bg-card: #ffffff;
+  --bg-subtle: #f2f4f7;
+
+  /* 描边 */
+  --border: #e5e8ec;
+  --border-strong: #d6dbe1;
+
+  /* 文字 */
+  --text-primary: #1f2733;
+  --text-secondary: #58636f;
+  --text-muted: #98a2ae;
+  --text-inverse: #ffffff; /* 深色底（--accent / --danger）上的反白文字 */
+
+  /* 点缀色：低饱和商务蓝 */
+  --accent: #3f6c8f;
+  --accent-light: #6c93af;
+  --accent-dark: #2f5674;
+  --accent-soft: #edf3f7;
+  --accent-soft-strong: #dfeaf2;
+
+  /* 语义色（低饱和，仅用于状态表达） */
+  --danger: #b0554a;
+  --danger-soft: #f7eeec;
+  --success: #4b7f63;
+  --success-soft: #edf4f0;
+  --warning: #9c7a3c;
+  --warning-soft: #f7f2e6;
+
+  /* 圆角与阴影 */
+  --radius-card: 16rpx;
+  --radius-btn: 16rpx;
+  --radius-pill: 999rpx;
+  --shadow-card: 0 2rpx 12rpx rgba(31, 39, 51, 0.05);
+  --shadow-raised: 0 4rpx 16rpx rgba(31, 39, 51, 0.08);
+
+  background-color: var(--bg-page);
+  color: var(--text-secondary);
   font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif;
   font-size: 28rpx;
   line-height: 1.6;
 }
 
 /* === 通用卡片 ===
-   改用 92% 白色 + 毛玻璃，让 detail 页的马卡龙渐变背景能透出
-   96% 透明度在浅色背景下几乎等同纯白，但玻璃感更强 */
+   浅白主题改为实色白底 + 1rpx 浅描边 + 极轻阴影：去毛玻璃，边界更清晰、更"专业" */
 .card {
-  background: rgba(255, 255, 255, 0.78);
-  border-radius: 24rpx;
+  background: var(--bg-card);
+  border-radius: var(--radius-card);
   padding: 32rpx;
   margin: 24rpx;
-  backdrop-filter: saturate(180%) blur(24rpx);
-  -webkit-backdrop-filter: saturate(180%) blur(24rpx);
-  border: 2rpx solid rgba(255, 255, 255, 0.5);
-  box-shadow:
-    0 4rpx 24rpx rgba(126, 206, 193, 0.12),
-    inset 0 1rpx 0 rgba(255, 255, 255, 0.6);
+  border: 2rpx solid var(--border);
+  box-shadow: var(--shadow-card);
 }
 
-/* === 苹果毛玻璃按钮 ===
-   - 半透明色块（透明度 0.75~0.85）作为基底，让背后内容能透出
-   - backdrop-filter saturate(180%) blur(20rpx) 增强色彩饱和度同时模糊背景
-   - 1px 内高光边框（白色 50% 透明）模拟玻璃边缘反光
-   - 双向阴影：外柔光 + 内顶高光，符合 iOS 14+ 按钮质感
-   - rpx 单位保持跨设备尺寸一致；border 用 2rpx 兼顾 iOS 1px 渲染 */
-
+/* === 主按钮 ===
+   深色实底（商务蓝）+ 白字，圆角收敛为 16rpx，去掉渐变与高光伪元素 */
 .btn-primary {
-  background: linear-gradient(135deg, rgba(126, 206, 193, 0.78), rgba(91, 168, 155, 0.78));
-  color: #FFFFFF;
-  border-radius: 40rpx;
-  padding: 20rpx 48rpx;
+  background: var(--accent);
+  color: #ffffff;
+  border-radius: var(--radius-btn);
+  padding: 22rpx 48rpx;
   font-size: 30rpx;
   font-weight: 500;
-  border: 2rpx solid rgba(255, 255, 255, 0.45);
+  border: 2rpx solid var(--accent);
   text-align: center;
-  backdrop-filter: saturate(180%) blur(20rpx);
-  -webkit-backdrop-filter: saturate(180%) blur(20rpx);
-  box-shadow:
-    0 8rpx 24rpx rgba(91, 168, 155, 0.25),
-    inset 0 1rpx 0 rgba(255, 255, 255, 0.5);
-  /* 不支持 backdrop-filter 时降级为不透明色块，保证可读性 */
   overflow: hidden;
   position: relative;
 }
 
+.btn-primary:active {
+  background: var(--accent-dark);
+  border-color: var(--accent-dark);
+}
+
+/* 次按钮：浅底 + 商务蓝文字 + 浅描边（替代原粉色底方案） */
 .btn-secondary {
-  background: rgba(255, 211, 224, 0.65);
-  color: #FF6B8A;
-  border-radius: 40rpx;
-  padding: 20rpx 48rpx;
+  background: var(--bg-card);
+  color: var(--accent);
+  border-radius: var(--radius-btn);
+  padding: 22rpx 48rpx;
   font-size: 30rpx;
   font-weight: 500;
-  border: 2rpx solid rgba(255, 255, 255, 0.6);
+  border: 2rpx solid var(--border-strong);
   text-align: center;
-  backdrop-filter: saturate(180%) blur(20rpx);
-  -webkit-backdrop-filter: saturate(180%) blur(20rpx);
-  box-shadow:
-    0 8rpx 24rpx rgba(255, 107, 138, 0.18),
-    inset 0 1rpx 0 rgba(255, 255, 255, 0.7);
   overflow: hidden;
   position: relative;
 }
 
-/* 顶层高光：横向渐变从顶部透出，增强玻璃折射感
-   用 ::before 伪元素不影响内容布局 */
-.btn-primary::before,
-.btn-secondary::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 50%;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0));
-  pointer-events: none;
-  border-radius: 40rpx 40rpx 0 0;
+.btn-secondary:active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
 }
 
-/* 按钮内容层 z-index 高于 ::before 高光，避免文字被覆盖 */
+/* 按钮内容层：图标 + 文字水平居中 */
 .btn-primary > .btn-content,
 .btn-secondary > .btn-content {
   position: relative;
@@ -97,8 +118,7 @@ page {
 }
 
 /* === 按钮内图标：开源 Tabler Icons (MIT)，禁止 AI 预制图标 ===
-   主按钮图标统一为白色（通过 filter 强制反色），次按钮保留原色。
-   尺寸 40rpx（约 20px），与文字垂直居中对齐，间距 12rpx */
+   图标-only 按钮（.btn-icon-only）不设右边距，尺寸放大到 44rpx 提升点击与视觉比重 */
 .btn-icon {
   width: 40rpx;
   height: 40rpx;
@@ -107,8 +127,14 @@ page {
   flex-shrink: 0;
 }
 
-/* 主按钮内图标强制变白：解决薄荷绿按钮上看不见同色图标的撞色问题
-   （SVG 描边色与按钮底色重叠时，filter 提亮对比度） */
+/* 图标-only 按钮：去掉文字后图标居中放大 */
+.btn-icon-only .btn-icon {
+  margin-right: 0;
+  width: 44rpx;
+  height: 44rpx;
+}
+
+/* 主按钮内图标强制变白：解决深底上看不见深色描边图标的问题 */
 .btn-primary .btn-icon {
   filter: brightness(0) invert(1);
 }
@@ -121,22 +147,58 @@ page {
   line-height: 1;
 }
 
+/* === 标准化图标按钮（ICON-BUTTON 规范） ===
+   所有「图标即按钮」的场景统一引用本组类，保证跨页面尺寸与点击区一致：
+   - 触控区 ≥ 88rpx（微信建议最小 40px ≈ 80rpx，留余量）
+   - 图标 44rpx，线框风格统一描边色 --text-secondary / 激活态 --accent
+   - 无中文文案，语义靠图标 + aria-label 承载 */
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 88rpx;
+  min-height: 88rpx;
+  border-radius: var(--radius-btn);
+  background: var(--bg-card);
+  border: 2rpx solid var(--border);
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+}
+
+.icon-btn:active {
+  background: var(--bg-subtle);
+}
+
+.icon-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.icon-btn-img {
+  width: 44rpx;
+  height: 44rpx;
+  flex-shrink: 0;
+}
+
+/* 图标本身已是 --accent 商务蓝（PNG 烘焙色），激活态只换底/描边，不叠 filter，
+   避免二次上色把 PNG 拖成脏色 */
+
 /* === 标签 === */
 .tag {
   display: inline-block;
   padding: 4rpx 16rpx;
-  border-radius: 20rpx;
+  border-radius: 8rpx;
   font-size: 22rpx;
 }
 
-.tag-mint { background: #B5EAD7; color: #5BA89B; }
-.tag-pink { background: #FFD3E0; color: #FF6B8A; }
-.tag-gray { background: #F0F4F2; color: #A0AEC0; }
+.tag-mint { background: var(--accent-soft); color: var(--accent); }
+.tag-pink { background: var(--danger-soft); color: var(--danger); }
+.tag-gray { background: var(--bg-subtle); color: var(--text-muted); }
 
 /* === 文字辅助类 === */
-.text-primary { color: #5BA89B; }
-.text-secondary { color: #A0AEC0; }
-.text-danger { color: #FF6B8A; }
+.text-primary { color: var(--accent); }
+.text-secondary { color: var(--text-muted); }
+.text-danger { color: var(--danger); }
 .text-large { font-size: 36rpx; font-weight: 600; }
 .text-small { font-size: 24rpx; }
 
@@ -146,7 +208,7 @@ page {
   justify-content: center;
   align-items: center;
   padding: 60rpx 0;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 /* === 空状态 === */
@@ -155,7 +217,7 @@ page {
   flex-direction: column;
   align-items: center;
   padding: 120rpx 0;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 .empty-state .empty-icon {

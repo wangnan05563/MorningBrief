@@ -83,7 +83,7 @@ Page({
 
     wx.showActionSheet({
       itemList: ['取消收藏'],
-      itemColor: '#FF6B8A',
+      itemColor: '#B0554A',
       success: (res) => {
         if (res.tapIndex === 0) this.removeFavorite(id, title);
       },

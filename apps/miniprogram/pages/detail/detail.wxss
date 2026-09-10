@@ -15,37 +15,37 @@
   align-items: flex-start;
   margin: 0 24rpx 8rpx;
   padding: 16rpx 20rpx;
-  background: #FFF7E6;
-  border: 1rpx solid #FFE0A3;
+  background: var(--warning-soft);
+  border: 1rpx solid var(--warning-soft);
   border-radius: 16rpx;
 }
 
 .disclaimer.strong {
-  background: #FFEBEE;
-  border-color: #FFB4A2;
+  background: var(--danger-soft);
+  border-color: var(--danger);
 }
 
 .disclaimer-icon {
   font-size: 28rpx;
-  color: #F0A020;
+  color: var(--warning);
   margin-right: 12rpx;
   flex-shrink: 0;
   line-height: 1.5;
 }
 
 .disclaimer.strong .disclaimer-icon {
-  color: #E57373;
+  color: var(--danger);
 }
 
 .disclaimer-text {
   flex: 1;
   font-size: 24rpx;
-  color: #8A6D3B;
+  color: var(--warning);
   line-height: 1.5;
 }
 
 .disclaimer.strong .disclaimer-text {
-  color: #C0392B;
+  color: var(--danger);
 }
 
 .episode-meta {
@@ -55,14 +55,14 @@
 
 .episode-date {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   margin-right: 16rpx;
 }
 
 .episode-title {
   font-size: 40rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
   line-height: 1.4;
   margin: 20rpx 0 16rpx;
 }
@@ -71,7 +71,7 @@
   display: flex;
   align-items: center;
   font-size: 26rpx;
-  color: #7ECEC1;
+  color: var(--accent-light);
 }
 
 .duration-icon {
@@ -92,9 +92,9 @@
   padding: 16rpx 20rpx;
   margin-bottom: 20rpx;
   border-radius: 16rpx;
-  background: #FFF0F4;
+  background: var(--accent-soft);
   font-size: 24rpx;
-  color: #FF6B8A;
+  color: var(--accent);
   line-height: 1.5;
 }
 
@@ -115,12 +115,12 @@
   width: 112rpx;
   height: 112rpx;
   border-radius: 50%;
-  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 6rpx 16rpx rgba(126, 206, 193, 0.45);
+  box-shadow: 0 6rpx 16rpx rgba(63, 108, 143, 0.45);
 }
 
 .play-icon {
@@ -136,12 +136,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #F0F4F2;
+  background: var(--bg-subtle);
   flex-shrink: 0;
 }
 
 .nav-btn:active {
-  background: #E6F4F1;
+  background: var(--accent-soft);
 }
 
 .nav-icon {
@@ -167,7 +167,7 @@
 
 .time {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 /* 稿件区域 */
@@ -195,7 +195,7 @@
   width: 100%;
   height: 360rpx;
   display: block;
-  background: #EDF2F7;
+  background: var(--bg-subtle);
 }
 /* 单图加载失败占位：居中图标 + 文案，保持轮播区域高度不塌陷 */
 .carousel-fallback {
@@ -205,7 +205,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #EDF2F7;
+  background: var(--bg-subtle);
 }
 .fallback-icon {
   width: 72rpx;
@@ -215,7 +215,7 @@
 }
 .fallback-text {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 /* 轮播计数器：右下角半透明胶囊 */
 .carousel-counter {
@@ -224,7 +224,7 @@
   bottom: 20rpx;
   padding: 4rpx 16rpx;
   font-size: 22rpx;
-  color: #fff;
+  color: var(--text-inverse);
   background: rgba(0, 0, 0, 0.45);
   border-radius: 999rpx;
   line-height: 1.4;
@@ -233,7 +233,7 @@
 .script-header {
   font-size: 30rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
   margin-bottom: 24rpx;
 }
 
@@ -242,7 +242,7 @@
   padding: 40rpx 0;
   text-align: center;
   font-size: 26rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 /* 正文未展开时的入口按钮（点击后再渲染正文） */
@@ -252,15 +252,19 @@
   padding: 20rpx 0;
 }
 
-/* 蜜桃粉“查看文稿”按钮（复用全局 .btn-secondary 配色） */
+/* "查看完整文稿"入口：T00384 改为图标按钮（方形触控区 88rpx） */
 .script-btn {
-  display: inline-block;
-  padding: 20rpx 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88rpx;
+  height: 88rpx;
+  padding: 0;
 }
 
 .script-body {
   font-size: 28rpx;
-  color: #4A5568;
+  color: var(--text-secondary);
   line-height: 1.8;
   white-space: pre-wrap;
   word-break: break-word;
@@ -269,7 +273,7 @@
 /* 稿件分段块：每段独立卡片感，段间留白 */
 .seg-block {
   padding: 24rpx 0;
-  border-bottom: 1rpx solid #EDF2F7;
+  border-bottom: 1rpx solid var(--bg-subtle);
 }
 .seg-block:last-child {
   border-bottom: none;
@@ -280,14 +284,14 @@
   width: 100%;
   border-radius: 16rpx;
   margin-bottom: 16rpx;
-  background: #F7FAFC;
+  background: var(--bg-subtle);
 }
 
 /* 段标题：与开场白/正文段统一字号，强调时使用 */
 .seg-title {
   font-size: 30rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
   margin-bottom: 12rpx;
   line-height: 1.5;
 }
@@ -295,7 +299,7 @@
 /* 段正文：保留换行，行高宽松便于阅读 */
 .seg-content {
   font-size: 28rpx;
-  color: #4A5568;
+  color: var(--text-secondary);
   line-height: 1.8;
   white-space: pre-wrap;
   word-break: break-word;
@@ -308,7 +312,7 @@
   align-items: flex-start;
   gap: 16rpx;
   padding: 16rpx 0;
-  border-bottom: 1rpx solid #F0F4F2;
+  border-bottom: 1rpx solid var(--bg-subtle);
 }
 
 .source-item:last-child {
@@ -321,7 +325,7 @@
   width: 36rpx;
   font-size: 28rpx;
   font-weight: 600;
-  color: #A0AEC0;
+  color: var(--text-muted);
   text-align: right;
   line-height: 1.5;
   padding-top: 2rpx;
@@ -347,20 +351,20 @@
   flex: 1;
   min-width: 0;
   font-size: 28rpx;
-  color: #2D3748;
+  color: var(--text-primary);
   line-height: 1.5;
   word-break: break-word;
 }
 
 .source-meta {
   font-size: 22rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   margin-top: 4rpx;
 }
 
 /* 可点击的标题：薄荷青主色 + 下划线，明确视觉反馈 */
 .source-link {
-  color: #5BA89B;
+  color: var(--accent);
   text-decoration: underline;
   flex: 1;
 }
@@ -372,7 +376,7 @@
 /* 外链图标：小号淡色，与标题同行 */
 .source-link-icon {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   flex-shrink: 0;
   line-height: 1;
 }
@@ -384,11 +388,17 @@
   margin-top: 16rpx;
 }
 
+/* T00384：图标即按钮，触控区抬到 100rpx，图标居中放大 */
 .footer-btn {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin: 0;
   margin-left: 24rpx;
-  line-height: 1.5;
+  min-height: 100rpx;
+  line-height: 1;
+  padding: 0;
 }
 
 .footer-btn:first-child {
@@ -400,7 +410,11 @@
   border: none;
 }
 
-/* === 操作按钮区：倍速 + 收藏 + 睡眠定时器 === */
+/* === 操作按钮区：倍速 + 收藏 + 列表 + 睡眠定时器 ===
+   T00384（商务浅白）：
+   - 去掉毛玻璃（backdrop-filter）与半透明白，改实色白底 + 浅描边
+   - 图标即按钮：触控区抬到 88rpx（微信建议最小值），图标放大到 36rpx
+   - 4 个 chip 等宽，仅保留「倍速值」「睡眠倒计时」两处动态状态文字 */
 .action-row {
   display: flex;
   justify-content: space-around;
@@ -408,67 +422,68 @@
   gap: 16rpx;
 }
 
-/* 操作芯片：毛玻璃风格底色，激活态使用品牌粉渐变
-   半透明 + backdrop-filter 让卡片背景透出，呼应全局按钮风格
-   关键修复（v2）：统一字号 24rpx、padding 10/10、icon 26rpx、gap 6rpx，
-   让 4 个等宽 chip 在最窄机型也能放下"已收藏"和"1时半"这类 3 字文案。
-   激活态不再缩字号/缩图标，避免视觉塌陷，仅靠背景色和文字色区分状态。 */
 .action-chip {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6rpx;
   flex: 1;
-  min-height: 72rpx;
-  height: auto;
-  padding: 10rpx 10rpx;
-  border-radius: 40rpx;
-  background: rgba(255, 255, 255, 0.55);
-  color: #5BA89B;
+  min-height: 88rpx;
+  padding: 12rpx 10rpx;
+  border-radius: var(--radius-btn);
+  background: var(--bg-card);
+  color: var(--accent);
   font-size: 24rpx;
   white-space: nowrap;
-  border: 2rpx solid rgba(255, 255, 255, 0.5);
-  backdrop-filter: saturate(180%) blur(16rpx);
-  -webkit-backdrop-filter: saturate(180%) blur(16rpx);
-  box-shadow:
-    0 4rpx 12rpx rgba(126, 206, 193, 0.1),
-    inset 0 1rpx 0 rgba(255, 255, 255, 0.6);
+  border: 2rpx solid var(--border);
+  box-shadow: var(--shadow-card);
   transition: all 0.2s ease;
   overflow: hidden;
 }
 
-.action-chip.active {
-  background: linear-gradient(135deg, rgba(255, 211, 224, 0.85), rgba(255, 154, 162, 0.85));
-  color: #FFFFFF;
-  border-color: rgba(255, 255, 255, 0.5);
-  box-shadow:
-    0 4rpx 12rpx rgba(255, 107, 138, 0.2),
-    inset 0 1rpx 0 rgba(255, 255, 255, 0.5);
+.action-chip:active {
+  background: var(--bg-subtle);
 }
 
-/* 激活态不再缩字号/缩图标，与未激活态保持视觉一致，
-   避免"已收藏"和"定时"在切换瞬间出现塌陷感。 */
+.action-chip.active {
+  background: var(--accent);
+  color: var(--text-inverse);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-raised);
+}
+
 .chip-icon {
-  width: 26rpx;
-  height: 26rpx;
+  width: 36rpx;
+  height: 36rpx;
   flex-shrink: 0;
 }
 
-/* 文字图标：当无 PNG 图标时用 Unicode 字符替代，与 .chip-icon 同尺寸 */
-.chip-icon-text {
+/* 激活态：图标底色与 chip 底色同为 --accent，白图直接可用；
+   未激活态图标为 --accent 蓝，在实色白底上对比充足 */
+
+/* 倍速数值：非文案，保留数字展示（如 1.0x / 1.5x） */
+.chip-rate {
   font-size: 26rpx;
+  font-weight: 600;
   line-height: 1;
   color: inherit;
+}
+
+/* 睡眠定时器剩余时长：动态状态而非按钮文案，保留极小号角标 */
+.chip-status {
+  font-size: 20rpx;
+  line-height: 1;
+  color: inherit;
+  white-space: nowrap;
   flex-shrink: 0;
 }
 
-.chip-label {
-  font-size: 24rpx;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  line-height: 1.3;
+/* T00387：下载中状态 —— 虚线描边弱化态，与"未下载/已下载"实底区分，百分比即进度 */
+.action-chip.downloading {
+  background: var(--bg-card);
+  border-color: var(--accent-light);
+  border-style: dashed;
+  color: var(--accent);
 }
 
 /* === 任务10：背景虚化层 === */
@@ -501,11 +516,12 @@
   left: 0;
   right: 0;
   bottom: 0;
+  /* 商务浅白主题：装饰性背景改为极轻的中性色，仅为封面模糊图提供低对比度垫底 */
   background: linear-gradient(
-    135deg,
-    rgba(181, 234, 215, 0.45) 0%,
-    rgba(255, 211, 224, 0.45) 45%,
-    rgba(255, 218, 185, 0.4) 100%
+    180deg,
+    rgba(247, 248, 250, 0.86) 0%,
+    rgba(247, 248, 250, 0.96) 60%,
+    var(--bg-page) 100%
   );
 }
 
@@ -517,7 +533,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: #F9FDFB;
+  background: var(--bg-page);
   z-index: -1;
 }
 
@@ -545,12 +561,12 @@
 .comment-title {
   font-size: 30rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
 }
 
 .comment-count {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 /* 评论输入框 + 发送按钮 */
@@ -560,7 +576,7 @@
   gap: 16rpx;
   margin-bottom: 24rpx;
   padding: 16rpx;
-  background: #F7FAFC;
+  background: var(--bg-subtle);
   border-radius: 16rpx;
 }
 
@@ -570,19 +586,27 @@
   padding: 12rpx 16rpx;
   font-size: 28rpx;
   line-height: 1.5;
-  color: #2D3748;
-  background: #FFFFFF;
+  color: var(--text-primary);
+  background: var(--bg-card);
   border-radius: 12rpx;
 }
 
 .comment-submit {
   flex-shrink: 0;
-  padding: 14rpx 28rpx;
-  border-radius: 28rpx;
-  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
-  color: #FFFFFF;
-  font-size: 26rpx;
-  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88rpx;
+  height: 88rpx;
+  padding: 0;
+  border-radius: var(--radius-btn);
+  background: var(--accent);
+  color: var(--text-inverse);
+}
+
+.comment-submit-icon {
+  width: 40rpx;
+  height: 40rpx;
 }
 
 .comment-submit.disabled {
@@ -602,7 +626,7 @@
   display: flex;
   gap: 16rpx;
   padding: 24rpx 0;
-  border-bottom: 1rpx solid #EDF2F7;
+  border-bottom: 1rpx solid var(--bg-subtle);
 }
 
 .comment-item:last-child {
@@ -614,7 +638,7 @@
   width: 72rpx;
   height: 72rpx;
   border-radius: 50%;
-  background: #F0F4F2;
+  background: var(--bg-subtle);
   flex-shrink: 0;
 }
 
@@ -630,7 +654,7 @@
 
 .comment-user {
   font-size: 24rpx;
-  color: #5BA89B;
+  color: var(--accent);
   font-weight: 500;
   max-width: 100%;
   overflow: hidden;
@@ -641,7 +665,7 @@
 
 .comment-date {
   font-size: 20rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   white-space: nowrap;
   margin-top: 4rpx;
 }
@@ -657,7 +681,7 @@
 
 .comment-content {
   font-size: 28rpx;
-  color: #2D3748;
+  color: var(--text-primary);
   line-height: 1.6;
   word-break: break-word;
 }
@@ -669,7 +693,7 @@
   gap: 6rpx;
   padding: 8rpx 16rpx;
   border-radius: 24rpx;
-  background: #FFF0F4;
+  background: var(--accent-soft);
 }
 
 .comment-like:active {
@@ -683,11 +707,11 @@
 
 .like-count {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 .like-count.liked {
-  color: #FF6B8A;
+  color: var(--accent);
   font-weight: 500;
 }
 
@@ -695,14 +719,14 @@
   padding: 60rpx 0;
   text-align: center;
   font-size: 26rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 .comment-loading {
   padding: 24rpx 0;
   text-align: center;
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 /* === 播放队列弹窗（页内弹出） === */
@@ -729,7 +753,7 @@
 .queue-modal-container {
   width: 86%;
   max-height: 70vh;
-  background: #FFFFFF;
+  background: var(--bg-card);
   border-radius: 28rpx;
   box-shadow: 0 16rpx 60rpx rgba(0, 0, 0, 0.18);
   display: flex;
@@ -750,7 +774,7 @@
   display: flex;
   align-items: center;
   padding: 32rpx 32rpx 24rpx;
-  border-bottom: 1rpx solid #F0F4F2;
+  border-bottom: 1rpx solid var(--bg-subtle);
   flex-shrink: 0;
 }
 
@@ -758,22 +782,29 @@
   flex: 1;
   font-size: 32rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
 }
 
 .queue-modal-count {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   margin-right: 20rpx;
 }
 
 .queue-modal-close.clear-btn {
-  font-size: 26rpx;
-  color: #FF6B8A;
-  font-weight: 500;
-  padding: 8rpx 20rpx;
-  border-radius: 20rpx;
-  background: #FFF0F4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88rpx;
+  height: 88rpx;
+  padding: 0;
+  border-radius: var(--radius-btn);
+  background: var(--danger-soft);
+}
+
+.clear-btn-icon {
+  width: 40rpx;
+  height: 40rpx;
 }
 
 .queue-modal-close.clear-btn:active {
@@ -798,7 +829,7 @@
 
 .queue-modal-empty text {
   font-size: 28rpx;
-  color: #CBD5E0;
+  color: var(--border-strong);
 }
 
 /* 队列列表 */
@@ -815,12 +846,12 @@
   padding: 24rpx 16rpx;
   margin-top: 16rpx;
   border-radius: 16rpx;
-  background: #FFFFFF;
+  background: var(--bg-card);
   transition: background 0.15s ease;
 }
 
 .queue-modal-item.current {
-  background: linear-gradient(135deg, #F0F4F2, #FFF5F7);
+  background: var(--bg-subtle);
 }
 
 .queue-modal-item:active {
@@ -831,7 +862,7 @@
   width: 56rpx;
   height: 56rpx;
   border-radius: 50%;
-  background: #F0F4F2;
+  background: var(--bg-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -846,7 +877,7 @@
 
 .qm-item-index text {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   font-weight: 500;
 }
 
@@ -860,7 +891,7 @@
 
 .qm-item-title {
   font-size: 28rpx;
-  color: #2D3748;
+  color: var(--text-primary);
   line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -869,7 +900,7 @@
 
 .qm-item-date {
   font-size: 22rpx;
-  color: #CBD5E0;
+  color: var(--border-strong);
 }
 
 /* 防止点击弹窗内部时冒泡到遮罩层关闭 */

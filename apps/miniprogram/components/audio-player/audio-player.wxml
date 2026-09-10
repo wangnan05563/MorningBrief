@@ -10,10 +10,10 @@
       min="0"
       max="{{duration || 0}}"
       value="{{currentTime}}"
-      activeColor="#7ECEC1"
-      backgroundColor="#E6F4F1"
+      activeColor="#3F6C8F"
+      backgroundColor="#EDF3F7"
       block-size="20"
-      block-color="#7ECEC1"
+      block-color="#3F6C8F"
       bindchange="onSeek"
     />
     <view class="time-row">

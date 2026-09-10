@@ -30,7 +30,11 @@ const iconConfigs = [
   { svg: 'skip-back.svg',            out: 'skip-back.png',            size: 48 },
   { svg: 'skip-forward.svg',         out: 'skip-forward.png',         size: 48 },
   // 列表项小图标：32x32
+  // play-mini：白色版，仅用于品牌色实底（continue-icon / play-icon-small）
   { svg: 'play-mini.svg',            out: 'play-mini.png',            size: 32 },
+  // play-mini-muted / play-mini-accent：浅色底版本，修正白图在白底/浅灰底不可见问题
+  { svg: 'play-mini-muted.svg',      out: 'play-mini-muted.png',      size: 32 },
+  { svg: 'play-mini-accent.svg',     out: 'play-mini-accent.png',     size: 32 },
   // 状态切换图标：48x48
   { svg: 'favorite.svg',             out: 'favorite.png',             size: 48 },
   { svg: 'favorite-filled.svg',      out: 'favorite-filled.png',      size: 48 },
@@ -65,6 +69,16 @@ const iconConfigs = [
   { svg: 'btn-home-mint.svg',        out: 'btn-home-mint.png',        size: 48 },
   { svg: 'btn-script-mint.svg',      out: 'btn-script-mint.png',      size: 48 },
   { svg: 'btn-x-mint.svg',           out: 'btn-x-mint.png',           size: 48 },
+  // 商务浅白主题新增图标按钮（Tabler Icons, MIT）：全部 48x48
+  { svg: 'download.svg',             out: 'download.png',             size: 48 },
+  { svg: 'download-done.svg',        out: 'download-done.png',        size: 48 },
+  { svg: 'list.svg',                 out: 'list.png',                 size: 48 },
+  { svg: 'arrows-sort.svg',          out: 'arrows-sort.png',          size: 48 },
+  { svg: 'trash.svg',                out: 'trash.png',                size: 48 },
+  { svg: 'info.svg',                 out: 'info.png',                 size: 48 },
+  { svg: 'x.svg',                    out: 'x.png',                    size: 48 },
+  { svg: 'check.svg',                out: 'check.png',                size: 48 },
+  { svg: 'checks.svg',               out: 'checks.png',               size: 48 },
 ];
 
 console.log(`SVG Source: ${scriptDir}`);

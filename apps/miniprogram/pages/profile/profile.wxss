@@ -23,21 +23,24 @@
 
 .login-tip {
   font-size: 28rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   margin-bottom: 48rpx;
 }
 
+/* T00384：图标即按钮，方形触控区 */
 .login-btn {
-  padding: 20rpx 80rpx;
+  width: 96rpx;
+  height: 96rpx;
+  padding: 0;
 }
 
-/* 用户信息卡片：薄荷青到蜜桃粉渐变背景 */
+/* 用户信息卡片：商务蓝实底（浅白主题去掉渐变，视觉更克制） */
 .user-card {
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 60rpx 32rpx 80rpx;
-  background: linear-gradient(135deg, #7ECEC1 0%, #FFD3E0 100%);
+  background: var(--accent);
   border-radius: 0 0 48rpx 48rpx;
 }
 
@@ -45,15 +48,15 @@
   width: 120rpx;
   height: 120rpx;
   border-radius: 50%;
-  border: 4rpx solid #FFFFFF;
-  background: #FFFFFF;
+  border: 4rpx solid var(--bg-card);
+  background: var(--bg-card);
 }
 
 .nickname {
   margin-top: 20rpx;
   font-size: 34rpx;
   font-weight: 600;
-  color: #FFFFFF;
+  color: var(--text-inverse);
 }
 
 /* 收听统计 */
@@ -73,19 +76,19 @@
 .stat-num {
   font-size: 40rpx;
   font-weight: 700;
-  color: #5BA89B;
+  color: var(--accent);
 }
 
 .stat-label {
   margin-top: 12rpx;
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 .stat-divider {
   width: 2rpx;
   height: 60rpx;
-  background: #E6F4F1;
+  background: var(--accent-soft);
 }
 
 /* 设置列表 */
@@ -98,7 +101,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 32rpx 0;
-  border-bottom: 2rpx solid #F0F4F2;
+  border-bottom: 2rpx solid var(--bg-subtle);
 }
 
 .list-item:last-child {
@@ -107,16 +110,16 @@
 
 .list-text {
   font-size: 30rpx;
-  color: #2D3748;
+  color: var(--text-primary);
 }
 
 .logout-text {
-  color: #FF6B8A;
+  color: var(--accent);
 }
 
 .list-extra {
   font-size: 26rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 /* 列表项右箭头：PNG 图标，弱化色 */
@@ -131,10 +134,10 @@
   padding: 10rpx 28rpx;
   border-radius: 32rpx;
   background: rgba(255, 255, 255, 0.85);
-  color: #5BA89B;
+  color: var(--accent);
   font-size: 24rpx;
   font-weight: 500;
-  box-shadow: 0 2rpx 8rpx rgba(126, 206, 193, 0.2);
+  box-shadow: 0 2rpx 8rpx rgba(63, 108, 143, 0.2);
   transition: all 0.2s ease;
 }
 
@@ -159,7 +162,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(45, 55, 72, 0.5);
+  background: rgba(31, 39, 51, 0.5);
   z-index: 1000;
   display: flex;
   justify-content: center;
@@ -168,7 +171,7 @@
 
 .edit-modal {
   width: 600rpx;
-  background: #FFFFFF;
+  background: var(--bg-card);
   border-radius: 32rpx;
   padding: 48rpx 40rpx 40rpx;
   display: flex;
@@ -180,7 +183,7 @@
 .edit-modal-title {
   font-size: 32rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
   margin-bottom: 32rpx;
 }
 
@@ -209,14 +212,14 @@
   width: 200rpx;
   height: 200rpx;
   border-radius: 50%;
-  background: #F0F4F2;
-  border: 4rpx solid #7ECEC1;
+  background: var(--bg-subtle);
+  border: 4rpx solid var(--accent-light);
 }
 
 .edit-avatar-tip {
   margin-top: 12rpx;
   font-size: 22rpx;
-  color: #5BA89B;
+  color: var(--accent);
   text-align: center;
 }
 
@@ -227,13 +230,13 @@
   align-items: center;
   margin-top: 32rpx;
   padding: 20rpx 24rpx;
-  background: #F0F4F2;
+  background: var(--bg-subtle);
   border-radius: 16rpx;
 }
 
 .edit-nickname-label {
   font-size: 28rpx;
-  color: #4A5568;
+  color: var(--text-secondary);
   flex-shrink: 0;
   margin-right: 16rpx;
 }
@@ -241,7 +244,7 @@
 .edit-nickname-input {
   flex: 1;
   font-size: 28rpx;
-  color: #2D3748;
+  color: var(--text-primary);
   background: transparent;
 }
 
@@ -253,13 +256,15 @@
   margin-top: 40rpx;
 }
 
+/* T00384：图标即按钮，两个等宽方形触控区 */
 .edit-btn {
   flex: 1;
-  text-align: center;
-  padding: 24rpx 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 96rpx;
+  padding: 0;
   border-radius: 16rpx;
-  font-size: 28rpx;
-  font-weight: 500;
   transition: all 0.15s ease;
 }
 
@@ -268,19 +273,21 @@
 }
 
 .edit-btn-cancel {
-  background: #F0F4F2;
-  color: #5BA89B;
+  background: var(--bg-subtle);
+  border: 2rpx solid var(--border);
 }
 
 .edit-btn-confirm {
-  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
-  color: #FFFFFF;
-  box-shadow: 0 4rpx 12rpx rgba(126, 206, 193, 0.3);
+  background: var(--accent);
+  box-shadow: 0 4rpx 12rpx rgba(63, 108, 143, 0.3);
 }
 
-/* 主色背景的编辑按钮（薄荷绿）内图标也强制变白，与全局 .btn-primary .btn-icon 规则对齐 */
-.edit-btn-confirm .btn-icon {
-  filter: brightness(0) invert(1);
+/* 两个按钮内的图标 PNG 已按底色烘焙好颜色：
+   btn-x-mint.png = 商务蓝（浅底），btn-check.png = 白色（深底），无需再叠 filter */
+.edit-btn .btn-icon {
+  margin-right: 0;
+  width: 44rpx;
+  height: 44rpx;
 }
 
 /* 我的课程（FR-MC-05）：已订阅课程/有声读物 + 本地学习进度 */
@@ -291,7 +298,7 @@
 .course-card-title {
   font-size: 30rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
   margin-bottom: 24rpx;
 }
 
@@ -299,7 +306,7 @@
   display: flex;
   align-items: center;
   padding: 24rpx 0;
-  border-bottom: 2rpx solid #F0F4F2;
+  border-bottom: 2rpx solid var(--bg-subtle);
 }
 
 .course-item:last-child {
@@ -311,7 +318,7 @@
   width: 96rpx;
   height: 96rpx;
   border-radius: 16rpx;
-  background: #F0F4F2;
+  background: var(--bg-subtle);
   flex-shrink: 0;
 }
 
@@ -325,7 +332,7 @@
 .course-name {
   font-size: 28rpx;
   font-weight: 500;
-  color: #2D3748;
+  color: var(--text-primary);
   margin-bottom: 16rpx;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -341,13 +348,13 @@
   flex: 1;
   height: 12rpx;
   border-radius: 6rpx;
-  background: #E6F4F1;
+  background: var(--accent-soft);
   overflow: hidden;
 }
 
 .course-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #7ECEC1, #5BA89B);
+  background: var(--accent);
   border-radius: 6rpx;
   transition: width 0.3s ease;
 }
@@ -355,7 +362,7 @@
 .course-progress-text {
   margin-left: 16rpx;
   font-size: 22rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
@@ -365,6 +372,6 @@
 
 .course-empty-text {
   font-size: 26rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   text-align: center;
 }

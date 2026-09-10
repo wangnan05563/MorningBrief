@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 取消 / 关闭图标：商务蓝单色，用于图标按钮（无中文文案）
+     图标来源：Tabler Icons (MIT License) - x -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <g fill="none" stroke="#3F6C8F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 6l-12 12"/><path d="M6 6l12 12"/>
+  </g>
+</svg>

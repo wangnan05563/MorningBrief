@@ -2,8 +2,8 @@
 <!-- tabBar "今日" 未选中态：浅灰背景 + 灰色太阳图标
      与选中态保持结构一致，仅颜色变化便于用户快速辨识状态 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <rect x="2" y="2" width="60" height="60" rx="16" ry="16" fill="#F0F4F2"/>
-  <g stroke="#A0AEC0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none">
+  <rect x="2" y="2" width="60" height="60" rx="16" ry="16" fill="#F2F4F7"/>
+  <g stroke="#98A2AE" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <circle cx="32" cy="32" r="8"/>
     <line x1="32" y1="14" x2="32" y2="18"/>
     <line x1="32" y1="46" x2="32" y2="50"/>

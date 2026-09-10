@@ -9,6 +9,34 @@ const { trackPageView, trackEvent } = require('../../utils/tracker');
 
 // 内容最小长度：低于此值视为信息不足，难以定位问题
 const MIN_LENGTH = 10;
+// 本地反馈历史 key（仅本机可见，便于用户回溯已发送记录）
+const STORAGE_KEY_FEEDBACK_HISTORY = 'news_feedback_history';
+// 历史最多保留条数，避免无限增长
+const MAX_HISTORY = 20;
+
+/**
+ * 时间格式化（B7）：时间戳 -> "YYYY-MM-DD HH:mm"
+ * 小程序无原生 Intl 稳定保证，手写补齐，避免 timeLabel 显示为空
+ */
+function formatTime(ts) {
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n) => (n < 10 ? '0' + n : '' + n);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
+ * 给历史条目补全 timeLabel（B7）：优先用已有 timeLabel，否则由 time 推导。
+ * 兼容旧版本仅存 time 的历史记录，保证 wxml 的 {{item.timeLabel}} 恒有值。
+ */
+function decorateHistory(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map((it) => ({
+    ...it,
+    timeLabel: it.timeLabel || (it.time ? formatTime(it.time) : ''),
+  }));
+}
 
 Page({
   data: {
@@ -18,10 +46,24 @@ Page({
     content: '',
     contact: '',
     submitting: false,      // 防止重复提交
+    history: [],            // 已发送反馈本地列表（B7）
   },
 
   onLoad() {
     trackPageView('pages/feedback/feedback');
+    this.loadHistory();
+  },
+
+  /**
+   * 读取本地反馈历史（B7）：页面返回后仍能看到已发送记录
+   */
+  loadHistory() {
+    try {
+      const raw = wx.getStorageSync(STORAGE_KEY_FEEDBACK_HISTORY) || [];
+      this.setData({ history: decorateHistory(raw) });
+    } catch (err) {
+      console.warn('[feedback] 读取历史失败:', err && err.errMsg);
+    }
   },
 
   onCategoryTap(e) {
@@ -71,6 +113,14 @@ Page({
       });
       trackEvent('feedback', 'submit_success', selectedCategory);
       wx.showToast({ title: '反馈已提交，感谢支持', icon: 'success' });
+      // 写入本地历史（B7）：不存联系方式，仅分类 + 内容摘要 + 时间，便于回溯
+      const newItem = {
+        category: selectedCategory,
+        summary: content.trim().slice(0, 50),
+        time: Date.now(),
+      };
+      newItem.timeLabel = formatTime(newItem.time);
+      this.appendHistory(newItem);
       // 延迟返回，让 success toast 完整展示后再退栈，避免被瞬间覆盖
       setTimeout(() => {
         this.resetForm();
@@ -91,5 +141,18 @@ Page({
       content: '',
       contact: '',
     });
+  },
+
+  /**
+   * 追加一条反馈到本地历史（B7）：最新在前，超 MAX_HISTORY 截断
+   */
+  appendHistory(item) {
+    const history = decorateHistory([item, ...this.data.history]).slice(0, MAX_HISTORY);
+    this.setData({ history });
+    try {
+      wx.setStorageSync(STORAGE_KEY_FEEDBACK_HISTORY, history);
+    } catch (err) {
+      console.warn('[feedback] 历史写入失败:', err && err.errMsg);
+    }
   },
 });

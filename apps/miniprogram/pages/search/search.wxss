@@ -17,14 +17,14 @@
 .filter-chip {
   padding: 8rpx 28rpx;
   font-size: 26rpx;
-  color: #6b7280;
-  background: #f1f2f4;
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
   border-radius: 999rpx;
   line-height: 1.4;
 }
 .filter-chip.active {
-  color: #fff;
-  background: #5BA89B;
+  color: var(--text-inverse);
+  background: var(--accent);
 }
 
 /* 搜索结果类型标签 + 频道名（FR-MC-07） */
@@ -40,14 +40,44 @@
   flex-shrink: 0;
   padding: 2rpx 12rpx;
   font-size: 20rpx;
-  color: #5BA89B;
-  background: rgba(91, 168, 155, 0.12);
+  color: var(--accent);
+  background: rgba(63, 108, 143, 0.12);
   border-radius: 6rpx;
 }
 .item-channel {
   font-size: 22rpx;
-  color: #9ca3af;
+  color: var(--text-muted);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* === 搜索历史区块（T00384 补齐样式 + 清空改为图标按钮） === */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 24rpx 16rpx;
+  font-size: 26rpx;
+  color: var(--text-secondary);
+}
+
+.clear-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: var(--radius-btn);
+  background: var(--bg-subtle);
+  border: 2rpx solid var(--border);
+}
+
+.clear-btn:active {
+  background: var(--danger-soft);
+}
+
+.clear-btn-icon {
+  width: 36rpx;
+  height: 36rpx;
 }

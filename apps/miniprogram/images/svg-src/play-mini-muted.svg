@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 小播放图标（弱化灰 #98A2AE）：用于白色/浅色卡片上的"播放量"统计前置图标
+     背景为白底或极浅灰底时使用本图标，避免白色版在白底上不可见
+     图标来源：Tabler Icons (MIT License) - player-play-filled -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <path d="M 7 4 L 19 12 L 7 20 Z" fill="#98A2AE"/>
+</svg>

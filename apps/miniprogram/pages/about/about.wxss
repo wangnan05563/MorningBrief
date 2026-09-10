@@ -9,7 +9,7 @@
   flex-direction: column;
   align-items: center;
   padding: 80rpx 32rpx 60rpx;
-  background: linear-gradient(135deg, #7ECEC1 0%, #FFD3E0 100%);
+  background: var(--accent);
   border-radius: 0 0 48rpx 48rpx;
 }
 
@@ -22,7 +22,7 @@
 .app-name {
   font-size: 38rpx;
   font-weight: 600;
-  color: #FFFFFF;
+  color: var(--text-inverse);
 }
 
 .app-version {
@@ -45,7 +45,7 @@
 .section-title {
   font-size: 28rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
   margin-bottom: 24rpx;
 }
 
@@ -58,7 +58,7 @@
   display: flex;
   align-items: center;
   padding: 20rpx 0;
-  border-bottom: 2rpx solid #F0F4F2;
+  border-bottom: 2rpx solid var(--bg-subtle);
 }
 
 .feature-item:last-child {
@@ -71,7 +71,7 @@
   height: 48rpx;
   margin-right: 24rpx;
   padding: 16rpx;
-  background: #F0F9F7;
+  background: var(--accent-soft);
   border-radius: 16rpx;
   flex-shrink: 0;
 }
@@ -82,13 +82,13 @@
 
 .feature-title {
   font-size: 30rpx;
-  color: #2D3748;
+  color: var(--text-primary);
 }
 
 .feature-desc {
   margin-top: 6rpx;
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 /* 开发者与联系方式 */
@@ -100,7 +100,7 @@
   display: flex;
   align-items: center;
   padding: 28rpx 0;
-  border-bottom: 2rpx solid #F0F4F2;
+  border-bottom: 2rpx solid var(--bg-subtle);
 }
 
 .info-item:last-child {
@@ -109,21 +109,21 @@
 
 .info-label {
   font-size: 28rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   width: 160rpx;
 }
 
 .info-value {
   flex: 1;
   font-size: 30rpx;
-  color: #2D3748;
+  color: var(--text-primary);
 }
 
 .info-action {
   font-size: 26rpx;
-  color: #5BA89B;
+  color: var(--accent);
   padding: 8rpx 20rpx;
-  background: #E6F4F1;
+  background: var(--accent-soft);
   border-radius: 20rpx;
 }
 
@@ -131,5 +131,5 @@
   margin-top: 40rpx;
   text-align: center;
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }

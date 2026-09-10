@@ -10,7 +10,7 @@
 
 .page-queue {
   min-height: 100vh;
-  background: #F7FAF9;
+  background: var(--bg-page);
 }
 
 /* === 头部（复用详情页弹窗 header 样式） === */
@@ -18,30 +18,38 @@
   display: flex;
   align-items: center;
   padding: 32rpx 32rpx 24rpx;
-  border-bottom: 1rpx solid #F0F4F2;
-  background: #FFFFFF;
+  border-bottom: 1rpx solid var(--bg-subtle);
+  background: var(--bg-card);
 }
 
 .queue-modal-title {
   flex: 1;
   font-size: 32rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
 }
 
 .queue-modal-count {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   margin-right: 20rpx;
 }
 
+/* T00384：清空改为图标按钮，触控区 88rpx（与详情页弹窗同款） */
 .queue-modal-close.clear-btn {
-  font-size: 26rpx;
-  color: #FF6B8A;
-  font-weight: 500;
-  padding: 8rpx 20rpx;
-  border-radius: 20rpx;
-  background: #FFF0F4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88rpx;
+  height: 88rpx;
+  padding: 0;
+  border-radius: var(--radius-btn);
+  background: var(--danger-soft);
+}
+
+.clear-btn-icon {
+  width: 40rpx;
+  height: 40rpx;
 }
 
 .queue-modal-close.clear-btn:active {
@@ -66,12 +74,12 @@
 
 .queue-modal-empty text {
   font-size: 28rpx;
-  color: #CBD5E0;
+  color: var(--border-strong);
 }
 
 .empty-desc {
   font-size: 24rpx;
-  color: #CBD5E0;
+  color: var(--border-strong);
   margin-top: 12rpx;
 }
 
@@ -87,12 +95,12 @@
   padding: 24rpx 16rpx;
   margin-top: 16rpx;
   border-radius: 16rpx;
-  background: #FFFFFF;
+  background: var(--bg-card);
   transition: background 0.15s ease;
 }
 
 .queue-modal-item.current {
-  background: linear-gradient(135deg, #F0F4F2, #FFF5F7);
+  background: var(--bg-subtle);
 }
 
 .queue-modal-item:active {
@@ -103,7 +111,7 @@
   width: 56rpx;
   height: 56rpx;
   border-radius: 50%;
-  background: #F0F4F2;
+  background: var(--bg-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -118,7 +126,7 @@
 
 .qm-item-index text {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   font-weight: 500;
 }
 
@@ -132,7 +140,7 @@
 
 .qm-item-title {
   font-size: 28rpx;
-  color: #2D3748;
+  color: var(--text-primary);
   line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -141,5 +149,5 @@
 
 .qm-item-date {
   font-size: 22rpx;
-  color: #CBD5E0;
+  color: var(--border-strong);
 }

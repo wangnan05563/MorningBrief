@@ -10,12 +10,12 @@
   width: 100rpx;
   height: 100rpx;
   border-radius: 50%;
-  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4rpx 12rpx rgba(126, 206, 193, 0.4);
+  box-shadow: 0 4rpx 12rpx rgba(63, 108, 143, 0.4);
 }
 
 .play-icon {
@@ -41,5 +41,5 @@
 
 .time {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }

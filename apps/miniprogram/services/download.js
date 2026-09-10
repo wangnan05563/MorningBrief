@@ -234,6 +234,96 @@ function _removeFile(localPath) {
   }
 }
 
+// ==================== 以标题命名导出（T00387） ====================
+
+// Windows/Android 文件名非法字符 + 控制字符（iOS 另禁冒号，统一处理）
+const _ILLEGAL_CHARS = /[/\\:*?"<>|\u0000-\u001f]/g;
+// 允许的音频扩展名（从 audio_url 推断，未命中回退 .mp3）
+const _AUDIO_EXTS = ['mp3', 'm4a', 'aac', 'wav', 'ogg'];
+const _MAX_NAME_LEN = 80; // 文件名（不含扩展名）长度上限，避免超长标题撑爆路径
+
+/**
+ * 由节目标题生成合法文件名：标题.mp3
+ * 规则（T00387）：以标题命名；标题为空/全非法字符时回退 audio_时间戳.mp3
+ * @param {string} title
+ * @param {string} [audioUrl] - 用于推断扩展名
+ * @returns {string} 如 "2026-09-10 早报.mp3"
+ */
+function buildTitleFilename(title, audioUrl) {
+  let ext = '.mp3';
+  if (audioUrl) {
+    const m = String(audioUrl).split('?')[0].match(/\.([a-z0-9]+)$/i);
+    if (m && _AUDIO_EXTS.indexOf(m[1].toLowerCase()) >= 0) ext = '.' + m[1].toLowerCase();
+  }
+  let base = String(title || '')
+    .replace(_ILLEGAL_CHARS, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^[.\s]+|[.\s]+$/g, '');
+  if (base.length > _MAX_NAME_LEN) base = base.slice(0, _MAX_NAME_LEN).trim();
+  if (!base) base = 'audio_' + Date.now();
+  return base + ext;
+}
+
+/**
+ * 把已下载的本地文件复制为「以标题命名」的导出副本
+ *
+ * 为什么需要副本：wx.saveFile 落盘的是自动命名文件（wxfile://usr/xxx），
+ * 用户看不到标题；复制到 USER_DATA_PATH/标题.mp3 后文件名即标题，
+ * 供 wx.shareFileMessage 导出（fileName 也会带上该名字）。
+ *
+ * 注意：导出副本独立于下载记录（removeDownload 只删 wxfile:// 原件），
+ * 同名标题重复导出会覆盖同一文件，不会无限膨胀。
+ *
+ * @param {string} localPath - downloadEpisode 返回的持久路径
+ * @param {string} title - 节目标题
+ * @param {string} [audioUrl] - 用于推断扩展名
+ * @returns {Promise<string>} 导出副本完整路径
+ */
+function exportWithTitle(localPath, title, audioUrl) {
+  if (!localPath) {
+    return Promise.reject(new Error('无本地文件可导出'));
+  }
+  const fs = wx.getFileSystemManager();
+  const dest = wx.env.USER_DATA_PATH + '/' + buildTitleFilename(title, audioUrl);
+  // 先 unlink 旧副本（copyFile 不覆盖已存在文件）；不存在时 fail 走 complete，无副作用
+  return new Promise((resolve) => {
+    fs.unlink({ filePath: dest, complete: () => resolve() });
+  }).then(
+    () =>
+      new Promise((resolve, reject) => {
+        fs.copyFile({
+          srcPath: localPath,
+          destPath: dest,
+          success: () => resolve(dest),
+          fail: (err) => reject(new Error('导出失败：' + ((err && err.errMsg) || ''))),
+        });
+      })
+  );
+}
+
+/**
+ * 通过微信文件会话把音频文件导出到手机（用户在聊天中另存）
+ * 必须在用户点击回调链路中调用；失败仅告警（部分环境不支持分享文件）
+ * @param {string} filePath - USER_DATA_PATH 下的文件路径
+ * @param {string} fileName - 展示给用户的文件名（含扩展名）
+ * @returns {Promise<void>}
+ */
+function shareAudioFile(filePath, fileName) {
+  return new Promise((resolve, reject) => {
+    if (typeof wx.shareFileMessage !== 'function') {
+      reject(new Error('当前微信版本不支持分享文件'));
+      return;
+    }
+    wx.shareFileMessage({
+      filePath,
+      fileName,
+      success: () => resolve(),
+      fail: (err) => reject(new Error(((err && err.errMsg) || '分享取消'))),
+    });
+  });
+}
+
 module.exports = {
   isDownloaded,
   getDownload,
@@ -245,4 +335,7 @@ module.exports = {
   listDownloads,
   computeTotalSize,
   clearByOpenid,
+  buildTitleFilename,
+  exportWithTitle,
+  shareAudioFile,
 };

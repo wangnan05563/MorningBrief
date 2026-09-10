@@ -10,8 +10,8 @@
   display: flex;
   align-items: center;
   padding: 16rpx 24rpx;
-  background: #FFFFFF;
-  border-bottom: 2rpx solid #F0F4F2;
+  background: var(--bg-card);
+  border-bottom: 2rpx solid var(--bg-subtle);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -21,8 +21,8 @@
 .continue-card {
   display: flex;
   align-items: center;
-  background: linear-gradient(135deg, #FFF1F5 0%, #F0F9F6 100%);
-  border: 2rpx solid #FFD3E0;
+  background: var(--bg-card);
+  border: 2rpx solid var(--accent-soft-strong);
   margin: 24rpx;
   padding: 24rpx 28rpx;
 }
@@ -31,8 +31,8 @@
   width: 72rpx;
   height: 72rpx;
   border-radius: 50%;
-  background: #5BA89B;
-  color: #FFFFFF;
+  background: var(--accent);
+  color: var(--text-inverse);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -54,14 +54,14 @@
 
 .continue-label {
   font-size: 22rpx;
-  color: #FF6B8A;
+  color: var(--accent);
   font-weight: 500;
   margin-bottom: 4rpx;
 }
 
 .continue-title {
   font-size: 30rpx;
-  color: #2D3748;
+  color: var(--text-primary);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -70,7 +70,7 @@
 
 .continue-meta {
   font-size: 22rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   margin-top: 4rpx;
 }
 
@@ -97,7 +97,7 @@
   width: 120rpx;
   height: 120rpx;
   border-radius: 20rpx;
-  background: linear-gradient(135deg, #FFE4ED 0%, #E0F4F1 100%);
+  background: var(--accent-soft);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -109,7 +109,7 @@
 
 .row-cover-channel {
   font-size: 22rpx;
-  color: #5BA89B;
+  color: var(--accent);
   font-weight: 600;
   text-align: center;
   line-height: 1.2;
@@ -117,14 +117,14 @@
 
 .row-cover-date {
   font-size: 20rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   margin-top: 6rpx;
 }
 
 /* 已播放角标：浅灰胶囊样式，与彩色封面形成对比 */
 .played-badge {
   font-size: 18rpx;
-  color: #718096;
+  color: var(--text-muted);
   background: rgba(255, 255, 255, 0.7);
   padding: 2rpx 10rpx;
   border-radius: 10rpx;
@@ -142,7 +142,7 @@
 
 .row-title {
   font-size: 28rpx;
-  color: #2D3748;
+  color: var(--text-primary);
   font-weight: 500;
   line-height: 1.4;
   white-space: nowrap;
@@ -162,23 +162,23 @@
   align-items: center;
 }
 
+/* 统计前置图标：使用弱化灰版本（play-mini-muted.png），白底卡片上白色版不可见 */
 .row-stat-icon {
   width: 24rpx;
   height: 24rpx;
   margin-right: 6rpx;
-  opacity: 0.6;
 }
 
 .row-stat text {
   font-size: 22rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 .row-play {
   width: 64rpx;
   height: 64rpx;
   border-radius: 50%;
-  background: #5BA89B;
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -186,7 +186,7 @@
 }
 
 .row-play:active {
-  background: #4A8A7E;
+  background: var(--accent-dark);
   transform: scale(0.95);
 }
 
@@ -232,20 +232,20 @@
   align-items: center;
   font-size: 30rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
   margin-bottom: 20rpx;
 }
 
 .script-action {
   font-size: 24rpx;
-  color: #5BA89B;
+  color: var(--accent);
   font-weight: 400;
 }
 
 .script-content {
   display: block;
   font-size: 28rpx;
-  color: #4A5568;
+  color: var(--text-secondary);
   line-height: 1.8;
   white-space: pre-wrap;
   word-break: break-word;
@@ -254,16 +254,16 @@
 .script-segment {
   margin-bottom: 24rpx;
   padding: 20rpx 24rpx;
-  background: #F9FDFB;
+  background: var(--bg-page);
   border-radius: 16rpx;
-  border-left: 6rpx solid #7ECEC1;
+  border-left: 6rpx solid var(--accent-light);
 }
 
 .seg-title {
   display: block;
   font-size: 28rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
   margin-bottom: 12rpx;
 }
 
@@ -273,13 +273,13 @@
   height: 240rpx;
   border-radius: 12rpx;
   margin-bottom: 12rpx;
-  background: #F0F4F2;
+  background: var(--bg-subtle);
 }
 
 .seg-content {
   display: block;
   font-size: 26rpx;
-  color: #4A5568;
+  color: var(--text-secondary);
   line-height: 1.7;
 }
 
@@ -287,7 +287,7 @@
   width: 64rpx;
   height: 64rpx;
   border-radius: 50%;
-  background: #F0F4F2;
+  background: var(--bg-subtle);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -295,7 +295,7 @@
 }
 
 .top-action:active {
-  background: #E6F4F1;
+  background: var(--accent-soft);
 }
 
 .action-icon {
@@ -316,27 +316,27 @@
   margin-right: 16rpx;
   border-radius: 32rpx;
   font-size: 26rpx;
-  color: #A0AEC0;
-  background: #F0F4F2;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
   transition: all 0.2s ease;
   line-height: 40rpx;
 }
 
 .channel-pill.active {
-  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
-  color: #FFFFFF;
-  box-shadow: 0 4rpx 12rpx rgba(126, 206, 193, 0.3);
+  background: var(--accent);
+  color: var(--text-inverse);
+  box-shadow: 0 4rpx 12rpx rgba(63, 108, 143, 0.3);
 }
 
 /* 课程类频道胶囊：用绿色系区分资讯类（FR-MC-02） */
 .channel-pill.course {
-  color: #4A7C6F;
-  background: #E3F1EC;
+  color: var(--accent-dark);
+  background: var(--accent-soft);
 }
 
 .channel-pill.course.active {
-  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
-  color: #FFFFFF;
+  background: var(--accent);
+  color: var(--text-inverse);
 }
 
 /* 课程类胶囊角标（课/听） */
@@ -347,8 +347,8 @@
   border-radius: 16rpx;
   font-size: 20rpx;
   line-height: 30rpx;
-  color: #FFFFFF;
-  background: #5BA89B;
+  color: var(--text-inverse);
+  background: var(--accent);
   vertical-align: middle;
 }
 
@@ -358,7 +358,7 @@
   margin-right: 12rpx;
   padding: 0 8rpx;
   font-size: 22rpx;
-  color: #B0BAC5;
+  color: var(--text-muted);
   line-height: 64rpx;
   letter-spacing: 2rpx;
 }
@@ -367,8 +367,8 @@
 .sleep-status {
   text-align: center;
   padding: 16rpx 24rpx;
-  background: linear-gradient(135deg, #FFF0F4, #E8F5F2);
-  color: #FF6B8A;
+  background: var(--accent-soft);
+  color: var(--accent);
   font-size: 24rpx;
 }
 
@@ -377,22 +377,22 @@
   margin: 24rpx;
   padding: 48rpx 32rpx;
   border-radius: 24rpx;
-  background: linear-gradient(135deg, #E8F5F2 0%, #FFF0F4 100%);
-  box-shadow: 0 4rpx 16rpx rgba(126, 206, 193, 0.12);
+  background: var(--accent-soft);
+  box-shadow: 0 4rpx 16rpx rgba(63, 108, 143, 0.12);
 }
 
 .greeting-title {
   display: block;
   font-size: 40rpx;
   font-weight: 600;
-  color: #5BA89B;
+  color: var(--accent);
   margin-bottom: 12rpx;
 }
 
 .greeting-subtitle {
   display: block;
   font-size: 26rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 /* === 节目信息卡片 === */
@@ -409,7 +409,7 @@
 
 .episode-date {
   font-size: 26rpx;
-  color: #7ECEC1;
+  color: var(--accent-light);
   font-weight: 500;
   margin-right: 16rpx;
 }
@@ -417,14 +417,14 @@
 .episode-title {
   font-size: 36rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
   line-height: 1.5;
   margin-bottom: 16rpx;
 }
 
 .episode-duration {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 /* === 播放控制卡片 === */
@@ -443,9 +443,9 @@
   padding: 16rpx 20rpx;
   margin-bottom: 20rpx;
   border-radius: 16rpx;
-  background: #FFF0F4;
+  background: var(--accent-soft);
   font-size: 24rpx;
-  color: #FF6B8A;
+  color: var(--accent);
   line-height: 1.5;
 }
 
@@ -461,11 +461,11 @@
   width: 120rpx;
   height: 120rpx;
   border-radius: 50%;
-  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  background: var(--accent);
   display: flex;
   justify-content: center;
   align-items: center;
-  box-shadow: 0 8rpx 24rpx rgba(126, 206, 193, 0.4);
+  box-shadow: 0 8rpx 24rpx rgba(63, 108, 143, 0.4);
   margin-bottom: 40rpx;
   transition: transform 0.15s ease;
 }
@@ -493,52 +493,7 @@
   display: flex;
   justify-content: space-between;
   font-size: 24rpx;
-  color: #A0AEC0;
-}
-
-/* === 查看文稿按钮区 === */
-.action-area {
-  padding: 0 24rpx;
-  margin-top: 16rpx;
-  display: flex;
-  flex-direction: column;
-  gap: 16rpx;
-}
-
-/* 操作芯片：图标 + 文字横向排列，激活态使用品牌色背景 */
-.action-chip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8rpx;
-  height: 80rpx;
-  padding: 0 32rpx;
-  border-radius: 40rpx;
-  background: #F0F4F2;
-  color: #5BA89B;
-  font-size: 28rpx;
-  transition: all 0.2s ease;
-}
-
-.action-chip.active {
-  background: linear-gradient(135deg, #FFD3E0, #FF9AA2);
-  color: #FFFFFF;
-}
-
-.chip-icon {
-  width: 32rpx;
-  height: 32rpx;
-}
-
-/* 文字图标：当无 PNG 图标时用 Unicode 字符替代，与 .chip-icon 同尺寸 */
-.chip-icon-text {
-  font-size: 32rpx;
-  line-height: 1;
-  color: inherit;
-}
-
-.action-area .btn-secondary {
-  width: 100%;
+  color: var(--text-muted);
 }
 
 /* === 骨架屏：与节目行布局对齐（封面 + 标题 + 副标题 + 播放按钮占位） === */
@@ -548,7 +503,7 @@
 }
 
 .shimmer {
-  background: linear-gradient(90deg, #F0F4F2 25%, #E6EEEB 50%, #F0F4F2 75%);
+  background: linear-gradient(90deg, var(--bg-subtle) 25%, var(--bg-card) 50%, var(--bg-subtle) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
 }
@@ -562,7 +517,7 @@
   align-items: center;
   padding: 24rpx;
   margin: 16rpx 24rpx;
-  background: #FFFFFF;
+  background: var(--bg-card);
   border-radius: 24rpx;
 }
 
@@ -617,15 +572,18 @@
 .preferred-empty-title {
   font-size: 32rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
   margin-bottom: 12rpx;
 }
 .preferred-empty-desc {
   font-size: 26rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   margin-bottom: 32rpx;
   line-height: 1.5;
 }
+/* T00384：图标即按钮，方形触控区 */
 .preferred-empty-btn {
-  padding: 18rpx 56rpx;
+  width: 96rpx;
+  height: 96rpx;
+  padding: 0;
 }

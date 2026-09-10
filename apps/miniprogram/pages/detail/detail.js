@@ -28,7 +28,10 @@ const {
   onPlaybackChange,
   onWaitingChange, offWaitingChange,
   onTimeUpdateChange, offTimeUpdateChange,
+  downloadEpisode, cancelDownload,
 } = require('../../services/audio');
+// T00387：下载记录存储 + 以标题命名导出
+const downloadStore = require('../../services/download');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 const { copySourceUrl } = require('../../utils/clipboard');
 const skin = require('../../utils/skin');
@@ -97,6 +100,11 @@ Page({
     showQueueModal: false,
     queue: [],
     currentIndex: -1,
+    // T00387：下载按钮状态
+    // downloadState: '' | 'downloading' | 'saving'（saving 期间无法取进度，用文案区分）
+    downloadState: '',
+    downloadProgress: 0,
+    isDownloaded: false,
   },
 
   onLoad(options) {
@@ -236,9 +244,82 @@ Page({
         bgCoverUrl: episode.cover_url || '',
       });
       this.syncPlayingState();
+      this.refreshDownloadState();
     } catch (err) {
       this.setData({ loading: false, error: err.message || '加载失败' });
     }
+  },
+
+  /**
+   * T00387：刷新「已下载」角标状态（进页 / 切集 / 下载完成后调用）
+   */
+  refreshDownloadState() {
+    const ep = this.data.episode;
+    this.setData({
+      isDownloaded: !!(ep && ep.id && downloadStore.isDownloaded(ep.id)),
+    });
+  },
+
+  /**
+   * T00387：下载当前节目音频到本地（列表图标右侧按钮）
+   *
+   * 链路：downloadEpisode（幂等 + 进度 + 持久化进下载表）
+   *      → exportWithTitle（复制为 USER_DATA_PATH/标题.mp3，让文件名即标题）
+   *      → 弹窗引导 wx.shareFileMessage 导出（小程序沙箱文件必须经会话分享才能落到手机）
+   *
+   * 命名规则：标题.mp3；标题为空/全非法字符时回退 audio_时间戳.mp3（buildTitleFilename）。
+   * 已下载时直接走导出副本步骤，不重复下载。
+   */
+  async onDownloadTap() {
+    const ep = this.data.episode;
+    if (!ep || !ep.id) {
+      wx.showToast({ title: '节目未加载', icon: 'none' });
+      return;
+    }
+    // 防重复点击：downloadEpisode 内部有并发守卫，这里再拦一层避免状态闪烁
+    if (this.data.downloadState) return;
+    this.setData({ downloadState: 'downloading', downloadProgress: 0 });
+    trackEvent('detail_download_tap', { episode_id: ep.id, downloaded: this.data.isDownloaded });
+
+    try {
+      const res = await downloadEpisode(ep, {
+        onProgress: (p) => this.setData({ downloadProgress: p }),
+        onState: (s) => {
+          if (s === 'saving') this.setData({ downloadState: 'saving' });
+        },
+      });
+      const wasCached = !!res.cached; // 已下载过：本次只做导出副本，不重复下载
+      const filePath = await downloadStore.exportWithTitle(res.localPath, ep.title, ep.audio_url);
+      const fileName = filePath.split('/').pop();
+      this.setData({ downloadState: '', isDownloaded: true, downloadProgress: 0 });
+      wx.showModal({
+        title: wasCached ? '已下载' : '下载完成',
+        content: `「${fileName}」已存入小程序本地，可将文件发送到聊天后另存到手机。`,
+        confirmText: '导出',
+        cancelText: '知道了',
+        success: (r) => {
+          if (!r.confirm) return;
+          downloadStore
+            .shareAudioFile(filePath, fileName)
+            .catch((err) => wx.showToast({ title: err.message || '导出失败', icon: 'none' }));
+        },
+      });
+    } catch (err) {
+      this.setData({ downloadState: '', downloadProgress: 0 });
+      const msg = (err && err.message) || '';
+      // 「下载进行中」来自 audio.js 的并发守卫（如整课批量下载中），温和提示即可
+      wx.showToast({ title: msg.indexOf('下载进行中') >= 0 ? '已有下载任务进行中' : msg || '下载失败', icon: 'none' });
+    }
+  },
+
+  /**
+   * T00387：下载中再次点击 = 取消当前下载
+   */
+  onDownloadCancel() {
+    const ep = this.data.episode;
+    if (ep && ep.id) cancelDownload(ep.id);
+    this.setData({ downloadState: '', downloadProgress: 0 });
+    wx.showToast({ title: '已取消下载', icon: 'none' });
   },
 
   /**
@@ -307,7 +388,7 @@ Page({
       // 过滤掉无效的
       return episodes.filter(x => x && x.audio_url);
     } catch (err) {
-      console.log("加载节目列表失败，降级为单条:", err.message);
+      console.warn("加载节目列表失败，降级为单条:", err.message);
       return [episode];
     }
   },
@@ -471,6 +552,8 @@ Page({
     // 切歌时重置 listenedSeconds 基准：下一首首次 _calcListenDelta 仅记录新 position
     // 而非沿用上一首的 lastListenStartTs，避免跨节目累加
     this._lastListenDeltaInited = false;
+    // 切集即刷新下载角标（不等 loadDetail 网络返回，旧节目的已下载态不能残留）
+    this.refreshDownloadState();
     // 清空稿件缓存（含自动拉取的轮播图数据），避免旧节目正文/图片残留到新节目
     this._scriptCache = null;
     this._scriptFetching = null;
@@ -616,7 +699,7 @@ Page({
     } catch (err) {
       this.setData({ commentLoading: false });
       // 评论加载失败不影响节目浏览，静默处理
-      console.log('评论加载失败:', err.message || err);
+      console.warn('评论加载失败:', err.message || err);
     }
   },
 

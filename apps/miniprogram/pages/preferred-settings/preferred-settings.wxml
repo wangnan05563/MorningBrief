@@ -29,24 +29,35 @@
           <view class="channel-name">{{item.name}}</view>
           <view class="channel-desc">{{item.description || '精彩内容，等你来听'}}</view>
         </view>
-        <!-- 勾选标记 -->
+        <!-- 勾选标记：T00384 统一改用 Tabler 图标，不再用 ✓ 字符 -->
         <view class="check-box {{item.selected ? 'checked' : ''}}">
-          <text wx:if="{{item.selected}}" class="check-icon">✓</text>
+          <image wx:if="{{item.selected}}" class="check-icon" lazy-load src="/images/icons/btn-check.png" mode="aspectFit" />
         </view>
       </view>
     </view>
 
-    <!-- 底部操作栏 -->
+    <!-- 底部操作栏：T00384 图标即按钮，去掉中文文案
+         全选/全不选用 checks/x 图标区分，选中数量以角标保留 -->
     <view class="bottom-bar">
-      <!-- 首次引导模式显示"暂不设置"，普通入口显示"全选" -->
-      <view class="select-all-btn" wx:if="{{!isOnboarding}}" bindtap="onSelectAll">
-        <text>{{channels.length > 0 && channels[0].selected ? '全不选' : '全选'}}</text>
+      <!-- 首次引导模式显示"暂不设置"，普通入口显示全选/全不选 -->
+      <view
+        class="select-all-btn"
+        wx:if="{{!isOnboarding}}"
+        bindtap="onSelectAll"
+        aria-label="{{channels.length > 0 && channels[0].selected ? '全不选' : '全选'}}"
+      >
+        <image class="bar-icon" lazy-load src="{{channels.length > 0 && channels[0].selected ? '/images/icons/x.png' : '/images/icons/checks.png'}}" mode="aspectFit" />
       </view>
-      <view class="select-all-btn" wx:else bindtap="onSkip">
-        <text>暂不设置</text>
+      <view class="select-all-btn" wx:else bindtap="onSkip" aria-label="暂不设置">
+        <image class="bar-icon" lazy-load src="/images/icons/x.png" mode="aspectFit" />
       </view>
-      <view class="save-btn {{selectedCount > 0 ? '' : 'disabled'}}" bindtap="onSave">
-        <text>保存（{{selectedCount}}）</text>
+      <view
+        class="save-btn {{selectedCount > 0 ? '' : 'disabled'}}"
+        bindtap="onSave"
+        aria-label="保存偏爱频道"
+      >
+        <image class="save-btn-icon" lazy-load src="/images/icons/btn-check.png" mode="aspectFit" />
+        <text class="save-count" wx:if="{{selectedCount > 0}}">{{selectedCount}}</text>
       </view>
     </view>
   </block>

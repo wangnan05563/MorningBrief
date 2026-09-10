@@ -10,8 +10,8 @@
   display: flex;
   align-items: center;
   padding: 16rpx 24rpx;
-  background: #FFFFFF;
-  border-bottom: 2rpx solid #F0F4F2;
+  background: var(--bg-card);
+  border-bottom: 2rpx solid var(--bg-subtle);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -21,7 +21,7 @@
   width: 64rpx;
   height: 64rpx;
   border-radius: 50%;
-  background: #F0F4F2;
+  background: var(--bg-subtle);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -29,7 +29,7 @@
 }
 
 .top-action:active {
-  background: #E6F4F1;
+  background: var(--accent-soft);
 }
 
 .action-icon {
@@ -50,16 +50,16 @@
   margin-right: 16rpx;
   border-radius: 32rpx;
   font-size: 26rpx;
-  color: #A0AEC0;
-  background: #F0F4F2;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
   transition: all 0.2s ease;
   line-height: 40rpx;
 }
 
 .channel-pill.active {
-  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
-  color: #FFFFFF;
-  box-shadow: 0 4rpx 12rpx rgba(126, 206, 193, 0.3);
+  background: var(--accent);
+  color: var(--text-inverse);
+  box-shadow: 0 4rpx 12rpx rgba(63, 108, 143, 0.3);
 }
 
 /* === 节目行卡片：与今日页完全一致 === */
@@ -83,7 +83,7 @@
   width: 120rpx;
   height: 120rpx;
   border-radius: 20rpx;
-  background: linear-gradient(135deg, #FFE4ED 0%, #E0F4F1 100%);
+  background: var(--accent-soft);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -95,7 +95,7 @@
 
 .row-cover-channel {
   font-size: 22rpx;
-  color: #5BA89B;
+  color: var(--accent);
   font-weight: 600;
   text-align: center;
   line-height: 1.2;
@@ -103,14 +103,14 @@
 
 .row-cover-date {
   font-size: 20rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   margin-top: 6rpx;
 }
 
 /* 已播放角标：浅灰胶囊样式，与彩色封面形成对比 */
 .played-badge {
   font-size: 18rpx;
-  color: #718096;
+  color: var(--text-muted);
   background: rgba(255, 255, 255, 0.7);
   padding: 2rpx 10rpx;
   border-radius: 10rpx;
@@ -128,7 +128,7 @@
 
 .row-title {
   font-size: 28rpx;
-  color: #2D3748;
+  color: var(--text-primary);
   font-weight: 500;
   line-height: 1.4;
   white-space: nowrap;
@@ -148,23 +148,24 @@
   align-items: center;
 }
 
+/* 统计前置图标：使用弱化灰版本（play-mini-muted.png），
+   白底卡片上白色版不可见；图标已自带 --text-muted 灰，无需再降透明度 */
 .row-stat-icon {
   width: 24rpx;
   height: 24rpx;
   margin-right: 6rpx;
-  opacity: 0.6;
 }
 
 .row-stat text {
   font-size: 22rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 .row-play {
   width: 64rpx;
   height: 64rpx;
   border-radius: 50%;
-  background: #5BA89B;
+  background: var(--accent);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -172,7 +173,7 @@
 }
 
 .row-play:active {
-  background: #4A8A7E;
+  background: var(--accent-dark);
   transform: scale(0.95);
 }
 
@@ -195,7 +196,7 @@
   text-align: center;
   padding: 32rpx 0;
   font-size: 26rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 /* === 任务6+7：继续播放 + 工具栏（与今日页 continue-card 同风格） === */
@@ -210,8 +211,9 @@
   padding: 20rpx 24rpx;
   margin-bottom: 16rpx;
   border-radius: 24rpx;
-  background: linear-gradient(135deg, rgba(255, 220, 230, 0.5), rgba(180, 220, 230, 0.5));
-  box-shadow: 0 4rpx 16rpx rgba(126, 206, 193, 0.1);
+  background: var(--accent-soft);
+  border: 2rpx solid var(--accent-soft-strong);
+  box-shadow: none;
   transition: transform 0.15s ease;
 }
 
@@ -223,7 +225,7 @@
   width: 56rpx;
   height: 56rpx;
   border-radius: 50%;
-  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  background: var(--accent);
   padding: 12rpx;
   box-sizing: border-box;
   flex-shrink: 0;
@@ -239,13 +241,13 @@
 
 .continue-label {
   font-size: 22rpx;
-  color: #5BA89B;
+  color: var(--accent);
   font-weight: 500;
 }
 
 .continue-title {
   font-size: 28rpx;
-  color: #2D3748;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -258,7 +260,7 @@
   opacity: 0.6;
 }
 
-/* 工具栏：排序 + 列表按钮 */
+/* 工具栏：排序 + 列表按钮（T00384：图标即按钮，去掉中文文案） */
 .history-tools {
   display: flex;
   gap: 16rpx;
@@ -268,30 +270,30 @@
 .tool-chip {
   display: flex;
   align-items: center;
-  gap: 8rpx;
-  padding: 12rpx 24rpx;
-  border-radius: 32rpx;
-  background: #FFFFFF;
-  color: #5BA89B;
-  font-size: 26rpx;
-  box-shadow: 0 2rpx 8rpx rgba(126, 206, 193, 0.08);
+  justify-content: center;
+  width: 88rpx;
+  height: 88rpx;
+  padding: 0;
+  border-radius: var(--radius-btn);
+  background: var(--bg-card);
+  border: 2rpx solid var(--border);
+  color: var(--accent);
   transition: all 0.2s ease;
 }
 
 .tool-chip:active {
-  background: #E6F4F1;
-  transform: scale(0.96);
+  background: var(--accent-soft);
 }
 
 .tool-icon {
-  width: 28rpx;
-  height: 28rpx;
+  width: 40rpx;
+  height: 40rpx;
+  transition: transform 0.2s ease;
 }
 
-.tool-icon-text {
-  font-size: 28rpx;
-  line-height: 1;
-  color: inherit;
+/* 排序方向：升序时把图标上下翻转，"最早优先"无需文字即可辨识 */
+.tool-chip.asc .tool-icon {
+  transform: rotate(180deg);
 }
 
 /* === 骨架屏：与节目行布局对齐（封面 + 标题 + 副标题 + 播放按钮占位） === */
@@ -301,7 +303,7 @@
 }
 
 .shimmer {
-  background: linear-gradient(90deg, #F0F4F2 25%, #E6EEEB 50%, #F0F4F2 75%);
+  background: linear-gradient(90deg, var(--bg-subtle) 25%, var(--bg-card) 50%, var(--bg-subtle) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
 }
@@ -315,7 +317,7 @@
   align-items: center;
   padding: 24rpx;
   margin: 16rpx 24rpx;
-  background: #FFFFFF;
+  background: var(--bg-card);
   border-radius: 24rpx;
 }
 
@@ -370,15 +372,18 @@
 .preferred-empty-title {
   font-size: 32rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
   margin-bottom: 12rpx;
 }
 .preferred-empty-desc {
   font-size: 26rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   margin-bottom: 32rpx;
   line-height: 1.5;
 }
+/* T00384：图标即按钮，方形触控区 */
 .preferred-empty-btn {
-  padding: 18rpx 56rpx;
+  width: 96rpx;
+  height: 96rpx;
+  padding: 0;
 }

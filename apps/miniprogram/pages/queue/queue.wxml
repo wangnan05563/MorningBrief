@@ -4,7 +4,10 @@
   <view class="queue-modal-header" wx:if="{{queue.length > 0}}">
     <text class="queue-modal-title">播放队列</text>
     <text class="queue-modal-count">{{queue.length}} 首</text>
-    <view class="queue-modal-close clear-btn" bindtap="onClear">清空</view>
+    <!-- T00384：清空改为图标按钮 -->
+    <view class="queue-modal-close clear-btn" bindtap="onClear" aria-label="清空播放队列">
+      <image class="clear-btn-icon" lazy-load src="/images/icons/trash.png" mode="aspectFit" />
+    </view>
   </view>
 
   <!-- 空状态 -->
@@ -24,7 +27,7 @@
       bindtap="onTapItem"
     >
       <view class="qm-item-index">
-        <image wx:if="{{index === currentIndex}}" class="qm-playing-icon" lazy-load src="/images/icons/play-mini.png" mode="aspectFit" />
+        <image wx:if="{{index === currentIndex}}" class="qm-playing-icon" lazy-load src="/images/icons/play-mini-accent.png" mode="aspectFit" />
         <text wx:else>{{index + 1}}</text>
       </view>
       <view class="qm-item-info">
@@ -34,3 +37,6 @@
     </view>
   </scroll-view>
 </view>
+
+<!-- 全局浮动播放器：离开 tab 后仍可看到并控制后台播放（B4） -->
+<floating-player />

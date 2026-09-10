@@ -83,7 +83,7 @@ Page({
       editable: true,
       placeholderText: current || 'http://192.168.x.x:8000',
       confirmText: '保存',
-      confirmColor: '#FF6B8A',
+      confirmColor: '#3F6C8F',
       success: (res) => {
         if (!res.confirm) return;
         const input = (res.content || '').trim();

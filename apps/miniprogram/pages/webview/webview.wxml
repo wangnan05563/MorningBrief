@@ -11,17 +11,12 @@
     <text class="fallback-desc">链接可能未加入业务域名白名单，请复制到浏览器打开</text>
     <view class="fallback-url">{{url}}</view>
     <view class="fallback-actions">
-      <button class="btn-primary" bindtap="onCopy" hover-class="none">
-        <view class="btn-content">
-          <image class="btn-icon" src="/images/icons/btn-copy.png" mode="aspectFit" />
-          <text>复制链接</text>
-        </view>
+      <!-- T00384：图标即按钮，去掉"复制链接/返回"文案 -->
+      <button class="btn-primary btn-icon-only" bindtap="onCopy" hover-class="none" aria-label="复制链接">
+        <image class="btn-icon" src="/images/icons/btn-copy.png" mode="aspectFit" />
       </button>
-      <button class="btn-secondary" bindtap="onBack" hover-class="none">
-        <view class="btn-content">
-          <image class="btn-icon" src="/images/icons/btn-arrow-left-mint.png" mode="aspectFit" />
-          <text>返回</text>
-        </view>
+      <button class="btn-secondary btn-icon-only" bindtap="onBack" hover-class="none" aria-label="返回">
+        <image class="btn-icon" src="/images/icons/btn-arrow-left-mint.png" mode="aspectFit" />
       </button>
     </view>
   </view>

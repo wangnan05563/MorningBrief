@@ -3,11 +3,11 @@
  * 卡片基础样式从 app.wxss .card 迁移，保持组件自包含（不依赖全局样式）
  */
 .episode-card {
-  background: #FFFFFF;
+  background: var(--bg-card);
   border-radius: 24rpx;
   padding: 32rpx;
   margin: 24rpx;
-  box-shadow: 0 4rpx 16rpx rgba(126, 206, 193, 0.08);
+  box-shadow: 0 4rpx 16rpx rgba(63, 108, 143, 0.08);
   display: flex;
   flex-direction: column;
 }
@@ -21,7 +21,7 @@
 /* 日期用薄荷青，与全局主题色呼应 */
 .episode-date {
   font-size: 26rpx;
-  color: #7ECEC1;
+  color: var(--accent-light);
   font-weight: 500;
   margin-right: 16rpx;
 }
@@ -35,14 +35,14 @@
 }
 
 .tag-mint {
-  background: #B5EAD7;
-  color: #5BA89B;
+  background: var(--accent-soft-strong);
+  color: var(--accent);
 }
 
 .episode-title {
   font-size: 36rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
   line-height: 1.5;
   margin-bottom: 16rpx;
 }
@@ -51,7 +51,7 @@
   display: flex;
   align-items: center;
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 .duration-icon {
@@ -60,32 +60,47 @@
   margin-right: 8rpx;
 }
 
-/* === 操作按钮区（showActions=true 时显示） === */
+/* === 操作按钮区（showActions=true 时显示） ===
+   T00384：图标即按钮，去掉中文文案；触控区沿用全局 .icon-btn 规范（≥88rpx） */
 .episode-actions {
   display: flex;
+  gap: 16rpx;
   margin-top: 24rpx;
 }
 
+/* 图标按钮基础样式：本地复刻 app.wxss 的 .icon-btn / .icon-btn-img
+   （组件样式默认 isolated 吃不到全局类，本组件约定自包含不依赖全局样式；
+   CSS 自定义属性可跨样式隔离继承，令牌仍可直接引用） */
 .action-btn {
   flex: 1;
-  text-align: center;
-  padding: 16rpx 0;
-  border-radius: 40rpx;
-  font-size: 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 88rpx;
+  border-radius: var(--radius-pill);
+  background: var(--bg-card);
+  border: 2rpx solid var(--border);
+  transition: all 0.15s ease;
 }
 
-.action-btn + .action-btn {
-  margin-left: 16rpx;
+.action-btn:active {
+  background: var(--bg-subtle);
 }
 
-/* 播放按钮：薄荷青主色渐变，与全局 .btn-primary 风格一致 */
+.icon-btn-img {
+  width: 44rpx;
+  height: 44rpx;
+  flex-shrink: 0;
+}
+
+/* 播放按钮：品牌色实底 + 白色图标（play-mini.png 已烘焙为白） */
 .action-play {
-  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
-  color: #FFFFFF;
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
-/* 详情按钮：蜜桃粉，与全局 .btn-secondary 风格一致 */
+/* 详情按钮：浅底 + 描边，图标保持商务蓝 */
 .action-detail {
-  background: #FFD3E0;
-  color: #FF6B8A;
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-strong);
 }

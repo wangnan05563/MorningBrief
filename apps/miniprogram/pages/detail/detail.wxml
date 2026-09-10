@@ -24,7 +24,7 @@
         class="carousel-swiper"
         indicator-dots="{{carouselImages.length > 1}}"
         indicator-color="rgba(255,255,255,0.5)"
-        indicator-active-color="#7ECEC1"
+        indicator-active-color="#3F6C8F"
         autoplay="{{true}}"
         interval="{{carouselInterval}}"
         duration="{{carouselDuration}}"
@@ -99,10 +99,10 @@
             min="0"
             max="{{duration || 0}}"
             value="{{currentTime}}"
-            activeColor="#7ECEC1"
-            backgroundColor="#E6F4F1"
+            activeColor="#3F6C8F"
+            backgroundColor="#EDF3F7"
             block-size="22"
-            block-color="#7ECEC1"
+            block-color="#3F6C8F"
             bindinput="onSeekInput"
             bindchange="onSeek"
           />
@@ -113,23 +113,45 @@
         </view>
       </view>
 
-      <!-- 操作按钮区：倍速 + 收藏 + 列表 + 睡眠定时器 -->
+      <!-- 操作按钮区：倍速 + 收藏 + 列表 + 下载 + 睡眠定时器
+           T00384：移除中文按钮文案，图标即按钮；仅保留倍速值与睡眠倒计时这类动态状态
+           T00387：下载按钮位于列表图标右侧，下载中显示进度/再次点击取消 -->
       <view class="action-row">
-        <view class="action-chip" bindtap="onCycleRate">
-          <text>{{currentRate}}x</text>
+        <view class="action-chip" bindtap="onCycleRate" aria-label="切换播放倍速">
+          <text class="chip-rate">{{currentRate}}x</text>
         </view>
-        <view class="action-chip {{favorited ? 'active' : ''}}" bindtap="onToggleFavorite">
+        <view
+          class="action-chip {{favorited ? 'active' : ''}}"
+          bindtap="onToggleFavorite"
+          aria-label="{{favorited ? '取消收藏' : '收藏'}}"
+        >
           <image class="chip-icon" lazy-load src="{{favorited ? '/images/icons/favorite-filled.png' : '/images/icons/favorite.png'}}" mode="aspectFit" />
-          <text class="chip-label">{{favorited ? '已收藏' : '收藏'}}</text>
         </view>
-        <view class="action-chip" bindtap="onOpenQueue">
-          <text class="chip-icon-text">☰</text>
-          <text class="chip-label">列表</text>
+        <view class="action-chip" bindtap="onOpenQueue" aria-label="打开播放队列">
+          <image class="chip-icon" lazy-load src="/images/icons/list.png" mode="aspectFit" />
         </view>
-        <view class="action-chip {{sleepActive ? 'active' : ''}}" bindtap="onSleepTimer">
+        <!-- 下载（T00387）：空闲→download / 已下载→download-done / 下载中→百分比（点按取消） -->
+        <view
+          class="action-chip {{downloadState === 'downloading' ? 'downloading' : ''}}"
+          bindtap="{{downloadState === 'downloading' ? 'onDownloadCancel' : 'onDownloadTap'}}"
+          aria-label="{{downloadState === 'downloading' ? '取消下载' : (isDownloaded ? '已下载，点击导出' : '下载到本地')}}"
+        >
+          <image
+            wx:if="{{downloadState !== 'downloading'}}"
+            class="chip-icon"
+            lazy-load
+            src="{{isDownloaded ? '/images/icons/download-done.png' : '/images/icons/download.png'}}"
+            mode="aspectFit"
+          />
+          <text class="chip-status" wx:else>{{downloadState === 'saving' ? '···' : downloadProgress + '%'}}</text>
+        </view>
+        <view
+          class="action-chip {{sleepActive ? 'active' : ''}}"
+          bindtap="onSleepTimer"
+          aria-label="睡眠定时器"
+        >
           <image class="chip-icon" lazy-load src="{{sleepActive ? '/images/icons/alarm.png' : '/images/icons/moon.png'}}" mode="aspectFit" />
-          <text class="chip-label" wx:if="{{sleepActive}}">{{sleepLabel}}</text>
-          <text class="chip-label" wx:else>定时</text>
+          <text class="chip-status" wx:if="{{sleepActive}}">{{sleepLabel}}</text>
         </view>
       </view>
     </view>
@@ -164,13 +186,11 @@
         <view class="script-body" wx:else>{{script}}</view>
       </block>
 
-      <!-- 未展开：展示入口按钮，点击后再渲染正文（保留懒加载带宽优化） -->
+      <!-- 未展开：展示入口按钮，点击后再渲染正文（保留懒加载带宽优化）
+           T00384：图标即按钮，去掉"查看完整文稿"文案 -->
       <view class="script-entry" wx:else>
-        <view class="btn-secondary script-btn" bindtap="onShowScript">
-          <view class="btn-content">
-            <image class="btn-icon" src="/images/icons/btn-script-mint.png" mode="aspectFit" />
-            <text>查看完整文稿</text>
-          </view>
+        <view class="btn-secondary btn-icon-only script-btn" bindtap="onShowScript" aria-label="查看完整文稿">
+          <image class="btn-icon" src="/images/icons/btn-script-mint.png" mode="aspectFit" />
         </view>
       </view>
     </view>
@@ -216,10 +236,14 @@
           maxlength="200"
           auto-height
         />
+        <!-- T00384：发送按钮改为图标即按钮，去掉"发送/发送中"文案 -->
         <view
           class="comment-submit {{postingComment ? 'disabled' : ''}}"
           bindtap="onPostComment"
-        >{{postingComment ? '发送中' : '发送'}}</view>
+          aria-label="{{postingComment ? '发送中' : '发送评论'}}"
+        >
+          <image class="comment-submit-icon" lazy-load src="/images/icons/btn-send.png" mode="aspectFit" />
+        </view>
       </view>
 
       <!-- 评论列表 -->
@@ -271,7 +295,9 @@
     <view class="queue-modal-header">
       <text class="queue-modal-title">播放队列</text>
       <text class="queue-modal-count">{{queue.length}} 首</text>
-      <view class="queue-modal-close clear-btn" bindtap="onClearQueue" wx:if="{{queue.length > 0}}">清空</view>
+      <view class="queue-modal-close clear-btn" bindtap="onClearQueue" wx:if="{{queue.length > 0}}" aria-label="清空播放队列">
+        <image class="clear-btn-icon" lazy-load src="/images/icons/trash.png" mode="aspectFit" />
+      </view>
     </view>
 
     <!-- 空状态 -->
@@ -290,7 +316,7 @@
         bindtap="onQueueItemClick"
       >
         <view class="qm-item-index">
-          <image wx:if="{{index === currentIndex}}" class="qm-playing-icon" lazy-load src="/images/icons/play-mini.png" mode="aspectFit" />
+          <image wx:if="{{index === currentIndex}}" class="qm-playing-icon" lazy-load src="/images/icons/play-mini-accent.png" mode="aspectFit" />
           <text wx:else>{{index + 1}}</text>
         </view>
         <view class="qm-item-info">
@@ -302,19 +328,13 @@
   </view>
 </view>
 
-    <!-- 底部操作 -->
+    <!-- 底部操作：T00384 改为图标即按钮，去掉中文文案 -->
     <view class="footer-actions">
-      <button class="btn-primary footer-btn" open-type="share" hover-class="none">
-        <view class="btn-content">
-          <image class="btn-icon" src="/images/icons/btn-share.png" mode="aspectFit" />
-          <text>分享节目</text>
-        </view>
+      <button class="btn-primary footer-btn btn-icon-only" open-type="share" hover-class="none" aria-label="分享节目">
+        <image class="btn-icon" src="/images/icons/btn-share.png" mode="aspectFit" />
       </button>
-      <view class="btn-secondary footer-btn" bindtap="onBackHome">
-        <view class="btn-content">
-          <image class="btn-icon" src="/images/icons/btn-home-mint.png" mode="aspectFit" />
-          <text>返回首页</text>
-        </view>
+      <view class="btn-secondary footer-btn btn-icon-only" bindtap="onBackHome" aria-label="返回首页">
+        <image class="btn-icon" src="/images/icons/btn-home-mint.png" mode="aspectFit" />
       </view>
     </view>
   </block>

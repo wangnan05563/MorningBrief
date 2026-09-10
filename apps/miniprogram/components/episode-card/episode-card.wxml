@@ -10,10 +10,15 @@
     <text>时长 {{fmt.time(episode.duration)}}</text>
   </view>
 
-  <!-- 操作按钮区：仅 showActions=true 时显示，列表场景用 -->
+  <!-- 操作按钮区：仅 showActions=true 时显示，列表场景用
+       T00384：去掉中文文案，图标即按钮；aria-label 保留无障碍语义 -->
   <view class="episode-actions" wx:if="{{showActions}}">
-    <view class="action-btn action-play" catchtap="onPlay">播放</view>
-    <view class="action-btn action-detail" catchtap="onViewDetail">详情</view>
+    <view class="icon-btn action-btn action-play" catchtap="onPlay" aria-label="播放">
+      <image class="icon-btn-img" lazy-load src="/images/icons/play-mini.png" mode="aspectFit" />
+    </view>
+    <view class="icon-btn action-btn action-detail" catchtap="onViewDetail" aria-label="查看详情">
+      <image class="icon-btn-img" lazy-load src="/images/icons/info.png" mode="aspectFit" />
+    </view>
   </view>
 </view>
 

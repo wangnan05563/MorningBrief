@@ -15,8 +15,8 @@
   margin: 0 0 24rpx 0;
   padding: 28rpx 32rpx;
   border-radius: 24rpx;
-  background: #FFFFFF;
-  box-shadow: 0 4rpx 16rpx rgba(126, 206, 193, 0.08);
+  background: var(--bg-card);
+  box-shadow: 0 4rpx 16rpx rgba(63, 108, 143, 0.08);
   transition: transform 0.15s ease;
 }
 
@@ -39,7 +39,7 @@
 /* 收藏时间用薄荷青色，与历史页日期风格一致 */
 .item-date {
   font-size: 26rpx;
-  color: #7ECEC1;
+  color: var(--accent-light);
   font-weight: 500;
   margin-right: 16rpx;
 }
@@ -49,7 +49,7 @@
   display: block;
   font-size: 32rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
   line-height: 1.5;
   margin-bottom: 20rpx;
 }
@@ -66,7 +66,7 @@
   align-items: center;
   gap: 8rpx;
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 .duration-icon {
@@ -79,11 +79,11 @@
   width: 56rpx;
   height: 56rpx;
   border-radius: 50%;
-  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  background: var(--accent);
   display: flex;
   justify-content: center;
   align-items: center;
-  box-shadow: 0 4rpx 12rpx rgba(126, 206, 193, 0.3);
+  box-shadow: 0 4rpx 12rpx rgba(63, 108, 143, 0.3);
 }
 
 /* 列表项小播放图标：白色三角 */
@@ -97,5 +97,5 @@
   text-align: center;
   padding: 24rpx 0 48rpx;
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }

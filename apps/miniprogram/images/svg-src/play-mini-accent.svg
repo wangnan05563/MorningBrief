@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 小播放图标（商务蓝 #3F6C8F）：用于浅色底上的播放指示/操作入口
+     典型场景：队列"当前播放"序号位、课程章节行右侧播放入口
+     图标来源：Tabler Icons (MIT License) - player-play-filled -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <path d="M 7 4 L 19 12 L 7 20 Z" fill="#3F6C8F"/>
+</svg>

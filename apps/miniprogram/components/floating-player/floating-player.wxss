@@ -10,8 +10,8 @@
   max-width: 480rpx;
   padding: 12rpx 24rpx 12rpx 12rpx;
   border-radius: 56rpx;
-  background: linear-gradient(135deg, rgba(126, 206, 193, 0.95), rgba(91, 168, 155, 0.95));
-  box-shadow: 0 8rpx 24rpx rgba(91, 168, 155, 0.35);
+  background: var(--accent);
+  box-shadow: 0 8rpx 24rpx rgba(63, 108, 143, 0.35);
   overflow: hidden;
 }
 
@@ -50,7 +50,7 @@
 
 .fp-title {
   font-size: 24rpx;
-  color: #FFFFFF;
+  color: var(--text-inverse);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;

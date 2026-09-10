@@ -1,7 +1,7 @@
-/* 课程主页样式（复用全局浅色主题：主色 #5BA89B，辅粉 #FF6B8A） */
+/* 课程主页样式（复用全局浅色主题：主色 var(--accent)，辅粉 var(--accent)） */
 .course-page {
   min-height: 100vh;
-  background: #FFF5F7;
+  background: var(--bg-page);
   padding-bottom: 40rpx;
 }
 
@@ -13,13 +13,13 @@
   width: 100%;
   height: 200rpx;
   border-radius: 20rpx;
-  background: #ECEFF1;
+  background: var(--border);
   margin-bottom: 24rpx;
 }
 .skeleton-line {
   height: 32rpx;
   border-radius: 8rpx;
-  background: #ECEFF1;
+  background: var(--border);
   margin-bottom: 16rpx;
 }
 .skeleton-line.short {
@@ -28,12 +28,12 @@
 .skeleton-card {
   height: 120rpx;
   border-radius: 16rpx;
-  background: #ECEFF1;
+  background: var(--border);
   margin-bottom: 16rpx;
 }
 .shimmer {
   animation: shimmer 1.2s infinite linear;
-  background: linear-gradient(90deg, #ECEFF1 25%, #F5F7F8 50%, #ECEFF1 75%);
+  background: linear-gradient(90deg, var(--border) 25%, var(--bg-card) 50%, var(--border) 75%);
   background-size: 400% 100%;
 }
 @keyframes shimmer {
@@ -47,7 +47,7 @@
   text-align: center;
 }
 .error-text {
-  color: #E57373;
+  color: var(--danger);
   font-size: 28rpx;
 }
 
@@ -55,13 +55,13 @@
 .course-head {
   display: flex;
   padding: 32rpx 24rpx 16rpx;
-  background: linear-gradient(135deg, #E8F5F2, #FFF5F7);
+  background: var(--accent-soft);
 }
 .course-cover {
   width: 180rpx;
   height: 180rpx;
   border-radius: 20rpx;
-  background: #E3F1EC;
+  background: var(--accent-soft);
   flex-shrink: 0;
 }
 .course-head-info {
@@ -74,38 +74,45 @@
 .course-name {
   font-size: 38rpx;
   font-weight: 600;
-  color: #2D3A36;
+  color: var(--text-primary);
   margin-bottom: 12rpx;
 }
 .course-desc {
   font-size: 26rpx;
-  color: #7A8A84;
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 
-/* 订阅按钮（FR-MC-06）：课程类频道订阅后可接收新章节推送 */
+/* 订阅按钮（FR-MC-06）：课程类频道订阅后可接收新章节推送
+   T00384：图标即按钮（未订阅 check / 已订阅 checks），触控区 88rpx */
 .sub-btn {
   flex-shrink: 0;
   align-self: flex-start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88rpx;
+  height: 88rpx;
   margin-left: 16rpx;
-  padding: 12rpx 28rpx;
-  border-radius: 32rpx;
-  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
-  color: #FFFFFF;
-  font-size: 26rpx;
+  border-radius: var(--radius-btn);
+  background: var(--accent);
 }
 .sub-btn.subscribed {
-  background: #E3F1EC;
-  color: #4A7C6F;
+  background: var(--accent-soft);
+  border: 2rpx solid var(--border);
+}
+.sub-btn-icon {
+  width: 40rpx;
+  height: 40rpx;
 }
 
 /* === 学习进度卡 === */
 .progress-card {
   margin: 24rpx;
   padding: 28rpx;
-  background: #FFFFFF;
+  background: var(--bg-card);
   border-radius: 20rpx;
-  box-shadow: 0 4rpx 16rpx rgba(91, 168, 155, 0.08);
+  box-shadow: 0 4rpx 16rpx rgba(63, 108, 143, 0.08);
 }
 .progress-top {
   display: flex;
@@ -115,22 +122,22 @@
 }
 .progress-label {
   font-size: 28rpx;
-  color: #2D3A36;
+  color: var(--text-primary);
   font-weight: 600;
 }
 .progress-num {
   font-size: 24rpx;
-  color: #5BA89B;
+  color: var(--accent);
 }
 .progress-track {
   height: 16rpx;
   border-radius: 8rpx;
-  background: #EEF3F1;
+  background: var(--accent-soft);
   overflow: hidden;
 }
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #7ECEC1, #5BA89B);
+  background: var(--accent);
   border-radius: 8rpx;
   transition: width 0.3s ease;
 }
@@ -139,23 +146,25 @@
   margin-top: 24rpx;
   gap: 20rpx;
 }
+/* T00384：图标即按钮，触控区抬到 88rpx */
 .btn-primary,
 .btn-ghost {
   flex: 1;
-  height: 76rpx;
-  border-radius: 38rpx;
+  min-height: 88rpx;
+  border-radius: var(--radius-btn);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28rpx;
 }
 .btn-primary {
-  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
-  color: #FFFFFF;
+  background: var(--accent);
 }
 .btn-ghost {
-  background: #E3F1EC;
-  color: #4A7C6F;
+  background: var(--accent-soft);
+  border: 2rpx solid var(--border);
+}
+.btn-ghost .btn-icon {
+  margin-right: 0;
 }
 
 /* === 合规提示（FR-MC-11） === */
@@ -164,31 +173,31 @@
   align-items: flex-start;
   margin: 0 24rpx 8rpx;
   padding: 20rpx 24rpx;
-  background: #FFF8E1;
+  background: var(--warning-soft);
   border-radius: 16rpx;
-  border: 1rpx solid #FFE0A3;
+  border: 1rpx solid var(--warning-soft);
 }
 .disclaimer.strong {
-  background: #FFEBEE;
-  border-color: #FFB4A2;
+  background: var(--danger-soft);
+  border-color: var(--danger);
 }
 .disclaimer-icon {
   font-size: 28rpx;
-  color: #F0A020;
+  color: var(--warning);
   margin-right: 12rpx;
   line-height: 1.5;
 }
 .disclaimer.strong .disclaimer-icon {
-  color: #E57373;
+  color: var(--danger);
 }
 .disclaimer-text {
   flex: 1;
   font-size: 24rpx;
-  color: #8A6D3B;
+  color: var(--warning);
   line-height: 1.6;
 }
 .disclaimer.strong .disclaimer-text {
-  color: #C0392B;
+  color: var(--danger);
 }
 
 /* === 章节列表 === */
@@ -199,7 +208,7 @@
   display: block;
   font-size: 28rpx;
   font-weight: 600;
-  color: #2D3A36;
+  color: var(--text-primary);
   margin: 16rpx 0 16rpx;
 }
 .chapter-item {
@@ -207,16 +216,16 @@
   align-items: center;
   padding: 24rpx;
   margin-bottom: 16rpx;
-  background: #FFFFFF;
+  background: var(--bg-card);
   border-radius: 16rpx;
-  box-shadow: 0 2rpx 10rpx rgba(91, 168, 155, 0.06);
+  box-shadow: 0 2rpx 10rpx rgba(63, 108, 143, 0.06);
 }
 .chapter-index {
   width: 64rpx;
   height: 64rpx;
   border-radius: 50%;
-  background: #E3F1EC;
-  color: #4A7C6F;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
   font-size: 28rpx;
   display: flex;
   align-items: center;
@@ -225,12 +234,17 @@
   margin-right: 20rpx;
 }
 .chapter-index.finished {
-  background: #5BA89B;
-  color: #FFFFFF;
+  background: var(--accent);
+  color: var(--text-inverse);
 }
 .chapter-index.learning {
-  background: #FFE0A3;
-  color: #8A6D3B;
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+/* T00384：状态字符（✓/▶）统一换为 Tabler 图标 */
+.chapter-state-icon {
+  width: 32rpx;
+  height: 32rpx;
 }
 .chapter-main {
   flex: 1;
@@ -239,7 +253,7 @@
 }
 .chapter-title {
   font-size: 28rpx;
-  color: #2D3A36;
+  color: var(--text-primary);
   line-height: 1.4;
   margin-bottom: 8rpx;
 }
@@ -249,20 +263,20 @@
 }
 .chapter-dur {
   font-size: 22rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   margin-right: 16rpx;
 }
 .chapter-status {
   font-size: 22rpx;
 }
 .chapter-status.new {
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 .chapter-status.learning {
-  color: #F0A020;
+  color: var(--warning);
 }
 .chapter-status.finished {
-  color: #5BA89B;
+  color: var(--accent);
 }
 .chapter-play {
   width: 48rpx;
@@ -285,49 +299,50 @@
 }
 .empty-title {
   font-size: 28rpx;
-  color: #5A6A64;
+  color: var(--text-secondary);
   margin-bottom: 12rpx;
 }
 .empty-desc {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   text-align: center;
   line-height: 1.6;
 }
 
-/* === 整课离线下载条（FR-MC-09） === */
+/* === 整课离线下载条（FR-MC-09） ===
+   T00384：文案换 download 图标，进度/已下载数量保留为右侧状态 */
 .download-all-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-top: 20rpx;
-  padding: 20rpx 24rpx;
-  background: linear-gradient(135deg, #FFF1F4, #FFE3EA);
+  min-height: 88rpx;
+  padding: 16rpx 24rpx;
+  background: var(--accent-soft);
   border-radius: 16rpx;
 }
 .download-all-bar.loading {
   opacity: 0.85;
 }
-.download-all-text {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #E0577F;
+.download-all-icon {
+  width: 44rpx;
+  height: 44rpx;
 }
 .download-all-sub {
   font-size: 22rpx;
-  color: #C98AA0;
+  color: var(--text-muted);
 }
 
-/* === 章节下载按钮（FR-MC-09） === */
+/* === 章节下载按钮（FR-MC-09） ===
+   T00384：图标即按钮（未下载 download / 已下载 download-done），触控区 88rpx */
 .chapter-dl {
   flex-shrink: 0;
-  min-width: 96rpx;
-  height: 52rpx;
+  width: 88rpx;
+  height: 88rpx;
   margin-left: 16rpx;
-  padding: 0 18rpx;
-  border-radius: 26rpx;
-  background: #FFF1F4;
-  color: #E0577F;
+  border-radius: var(--radius-btn);
+  background: var(--accent-soft);
+  color: var(--accent-dark);
   font-size: 22rpx;
   display: flex;
   align-items: center;
@@ -335,10 +350,12 @@
   text-align: center;
 }
 .chapter-dl.ing {
-  background: #E3F1EC;
-  color: #4A7C6F;
+  background: var(--warning-soft);
 }
 .chapter-dl.done {
-  background: #E3F1EC;
-  color: #5BA89B;
+  background: var(--accent-soft);
+}
+.chapter-dl-icon {
+  width: 40rpx;
+  height: 40rpx;
 }

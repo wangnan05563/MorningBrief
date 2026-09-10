@@ -5,7 +5,7 @@
   flex-direction: column;
   align-items: center;
   padding: 120rpx 0;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 .empty-icon {
@@ -22,12 +22,12 @@
 
 .empty-title {
   font-size: 28rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 /* 描述比标题略小且更淡，形成层次 */
 .empty-desc {
   font-size: 24rpx;
-  color: #CBD5E0;
+  color: var(--border-strong);
   margin-top: 12rpx;
 }

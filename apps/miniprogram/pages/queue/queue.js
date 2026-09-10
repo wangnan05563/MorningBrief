@@ -58,7 +58,7 @@ Page({
     wx.showModal({
       title: '清空队列',
       content: '确定清空当前播放队列？',
-      confirmColor: '#FF6B8A',
+      confirmColor: '#B0554A',
       success: (res) => {
         if (res.confirm) {
           clearQueue();

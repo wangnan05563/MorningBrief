@@ -129,7 +129,7 @@ Page({
     wx.showModal({
       title: '清空全部下载',
       content: '将删除全部离线缓存文件，不可恢复。',
-      confirmColor: '#FF6B8A',
+      confirmColor: '#B0554A',
       success: (res) => {
         if (res.confirm) {
           downloadStore.clearAll();

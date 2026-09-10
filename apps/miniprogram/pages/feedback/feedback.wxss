@@ -12,7 +12,7 @@
 .section-title {
   font-size: 28rpx;
   font-weight: 600;
-  color: #2D3748;
+  color: var(--text-primary);
   margin-bottom: 20rpx;
 }
 
@@ -26,8 +26,8 @@
 .category-tag {
   padding: 14rpx 32rpx;
   font-size: 26rpx;
-  color: #5BA89B;
-  background: #E6F4F1;
+  color: var(--accent);
+  background: var(--accent-soft);
   border-radius: 32rpx;
   border: 2rpx solid transparent;
   transition: all 0.2s;
@@ -35,9 +35,9 @@
 
 /* 选中态切换为蜜桃粉：与未选中的薄荷青形成明确对比 */
 .category-tag.active {
-  color: #FFFFFF;
-  background: linear-gradient(135deg, #FF9AA2, #FF6B8A);
-  border-color: #FF6B8A;
+  color: var(--text-inverse);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 /* === 反馈内容输入区 === */
@@ -46,16 +46,16 @@
   min-height: 200rpx;
   padding: 24rpx;
   font-size: 28rpx;
-  color: #2D3748;
+  color: var(--text-primary);
   line-height: 1.6;
-  background: #F9FDFB;
-  border: 2rpx solid #E6F4F1;
+  background: var(--bg-page);
+  border: 2rpx solid var(--accent-soft);
   border-radius: 16rpx;
   box-sizing: border-box;
 }
 
 .content-ph {
-  color: #CBD5E0;
+  color: var(--border-strong);
 }
 
 /* 字数统计贴右下角：用户输入时目光自然落点 */
@@ -63,7 +63,7 @@
   margin-top: 12rpx;
   text-align: right;
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 /* === 联系方式输入框 === */
@@ -71,26 +71,30 @@
   width: 100%;
   padding: 20rpx 24rpx;
   font-size: 28rpx;
-  color: #2D3748;
-  background: #F9FDFB;
-  border: 2rpx solid #E6F4F1;
+  color: var(--text-primary);
+  background: var(--bg-page);
+  border: 2rpx solid var(--accent-soft);
   border-radius: 16rpx;
   box-sizing: border-box;
 }
 
 .contact-ph {
-  color: #CBD5E0;
+  color: var(--border-strong);
 }
 
-/* === 提交按钮 === */
+/* === 提交按钮 ===
+   T00384：图标即按钮，固定宽度方形触控区并居中 */
 .submit-wrap {
+  display: flex;
+  justify-content: center;
   padding: 40rpx 24rpx 0;
 }
 
 .submit-btn {
-  width: 100%;
-  border-radius: 40rpx;
-  font-size: 32rpx;
+  width: 120rpx;
+  min-height: 96rpx;
+  padding: 0;
+  border-radius: var(--radius-btn);
 }
 
 /* 禁用态降低饱和度，提示用户不可点击 */
@@ -98,6 +102,47 @@
   opacity: 0.6;
 }
 
-.submit-loading {
-  letter-spacing: 2rpx;
+/* === 反馈历史（B7）：与全局马卡龙配色统一 === */
+.history-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.history-item {
+  padding: 20rpx 0;
+  border-bottom: 2rpx solid var(--bg-subtle);
+}
+
+.history-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.history-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10rpx;
+}
+
+.history-cate {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 6rpx 20rpx;
+  border-radius: 24rpx;
+}
+
+.history-time {
+  font-size: 22rpx;
+  color: var(--text-muted);
+}
+
+.history-summary {
+  display: block;
+  font-size: 26rpx;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  word-break: break-all;
 }

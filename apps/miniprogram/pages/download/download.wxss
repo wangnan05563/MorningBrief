@@ -1,7 +1,7 @@
-/* 我的下载页样式（复用全局浅色主题：主色 #5BA89B，辅粉 #FF6B8A） */
+/* 我的下载页样式（复用全局浅色主题：主色 var(--accent)，辅粉 var(--accent)） */
 .download-page {
   min-height: 100vh;
-  background: #FFF5F7;
+  background: var(--bg-page);
   padding: 24rpx;
 }
 
@@ -12,9 +12,9 @@
   justify-content: space-between;
   padding: 24rpx 28rpx;
   margin-bottom: 16rpx;
-  background: #FFFFFF;
+  background: var(--bg-card);
   border-radius: 20rpx;
-  box-shadow: 0 4rpx 16rpx rgba(91, 168, 155, 0.08);
+  box-shadow: 0 4rpx 16rpx rgba(63, 108, 143, 0.08);
 }
 .stat-info {
   display: flex;
@@ -23,50 +23,58 @@
 .stat-count {
   font-size: 30rpx;
   font-weight: 600;
-  color: #2D3A36;
+  color: var(--text-primary);
 }
 .stat-size {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   margin-top: 6rpx;
 }
+/* T00384：清空/删除改为图标按钮，触控区 88rpx */
 .stat-clear {
-  padding: 12rpx 28rpx;
-  border-radius: 32rpx;
-  background: #FFEBEE;
-  color: #E57373;
-  font-size: 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: var(--radius-btn);
+  background: var(--danger-soft);
 }
 
 /* 分组 */
 .dl-group {
   margin-bottom: 24rpx;
-  background: #FFFFFF;
+  background: var(--bg-card);
   border-radius: 20rpx;
   overflow: hidden;
-  box-shadow: 0 2rpx 10rpx rgba(91, 168, 155, 0.06);
+  box-shadow: 0 2rpx 10rpx rgba(63, 108, 143, 0.06);
 }
 .group-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 24rpx 28rpx;
-  border-bottom: 1rpx solid #F0F3F2;
+  border-bottom: 1rpx solid var(--border);
 }
 .group-name {
   font-size: 28rpx;
   font-weight: 600;
-  color: #2D3A36;
+  color: var(--text-primary);
 }
 .group-clear {
-  font-size: 22rpx;
-  color: #E57373;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: var(--radius-btn);
+  background: var(--bg-subtle);
 }
 .dl-item {
   display: flex;
   align-items: center;
   padding: 24rpx 28rpx;
-  border-bottom: 1rpx solid #F5F7F6;
+  border-bottom: 1rpx solid var(--border);
 }
 .dl-item:last-child {
   border-bottom: none;
@@ -78,22 +86,29 @@
 }
 .dl-title {
   font-size: 28rpx;
-  color: #2D3A36;
+  color: var(--text-primary);
   line-height: 1.4;
 }
 .dl-sub {
   font-size: 22rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   margin-top: 6rpx;
 }
 .dl-del {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88rpx;
+  height: 88rpx;
   margin-left: 16rpx;
-  padding: 10rpx 24rpx;
-  border-radius: 26rpx;
-  background: #FFF1F4;
-  color: #E0577F;
-  font-size: 22rpx;
+  border-radius: var(--radius-btn);
+  background: var(--danger-soft);
+}
+/* 图标按钮内的图标尺寸（本页统一 40rpx） */
+.dl-icon {
+  width: 40rpx;
+  height: 40rpx;
 }
 
 /* 空态 */
@@ -111,12 +126,12 @@
 }
 .empty-title {
   font-size: 28rpx;
-  color: #5A6A64;
+  color: var(--text-secondary);
   margin-bottom: 12rpx;
 }
 .empty-desc {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
   text-align: center;
   line-height: 1.6;
 }

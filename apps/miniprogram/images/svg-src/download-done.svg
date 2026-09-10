@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 已下载到本地图标：商务蓝单色，用于图标按钮（无中文文案）
+     图标来源：Tabler Icons (MIT License) - circle-check -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <g fill="none" stroke="#3F6C8F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"/><path d="M9 12l2 2l4 -4"/>
+  </g>
+</svg>

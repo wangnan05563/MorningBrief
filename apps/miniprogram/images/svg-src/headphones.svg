@@ -4,7 +4,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <path
     d="M 12 36 C 12 22 22 12 32 12 C 42 12 52 22 52 36"
-    fill="none" stroke="#7ECEC1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="10" y="36" width="8" height="14" rx="3" fill="#7ECEC1"/>
-  <rect x="46" y="36" width="8" height="14" rx="3" fill="#7ECEC1"/>
+    fill="none" stroke="#6C93AF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="10" y="36" width="8" height="14" rx="3" fill="#6C93AF"/>
+  <rect x="46" y="36" width="8" height="14" rx="3" fill="#6C93AF"/>
 </svg>

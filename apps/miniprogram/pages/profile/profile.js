@@ -72,7 +72,7 @@ Page({
       profile = await this.fetchWxProfile();
     } catch (err) {
       // 旧版 API 报错：profile 保持 null，走下方"使用微信资料"分支
-      console.log('silentEnrichProfile fetchWxProfile 失败:', err.message || err);
+      console.warn('silentEnrichProfile fetchWxProfile 失败:', err.message || err);
     }
     if (profile && (profile.avatar || profile.nickname)) {
       // 旧基础库路径：getUserProfile 成功，写回后端 + 更新本地
@@ -101,7 +101,7 @@ Page({
       content: '为了在评论、收藏等场景展示你的头像和昵称，建议使用微信资料。',
       confirmText: '使用微信资料',
       cancelText: '以后再说',
-      confirmColor: '#5BA89B',
+      confirmColor: '#3F6C8F',
       success: (res) => {
         if (res.confirm) {
           // 用户同意：打开"使用微信资料"弹窗（复用 onTapEditProfile 的 UI）
@@ -504,7 +504,7 @@ Page({
     wx.showModal({
       title: '退出登录',
       content: '确定要退出登录吗？',
-      confirmColor: '#FF6B8A',
+      confirmColor: '#B0554A',
       success: async (res) => {
         if (!res.confirm) return;
         // 在 logout 清除 news_user 前先取 openid，用于清理该用户的本地数据

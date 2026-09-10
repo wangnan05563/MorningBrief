@@ -21,15 +21,15 @@
   ],
   "window": {
     "backgroundTextStyle": "light",
-    "navigationBarBackgroundColor": "#FFF5F7",
+    "navigationBarBackgroundColor": "#FFFFFF",
     "navigationBarTitleText": "今日节目",
     "navigationBarTextStyle": "black"
   },
   "tabBar": {
-    "color": "#A0AEC0",
-    "selectedColor": "#5BA89B",
+    "color": "#98A2AE",
+    "selectedColor": "#3F6C8F",
     "backgroundColor": "#FFFFFF",
-    "borderStyle": "white",
+    "borderStyle": "black",
     "list": [
       {
         "pagePath": "pages/index/index",

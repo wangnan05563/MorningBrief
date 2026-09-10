@@ -5,11 +5,11 @@
   width: 56rpx;
   height: 56rpx;
   border-radius: 50%;
-  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
+  background: var(--accent);
   display: flex;
   justify-content: center;
   align-items: center;
-  box-shadow: 0 4rpx 12rpx rgba(126, 206, 193, 0.3);
+  box-shadow: 0 4rpx 12rpx rgba(63, 108, 143, 0.3);
 }
 
 .icon-text {
@@ -25,11 +25,11 @@
 
 .item-duration {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 .empty-desc {
   font-size: 24rpx;
-  color: #CBD5E0;
+  color: var(--border-strong);
   margin-top: 12rpx;
 }

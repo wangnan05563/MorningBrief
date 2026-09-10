@@ -13,12 +13,12 @@
 .tip-bar {
   margin: 24rpx;
   padding: 20rpx 28rpx;
-  background: #EAF7F4;
+  background: var(--accent-soft);
   border-radius: 16rpx;
 }
 .tip-text {
   font-size: 26rpx;
-  color: #5BA89B;
+  color: var(--accent);
 }
 
 .channel-list {
@@ -33,8 +33,8 @@
   border: 2rpx solid transparent;
 }
 .channel-item.selected {
-  background: #F4FBF9;
-  border-color: #7ECEC1;
+  background: var(--accent-soft);
+  border-color: var(--accent-light);
 }
 
 .channel-info {
@@ -44,12 +44,12 @@
 .channel-name {
   font-size: 30rpx;
   font-weight: 500;
-  color: #2D3748;
+  color: var(--text-primary);
   margin-bottom: 8rpx;
 }
 .channel-desc {
   font-size: 24rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 /* 勾选标记：未选时是浅灰描边圆，选中时填充薄荷青 */
@@ -57,23 +57,21 @@
   width: 44rpx;
   height: 44rpx;
   border-radius: 50%;
-  border: 2rpx solid #CBD5E0;
+  border: 2rpx solid var(--border-strong);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #FFFFFF;
+  background: var(--bg-card);
   flex-shrink: 0;
   margin-left: 24rpx;
 }
 .check-box.checked {
-  background: #5BA89B;
-  border-color: #5BA89B;
+  background: var(--accent);
+  border-color: var(--accent);
 }
 .check-icon {
-  color: #FFFFFF;
-  font-size: 28rpx;
-  font-weight: 700;
-  line-height: 1;
+  width: 28rpx;
+  height: 28rpx;
 }
 
 /* 底部操作栏：固定在屏幕底部，与 floating-player 错开 */
@@ -86,28 +84,69 @@
   align-items: center;
   padding: 20rpx 32rpx;
   padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
-  background: #FFFFFF;
-  box-shadow: 0 -4rpx 16rpx rgba(126, 206, 193, 0.12);
+  background: var(--bg-card);
+  box-shadow: 0 -4rpx 16rpx rgba(63, 108, 143, 0.12);
   z-index: 100;
 }
+
+/* T00384：全选/暂不设置改为图标按钮，触控区 88rpx */
 .select-all-btn {
   flex-shrink: 0;
-  padding: 16rpx 24rpx;
-  color: #5BA89B;
-  font-size: 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: var(--radius-btn);
+  background: var(--bg-subtle);
+  border: 2rpx solid var(--border);
 }
+
+.select-all-btn:active {
+  background: var(--accent-soft);
+}
+
+.bar-icon {
+  width: 40rpx;
+  height: 40rpx;
+}
+
+/* 保存按钮：图标 + 已选数量角标（数量是状态而非按钮文案） */
 .save-btn {
+  position: relative;
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-left: 16rpx;
-  padding: 22rpx 0;
+  min-height: 88rpx;
+  padding: 0;
+  background: var(--accent);
+  color: var(--text-inverse);
+  border-radius: var(--radius-btn);
+}
+
+.save-btn-icon {
+  width: 44rpx;
+  height: 44rpx;
+}
+
+.save-count {
+  position: absolute;
+  top: 8rpx;
+  right: 16rpx;
+  min-width: 32rpx;
+  height: 32rpx;
+  padding: 0 8rpx;
+  border-radius: var(--radius-pill);
+  background: var(--bg-card);
+  color: var(--accent);
+  font-size: 20rpx;
+  font-weight: 600;
+  line-height: 32rpx;
   text-align: center;
-  background: linear-gradient(135deg, #7ECEC1, #5BA89B);
-  color: #FFFFFF;
-  border-radius: 40rpx;
-  font-size: 30rpx;
-  font-weight: 500;
 }
 .save-btn.disabled {
-  background: #E2E8F0;
-  color: #A0AEC0;
+  background: var(--border);
+  color: var(--text-muted);
 }

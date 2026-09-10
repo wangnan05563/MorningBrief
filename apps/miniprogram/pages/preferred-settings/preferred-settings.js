@@ -75,7 +75,13 @@ Page({
     const selectedIds = this.data.channels
       .filter((ch) => ch.selected)
       .map((ch) => ch.id);
-    localData.setPreferredChannels(selectedIds);
+    // A5：未登录时 setPreferredChannels 返回 false（openid 缺失，存储无目标 key）。
+    // 此时不能静默当成功——拦截并提示登录，避免用户误以为已保存偏爱。
+    const saved = localData.setPreferredChannels(selectedIds);
+    if (!saved) {
+      wx.showToast({ title: '请先登录后再设置偏爱', icon: 'none' });
+      return;
+    }
     // 标记已完成首次引导（即使用户选0个也视为已完成）
     localData.markPreferredChannelsOnboarded();
     // 通过 globalData 事件通知今日/历史页刷新偏爱筛选

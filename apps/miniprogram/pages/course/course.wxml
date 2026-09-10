@@ -17,18 +17,23 @@
   <block wx:else>
     <!-- 课程头部 -->
     <view class="course-head">
-      <image class="course-cover" lazy-load src="{{coverUrl}}" mode="aspectFill" />
+      <image wx:if="{{!coverError}}" class="course-cover" lazy-load src="{{coverUrl}}" mode="aspectFill" binderror="onCoverError" />
+      <view wx:else class="course-cover course-cover-fallback">
+        <text class="course-cover-fallback-text">课程封面</text>
+      </view>
       <view class="course-head-info">
         <text class="course-name">{{channel.name || '课程'}}</text>
         <text class="course-desc">{{channel.description || '专业资料语音课，随时随地听学。'}}</text>
       </view>
-      <!-- 订阅/取消订阅（FR-MC-06）：课程类频道订阅后可接收新章节推送 -->
+      <!-- 订阅/取消订阅（FR-MC-06）：课程类频道订阅后可接收新章节推送
+           T00384：图标即按钮，checks/check 区分已订阅态 -->
       <view
         class="sub-btn {{isSubscribed ? 'subscribed' : ''}}"
         bindtap="onToggleSubscribe"
         wx:if="{{!loading}}"
+        aria-label="{{isSubscribed ? '取消订阅' : '订阅课程'}}"
       >
-        <text>{{isSubscribed ? '已订阅' : '订阅'}}</text>
+        <image class="sub-btn-icon" lazy-load src="{{isSubscribed ? '/images/icons/checks.png' : '/images/icons/check.png'}}" mode="aspectFit" />
       </view>
     </view>
 
@@ -41,19 +46,21 @@
       <view class="progress-track">
         <view class="progress-fill" style="width: {{percent}}%;"></view>
       </view>
+      <!-- T00384：继续学习/从头播放改为图标按钮 -->
       <view class="progress-actions">
-        <view class="btn-primary" bindtap="onContinue">
-          <text>继续学习</text>
+        <view class="btn-primary btn-icon-only" bindtap="onContinue" aria-label="继续学习">
+          <image class="btn-icon" lazy-load src="/images/icons/play.png" mode="aspectFit" />
         </view>
-        <view class="btn-ghost" bindtap="onPlayFromStart">
-          <text>从头播放</text>
+        <view class="btn-ghost btn-icon-only" bindtap="onPlayFromStart" aria-label="从头播放">
+          <image class="btn-icon" lazy-load src="/images/icons/skip-back.png" mode="aspectFit" />
         </view>
       </view>
 
-      <!-- 整课离线下载（FR-MC-09）：点击下载全部未下载章节 -->
-      <view class="download-all-bar {{batchDownloading ? 'loading' : ''}}" bindtap="onDownloadAll" wx:if="{{totalCount > 0}}">
-        <text class="download-all-text">⬇ 下载整门课程</text>
-        <text class="download-all-sub">{{batchDownloading ? ('下载中 ' + batchProgress + '%') : ('已下载 ' + downloadedCount + '/' + totalCount)}}</text>
+      <!-- 整课离线下载（FR-MC-09）：点击下载全部未下载章节
+           T00384：图标即按钮，进度/已下载数量作为状态角标保留 -->
+      <view class="download-all-bar {{batchDownloading ? 'loading' : ''}}" bindtap="onDownloadAll" wx:if="{{totalCount > 0}}" aria-label="下载整门课程">
+        <image class="download-all-icon" lazy-load src="/images/icons/download.png" mode="aspectFit" />
+        <text class="download-all-sub">{{batchDownloading ? (batchProgress + '%') : (downloadedCount + '/' + totalCount)}}</text>
       </view>
     </view>
 
@@ -75,9 +82,10 @@
         data-index="{{index}}"
         bindtap="onTapChapter"
       >
+        <!-- 章节状态位：✓/▶ 字符统一换成 Tabler 图标（T00384） -->
         <view class="chapter-index {{item.status}}">
-          <text wx:if="{{item.status === 'finished'}}">✓</text>
-          <text wx:elif="{{item.status === 'learning'}}">▶</text>
+          <image wx:if="{{item.status === 'finished'}}" class="chapter-state-icon" lazy-load src="/images/icons/btn-check.png" mode="aspectFit" />
+          <image wx:elif="{{item.status === 'learning'}}" class="chapter-state-icon" lazy-load src="/images/icons/play-mini-accent.png" mode="aspectFit" />
           <text wx:else>{{item.index}}</text>
         </view>
         <view class="chapter-main">
@@ -89,17 +97,19 @@
             <text class="chapter-status {{item.status}}" wx:else>未学习</text>
           </view>
         </view>
-        <!-- 章节离线下载（FR-MC-09）：catchtap 不触发卡片跳转 -->
+        <!-- 章节离线下载（FR-MC-09）：catchtap 不触发卡片跳转
+             T00384：文案改为图标，下载中保留百分比 -->
         <view
           class="chapter-dl {{item.downloaded ? 'done' : ''}} {{item.downloading ? 'ing' : ''}}"
           catchtap="onTapDownloadChapter"
           data-id="{{item.id}}"
+          aria-label="{{item.downloaded ? '已下载' : (item.downloading ? '下载中' : '下载本章')}}"
         >
-          <text wx:if="{{item.downloaded}}">✓ 已下载</text>
+          <image wx:if="{{item.downloaded}}" class="chapter-dl-icon" lazy-load src="/images/icons/download-done.png" mode="aspectFit" />
           <text wx:elif="{{item.downloading}}">{{item.progress}}%</text>
-          <text wx:else>⬇ 下载</text>
+          <image wx:else class="chapter-dl-icon" lazy-load src="/images/icons/download.png" mode="aspectFit" />
         </view>
-        <image class="chapter-play" lazy-load src="/images/icons/play.png" mode="aspectFit" />
+        <image class="chapter-play" lazy-load src="/images/icons/play-mini-accent.png" mode="aspectFit" />
       </view>
 
       <!-- 空态：课程尚未生成章节 -->
@@ -111,3 +121,6 @@
     </view>
   </block>
 </view>
+
+<!-- 全局浮动播放器：离开 tab 后仍可看到并控制后台播放（B4） -->
+<floating-player />

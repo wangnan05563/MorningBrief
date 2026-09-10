@@ -346,7 +346,7 @@ Page({
       content: '勾选你喜爱的频道，"我的偏爱"将只展示这些频道的节目。',
       confirmText: '去设置',
       cancelText: '暂不',
-      confirmColor: '#5BA89B',
+      confirmColor: '#3F6C8F',
       success: (res) => {
         if (res.confirm) {
           wx.navigateTo({ url: '/pages/preferred-settings/preferred-settings?from=onboarding' });
