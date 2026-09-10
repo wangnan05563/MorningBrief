@@ -93,6 +93,10 @@ MANIFEST
 # ═══════════════════════════════════════════
 *.spec.bak
 installer.iss
+# 打包输出根（V2 起从 release/dist/ 迁至 release/ 根）
+# 通配 dist/ 已无法覆盖 release 下的目录，需精确路径
+release/MorningBrief/
+release/MorningBrief-Setup-*.exe
 
 # ═══════════════════════════════════════════
 # 测试报告与结果
@@ -225,3 +229,21 @@ sonar-results/
 *.tmp
 *.bak
 *.orig
+
+# ---------- 清理技能自动生成规则 (workspace-cleanup 2026-09-10) ----------
+# Vite 临时配置缓存：旧规则 `admin-web/vite.config.js.timestamp-*.mjs` 含斜杠被锚定到仓库根，
+# 无法命中 apps/admin-web 层级；下面无斜杠的基名规则对任意层级生效，可取代旧规则。
+vite.config.js.timestamp-*.mjs
+# pytest 临时目录：根目录随机后缀目录 + backend 固定名目录
+/pytest-cache-files-*/
+.pytest_tmp/
+# 根目录 _ 前缀调试输出（.py / .ps1 已有规则，此处补齐 .json / .txt）
+/_*.json
+/_*.txt
+# 前端测试运行残留
+test-last-run.txt
+# 运行时临时状态目录（pid / 临时 token，均属本机态）
+/.run/
+# 清理隔离区（24h 恢复窗口，绝不入库）
+runtime/.cleanup-trash-*/
+

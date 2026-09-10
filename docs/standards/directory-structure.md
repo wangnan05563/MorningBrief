@@ -162,14 +162,14 @@
 | `admin-web/` | `apps/admin-web/` | 前端 Vue SPA；同步更新 ci.yml、5 个构建/打包脚本、运行时 `backend/app/paths.py:136`、`installer.iss`/`MorningBrief.spec` 图标与打包路径 |
 | `miniprogram/` | `apps/miniprogram/` | 微信小程序客户端 |
 | `scf/` | `apps/scf/` | 腾讯云 SCF，部署契约由 `scf/xxx.handler` 更新为 `apps/scf/xxx.handler` |
-| `dist/` | `release/dist/` | 打包 exe 交付物（gitignore）；`build-exe.ps1`/`installer.iss`/`MorningBrief.spec` 同步改 `release/dist/MorningBrief` |
+| `dist/` | `release/MorningBrief/` | 打包 exe 交付物（gitignore）；`build-exe.ps1`/`installer.iss`/`MorningBrief.spec` 同步改 `release/MorningBrief` |
 | `build/` | `release/build/` | PyInstaller 中间目录（gitignore）；`build-exe.ps1` 清理列表同步改 `release/build` |
 | `assets/` | `release/assets/` | 安装包图标 `MorningBrief.ico`，被 `installer.iss`/`MorningBrief.spec` 引用，改为 `release/assets/MorningBrief.ico` |
 | `data/` | `runtime/data/` | cloudflared/cpolar 隧道二进制（dev 真实库在 `backend/data/`，不在本次移动范围） |
 | `logs/` | `runtime/logs/` | 运行态日志（gitignore）；`start.ps1`/`cleanup-config.yaml` `logs_dir`/`preserve_roots`/`service_indicators` 同步改 `runtime/logs` |
 | `canvas-fonts/` | （删除） | 空目录，无引用，直接移除 |
 
-> 冻结态（exe 模式）SPA 拷贝名保持 `admin-web/dist`：`build-exe.ps1` 复制到 `release/dist/MorningBrief/admin-web/dist`，`backend/app/paths.py:126` 的 `ext_dist` 仍按 `admin-web/dist` 解析（exe 同级子目录名，与源码树位置无关）。仅开发态路径 `paths.py:136`（`app_root.parent`）改 `apps/admin-web/dist`。
+> 冻结态（exe 模式）SPA 拷贝名保持 `admin-web/dist`：`build-exe.ps1` 复制到 `release/MorningBrief/admin-web/dist`，`backend/app/paths.py:126` 的 `ext_dist` 仍按 `admin-web/dist` 解析（exe 同级子目录名，与源码树位置无关）。仅开发态路径 `paths.py:136`（`app_root.parent`）改 `apps/admin-web/dist`。
 
 ### 规范化目标布局（当前实际结构）
 
@@ -180,7 +180,7 @@
 | 云函数 | `apps/scf/` | 腾讯云 SCF，部署契约 `apps/scf/xxx.handler` |
 | 后端 | `backend/` | FastAPI 应用 + `backend/app`（服务源码） |
 | 脚本 | `scripts/`（含 `scripts/jmeter_test/`、`scripts/canvas-design/`） | 构建/打包/压测/素材生成/运维工具 |
-| 构建产物/打包 | `release/dist/`（含 `release/dist/MorningBrief/` 打包 exe）、`release/build/`（PyInstaller 中间目录）、`release/assets/`（安装包图标 `MorningBrief.ico`） | 交付物与安装包资源 |
+| 构建产物/打包 | `release/MorningBrief/`（打包 exe + 安装包 `MorningBrief-Setup-v*.exe`）、`release/build/`（PyInstaller 中间目录）、`release/assets/`（安装包图标 `MorningBrief.ico`） | 交付物与安装包资源 |
 | 运行时数据/日志 | `runtime/data/`（隧道二进制 + audio_cache）、`runtime/logs/`（运行态日志，gitignore） | 运行时产物，被 `paths.py`/`start.ps1`/`cleanup-config.yaml` 解析 |
 | 文档 | `docs/`（含 `docs/reports/`、`docs/test-reports/`、`docs/sonar-reports/`、`docs/standards/`） | 设计/测试/评审/规范 |
 | 根配置 | `installer.iss`、`MorningBrief.spec`、`sonar-project.properties`、`.gitignore`、`cleanup-config.yaml` | 构建/扫描/清理配置 |
@@ -189,3 +189,84 @@
 
 - 目录（7）：`apps/` `backend/` `docs/` `release/` `runtime/` `scripts/` + `node_modules/`（gitignore）
 - 文件（4）：`cleanup-config.yaml` `installer.iss` `MorningBrief.spec` `sonar-project.properties`
+
+---
+
+## 2026-09-10 工作空间清理（周期性维护 · 第三轮）
+
+### 背景
+
+距上一轮（2026-08-14，删 3633 文件 / 137.2 MB）约四周。根目录已稳定（9 个文件，全部合规），本轮垃圾集中在**子目录与运行态目录**：backend 下 22 个 `__pycache__/`、pytest 临时目录、5 个超大运行日志（合计 106.5 MB）、以及散落在 `apps/admin-web` 的 Vite 临时配置与调试产物。
+
+执行前服务状态四重检测：`runtime/logs/{web,app}.pid` 不存在、8000/8080/5000 端口无监听、后端日志与 `service-error.log` 未被占用 → 判定服务已停止，可安全执行。
+
+### 清理动作
+
+| Tier | 类别 | 数量 | 处理方式 | 空间 |
+|---|---|---|---|---|
+| A | Python 字节码 `__pycache__/`（backend 22 个 + 根 1 个） | 259 文件 / 23 目录 | 直接删除 | 3.11 MB |
+| A | pytest 临时目录 `backend/.pytest_tmp/`、`.pytest_cache/`×2 | 110 文件 / 3 目录 | 直接删除 | 0.05 MB |
+| A | Sonar / 临时目录 `.scannerwork/`、`backend/.tmp/`、`pytest-cache-files-*/` | 3 文件 / 3 目录 | 直接删除 | ~0 MB |
+| B | 运行日志：`backend/logs/MorningBrief_2026-0{9-01,9-05,9-06,9-09}.log` 等 | 10 文件 | 直接删除 | 106.52 MB |
+| C | 根目录调试产物：`_sonar_issues.py`、`_es_query.json`、`_diag_build.ps1`（空文件） | 3 文件 | 直接删除 | ~0 MB |
+| C | `apps/admin-web/`：`vite.config.js.timestamp-*.mjs`×5、`_clean_tmp.py`、`test-last-run.txt` | 7 文件 | 直接删除 | 0.05 MB |
+| D | 一次性脚本与上轮审计产物：`temp/`、`backend/temp/`、`backend/fix_client.py`、`.run/test_token.txt`、`runtime/logs/cleanup-*`、`stats_page_*.png` | 20 文件 | **隔离 24h** | 1.48 MB |
+| D | `apps/admin-web/dist/`（SPA 构建产物） | 109 文件 | **隔离 24h** | 3.27 MB |
+| **合计** | | **521 文件 / 29 目录** | | **~114.47 MB** |
+
+### 风险分级与处置依据
+
+| 级别 | 判定 | 处置 |
+|---|---|---|
+| 零风险 | 纯缓存/字节码，可完全再生 | 直接删除 |
+| 低风险 | 运行日志、根目录调试脚本（空文件、一次性 ES 查询） | 直接删除（删前 sha256 留痕） |
+| 中风险 | 一次性验证脚本、上轮清理审计产物、前端构建产物 | **移动至 `runtime/.cleanup-trash-20260910/`**（24h 恢复窗口） |
+| 高风险（未执行） | `backend/data/backup/` 9 个 DB 备份（~205 MB）、`news.db.bak_constraint_drop`（22 MB） | 用户数据，仅列出未动 |
+
+### 验证结果
+
+- **语法完整性**：`backend/app` + `backend/tests` 共 **244 个 `.py` AST 解析 0 错误** ✓
+- **应用导入冒烟**：`.venv\Scripts\python.exe -B -c "from app.main import app"` → **import OK，199 条路由，4.83s，exit=0** ✓（`-B` 确保不复生 pyc）
+- **稳定性复扫**：6 秒后复扫 `__pycache__`=0、`backend/logs`=0、根 `__pycache__`=0 ✓
+- **根目录文件**：9 → **6** ✓
+- **用户数据零触碰**：`backend/data/news.db`(40 MB)、`backup/`、`bgm/`、`avatars/`、`ai_budget.json`、`tunnel_config.json` 全部保留 ✓
+- **保留根零触碰**：`build/`、`release/`、`runtime/data/`、`node_modules/`×2、`backend/ffmpeg/`、`.trae/`、`.workbuddy/`、`.venv*` ✓
+
+### 新增 .gitignore 规则
+
+追加「清理技能自动生成规则 (workspace-cleanup 2026-09-10)」块，共 8 条：
+
+| 规则 | 补的缺口 |
+|---|---|
+| `vite.config.js.timestamp-*.mjs` | 旧规则 `admin-web/...` 含斜杠被锚定到仓库根，未命中 `apps/admin-web/` 层级（本轮 5 个文件曾被跟踪） |
+| `/pytest-cache-files-*/` | 根目录 pytest 随机后缀临时目录（`.pytest_cache/` 规则未覆盖） |
+| `.pytest_tmp/` | backend pytest 临时目录 |
+| `/_*.json`、`/_*.txt` | 已有 `/ _*.py`、`/_*.ps1`，补齐 json/txt 两类 |
+| `test-last-run.txt` | 前端测试运行残留（本轮 1 个文件曾被跟踪） |
+| `/.run/` | 运行态 pid / 临时 token 目录 |
+| `runtime/.cleanup-trash-*/` | 未来清理隔离区，防止误入库 |
+
+> `.pre-commit-config.yaml` 在本仓库不存在（项目未启用 pre-commit），故未生成钩子；防复发依赖 `.gitignore` + CI。如需强制拦截，建议后续引入 pre-commit 或复用 `.github/workflows/ci.yml`。
+
+### 备份与可追溯
+
+- **删前哈希审计**：`runtime/logs/cleanup-20260910-audit.log`（412 行：SHA256 \| 字节数 \| Tier \| 动作 \| 路径）
+- **目标清单**：`runtime/logs/cleanup-targets-20260910.txt`、`cleanup-plan-20260910.json`
+- **隔离区**：`runtime/.cleanup-trash-20260910/`（21 项，含 `dist/`；24h 内可原样恢复）
+- **执行脚本**：`runtime/logs/wscleanup-exec-20260910.ps1`（enumerate / hashlog / delete / move / movedirs / rmdirs 六动作，幂等）
+
+### 未清理的风险文件（需人工决策）
+
+| 项 | 大小 | 原因 |
+|---|---|---|
+| `backend/data/backup/` 9 个 DB 备份 | ~205 MB | 用户数据，备份轮转残留，删前需确认保留策略 |
+| `backend/data/news.db.bak_constraint_drop` | 22 MB | 08-19 手工兜底备份 |
+| `backend/fix_client.py` | 9.7 KB | 已隔离；untracked 一次性修复脚本，待确认是否仍需 |
+| `release/assets/MorningBrief.ico` | — | **本轮之前即已缺失**（`git ls-files --deleted` 可见，不在本轮目标清单内），且整个 `release/` 目录当前不存在，待确认是否被历史打包脚本清除 |
+
+### 后续建议
+
+1. **DB 备份轮转策略**：`backend/data/backup/` 已积累 9 份快照（每份 ~19–29 MB，共 ~205 MB），建议在 `backup_service` 中加保留窗口（如仅留最近 3 份 + 每周 1 份）。
+2. **日志轮转**：`backend/logs/` 单日日志可达 34 MB，建议加 `RotatingFileHandler` 或按天保留 N 天，避免四周内再次累积 100 MB+。
+3. **`release/` 目录核查**：确认 `release/assets/MorningBrief.ico` 缺失是否影响 `installer.iss` / `MorningBrief.spec` 打包，必要时从 git 历史恢复。
+4. **周期性维护**：建议每月或每个里程碑后运行一次 workspace-cleanup。
