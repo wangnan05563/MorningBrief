@@ -138,6 +138,7 @@ docs/lighthouse/
 docs/test-reports/
 docs/snapshots/
 docs/*.png
+!docs/github-social-preview.png
 docs/*.jpg
 docs/*.jpeg
 docs/report.html
