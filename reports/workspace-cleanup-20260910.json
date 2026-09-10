@@ -1,0 +1,184 @@
+{
+  "report": {
+    "schema": "workspace-cleanup/report@1",
+    "project": "20_News",
+    "root": "D:\\code\\otherProjects\\20_News",
+    "round": 3,
+    "executedAt": "2026-09-10T12:34:00+08:00",
+    "finishedAt": "2026-09-10T16:10:00+08:00",
+    "skill": "workspace-cleanup",
+    "config": "cleanup-config.yaml",
+    "commit": "68c73b4",
+    "commitMessage": "chore(cleanup): 工作空间清理第三轮 + .gitignore 防复发规则"
+  },
+  "summary": {
+    "deletedFiles": 392,
+    "deletedDirectories": 29,
+    "quarantinedFiles": 129,
+    "quarantinedItems": 21,
+    "freedBytes": 120032890,
+    "freedHuman": "114.47 MB",
+    "trackedDeletionsUnstaged": 10,
+    "rootFilesBefore": 9,
+    "rootFilesAfter": 6,
+    "verification": "PASS"
+  },
+  "byType": [
+    { "ext": ".log",  "files": 8,   "mb": 107.21, "note": "backend/logs 运行日志 + runtime/logs" },
+    { "ext": ".pyc",  "files": 259, "mb": 3.10,   "note": "__pycache__ 字节码，可完全再生" },
+    { "ext": ".txt",  "files": 37,  "mb": 0.52,   "note": "pytest 临时 fixture / 上轮审计产物" },
+    { "ext": ".json", "files": 29,  "mb": 0.11,   "note": "pytest 临时 fixture / 上轮审计产物" },
+    { "ext": ".png",  "files": 2,   "mb": 0.10,   "note": "stats_page_*.png 调试截图" },
+    { "ext": ".py",   "files": 21,  "mb": 0.05,   "note": "一次性验证脚本 / _clean_tmp.py" },
+    { "ext": ".mjs",  "files": 5,   "mb": 0.05,   "note": "Vite 临时配置 vite.config.js.timestamp-*.mjs" },
+    { "ext": "(none)","files": 7,   "mb": 0.04,   "note": "pytest 临时无扩展名 fixture" },
+    { "ext": ".ps1",  "files": 2,   "mb": 0.01,   "note": "_diag_build.ps1（0 字节）等" },
+    { "ext": "other", "files": 42,  "mb": 0.01,   "note": ".err/.out/.lock/.TAG/.gitignore/.env/.exe/.dll/.zip/.yaml/.md" }
+  ],
+  "byTier": [
+    { "tier": "A", "risk": "zero",  "description": "零风险：纯缓存，可完全再生", "files": 372, "mb": 3.15,  "action": "delete" },
+    { "tier": "B", "risk": "low",   "description": "低风险：运行日志",           "files": 10,  "mb": 106.52,"action": "delete" },
+    { "tier": "C", "risk": "low",   "description": "低风险：根/子目录调试产物",   "files": 10,  "mb": 0.05,  "action": "delete" },
+    { "tier": "D", "risk": "medium","description": "中风险：一次性脚本/审计产物/构建产物", "files": 129, "mb": 4.75, "action": "quarantine" }
+  ],
+  "byDirectory": [
+    { "dir": "backend/",           "files": 376, "mb": 109.64 },
+    { "dir": "apps/",              "files": 116, "mb": 3.32 },
+    { "dir": "runtime/",           "files": 17,  "mb": 1.50 },
+    { "dir": "(root files)",       "files": 3,   "mb": 0.00 },
+    { "dir": "__pycache__/",       "files": 1,   "mb": 0.01 },
+    { "dir": "temp/",              "files": 1,   "mb": 0.01 },
+    { "dir": ".pytest_cache/",     "files": 4,   "mb": 0.00 },
+    { "dir": ".scannerwork/",      "files": 2,   "mb": 0.00 },
+    { "dir": ".run/",              "files": 1,   "mb": 0.00 },
+    { "dir": "pytest-cache-files-bdlg3fu2/", "files": 0, "mb": 0.00 }
+  ],
+  "deletedDirectories": [
+    "backend/app/__pycache__", "backend/app/cache/__pycache__", "backend/app/core/__pycache__",
+    "backend/app/cos/__pycache__", "backend/app/middleware/__pycache__", "backend/app/models/__pycache__",
+    "backend/app/routers/__pycache__", "backend/app/routers/admin/__pycache__", "backend/app/routers/api/__pycache__",
+    "backend/app/routers/internal/__pycache__", "backend/app/scripts/__pycache__", "backend/app/services/__pycache__",
+    "backend/app/services/notification/__pycache__", "backend/app/services/notifier/__pycache__",
+    "backend/app/services/notifier/channels/__pycache__", "backend/app/workflow/__pycache__",
+    "backend/app/workflow/crawler/__pycache__", "backend/app/workflow/llm/__pycache__",
+    "backend/app/workflow/stitch/__pycache__", "backend/app/workflow/tts/__pycache__",
+    "backend/tests/__pycache__", "backend/__pycache__",
+    "__pycache__", ".pytest_cache", ".scannerwork", "pytest-cache-files-bdlg3fu2",
+    "backend/.pytest_cache", "backend/.pytest_tmp", "backend/.tmp", "temp", "backend/temp"
+  ],
+  "workspaceBeforeAfter": {
+    "beforeMB": 1458.6,
+    "afterMB": 1344.1,
+    "deltaMB": -114.47,
+    "deltaPercent": -7.8,
+    "excludes": ".git",
+    "rootFilesBefore": 9,
+    "rootFilesAfter": 6,
+    "pycBefore": 259,
+    "pycAfter": 0,
+    "pycacheDirsBefore": 23,
+    "pycacheDirsAfter": 0,
+    "backendLogsBefore": 5,
+    "backendLogsAfter": 0
+  },
+  "skippedRiskyFiles": [
+    { "path": "backend/data/backup/", "sizeMB": 205, "reason": "用户数据：backup_service 自动轮转的 9 份 DB 快照，删除不可逆", "recommendation": "确认保留窗口后加轮转策略或单独授权清理" },
+    { "path": "backend/data/news.db.bak_constraint_drop", "sizeMB": 22, "reason": "用户数据：2026-08-19 手工兜底备份，可能仍有回滚价值", "recommendation": "确认约束变更稳定后可删" },
+    { "path": "backend/fix_client.py", "sizeMB": 0.009, "reason": "untracked 一次性修复脚本（2026-08-17），功能归属不明", "recommendation": "已隔离 24h，请确认是否仍需" },
+    { "path": "release/assets/MorningBrief.ico", "sizeMB": 0, "reason": "本轮之前即已缺失（不在本轮目标清单内），且整个 release/ 目录当前不存在", "recommendation": "人工核查是否影响 installer.iss / MorningBrief.spec 打包" },
+    { "path": "backend/data/ (news.db 等)", "sizeMB": 140, "reason": "运行时用户数据与素材", "recommendation": "保留" },
+    { "path": "backend/ffmpeg/", "sizeMB": 175, "reason": "运行时依赖（音频处理二进制）", "recommendation": "保留" },
+    { "path": "build/", "sizeMB": 52.8, "reason": "PyInstaller 中间产物，今日 09:51 刚构建（活跃）", "recommendation": "保留" },
+    { "path": "runtime/data/", "sizeMB": 72, "reason": "内网穿透运行时二进制", "recommendation": "保留" },
+    { "path": ".trae/ .workbuddy/ .github/ .venv* node_modules/*2", "sizeMB": 270, "reason": "活跃 skill 源 / 规则目录 / 依赖", "recommendation": "保留（禁止清理）" }
+  ],
+  "impactAssessment": {
+    "serviceState": "stopped",
+    "pidFiles": { "runtime/logs/web.pid": "absent", "runtime/logs/app.pid": "absent", ".run/20-news.pid": "stale (pid 17140 not running, file held by non-service handle)" },
+    "ports": { "8000": "no-listener", "8080": "no-listener", "5000": "no-listener" },
+    "processes": "node/python processes present but belong to IDE/toolchain, not this project's backend",
+    "fileOccupancy": { "backend/logs/*.log": "not locked", "runtime/logs/service-error.log": "not locked" },
+    "specialFilenames": [],
+    "decision": "proceed"
+  },
+  "verification": {
+    "syntaxCheck": { "scope": "backend/app + backend/tests", "filesParsed": 244, "syntaxErrors": 0, "encoding": "utf-8-sig", "result": "PASS" },
+    "importSmoke": { "command": ".venv/Scripts/python.exe -B -c \"from app.main import app\"", "result": "PASS", "routes": 199, "elapsedSeconds": 4.83, "exitCode": 0, "pycRegenerated": 0 },
+    "stabilityCheck": { "waitSeconds": 6, "pycacheAfter": 0, "backendLogsAfter": 0, "rootPycacheAfter": 0, "recurrence": "none", "action": "proceed" },
+    "integrityChecklist": {
+      "coreImportOk": true,
+      "rootCountBeforeAfter": "9 -> 6",
+      "scriptsCount": "unchanged",
+      "noAccidentalDeletion": true,
+      "userDataIntact": true,
+      "preserveRootsIntact": true
+    }
+  },
+  "archive": {
+    "gitignoreRulesAdded": 8,
+    "gitignoreRules": [
+      { "rule": "vite.config.js.timestamp-*.mjs", "gapFixed": "旧规则 `admin-web/...` 含斜杠被锚定到仓库根，未命中 apps/admin-web/ 层级（本轮 5 个文件曾被跟踪）" },
+      { "rule": "/pytest-cache-files-*/", "gapFixed": "根目录 pytest 随机后缀临时目录" },
+      { "rule": ".pytest_tmp/", "gapFixed": "backend pytest 临时目录" },
+      { "rule": "/_*.json", "gapFixed": "根级 _ 前缀调试输出（.py/.ps1 已有规则）" },
+      { "rule": "/_*.txt", "gapFixed": "根级 _ 前缀调试输出" },
+      { "rule": "test-last-run.txt", "gapFixed": "前端测试运行残留（本轮 1 个文件曾被跟踪）" },
+      { "rule": "/.run/", "gapFixed": "运行态 pid / 临时 token 目录" },
+      { "rule": "runtime/.cleanup-trash-*/", "gapFixed": "未来清理隔离区" }
+    ],
+    "preCommitUpdated": false,
+    "preCommitReason": ".pre-commit-config.yaml 在本仓库不存在（项目未启用 pre-commit），未生成钩子；防复发依赖 .gitignore + .github/workflows/ci.yml",
+    "changelogPath": "docs/standards/directory-structure.md",
+    "changelogSection": "2026-09-10 工作空间清理（周期性维护 · 第三轮）",
+    "gitattributesRecommendation": "本轮清理的 10 个曾被跟踪文件历史体积均很小（Vite 临时配置各 ~9.5 KB），无需 export-ignore；如后续出现大体积历史垃圾，建议 .gitattributes + export-ignore 或 git filter-repo",
+    "incidentalFix": "清除 .git/index.lock（2026-08-22 遗留 19 天陈旧空锁，0 字节，无 git 进程持有），此前阻塞所有 git 写操作"
+  },
+  "quarantine": {
+    "path": "runtime/.cleanup-trash-20260910",
+    "windowHours": 24,
+    "restoreCommand": "将隔离区内文件按名还原至原路径（文件名中 `__` 对应路径分隔符）",
+    "items": [
+      "apps__admin-web__dist",
+      "backend__fix_client.py",
+      "backend__temp__test_cookie_auth.py",
+      "backend__temp__test_e2e_smoke.py",
+      "backend__temp__test_mc_search_courses.py",
+      "backend__temp__test_mobile_smoke.py",
+      "backend__temp__test_strategy_unit.py",
+      "runtime__logs__cleanup-backup.log",
+      "runtime__logs__cleanup-driver-summary.json",
+      "runtime__logs__cleanup-emptydirs-summary.json",
+      "runtime__logs__cleanup-exec.ps1",
+      "runtime__logs__cleanup-flat.txt",
+      "runtime__logs__cleanup-plan-20260814-001720.json",
+      "runtime__logs__cleanup-plan-20260814-001720.md",
+      "runtime__logs__cleanup-report-final.json",
+      "runtime__logs__cleanup-report-final.md",
+      "runtime__logs__cleanup-targets.txt",
+      "runtime__logs__stats_page_0728.png",
+      "runtime__logs__stats_page_default.png",
+      "temp__test_bgm_overlay_e2e.py",
+      ".run__test_token.txt"
+    ]
+  },
+  "traceability": {
+    "auditLog": "runtime/logs/cleanup-20260910-audit.log",
+    "auditLogLines": 412,
+    "auditLogFormat": "SHA256 | BYTES | TIER | ACTION | PATH",
+    "targetsFile": "runtime/logs/cleanup-targets-20260910.txt",
+    "planJson": "runtime/logs/cleanup-plan-20260910.json",
+    "execScript": "runtime/logs/wscleanup-exec-20260910.ps1",
+    "execScriptActions": ["enumerate", "hashlog", "delete", "move", "movedirs", "rmdirs"],
+    "rollback": [
+      "隔离项：从 runtime/.cleanup-trash-20260910/ 原样移回",
+      "已跟踪文件：git checkout 68c73b4^ -- <file>",
+      "缓存/日志：重新运行构建或测试即再生（python -c 'import app.main' 等）"
+    ]
+  },
+  "followUpRecommendations": [
+    "backend/data/backup/ 已积累 9 份 DB 快照（~205 MB），建议在 backup_service 中加保留窗口（最近 3 份 + 每周 1 份）",
+    "backend/logs/ 单日日志可达 34 MB，建议加 RotatingFileHandler 或按天保留 N 天",
+    "核查 release/assets/MorningBrief.ico 缺失是否影响 installer.iss / MorningBrief.spec 打包链路",
+    "建议每月或每个里程碑后运行一次 workspace-cleanup"
+  ]
+}
