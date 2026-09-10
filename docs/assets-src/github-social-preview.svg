@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MorningBrief GitHub 社交预览图（T00397）设计源稿
+     画布：1280x640（GitHub Open Graph 规格）
+     风格：与小程序商务浅白主题一致（浅灰底 / 深灰文字 / 商务蓝点缀）
+     布局：左侧品牌徽标（复用 app-icon 耳机+声波图形），右侧名称 + 标语 + 技术栈
+     渲染：node render-social-preview.js（@resvg/resvg-js，需 Microsoft YaHei 中文字体） -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+  <defs>
+    <!-- 品牌渐变：与 app-icon 徽标背景一致 -->
+    <linearGradient id="brandBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4E7B9C"/>
+      <stop offset="100%" stop-color="#3F6C8F"/>
+    </linearGradient>
+    <linearGradient id="earCupGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#EDF3F7"/>
+    </linearGradient>
+    <!-- 页面底：极浅的冷灰，商务浅白 -->
+    <linearGradient id="pageBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#EDF1F5"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="1280" height="640" fill="url(#pageBg)"/>
+
+  <!-- 右上/左下装饰：低饱和商务蓝几何点缀，克制不抢戏 -->
+  <circle cx="1210" cy="70" r="150" fill="#3F6C8F" opacity="0.06"/>
+  <circle cx="60" cy="600" r="120" fill="#3F6C8F" opacity="0.05"/>
+  <rect x="0" y="0" width="1280" height="8" fill="url(#brandBg)"/>
+
+  <!-- 品牌徽标：圆角方形 + 耳机 + 声波（与小程序图标同图形） -->
+  <g transform="translate(150,208) scale(0.87)">
+    <rect x="16" y="16" width="480" height="480" rx="112" ry="112" fill="url(#brandBg)"/>
+    <path d="M 136 296 C 136 200 192 136 256 136 C 320 136 376 200 376 296"
+          fill="none" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round"/>
+    <rect x="100" y="284" width="72" height="112" rx="32" ry="32" fill="url(#earCupGrad)"/>
+    <rect x="340" y="284" width="72" height="112" rx="32" ry="32" fill="url(#earCupGrad)"/>
+    <line x1="226" y1="212" x2="226" y2="276" stroke="#FFFFFF" stroke-width="13" stroke-linecap="round" opacity="0.88"/>
+    <line x1="256" y1="190" x2="256" y2="298" stroke="#FFFFFF" stroke-width="13" stroke-linecap="round"/>
+    <line x1="286" y1="212" x2="286" y2="276" stroke="#FFFFFF" stroke-width="13" stroke-linecap="round" opacity="0.88"/>
+  </g>
+
+  <!-- 右侧文案区 -->
+  <g>
+    <!-- 项目名 -->
+    <text x="628" y="272" font-family="Microsoft YaHei, PingFang SC, sans-serif"
+          font-size="80" font-weight="bold" fill="#1F2733" letter-spacing="1">MorningBrief</text>
+
+    <!-- 标语 -->
+    <text x="632" y="346" font-family="Microsoft YaHei, PingFang SC, sans-serif"
+          font-size="36" fill="#3F6C8F" font-weight="500">AI 起草 · 双人播报 · 每天早上听见世界</text>
+
+    <!-- 特性三条 -->
+    <g font-family="Microsoft YaHei, PingFang SC, sans-serif" font-size="27" fill="#58636F">
+      <circle cx="638" cy="412" r="6" fill="#3F6C8F"/>
+      <text x="660" y="421">抓取 → 改写 → 合成 → 审核 → 发布 全流程自动化</text>
+      <circle cx="638" cy="464" r="6" fill="#3F6C8F"/>
+      <text x="660" y="473">跨端交付：Vue3 管理后台 + 微信小程序</text>
+      <circle cx="638" cy="516" r="6" fill="#3F6C8F"/>
+      <text x="660" y="525">单机零运维：FastAPI + SQLite，单 exe</text>
+    </g>
+
+    <!-- 底部技术栈徽标条 -->
+    <g font-family="Consolas, Microsoft YaHei, monospace" font-size="22" fill="#6C93AF">
+      <text x="632" y="588">FastAPI</text>
+      <text x="744" y="588">Vue 3</text>
+      <text x="844" y="588">微信小程序</text>
+      <text x="984" y="588">SQLite</text>
+      <text x="1076" y="588">TTS ×5 引擎</text>
+    </g>
+  </g>
+</svg>
