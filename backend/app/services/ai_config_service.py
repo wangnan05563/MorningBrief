@@ -17,15 +17,78 @@ from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 import httpx
+from openai import AsyncOpenAI
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.exceptions import BizError, ParamError
+from app.core.tc3_sign import TencentAPIError, utc_now_iso
 from app.core.timeutil import localnow_naive
 from app.models.ai_config import AIConfig, AIUsageLog
 
 logger = logging.getLogger(__name__)
+
+# ---- TTS 音色（T00388 音色同步） ----
+
+# 同步缓存写 ai_config 表的 key 前缀（每 provider 一条，值为 JSON：
+# {items: [{key,label}], synced_at: ISO8601, source: <官方接口标识>}）
+VOICES_CACHE_KEY_PREFIX = "tts_voices_cache_"
+
+# 支持从官方接口同步音色的引擎：edge（微软，无鉴权）/ tencent（DescribeVoices，TC3 签名）。
+# aliyun 无公开音色列表 API；kokoro/piper 为本地离线引擎，音色清单天然静态。
+VOICES_SYNC_SUPPORTED = ("edge", "tencent")
+
+# 内置静态音色清单（同步前兜底 / 同步失败回退 / 不支持同步引擎的唯一来源）
+_STATIC_VOICES: dict[str, list[dict]] = {
+    "edge": [
+        # 以下音色 ID 均与微软官方 zh-CN Neural 目录一致（已用 edge-tts --list-voices 实时核对）。
+        # 注意：XiaomengNeural / YunfengNeural 在早期博客中常见，但当前线上服务已不存在，
+        # 选中后会触发 NoAudioReceived，故已从列表移除。
+        {"key": "zh-CN-XiaoxiaoNeural", "label": "晓晓（标准女声·温暖·新闻/小说，默认）"},
+        {"key": "zh-CN-YunyangNeural", "label": "云扬（新闻男声·专业可靠，业界新闻播报标杆）"},
+        {"key": "zh-CN-XiaoyiNeural", "label": "晓伊（活泼女声·卡通/小说）"},
+        {"key": "zh-CN-YunxiNeural", "label": "云希（阳光男声·小说）"},
+        {"key": "zh-CN-YunjianNeural", "label": "云健（男声·激情·体育/小说）"},
+        {"key": "zh-CN-YunxiaNeural", "label": "云夏（可爱男声·卡通/小说）"},
+        {"key": "zh-CN-liaoning-XiaobeiNeural", "label": "晓蓓（女声·东北话·幽默）"},
+        {"key": "zh-CN-shaanxi-XiaoniNeural", "label": "晓妮（女声·陕西话·明亮）"},
+    ],
+    "tencent": [
+        {"key": "101011", "label": "智燕（新闻女声，精品音色，推荐）"},
+        {"key": "101013", "label": "智辉（新闻男声，精品音色）"},
+        {"key": "101021", "label": "智瑞（新闻男声，精品音色）"},
+        {"key": "501001", "label": "智兰（资讯女声，大模型音色，24k）"},
+        {"key": "101001", "label": "智瑜（情感女声）"},
+        {"key": "101004", "label": "智云（通用男声）"},
+    ],
+    "kokoro": [
+        # 本地离线，免费高质量；须与 lang 匹配
+        {"key": "zf_xiaobei", "label": "zf_xiaobei（女声·温柔甜美，有声书/客服）"},
+        {"key": "zf_xiaoni", "label": "zf_xiaoni（女声·清亮活泼，短视频）"},
+        {"key": "zf_xiaoxiao", "label": "zf_xiaoxiao（女声·成熟稳重，新闻播报·默认）"},
+        {"key": "zf_xiaoyi", "label": "zf_xiaoyi（女声·专业正式，教程）"},
+        {"key": "zm_yunjian", "label": "zm_yunjian（男声·青春活力，游戏）"},
+        {"key": "zm_yunxi", "label": "zm_yunxi（男声·温柔细腻，有声小说）"},
+        {"key": "zm_yunxia", "label": "zm_yunxia（男声·成熟稳重，企业）"},
+        {"key": "zm_yunyang", "label": "zm_yunyang（男声·浑厚有力，纪录片旁白）"},
+    ],
+    "piper": [
+        # 本地离线，轻量免费；模型需另行下载
+        {"key": "zh_CN-huayan-medium", "label": "zh_CN-huayan-medium（中文女声·medium·默认）"},
+        {"key": "zh_CN-huayan-x_low", "label": "zh_CN-huayan-x_low（中文女声·x_low 更小更快）"},
+        {"key": "zh_CN-chenyang-medium", "label": "zh_CN-chenyang-medium（中文男声·medium）"},
+        {"key": "zh_CN-lessac-medium", "label": "zh_CN-lessac-medium（中文·medium）"},
+    ],
+    "aliyun": [
+        {"key": "xiaoyun", "label": "小芸（标准女声）"},
+        {"key": "xiaoyi", "label": "小伊（温柔女声）"},
+        {"key": "xiaoxiao", "label": "小晓（知性女声）"},
+        {"key": "xiaomeng", "label": "小梦（甜美女声）"},
+        {"key": "xiaowei", "label": "小维（沉稳男声）"},
+        {"key": "aiya", "label": "艾雅（活泼女声）"},
+    ],
+}
 
 # ---- 配置项与 Settings 字段的映射 ----
 # key = ai_config 表的 config_key，value = Settings 类的属性名
@@ -1216,6 +1279,238 @@ class AIConfigService:
         )
         return await provider.synthesize(text, format="wav", sample_rate=22050)
 
+    # ---- 模型列表拉取 & 问答 ----
+
+    async def fetch_llm_models(self, base_url: str, api_key: str) -> dict:
+        """从 OpenAI 兼容接口拉取可用模型列表并解析。
+
+        解析 {base_url}/models 返回的 {"object":"list","data":[{id,...}]}。
+        兼容 base_url 是否带 /v1（404 时回退 /v1/models）。
+        明确区分四类错误：API Key 未配置 / base_url 不可达 / API Key 无效(401) /
+        返回内容无法解析为模型列表。
+
+        返回结构：{"success": bool, "models": [{"id","owned_by"}], "message": str}
+        """
+        settings = get_settings()
+
+        # API Key 解析：脱敏值或未传 → 回退到已保存明文
+        if not api_key or _is_masked(api_key):
+            saved_key = await self.get_config_value("llm_api_key")
+            api_key = saved_key or settings.LLM_API_KEY or ""
+        if not base_url:
+            base_url = settings.LLM_BASE_URL
+
+        if not api_key:
+            return {
+                "success": False,
+                "models": [],
+                "message": "API Key 未配置，请先在「LLM 大模型」中填写并保存",
+            }
+        if not base_url:
+            return {
+                "success": False,
+                "models": [],
+                "message": "API Base URL 未配置，请先在「LLM 大模型」中填写",
+            }
+
+        # 候选地址：base_url 可能已含 /v1，也可能不含
+        normalized = base_url.rstrip("/")
+        candidates = [normalized + "/models"]
+        if not normalized.endswith("/v1"):
+            candidates.append(normalized + "/v1/models")
+
+        headers = {"Authorization": f"Bearer {api_key}"}
+        timeout = float(settings.LLM_TIMEOUT_SEC or 30)
+        last_net_err = None
+
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            for url in candidates:
+                try:
+                    resp = await client.get(url, headers=headers)
+                except httpx.TimeoutException:
+                    return {
+                        "success": False,
+                        "models": [],
+                        "message": f"连接超时（>{int(timeout)}s），请检查 API Base URL 是否可达：{base_url}",
+                    }
+                except httpx.RequestError as e:
+                    # 候选地址逐个尝试，仅当全部失败才报不可达
+                    last_net_err = f"无法连接到 {base_url}：{e}"
+                    continue
+
+                if resp.status_code == 200:
+                    try:
+                        payload = resp.json()
+                    except Exception:
+                        return {
+                            "success": False,
+                            "models": [],
+                            "message": "接口返回内容不是合法 JSON，请确认 Base URL 指向 OpenAI 兼容的 /models 接口",
+                        }
+                    models = self._parse_models(payload)
+                    if not models:
+                        return {
+                            "success": False,
+                            "models": [],
+                            "message": "接口返回模型列表为空，请确认该账户是否有可用模型",
+                        }
+                    return {
+                        "success": True,
+                        "models": models,
+                        "message": f"成功获取 {len(models)} 个模型",
+                    }
+                elif resp.status_code == 401:
+                    return {
+                        "success": False,
+                        "models": [],
+                        "message": "API Key 无效或已过期（401），请检查后重试",
+                    }
+                elif resp.status_code == 404:
+                    # 尝试下一个候选地址（/v1/models）
+                    continue
+                else:
+                    snippet = resp.text[:200]
+                    return {
+                        "success": False,
+                        "models": [],
+                        "message": f"服务返回 {resp.status_code}: {snippet}",
+                    }
+
+        if last_net_err:
+            return {"success": False, "models": [], "message": last_net_err}
+        return {
+            "success": False,
+            "models": [],
+            "message": "未找到模型接口（已尝试 /models 与 /v1/models），请确认 Base URL 是否正确",
+        }
+
+    @staticmethod
+    def _parse_models(payload: dict) -> list[dict]:
+        """从 OpenAI /models 响应解析模型列表。
+
+        返回 [{"id": str, "owned_by": str}]，去重并按 id 升序，保证展示稳定。
+        兼容 data 为对象数组或纯字符串数组两种形态。
+        """
+        if not isinstance(payload, dict):
+            return []
+        data = payload.get("data")
+        if not isinstance(data, list):
+            return []
+
+        parsed: list[dict] = []
+        for item in data:
+            if isinstance(item, str):
+                parsed.append({"id": item, "owned_by": ""})
+            elif isinstance(item, dict) and item.get("id"):
+                parsed.append({
+                    "id": str(item["id"]),
+                    "owned_by": str(item.get("owned_by", "")),
+                })
+
+        seen: set[str] = set()
+        unique: list[dict] = []
+        for m in sorted(parsed, key=lambda x: x["id"]):
+            if m["id"] in seen:
+                continue
+            seen.add(m["id"])
+            unique.append(m)
+        return unique
+
+    async def chat_with_model(
+        self,
+        base_url: str,
+        api_key: str,
+        model: str,
+        messages: list[dict],
+    ) -> dict:
+        """用指定模型进行问答（OpenAI 兼容 chat/completions）。
+
+        优先使用传入的 base_url/api_key（来自已保存配置），缺失时回退到 settings。
+        返回结构：{"success": bool, "reply": str, "model": str,
+                  "input_tokens": int, "output_tokens": int, "message": str}
+        """
+        settings = get_settings()
+
+        if not api_key or _is_masked(api_key):
+            saved_key = await self.get_config_value("llm_api_key")
+            api_key = saved_key or settings.LLM_API_KEY or ""
+        if not base_url:
+            base_url = settings.LLM_BASE_URL
+        if not model:
+            model = settings.LLM_MODEL
+
+        if not api_key:
+            return {
+                "success": False,
+                "reply": "",
+                "model": model,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "message": "API Key 未配置，请先在「LLM 大模型」中填写并保存",
+            }
+        if not base_url:
+            return {
+                "success": False,
+                "reply": "",
+                "model": model,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "message": "API Base URL 未配置",
+            }
+
+        try:
+            client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+            resp = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.7,
+                timeout=float(settings.LLM_TIMEOUT_SEC or 30),
+            )
+        except Exception as e:
+            # openai 各类异常（鉴权/超时/限流等）统一兜底为可读提示；
+            # 非 openai 异常（如代码 bug）继续抛出，避免被静默吞掉
+            if "openai" not in type(e).__module__:
+                raise
+            return {
+                "success": False,
+                "reply": "",
+                "model": model,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "message": f"调用模型失败（{type(e).__name__}）：{e}",
+            }
+
+        reply = resp.choices[0].message.content or ""
+        usage = resp.usage
+        in_tok = usage.prompt_tokens if usage else 0
+        out_tok = usage.completion_tokens if usage else 0
+
+        # 记录用量（不阻塞主流程，失败仅告警）
+        try:
+            await self.record_usage(
+                "llm", model, input_tokens=in_tok, output_tokens=out_tok
+            )
+        except Exception as e:  # NOSONAR
+            logger.warning("问答用量记录失败: %s", e)
+
+        return {
+            "success": True,
+            "reply": reply,
+            "model": model,
+            "input_tokens": in_tok,
+            "output_tokens": out_tok,
+            "message": "ok",
+        }
+
+    async def get_selected_model(self) -> str:
+        """读取上次选择的默认模型（llm_selected_model 配置项）。"""
+        return await self.get_config_value("llm_selected_model") or ""
+
+    async def set_selected_model(self, model: str) -> None:
+        """保存用户最后选择的模型为默认选项。"""
+        await self._upsert_config("llm_selected_model", model or "")
+        await self.db.commit()
+
     # ---- 用量记录 ----
 
     async def record_usage(
@@ -1343,62 +1638,207 @@ class AIConfigService:
         return LLM_PRESETS
 
     def get_voices(self, provider: str = None) -> list[dict]:
-        """返回对应 provider 的 TTS 音色列表。
+        """返回内置静态音色清单（同步兜底接口，保留给无 DB 的调用场景）。"""
+        provider = provider or get_settings().TTS_PROVIDER or "aliyun"
+        return self._static_voices(provider)
 
-        不同 provider 的音色 ID 体系不同，前端切换 provider 时需重新加载音色列表。
+    async def get_voices_cached(self, provider: str = None) -> list[dict]:
+        """返回音色列表（异步版，供路由使用）。
+
+        优先级（T00388 音色同步）：
+        1. ai_config 表中的同步缓存（tts_voices_cache_<provider>，来自官方接口）
+        2. 内置静态清单 _STATIC_VOICES（同步前 / 缓存读取失败 / 不支持同步的引擎）
         """
         provider = provider or get_settings().TTS_PROVIDER or "aliyun"
+        cache = await self._read_voices_cache(provider)
+        if cache:
+            return cache["items"]
+        return self._static_voices(provider)
+
+    @staticmethod
+    def _static_voices(provider: str) -> list[dict]:
+        """返回内置静态音色清单（兜底，不做 IO）。"""
+        return _STATIC_VOICES.get(provider, _STATIC_VOICES["aliyun"])
+
+    async def get_voice_meta(self, provider: str = None) -> dict:
+        """返回音色列表的同步元信息（是否官方同步 / 同步时间 / 数量）。"""
+        provider = provider or get_settings().TTS_PROVIDER or "aliyun"
+        cache = await self._read_voices_cache(provider)
+        if cache:
+            return {
+                "provider": provider,
+                "is_custom": True,
+                "synced_at": cache.get("synced_at", ""),
+                "source": cache.get("source", ""),
+                "count": len(cache.get("items", [])),
+            }
+        return {
+            "provider": provider,
+            "is_custom": False,
+            "synced_at": "",
+            "source": "builtin",
+            "count": len(self._static_voices(provider)),
+        }
+
+    async def _read_voices_cache(self, provider: str) -> Optional[dict]:
+        """读取音色同步缓存；损坏/为空/表缺失时返回 None（上层回退静态清单）。"""
+        result = await self.db.execute(
+            select(AIConfig.config_value).where(
+                AIConfig.config_key == f"{VOICES_CACHE_KEY_PREFIX}{provider}"
+            )
+        )
+        row = result.scalar_one_or_none()
+        if not row:
+            return None
+        try:
+            data = json.loads(row)
+        except (TypeError, ValueError) as e:
+            logger.warning("[ai_config] 音色缓存 JSON 损坏，回退内置清单: %s", e)
+            return None
+        items = data.get("items") if isinstance(data, dict) else None
+        if not isinstance(items, list) or not items:
+            return None
+        return data
+
+    async def sync_voices(self, provider: str) -> dict:
+        """从官方接口拉取最新音色列表并持久化（T00388 同步按钮）。
+
+        - edge：微软官方 Azure Neural 目录（edge-tts list_voices，无鉴权）
+        - tencent：腾讯云 DescribeVoices（TC3 签名，复用 COS/TTS SecretId/Key）
+        - aliyun / kokoro / piper：无公开官方列表接口（本地引擎音色为静态清单），
+          明确报错提示，不做伪同步。
+
+        拉取结果规范化为 [{key, label}]（key/label 字段与既有前端契约完全一致），
+        写入 ai_config 表 tts_voices_cache_<provider>，get_voices 读取时优先返回。
+        """
+        provider = (provider or "").strip().lower()
+        if provider not in VOICES_SYNC_SUPPORTED:
+            raise ParamError(
+                f"引擎「{provider}」无官方音色列表接口，音色清单为内置静态维护，不支持同步"
+            )
 
         if provider == "edge":
-            # 以下音色 ID 均与微软官方 zh-CN Neural 目录一致（已用 edge-tts --list-voices 实时核对）。
-            # 注意：XiaomengNeural / YunfengNeural 在早期博客中常见，但当前线上服务已不存在，
-            # 选中后会触发 NoAudioReceived，故已从列表移除。
-            return [
-                {"key": "zh-CN-XiaoxiaoNeural", "label": "晓晓（标准女声·温暖·新闻/小说，默认）"},
-                {"key": "zh-CN-YunyangNeural", "label": "云扬（新闻男声·专业可靠，业界新闻播报标杆）"},
-                {"key": "zh-CN-XiaoyiNeural", "label": "晓伊（活泼女声·卡通/小说）"},
-                {"key": "zh-CN-YunxiNeural", "label": "云希（阳光男声·小说）"},
-                {"key": "zh-CN-YunjianNeural", "label": "云健（男声·激情·体育/小说）"},
-                {"key": "zh-CN-YunxiaNeural", "label": "云夏（可爱男声·卡通/小说）"},
-                {"key": "zh-CN-liaoning-XiaobeiNeural", "label": "晓蓓（女声·东北话·幽默）"},
-                {"key": "zh-CN-shaanxi-XiaoniNeural", "label": "晓妮（女声·陕西话·明亮）"},
-            ]
-        elif provider == "tencent":
-            return [
-                {"key": "101011", "label": "智燕（新闻女声，精品音色，推荐）"},
-                {"key": "101013", "label": "智辉（新闻男声，精品音色）"},
-                {"key": "101021", "label": "智瑞（新闻男声，精品音色）"},
-                {"key": "501001", "label": "智兰（资讯女声，大模型音色，24k）"},
-                {"key": "101001", "label": "智瑜（情感女声）"},
-                {"key": "101004", "label": "智云（通用男声）"},
-            ]
-        # Kokoro（本地离线，免费高质量；须与 lang 匹配）
-        elif provider == "kokoro":
-            return [
-                {"key": "zf_xiaobei", "label": "zf_xiaobei（女声·温柔甜美，有声书/客服）"},
-                {"key": "zf_xiaoni", "label": "zf_xiaoni（女声·清亮活泼，短视频）"},
-                {"key": "zf_xiaoxiao", "label": "zf_xiaoxiao（女声·成熟稳重，新闻播报·默认）"},
-                {"key": "zf_xiaoyi", "label": "zf_xiaoyi（女声·专业正式，教程）"},
-                {"key": "zm_yunjian", "label": "zm_yunjian（男声·青春活力，游戏）"},
-                {"key": "zm_yunxi", "label": "zm_yunxi（男声·温柔细腻，有声小说）"},
-                {"key": "zm_yunxia", "label": "zm_yunxia（男声·成熟稳重，企业）"},
-                {"key": "zm_yunyang", "label": "zm_yunyang（男声·浑厚有力，纪录片旁白）"},
-            ]
-        # Piper（本地离线，轻量免费；模型需另行下载）
-        elif provider == "piper":
-            return [
-                {"key": "zh_CN-huayan-medium", "label": "zh_CN-huayan-medium（中文女声·medium·默认）"},
-                {"key": "zh_CN-huayan-x_low", "label": "zh_CN-huayan-x_low（中文女声·x_low 更小更快）"},
-                {"key": "zh_CN-chenyang-medium", "label": "zh_CN-chenyang-medium（中文男声·medium）"},
-                {"key": "zh_CN-lessac-medium", "label": "zh_CN-lessac-medium（中文·medium）"},
-            ]
-        # 默认阿里云
-        return [
-            {"key": "xiaoyun", "label": "小芸（标准女声）"},
-            {"key": "xiaoyi", "label": "小伊（温柔女声）"},
-            {"key": "xiaoxiao", "label": "小晓（知性女声）"},
-            {"key": "xiaomeng", "label": "小梦（甜美女声）"},
-            {"key": "xiaowei", "label": "小维（沉稳男声）"},
-            {"key": "aiya", "label": "艾雅（活泼女声）"},
-        ]
+            items, source = await self._fetch_edge_voices()
+        else:
+            items, source = await self._fetch_tencent_voices()
+
+        if not items:
+            raise BizError("官方接口返回空音色列表，已保留原列表不变")
+
+        synced_at = utc_now_iso()
+        await self._upsert_config(
+            f"{VOICES_CACHE_KEY_PREFIX}{provider}",
+            json.dumps({"items": items, "synced_at": synced_at, "source": source}, ensure_ascii=False),
+        )
+        # _upsert_config 只做 add/改值不提交，这里必须显式 commit，
+        # 否则请求结束后事务回滚、同步结果丢失
+        await self.db.commit()
+        logger.info("[ai_config] 音色同步完成 provider=%s count=%s source=%s", provider, len(items), source)
+        return {"provider": provider, "items": items, "synced_at": synced_at, "source": source, "count": len(items)}
+
+    async def reset_voices_cache(self, provider: str) -> dict:
+        """清除音色同步缓存，回退到内置静态清单（同步结果异常时的逃生口）。"""
+        provider = (provider or "").strip().lower()
+        await self.db.execute(
+            delete(AIConfig).where(AIConfig.config_key == f"{VOICES_CACHE_KEY_PREFIX}{provider}")
+        )
+        await self.db.commit()
+        return {"provider": provider, "is_custom": False, "count": len(self._static_voices(provider))}
+
+    @staticmethod
+    async def _fetch_edge_voices() -> tuple[list[dict], str]:
+        """拉取微软 Edge/Azure 官方 Neural 音色目录，仅保留中文（与静态清单口径一致）。"""
+        try:
+            import edge_tts
+        except ImportError as e:
+            raise BizError("edge-tts 库未安装，无法同步官方音色列表") from e
+
+        try:
+            raw = await edge_tts.list_voices()
+        except Exception as e:
+            raise BizError(f"微软官方音色目录拉取失败：{type(e).__name__}: {e}") from e
+
+        _GENDER = {"Female": "女声", "Male": "男声"}
+        _LOCALE_ZH = {
+            "zh-CN": "普通话", "zh-HK": "粤语", "zh-TW": "台湾国语",
+            "zh-CN-liaoning": "东北话", "zh-CN-shaanxi": "陕西话",
+        }
+        items: list[dict] = []
+        seen: set[str] = set()
+        for v in raw:
+            locale = str(v.get("Locale") or "")
+            short = str(v.get("ShortName") or "")
+            # 与静态清单同口径：只收中文（zh-CN / zh-HK 等中文变体）
+            if not short or not locale.lower().startswith("zh") or short in seen:
+                continue
+            seen.add(short)
+            gender = _GENDER.get(str(v.get("Gender") or ""), str(v.get("Gender") or "未知"))
+            # VoicePersonalities 是官方标签数组（如 ["Warm"]），需 join 成字符串避免 list repr 泄漏
+            tag_obj = v.get("VoiceTag") or {}
+            raw_tag = tag_obj.get("VoicePersonalities") or []
+            if isinstance(raw_tag, list):
+                personalities = "·".join(str(x) for x in raw_tag)
+            else:
+                personalities = str(raw_tag)
+            # 展示名：完整 ShortName（即配置值，便于核对）+ 口语化 locale/性别/风格标注
+            display = short
+            locale_desc = _LOCALE_ZH.get(locale, locale)
+            parts = [p for p in (locale_desc, gender, personalities) if p]
+            items.append({"key": short, "label": f"{display}（{'·'.join(parts)}）" if parts else display})
+        items.sort(key=lambda x: (0 if x["key"].startswith("zh-CN") else 1, x["key"]))
+        return items, "microsoft-edge-list-voices"
+
+    @staticmethod
+    async def _fetch_tencent_voices() -> tuple[list[dict], str]:
+        """拉取腾讯云官方音色列表（DescribeVoices，实测 Version=2019-08-23 + WebsiteType=1）。
+
+        响应结构（实测）：CategoryVoiceList[] { CategoryName, VoiceList[] }，
+        VoiceList 元素含 VoiceType（音色 ID）/ VoiceName / VoiceDesc / VoiceGender /
+        VoiceHumanStyle / VoiceTypeTag（如"大模型,超自然"）。
+        """
+        settings = get_settings()
+        secret_id = settings.TENCENT_TTS_SECRET_ID or settings.COS_SECRET_ID
+        secret_key = settings.TENCENT_TTS_SECRET_KEY or settings.COS_SECRET_KEY
+        if not (secret_id and secret_key):
+            raise ParamError("未配置腾讯云 SecretId/SecretKey（TTS 或 COS 任一即可），无法同步官方音色")
+
+        region = settings.TENCENT_TTS_REGION or ""
+        try:
+            from app.core.tc3_sign import signed_tencent_post
+
+            response = await signed_tencent_post(
+                host="tts.tencentcloudapi.com",
+                service="tts",
+                action="DescribeVoices",
+                version="2019-08-23",
+                payload={"WebsiteType": 1},
+                secret_id=secret_id,
+                secret_key=secret_key,
+                region=region,
+                timeout_sec=settings.ALIYUN_TTS_TIMEOUT_SEC,
+            )
+        except TencentAPIError as e:
+            raise BizError(f"腾讯云官方音色拉取失败 [{e.code}]：{e.message}") from e
+
+        items: list[dict] = []
+        seen: set[str] = set()
+        for category in response.get("CategoryVoiceList") or []:
+            for v in category.get("VoiceList") or []:
+                voice_type = str(v.get("VoiceType") or "").strip()
+                name = str(v.get("VoiceName") or "").strip()
+                if not voice_type or voice_type in seen:
+                    continue
+                seen.add(voice_type)
+                desc = str(v.get("VoiceDesc") or "").strip()
+                style = str(v.get("VoiceHumanStyle") or "").strip()
+                tag = str(v.get("VoiceTypeTag") or "").strip().replace(",", "·")
+                gender_raw = str(v.get("VoiceGender") or "")
+                gender = "女声" if gender_raw == "female" else ("男声" if gender_raw == "male" else "")
+                # VoiceDesc（如"阳光男声"）常已含性别，去重避免出现"阳光男声·男声"
+                if gender and (gender[0] in desc or gender[0] in style):
+                    gender = ""
+                parts = [p for p in (style or desc, gender, tag) if p]
+                label = f"{name or voice_type}（{'·'.join(parts)}）" if parts else f"{name or voice_type}"
+                items.append({"key": voice_type, "label": label})
+        return items, "tencent-describe-voices"
 

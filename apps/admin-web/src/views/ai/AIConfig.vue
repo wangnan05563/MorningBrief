@@ -91,7 +91,32 @@
               <el-input v-model="llmForm.base_url" placeholder="OpenAI 兼容 API 地址" />
             </el-form-item>
             <el-form-item label="模型名称">
-              <el-input v-model="llmForm.model" placeholder="如 qwen-max, gpt-4o-mini" />
+              <div class="model-picker">
+                <el-select
+                  v-model="llmForm.model"
+                  filterable
+                  allow-create
+                  default-first-option
+                  clearable
+                  placeholder="选择或输入模型名称，如 qwen-max"
+                  style="flex: 1"
+                >
+                  <el-option
+                    v-for="m in modelList"
+                    :key="m.id"
+                    :label="m.owned_by ? `${m.id}（${m.owned_by}）` : m.id"
+                    :value="m.id"
+                  />
+                </el-select>
+                <el-button
+                  :icon="Refresh"
+                  :loading="fetchingModels"
+                  @click="handleFetchModels"
+                >
+                  拉取可用模型
+                </el-button>
+              </div>
+              <span class="field-tip">点击「拉取可用模型」回填下拉选项；也可直接输入列表外的模型名</span>
             </el-form-item>
             <el-form-item label="超时(秒)">
               <el-input-number v-model="llmForm.timeout_sec" :min="5" :max="120" />
@@ -190,6 +215,12 @@
                   :value="v.key"
                 />
               </el-select>
+              <!-- T00388：官方音色同步，同步后音色组合下拉即时刷新 -->
+              <voice-sync-button
+                :provider="ttsForm.provider"
+                :disabled="crossVoiceDisabledForProvider"
+                @synced="onVoicesSynced"
+              />
               <span class="field-tip" style="margin-left: 12px;">
                 至少选 2 个；当前引擎：{{ ttsForm.provider }}
                 <template v-if="crossVoiceDisabledForProvider">（Piper 为单说话人模型，交叉音色不生效）</template>
@@ -274,6 +305,8 @@
                   :value="v.key"
                 />
               </el-select>
+              <!-- T00388：官方音色同步（阿里云无公开列表 API，按钮禁用并说明） -->
+              <voice-sync-button :provider="ttsForm.provider" @synced="onVoicesSynced" />
             </el-form-item>
             <el-form-item label="采样率">
               <el-input-number v-model="ttsForm.sample_rate" :min="8000" :max="48000" :step="1000" />
@@ -330,6 +363,8 @@
                   :value="v.key"
                 />
               </el-select>
+              <!-- T00388：同步微软官方 Azure Neural 目录 -->
+              <voice-sync-button :provider="ttsForm.provider" @synced="onVoicesSynced" />
             </el-form-item>
             <el-form-item label="语速调节">
               <el-slider
@@ -413,6 +448,8 @@
                   :value="Number(v.key)"
                 />
               </el-select>
+              <!-- T00388：同步腾讯云 DescribeVoices 官方音色 -->
+              <voice-sync-button :provider="ttsForm.provider" @synced="onVoicesSynced" />
             </el-form-item>
             <el-form-item label="音量">
               <el-input-number v-model="ttsForm.tencent_volume" :min="-10" :max="10" />
@@ -463,6 +500,8 @@
                   :value="v.key"
                 />
               </el-select>
+              <!-- T00388：本地引擎无官方列表 API，按钮禁用并说明 -->
+              <voice-sync-button :provider="ttsForm.provider" @synced="onVoicesSynced" />
             </el-form-item>
             <el-form-item label="语速">
               <el-slider
@@ -522,6 +561,8 @@
                   :value="v.key"
                 />
               </el-select>
+              <!-- T00388：本地引擎无官方列表 API，按钮禁用并说明 -->
+              <voice-sync-button :provider="ttsForm.provider" @synced="onVoicesSynced" />
               <div class="field-tip">
                 也可点击下方「下载模型」按钮在后台自动拉取（无需登录服务器）
               </div>
@@ -709,8 +750,10 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { ElMessage, ElMessageBox } from '../../utils/message'
-import { Check, RefreshLeft } from '@element-plus/icons-vue'
+import { Check, Refresh, RefreshLeft } from '@element-plus/icons-vue'
 import api from '../../api'
+// T00388：TTS 音色官方同步按钮（音色组合 + 各引擎音色下拉右侧）
+import VoiceSyncButton from '../../components/VoiceSyncButton.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -737,6 +780,9 @@ const presets = ref([])
 // 每个预设独立保存的配置（API Key 脱敏），结构：{preset_key: {api_key, base_url, model}}
 const presetConfigs = ref({})
 const resetting = ref(false)
+// 拉取可用模型列表：加载态 / 模型下拉选项
+const fetchingModels = ref(false)
+const modelList = ref([])
 
 // TTS 配置（覆盖阿里云/Edge-TTS/腾讯云三套字段）
 const ttsForm = ref({
@@ -1040,6 +1086,19 @@ async function loadVoices(provider) {
   }
 }
 
+/**
+ * T00388：音色同步完成回调（VoiceSyncButton 触发）
+ * @param {Array|null} items - 同步返回的 [{key,label}]；null 表示已重置，需重新拉内置清单
+ */
+async function onVoicesSynced(items) {
+  if (Array.isArray(items)) {
+    voices.value = items
+  } else {
+    await loadVoices(ttsForm.value.provider)
+  }
+  // 已保存音色若不在新列表中，仅影响展示名；不做静默改动，避免误改用户配置
+}
+
 // 切换 TTS Provider：重新加载音色列表并清空测试结果
 async function handleProviderChange(provider) {
   ttsTestResult.value = null
@@ -1124,6 +1183,31 @@ async function handleResetConfig() {
     resetting.value = false
   } finally {
     loading.value = false
+  }
+}
+
+// 拉取可用模型列表：透传当前表单 base_url/api_key，成功后回填下拉选项
+async function handleFetchModels() {
+  fetchingModels.value = true
+  try {
+    // api_key 为空或为脱敏值时不回传明文，由后端回退到已保存配置解析
+    const data = await api.post('/ai/models', {
+      base_url: llmForm.value.base_url || '',
+      api_key: llmForm.value.api_key || '',
+    })
+    modelList.value = data?.models || []
+    // 拉取失败或空列表：后端 message 已含可读原因，直接提示即可
+    if (data?.success && modelList.value.length === 0) {
+      ElMessage.info('该账户暂无可用模型')
+    }
+  } catch (e) {
+    modelList.value = []
+    // 拦截器已弹出后端 message，此处仅兜底
+    if (!e?.message) {
+      ElMessage.error('获取模型列表失败')
+    }
+  } finally {
+    fetchingModels.value = false
   }
 }
 
@@ -1377,6 +1461,14 @@ onUnmounted(() => {
 
   .config-form {
     max-width: 600px;
+
+    .model-picker {
+      // 下拉与「拉取可用模型」按钮并排，避免按钮换行撑高表单行
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+    }
 
     .field-tip {
       font-size: 12px;

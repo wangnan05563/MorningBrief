@@ -11,7 +11,14 @@
 - GET  /admin/api/v1/ai/usage      用量统计（历史，来自 DB）
 - GET  /admin/api/v1/ai/budget     实时预算摘要（来自内存，含限额信息）
 - GET  /admin/api/v1/ai/presets    LLM 提供商预设
-- GET  /admin/api/v1/ai/voices     TTS 音色列表
+- GET  /admin/api/v1/ai/voices     TTS 音色列表（优先官方同步缓存）
+- GET  /admin/api/v1/ai/voices/meta  音色列表同步元信息（is_custom/synced_at/count）
+- POST /admin/api/v1/ai/voices/sync  同步官方最新音色并持久化（edge/tencent）
+- DELETE /admin/api/v1/ai/voices/sync  清除同步缓存，回退内置清单
+- POST /admin/api/v1/ai/models     拉取可用模型列表（OpenAI 兼容 /models）
+- POST /admin/api/v1/ai/chat       知识库问答（指定模型发起对话）
+- GET  /admin/api/v1/ai/selected-model  获取默认模型
+- POST /admin/api/v1/ai/selected-model  保存默认模型
 - POST /admin/api/v1/ai/reset-config  恢复 LLM 初始配置（清空预设配置）
 
 所有端点需要管理员权限，防止运营误改 AI 配置。
@@ -92,6 +99,12 @@ class SaveConfigBody(BaseModel):
     selected_preset: str = ""
 
 
+class VoiceSyncBody(BaseModel):
+    """T00388 音色同步请求体：目标 TTS 引擎（edge/tencent）。"""
+
+    provider: str
+
+
 class TestLLMBody(BaseModel):
     base_url: str = ""
     api_key: str = ""
@@ -166,6 +179,33 @@ class DownloadTTSModelsBody(BaseModel):
     # Piper 参数
     piper_voice: str = ""
     piper_voice_dir: str = "./models/piper"
+
+
+class FetchModelsBody(BaseModel):
+    """拉取可用模型列表：base_url / api_key 可留空，留空时使用已保存配置。
+
+    base_url / api_key 与「LLM 大模型」配置一致；前端透传配置的 base_url，
+    API Key 因脱敏不回传，由后端从已保存明文解析。
+    """
+    base_url: str = ""
+    api_key: str = ""
+
+
+class ChatBody(BaseModel):
+    """知识库问答：携带当前选中的模型与对话历史。
+
+    messages 为 OpenAI 格式：[{"role": "user"|"assistant", "content": "..."}]
+    base_url / api_key 可留空，留空时使用已保存配置。
+    """
+    model: str = ""
+    messages: list[dict] = []
+    base_url: str = ""
+    api_key: str = ""
+
+
+class SelectedModelBody(BaseModel):
+    """保存/读取用户最后选择的默认模型。"""
+    model: str = ""
 
 
 @router.get("/config")
@@ -405,8 +445,112 @@ async def get_presets(
 @router.get("/voices")
 async def get_voices(
     provider: str = None,
+    db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
-    """获取 TTS 音色列表（按 provider 返回不同音色体系）。"""
-    svc = AIConfigService.__new__(AIConfigService)
-    return success(data=svc.get_voices(provider))
+    """获取 TTS 音色列表（按 provider 返回不同音色体系）。
+
+    优先返回官方接口同步缓存（T00388），无缓存时返回内置静态清单。
+    """
+    svc = AIConfigService(db)
+    return success(data=await svc.get_voices_cached(provider))
+
+
+@router.get("/voices/meta")
+async def get_voices_meta(
+    provider: str = None,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """获取音色列表同步元信息（是否官方同步 / synced_at / 数量 / 来源）。"""
+    svc = AIConfigService(db)
+    return success(data=await svc.get_voice_meta(provider))
+
+
+@router.post("/voices/sync")
+async def sync_voices(
+    body: VoiceSyncBody,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """同步官方最新音色列表并持久化（T00388）。
+
+    支持引擎：edge（微软官方目录）/ tencent（DescribeVoices，TC3 签名）。
+    aliyun/kokoro/piper 无公开官方列表接口，明确报错，不做伪同步。
+    同步成功后 get_voices_cached 优先返回缓存列表。
+    """
+    svc = AIConfigService(db)
+    return success(data=await svc.sync_voices(body.provider))
+
+
+@router.delete("/voices/sync")
+async def reset_voices_cache(
+    provider: str,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """清除音色同步缓存，回退内置静态清单（同步结果异常时的逃生口）。"""
+    svc = AIConfigService(db)
+    return success(data=await svc.reset_voices_cache(provider))
+
+
+@router.post("/models")
+async def fetch_models(
+    body: FetchModelsBody,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """拉取可用模型列表（OpenAI 兼容 /models 接口）。
+
+    根据 base_url + api_key 自动请求并解析模型列表；明确区分 base_url 不可达 /
+    API Key 无效(401) / 返回内容无法解析等错误，返回可读 message。
+    """
+    svc = AIConfigService(db)
+    result = await svc.fetch_llm_models(
+        base_url=body.base_url,
+        api_key=body.api_key,
+    )
+    return success(data=result)
+
+
+@router.post("/chat")
+async def chat(
+    body: ChatBody,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """知识库问答：用指定模型发起一轮对话（OpenAI 兼容 chat/completions）。
+
+    支持在问答过程中随时切换 model 参数（前端每次请求传入当前选中模型），
+    切换立即生效。返回模型回复与 token 用量。
+    """
+    svc = AIConfigService(db)
+    result = await svc.chat_with_model(
+        base_url=body.base_url,
+        api_key=body.api_key,
+        model=body.model,
+        messages=body.messages,
+    )
+    return success(data=result)
+
+
+@router.get("/selected-model")
+async def get_selected_model(
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """获取用户最后选择的默认模型。"""
+    svc = AIConfigService(db)
+    return success(data={"model": await svc.get_selected_model()})
+
+
+@router.post("/selected-model")
+async def set_selected_model(
+    body: SelectedModelBody,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """保存用户最后选择的模型为默认选项（下次自动选中）。"""
+    svc = AIConfigService(db)
+    await svc.set_selected_model(body.model)
+    return success(message="已保存默认模型")
