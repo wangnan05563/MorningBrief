@@ -34,8 +34,11 @@
   padding: 0;
 }
 
-/* 用户信息卡片：商务蓝实底（浅白主题去掉渐变，视觉更克制） */
+/* 用户信息卡片：T00430 头像区背景图（AI 生成商务蓝声波主题）
+   var(--accent) 实底作为图片加载前/失败时的兜底色 */
 .user-card {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -44,7 +47,28 @@
   border-radius: 0 0 48rpx 48rpx;
 }
 
+/* 背景图层：铺满头部，aspectFill 裁切适配 */
+.user-card-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* 底部压暗层：功能性 scrim，保证昵称白字落在声波亮条上仍可读 */
+.user-card-scrim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 45%;
+  background: linear-gradient(to top, rgba(31, 48, 64, 0.55), rgba(31, 48, 64, 0));
+}
+
 .avatar {
+  position: relative;
+  z-index: 1;
   width: 120rpx;
   height: 120rpx;
   border-radius: 50%;
@@ -53,10 +77,13 @@
 }
 
 .nickname {
+  position: relative;
+  z-index: 1;
   margin-top: 20rpx;
   font-size: 34rpx;
   font-weight: 600;
   color: var(--text-inverse);
+  text-shadow: 0 1rpx 6rpx rgba(31, 48, 64, 0.45);
 }
 
 /* 收听统计 */
