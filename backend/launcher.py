@@ -74,7 +74,11 @@ def main():
     except Exception:
         log_dir = settings.LOG_DIR
 
-    setup_logging(log_level=settings.LOG_LEVEL, log_dir=log_dir)
+    setup_logging(
+        log_level=settings.LOG_LEVEL,
+        log_dir=log_dir,
+        log_file_max_mb=settings.LOG_FILE_MAX_MB,
+    )
 
     import uvicorn
 

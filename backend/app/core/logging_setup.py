@@ -2,7 +2,7 @@
 
 对标 17_xianyu 项目的日志设计：
 - 控制台 sink：彩色输出，含日期时间 + request_id + 模块路径
-- 文件 sink：纯文本，按日滚动，保留 14 天
+- 文件 sink：纯文本，单文件达 LOG_FILE_MAX_MB（默认 10MB）或跨日滚动，保留 14 天
 - InterceptHandler：将 uvicorn/SQLAlchemy 等标准库 logging 重定向到 loguru，
   统一所有日志格式（补全闲鱼项目的设计缺口）
 
@@ -10,7 +10,9 @@
 避免 uvicorn 默认 ANSI 码在 cmd 窗口显示为 [32m 乱码。
 """
 import logging
+import os
 import sys
+import time
 from pathlib import Path
 
 from loguru import logger
@@ -18,6 +20,39 @@ from loguru import logger
 from app.core.request_context import get_request_id
 
 _configured = False
+
+
+def _make_rotation(max_mb: int):
+    """loguru 自定义 rotation 谓词：文件达到 max_mb 或跨日即滚动。
+
+    loguru 单个 sink 只接受一个 rotation 条件，无法原生同时支持
+    「大小滚动 + 每日零点滚动」，故用谓词函数组合两者：
+    - 大小滚动：os.path.getsize 超过 max_mb（兜底单日刷爆磁盘，
+      2026-09-10 单日曾达 68MB）
+    - 每日滚动：本地日期变化时滚动（保留原 rotation="00:00" 语义，
+      文件名中的 {time:YYYY-MM-DD} 保持按日期可读）
+    """
+    max_bytes = max(1, int(max_mb)) * 1024 * 1024
+    state = {"day": None}
+
+    def _should_rotate(message, file=None) -> bool:
+        # 兼容不同 loguru 版本：部分版本回调 (message)，较新版本回调 (message, file)
+        f = file if file is not None else getattr(message, "file", None)
+        try:
+            if os.path.getsize(f.name) >= max_bytes:
+                return True
+        except (OSError, AttributeError):
+            pass  # 文件暂不可 stat 时跳过大小判断，下条日志再试
+        day = time.strftime("%Y-%m-%d", time.localtime())
+        if state["day"] is None:
+            state["day"] = day  # 首条日志仅记录基准日，不触发滚动
+            return False
+        if day != state["day"]:
+            state["day"] = day
+            return True
+        return False
+
+    return _should_rotate
 
 
 class InterceptHandler(logging.Handler):
@@ -66,7 +101,11 @@ def _admin_log_filter(record):
             return False
     return True
 
-def setup_logging(log_level: str = "INFO", log_dir: str | Path | None = None) -> None:
+def setup_logging(
+    log_level: str = "INFO",
+    log_dir: str | Path | None = None,
+    log_file_max_mb: int = 10,
+) -> None:
     """全局初始化日志系统：控制台（彩色）+ 文件（纯文本滚动）。
 
     幂等设计：多次调用不会重复添加 sink。
@@ -101,7 +140,7 @@ def setup_logging(log_level: str = "INFO", log_dir: str | Path | None = None) ->
         ),
     )
 
-    # 文件 sink：纯文本（无颜色码），按日滚动，保留 14 天
+    # 文件 sink：纯文本（无颜色码），单文件达 LOG_FILE_MAX_MB 或跨日即滚动，保留 14 天
     if log_dir:
         log_path = Path(log_dir)
         log_path.mkdir(parents=True, exist_ok=True)
@@ -115,7 +154,7 @@ def setup_logging(log_level: str = "INFO", log_dir: str | Path | None = None) ->
                 "[req={extra[request_id]}] | "
                 "{name}:{function}:{line} - {message}"
             ),
-            rotation="00:00",
+            rotation=_make_rotation(log_file_max_mb),
             retention="14 days",
             encoding="utf-8",
         )

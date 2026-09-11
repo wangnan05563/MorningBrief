@@ -370,6 +370,9 @@ class Settings(BaseSettings):
     # ---- 日志 ----
     LOG_LEVEL: str = "INFO"
     LOG_DIR: str = "./logs"             # V1.2：改为 exe 同级相对路径
+    # 单个日志文件大小上限（MB）：达到即滚动新文件，防止单日刷爆磁盘
+    # 背景：2026-09-10 单日日志达 68MB（admin 轮询 + DEBUG 级），按日滚动不足以兜底
+    LOG_FILE_MAX_MB: int = 10
 
     # ---- FFmpeg 依赖 ----
     # BtbN/FFmpeg-Builds 共享构建下载源（gpl-shared，含 ffmpeg.exe/ffprobe.exe + DLL）

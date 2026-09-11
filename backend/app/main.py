@@ -673,7 +673,11 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
         log_dir = str(resolve_log_dir())
     except Exception:
         log_dir = settings.LOG_DIR
-    setup_logging(log_level=settings.LOG_LEVEL, log_dir=log_dir)
+    setup_logging(
+        log_level=settings.LOG_LEVEL,
+        log_dir=log_dir,
+        log_file_max_mb=settings.LOG_FILE_MAX_MB,
+    )
 
     # 注册事件循环异常处理器：过滤浏览器提前断开连接导致的 WinError 10054 噪声
     # 必须在业务逻辑启动前注册，否则首个请求断开就会污染日志
