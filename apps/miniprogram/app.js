@@ -22,7 +22,7 @@
 const { login } = require('./services/auth');
 const { initPlayer } = require('./services/audio');
 const { fetchTodayEpisode, channelType } = require('./services/api');
-const { discoverServer, PROD_API_BASE_URL } = require('./utils/server-discovery');
+const { discoverServer, PROD_API_BASE_URL, getEnvVersion } = require('./utils/server-discovery');
 
 // 构建脚本可在编译期注入 VERSION / BUILD_DATE 全局变量覆盖默认值
 const VERSION = (typeof __VERSION__ !== 'undefined' && __VERSION__) || '1.3.0';
@@ -185,10 +185,22 @@ App({
 
   /**
    * 检查小程序版本更新
-   * 仅 release 模式生效（开发版不需要弹窗提示）
+   *
+   * T00575：版本判定改用 `utils/server-discovery.getEnvVersion()`（官方
+   * `wx.getAccountInfoSync().miniProgram.envVersion` 优先，`__wxConfig` 回退）。
+   *
+   * 原实现 `if (typeof __wxConfig !== 'undefined' && __wxConfig.envVersion !== 'release') return;`
+   * 与 T00571 的弹窗根因同源——依赖未公开的 `__wxConfig.envVersion`，有两个坑：
+   *   ① `__wxConfig` 存在但无 `envVersion` → `undefined !== 'release'` 成立 → 直接 return，
+   *      **正式版的更新检查被静默跳过**，用户拿不到新版本提示；
+   *   ② `__wxConfig` 整体缺失 → 反向放行，开发版/体验版也会注册更新管理器。
+   *
+   * 现口径：明确判定为非 release（develop / trial）才跳过；`release` 与「版本未知（''）」
+   * 都注册更新管理器——取「宁可多查、不漏更新」侧，开发版下多一次检查无副作用。
    */
   checkUpdate() {
-    if (typeof __wxConfig !== 'undefined' && __wxConfig.envVersion !== 'release') return;
+    const env = getEnvVersion();
+    if (env && env !== 'release') return;
     const updateManager = wx.getUpdateManager();
     updateManager.onCheckForUpdate((res) => {
       if (res.hasUpdate) console.warn('检测到新版本');
