@@ -458,8 +458,12 @@
   flex-shrink: 0;
 }
 
-/* 激活态：图标底色与 chip 底色同为 --accent，白图直接可用；
-   未激活态图标为 --accent 蓝，在实色白底上对比充足 */
+/* 激活态图标（T00579）：
+   `.action-chip.active` 背景是 var(--accent)（#3F6C8F 商务蓝），而 images/icons/ 下的彩色图标
+   非透明像素恰好也是同一抹蓝 → 「蓝图标放蓝底」导致已收藏 / 睡眠激活时图标无法辨识。
+   修复：激活态改用 **白色变体**（favorite-filled-white.png / alarm-white.png，非透明像素染成
+   var(--text-inverse) 的 #FFFFFF，alpha 抗锯齿边缘原样保留），未激活态仍用彩色图标（白底上对比充足）。
+   注意：新增激活态图标时必须提供 -white 变体，不要依赖「图标配色碰巧可用」。 */
 
 /* 倍速数值：非文案，保留数字展示（如 1.0x / 1.5x） */
 .chip-rate {

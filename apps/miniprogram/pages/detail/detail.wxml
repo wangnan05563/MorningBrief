@@ -125,7 +125,7 @@
           bindtap="onToggleFavorite"
           aria-label="{{favorited ? '取消收藏' : '收藏'}}"
         >
-          <image class="chip-icon" lazy-load src="{{favorited ? '/images/icons/favorite-filled.png' : '/images/icons/favorite.png'}}" mode="aspectFit" />
+          <image class="chip-icon" lazy-load src="{{favorited ? '/images/icons/favorite-filled-white.png' : '/images/icons/favorite.png'}}" mode="aspectFit" />
         </view>
         <view class="action-chip" bindtap="onOpenQueue" aria-label="打开播放队列">
           <image class="chip-icon" lazy-load src="/images/icons/list.png" mode="aspectFit" />
@@ -150,7 +150,7 @@
           bindtap="onSleepTimer"
           aria-label="睡眠定时器"
         >
-          <image class="chip-icon" lazy-load src="{{sleepActive ? '/images/icons/alarm.png' : '/images/icons/moon.png'}}" mode="aspectFit" />
+          <image class="chip-icon" lazy-load src="{{sleepActive ? '/images/icons/alarm-white.png' : '/images/icons/moon.png'}}" mode="aspectFit" />
           <text class="chip-status" wx:if="{{sleepActive}}">{{sleepLabel}}</text>
         </view>
       </view>
