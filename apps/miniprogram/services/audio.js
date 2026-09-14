@@ -63,12 +63,20 @@ let lastReportedPosition = -1;
 // 为什么需要：NotSupportedError 是浏览器媒体元素的未捕获 Promise rejection，
 // 不触发 BackgroundAudioManager.onError，用户无任何反馈
 let fallbackTimeoutTimer = null;
-// HLS 静默重试次数：会话首次播放时 BackgroundAudioManager 的 HLS 协议栈冷启动，
-// 偶发 errCode:0 src:null 的加载失败（第二集同链路却成功，证明是冷启动而非硬故障）。
-// 立即静默重试一次即可命中，避免"先弹失败又播放成功"的割裂体验；
-// 重试仍失败再降级 mp3（MAX_HLS_RETRY 控制重试上限，防无限循环）。
-let hlsRetryCount = 0;
-const MAX_HLS_RETRY = 1;
+// HLS 可用性熔断（会话级，T00572）。
+//
+// 背景：微信客户端会把 BackgroundAudioManager 的**每一次**加载失败渲染成客户端原生提示
+// 「该内容因网络或其他原因暂时无法播放」，小程序侧既无法拦截、无法抑制，也无法改写文案。
+// 因此原「首播失败 → 静默重试一次」的策略在重试同样失败时会**连续弹两次**同一提示
+// （T00572 用户实测反馈），观感等同"播放坏了"。
+//
+// 改进：把可控点从"失败后重试"前移到"失败前拦截 + 失败后熔断"——
+//   1. 启用 HLS 前先 probeHls 预检 m3u8，明显不可用的地址直接走 mp3（0 次提示）；
+//   2. HLS 真失败时不再重试，立即熔断本会话 HLS 并降级 mp3（最坏 1 次提示）；
+//   3. 熔断后本会话后续节目一律走 mp3（0 次提示），不再重复踩同一条链路。
+//
+// 不持久化：HLS 冷启动问题是「会话级」的，下次启动仍给 HLS 一次机会。
+let hlsDisabled = false;
 
 /**
  * 读取用户设置中的默认倍速与自动连播开关
@@ -188,19 +196,14 @@ function initPlayer() {
     loadingEpisodeId = null;
     loadingEpisodeUrl = null;
 
-    // HLS 链路：会话首次播放时 HLS 协议栈冷启动偶发失败（errCode:0 src:null），
-    // 第二集同链路却成功，证明是冷启动而非硬故障。
-    // 处理策略：先静默重试一次 HLS（命中则用户无感知）；重试仍失败再降级 mp3；
-    // 二者均非"致命错误"——不打 error 级日志、不弹失败 toast，避免割裂体验。
+    // HLS 链路：T00572 起不再静默重试——微信客户端把每次加载失败都渲染成一次原生提示，
+    // 「首播失败 + 静默重试」在重试也失败时会连续弹两次提示（用户实测反馈）。
+    // 改为失败即熔断本会话 HLS 并降级 mp3 整文件（后端 CORSStaticFiles 已支持 Range 206，
+    // mp3 同样可流式起播），保证提示最多 1 次、本会话后续节目 0 次。
     if (currentProtocol === 'hls' && currentEpisode && currentEpisode.hls_url) {
-      if (hlsRetryCount < MAX_HLS_RETRY) {
-        hlsRetryCount += 1;
-        console.warn('[audio] HLS 首次加载失败，静默重试一次:', currentEpisode.hls_url,
-          '| err:', JSON.stringify(err));
-        _retryHls(currentEpisode);
-        return;
-      }
-      console.warn('[audio] HLS 重试仍失败，降级到 mp3 整文件:', currentEpisode.audio_url);
+      hlsDisabled = true;
+      console.warn('[audio] HLS 加载失败，熔断本会话 HLS 并降级到 mp3 整文件:',
+        currentEpisode.audio_url, '| err:', JSON.stringify(err));
       _fallbackToMp3(currentEpisode);
       return;
     }
@@ -383,6 +386,10 @@ function safePlay() {
  * （errCode 10001），直接跳过 hls_url 使用 audio_url，避免 HLS→mp3 fallback
  * 周期中 NotSupportedError 未捕获 Promise rejection 污染控制台。
  *
+ * T00572 补充：HLS 失败会触发微信**原生**「该内容无法播放」提示且无法拦截，
+ * 故 HLS 启用条件收进 shouldUseHls：工具环境、本会话 HLS 已被熔断（hlsDisabled）
+ * 时一律回退 mp3，减少失败链路被原生播放器触达的次数。
+ *
  * @param {Object} episode - 节目对象
  * @returns {{url: string, protocol: string}} - 播放 URL + 协议标识
  *   protocol: 'audio'（本地/网络 mp3）/ 'hls'（HLS 分片流）
@@ -397,8 +404,9 @@ function _pickPlayableUrl(episode) {
   if (dlPath) {
     return { url: dlPath, protocol: 'audio' };
   }
-  // 开发者工具不支持 HLS：跳过 hls_url 直接用 mp3，避免 fallback 周期中的未捕获错误
-  if (episode.hls_url && !isDevTools()) {
+  // T00572：HLS 启用条件收敛到 shouldUseHls（含开发者工具判定 + 本会话 HLS 熔断），
+  // 跳过 hls_url 直接用 mp3，避免失败链路再次触发微信原生「该内容无法播放」提示
+  if (shouldUseHls({ hasHls: !!episode.hls_url, devTools: isDevTools(), disabled: hlsDisabled })) {
     return { url: episode.hls_url, protocol: 'hls' };
   }
   return { url: episode.audio_url, protocol: 'audio' };
@@ -407,7 +415,7 @@ function _pickPlayableUrl(episode) {
 /**
  * 安全地设置 BackgroundAudioManager.protocol（基础库 2.41.0+ 支持 HLS）
  * 旧版基础库无该属性时 try-catch 静默忽略，回退到 URL 后缀自动识别。
- * 抽成独立函数避免 playEpisode / _retryHls / _fallbackToMp3 三处重复。
+ * 抽成独立函数避免 playEpisode / _fallbackToMp3 两处重复。
  * @param {string} protocol - 'audio' / 'hls'
  */
 function _applyProtocol(protocol) {
@@ -419,32 +427,66 @@ function _applyProtocol(protocol) {
 }
 
 /**
- * HLS 静默重试一次（应对会话首次播放的协议栈冷启动偶发失败）
+ * 是否启用 HLS（T00572，纯函数便于单元测试）
  *
- * 为什么需要：真机首播 HLS 偶发 errCode:0 src:null，但同一会话后续 HLS 播放稳定成功，
- * 说明是冷启动而非 HLS 硬故障。onError 中先调用本函数重试一次，命中则用户无感知；
- * 4s 内 onPlay 仍未触发（HLS 真不可用或卡死）再降级 mp3。
+ * 三个条件同时满足才走 HLS，任一不满足立即回退 mp3 整文件：
+ *   1. 节目带 hls_url；
+ *   2. 非开发者工具（工具不支持 HLS，会报 errCode 10001）；
+ *   3. 本会话未被 HLS 失败熔断（hlsDisabled）。
  *
- * onPlay 触发时会清空 fallbackTimeoutTimer，故定时器能走到回调即说明 HLS 仍未起播。
- * @param {Object} episode - 当前节目（需含 hls_url）
+ * 为什么收敛成纯函数：HLS 启用与否直接决定用户会不会看到微信原生失败提示，
+ * 属易回归的关键判定，抽成纯函数后用单测锁住，避免后续改动误放宽条件。
+ * @param {{hasHls: boolean, devTools: boolean, disabled: boolean}} ctx
+ * @returns {boolean}
  */
-function _retryHls(episode) {
-  currentProtocol = 'hls';
-  _applyProtocol('hls');
-  // 保持 loading 菊花连续，避免重试瞬间闪烁让用户误以为失败了
-  setWaiting(true);
-  audioManager.src = episode.hls_url;
-  const p = audioManager.play();
-  if (p && typeof p.catch === 'function') {
-    p.catch((e) => console.debug('[audio] retry HLS play() 被中断（可忽略）:', e && e.message));
-  }
-  clearTimeout(fallbackTimeoutTimer);
-  fallbackTimeoutTimer = setTimeout(() => {
-    // 已切到别的节目则忽略本次超时，避免覆盖新的播放
-    if (currentEpisode !== episode) return;
-    console.warn('[audio] HLS 重试超时，降级到 mp3');
-    _fallbackToMp3(episode);
-  }, 4000);
+function shouldUseHls(ctx) {
+  if (!ctx) return false;
+  if (!ctx.hasHls) return false;
+  if (ctx.devTools) return false;
+  return !ctx.disabled;
+}
+
+/**
+ * HLS m3u8 可用性预检（T00572）——启用 HLS 前的轻量探测
+ *
+ * 为什么需要：微信客户端把 BackgroundAudioManager 的每次加载失败渲染成客户端原生提示
+ * 「该内容因网络或其他原因暂时无法播放」，小程序侧无法拦截/抑制/改写。
+ * 唯一可控的改进是「不让原生播放器接触到明显不可用的地址」：
+ * 先用 wx.request 取一次 m3u8 清单，确认 HTTP 2xx 且正文以 #EXTM3U 开头，
+ * 才把 hls_url 交给原生播放器；否则静默改用 mp3——全程不产生任何原生提示。
+ *
+ * 开销：清单本身仅数 KB（与播放器自身要取的清单同源），额外成本约 1 个 RTT，
+ * 且失败后 hlsDisabled 熔断，因此每个会话最多多付这一次探测。
+ *
+ * 失败开放：探测能力本身不可用（旧基础库抛错等）时返回 true 不拦截，
+ * 交回原生播放器按原逻辑处理，避免探测逻辑反而成为新的阻断点。
+ * @param {string} url - HLS m3u8 清单地址
+ * @returns {Promise<boolean>} m3u8 是否可获取
+ */
+function probeHls(url) {
+  return new Promise((resolve) => {
+    if (!url) {
+      resolve(false);
+      return;
+    }
+    try {
+      wx.request({
+        url,
+        method: 'GET',
+        timeout: 5000,
+        success: (res) => {
+          const body = typeof res.data === 'string' ? res.data : '';
+          const ok = res.statusCode >= 200 && res.statusCode < 300
+            && body.indexOf('#EXTM3U') >= 0;
+          resolve(ok);
+        },
+        fail: () => resolve(false),
+      });
+    } catch (e) {
+      console.debug('[audio] HLS 预检不可用（跳过探测）:', e && e.message);
+      resolve(true);
+    }
+  });
 }
 
 /**
@@ -534,13 +576,23 @@ async function playEpisode(episode) {
   }
   loadingEpisodeId = episode.id;
   loadingEpisodeUrl = picked.url;
-  // 重置 HLS 静默重试计数：每首新节目都拥有完整的重试预算
-  hlsRetryCount = 0;
 
-  console.debug('[audio] playEpisode called:', episode.title, 'src:', picked.url, 'protocol:', picked.protocol);
+  // T00572：HLS 预检（详见 probeHls）。把「明显不可用」的 m3u8 挡在原生播放器之外——
+  // 一旦交给原生播放器，失败就会弹微信客户端提示且小程序无法拦截。
+  // 预检不通过则熔断本会话 HLS 并静默改用 mp3，用户全程无感知。
+  // 注意：预检 await 期间 loadingEpisodeId/Url 已置位，并发重复调用仍会被上方防重入拦住。
+  let playable = picked;
+  if (picked.protocol === 'hls' && !(await probeHls(picked.url))) {
+    hlsDisabled = true;
+    playable = _pickPlayableUrl(episode);
+    loadingEpisodeUrl = playable.url;
+    console.warn('[audio] HLS 预检未通过，本会话改用 mp3:', picked.url);
+  }
+
+  console.debug('[audio] playEpisode called:', episode.title, 'src:', playable.url, 'protocol:', playable.protocol);
   currentEpisode = episode;
   // 记录当前协议：onError 时用于判断是否需要 HLS→mp3 fallback
-  currentProtocol = picked.protocol;
+  currentProtocol = playable.protocol;
   // 重置倍速缓存：切歌后部分基础库会重置 playbackRate 为 1.0，
   // 此处强制下次 applyPlaybackRate 重新写入，保证倍速不丢
   lastAppliedRate = null;
@@ -561,8 +613,8 @@ async function playEpisode(episode) {
   // 显式声明 protocol 让播放器按 HLS 协议处理 m3u8，避免部分基础库
   // 因 URL 后缀识别失败而走 mp3 整文件下载路径。旧版基础库无 protocol
   // 属性时 try-catch 静默忽略，回退到自动识别（仍可正常播放 m3u8）
-  _applyProtocol(picked.protocol);
-  audioManager.src = picked.url;
+  _applyProtocol(playable.protocol);
+  audioManager.src = playable.url;
   // play() 返回 Promise，若未 resolve 就被 pause() 打断会抛 DOMException
   // （"The play() request was interrupted by a call to pause()"）
   // 这里 catch 掉该异常，避免未捕获的 promise rejection 污染控制台
@@ -1343,4 +1395,8 @@ module.exports = {
   getDuration,
   // 当前节目
   getCurrentEpisode,
+  // HLS 启用判定（T00572，纯函数：供单测锁定「工具环境 / 会话熔断」两个回退条件）
+  shouldUseHls,
+  // HLS m3u8 预检（T00572，导出仅为单测覆盖；业务侧只在 playEpisode 内部调用）
+  probeHls,
 };
