@@ -209,8 +209,59 @@ function probeCandidate(url) {
   return Promise.race([requestPromise, forceTimer]);
 }
 
+/**
+ * 获取小程序运行版本（T00571）
+ *
+ * 三层取值，优先官方 API：
+ *   1. wx.getAccountInfoSync().miniProgram.envVersion —— 官方公开 API，返回
+ *      'develop'（开发版）/ 'trial'（体验版）/ 'release'（正式版）
+ *   2. __wxConfig.envVersion —— 历史内部字段，部分新基础库已不暴露
+ *   3. '' —— 都取不到（视为未知，调用方按最保守策略处理）
+ *
+ * 为什么必须换成官方 API：旧的单一 `__wxConfig.envVersion` 判定一旦取不到就恒为
+ * false，会把正式版误判成非正式版，进而掉进「弹窗引导手动输入」分支——这正是
+ * T00571「正式版启动弹配置后端地址」的根因。
+ * @returns {'develop'|'trial'|'release'|''} 运行版本，未知时为空串
+ */
+function getEnvVersion() {
+  try {
+    if (typeof wx.getAccountInfoSync === 'function') {
+      const info = wx.getAccountInfoSync();
+      const version = info && info.miniProgram && info.miniProgram.envVersion;
+      if (version) return version;
+    }
+  } catch (e) {
+    // 旧基础库/异常环境下 getAccountInfoSync 可能抛错，继续走回退
+  }
+  try {
+    if (typeof __wxConfig !== 'undefined' && __wxConfig && __wxConfig.envVersion) {
+      return __wxConfig.envVersion;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return '';
+}
+
 function isRelease() {
-  return typeof __wxConfig !== 'undefined' && __wxConfig.envVersion === 'release';
+  return getEnvVersion() === 'release';
+}
+
+/**
+ * 是否「开发模式」——只有开发模式允许弹出「配置后端地址」引导（T00571）
+ *
+ * 判定口径：
+ *   - envVersion === 'develop'（开发版，含真机调试）→ 允许弹窗；
+ *   - 开发者工具（platform === 'devtools'）→ 允许弹窗（工具里跑的就是开发版/体验版调测）；
+ *   - 其余（trial / release / 版本未知）→ 不允许弹窗，直接用预置兜底地址。
+ *
+ * 为什么写成「正向判定开发模式」而不是沿用 `!isRelease() && !isDevTools()`
+ * 反推：反推式判定在版本信息缺失时会**默认放行**弹窗，生产环境用户就会莫名被弹框；
+ * 正向白名单则在信息缺失时默认不弹，符合「生产模式静默走兜底」的预期。
+ * @returns {boolean}
+ */
+function isDevelopMode() {
+  return getEnvVersion() === 'develop' || isDevTools();
 }
 
 /**
@@ -227,11 +278,20 @@ function isRealDeviceDebug() {
 }
 
 async function discoverServer() {
-  if (isRelease()) {
-    console.log('[server-discovery] release 模式，直接使用生产域名:', PROD_API_BASE_URL);
+  // T00571：非开发模式（正式版 / 体验版 / 版本信息未知）直接返回预置兜底地址——
+  // 跳过全部候选探测与「配置后端地址」手动输入弹窗，生产环境零打扰且启动更快。
+  //
+  // 为什么改成入口正向门控：原实现是「release 早返回 + 真机调试兜底 + 剩余情况弹窗」
+  // 三条分支反推出来的，弹窗分支的隐含条件是 `isRelease() || isDevTools()`。
+  // 一旦版本判定失效（旧实现仅依赖未公开的 __wxConfig.envVersion，取不到即恒为 false），
+  // 生产环境就会落进弹窗分支被莫名打断。改为「只有明确判定为开发模式才进入发现流程」，
+  // 版本未知时默认走兜底，取安全侧默认。
+  if (!isDevelopMode()) {
+    console.warn('[server-discovery] 非开发模式（envVersion=%s）直接使用预置兜底地址:',
+      getEnvVersion() || 'unknown', PROD_API_BASE_URL);
     return PROD_API_BASE_URL;
   }
-  console.log('[server-discovery] 开始发现后端地址...');
+  console.warn('[server-discovery] 开发模式，开始发现后端地址...');
   const candidates = [];
   const seen = new Set();
   function add(url) { if (url && !seen.has(url)) { seen.add(url); candidates.push(url); } }
@@ -305,8 +365,9 @@ async function discoverServer() {
     return PROD_API_BASE_URL;
   }
 
-  // 开发者工具：探测失败后弹窗引导手动输入（开发场景需要灵活配置）
-  console.warn('[server-discovery] 自动发现失败，弹窗引导用户手动输入');
+  // 至此必然是开发模式（入口已用 isDevelopMode 门控）：探测失败后弹窗引导手动输入，
+  // 开发场景需要灵活切换后端地址
+  console.warn('[server-discovery] 开发模式下自动发现失败，弹窗引导用户手动输入');
   const userInput = await promptManualInput(realDeviceDebug);
   if (userInput && isValidBaseUrl(userInput)) {
     console.log('[server-discovery] 用户手动输入有效:', userInput);
@@ -399,4 +460,7 @@ module.exports = {
   PROD_API_BASE_URL,
   isRelease,
   isDevTools,
+  // T00571：版本判定与「是否开发模式」导出，供单测锁定弹窗门控口径
+  getEnvVersion,
+  isDevelopMode,
 };
