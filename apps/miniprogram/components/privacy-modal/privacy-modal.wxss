@@ -1,0 +1,80 @@
+/* 隐私授权弹窗（T00609）——主题变量与 app.wxss 一致（轻白商务风） */
+.privacy-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: rgba(31, 39, 51, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.privacy-panel {
+  width: 560rpx;
+  background: var(--bg-card, #ffffff);
+  border-radius: 24rpx;
+  padding: 40rpx 36rpx 32rpx;
+  box-sizing: border-box;
+}
+
+.privacy-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--text-primary, #1f2733);
+  text-align: center;
+  margin-bottom: 20rpx;
+}
+
+.privacy-body {
+  font-size: 26rpx;
+  line-height: 1.7;
+  color: var(--text-secondary, #58636f);
+  margin-bottom: 32rpx;
+}
+
+.privacy-link {
+  color: var(--accent, #3f6c8f);
+}
+
+/* 官方 agreePrivacyAuthorization 按钮：清除原生 button 默认样式后定制 */
+.privacy-agree-btn {
+  width: 100% !important;
+  min-height: 80rpx;
+  line-height: 80rpx !important;
+  padding: 0 !important;
+  margin: 0 0 16rpx !important;
+  border-radius: var(--radius-btn, 12rpx) !important;
+  background: var(--accent, #3f6c8f) !important;
+  color: var(--text-inverse, #ffffff) !important;
+  font-size: 28rpx !important;
+  border: none !important;
+}
+
+.privacy-agree-btn::after {
+  border: none !important;
+}
+
+.privacy-agree-hover {
+  opacity: 0.88;
+}
+
+.privacy-reject-btn {
+  width: 100% !important;
+  min-height: 72rpx;
+  line-height: 72rpx !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: var(--radius-btn, 12rpx) !important;
+  background: var(--bg-subtle, #f2f4f7) !important;
+  color: var(--text-secondary, #58636f) !important;
+  font-size: 26rpx !important;
+  border: none !important;
+}
+
+.privacy-reject-btn::after {
+  border: none !important;
+}
+
+.privacy-reject-hover {
+  background: var(--border, #e5e8ec) !important;
+}

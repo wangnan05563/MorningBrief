@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 全局入口：登录、全局播放器初始化、预加载今日节目
  *
  * V1.3 增强：
@@ -8,6 +8,7 @@
  * - 后端地址自动发现（utils/server-discovery.js，零配置真机调试）
  *
  * onLaunch 执行顺序（V1.4 性能优化：串行 → 并行）：
+ * 0. 隐私授权检查（同步最先注册 onNeedPrivacyAuthorization，必须先于一切隐私 API）
  * 1. 版本信息注入
  * 2. 后端地址自动发现（discoverServer，注入 globalData.baseUrl）—— 必须先完成
  * 3. 检查小程序更新（冷启动时，与下面并行无依赖）
@@ -17,12 +18,13 @@
  *    - 两者并行可节省 1 个 RTT，首屏更快拿到节目数据
  * 5. 初始化全局播放器（BackgroundAudioManager 单例）
  * 6. 监听网络变化（弱网时进度上报降频）
- * 7. 隐私授权检查（涉及用户信息接口前需先同意）
  */
 const { login } = require('./services/auth');
 const { initPlayer } = require('./services/audio');
 const { fetchTodayEpisode, channelType } = require('./services/api');
 const { discoverServer, PROD_API_BASE_URL, getEnvVersion } = require('./utils/server-discovery');
+// T00609：隐私授权协调器（官方 agreePrivacyAuthorization 按钮模式，见 utils/privacy.js）
+const { createPrivacyCoordinator } = require('./utils/privacy');
 
 // 构建脚本可在编译期注入 VERSION / BUILD_DATE 全局变量覆盖默认值
 const VERSION = (typeof __VERSION__ !== 'undefined' && __VERSION__) || '1.3.0';
@@ -61,6 +63,12 @@ App({
   readyPromise: null,
 
   async onLaunch() {
+    // 0. 隐私授权检查必须最先同步注册：onNeedPrivacyAuthorization 要在任何可能的
+    //    隐私 API 调用（复制链接、getUserProfile 等）之前就绪，否则框架会弹微信
+    //    官方默认隐私弹窗，与自定义弹窗混合导致重复弹窗。绝不能放在 readyPromise
+    //    末尾（后端发现/登录可能耗时数秒，窗口期内点链接就会触发官方弹窗）。
+    this.checkPrivacy();
+
     this.readyPromise = (async () => {
       // 1. 后端地址自动发现：注入 globalData.baseUrl，后续 api.js getBaseUrl() 读取
       // 必须先完成：login 和 fetchTodayEpisode 都通过 request() 间接依赖 baseUrl，
@@ -124,9 +132,6 @@ App({
       wx.onNetworkStatusChange((res) => {
         this.globalData.networkType = res.networkType;
       });
-
-      // 6. 隐私授权检查：__usePrivacyCheck__ 开启后，调用涉及用户信息的 API 前需先同意
-      this.checkPrivacy();
     })();
     return this.readyPromise;
   },
@@ -209,7 +214,7 @@ App({
       wx.showModal({
         title: '更新提示',
         content: '新版本已就绪，是否重启应用？',
-        confirmColor: '#FF6B8A',
+        confirmColor: '#3F6C8F',
         success: (res) => {
           if (res.confirm) updateManager.applyUpdate();
         },
@@ -221,38 +226,68 @@ App({
   },
 
   /**
-   * 隐私授权检查
+   * 隐私授权检查（T00609 重构：官方 agreePrivacyAuthorization 按钮模式）
    * 2026 年起微信要求所有涉及用户信息的小程序必须接入隐私协议
    * 用户未同意前，调用 wx.setClipboardData/getUserProfile 等 API 会 fail（errCode:104）
    *
-   * 关键：onNeedPrivacyAuthorization 必须同步注册，不能放在 getPrivacySetting 的
+   * 关键 1：onNeedPrivacyAuthorization 必须同步注册，不能放在 getPrivacySetting 的
    * 异步回调里。否则在 getPrivacySetting 返回前，clipboard 调 requirePrivacyAuthorize
    * 会因无 handler 而直接 fail，导致复制功能不可用。
+   *
+   * 关键 2（T00609 实测更正）：**按钮触发的隐私接口（chooseAvatar 等）必须走官方按钮授权**——
+   * 自定义弹窗里须放 `<button open-type="agreePrivacyAuthorization" id="agree-btn">`，
+   * 并以 `resolve({event:'agree', buttonId:'agree-btn'})` 收尾。旧实现用 wx.showModal 的
+   * 「同意」+ 不带 buttonId 的 resolve，框架判定授权未完成，报：
+   *   chooseAvatar:fail privacy permission is not authorized or buttonId is wrong
+   * 因此授权 UI 分两条路径（见 utils/privacy.js 协调器）：
+   * - 组件路径（首选）：页面挂载 privacy-modal 组件（内含官方按钮），resolve 带 buttonId；
+   * - 兜底路径：wx.showModal（无法承载官方按钮），resolve 不带 buttonId——
+   *   仅对剪贴板等非按钮触发的隐私 API 可靠。
+   *
+   * 关键 3：防重入。并发多个隐私 API 调用会同时触发本 handler，
+   * 只弹一次窗，用户选择后统一 resolve 所有挂起的调用，避免弹窗叠加。
    */
   checkPrivacy() {
-    // 1. 同步注册隐私授权弹窗 handler：无论 getPrivacySetting 结果如何都必须注册
-    //    requirePrivacyAuthorize 触发时依赖此 handler 弹窗引导用户同意
+    // 1. 协调器：管理挂起的 resolve 队列与扇出（纯逻辑，见 utils/privacy.js）
+    this._privacy = createPrivacyCoordinator();
+    // 隐私授权 UI 槽位：privacy-modal 组件 attached 时注册、detached 时注销
+    this._privacyUI = null;
+
+    // 2. 同步注册隐私授权弹窗 handler：无论 getPrivacySetting 结果如何都必须注册
     if (typeof wx.onNeedPrivacyAuthorization === 'function') {
       wx.onNeedPrivacyAuthorization((resolve) => {
+        const st = this._privacy.needPrivacy(resolve);
+        if (!st.shown) return; // 已有弹窗在展示：仅排队，不重复弹（防重入）
+        const ui = this._privacyUI;
+        if (ui && typeof ui.show === 'function') {
+          // 组件路径（首选）：内含官方 agreePrivacyAuthorization 按钮
+          ui.show();
+          return;
+        }
+        // 兜底路径：wx.showModal（无官方按钮；chooseAvatar 等按钮类接口请挂载组件）
         wx.showModal({
           title: '隐私保护提示',
           content: '为了向您提供更好的服务，我们需要您同意《用户协议》和《隐私政策》',
           confirmText: '同意',
-          confirmColor: '#FF6B8A',
+          confirmColor: '#3F6C8F',
           cancelText: '拒绝',
           success: (modalRes) => {
             if (modalRes.confirm) {
               this.globalData.privacyAuthorized = true;
-              resolve({ event: 'agree', buttonId: 'agree' });
+              this._privacy.agreeFallback();
             } else {
-              resolve({ event: 'disagree' });
+              this._privacy.reject();
             }
+          },
+          fail: () => {
+            // showModal 失败也要释放挂起的 resolve，否则隐私 API 永久挂起
+            this._privacy.reject();
           },
         });
       });
     }
 
-    // 2. 查询当前隐私授权状态：已同意则标记 privacyAuthorized=true，
+    // 3. 查询当前隐私授权状态：已同意则标记 privacyAuthorized=true，
     //    跳过后续 requirePrivacyAuthorize 弹窗
     if (typeof wx.getPrivacySetting === 'undefined') {
       this.globalData.privacyAuthorized = true;
@@ -268,5 +303,27 @@ App({
         this.globalData.privacyAuthorized = true;
       },
     });
+  },
+
+  /**
+   * 注册/注销隐私授权 UI（privacy-modal 组件在 attached/detached 时调用）。
+   * 组件须提供 show() 方法，并在用户点同意/拒绝时回调 agreePrivacyViaButton / rejectPrivacy。
+   */
+  registerPrivacyUI(ui) {
+    this._privacyUI = ui || null;
+  },
+
+  /**
+   * 组件路径：用户点击官方 agreePrivacyAuthorization 按钮。
+   * buttonId 必须与弹窗内该按钮的 id 一致，框架才认可授权完成（T00609 报错根因）。
+   */
+  agreePrivacyViaButton(buttonId) {
+    this.globalData.privacyAuthorized = true;
+    this._privacy.agreeViaButton(buttonId);
+  },
+
+  /** 组件路径：用户点击「拒绝」 */
+  rejectPrivacy() {
+    this._privacy.reject();
   },
 });

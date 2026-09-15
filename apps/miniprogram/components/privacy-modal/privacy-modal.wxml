@@ -1,0 +1,20 @@
+<!-- 隐私授权弹窗（T00609）：内含官方 agreePrivacyAuthorization 按钮 -->
+<view class="privacy-mask" wx:if="{{visible}}" catchtap="stopPropagation">
+  <view class="privacy-panel">
+    <view class="privacy-title">隐私保护提示</view>
+    <view class="privacy-body">
+      为了向您提供更好的服务，我们需要您同意
+      <text class="privacy-link" bindtap="onOpenContract">《用户隐私保护指引》</text>
+      。您的头像、昵称等信息仅在您授权后用于完善个人资料与展示。
+    </view>
+    <!-- 官方授权按钮：id 必须与 app.js resolve 的 buttonId 一致（'agree-btn'） -->
+    <button
+      id="agree-btn"
+      class="privacy-agree-btn"
+      open-type="agreePrivacyAuthorization"
+      bindagreeprivacyauthorization="onAgree"
+      hover-class="privacy-agree-hover"
+    >同意并继续</button>
+    <button class="privacy-reject-btn" bindtap="onReject" hover-class="privacy-reject-hover">拒绝</button>
+  </view>
+</view>

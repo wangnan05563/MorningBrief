@@ -201,3 +201,7 @@
 
 <!-- 任务9：全局浮动播放按钮 -->
 <floating-player />
+
+<!-- T00609：隐私授权弹窗（官方 agreePrivacyAuthorization 按钮模式，
+     chooseAvatar 等按钮类隐私接口的授权必须经此组件完成） -->
+<privacy-modal />
