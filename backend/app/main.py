@@ -171,6 +171,8 @@ from app.routers.admin.about import router as b_about_router
 from app.routers.admin.mobile import router as b_mobile_router
 # 终端用户管理路由（SRS M5：检索 / 启停）
 from app.routers.admin.users import router as b_users_router
+# 找书工具路由（T00601/T00603：书源检索，取件后走素材上传入库）
+from app.routers.admin.ebooks import router as b_ebooks_router
 # 数据库维护与系统清理模块（仅 admin）
 from app.routers.admin.db_admin import router as b_db_admin_router
 from app.routers.admin.maintenance import router as b_maintenance_router
@@ -941,6 +943,8 @@ def create_app() -> FastAPI:  # NOSONAR
     # 移动端适配路由
     app.include_router(b_mobile_router)
     app.include_router(b_users_router)
+    # 找书工具（书源检索 → 人工取件 → 素材上传入库）
+    app.include_router(b_ebooks_router)
     # 内部（工作流调度）
     app.include_router(internal_workflow_router)
 

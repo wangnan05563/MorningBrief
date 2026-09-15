@@ -91,6 +91,12 @@ const routes = [
         meta: { title: '频道管理', icon: 'Menu', group: '内容运营' },
       },
       {
+        path: 'ebooks',
+        name: 'BookFinder',
+        component: () => import('../views/ebooks/BookFinder.vue'),
+        meta: { title: '找书工具', icon: 'Search', group: '内容运营' },
+      },
+      {
         path: 'queue',
         name: 'Queue',
         component: () => import('../views/queue/QueueManagement.vue'),
