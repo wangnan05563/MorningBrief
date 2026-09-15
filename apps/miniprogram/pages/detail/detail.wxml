@@ -253,7 +253,7 @@
           <image
             class="comment-avatar"
             lazy-load
-            src="{{item.user_avatar || '/images/icons/favorite.png'}}"
+            src="{{item.user_avatar || '/images/icons/avatar-default.jpg'}}"
             mode="aspectFill"
             data-url="{{item.user_avatar}}"
             bindtap="onPreviewAvatar"

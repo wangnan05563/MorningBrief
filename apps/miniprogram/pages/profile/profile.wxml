@@ -24,7 +24,7 @@
       <view class="user-card-scrim" aria-hidden="true"></view>
       <image
         class="avatar"
-        src="{{userInfo.avatar_url || userInfo.avatar || userInfo.avatarUrl || ''}}"
+        src="{{userInfo.avatar_url || userInfo.avatar || userInfo.avatarUrl || '/images/icons/avatar-default.jpg'}}"
         mode="aspectFill"
       />
       <view class="nickname">{{userInfo.nickname || userInfo.nickName || '听友'}}</view>
