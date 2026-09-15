@@ -155,7 +155,7 @@
       >
         <image
           class="edit-avatar"
-          src="{{editAvatar || userInfo.avatar || userInfo.avatar_url || '/images/icons/headphones.png'}}"
+          src="{{editAvatar || userInfo.avatar || userInfo.avatar_url || '/images/icons/avatar-default.jpg'}}"
           mode="aspectFill"
         />
         <text class="edit-avatar-tip">使用微信头像</text>
