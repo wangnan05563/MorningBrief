@@ -12,8 +12,14 @@ import api from '../api'
 export const getEbookCategories = (force = false) =>
   api.get('/ebooks/categories', { params: { force } })
 
-// 按关键词检索书名/作者；category 为空则全量扫描（较慢）
+// 按关键词检索书名/作者；category 为空则走全量索引（索引未就绪时返回 428 并触发构建）
 export const searchEbooks = ({ keyword, category = '', limit = 20 }) =>
   api.get('/ebooks/search', {
     params: { keyword, ...(category ? { category } : {}), limit },
   })
+
+// 书源索引状态（就绪 / 构建进度）
+export const getEbookIndexStatus = () => api.get('/ebooks/index/status')
+
+// 重建书源索引（后台执行，约 2-5 分钟；进度走 status 轮询）
+export const rebuildEbookIndex = () => api.post('/ebooks/index/rebuild')

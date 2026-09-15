@@ -155,6 +155,8 @@ backend/ffmpeg/
 # ═══════════════════════════════════════════
 backend/data/audio_cache/*
 backend/data/*.db
+# 找书工具的书源索引（T00612：可重建的缓存，体量 ~20MB）
+backend/data/ebook_index.json
 backend/data/*.db-shm
 backend/data/*.db-wal
 backend/data/*.malformed.bak

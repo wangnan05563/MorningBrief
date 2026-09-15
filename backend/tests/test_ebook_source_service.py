@@ -120,6 +120,21 @@ def stub_blacklist(monkeypatch):
     monkeypatch.setattr(app.core.auth, "is_in_blacklist", _always_false)
 
 
+@pytest.fixture(autouse=True)
+def force_index_not_ready(monkeypatch):
+    """本文件聚焦「在线抓取」路径：固定索引为未就绪。
+
+    T00612 后 /search 会优先读本地索引（真实 data/ebook_index.json 可能已存在），
+    若不隔离，索引命中就会绕过本文件 monkeypatch 的网络层，造成测试与真实数据耦合。
+    """
+    from app.services import ebook_index_service
+
+    monkeypatch.setattr(ebook_index_service, "index_status",
+                        lambda: {"ready": False, "build": {}})
+    monkeypatch.setattr(ebook_index_service, "start_build_async",
+                        lambda: {"running": True, "done": 0, "total": 0})
+
+
 def _headers(admin_token):
     return {"Authorization": f"Bearer {admin_token['token']}"}
 
@@ -154,22 +169,39 @@ def test_search_api_requires_admin(client, fake_fetch):
     assert resp.status_code in (401, 403)
 
 
-def test_search_api_network_failure_returns_biz_error(client, admin_token, stub_blacklist, monkeypatch):
-    """书源不可达 → 可读业务错误（而非 500 堆栈）。"""
+def test_search_api_network_failure_degrades_gracefully(client, admin_token, stub_blacklist, monkeypatch):
+    """分类快路径网络异常 → 优雅降级：200 + 空命中 + failed_categories 回传（不 500、不报错）。
+
+    为什么不断言业务错误：`svc.search` 对单分类失败做了**隔离**（这是设计要求——
+    一个分类抓不到不应让整个检索失败），前端据 failed_categories 展示「N 个分类拉取失败」。
+    T00612 后「无分类」路径改为触发索引构建 + 428 提示（见下一个用例）。
+    """
     svc._CACHE.clear()
 
     def _boom(path, force=False):
         raise RuntimeError("连接超时")
 
     monkeypatch.setattr(svc, "_fetch", _boom)
-    # 不带 category → 全量扫描需先拉 README（分类清单），此路径失败才会冒泡为业务错误；
-    # 带 category 时单分类失败按设计被隔离（返回空结果 + failed_categories），不报错
     resp = client.get(
         "/admin/api/v1/ebooks/search",
-        params={"keyword": "活着"},
+        params={"keyword": "活着", "category": "文学"},
         headers=_headers(admin_token),
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["code"] != 0
-    assert "书源仓库访问失败" in body["message"]
+    assert body["code"] == 0, body
+    assert body["data"]["hits"] == []
+    assert body["data"]["failed_categories"] == ["文学"], "失败分类必须回传，便于前端如实展示"
+
+
+def test_search_api_without_index_returns_hint(client, admin_token, stub_blacklist):
+    """无索引 + 无分类（原超时场景）：返回 428 可读提示并已触发构建。"""
+    resp = client.get(
+        "/admin/api/v1/ebooks/search",
+        params={"keyword": "余华"},
+        headers=_headers(admin_token),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["code"] == 428
+    assert "索引" in body["message"]

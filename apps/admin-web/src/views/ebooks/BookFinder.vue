@@ -10,6 +10,38 @@
       style="margin-bottom: 12px"
     />
 
+    <!-- 索引状态条（T00612）：全量检索走本地索引，未构建时引导构建 -->
+    <el-card shadow="never" class="index-card">
+      <div class="index-row">
+        <template v-if="indexReady">
+          <el-tag type="success" size="small">索引就绪</el-tag>
+          <span class="index-text">
+            共 {{ indexInfo.book_count }} 本书 / {{ indexInfo.category_count }} 个分类，
+            构建于 {{ formatTime(indexInfo.built_at) }}
+          </span>
+        </template>
+        <template v-else-if="building">
+          <el-tag type="warning" size="small">索引构建中</el-tag>
+          <span class="index-text">
+            {{ indexInfo.build.done || 0 }} / {{ indexInfo.build.total || '…' }} 个分类
+            （首次约 2-5 分钟，期间可先选具体分类搜索）
+          </span>
+        </template>
+        <template v-else>
+          <el-tag type="info" size="small">索引未构建</el-tag>
+          <span class="index-text">
+            不选分类的全量搜索需先构建本地索引；也可先选择具体分类立即搜索
+          </span>
+        </template>
+        <el-button
+          size="small"
+          :loading="building"
+          :disabled="building"
+          @click="onRebuildIndex"
+        >{{ indexReady ? '重建索引' : '构建索引' }}</el-button>
+      </div>
+    </el-card>
+
     <!-- 检索区 -->
     <el-card shadow="never" class="search-card">
       <el-form :inline="true" @submit.prevent>
@@ -50,7 +82,8 @@
         <el-tag v-if="failedCategories.length" size="small" type="warning">
           {{ failedCategories.length }} 个分类拉取失败：{{ failedCategories.join('、') }}
         </el-tag>
-        <span v-if="!category" class="meta-hint">未限定分类时需扫描全部分类，耗时较长；建议先选分类。</span>
+        <span v-if="indexReadyForQuery" class="meta-hint">结果来自本地索引（毫秒级）。</span>
+        <span v-else-if="!category" class="meta-hint">索引未就绪时，未限定分类的搜索需先构建索引；可先选分类。</span>
       </div>
     </el-card>
 
@@ -87,9 +120,14 @@
  * - 本页只做「检索」；下载在城通网盘页面完成（无直链，程序化取件不可行）；
  * - 取件后走既有「素材录入」（支持 .epub/.docx/.html/.txt/.md）入库，再由频道工作流改写。
  */
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage } from '../../utils/message'
-import { getEbookCategories, searchEbooks } from '../../api/ebooks'
+import {
+  getEbookCategories,
+  getEbookIndexStatus,
+  rebuildEbookIndex,
+  searchEbooks,
+} from '../../api/ebooks'
 
 const keyword = ref('')
 const category = ref('')
@@ -103,6 +141,14 @@ const scannedCount = ref(0)
 const failedCategories = ref([])
 const searching = ref(false)
 const searched = ref(false)
+
+// 索引状态（T00612：全量检索走本地索引，避免全量抓取超时）
+const indexInfo = ref({ book_count: 0, category_count: 0, built_at: null, build: {} })
+const indexReady = ref(false)
+const indexReadyForQuery = ref(false)
+let pollTimer = null
+
+const building = computed(() => !!(indexInfo.value.build && indexInfo.value.build.running))
 
 async function loadCategories(force = false) {
   categoryLoading.value = true
@@ -127,24 +173,92 @@ async function onSearch() {
     ElMessage.warning('请输入关键词（书名或作者）')
     return
   }
+  // 未选分类且索引未就绪：先说明机制并触发构建，避免请求挂到超时（T00612 根因）
+  if (!category.value && !indexReady.value) {
+    ElMessage.warning('全量搜索需要先构建书源索引，已开始构建；也可选择具体分类立即搜索')
+    await onRebuildIndex()
+    return
+  }
   searching.value = true
   try {
     const data = await searchEbooks({ keyword: kw, category: category.value, limit: limit.value })
     hits.value = data?.hits || []
     scannedCount.value = (data?.scanned_categories || []).length
     failedCategories.value = data?.failed_categories || []
+    indexReadyForQuery.value = !!data?.index_ready
     searched.value = true
+  } catch (e) {
+    // 索引缺失（428）等业务错误由拦截器提示；刷新一次状态便于用户看到进度
+    await loadIndexStatus()
   } finally {
     searching.value = false
   }
 }
 
-onMounted(() => loadCategories())
+function formatTime(iso) {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString()
+}
+
+async function loadIndexStatus() {
+  try {
+    const data = await getEbookIndexStatus()
+    indexInfo.value = data || {}
+    indexReady.value = !!data?.ready
+    // 构建结束（running=false 且有结果）后停止轮询
+    if (!building.value && pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = null
+    }
+  } catch (e) {
+    // 状态查询失败不阻断检索
+  }
+}
+
+function startPolling() {
+  if (pollTimer) return
+  pollTimer = setInterval(loadIndexStatus, 3000)
+}
+
+async function onRebuildIndex() {
+  try {
+    await rebuildEbookIndex()
+    ElMessage.success('索引构建已开始，完成后即可全量搜索（约 2-5 分钟）')
+    await loadIndexStatus()
+    startPolling()
+  } catch (e) {
+    // 错误提示由请求拦截器统一处理
+  }
+}
+
+onMounted(() => {
+  loadCategories()
+  loadIndexStatus()
+})
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
+})
 </script>
 
 <style scoped>
 .book-finder .search-card {
   margin-bottom: 12px;
+}
+.book-finder .index-card {
+  margin-bottom: 12px;
+}
+.book-finder .index-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.book-finder .index-text {
+  color: var(--el-text-color-regular, #606266);
+  font-size: 13px;
+  margin-right: auto;
 }
 .book-finder .result-meta {
   display: flex;
