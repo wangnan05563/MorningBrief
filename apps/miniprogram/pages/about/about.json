@@ -1,4 +1,6 @@
 {
-  "usingComponents": {},
+  "usingComponents": {
+    "privacy-modal": "/components/privacy-modal/privacy-modal"
+  },
   "navigationBarTitleText": "关于我们"
 }

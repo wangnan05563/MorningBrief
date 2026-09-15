@@ -133,3 +133,10 @@
   font-size: 24rpx;
   color: var(--text-muted);
 }
+
+/* T00618：联系邮箱可长按选中复制（剪贴板不可用时的兜底） */
+.contact-text {
+  user-select: text;
+  -webkit-user-select: text;
+  word-break: break-all;
+}

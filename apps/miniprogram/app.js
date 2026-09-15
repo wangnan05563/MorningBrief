@@ -252,6 +252,8 @@ App({
     this._privacy = createPrivacyCoordinator();
     // 隐私授权 UI 槽位：privacy-modal 组件 attached 时注册、detached 时注销
     this._privacyUI = null;
+    // T00618：授权通过后要执行的动作队列（如 setClipboardData 需在手势链内执行）
+    this._postPrivacyActions = [];
 
     // 2. 同步注册隐私授权弹窗 handler：无论 getPrivacySetting 结果如何都必须注册
     if (typeof wx.onNeedPrivacyAuthorization === 'function') {
@@ -275,13 +277,17 @@ App({
             if (modalRes.confirm) {
               this.globalData.privacyAuthorized = true;
               this._privacy.agreeFallback();
+              // 兜底路径（wx.showModal 无官方按钮）：同样执行登记动作
+              this._runPostPrivacyActions();
             } else {
               this._privacy.reject();
+              this.clearPostPrivacyActions();
             }
           },
           fail: () => {
             // showModal 失败也要释放挂起的 resolve，否则隐私 API 永久挂起
             this._privacy.reject();
+            this.clearPostPrivacyActions();
           },
         });
       });
@@ -314,16 +320,58 @@ App({
   },
 
   /**
+   * 注册「隐私授权通过后要执行的动作」（T00618）
+   *
+   * 为什么需要：`wx.setClipboardData` 等隐私写操作**必须在用户手势的同步链内发起**——
+   * 在 await/setTimeout 之后调用会被微信拒绝（表现为复制失败）。而授权弹窗是异步的，
+   * 用户点「同意并继续」时其按钮回调本身处于手势链内，因此把动作登记到这里，
+   * 由 agreePrivacyViaButton 在那一刻同步执行。
+   *
+   * @param {Function} fn 返回 Promise<boolean>/boolean 的动作
+   * @returns {Promise<boolean>} 动作执行结果（用户拒绝授权时 resolve(false)）
+   */
+  registerPostPrivacyAction(fn) {
+    if (!this._postPrivacyActions) this._postPrivacyActions = [];
+    return new Promise((resolve) => {
+      this._postPrivacyActions.push({ fn, resolve });
+    });
+  },
+
+  /** 清空登记的动作（用户拒绝授权时），全部 resolve(false) */
+  clearPostPrivacyActions() {
+    const acts = (this._postPrivacyActions || []).splice(0);
+    acts.forEach((a) => a.resolve(false));
+  },
+
+  /** 在授权同意的手势链内执行登记的动作（内部方法） */
+  _runPostPrivacyActions() {
+    const acts = (this._postPrivacyActions || []).splice(0);
+    acts.forEach(({ fn, resolve }) => {
+      let ret;
+      try {
+        ret = fn();
+      } catch (e) {
+        console.warn('[privacy] 授权后动作抛错:', e);
+        ret = false;
+      }
+      Promise.resolve(ret).then((ok) => resolve(!!ok));
+    });
+  },
+
+  /**
    * 组件路径：用户点击官方 agreePrivacyAuthorization 按钮。
    * buttonId 必须与弹窗内该按钮的 id 一致，框架才认可授权完成（T00609 报错根因）。
    */
   agreePrivacyViaButton(buttonId) {
     this.globalData.privacyAuthorized = true;
     this._privacy.agreeViaButton(buttonId);
+    // 关键：立刻在手势链内执行登记动作（如 setClipboardData），不可延后
+    this._runPostPrivacyActions();
   },
 
   /** 组件路径：用户点击「拒绝」 */
   rejectPrivacy() {
     this._privacy.reject();
+    this.clearPostPrivacyActions();
   },
 });

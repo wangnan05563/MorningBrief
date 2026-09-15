@@ -3,7 +3,7 @@
   <!-- 应用信息头部 -->
   <view class="about-header">
     <image class="app-logo" src="/images/icons/app-logo.png" mode="aspectFit" />
-    <view class="app-name">MorningBrief 语音新闻</view>
+    <view class="app-name">{{appName}}</view>
     <view class="app-version" bindtap="onVersionTap">版本 {{version}}{{buildDate ? ' · ' + buildDate : ''}}</view>
     <view class="app-desc">{{description}}</view>
   </view>
@@ -30,10 +30,14 @@
     </view>
     <view class="info-item" bindtap="onCopyContact">
       <text class="info-label">联系邮箱</text>
-      <text class="info-value">{{contact}}</text>
+      <!-- T00618：邮箱文本可长按选中复制（剪贴板不可用时的兜底路径） -->
+      <text class="info-value contact-text" selectable user-select>{{contact}}</text>
       <text class="info-action">复制</text>
     </view>
   </view>
 
-  <view class="about-footer">© 2025 MorningBrief · 用耳朵听新闻</view>
+  <view class="about-footer">© 2026 {{appName}} · 用耳朵听新闻</view>
+
+<!-- T00618：隐私授权弹窗（剪贴板属隐私接口，授权须经官方按钮，见 components/privacy-modal） -->
+<privacy-modal />
 </view>

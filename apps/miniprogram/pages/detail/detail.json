@@ -1,3 +1,6 @@
 {
-  "navigationBarTitleText": "节目详情"
+  "navigationBarTitleText": "节目详情",
+  "usingComponents": {
+    "privacy-modal": "/components/privacy-modal/privacy-modal"
+  }
 }

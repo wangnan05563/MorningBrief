@@ -1,5 +1,5 @@
 {
-  "description": "MorningBrief ",
+  "description": "南屿听记（语音新闻与听书）",
   "miniprogramRoot": "./",
   "compileType": "miniprogram",
   "setting": {
@@ -30,7 +30,7 @@
     }
   },
   "appid": "wx1b4d58afd98bf2f6",
-  "projectname": "MorningBrief",
+  "projectname": "南屿听记",
   "libVersion": "3.3.4",
   "condition": {},
   "simulatorPluginLibVersion": {},

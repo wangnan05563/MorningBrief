@@ -19,6 +19,8 @@ const TAP_RESET_MS = 1500;
 
 Page({
   data: {
+    // T00618：应用名称（品牌更名：MorningBrief 语音新闻 → 南屿听记）
+    appName: '南屿听记',
     version: '',
     buildDate: '',
     description: '用耳朵听新闻，让信息获取更轻松。',
@@ -31,8 +33,8 @@ Page({
       { icon: '/images/icons/play.png', title: '倍速播放', desc: '支持多种倍速切换' },
       { icon: '/images/icons/play-mini.png', title: '离线收听', desc: '下载后无网络也能听' },
     ],
-    author: 'MorningBrief 团队',
-    contact: 'support@MorningBrief.example.com',
+    author: '南屿轻舟',
+    contact: '107038953@qq.com',
     currentServerUrl: '',  // 当前生效的后端地址（展示用）
   },
 
@@ -112,7 +114,18 @@ Page({
         wx.showToast({ title: '邮箱已复制', icon: 'success' });
         trackEvent('about', 'copy_contact');
       } else {
-        wx.showToast({ title: '复制失败，请稍后重试', icon: 'none' });
+        // T00618：失败不再只给"稍后重试"（用户无从下手）——给出可操作兜底：
+        // 邮箱文本已支持长按选中复制；同时说明可能的平台原因（后台未声明「剪切板」隐私类型）
+        wx.showModal({
+          title: '复制失败',
+          content: `请长按下方邮箱手动复制：
+${this.data.contact}
+
+若长按也无法选中，请在微信公众平台「设置 → 服务内容声明 → 用户隐私保护指引」中声明「剪切板」用途后重试。`,
+          showCancel: false,
+          confirmText: '我知道了',
+          confirmColor: '#3F6C8F',
+        });
       }
     });
   },
