@@ -402,3 +402,41 @@
   color: var(--text-muted);
   text-align: center;
 }
+
+/* === T00593：相册自选头像入口 ===
+   为什么用次要按钮而非主按钮：主入口是微信官方推荐的 chooseAvatar（上方圆形头像），
+   这里是「被隐私声明拦截」时的降级出路，视觉层级必须低于主入口，不能引导所有用户走它 */
+.avatar-album-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+  margin-top: -8rpx;
+  margin-bottom: 16rpx;
+}
+
+.avatar-album-btn {
+  min-height: 64rpx;
+  line-height: 64rpx !important;
+  padding: 0 32rpx !important;
+  margin: 0 !important;
+  border-radius: var(--radius-btn) !important;
+  background: var(--bg-subtle) !important;
+  color: var(--accent) !important;
+  border: 2rpx solid var(--border) !important;
+  font-size: 26rpx !important;
+}
+
+.avatar-album-btn::after {
+  border: none !important;
+}
+
+.avatar-album-btn-hover {
+  background: var(--border) !important;
+}
+
+.avatar-album-hint {
+  font-size: 22rpx;
+  color: var(--text-muted);
+  line-height: 1.4;
+}

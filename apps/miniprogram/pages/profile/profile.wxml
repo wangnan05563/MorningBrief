@@ -161,6 +161,18 @@
         <text class="edit-avatar-tip">使用微信头像</text>
       </button>
 
+      <!-- T00593：相册/相机自选头像（自定义上传头像）
+           chooseAvatar 属隐私接口，mp 后台未声明「收集你的昵称、头像」时点击会被拦截
+           （用户侧表现为点了没反应）——本入口是那条路径的降级出路 -->
+      <view class="avatar-album-row">
+        <button
+          class="avatar-album-btn"
+          bindtap="onPickAvatarFromAlbum"
+          hover-class="avatar-album-btn-hover"
+        >从相册选择</button>
+        <text class="avatar-album-hint">微信头像点不动？可从相册选一张</text>
+      </view>
+
       <!-- 昵称输入：input type="nickname"（唤起键盘上方的"使用微信昵称"按钮，一键填入） -->
       <view class="edit-nickname-row">
         <text class="edit-nickname-label">昵称</text>

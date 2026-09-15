@@ -13,6 +13,8 @@ const downloadStore = require('../../services/download');
 // 本地进度/收藏聚合（FR-MC-10 修复 GAP-11 统计恒为 0 的离线兜底）
 const localData = require('../../services/local-data');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
+// T00593：从相册/相机自选头像（chooseAvatar 被隐私声明拦截时的降级路径）
+const { pickAvatarFromAlbum } = require('../../utils/avatar-picker');
 
 Page({
   data: {
@@ -161,6 +163,30 @@ Page({
     }
     // 仅用临时路径做 UI 预览，本会话内有效
     this.setData({ editAvatar: tempPath });
+  },
+
+  /**
+   * T00593：从相册/相机自选头像（自定义上传头像）
+   *
+   * 与「使用微信头像」并存的原因：`chooseAvatar` 属隐私接口，小程序未在 mp 后台
+   * 《用户隐私保护指引》声明「收集你的昵称、头像」时点击会被渲染层直接拦截
+   * （控制台 chooseAvatar:fail api scope is not declared in the privacy agreement，
+   * 用户侧表现为点了没反应）——本入口是那条路径的降级出路。
+   *
+   * 选中的临时路径同样只做本会话预览，保存由 onConfirmEditProfile 统一上传
+   * （COS 直传优先，未配置时回退后端代理 /api/v1/users/avatar）。
+   */
+  onPickAvatarFromAlbum() {
+    pickAvatarFromAlbum()
+      .then((tempPath) => {
+        this.setData({ editAvatar: tempPath });
+        wx.showToast({ title: '已选择，点保存生效', icon: 'none' });
+      })
+      .catch((err) => {
+        // 用户主动取消不提示（避免打扰）
+        if (err && err.cancelled) return;
+        wx.showToast({ title: (err && err.message) || '选择图片失败', icon: 'none' });
+      });
   },
 
   /**
