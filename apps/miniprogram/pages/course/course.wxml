@@ -7,6 +7,11 @@
     <view class="skeleton-line shimmer"></view>
     <view class="skeleton-line short shimmer"></view>
     <view class="skeleton-card" wx:for="{{[1,2,3]}}" wx:key="*this"></view>
+    <!-- T00599：分级加载提示——慢加载文案 / 超时重试入口（骨架保持） -->
+    <view class="load-hint" wx:if="{{loadingSlow}}">网络较慢，正在加载…</view>
+    <view class="load-retry-wrap" wx:if="{{loadingTimedOut}}">
+      <button class="load-retry-btn" bindtap="onRetryLoad" hover-class="none">重试</button>
+    </view>
   </view>
 
   <!-- 错误态 -->

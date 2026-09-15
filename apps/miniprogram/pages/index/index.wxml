@@ -36,6 +36,12 @@
       </view>
       <view class="skeleton-play shimmer"></view>
     </view>
+    <!-- T00599：分级加载提示——慢加载（>2s）文案 / 超时（>8s）重试入口；
+         骨架保持不动，只在下方追加提示，避免用户以为卡死 -->
+    <view class="load-hint" wx:if="{{loadingSlow}}">网络较慢，正在加载…</view>
+    <view class="load-retry-wrap" wx:if="{{loadingTimedOut}}">
+      <button class="load-retry-btn" bindtap="onRetryLoad" hover-class="none">重试</button>
+    </view>
   </view>
 
   <!-- === 今日节目列表（统一布局，点击跳转 detail 页） === -->

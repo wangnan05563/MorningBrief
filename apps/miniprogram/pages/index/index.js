@@ -19,6 +19,8 @@ const localData = require('../../services/local-data');
 const skin = require('../../utils/skin');
 const { playEpisode, safePlay, setQueue, setPendingSeek, seek, getPlaybackRate, setPlaybackRate, getSleepStatus, startSleepTimer, stopSleepTimer, onSleepChange, onError, getCurrentEpisode, onPlaybackChange, onTimeUpdateChange, offTimeUpdateChange } = require('../../services/audio');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
+// T00599：加载态控制器（最短骨架展示 600ms + 慢加载提示 2s + 超时重试 8s）
+const { createLoadingController } = require('../../utils/loading');
 // 带 TTL 的 storage 工具：lastPlayedEpisode 是续播缓存，7 天后自动过期清理
 const { setWithTTL, getWithTTL } = require('../../utils/storage');
 
@@ -47,6 +49,9 @@ Page({
     currentTime: 0,     // 当前播放位置（秒）
     duration: 0,        // 总时长（秒，播放后由播放器填入）
     loading: true,      // 加载中
+    // T00599：分级加载态（由 utils/loading.js 控制器统一维护）
+    loadingSlow: false,      // 超过 2s 仍在加载 → 显示"网络较慢"提示
+    loadingTimedOut: false,  // 超过 8s 仍在加载 → 显示"重试"按钮
     error: '',          // 错误信息（今日节目未发布等）
     // V1.3 新增字段
     channels: [],         // 频道列表
@@ -82,6 +87,9 @@ Page({
 
   async onLoad() {
     trackPageView('pages/index/index');
+    // T00599：先建加载态控制器，供后续所有 loading 流转统一使用
+    // （最短骨架展示 / 慢加载提示 / 超时重试；见 utils/loading.js 的用法说明）
+    this._lc = createLoadingController({ setData: this.setData.bind(this) });
     this._unsubSleep = onSleepChange((status) => {
       this.setData({
         sleepActive: status.active,
@@ -135,6 +143,20 @@ Page({
       offTimeUpdateChange(this._onTimeUpdateChange);
       this._onTimeUpdateChange = null;
     }
+    // T00599：清理加载态计时器，避免页面销毁后仍 setData
+    if (this._lc) this._lc.cancel();
+  },
+
+  /**
+   * T00599：慢加载超时后的重试入口（骨架下方"重试"按钮）
+   * 重新走主数据拉取链路；start() 会重置计时与全部提示态
+   */
+  onRetryLoad() {
+    if (this.data.isPreferredMode) {
+      this.loadPreferred();
+      return;
+    }
+    this.initData(true);
   },
 
   /**
@@ -302,16 +324,18 @@ Page({
     if (JSON.stringify(this.data.preferredIds) !== JSON.stringify(preferredIds)) {
       this.setData({ preferredIds });
     }
-    this.setData({ loading: true, error: '' });
+    this._lc.start();
+    this.setData({ error: '' });
     if (preferredIds.length === 0) {
       // 未设置偏爱频道：展示引导设置提示，不发起请求
       // 同时清空 todayList 和 globalData.todayList，避免残留上次加载的全部频道数据
       this.setData({
-        loading: false,
         todayList: [],
         preferredEmpty: true,
       });
       app.globalData.todayList = [];
+      // 本地即刻决策、无网络等待：不走最短展示保护，立即收起骨架出引导
+      this._lc.finish(true);
       return;
     }
     try {
@@ -323,8 +347,9 @@ Page({
       // 偏爱模式下过滤后为空，preferredEmpty=true 让 wxml 走"偏爱频道暂无今日节目"分支
       this.setData({ preferredEmpty: filtered.length === 0 });
     } catch (err) {
+      // 失败：立即收起骨架（错误态由 wxml 的 error 分支渲染），不被最短展示时长拖住
+      this._lc.fail();
       this.setData({
-        loading: false,
         error: err.message || '今日节目暂未上线',
       });
     }
@@ -367,7 +392,8 @@ Page({
    * @param {boolean} force - 强制刷新（频道切换时）
    */
   async initData(force) {
-    this.setData({ loading: true, error: '' });
+    this._lc.start();
+    this.setData({ error: '' });
     const channelId = this.data.currentChannelId;
     // 切换频道/强制刷新时清空旧文稿与状态，避免新节目详情仍残留上一节目的文稿和图片
     // 任务1+2+10：节目详情、文稿、分段封面图需随频道切换同步刷新
@@ -384,8 +410,8 @@ Page({
       const data = await fetchTodayEpisode(channelId);
       this._applyTodayData(data);
     } catch (err) {
+      this._lc.fail();
       this.setData({
-        loading: false,
         error: err.message || '今日节目暂未上线',
       });
     }
@@ -424,10 +450,11 @@ Page({
     this.setData({
       todayList: enriched,
       todayDateText: this._formatDateZh(new Date()),
-      loading: false,
       episode: null,
     });
     app.globalData.todayList = enriched;
+    // T00599：数据就绪 → 走最短展示保护收起骨架（数据早到也保持 600ms，消除骨架一闪）
+    if (this._lc) this._lc.finish();
   },
 
   /**

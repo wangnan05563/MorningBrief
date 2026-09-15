@@ -14,6 +14,8 @@ const { fetchHistory, fetchChannels } = require('../../services/api');
 const localData = require('../../services/local-data');
 const { setQueue, playEpisode, setPendingSeek, safePlay, getCurrentEpisode, onPlaybackChange } = require('../../services/audio');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
+// T00599：加载态控制器（最短骨架展示 + 慢加载提示 + 超时重试）
+const { createLoadingController } = require('../../utils/loading');
 
 // 分页渲染步长：每次 onReachBottom 增量渲染的项数
 // 选 20 与 size 对齐：单次分页加载的数据量与单次渲染增量一致，
@@ -32,6 +34,9 @@ Page({
     size: 20,
     total: 0,
     loading: false,
+    // T00599：分级加载态（由 utils/loading.js 控制器维护；仅首屏骨架期有效）
+    loadingSlow: false,
+    loadingTimedOut: false,
     hasMore: true,
     // V1.3 新增
     channels: [],
@@ -55,6 +60,8 @@ Page({
   },
 
   onLoad() {
+    // T00599：加载态控制器（onUnload 需 cancel）
+    this._lc = createLoadingController({ setData: this.setData.bind(this) });
     trackPageView('pages/history/history');
     this.loadChannels();
     this.loadHistory(true);
@@ -174,9 +181,10 @@ Page({
         renderCount: RENDER_STEP,
         page: 1,
         hasMore: false,
-        loading: false,
         preferredEmpty: true,
       });
+      // 本地即刻决策、无网络等待：不留最短展示时长
+      this._lc.finish(true);
       return;
     }
 
@@ -186,7 +194,8 @@ Page({
     }
     if (!this.data.hasMore && !first) return;
 
-    this.setData({ loading: true });
+    // T00599：start() 置加载态并启动分级计时（首屏骨架期生效）
+    this._lc.start();
 
     try {
       // 偏爱模式下传 channelId=null 拉全部频道，本地再按 preferredIds 过滤
@@ -223,17 +232,23 @@ Page({
           ? ((res.list || []).length >= this.data.size && newList.length < (res.total || 0))
           : newList.length < (res.total || 0),
         page: this.data.page + 1,
-        loading: false,
         // 偏爱模式下过滤后为空，显示"偏爱频道暂无历史节目"空状态（preferredEmpty=false时走通用空态）
         preferredEmpty: this.data.isPreferredMode && newList.length === 0,
       });
+      // T00599：首屏走最短展示保护（消除骨架一闪）；上拉加载更多无骨架，立即收起
+      this._lc.finish(!first);
     } catch (err) {
-      this.setData({ loading: false });
+      this._lc.fail();
       wx.showToast({
         title: err.message || '加载失败',
         icon: 'none',
       });
     }
+  },
+
+  /** T00599：慢加载超时后的重试入口（骨架下方"重试"按钮） */
+  onRetryLoad() {
+    this.loadHistory(true);
   },
 
   onReachBottom() {
@@ -504,6 +519,8 @@ Page({
   },
 
   onUnload() {
+    // T00599：清理加载态计时器，避免页面销毁后仍 setData
+    if (this._lc) this._lc.cancel();
     if (this._unsubPlayback) {
       this._unsubPlayback();
       this._unsubPlayback = null;

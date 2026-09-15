@@ -237,3 +237,34 @@ page {
   width: 24rpx;
   height: 24rpx;
 }
+
+/* === T00599：加载态分级提示（慢加载 / 超时重试），骨架页共用 ===
+   与骨架屏配合使用：loadingSlow → 文字提示；loadingTimedOut → 保留骨架 + 重试按钮 */
+.load-hint {
+  margin: 16rpx 0 8rpx;
+  font-size: 24rpx;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.load-retry-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 16rpx 0 24rpx;
+}
+
+.load-retry-btn {
+  min-height: 64rpx;
+  line-height: 64rpx !important;
+  padding: 0 40rpx !important;
+  margin: 0 !important;
+  border-radius: var(--radius-btn) !important;
+  background: var(--bg-card) !important;
+  color: var(--accent) !important;
+  border: 2rpx solid var(--border) !important;
+  font-size: 26rpx !important;
+}
+
+.load-retry-btn::after {
+  border: none !important;
+}

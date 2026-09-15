@@ -28,6 +28,8 @@ const { playEpisode, setQueue, downloadEpisode, cancelDownload } = require('../.
 const downloadStore = require('../../services/download');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 const skin = require('../../utils/skin');
+// T00599：加载态控制器（最短骨架展示 + 慢加载提示 + 超时重试）
+const { createLoadingController } = require('../../utils/loading');
 
 // 章节「已学完」判定阈值：统一收敛到 services/constants（与后端 _COMPLETE_RATIO 保持一致）
 const { COURSE_COMPLETE_RATIO } = require('../../services/constants');
@@ -37,8 +39,12 @@ Page({
     channelId: null,
     channel: null,            // 频道元信息（含 name/description/cover_url/disclaimer_level）
     coverUrl: '',             // 课程封面（频道封面优先，否则皮肤默认图）
+    coverError: false,        // 封面加载失败兜底（B3）：失败时展示灰块占位，避免裂图
     chapters: [],             // 章节列表（每章一期 episode，含 index/status/duration_label）
     loading: true,
+    // T00599：分级加载态（由 utils/loading.js 控制器维护）
+    loadingSlow: false,
+    loadingTimedOut: false,
     error: '',
     learnedCount: 0,          // 已学完章节数
     totalCount: 0,            // 章节总数
@@ -52,6 +58,8 @@ Page({
   },
 
   onLoad(options) {
+    // T00599：加载态控制器（onUnload 需 cancel）
+    this._lc = createLoadingController({ setData: this.setData.bind(this) });
     trackPageView('pages/course/course');
     // FR-MC-10：课程浏览埋点（SRS §4.10 course_view）
     trackEvent('course', 'view', 'channel_' + (options.channelId || ''));
@@ -131,6 +139,7 @@ Page({
       this.setData({
         channel: meta,
         coverUrl: meta.cover_url || skin.getSkin(meta.channel_type).defaultCover,
+        coverError: false,
         disclaimerText: skin.getDisclaimerText(meta.disclaimer_level),
       });
       wx.setNavigationBarTitle({ title: meta.name || '课程' });
@@ -138,11 +147,20 @@ Page({
   },
 
   /**
+   * 封面加载失败兜底（B3）：defaultCover 等也失败时不裂图，展示灰块占位
+   */
+  onCoverError() {
+    if (!this.data.coverError) this.setData({ coverError: true });
+  },
+
+  /**
    * 加载章节列表并聚合学习状态
    * 章节顺序以 published_at 升序（API sort_order=asc），即课程章节顺序
    */
   async loadChapters(channelId) {
-    this.setData({ loading: true, error: '' });
+    // T00599：start() 置骨架态并启动分级计时；成功 finish()（最短展示保护），失败 fail() 立即收起
+    this._lc.start();
+    this.setData({ error: '' });
     try {
       const res = await fetchHistory(1, 50, channelId, 'asc');
       const list = (res && res.list) || [];
@@ -182,8 +200,8 @@ Page({
         learnedCount,
         totalCount,
         percent: totalCount ? Math.round((learnedCount / totalCount) * 100) : 0,
-        loading: false,
       });
+      this._lc.finish();
 
       // P1：若后端提供课程进度聚合（GET /courses/{id}/progress），刷新精度（失败忽略）
       fetchCourseProgress(channelId)
@@ -198,8 +216,19 @@ Page({
         })
         .catch(() => {});
     } catch (err) {
-      this.setData({ loading: false, error: err.message || '课程章节加载失败' });
+      this._lc.fail();
+      this.setData({ error: err.message || '课程章节加载失败' });
     }
+  },
+
+  /** T00599：慢加载超时后的重试入口（骨架下方"重试"按钮） */
+  onRetryLoad() {
+    this.loadChapters(this.data.channelId);
+  },
+
+  /** T00599：清理加载态计时器，避免页面销毁后仍 setData */
+  onUnload() {
+    if (this._lc) this._lc.cancel();
   },
 
   /**
