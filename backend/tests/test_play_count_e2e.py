@@ -92,3 +92,38 @@ async def test_play_count_visible_and_persistent(db_session, client, user_token)
         select(PlayLog).where(PlayLog.episode_id == episode.id)
     )).scalars().all()
     assert len(logs2) == 1, "同一用户重复播放不应新增 play_log"
+
+class TestProgressLookupT00660:
+    """进度查询对"节目不存在/未发布"返回空进度而非 404（T00660）。
+
+    场景：小程序本地续播缓存（lastPlayedEpisode，TTL 7 天）可能保存当前后端库中
+    已不存在的节目 id（换库/重置/环境切换），旧实现 404 在控制台刷红且无业务价值。
+    写入路径（POST /progress）仍保留 404 校验，防脏进度入库。
+    """
+
+    @pytest.mark.asyncio
+    async def test_get_progress_missing_episode_returns_null(self, db_session, client, user_token):
+        resp = client.get("/api/v1/playlogs/progress/99999", headers=_auth(user_token)).json()
+        assert resp["code"] == 0, resp
+        assert resp["data"] in (None, {}), resp
+
+    @pytest.mark.asyncio
+    async def test_get_progress_unpublished_episode_returns_null(self, db_session, client, user_token):
+        from app.models import Episode as EpModel
+        ep = EpModel(title="未发布节目", date=date.today(), duration=600,
+                     audio_url="http://x/t.mp3", status="draft")
+        db_session.add(ep)
+        await db_session.commit()
+        await db_session.refresh(ep)
+        resp = client.get(f"/api/v1/playlogs/progress/{ep.id}", headers=_auth(user_token)).json()
+        assert resp["code"] == 0, resp
+        assert resp["data"] in (None, {}), resp
+
+    @pytest.mark.asyncio
+    async def test_post_progress_missing_episode_still_rejected(self, db_session, client, user_token):
+        """写入路径保留校验：不存在的节目不得写入进度（防脏数据）。"""
+        resp = client.post("/api/v1/playlogs/progress",
+                           json={"episode_id": 99999, "position": 60, "duration": 600,
+                                 "completed": False, "listened_seconds": 60},
+                           headers=_auth(user_token)).json()
+        assert resp["code"] != 0, resp

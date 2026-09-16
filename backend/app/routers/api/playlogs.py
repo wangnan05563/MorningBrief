@@ -90,8 +90,14 @@ async def get_progress(
     user: UserPayload = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    # 校验节目存在且已发布：未发布节目查询进度无业务意义
-    await _get_published_episode(db, episode_id)
+    # T00660：进度查询是**良性读操作**——节目不存在/未发布时返回空进度（data=None）而非 404。
+    # 场景：小程序本地续播缓存（lastPlayedEpisode，TTL 7 天）可能保存着当前后端库中
+    # 已不存在的节目 id（换库/重置/episode 重建/环境切换），旧实现 404 会在控制台刷红
+    # 且无业务价值——客户端本来就把"无进度"按未播放处理（catch → null）。
+    # POST /progress 仍保留 404 校验：写入路径必须防脏进度记录入库。
+    ep = (await db.execute(select(Episode).where(Episode.id == episode_id))).scalar_one_or_none()
+    if ep is None or ep.status != EpisodeStatus.published.value:
+        return success(data=None)
     svc = PlayService(db)
     # 无进度记录返回 None，前端按未播放处理
     data = await svc.get_progress(user.user_id, episode_id)
