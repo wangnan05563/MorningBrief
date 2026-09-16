@@ -45,6 +45,8 @@ from app.models.workflow import (
 from app.models.review import Review, ReviewStatus
 from app.models.episode import Episode, EpisodeStatus
 from app.models.play_log import PlayLog
+# T00656 讲书稿素材池
+from app.models.book_pool import BookPoolItem
 # V1.2 新增辅助表
 from app.models.jwt_blacklist import JwtBlacklist
 from app.models.crawler_dedup import CrawlerDedup

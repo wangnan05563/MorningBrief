@@ -91,6 +91,13 @@ const routes = [
         meta: { title: '频道管理', icon: 'Menu', group: '内容运营' },
       },
       {
+        // T00656：讲书稿模式与素材池（按频道配置开关/书单/排序/进度）
+        path: 'channels/book-pool',
+        name: 'BookPool',
+        component: () => import('../views/channel/BookPool.vue'),
+        meta: { title: '讲书稿素材池', icon: 'Collection', group: '内容运营' },
+      },
+      {
         path: 'ebooks',
         name: 'BookFinder',
         component: () => import('../views/ebooks/BookFinder.vue'),

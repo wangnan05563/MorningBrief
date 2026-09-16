@@ -18,7 +18,7 @@ from typing import Optional
 from app.config import get_settings
 from app.core.simhash import compute
 from app.core.timeutil import localnow_naive
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.database import AsyncSessionLocal
 from app.models import Material, Channel
@@ -60,6 +60,91 @@ async def _extract_content(entry: dict) -> dict:
         # 封面图由 article_parser 从 og:image 提取，透传到 Material 入库
         # 无封面图时为 None，小程序文稿页降级为纯文本展示
         "cover_url": article.get("cover_url"),
+    }
+
+
+async def _route_book_pool_mode(workflow_id: str, channel_id: Optional[int]) -> Optional[dict]:
+    """讲书稿模式路由（T00656）。
+
+    - 非讲书稿模式：返回 None，走原采集流程；
+    - 讲书稿模式：**完全不采集**书源/资讯源（仅清空频道的 rss_sources 字段并不足够——
+      非 audiobook 频道空白名单会回退到全局源），改为按素材池顺序供给"当前应讲的那本书"的
+      章节素材，并关联到本次工作流；池空/未到间隔/已到末尾/书未上传书稿等情况抛**明确原因**
+      的错误（工作流详情页可见），便于运营直接处置。
+
+    Returns:
+        讲书稿模式下的 crawl 结果 dict；非该模式返回 None
+    """
+    if channel_id is None:
+        return None
+    from app.models import Channel
+    from app.services import book_pool_service as book_pool_svc
+
+    async with AsyncSessionLocal() as session:
+        mode = (await session.execute(
+            select(Channel.script_mode).where(Channel.id == channel_id)
+        )).scalar()
+        if (mode or "") != book_pool_svc.MODE_BOOK_POOL:
+            return None
+
+        pick = await book_pool_svc.pick_next_book(session, channel_id)
+        status = pick.get("status")
+
+        def _raise(reason: str, msg: str, hint: str) -> None:
+            err = RuntimeError(msg)
+            err.failure_details = {  # type: ignore[attr-defined]
+                "reason": reason, "channel_id": channel_id, "hint": hint, "pick": pick,
+            }
+            raise err
+
+        if status == "empty":
+            _raise("book_pool_empty",
+                   "讲书稿模式：素材池为空，已跳过当日生成",
+                   "请在「频道管理 → 讲书稿素材池」加入书籍（或关闭讲书稿模式改用频道书源）")
+        if status == "not_due":
+            _raise("book_pool_not_due",
+                   f"讲书稿模式：未到取书间隔（上次 {pick.get('last_run_date')}，"
+                   f"下次 {pick.get('next_due_date')}），已跳过当日生成",
+                   "如需每日生成，请把取书间隔设为 1 天")
+        if status == "exhausted":
+            _raise("book_pool_exhausted",
+                   f"讲书稿模式：素材池已到末尾（进度 {pick.get('cursor')}/{pick.get('total')}），已跳过当日生成",
+                   "可在素材池页开启「末尾循环」或重置进度，或向池中追加书籍")
+        if status != "ok":
+            _raise("book_pool_unknown", f"讲书稿模式：取书失败（{status}）", "请检查频道与素材池配置")
+
+        item = pick.get("item") or {}
+        materials = await book_pool_svc.collect_book_materials(session, channel_id, item)
+        if not materials:
+            _raise("book_not_uploaded",
+                   f"讲书稿模式：待讲书籍《{item.get('title')}》尚无待消费的书稿素材",
+                   "请在「素材录入」上传该书 EPUB/DOCX 并选择本频道；"
+                   "为便于自动聚合全书章节，上传时把「来源」填为书名")
+
+        # 关联到本次工作流（素材本质是频道池，workflow_id 为运行期临时关联）
+        ids = [m.id for m in materials]
+        await session.execute(
+            update(Material).where(Material.id.in_(ids)).values(workflow_id=workflow_id)
+        )
+        await session.commit()
+
+    logger.info(
+        "[讲书稿] workflow_id=%s channel_id=%s 取书《%s》（进度 %s/%s）→ 章节素材 %d 条",
+        workflow_id, channel_id, item.get("title"), pick.get("cursor"), pick.get("total"), len(ids),
+    )
+    return {
+        "material_count": len(ids),
+        "workflow_id": workflow_id,
+        "book_pool": {
+            "book_title": item.get("title"),
+            "material_id": item.get("material_id"),
+            "cursor": pick.get("cursor"),
+            "total": pick.get("total"),
+            "chapter_count": len(ids),
+        },
+        "source_details": [],  # 讲书稿模式不采集任何源，前端展示为空属预期
+        "total_entries": 0,
+        "extracted_entries": 0,
     }
 
 
@@ -340,6 +425,13 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
         "爬虫启动 workflow_id=%s date=%s channel_id=%s",
         workflow_id, date_str, channel_id,
     )
+
+    # T00656：讲书稿模式——完全不采集书源，按素材池顺序供给"当前应讲的那本书"的章节素材。
+    # 置于最前：既省去无谓抓取，也让"忽略频道书源"在**行为**上真正成立
+    # （仅把频道 rss_sources 清空并不足够：非 audiobook 频道空白名单会回退到全局源）。
+    book_pool_outcome = await _route_book_pool_mode(workflow_id, channel_id)
+    if book_pool_outcome is not None:
+        return book_pool_outcome
 
     # 加载频道级数据源白名单和关键词过滤配置
     # channel_id 为 None 或频道未配置时返回空列表，回退到全局模式

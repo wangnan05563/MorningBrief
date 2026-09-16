@@ -173,6 +173,8 @@ from app.routers.admin.mobile import router as b_mobile_router
 from app.routers.admin.users import router as b_users_router
 # 找书工具路由（T00601/T00603：书源检索，取件后走素材上传入库）
 from app.routers.admin.ebooks import router as b_ebooks_router
+# T00656 讲书稿模式与素材池
+from app.routers.admin.book_pool import router as b_book_pool_router
 # 数据库维护与系统清理模块（仅 admin）
 from app.routers.admin.db_admin import router as b_db_admin_router
 from app.routers.admin.maintenance import router as b_maintenance_router
@@ -287,6 +289,17 @@ async def _migrate_channel_schema() -> None:  # NOSONAR
             ("type_label", "TEXT"),
             ("cover_url", "TEXT"),
             ("disclaimer_level", "TEXT NOT NULL DEFAULT 'none'"),
+            # T00656 讲书稿模式：script_mode=book_pool 时忽略频道书源、改从素材池按序取书。
+            # 快照列用于关闭模式时恢复原书源（不修改 rss.yaml，仅动频道字段）；
+            # cursor/last_run_date/interval_days/loop 为按天取书的进度与调度状态。
+            ("script_mode", "TEXT NOT NULL DEFAULT ''"),
+            ("rss_sources_snapshot", "TEXT"),
+            ("book_rss_sources_snapshot", "TEXT"),
+            ("book_pool_interval_days", "INTEGER NOT NULL DEFAULT 1"),
+            ("book_pool_loop", "INTEGER NOT NULL DEFAULT 0"),
+            ("book_pool_cursor", "INTEGER NOT NULL DEFAULT 0"),
+            ("book_pool_last_run_date", "TEXT"),
+            ("book_pool_last_title", "TEXT"),
         ]
         added = 0
         for col_name, col_type in new_columns:
@@ -945,6 +958,7 @@ def create_app() -> FastAPI:  # NOSONAR
     app.include_router(b_users_router)
     # 找书工具（书源检索 → 人工取件 → 素材上传入库）
     app.include_router(b_ebooks_router)
+    app.include_router(b_book_pool_router)
     # 内部（工作流调度）
     app.include_router(internal_workflow_router)
 

@@ -67,9 +67,17 @@
         <el-table-column label="创建时间" min-width="170">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column v-if="canOperate" label="操作" width="160">
+        <!-- T00656：内容来源模式（讲书稿模式 = 忽略频道书源，按素材池顺序逐日取书） -->
+        <el-table-column label="内容来源" width="120" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.script_mode === 'book_pool'" type="success" size="small">讲书稿模式</el-tag>
+            <el-tag v-else type="info" size="small">频道书源</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column v-if="canOperate" label="操作" width="240">
           <template #default="{ row }">
             <el-button size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" type="primary" plain @click="openBookPool(row)">讲书稿</el-button>
             <el-button size="small" type="danger" :loading="deletingIds.has(row.id)" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -384,6 +392,7 @@
 <script setup>
 defineOptions({ name: 'ChannelManagement' })
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { Plus, VideoPlay, Upload } from '@element-plus/icons-vue'
 import {
@@ -391,6 +400,9 @@ import {
   listBgmFiles, uploadBgmFile, recommendChannelBgm, listRssSources, recommendChannelSources,
 } from '../../api/channels'
 import { formatTime } from '../../utils/format'
+
+// T00656：跳转「讲书稿素材池」页（开关/书单/进度在该页按频道配置）
+const router = useRouter()
 
 // 角色控制：直接读 localStorage，operator 隐藏增删改操作
 const role = localStorage.getItem('admin_role') || ''
@@ -569,6 +581,14 @@ function openCreate() {
   loadBgmList()
   loadRssSources()
   dialogVisible.value = true
+}
+
+/**
+ * T00656：打开该频道的讲书稿素材池（开关 / 书单排序 / 进度在同一页完成，
+ * 避免在"尚未保存的新频道"上切换模式——模式开关需要已有 channel_id）
+ */
+function openBookPool(row) {
+  router.push({ path: '/channels/book-pool', query: { channelId: row.id } })
 }
 
 function openEdit(row) {

@@ -543,6 +543,24 @@ class ContentService:
         await self.cache.delete_pattern("episode:list:page:*")
         await self.cache.delete_pattern("episode:search:*")
 
+        # T00656：讲书稿模式——标题用书名（而非"日期 · 频道名"），并在**发布成功后**推进取书进度。
+        # 为什么放在这里：publish_episode 是所有发布路径（自动审批/人工审核/内部回调）的收敛点，
+        # 且"发布成功"是唯一确定的成功点——放 crawl 会在失败重跑时丢书。
+        if channel_id:
+            try:
+                from app.services import book_pool_service as book_pool_svc
+                pick = await book_pool_svc.pick_next_book(self.db, channel_id, review.episode_date)
+                if pick.get("status") == "ok":
+                    book_title = ((pick.get("item") or {}).get("title") or "").strip()
+                    if book_title:
+                        episode.title = f"{date_part} · 《{book_title}》讲书"[:256]
+                        await self.db.commit()
+                    await book_pool_svc.mark_published(
+                        self.db, channel_id, book_title, review.episode_date,
+                    )
+            except Exception as e:  # noqa: BLE001 — 进度推进失败不应影响节目发布
+                logger.warning("讲书稿进度推进失败（不影响发布）: %s", e)
+
         return episode.id
 
     @staticmethod

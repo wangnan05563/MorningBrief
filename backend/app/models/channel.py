@@ -48,6 +48,43 @@ class Channel(Base):
     # 频道专属 RSS 源列表（JSON 数组，存储 rss.yaml 中的 source name，如 ["人民网-国内"]）
     # 为空时 crawler 回退到全局所有源；非空时仅采集列表中的源，实现频道级数据源隔离
     rss_sources: Mapped[Optional[str]] = mapped_column(Text, comment="频道专属 RSS 源列表（JSON 数组）")
+    # 频道专属书籍 RSS 源列表（JSON 数组，存储 book_rss.yaml 中的 source name，如 ["豆瓣读书-书评"]）
+    # 仅 audiobook 频道使用；为空时 crawler 不加载 book_rss.yaml 预制源。
+    book_rss_sources: Mapped[Optional[str]] = mapped_column(Text, comment="频道专属书籍 RSS 源列表（JSON 数组，仅 audiobook）")
+    # ==== T00656 讲书稿模式（script_mode=book_pool 时忽略频道书源，改从素材池按序取书）====
+    # 内容来源模式：'' / 'channel' = 常规（频道书源）；'book_pool' = 讲书稿素材池
+    script_mode: Mapped[Optional[str]] = mapped_column(
+        String(16), default="", nullable=False, server_default="",
+        comment="内容来源模式：''/channel=频道书源，book_pool=讲书稿素材池",
+    )
+    # 开讲书稿模式时对频道书源做快照并清空；关闭时恢复快照（不修改 rss.yaml，仅动频道字段）
+    rss_sources_snapshot: Mapped[Optional[str]] = mapped_column(
+        Text, comment="进入讲书稿模式时的 rss_sources 快照（关闭时恢复）",
+    )
+    book_rss_sources_snapshot: Mapped[Optional[str]] = mapped_column(
+        Text, comment="进入讲书稿模式时的 book_rss_sources 快照（关闭时恢复）",
+    )
+    # 取书间隔：1=每日，N=每 N 天（按日期差节流；0/None 视为每日）
+    book_pool_interval_days: Mapped[int] = mapped_column(
+        Integer, default=1, nullable=False, server_default="1",
+        comment="讲书稿取书间隔天数（1=每日，N=每 N 天）",
+    )
+    # 池末尾行为：1=回到开头循环，0=停止（停止后池空/到末尾即"跳过当日生成"）
+    book_pool_loop: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default="0",
+        comment="池末尾后是否循环（1=循环，0=停止）",
+    )
+    # 进度：下一次应取用的池内位置（0-based）。生成成功后 +1；重置归 0
+    book_pool_cursor: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default="0",
+        comment="讲书稿进度：下一个待取用的池内位置（0-based）",
+    )
+    book_pool_last_run_date: Mapped[Optional[str]] = mapped_column(
+        String(10), comment="讲书稿上次生成日期（YYYY-MM-DD，用于间隔节流）",
+    )
+    book_pool_last_title: Mapped[Optional[str]] = mapped_column(
+        String(256), comment="讲书稿最近一次取用的书名（展示用）",
+    )
     # 频道关键词过滤（逗号分隔，如 "游戏,主机,PS5,Xbox,任天堂"）
     # crawler 入库前按关键词过滤标题/内容，为空表示不关键词过滤
     keywords: Mapped[Optional[str]] = mapped_column(Text, comment="频道关键词过滤（逗号分隔）")
