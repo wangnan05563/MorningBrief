@@ -19,6 +19,13 @@ settings = get_settings()
 # 客户端缓存（与 rewriter._get_client 同策略：配置变更时自动重建）
 _client: AsyncOpenAI | None = None
 
+# T00621：LLM JSON 输出的统一约束片段（拼进各元提示词，从源头减少非法 JSON）
+_JSON_OUTPUT_RULES = """输出要求（严格遵守）：
+- 仅输出一个合法的 JSON 对象本身，不要任何解释、前后缀文字或 Markdown 代码块围栏；
+- 键与字符串值一律使用英文双引号；字符串值内部若需引用，一律使用中文引号「」，
+  绝不要出现未转义的英文双引号（否则 JSON 非法）；
+- 字符串值内的换行写作 \\n，不要直接换行破坏 JSON 结构；"""
+
 
 def _get_client() -> AsyncOpenAI:
     """获取 LLM 客户端（缓存实例，配置变更时重建）。"""
@@ -31,6 +38,97 @@ def _get_client() -> AsyncOpenAI:
         )
         _client._cache_key = cache_key  # type: ignore[attr-defined]
     return _client
+
+
+def _strip_code_fences(raw: str) -> str:
+    """剥离 Markdown 代码块围栏（```json ... ```）。"""
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    return text
+
+
+def _extract_json_object(text: str) -> str:
+    """截取首个 { 到最后一个 } 之间的内容（容忍 LLM 在 JSON 前后附加说明文字）。"""
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end <= start:
+        return text
+    return text[start : end + 1]
+
+
+def parse_llm_json(raw: str, label: str = "llm") -> dict:
+    """尽力解析 LLM 输出的 JSON（纯函数，可单测）。
+
+    解析顺序：剥围栏 → 截取 {} 片段 → json.loads → ast.literal_eval（容忍单引号风格）。
+    全部失败抛 ValueError，消息含内容摘录便于定位。
+
+    Raises:
+        ValueError: 内容不是可解析的 JSON 对象
+    """
+    import ast
+
+    candidate = _extract_json_object(_strip_code_fences(raw or ""))
+    try:
+        return json.loads(candidate)
+    except json.JSONDecodeError:
+        pass
+    try:
+        data = ast.literal_eval(candidate)
+        if isinstance(data, dict):
+            return data
+    except (ValueError, SyntaxError, MemoryError, RecursionError):
+        pass
+    raise ValueError(f"{label} 响应不是合法 JSON（前 200 字符: {candidate[:200]!r}）")
+
+
+async def _chat_json(prompt: str, timeout: float, label: str) -> dict:
+    """调用 LLM 并解析 JSON；解析失败自动发起**一次**自修复重试（T00621）。
+
+    失败重试把原始输出与解析错误喂回模型，要求只输出修正后的 JSON——
+    相比直接报错，绝大多数「引号未转义/多了一句解释」类问题一次即可修复；
+    二次仍失败才抛错（消息含内容摘录）。
+    """
+
+    async def _call(p: str) -> str:
+        resp = await _get_client().chat.completions.create(
+            model=settings.LLM_MODEL,
+            messages=[{"role": "user", "content": p}],
+            timeout=timeout,
+        )
+        usage = getattr(resp, "usage", None)
+        record_call(
+            service_type="llm",
+            model=settings.LLM_MODEL,
+            input_tokens=getattr(usage, "prompt_tokens", 0) if usage else 0,
+            output_tokens=getattr(usage, "completion_tokens", 0) if usage else 0,
+        )
+        return (resp.choices[0].message.content or "").strip()
+
+    raw = await _call(prompt)
+    try:
+        return parse_llm_json(raw, label)
+    except ValueError as first_err:
+        logger.warning("[%s] JSON 解析失败（%s），发起一次自修复重试", label, first_err)
+        repair_prompt = (
+            f"{prompt}\n\n---\n"
+            f"你上一次的输出不是合法 JSON（解析错误：{first_err}）。\n"
+            f"你上一次输出的开头 800 字符：\n{raw[:800]}\n\n"
+            "请重新输出修正后的合法 JSON 对象本身：不要解释、不要代码块围栏；"
+            "字符串值内部一律使用中文引号「」，不要出现未转义的英文双引号。"
+        )
+        raw2 = await _call(repair_prompt)
+        try:
+            return parse_llm_json(raw2, label)
+        except ValueError as second_err:
+            logger.error(
+                "[%s] 自修复重试后仍解析失败: %s, raw=%s", label, second_err, raw2[:500], exc_info=True
+            )
+            raise ValueError(f"LLM 响应 JSON 解析失败（自修复重试后仍失败）: {second_err}") from second_err
 
 
 # 生成提示词的元提示词：引导 LLM 按频道定位产出 4 类提示词
@@ -82,48 +180,11 @@ async def generate_prompts_for_channel(name: str, description: str) -> dict:
 
     prompt = _META_PROMPT_TEMPLATE.format(name=name, description=description or "无描述")
 
-    try:
-        # 频道提示词生成需产出 4 段长文本，比单条改写更耗时
-        # 取 LLM_TIMEOUT_SEC × 2 作为超时，避免长响应被截断
-        # 用户可在 AI 配置页调整 llm_timeout_sec，此处自动联动
-        prompt_timeout = max(settings.LLM_TIMEOUT_SEC * 2, 60)
-        resp = await _get_client().chat.completions.create(
-            model=settings.LLM_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            timeout=prompt_timeout,
-        )
-    except Exception as e:
-        # exc_info=True 保留 traceback，便于排查 LLM 网关/超时/认证类问题
-        logger.error("频道提示词生成 LLM 调用失败: %s", e, exc_info=True)
-        raise ValueError(f"LLM 调用失败: {e}") from e
-
-    # 记录用量
-    usage = getattr(resp, "usage", None)
-    input_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
-    output_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
-    record_call(
-        service_type="llm",
-        model=settings.LLM_MODEL,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-    )
-
-    raw = resp.choices[0].message.content.strip()
-    # 剥离 Markdown 代码块包裹
-    if raw.startswith("```"):
-        lines = raw.splitlines()
-        if lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].startswith("```"):
-            lines = lines[:-1]
-        raw = "\n".join(lines).strip()
-
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        # exc_info=True 保留解析栈，raw[:200] 限制日志体积避免爆盘
-        logger.error("频道提示词 LLM 响应 JSON 解析失败: %s, raw=%s", e, raw[:200], exc_info=True)
-        raise ValueError(f"LLM 响应 JSON 解析失败: {e}") from e
+    # 频道提示词生成需产出 4 段长文本，比单条改写更耗时
+    # 取 LLM_TIMEOUT_SEC × 2 作为超时，避免长响应被截断（用户可在 AI 配置页调整 llm_timeout_sec，此处自动联动）
+    prompt_timeout = max(settings.LLM_TIMEOUT_SEC * 2, 60)
+    # T00621：解析失败自动自修复重试一次（见 _chat_json）
+    data = await _chat_json(prompt + "\n" + _JSON_OUTPUT_RULES, prompt_timeout, "频道提示词")
 
     # 字段校验：缺失字段填空字符串，避免 None 污染前端
     return {
@@ -192,40 +253,8 @@ async def recommend_bgm_for_channel(
         bgm_list_json=json.dumps(bgm_summary, ensure_ascii=False, indent=2),
     )
 
-    try:
-        resp = await _get_client().chat.completions.create(
-            model=settings.LLM_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            timeout=settings.LLM_TIMEOUT_SEC,
-        )
-    except Exception as e:
-        logger.error("BGM 推荐 LLM 调用失败: %s", e, exc_info=True)
-        raise ValueError(f"LLM 调用失败: {e}") from e
-
-    usage = getattr(resp, "usage", None)
-    input_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
-    output_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
-    record_call(
-        service_type="llm",
-        model=settings.LLM_MODEL,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-    )
-
-    raw = resp.choices[0].message.content.strip()
-    if raw.startswith("```"):
-        lines = raw.splitlines()
-        if lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].startswith("```"):
-            lines = lines[:-1]
-        raw = "\n".join(lines).strip()
-
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        logger.error("BGM 推荐 LLM 响应 JSON 解析失败: %s, raw=%s", e, raw[:200], exc_info=True)
-        raise ValueError(f"LLM 响应 JSON 解析失败: {e}") from e
+    # T00621：解析失败自动自修复重试一次（见 _chat_json）
+    data = await _chat_json(prompt + "\n" + _JSON_OUTPUT_RULES, settings.LLM_TIMEOUT_SEC, "BGM 推荐")
 
     recommended_path = data.get("path", "").strip()
     # 校验推荐的 path 确实在可用列表中，防止 LLM 幻觉返回不存在的 BGM
@@ -309,40 +338,8 @@ async def recommend_rss_keywords_for_channel( # NOSONAR
         rss_list_json=json.dumps(rss_summary, ensure_ascii=False, indent=2),
     )
 
-    try:
-        resp = await _get_client().chat.completions.create(
-            model=settings.LLM_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            timeout=settings.LLM_TIMEOUT_SEC,
-        )
-    except Exception as e:
-        logger.error("RSS 源推荐 LLM 调用失败: %s", e, exc_info=True)
-        raise ValueError(f"LLM 调用失败: {e}") from e
-
-    usage = getattr(resp, "usage", None)
-    input_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
-    output_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
-    record_call(
-        service_type="llm",
-        model=settings.LLM_MODEL,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-    )
-
-    raw = resp.choices[0].message.content.strip()
-    if raw.startswith("```"):
-        lines = raw.splitlines()
-        if lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].startswith("```"):
-            lines = lines[:-1]
-        raw = "\n".join(lines).strip()
-
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        logger.error("RSS 源推荐 LLM 响应 JSON 解析失败: %s, raw=%s", e, raw[:200], exc_info=True)
-        raise ValueError(f"LLM 响应 JSON 解析失败: {e}") from e
+    # T00621：解析失败自动自修复重试一次（见 _chat_json）
+    data = await _chat_json(prompt + "\n" + _JSON_OUTPUT_RULES, settings.LLM_TIMEOUT_SEC, "RSS 源推荐")
 
     # 校验推荐的源名称确实在可用列表中，过滤 LLM 幻觉返回的不存在源
     valid_names = {s.get("name", "") for s in rss_list}
