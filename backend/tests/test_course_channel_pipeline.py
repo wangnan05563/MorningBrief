@@ -182,7 +182,8 @@ async def test_rewrite_course_pipeline_applies_template_and_no_date(course_sessi
 
     async def fake_rewrite_one(m, words_per_segment=None, segment_duration=None,
                                template_text=None, constraint_text=None,
-                               enable_thinking_question=True, style_hint=None):
+                               enable_thinking_question=True, style_hint=None,
+                               book_context=None):  # T00626：新增讲书分集上下文参数
         captured["calls"].append({
             "material_id": m["id"],
             "template_text": template_text,

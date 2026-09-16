@@ -140,9 +140,27 @@ def load_index() -> dict | None:
         return None
 
 
+def _age_days(built_at: str | None) -> float | None:
+    """索引构建时间距今天数（解析失败返回 None）。"""
+    if not built_at:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(built_at).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - dt).total_seconds() / 86400
+    except (ValueError, TypeError):
+        return None
+
+
 def index_status() -> dict:
-    """索引就绪状态（供前端展示与轮询）。"""
+    """索引就绪状态（供前端展示与轮询）。
+
+    T00619：新增年龄与过期标记——索引是一次性快照，书源后续新增的书不会自动进入，
+    过期后搜索结果会"查不到新书"且此前无任何提示。
+    """
     idx = load_index()
+    age = _age_days((idx or {}).get("built_at"))
     return {
         "ready": bool(idx),
         "built_at": (idx or {}).get("built_at"),
@@ -150,8 +168,43 @@ def index_status() -> dict:
         "category_count": (idx or {}).get("category_count", 0),
         "elapsed_sec": (idx or {}).get("elapsed_sec"),
         "file": str(index_path()),
+        # T00619：年龄 / 过期（阈值可用环境变量覆盖，便于不同环境调参）
+        "age_days": round(age, 1) if age is not None else None,
+        "stale": bool(idx) and age is not None and age > index_stale_days(),
+        "stale_days": index_stale_days(),
         "build": build_state(),
     }
+
+
+def index_stale_days() -> float:
+    """过期阈值（天）：默认 14，环境变量 EBOOK_INDEX_STALE_DAYS 覆盖。"""
+    try:
+        return float(os.getenv("EBOOK_INDEX_STALE_DAYS") or 14)
+    except ValueError:
+        return 14.0
+
+
+def maybe_auto_rebuild() -> dict:
+    """T00619：索引缺失或过期时自动触发一次后台重建（自愈；构建中不重复触发）。
+
+    为什么自动而非只提醒：过期索引会让用户"静默查不到新书"——提醒容易被忽略，
+    重建成本（约 165s / 200MB）可接受且已有并发与原子写保护；仍保留前端手动重建入口。
+
+    Returns:
+        {"triggered": bool, "reason": "missing" | "stale" | "fresh" | "building"}
+    """
+    st = index_status()
+    if (st.get("build") or {}).get("running"):
+        return {"triggered": False, "reason": "building"}
+    if not st.get("ready"):
+        reason = "missing"
+    elif st.get("stale"):
+        reason = "stale"
+    else:
+        return {"triggered": False, "reason": "fresh"}
+    logger.info("[ebook_index] 索引%s（age=%s 天），自动触发后台重建", reason, st.get("age_days"))
+    start_build_async()
+    return {"triggered": True, "reason": reason}
 
 
 def search_index(keyword: str, category: str | None = None, limit: int = 20) -> dict:

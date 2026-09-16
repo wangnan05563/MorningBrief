@@ -193,3 +193,84 @@ def test_index_status_and_rebuild_endpoints(client, admin_token, stub_blacklist,
     monkeypatch.setattr(idx, "start_build_async", lambda: {"running": True})
     rb = client.post("/admin/api/v1/ebooks/index/rebuild", headers=_headers(admin_token)).json()
     assert rb["code"] == 0 and rb["data"]["started"] is True
+
+# ---------------------------------------------------------------------------
+# T00619：索引过期检测与自动重建
+# ---------------------------------------------------------------------------
+
+class TestStaleAndAutoRebuild:
+    def test_fresh_index_not_stale(self, tmp_index):
+        idx.build_index(fetch_categories=["文学"], max_workers=1)
+        st = idx.index_status()
+        assert st["ready"] is True
+        assert st["stale"] is False
+        assert st["age_days"] is not None and st["age_days"] < 1
+        assert st["stale_days"] == 14.0
+
+    def test_old_index_marked_stale(self, tmp_index):
+        """把 built_at 回拨 20 天 → stale=True。"""
+        import json as _json
+        from datetime import datetime, timedelta, timezone as _tz
+        idx.build_index(fetch_categories=["文学"], max_workers=1)
+        data = _json.loads(tmp_index.read_text(encoding="utf-8"))
+        data["built_at"] = (datetime.now(_tz.utc) - timedelta(days=20)).isoformat()
+        tmp_index.write_text(_json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        st = idx.index_status()
+        assert st["stale"] is True, st
+        assert st["age_days"] >= 19
+
+    def test_threshold_env_override(self, tmp_index, monkeypatch):
+        monkeypatch.setenv("EBOOK_INDEX_STALE_DAYS", "0.5")
+        assert idx.index_stale_days() == 0.5
+
+    def test_auto_rebuild_when_missing(self, tmp_index, monkeypatch):
+        started = {}
+        monkeypatch.setattr(idx, "start_build_async", lambda: started.setdefault("yes", True))
+        res = idx.maybe_auto_rebuild()
+        assert res == {"triggered": True, "reason": "missing"}
+        assert started.get("yes") is True
+
+    def test_auto_rebuild_when_stale(self, tmp_index, monkeypatch):
+        import json as _json
+        from datetime import datetime, timedelta, timezone as _tz
+        idx.build_index(fetch_categories=["文学"], max_workers=1)
+        data = _json.loads(tmp_index.read_text(encoding="utf-8"))
+        data["built_at"] = (datetime.now(_tz.utc) - timedelta(days=30)).isoformat()
+        tmp_index.write_text(_json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        started = {}
+        monkeypatch.setattr(idx, "start_build_async", lambda: started.setdefault("yes", True))
+        res = idx.maybe_auto_rebuild()
+        assert res == {"triggered": True, "reason": "stale"}
+        assert started.get("yes") is True
+
+    def test_auto_rebuild_skipped_when_fresh(self, tmp_index, monkeypatch):
+        idx.build_index(fetch_categories=["文学"], max_workers=1)
+        monkeypatch.setattr(idx, "start_build_async", lambda: pytest.fail("不应触发重建"))
+        assert idx.maybe_auto_rebuild() == {"triggered": False, "reason": "fresh"}
+
+    def test_auto_rebuild_skipped_while_building(self, tmp_index, monkeypatch):
+        monkeypatch.setattr(idx, "start_build_async", lambda: pytest.fail("构建中不应重复触发"))
+        idx._BUILD_STATE.update(running=True, done=1, total=10)
+        try:
+            assert idx.maybe_auto_rebuild() == {"triggered": False, "reason": "building"}
+        finally:
+            idx._BUILD_STATE.update(running=False)
+
+
+def test_search_response_carries_stale_flags(client, admin_token, stub_blacklist, tmp_index, monkeypatch):
+    """检索响应回传 index_stale / index_age_days / auto_rebuild（前端据此提示）。"""
+    idx.build_index(fetch_categories=["文学"], max_workers=1)
+    monkeypatch.setattr(idx, "maybe_auto_rebuild", lambda: {"triggered": False, "reason": "fresh"})
+    body = client.get("/admin/api/v1/ebooks/search", params={"keyword": "余华"},
+                      headers=_headers(admin_token)).json()
+    assert body["code"] == 0, body
+    assert body["data"]["index_stale"] is False
+    assert body["data"]["index_age_days"] is not None
+    assert body["data"]["auto_rebuild"] == {"triggered": False, "reason": "fresh"}
+
+
+def test_index_status_exposes_stale_fields(client, admin_token, stub_blacklist, tmp_index):
+    body = client.get("/admin/api/v1/ebooks/index/status", headers=_headers(admin_token)).json()
+    assert body["code"] == 0
+    assert body["data"]["stale"] is False and body["data"]["ready"] is False
+    assert body["data"]["stale_days"] == 14.0

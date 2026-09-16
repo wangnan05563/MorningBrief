@@ -26,6 +26,7 @@ from tenacity import (
 )
 from sqlalchemy import func, select, update
 
+from app.workflow.text_clean import strip_markdown_residue
 from app.config import get_settings
 from app.core.ai_budget import check_budget, record_call
 from app.database import AsyncSessionLocal
@@ -377,7 +378,7 @@ def _calc_segment_words(target_sec: int, rate_multiplier: float) -> tuple[int, i
     策略：
     1. 总字数 = 目标时长 × 基础语速 × 倍率 / 60
     2. 扣除开场白+结尾固定字数（约 145 字）= 正文总字数
-    3. 段数 = clamp(round(正文总字数 / 350), 3, 6)
+    3. 段数 = clamp(round(正文总字数 / 350), 3, 段数上限 LLM_MAX_SCRIPT_SEGMENTS（默认 10，可调至 20+）)
        - 350 字/段是经验值：基础语速下约 100s/段，节奏适中
     4. 每段字数 = 正文总字数 / 段数
 
@@ -388,8 +389,14 @@ def _calc_segment_words(target_sec: int, rate_multiplier: float) -> tuple[int, i
     intro_outro_words = len(INTRO_TEXT) + len(OUTRO_TEXT)
     body_words = max(300, total_words - intro_outro_words)
 
-    # 段数动态调整：正文越长段数越多，但限制在 [3, 6]
-    target_segments = max(MIN_VALID_SEGMENTS, min(MAX_SCRIPT_SEGMENTS, round(body_words / 350)))
+    # 段数动态调整：正文越长段数越多，上限可经 ai_config 键 llm_max_script_segments
+    # 运行时调整（T00584 得到式听书：20-30 分钟需 15-20 段），默认仍为 MAX_SCRIPT_SEGMENTS=10
+    # 下限保持 [MIN_VALID_SEGMENTS, cap]，cap 下限 10（不低于既有行为）、上限 40（防误配超长节目）
+    try:
+        segment_cap = max(10, min(40, int(getattr(settings, "LLM_MAX_SCRIPT_SEGMENTS", MAX_SCRIPT_SEGMENTS))))
+    except (ValueError, TypeError):
+        segment_cap = MAX_SCRIPT_SEGMENTS
+    target_segments = max(MIN_VALID_SEGMENTS, min(segment_cap, round(body_words / 350)))
     words_per_seg = max(200, int(body_words / target_segments))
     return target_segments, words_per_seg
 
@@ -414,53 +421,13 @@ def _count_content_words(text: str) -> int:
 def _strip_markdown_residue(text: str) -> str:
     """防御性清洗 content 字段中残留的 Markdown 标记。
 
-    场景：LLM 偶发违反"禁止输出 Markdown 标记"约束，在 content 中留下
-    加粗/斜体/标题/列表等符号。TTS 朗读时会念出"星号星号""星号""井号"，
-    严重影响听感。此处做兜底清理，仅清理已知模式，不破坏正文标点与数学表达。
-
-    清理范围：
-    - **xxx** 闭合加粗 → 保留内部文字 xxx
-    - **xxx 未闭合加粗 → 保留内部文字 xxx（移除开头的 **）
-    - 孤立的 **（未成对）→ 直接移除
-    - 行首 # / ## / ### 等 Markdown 标题符号 + 空格 → 移除符号保留标题文字
-    - 行首列表符号（* / - / + 后跟空格）→ 移除标记保留正文（LLM 偶发输出列表）
-    - 成对斜体 *文字* / _文字_ → 移除分隔符保留内部文字
-      （仅当分隔符两侧均非数字/字母时清理，保护数学乘号 1*2*3、a*b、3 * 4）
-
-    注意单星号 * 的处理：早期版本完全放过单个 *（担心误伤数学乘号），
-    导致斜体/列表残留的单个 * 被 TTS 念成"星号"。现改为"数学安全"策略：
-    两侧都被数字/字母紧邻的 * 视为乘号保留，其余 Markdown 用法的 * 一律清理。
+    实现已收敛到共享模块 app/workflow/text_clean.py（同一套规则同时作为
+    TTS 入口的最后一道防线，覆盖历史脏数据与绕过 rewriter 的写入路径），
+    此处保留薄委托以兼容既有调用点与测试。清理规则详见
+    text_clean.strip_markdown_residue 文档；相比旧版新增：超链接/图片/
+    裸 URL/代码围栏/行内反引号/引用块/表格/水平线/HTML 标签清理。
     """
-    if not text:
-        return text
-    # 先清理闭合的 **xxx**（避免被未闭合规则误伤）
-    text = re.sub(r"\*\*([^*]+?)\*\*", r"\1", text)
-    # 清理未闭合的 **xxx（行内剩余的开头 **）
-    text = re.sub(r"\*\*([^*\n]+)", r"\1", text)
-    # 清理孤立的 **（未成对出现）
-    text = text.replace("**", "")
-    # 清理行首 Markdown 标题符号（# / ## / ### 后跟空格）
-    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
-    # 清理行首列表符号（* / - / + 后跟空格）→ 仅移除标记保留正文
-    text = re.sub(r"^\s*[\*\-\+]\s+", "", text, flags=re.MULTILINE)
-    # 单星号 * 处理（数学安全策略）：
-    # 1. 先保护"数学乘号"（两侧均为数字/字母，允许中间空格，如 1*2*3 / 3 * 4 / a*b），
-    #    用占位符暂存，避免被后续清理误删。
-    #    注：不能用 \w 边界判断——Python \w 在 Unicode 模式下含汉字，会导致中文后的
-    #    斜体 * 因"其后为汉字"而被判定为边界外而不匹配，斜体清理整体失效。
-    # 2. 成对斜体分隔符 *文字* / _文字_ → 移除分隔符保留内部文字。
-    # 3. 清理剩余孤立单个 *（未成对残留 / LLM 噪声），数学乘号已用占位符保护不受影响。
-    # 4. 恢复数学乘号占位符。
-    _math_asterisk = re.compile(r"([0-9A-Za-z])(\s*)\*(\s*)(?=[0-9A-Za-z])")
-    # 用私有区字符作占位符（正常文本绝不会出现），避免与正文冲突
-    _math_ph = ""
-    text = _math_asterisk.sub(
-        lambda m: m.group(1) + m.group(2) + _math_ph + m.group(3), text
-    )
-    text = re.sub(r"(\*|_)([^*\n_]+?)\1", r"\2", text)
-    text = text.replace("*", "")
-    text = text.replace(_math_ph, "*")
-    return text
+    return strip_markdown_residue(text)
 
 
 # ===== 异常定义（LLD 7.4） =====
@@ -502,6 +469,61 @@ class LLMError(Exception):
         # failure_details 结构：[{material_id, title, stage, error_type, error_message}]
         # 仅在 rewrite() 中聚合并发失败时填充，单点失败场景为 None
         self.failure_details = failure_details
+
+
+class LLMAccountError(LLMError):
+    """AI 服务「账号级」错误：余额不足 / 鉴权失败 / 无权限（T00582）。
+
+    与普通 LLMError 的区别：
+    - **重试无意义**：余额与 API Key 不会自行恢复，workflow_scheduler 依据
+      `account_level` 属性直接判 failed，跳过 3 次步骤重试；
+    - 错误消息面向运维给出明确动作指引（充值 / 更换 API Key / 切换模型或提供商），
+      而非透传英文原始错误。
+
+    实测背景：audiobook 频道（每日听书）连续多天因硅基流动
+    402 {'code':30001,'message':'Sorry, your account balance is insufficient'}
+    失败（wf-20260901/0905 均 10/10 条，且被逐条素材 × 3 次步骤重试放大）。
+    """
+
+    account_level = True
+
+
+def is_account_level_error(exc: BaseException) -> bool:
+    """判断异常是否为 AI 服务「账号级」错误（余额不足 / 鉴权失败 / 无权限）。
+
+    识别依据（任一命中）：
+    - openai SDK 的 APIStatusError.status_code ∈ {401, 402, 403}；
+    - 错误文本含已知标记（硅基流动 30001 / insufficient balance / unauthorized /
+      invalid api key 等）。
+    """
+    if isinstance(exc, LLMAccountError):
+        return True
+    status = getattr(exc, "status_code", None)
+    if status in (401, 402, 403):
+        return True
+    text = str(exc)
+    lowered = text.lower()
+    markers = (
+        "insufficient balance", "余额不足", "30001", "unauthorized",
+        "invalid api key", "invalid_api_key", "account balance",
+    )
+    return any(m in lowered for m in markers)
+
+
+def account_error_hint(exc: BaseException) -> str:
+    """账号级错误的运维指引（含当前提供商 base_url，便于定位是哪家的余额）。"""
+    base_url = ""
+    try:
+        from app.config import get_settings
+        base_url = (get_settings().LLM_BASE_URL or "").strip()
+    except Exception:  # pragma: no cover - settings 异常不影响错误抛出
+        base_url = ""
+    suffix = f"（当前提供商: {base_url}）" if base_url else ""
+    return (
+        "AI 服务账号级错误：账户余额不足或 API Key 鉴权失败，重试无效。"
+        "请前往「AI 服务设置」为对应提供商充值，或更换 API Key / 切换模型与提供商"
+        + suffix
+    )
 
 
 # tenacity 重试装饰器（LLD 7.4）
@@ -679,6 +701,23 @@ async def _call_llm(prompt: str) -> str:
     return resp.choices[0].message.content
 
 
+class _EmptyDict(dict):
+    """缺失键返回空串的 dict（T00626）：频道模板若引用了未提供的占位符，
+    按空值填充而不是抛 KeyError 中断整轮改写。"""
+
+    def __missing__(self, key):  # noqa: D105
+        return ""
+
+
+def _safe_format(template: str, **kwargs) -> str:
+    """宽容版 str.format：未知占位符 → 空串（并记录一次告警便于发现模板笔误）。"""
+    try:
+        return template.format(**kwargs)
+    except (KeyError, IndexError, ValueError) as e:
+        logger.warning("改写模板占位符异常（%s），改用空值填充兜底", e)
+        return template.format_map(_EmptyDict(**kwargs))
+
+
 def _build_prompt(
     material: dict,
     words_per_segment: int = 450,
@@ -687,6 +726,7 @@ def _build_prompt(
     template_text: str = None,
     enable_thinking_question: bool = True,
     style_hint: str = None,
+    book_context: dict | None = None,
 ) -> str:
     """构建改写 prompt（读 rewrite.txt 模板，填入素材信息 + 动态字数要求）。
 
@@ -699,13 +739,19 @@ def _build_prompt(
         enable_thinking_question: 是否在 prompt 中注入结尾思考问题要求
         style_hint: 风格多样性提示（开场白/过渡词/同义词/段落结构变体），
             None 时不追加。由 _rewrite_one_with_limit 按 seq 号从 style_library 轮换选取
+        book_context: T00626 单本讲书分集变量（book_title/part_label/part_brief/
+            part_link/next_episode_hint 等），由 book_part_planner 生成；None 时按空串填充
     """
     template = template_text if template_text else PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
     # 预计算字数范围，供模板中 {words_min}/{words_max} 使用
     # .format() 不支持表达式，必须预计算后传入
     words_min = int(words_per_segment * 0.9)
     words_max = int(words_per_segment * 1.1)
-    prompt = template.format(
+    # T00626：单本讲书分集变量（讲书频道由 book_part_planner 生成；非讲书场景为空串，
+    # 频道模板未使用这些占位符时无副作用）
+    _bk = book_context or {}
+    prompt = _safe_format(
+        template,
         title=material["title"],
         content=material["content"],
         source=material["source"],
@@ -715,6 +761,13 @@ def _build_prompt(
         words_min=words_min,
         words_max=words_max,
         segment_duration=segment_duration,
+        book_title=_bk.get("book_title", ""),
+        part_label=_bk.get("part_label", ""),
+        part_index=_bk.get("part_index", ""),
+        part_total=_bk.get("part_total", ""),
+        part_brief=_bk.get("part_brief", ""),
+        part_link=_bk.get("part_link", ""),
+        next_episode_hint=_bk.get("next_episode_hint", ""),
     )
     # 频道级模板可能省略 JSON 输出格式要求，导致 LLM 返回纯文本
     # 检测模板是否已含 JSON 格式声明（双引号包裹的 title/content 字段），
@@ -751,6 +804,7 @@ async def _rewrite_one(  # NOSONAR S3776: 双层过滤改写主逻辑，职责�
     constraint_text: str = None,
     enable_thinking_question: bool = True,
     style_hint: str = None,
+    book_context: dict | None = None,
 ) -> dict:
     """改写单条素材（LLD 7.3 双层过滤）。
 
@@ -790,6 +844,7 @@ async def _rewrite_one(  # NOSONAR S3776: 双层过滤改写主逻辑，职责�
         template_text=template_text,
         enable_thinking_question=enable_thinking_question,
         style_hint=style_hint,
+        book_context=book_context,
     )
     raw = await _call_llm(prompt)
 
@@ -996,7 +1051,7 @@ def _parse_llm_response(raw: str, material_id: int) -> dict:  # NOSONAR S3776: L
     return parsed
 
 
-def _select_top_materials(
+def _select_top_materials(  # NOSONAR
     materials: list[dict], top_n: int = SELECT_TOP_N,
     strategy: str = "heat", manual_ids: list[int] | None = None,
 ) -> list[dict]:
@@ -1059,13 +1114,16 @@ def _build_aggregated_error(
     segments: list[dict],
     failure_details: list[dict],
     min_segments: int = MIN_VALID_SEGMENTS,
+    account_hint: str | None = None,
 ) -> LLMError:
     """根据并发失败的 failure_details 聚合错误信息，构建 LLMError。
 
     策略：
     - 若同一 error_type 出现次数 >= 总失败数的 2/3，认为这是根因，
       错误消息中明确指出根因类型和示例，便于运维直接定位
-      （例：6 条全部 LLMAuthError → 明确报鉴权失败而非"段数不足"）
+      （例：6 条全部 LLMAuthError → 明确报鉴权失败而非"段数不足"）；
+    - 若存在 AI 服务**账号级**错误（余额不足 / 鉴权失败，T00582），返回 LLMAccountError：
+      消息给出明确动作指引，且 workflow_scheduler 据此跳过步骤重试（重试无效）；
     - 否则回退到笼统的"段数不足"消息，但附带 failure_details 供 workflow_step 展示
 
     始终把完整 failure_details 附加到 LLMError.failure_details 属性，
@@ -1073,10 +1131,23 @@ def _build_aggregated_error(
 
     Args:
         min_segments: 动态有效段数下限（素材稀缺时降级，默认 MIN_VALID_SEGMENTS）
+        account_hint: 账号级错误的运维指引（见 account_error_hint），非账号级为 None
     """
     base_msg = (
         f"有效改写段数 {len(segments)} < {min_segments}，无法生成节目"
     )
+
+    if account_hint:
+        # 账号级错误（余额不足 / 鉴权失败）：给出明确动作指引，且调度器不重试
+        return LLMAccountError(
+            f"{account_hint}（有效改写段数 {len(segments)} < {min_segments}，"
+            f"已中止剩余素材的改写以避免无意义调用）",
+            failure_details=failure_details or [{
+                "stage": "account_error",
+                "error_type": "LLMAccountError",
+                "error_message": account_hint,
+            }],
+        )
 
     if not failure_details:
         # 无单条素材失败（如素材总量不足选不够 top_n），构造诊断摘要写入 workflow_step.result
@@ -1099,7 +1170,7 @@ def _build_aggregated_error(
             d for d in failure_details if d["error_type"] == most_common_type
         )
         msg = (
-            f"有效改写段数 {len(segments)} < {MIN_VALID_SEGMENTS}，"
+            f"有效改写段数 {len(segments)} < {min_segments}，"
             f"根因：{most_common_count}/{len(failure_details)} 条素材"
             f"因 {most_common_type} 失败"
             f"（示例: {representative['error_message'][:200]}）"
@@ -1209,6 +1280,14 @@ def _assemble_script(
     }
 
     all_segments = [intro_segment] + body_segments + [outro_segment]
+
+    # T00627：**末道防御清洗**——落库前统一清洗每个分段（含开场白/结尾）。
+    # 为什么需要：开场白/结尾来自用户手填的频道提示词、正文来自 LLM，两条来源都可能
+    # 残留 Markdown 与星号变体（全角＊、※、装饰星等，TTS 会念「星号」）；
+    # 此前清洗只在 LLM 解析路径，手填文案与历史脏数据会漏过（实测 8 月稿即如此）。
+    # 清洗后的文本才参与 full_text 拼接与字数/时长统计，保证「库里的稿子 = 送 TTS 的文本」。
+    for _seg in all_segments:
+        _seg["content"] = strip_markdown_residue(_seg.get("content") or "")
 
     # 拼接完整稿件文本，用于全文检索与人工审阅
     full_text = "\n\n".join(s["content"] for s in all_segments)
@@ -1720,6 +1799,12 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
     # 远超 20 次/分钟的频率预算，导致全部被 check_budget 拦截
     semaphore = asyncio.Semaphore(_LLM_CONCURRENCY_LIMIT)
 
+    # 账号级错误（余额不足/鉴权失败）快速中止（T00582）：一条素材命中 402/401/403
+    # 即停止剩余改写——这类错误重试与逐条重放均无意义，只会把同一个 402 打满
+    # （实测：audiobook 频道 10 条素材 × 3 次步骤重试 = 30 次无效调用）
+    abort_event = asyncio.Event()
+    account_hints: list[str] = []
+
     # 风格多样性提示：按 selected 索引 i 作为 seq 号从 style_library 轮换选取
     # 用 selected 索引而非最终 segments seq：并发调用时 segments seq 不可预知，
     # 而 selected 索引稳定，保证单期内开场白/过渡词轮换不重复
@@ -1728,7 +1813,29 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
     channel_id_for_style = channel_id
     total_for_style = len(selected)
 
+    # T00626：讲书频道（audiobook）单本分集编排——按素材序列估算改写总量，
+    # 自动划分 单集 / 上·下 / 上·中·下 并生成篇名、覆盖说明与衔接语，
+    # 结果按 material_id 注入改写模板的 {book_title}/{part_label}/... 占位符。
+    # 编排失败不阻断改写（降级为占位符空串）。
+    book_ctx_map: dict = {}
+    if channel_type == "audiobook" and selected:
+        try:
+            from app.services.book_part_planner import plan_book_parts
+            _plan = plan_book_parts(selected, words_per_segment)
+            book_ctx_map = _plan.get("assignments") or {}
+            logger.info(
+                "[讲书编排] 《%s》估算 %d 字 → %d 篇，覆盖 %d 条章节素材",
+                _plan.get("book_title") or "(未识别)", _plan.get("total_words_estimate"),
+                _plan.get("parts"), len(book_ctx_map),
+            )
+        except Exception as e:  # noqa: BLE001 — 编排仅影响提示词丰富度，不应阻断改写
+            logger.warning("讲书分集编排失败（降级为空占位符）: %s", e)
+
     async def _rewrite_one_with_limit(m: dict, style_seq: int) -> dict:
+        # 账号级错误（余额不足/鉴权失败）中止：后续素材不再发起调用，
+        # 避免 N 条素材把同一个 402/401 重复打满（T00582 实测 10 条 × 重试 3 次）
+        if abort_event.is_set():
+            raise LLMAccountError("账号级错误已触发中止，本素材未尝试改写")
         async with semaphore:
             # 按 seq 号从 style_library 轮换选取开场白/过渡词/同义词提示
             style_hint = get_style_hint(channel_id_for_style, style_seq, total_for_style, channel_type)
@@ -1740,6 +1847,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                 constraint_text=channel_prompts["constraint_prompt"] if channel_prompts else None,
                 enable_thinking_question=channel_prompts["enable_thinking_question"] if channel_prompts else True,
                 style_hint=style_hint,
+                book_context=book_ctx_map.get(m.get("id")),
             )
 
     # enumerate 从 1 开始：seq=1 用开场白（intro），seq>=2 用过渡词（transition）
@@ -1778,6 +1886,11 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         elif isinstance(r, Exception):
             # 其他异常（LLM 调用失败、JSON 解析失败等）跳过该条
             logger.warning("素材 %s 改写失败: %s", m["id"], r)
+            if is_account_level_error(r):
+                # 账号级错误（余额不足/鉴权失败）：记录指引并中止剩余素材改写
+                hint = account_error_hint(r)
+                account_hints.append(hint)
+                abort_event.set()
             failure_details.append({
                 "material_id": m["id"],
                 "title": m["title"][:50],
@@ -1814,7 +1927,8 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                     workflow_id, rollback_err,
                 )
         raise _build_aggregated_error(
-            segments, failure_details, effective_min_segments
+            segments, failure_details, effective_min_segments,
+            account_hint=account_hints[0] if account_hints else None,
         )
 
     # 4.5 限制最终段数，避免选题数增加后节目时长过长

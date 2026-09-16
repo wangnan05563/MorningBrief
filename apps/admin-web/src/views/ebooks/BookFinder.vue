@@ -14,10 +14,16 @@
     <el-card shadow="never" class="index-card">
       <div class="index-row">
         <template v-if="indexReady">
-          <el-tag type="success" size="small">索引就绪</el-tag>
+          <!-- T00619：索引过期（默认 >14 天）时醒目提示，并说明已自动后台更新 -->
+          <el-tag v-if="indexInfo.stale" type="warning" size="small">索引已过期</el-tag>
+          <el-tag v-else type="success" size="small">索引就绪</el-tag>
           <span class="index-text">
             共 {{ indexInfo.book_count }} 本书 / {{ indexInfo.category_count }} 个分类，
             构建于 {{ formatTime(indexInfo.built_at) }}
+            <template v-if="indexInfo.stale">
+              （{{ indexInfo.age_days }} 天前{{ building ? '，正在后台自动更新' : '，系统已自动触发后台更新' }}，
+              期间结果可能不含最新书籍）
+            </template>
           </span>
         </template>
         <template v-else-if="building">
@@ -82,7 +88,10 @@
         <el-tag v-if="failedCategories.length" size="small" type="warning">
           {{ failedCategories.length }} 个分类拉取失败：{{ failedCategories.join('、') }}
         </el-tag>
-        <span v-if="indexReadyForQuery" class="meta-hint">结果来自本地索引（毫秒级）。</span>
+        <span v-if="indexStaleForQuery" class="meta-hint stale-hint">
+          索引数据为 {{ indexAgeDays }} 天前，正在后台自动更新——本次结果可能不含最新书籍。
+        </span>
+        <span v-else-if="indexReadyForQuery" class="meta-hint">结果来自本地索引（毫秒级）。</span>
         <span v-else-if="!category" class="meta-hint">索引未就绪时，未限定分类的搜索需先构建索引；可先选分类。</span>
       </div>
     </el-card>
@@ -94,11 +103,21 @@
         <el-table-column prop="title" label="书名" min-width="240" show-overflow-tooltip />
         <el-table-column prop="author" label="作者" width="180" show-overflow-tooltip />
         <el-table-column prop="category" label="分类" width="120" />
-        <el-table-column label="下载" width="140" fixed="right">
+        <el-table-column label="下载" width="130" fixed="right">
           <template #default="{ row }">
             <el-link type="primary" :href="row.url" target="_blank" rel="noopener">
               打开链接 ↗
             </el-link>
+          </template>
+        </el-table-column>
+        <!-- T00626：一键加入待讲书单（写素材占位，运营据此补齐书稿） -->
+        <el-table-column label="待讲书单" width="130" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              size="small"
+              :loading="draftingUrl === row.url"
+              @click="onAddToBookList(row)"
+            >加入书单</el-button>
           </template>
         </el-table-column>
         <template #empty>
@@ -123,6 +142,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage } from '../../utils/message'
 import {
+  createDraftMaterial,
   getEbookCategories,
   getEbookIndexStatus,
   rebuildEbookIndex,
@@ -146,6 +166,11 @@ const searched = ref(false)
 const indexInfo = ref({ book_count: 0, category_count: 0, built_at: null, build: {} })
 const indexReady = ref(false)
 const indexReadyForQuery = ref(false)
+// T00619：本次检索所用索引是否已过期（后端随响应回传）
+const indexStaleForQuery = ref(false)
+// T00626：正在加入待讲书单的 url（按钮 loading 用）
+const draftingUrl = ref('')
+const indexAgeDays = ref(null)
 let pollTimer = null
 
 const building = computed(() => !!(indexInfo.value.build && indexInfo.value.build.running))
@@ -167,6 +192,31 @@ function onRefreshCategories() {
   loadCategories(true)
 }
 
+/**
+ * T00626：把命中的书加入待讲书单（写一条"待上传书稿"的素材占位，url 去重幂等）。
+ * 取件仍人工：下载 EPUB/DOCX 后到「素材录入」上传，素材占位随之被替换/补齐。
+ */
+async function onAddToBookList(row) {
+  draftingUrl.value = row.url
+  try {
+    const data = await createDraftMaterial({
+      title: row.title,
+      author: row.author,
+      category: row.category,
+      url: row.url,
+    })
+    if (data?.created === false) {
+      ElMessage.info(data?.message || '该书已在素材库中')
+    } else {
+      ElMessage.success(data?.message || '已加入待讲书单')
+    }
+  } catch (e) {
+    // 错误提示由拦截器统一处理
+  } finally {
+    draftingUrl.value = ''
+  }
+}
+
 async function onSearch() {
   const kw = keyword.value.trim()
   if (!kw) {
@@ -186,6 +236,10 @@ async function onSearch() {
     scannedCount.value = (data?.scanned_categories || []).length
     failedCategories.value = data?.failed_categories || []
     indexReadyForQuery.value = !!data?.index_ready
+    indexStaleForQuery.value = !!data?.index_stale
+    indexAgeDays.value = data?.index_age_days ?? null
+    // 后端在检索时若发现索引过期/缺失会自动触发后台重建 → 起轮询让用户看到进度
+    if (data?.auto_rebuild?.triggered) startPolling()
     searched.value = true
   } catch (e) {
     // 索引缺失（428）等业务错误由拦截器提示；刷新一次状态便于用户看到进度
@@ -254,6 +308,9 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+.book-finder .stale-hint {
+  color: var(--el-color-warning, #e6a23c);
 }
 .book-finder .index-text {
   color: var(--el-text-color-regular, #606266);

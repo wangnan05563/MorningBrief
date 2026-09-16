@@ -23,6 +23,7 @@ from app.database import AsyncSessionLocal
 from app.models import (
     AutoReviewConfig, AutoReviewStat, Review, WorkflowStep,
     WorkflowStepName, WorkflowStepStatus, AuditLog, Script,
+    Material, Workflow, Channel,
 )
 from app.models.review import ReviewStatus
 
@@ -31,6 +32,42 @@ logger = logging.getLogger(__name__)
 # 系统操作人标识，用于 Review.reviewer_name 和 AuditLog.operator
 # 让审批历史明确标记为"系统自动审批"
 _SYSTEM_OPERATOR = "system_auto_review"
+
+
+def evaluate_audiobook_consistency(
+    channel_type: str | None,
+    sources: list[str] | None,
+    segment_material_ids: list[int] | None,
+    full_text: str | None,
+) -> tuple[bool, str]:
+    """听书频道专用一致性校验（T00626 P2，纯函数便于单测）。
+
+    规则（对应《每日听书频道专有流程规范》的验收标准）：
+    1. **单书聚焦**：素材来源（书名）去重后应为 1 本，多本即跨书混讲；
+    2. **章节衔接**：稿件分段引用的素材顺序应递增（与讲述顺序一致，防乱序拼接）；
+    3. **结尾合规**：稿件需含"正版"提醒（引用原著金句的合规要求）。
+
+    非 audiobook 频道直接通过——不改变既有自动审批行为。
+
+    Returns:
+        (是否通过, 失败原因)
+    """
+    if channel_type != "audiobook":
+        return True, ""
+
+    books = {str(s).strip() for s in (sources or []) if s and str(s).strip()}
+    if len(books) > 1:
+        shown = "、".join(sorted(books))[:60]
+        return False, f"听书频道要求单书聚焦：本次引用了 {len(books)} 个来源（{shown}）"
+
+    ids = [i for i in (segment_material_ids or []) if isinstance(i, int)]
+    if ids != sorted(ids):
+        return False, "章节衔接异常：稿件分段顺序与素材顺序不一致（可能存在乱序拼接）"
+
+    if "正版" not in (full_text or ""):
+        return False, "结尾缺少正版提醒（讲书合规要求：每集结尾提示支持正版原著）"
+
+    return True, ""
 
 
 class AutoReviewService:
@@ -137,10 +174,6 @@ class AutoReviewService:
             # 未执行内容安全检测：视为不安全
             return False, "未执行内容安全检测"
 
-            # ???????????????????????
-            # ???????????????AC ??????????
-            logger.info("????????????????????????????? workflow_id=%s", workflow_id)
-            return True, "???????????????"
 
         if not content_security.get("safe"):
             # 检测命中违规：明确不安全
@@ -221,7 +254,45 @@ class AutoReviewService:
 
     # ===== 自动审批执行 =====
 
-    async def try_auto_approve(
+    async def _check_audiobook_consistency(self, workflow_id: str) -> tuple[bool, str, bool]:
+        """T00626 P2：听书频道一致性校验（取库数据后交由纯函数判定）。
+
+        Returns:
+            (是否通过, 失败原因, 是否本次校验适用)——applicable=False 表示非听书频道，
+            调用方不应把本项计入 matched_rules（避免污染自动审批规则命中记录）。
+        """
+        async with AsyncSessionLocal() as session:
+            channel_type = (await session.execute(
+                select(Channel.channel_type)
+                .join(Workflow, Workflow.channel_id == Channel.id)
+                .where(Workflow.id == workflow_id)
+            )).scalar()
+            if channel_type != "audiobook":
+                return True, "", False
+
+            sources = (await session.execute(
+                select(Material.source).where(Material.workflow_id == workflow_id)
+            )).scalars().all()
+
+            latest = (await session.execute(
+                select(Script.segments, Script.full_text)
+                .where(Script.workflow_id == workflow_id)
+                .order_by(Script.id.desc()).limit(1)
+            )).first()
+            seg_json, full_text = (latest if latest else (None, None))
+            ids: list[int] = []
+            if seg_json:
+                try:
+                    for seg in json.loads(seg_json):
+                        if isinstance(seg, dict):
+                            ids.extend(m for m in (seg.get("material_ids") or []) if isinstance(m, int))
+                except (json.JSONDecodeError, TypeError):
+                    logger.warning("script.segments 解析失败，跳过章节衔接校验 workflow_id=%s", workflow_id)
+
+        ok, msg = evaluate_audiobook_consistency(channel_type, list(sources), ids, full_text)
+        return ok, msg, True
+
+    async def try_auto_approve(  # NOSONAR
         self, workflow_id: str, review_id: int, review_created_at: datetime,
     ) -> dict:
         """尝试自动审批（工作流创建 Review 后调用）。
@@ -269,7 +340,14 @@ class AutoReviewService:
             else:
                 fail_reasons.append(msg)
 
-        # 3. 任一规则失败则不自动审批
+        # 3. T00626 P2：听书频道专用校验（非 audiobook 频道 applicable=False，不影响既有行为）
+        ok, msg, applicable = await self._check_audiobook_consistency(workflow_id)
+        if not ok:
+            fail_reasons.append(msg)
+        elif applicable:
+            matched_rules.append("audiobook_consistency")
+
+        # 4. 任一规则失败则不自动审批
         if fail_reasons:
             fail_msg = "; ".join(fail_reasons)
             await self._record_stat(

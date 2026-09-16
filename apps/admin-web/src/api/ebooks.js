@@ -23,3 +23,6 @@ export const getEbookIndexStatus = () => api.get('/ebooks/index/status')
 
 // 重建书源索引（后台执行，约 2-5 分钟；进度走 status 轮询）
 export const rebuildEbookIndex = () => api.post('/ebooks/index/rebuild')
+
+// T00626：加入待讲书单（为检索命中的书写入一条"待上传书稿"的素材占位，幂等）
+export const createDraftMaterial = (payload) => api.post('/ebooks/draft-material', payload)
