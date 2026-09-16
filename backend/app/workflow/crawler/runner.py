@@ -18,6 +18,8 @@ from typing import Optional
 from app.config import get_settings
 from app.core.simhash import compute
 from app.core.timeutil import localnow_naive
+from sqlalchemy import func, select
+
 from app.database import AsyncSessionLocal
 from app.models import Material, Channel
 from app.models.material import MaterialSourceType, MaterialStatus
@@ -59,6 +61,50 @@ async def _extract_content(entry: dict) -> dict:
         # 无封面图时为 None，小程序文稿页降级为纯文本展示
         "cover_url": article.get("cover_url"),
     }
+
+
+def decide_crawl_outcome(material_count: int, duplicates_skipped: int) -> str:
+    """判定 crawl 结果语义（T00649，纯函数便于单测）。
+
+    Returns:
+        "ok"    —— 有新增素材（正常成功）
+        "reuse" —— 无新增但命中去重：素材已在池中（重跑工作流 / 先经素材录入上传过），
+                   视为成功复用，**不得判失败**
+        "fail"  —— 无新增且无去重命中：真无可用素材，需阻断（rewrite 会空跑）
+    """
+    if material_count > 0:
+        return "ok"
+    if duplicates_skipped > 0:
+        return "reuse"
+    return "fail"
+
+
+async def _count_channel_pending_materials(channel_id: Optional[int]) -> int:
+    """统计该频道**上传驱动**（selection_strategy=outline/manual）下待消费的素材数（T00649）。
+
+    用途：书稿类内容经「素材录入」入库后，工作流 crawl 若未配置书源（或书源无新增），
+    `原始 0 条` 属**预期**而非故障——此时应以素材池为准判断"是否有素材可用"。
+    仅对 outline/manual 策略生效：RSS 驱动频道仍严格按抓取结果判定，
+    避免"池里有旧 pending 素材"掩盖抓取失败、导致发布陈旧内容。
+
+    Returns:
+        该频道 pending 素材数（非上传驱动策略返回 0）
+    """
+    if channel_id is None:
+        return 0
+    async with AsyncSessionLocal() as session:
+        strategy = (await session.execute(
+            select(Channel.selection_strategy).where(Channel.id == channel_id)
+        )).scalar()
+        if strategy not in ("outline", "manual"):
+            return 0
+        cnt = (await session.execute(
+            select(func.count(Material.id)).where(
+                Material.channel_id == channel_id,
+                Material.status == MaterialStatus.pending.value,
+            )
+        )).scalar()
+    return int(cnt or 0)
 
 
 async def _insert_material(prepared: dict, workflow_id: str, session, channel_id=None) -> bool:
@@ -511,6 +557,8 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
     # 阶段2：逐条短事务入库，避免单条失败导致整批回滚
     material_count = 0
     insert_failures = 0
+    # T00649：因"已在素材池/去重命中"而跳过的新增数——**不等于失败**
+    duplicates_skipped = 0
     # IntegrityError 视为已入库跳过（防御性兜底）：
     # is_duplicate 已检查 dedup + material.url 双源，正常路径不应再触发 UNIQUE 冲突。
     # 但并发场景（同时两个 crawl 任务竞争同一 URL）或 dedup/material 一致性窗口外的
@@ -522,6 +570,9 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
                 async with session.begin():
                     if await _insert_material(prepared, workflow_id, session, channel_id):
                         material_count += 1
+                    else:
+                        # _insert_material 返回 False = 去重命中（URL/dedup_key 已在池中）
+                        duplicates_skipped += 1
         except IntegrityError as e:
             # UNIQUE 冲突 = 该 URL 已入库，视为成功跳过（不计入 insert_failures）
             logger.debug(
@@ -537,11 +588,49 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
     # 爬取总结：原始/提取/入库三个维度的数量便于日志快速定位
     # source_details 已包含每个源的 name/url/status/entry_count/error
     logger.info(
-        "爬虫完成 workflow_id=%s channel_id=%s: 原始 %d 条 → 提取 %d 条 → 入库 %d 条"
-        "（提取失败 %d 条，入库失败 %d 条）",
+        "爬虫完成 workflow_id=%s channel_id=%s: 原始 %d 条 → 提取 %d 条 → 新增 %d 条"
+        "（去重跳过 %d 条，提取失败 %d 条，入库失败 %d 条）",
         workflow_id, channel_id, len(all_entries), len(prepared_list),
-        material_count, len(all_entries) - len(prepared_list), insert_failures,
+        material_count, duplicates_skipped,
+        len(all_entries) - len(prepared_list), insert_failures,
     )
+
+    # T00649：**去重命中不算失败**——素材已存在于池中（重跑工作流 / 先经「素材录入」上传过
+    # 同一内容）时，本条 crawl 的实际语义是"素材可复用"，下游 rewrite 会按
+    # channel_id + status=pending 正常取到；旧实现把这种情况与"真无素材"一并判失败。
+    if decide_crawl_outcome(material_count, duplicates_skipped) == "reuse":
+        logger.info(
+            "本次未新增素材，但 %d 条已在素材池中被去重跳过，视为成功复用"
+            "（workflow_id=%s channel_id=%s）",
+            duplicates_skipped, workflow_id, channel_id,
+        )
+        return {
+            "material_count": 0,
+            "reused_materials": duplicates_skipped,
+            "workflow_id": workflow_id,
+            "source_details": source_details,
+            "total_entries": len(all_entries),
+            "extracted_entries": len(prepared_list),
+        }
+
+    # T00649：上传驱动频道（outline/manual）的素材池兜底——书稿经「素材录入」入库、
+    # crawl 无书源或书源无新增时，池中 pending 素材即"可用素材"，不应阻断工作流。
+    if decide_crawl_outcome(material_count, duplicates_skipped) == "fail":
+        pool_pending = await _count_channel_pending_materials(channel_id)
+        if pool_pending > 0:
+            logger.info(
+                "crawl 未采集到新素材，但频道 %s 素材池已有 %d 条 pending 素材（上传驱动），"
+                "视为可用（workflow_id=%s）",
+                channel_id, pool_pending, workflow_id,
+            )
+            return {
+                "material_count": 0,
+                "pool_materials": pool_pending,
+                "workflow_id": workflow_id,
+                "source_details": source_details,
+                "total_entries": len(all_entries),
+                "extracted_entries": len(prepared_list),
+            }
 
     # 0 素材阻断：rewrite 步骤对空 pending 也会失败并浪费 LLM 调用
     # 此处主动抛异常让 crawl 步骤 failed，避免后续无效执行
@@ -583,6 +672,7 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
     # 成功路径：返回 material_count 供下游使用，source_details 供前端展示
     return {
         "material_count": material_count,
+        "reused_materials": duplicates_skipped,
         "workflow_id": workflow_id,
         "source_details": source_details,
         "total_entries": len(all_entries),
