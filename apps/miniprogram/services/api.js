@@ -284,11 +284,76 @@ const searchEpisodes = (keyword, page = 1, size = 20, channelType) =>
 
 // === 播放日志接口 ===
 
-/** 上报播放进度（允许失败，不影响播放）
+/**
+ * 播放上报的待重发队列（T00637）
+ *
+ * 为什么需要：真机上报会因网络抖动、token 过期、后端域名未加入「request 合法域名」等原因失败；
+ * 旧实现 `catch(() => {})` 静默丢弃 → 播放量不增长（用户感知"重新进入应用后播放量还是 0"），
+ * 且没有任何日志可排查。改为：失败入队 → next 启动/前台时补发 → 成功即出队。
+ *
+ * 去重规则：同一 episode 只保留**最新一条**（位置更靠后的上报覆盖前者），队列上限 50 条防膨胀。
+ */
+const PENDING_REPORTS_KEY = 'pending_play_reports';
+const PENDING_REPORTS_MAX = 50;
+
+function readPendingReports() {
+  try {
+    const raw = wx.getStorageSync(PENDING_REPORTS_KEY);
+    return Array.isArray(raw) ? raw : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function writePendingReports(list) {
+  try {
+    wx.setStorageSync(PENDING_REPORTS_KEY, list.slice(-PENDING_REPORTS_MAX));
+  } catch (e) {
+    console.warn('[api] 播放上报队列写入失败:', e && e.message);
+  }
+}
+
+/** 上报失败入队（同 episode 覆盖旧记录） */
+function queuePendingReport(data) {
+  const list = readPendingReports().filter((it) => it && it.episode_id !== data.episode_id);
+  list.push({ ...data, queued_at: Date.now() });
+  writePendingReports(list);
+  console.warn('[api] 播放上报失败已入队待补发 episode_id=', data.episode_id, '队列长度=', list.length);
+}
+
+/** 补发待重发队列（启动/回前台调用）。返回成功补发条数。 */
+async function flushPendingReports() {
+  const list = readPendingReports();
+  if (!list.length) return 0;
+  const remain = [];
+  let ok = 0;
+  for (const item of list) {
+    const { queued_at, ...payload } = item;
+    try {
+      await request({ url: '/playlogs/progress', method: 'POST', data: payload });
+      ok += 1;
+    } catch (e) {
+      remain.push(item);
+    }
+  }
+  writePendingReports(remain);
+  if (ok) console.info('[api] 播放上报补发成功', ok, '条，剩余', remain.length, '条');
+  return ok;
+}
+
+/** 上报播放进度（T00637：失败入队重发，不再静默丢弃）
  * 不放 _allowRetry=false：token 过期时也需要触发 refreshToken，
  * 否则进度上报持续 401 且永远不会恢复（auth.js 已有并发+冷却保护，不会频繁 login） */
 const reportPlayProgress = (data) =>
-  request({ url: '/playlogs/progress', method: 'POST', data }).catch(() => {});
+  request({ url: '/playlogs/progress', method: 'POST', data }).catch(() => {
+    // 失败不再静默：入队待下次启动/回前台补发（避免播放量永久丢失）
+    try {
+      queuePendingReport(data);
+    } catch (e) {
+      console.warn('[api] 播放上报入队失败:', e && e.message);
+    }
+    return null;
+  });
 
 /** 查询某节目播放进度（断点续播，允许失败）
  * 不放 _allowRetry=false：与 reportPlayProgress 同理，token 过期时需能触发 refreshToken */
@@ -742,6 +807,8 @@ module.exports = {
   request,
   getBaseUrl,
   throttle,
+  flushPendingReports,  // T00637：播放上报失败队列补发
+  queuePendingReport,   // T00637：导出以便单测（失败上报入队）
   // 节目
   fetchTodayEpisode,
   fetchEpisodeDetail,

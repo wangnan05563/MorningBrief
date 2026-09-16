@@ -145,7 +145,27 @@ App({
    * 后端可在通知 page query 中附带 ct（channel_type）以加速兜底判定；
    * 缺省时按缓存 / 频道列表判定类型。
    */
+  /**
+   * T00637：补发播放上报失败队列（启动/回前台各触发一次，节流 60s）
+   *
+   * 为什么延迟 3s：冷启动时 token 可能尚未就绪（登录流程进行中），
+   * 立刻补发会 401 留队列；延迟后成功率更高，失败也仍保留队列等下次。
+   */
+  _flushPendingReportsThrottled() {
+    const now = Date.now();
+    if (this._lastReportFlushAt && now - this._lastReportFlushAt < 60000) return;
+    this._lastReportFlushAt = now;
+    setTimeout(() => {
+      const { flushPendingReports } = require('./services/api');
+      flushPendingReports().catch((e) => {
+        console.warn('[app] 播放上报补发失败（保留队列）:', e && e.message);
+      });
+    }, 3000);
+  },
+
   onShow(options) {
+    // T00637：回前台补发失败的播放上报（失败不再静默丢弃）——节流 60s，避免频繁请求
+    this._flushPendingReportsThrottled();
     if (!options || options.scene !== 1014) return;
     const q = options.query || {};
     const channelId = q.channelId;
