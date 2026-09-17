@@ -158,8 +158,12 @@
         <view class="action-chip" bindtap="onOpenQueue" aria-label="打开播放队列">
           <image class="chip-icon" lazy-load src="/images/icons/list.png" mode="aspectFit" />
         </view>
-        <!-- T00753：完整文稿（位于下载之前），与其他按钮同一行 -->
-        <view class="action-chip" bindtap="onShowScript" aria-label="查看完整文稿">
+        <!-- T00753：完整文稿（位于下载之前），与其他按钮同一行；T00753 反馈：点击切换显示/收起 -->
+        <view
+          class="action-chip {{scriptVisible ? 'active' : ''}}"
+          bindtap="onShowScript"
+          aria-label="{{scriptVisible ? '收起完整文稿' : '查看完整文稿'}}"
+        >
           <image class="chip-icon" lazy-load src="/images/icons/btn-script-mint.png" mode="aspectFit" />
         </view>
         <!-- 下载（T00387）：空闲→download / 已下载→download-done / 下载中→百分比（点按取消） -->
@@ -188,8 +192,9 @@
       </view>
     </view>
 
-    <!-- 稿件区域：进页自动拉取（仅喂顶部轮播），正文仍懒加载，用户点"查看完整文稿"展开 -->
-    <view class="card script-card">
+    <!-- 稿件区域：T00753 反馈——默认整栏隐藏，点操作行「完整文稿」按钮才显示（再点收起）
+         进页仍自动拉取稿件（仅喂顶部轮播），正文在显示时按需填充 -->
+    <view class="card script-card" wx:if="{{scriptVisible}}">
       <view class="script-header">完整文稿</view>
 
       <!-- 稿件加载中（进页自动拉取或用户点击展开时） -->
@@ -227,12 +232,10 @@
         <view class="script-body" wx:else>{{script}}</view>
       </block>
 
-      <!-- T00753：原「完整文稿」入口按钮已上移并入操作按钮行（位于下载之前），此处不再重复 -->
-      <view class="script-entry" wx:else></view>
     </view>
 
     <!-- 节目来源（版权溯源，仅稿件加载后展示） -->
-    <view class="card sources-card" wx:if="{{scriptLoaded && sources.length > 0}}">
+    <view class="card sources-card" wx:if="{{scriptVisible && scriptLoaded && sources.length > 0}}">
       <view class="script-header">节目来源</view>
       <view class="sources-list">
         <view class="source-item" wx:for="{{sources}}" wx:key="seq">

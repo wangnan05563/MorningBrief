@@ -52,6 +52,7 @@ Page({
     segments: [],          // 稿件分段（含 cover_url，新稿件按段渲染图文）
     currentSegmentIndex: -1,  // T00725：当前播放/选中文稿段索引（-1 = 无）
     scriptLoaded: false,
+    scriptVisible: false,   // T00753 反馈：完整文稿栏默认隐藏，点按钮才显示
     scriptLoading: false,
     isPlaying: false,
     currentTime: 0,
@@ -593,6 +594,7 @@ Page({
       script: '',
       segments: [],
       scriptLoaded: false,
+      scriptVisible: false,   // T00753 反馈：切集后文稿栏恢复默认隐藏
       comments: [],
       commentsTotal: 0,
       bgCoverUrl: ep.cover_url || '',
@@ -718,6 +720,12 @@ Page({
    * V1.3：稿件接口返回 sources 字段，随正文一并展示版权溯源。
    */
   async onShowScript() {
+    // T00753 反馈：点击切换——已显示则收起（内容已缓存，不重复请求）
+    if (this.data.scriptVisible) {
+      this.setData({ scriptVisible: false });
+      return;
+    }
+    this.setData({ scriptVisible: true });
     if (this.data.scriptLoaded) return;
     try {
       const cache = await this.ensureScript();
