@@ -316,55 +316,70 @@
   height: 64rpx;
 }
 
+/* 频道导航 tab：无背景 + 下划线指示（T00753 追加：用户要求去底色、横线风格） */
 .channel-pill {
+  position: relative;
   display: inline-block;
-  padding: 12rpx 28rpx;
-  margin-right: 16rpx;
-  border-radius: 32rpx;
-  font-size: 26rpx;
-  color: var(--text-muted);
-  background: var(--bg-subtle);
-  transition: all 0.2s ease;
-  line-height: 40rpx;
+  padding: 11rpx 20rpx;
+  margin-right: 8rpx;
+  border-radius: 0;
+  font-size: 27rpx;
+  color: var(--text-secondary);
+  background: transparent;
+  transition: color 0.2s ease, font-weight 0.2s ease;
+  line-height: 42rpx;
 }
 
+/* 选中：标题加粗 + 主题色 + 下方横线指示条 */
 .channel-pill.active {
-  background: var(--accent);
-  color: var(--text-inverse);
-  box-shadow: 0 4rpx 12rpx rgba(63, 108, 143, 0.3);
+  color: var(--accent);
+  font-weight: 700;
+  background: transparent;
+  box-shadow: none;
 }
 
-/* 课程类频道胶囊：用绿色系区分资讯类（FR-MC-02） */
+.channel-pill.active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 44rpx;
+  height: 6rpx;
+  border-radius: 3rpx;
+  background: var(--accent);
+}
+
+/* 课程/听书类频道：仅以文字色区分（无底色） */
 .channel-pill.course {
-  color: var(--accent-dark);
-  background: var(--accent-soft);
+  color: var(--text-secondary);
 }
 
 .channel-pill.course.active {
-  background: var(--accent);
-  color: var(--text-inverse);
+  color: var(--accent);
 }
 
-/* 课程类胶囊角标（课/听） */
+/* 课程类角标（课/听）：无底胶囊 → 浅底小标，仍可一眼区分类型 */
 .pill-badge {
   display: inline-block;
-  margin-left: 8rpx;
-  padding: 0 10rpx;
-  border-radius: 16rpx;
-  font-size: 20rpx;
-  line-height: 30rpx;
-  color: var(--text-inverse);
-  background: var(--accent);
+  margin-left: 6rpx;
+  padding: 0 8rpx;
+  border-radius: 12rpx;
+  font-size: 19rpx;
+  line-height: 28rpx;
+  color: var(--accent);
+  background: var(--accent-soft);
   vertical-align: middle;
 }
 
-/* 频道分组标题（资讯 / 课程） */
+/* 频道分组标签（资讯 / 课程）：加深颜色 + 加粗，与频道名形成层级区分 */
 .channel-group-label {
   display: inline-block;
-  margin-right: 12rpx;
+  margin-right: 10rpx;
   padding: 0 8rpx;
-  font-size: 22rpx;
-  color: var(--text-muted);
+  font-size: 23rpx;
+  font-weight: 700;
+  color: var(--text-primary);
   line-height: 64rpx;
   letter-spacing: 2rpx;
 }
