@@ -449,8 +449,10 @@
      统计行必须自带层叠上下文才能显示（同 avatar/nickname 的 z-index:1） */
   position: relative;
   z-index: 1;
-  display: flex;
-  /* T00726 反馈2：负外边距横贯整卡（抵消卡片左右内边距），加宽统计条避免标签换行 */
+  /* T00726 反馈3：grid 四等列 + 列间隔，宽度自适应且各列严格等宽不叠加 */
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  column-gap: 12rpx;
   margin: 20rpx -32rpx 0;
   padding: 12rpx 16rpx;
   border-top: 1rpx solid rgba(255, 255, 255, 0.25);
@@ -458,7 +460,7 @@
   background: rgba(31, 48, 64, 0.3);
 }
 .stats-cell {
-  flex: 1;
+  min-width: 0;
   text-align: center;
   white-space: nowrap;
 }

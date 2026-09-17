@@ -23,7 +23,7 @@ Page({
     totalListenCount: 0,      // 累计收听期数
     completedCount: 0,        // 完播期数
     favoriteCount: 0,         // 收藏数
-    durationLabel: '0分钟',   // 格式化后的收听时长
+    durationLabel: '0',       // T00726 反馈：统计行收听时长（分钟数）
     myCourses: [],            // 我的课程（FR-MC-05）：已订阅的课程/有声读物频道 + 本地进度
     myCoursesLoaded: false,   // 防止加载完成前空态闪烁
     // T00726 双层 Tab：第一层＝频道类型过滤；第二层＝功能入口选中态
