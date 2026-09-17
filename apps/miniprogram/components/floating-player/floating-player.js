@@ -7,13 +7,14 @@
  * - currentEpisode 为空（从未播放过）时隐藏，避免误触
  * - 通过 onShow 周期查询 currentEpisode，避免与播放器状态强耦合
  */
-const { getCurrentEpisode, resumePlay, onPlaybackChange } = require('../../services/audio');
+const { getCurrentEpisode, resumePlay, onPlaybackChange, onTimeUpdateChange } = require('../../services/audio');
 
 Component({
   data: {
     visible: false,
     episode: null,
     isPlaying: false,
+    fpProgressDeg: 0,  // T00722：播放进度环角度（0-360，仅变化时 setData）
   },
 
   lifetimes: {
@@ -25,9 +26,18 @@ Component({
         const isPlaying = !!(player && !player.paused);
         this.setData({ isPlaying });
       });
+      // T00722：订阅播放进度，驱动浮条播放键的进度环（audio.js 已 800ms 节流；
+      // 仅角度变化时 setData，避免无谓渲染）
+      this._unsubTime = onTimeUpdateChange((ct, du) => {
+        const deg = du > 0 ? Math.min(360, Math.round((ct / du) * 360)) : 0;
+        if (deg !== this.data.fpProgressDeg) {
+          this.setData({ fpProgressDeg: deg });
+        }
+      });
     },
     detached() {
       if (this._unsubPlayback) this._unsubPlayback();
+      if (this._unsubTime) this._unsubTime();
     },
   },
 

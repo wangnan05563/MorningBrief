@@ -128,6 +128,25 @@
   height: 44rpx;
 }
 
+/* T00722：播放进度环——conic-gradient 随播放进度由空心渐实（角度在 wxml 内联计算） */
+.progress-ring {
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ring-hole {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* 上一首/下一首导航按钮 */
 .nav-btn {
   width: 72rpx;

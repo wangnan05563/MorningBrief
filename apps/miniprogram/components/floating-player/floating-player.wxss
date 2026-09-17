@@ -35,6 +35,17 @@
   height: 32rpx;
 }
 
+/* T00722：进度环内孔（露出浮条底色，环厚 8rpx） */
+.fp-icon-hole {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .fp-info {
   flex: 1;
   min-width: 0;

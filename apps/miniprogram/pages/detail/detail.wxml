@@ -87,7 +87,15 @@
           <image class="nav-icon" lazy-load src="/images/icons/skip-back.png" mode="aspectFit" />
         </view>
         <view class="play-btn" bindtap="onTogglePlay">
-          <image class="play-icon" lazy-load src="{{isPlaying ? '/images/icons/pause.png' : '/images/icons/play.png'}}" mode="aspectFit" />
+          <!-- T00722：进度环——边缘随播放进度由空心渐实（conic-gradient，无需 JS 计算） -->
+          <view
+            class="progress-ring"
+            style="background: conic-gradient(#FFFFFF {{duration > 0 ? (currentTime / duration) * 360 : 0}}deg, rgba(255, 255, 255, 0.28) 0deg)"
+          >
+            <view class="ring-hole">
+              <image class="play-icon" lazy-load src="{{isPlaying ? '/images/icons/pause.png' : '/images/icons/play.png'}}" mode="aspectFit" />
+            </view>
+          </view>
         </view>
         <!-- 下一首按钮 -->
         <view class="nav-btn" wx:if="{{hasNext}}" bindtap="onNext">

@@ -3,8 +3,14 @@
   显示当前节目标题（截断），点击跳转详情页继续播放
 -->
 <view class="floating-player" wx:if="{{visible}}" bindtap="onTap">
-  <view class="fp-icon-wrap">
-    <image class="fp-icon" src="{{isPlaying ? '/images/icons/pause.png' : '/images/icons/play.png'}}" mode="aspectFit" />
+  <!-- T00722：进度环——边缘随播放进度由空心渐实 -->
+  <view
+    class="fp-icon-wrap"
+    style="background: conic-gradient(#FFFFFF {{fpProgressDeg}}deg, rgba(255, 255, 255, 0.25) 0deg)"
+  >
+    <view class="fp-icon-hole">
+      <image class="fp-icon" src="{{isPlaying ? '/images/icons/pause.png' : '/images/icons/play.png'}}" mode="aspectFit" />
+    </view>
   </view>
   <view class="fp-info">
     <text class="fp-label">正在播放</text>
