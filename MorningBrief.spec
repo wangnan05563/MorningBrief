@@ -109,6 +109,24 @@ for src, dst in explicit_datas:
     if os.path.exists(src):
         datas.append((src, dst))
 
+# 频道预制封面/图标（T00731）：出厂资产随包打入 _internal/data/channel_assets。
+# 运行时可写目录是 exe 同级 data/channel_assets（_internal 只读），
+# 由 lifespan 的 _seed_default_channel_assets 在首次启动/升级时按需补齐
+# （仅补缺失、不覆盖用户替换过的同名文件）。
+# 用目录扫描而非硬编码文件名：后续新增频道封面无需改动本 spec。
+_channel_assets_dir = os.path.join(_backend_dir, 'data', 'channel_assets')
+_channel_asset_exts = ('.jpg', '.jpeg', '.png', '.webp')
+if os.path.isdir(_channel_assets_dir):
+    _asset_count = 0
+    for _name in sorted(os.listdir(_channel_assets_dir)):
+        _path = os.path.join(_channel_assets_dir, _name)
+        if os.path.isfile(_path) and _name.lower().endswith(_channel_asset_exts):
+            datas.append((_path, os.path.join('data', 'channel_assets')))
+            _asset_count += 1
+    print(f"[spec] 频道预制资产已收集：{_asset_count} 个文件 -> data/channel_assets")
+else:
+    print(f"[spec] 警告：未找到频道资产目录 {_channel_assets_dir}，出厂封面将缺失")
+
 # ============================================================
 # Analysis
 # ============================================================

@@ -661,6 +661,62 @@ async def _seed_default_channels() -> None:  # NOSONAR
         conn.close()
 
 
+# 频道资产允许的图片后缀（与 routers/admin/channels.py 的上传白名单同口径）
+_CHANNEL_ASSET_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def seed_channel_assets_from(src_dir, dst_dir) -> int:
+    """把出厂频道资产（封面/图标）补齐到可写资产目录，返回补齐文件数（T00731）。
+
+    必要性：打包态随包资源在只读的 _internal/data/channel_assets，而
+    /channel-assets 静态挂载指向 exe 同级的可写 data/channel_assets；
+    不补齐则全新安装的实例 12 个频道封面全部 404。
+
+    策略（两条都重要）：
+    - **仅补缺失**：目标已存在同名文件一律跳过，绝不覆盖（用户可能已替换）；
+    - **同目录短路**：开发态源/目标同路径，直接返回 0，不做无意义拷贝。
+
+    抽出为普通函数（非 async）以便单测直接验证；lifespan 里包装调用。
+    """
+    import shutil
+    from pathlib import Path
+
+    src = Path(src_dir)
+    dst = Path(dst_dir)
+    if not src.is_dir():
+        return 0
+    try:
+        if src.resolve() == dst.resolve():
+            return 0  # 开发态：源即目标
+    except OSError:
+        return 0
+    dst.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for item in sorted(src.iterdir()):
+        if not item.is_file() or item.suffix.lower() not in _CHANNEL_ASSET_SUFFIXES:
+            continue
+        target = dst / item.name
+        if target.exists():
+            continue
+        shutil.copyfile(item, target)
+        copied += 1
+    return copied
+
+
+async def _seed_default_channel_assets() -> None:  # NOSONAR
+    """把随包发布的频道预制封面/图标播种到 data/channel_assets（幂等）。"""
+    from app.paths import resolve_bundled_channel_assets_dir, resolve_channel_asset_dir
+
+    try:
+        copied = seed_channel_assets_from(
+            resolve_bundled_channel_assets_dir(), resolve_channel_asset_dir()
+        )
+        if copied:
+            logger.info("[startup] 频道预制资产已补齐 %d 个（data/channel_assets）", copied)
+    except Exception as e:  # NOSONAR 资产缺失不应阻断启动
+        logger.warning("[startup] 频道预制资产补齐失败（不影响启动）: %s", e)
+
+
 def _make_loop_exception_handler():
     """构造事件循环异常处理器，过滤 Windows Proactor 连接重置噪声。
 
@@ -784,6 +840,9 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
         await _seed_default_channels()
     except Exception as e:
         logger.warning("[startup] 自动 seed 默认频道失败: %s", e)
+
+    # 频道预制封面/图标补齐（T00731，幂等，仅补缺失不覆盖）
+    await _seed_default_channel_assets()
 
     # 从 SQLite 加载 AI 配置覆盖到 Settings 单例（前端修改的配置热生效）
     from app.services.ai_config_service import AIConfigService

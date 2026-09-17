@@ -350,6 +350,31 @@ if (Test-Path $bgmSrc) {
 } else {
     Write-Warn "BGM preset source not found: $bgmSrc"
 }
+
+# 5.3.3 Copy channel assets (T00731 频道预制封面/图标)
+# 出厂资产：12 个频道封面等，装入 exe 同级 data/channel_assets，
+# 使全新安装的实例 /channel-assets 立即可用（否则频道卡片封面 404）。
+# 同一份资产亦由 MorningBrief.spec 打入 _internal（打包态只读源），
+# 运行时 lifespan 按需补齐到 data/（升级安装不覆盖已有文件时的兜底）。
+Write-Host "  [5.3.3] Copy channel assets..."
+$assetSrc = Join-Path $backendDir "data\channel_assets"
+$assetDst = Join-Path $distDir "data\channel_assets"
+if (Test-Path $assetSrc) {
+    New-Item -ItemType Directory -Force $assetDst | Out-Null
+    # 仅取图片资产：排除 .backup-*/ 备份目录与 .gitignore 等非资产文件
+    $assetFiles = Get-ChildItem -Path $assetSrc -File |
+        Where-Object { $_.Extension -match '^\.(jpg|jpeg|png|webp)$' }
+    if ($assetFiles.Count -gt 0) {
+        $assetFiles | Copy-Item -Destination $assetDst -Force
+        $copiedCount = (Get-ChildItem $assetDst -File).Count
+        Write-OK "channel assets copied ($copiedCount files)"
+    } else {
+        Write-Warn "channel_assets 目录内无图片资产，跳过：$assetSrc"
+    }
+} else {
+    Write-Warn "channel assets source not found: $assetSrc"
+}
+
 # 5.3.1 Seed 默认管理员（首次启动即可登录）
 Write-Host "  [5.3.1] 初始化默认管理员..."
 $dbPath = "$distDir\data\news.db"

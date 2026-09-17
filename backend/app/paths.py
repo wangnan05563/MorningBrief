@@ -78,6 +78,23 @@ def resolve_channel_asset_dir() -> Path:
     return asset_dir
 
 
+def resolve_bundled_channel_assets_dir() -> Path:
+    """随包发布的出厂频道资产目录（T00731 补全）。
+
+    与 resolve_channel_asset_dir 的区别：本函数返回**只读**的随包资源，
+    用于首次启动/升级时把出厂封面补齐到可写的 data/channel_assets。
+
+    - 打包态：_MEIPASS/data/channel_assets（MorningBrief.spec 的 datas 打入）
+    - 开发态：backend/data/channel_assets（即开发库自身的资产目录）
+
+    注意：开发态两者同路径，播种逻辑需据此短路（见 main._seed_default_channel_assets）。
+    """
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        return Path(meipass) / "data" / "channel_assets"
+    return Path(__file__).parent.parent / "data" / "channel_assets"
+
+
 def resolve_log_dir() -> Path:
     """日志目录。"""
     log_dir = get_app_root() / "logs"
