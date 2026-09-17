@@ -27,22 +27,57 @@
   padding: 24rpx 28rpx;
 }
 
+/* 继续播放卡播放键：碟片样式（与列表 row-play 同配方，小一号 64rpx） */
 .continue-icon-wrap {
-  width: 72rpx;
-  height: 72rpx;
+  position: relative;
+  width: 64rpx;
+  height: 64rpx;
   border-radius: 50%;
-  background: var(--accent);
-  color: var(--text-inverse);
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+  background: radial-gradient(
+    circle at 50% 50%,
+    var(--accent) 0 30%,
+    #8c9cb0 31% 41%,
+    #b3c0cf 42% 100%
+  );
+  box-shadow: 0 2rpx 8rpx rgba(63, 108, 143, 0.18), inset 0 0 0 1rpx rgba(255, 255, 255, 0.5);
   flex-shrink: 0;
   margin-right: 20rpx;
 }
 
+/* 唱片纹路 + 非对称高光（转动可见性依赖高光） */
+.continue-icon-wrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    repeating-radial-gradient(
+      circle at 50% 50%,
+      rgba(255, 255, 255, 0.42) 0 2rpx,
+      rgba(255, 255, 255, 0) 2rpx 7rpx
+    ),
+    conic-gradient(
+      from 0deg,
+      rgba(255, 255, 255, 0.55) 0deg 26deg,
+      rgba(255, 255, 255, 0) 26deg 360deg
+    );
+  pointer-events: none;
+}
+
+.continue-icon-wrap.playing::before {
+  animation: disc-spin 9s linear infinite;
+}
+
+/* 内层播放/暂停图标：与历史页一致（26rpx 适配 64rpx 碟片中心标签） */
 .continue-icon {
-  width: 32rpx;
-  height: 32rpx;
+  position: relative;
+  z-index: 1;
+  width: 26rpx;
+  height: 26rpx;
 }
 
 .continue-info {

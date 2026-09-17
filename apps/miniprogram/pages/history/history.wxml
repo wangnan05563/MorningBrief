@@ -19,7 +19,9 @@
   <!-- 任务6+7：继续播放 + 排序按钮 + 列表按钮（与今日页同款风格：左继续播放，右工具） -->
   <view class="history-action-bar">
     <view class="continue-card-mini" wx:if="{{lastPlayedEpisode}}" bindtap="onTapContinue">
-      <image class="continue-icon" lazy-load src="{{(isPlaying && currentEpisodeId === lastPlayedEpisode.id) ? '/images/icons/pause.png' : '/images/icons/play-mini.png'}}" mode="aspectFit" />
+      <view class="continue-icon-wrap {{(isPlaying && currentEpisodeId === lastPlayedEpisode.id) ? 'playing' : ''}}">
+        <image class="continue-icon" lazy-load src="{{(isPlaying && currentEpisodeId === lastPlayedEpisode.id) ? '/images/icons/pause.png' : '/images/icons/play-mini.png'}}" mode="aspectFit" />
+      </view>
       <view class="continue-info">
         <text class="continue-label">继续播放</text>
         <text class="continue-title">{{lastPlayedEpisode.title || '上次的节目'}}</text>
