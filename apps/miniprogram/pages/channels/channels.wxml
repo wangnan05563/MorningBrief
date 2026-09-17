@@ -3,6 +3,11 @@
   <!-- 加载中 -->
   <view class="loading-mask" wx:if="{{loading}}">
     <text>加载中...</text>
+    <!-- T00599：分级加载提示——慢加载文案 / 超时重试入口（T00602 单独落地；A8 骨架屏落地后由其版本接管） -->
+    <view class="load-hint" wx:if="{{loadingSlow}}">网络较慢，正在加载…</view>
+    <view class="load-retry-wrap" wx:if="{{loadingTimedOut}}">
+      <button class="load-retry-btn" bindtap="onRetryLoad" hover-class="none">重试</button>
+    </view>
   </view>
 
   <!-- 空状态 -->
