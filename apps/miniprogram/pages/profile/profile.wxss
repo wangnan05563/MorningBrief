@@ -450,26 +450,29 @@
   position: relative;
   z-index: 1;
   display: flex;
-  margin-top: 20rpx;
-  padding: 12rpx 8rpx;
+  /* T00726 反馈2：负外边距横贯整卡（抵消卡片左右内边距），加宽统计条避免标签换行 */
+  margin: 20rpx -32rpx 0;
+  padding: 12rpx 16rpx;
   border-top: 1rpx solid rgba(255, 255, 255, 0.25);
   /* 轻微压暗底衬：保证白字落在声波亮条上仍可读 */
   background: rgba(31, 48, 64, 0.3);
-  border-radius: 16rpx;
 }
 .stats-cell {
   flex: 1;
   text-align: center;
+  white-space: nowrap;
 }
 .stats-num {
   color: #ffffff;
   font-size: 28rpx;
   font-weight: 600;
+  white-space: nowrap;
 }
 .stats-label {
   margin-top: 4rpx;
   color: rgba(255, 255, 255, 0.78);
-  font-size: 20rpx;
+  font-size: 19rpx;
+  white-space: nowrap;
 }
 
 /* 双层 Tab 容器 */
