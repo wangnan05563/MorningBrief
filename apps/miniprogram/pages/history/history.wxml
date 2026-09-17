@@ -106,8 +106,14 @@
             </view>
           </view>
         </view>
-        <view class="row-play" data-id="{{item.id}}" data-index="{{index}}" catchtap="onPlay">
-          <image class="row-play-icon" lazy-load src="/images/icons/play.png" mode="aspectFit" />
+        <view
+          class="row-play {{(isPlaying && currentEpisodeId === item.id) ? 'playing' : ''}}"
+          data-id="{{item.id}}"
+          data-index="{{index}}"
+          catchtap="onPlay"
+          aria-label="{{(isPlaying && currentEpisodeId === item.id) ? '暂停' : '播放'}}"
+        >
+          <image class="row-play-icon" lazy-load src="{{(isPlaying && currentEpisodeId === item.id) ? '/images/icons/pause.png' : '/images/icons/play.png'}}" mode="aspectFit" />
         </view>
       </view>
     </view>

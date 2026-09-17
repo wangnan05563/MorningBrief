@@ -181,26 +181,63 @@
 }
 
 .row-play {
-  width: 64rpx;
-  height: 64rpx;
+  position: relative;
+  width: 72rpx;
+  height: 72rpx;
   border-radius: 50%;
-  background: var(--accent);
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  overflow: hidden;
+  /* 碟片样式：中心薄荷标签 + 外圈黑胶盘体（径向渐变模拟唱片） */
+  background: radial-gradient(
+    circle at 50% 50%,
+    var(--accent) 0 30%,
+    #2b3542 31% 41%,
+    #1f2733 42% 100%
+  );
+  box-shadow: 0 2rpx 8rpx rgba(31, 45, 61, 0.22), inset 0 0 0 1rpx rgba(255, 255, 255, 0.06);
+}
+
+/* 唱片纹路 + 非对称高光（高光用于表达"转动"） */
+.row-play::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    repeating-radial-gradient(
+      circle at 50% 50%,
+      rgba(255, 255, 255, 0.06) 0 2rpx,
+      rgba(255, 255, 255, 0) 2rpx 7rpx
+    ),
+    conic-gradient(
+      from 0deg,
+      rgba(255, 255, 255, 0.18) 0deg 26deg,
+      rgba(255, 255, 255, 0) 26deg 360deg
+    );
+  pointer-events: none;
+}
+
+/* 播放中：高光层匀速旋转（图标独立于该层，保持正向） */
+.row-play.playing::before {
+  animation: disc-spin 9s linear infinite;
+}
+
+@keyframes disc-spin {
+  to { transform: rotate(360deg); }
 }
 
 .row-play:active {
-  background: var(--accent-dark);
   transform: scale(0.95);
 }
 
 .row-play-icon {
-  width: 36rpx;
-  height: 36rpx;
-  margin-left: 4rpx;
-  filter: brightness(0) invert(1);
+  position: relative;
+  z-index: 1;
+  width: 30rpx;
+  height: 30rpx;
 }
 
 /* === 任务5：带封面背景的播放卡片 === */
