@@ -1,4 +1,4 @@
-"""内容服务：今日节目、节目详情、历史列表、稿件、发布。
+﻿"""内容服务：今日节目、节目详情、历史列表、稿件、发布。
 
 V1.2 起缓存层从 Redis 改为进程内 TTLCache：
 - TTLCache 直接存 Python dict，无需 json 序列化
@@ -82,6 +82,8 @@ class ContentService:
             if not episodes:
                 return None
             data = self._episode_to_dict(episodes[0])
+            # T00731：附带频道封面（AI 预制封面），供首页卡片渲染
+            data["channel_cover"] = await self._channel_cover_url(channel_id)
             await self.cache.set(cache_key, data, ttl=TTL_TODAY)
             return data
 
@@ -93,6 +95,22 @@ class ContentService:
                 continue
             seen_channels.add(ep.channel_id)
             unique.append(self._episode_to_dict(ep))
+
+        # T00731：批量附带频道封面（一次 IN 查询避免 N+1），首页卡片渲染 AI 预制封面
+        if unique:
+            from app.models import Channel as ChannelModel
+            ch_ids = list(seen_channels)
+            ch_rows = await self.db.execute(
+                select(ChannelModel.id, ChannelModel.cover_url).where(ChannelModel.id.in_(ch_ids))
+            )
+            base = self._resolve_audio_base_url()
+            cover_map = {}
+            for cid, curl in ch_rows.all():
+                if curl:
+                    cover_map[cid] = curl if curl.startswith("http") else base + curl
+            for e in unique:
+                if e.get("channel_id") in cover_map:
+                    e["channel_cover"] = cover_map[e["channel_id"]]
 
         # 任务3：批量统计各 episode 的播放次数（一次 IN 查询避免 N+1）
         if unique:
@@ -211,7 +229,7 @@ class ContentService:
         "course": ["course", "audiobook"],
     }
 
-    async def search_episodes(
+    async def search_episodes(  # NOSONAR
         self, keyword: str, page: int, size: int, channel_type: str | None = None
     ) -> dict:
         """节目搜索：优先用 FTS5 全文索引，回退到 LIKE 模糊匹配。
@@ -591,6 +609,17 @@ class ContentService:
         return get_settings().audio_base_url_resolved
 
     @staticmethod
+    async def _channel_cover_url(self, channel_id: int) -> str | None:
+        """频道封面绝对 URL（T00731：预制封面），无封面返回 None。"""
+        from app.models import Channel as ChannelModel
+        row = await self.db.execute(
+            select(ChannelModel.cover_url).where(ChannelModel.id == channel_id)
+        )
+        curl = row.scalar_one_or_none()
+        if not curl:
+            return None
+        return curl if curl.startswith("http") else self._resolve_audio_base_url() + curl
+
     def _episode_to_dict(episode: Episode) -> dict:
         """统一 Episode 序列化，避免多处重复。
 

@@ -84,9 +84,18 @@
       bindtap="onTapEpisode"
     >
       <view class="row-cover">
-        <text class="row-cover-channel">{{item.channel_name || '节目'}}</text>
-        <text class="row-cover-date">{{item.date_label || ''}}</text>
-        <!-- 已播放角标：与未播放的卡片形成视觉区分 -->
+        <!-- T00731：频道 AI 封面（无封面回退文字占位）；已播放角标保留 -->
+        <image
+          wx:if="{{item.channel_cover}}"
+          class="row-cover-img"
+          src="{{item.channel_cover}}"
+          mode="aspectFill"
+          lazy-load
+        />
+        <block wx:else>
+          <text class="row-cover-channel">{{item.channel_name || '节目'}}</text>
+          <text class="row-cover-date">{{item.date_label || ''}}</text>
+        </block>
         <text class="played-badge" wx:if="{{item.played}}">已播放</text>
       </view>
       <view class="row-main">
