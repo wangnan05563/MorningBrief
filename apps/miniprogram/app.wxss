@@ -80,7 +80,7 @@ page {
   padding: 22rpx 48rpx;
   font-size: 30rpx;
   font-weight: 500;
-  border: 2rpx solid var(--accent);
+  /* T00753 全局统一：按钮无边框（扁平化） */
   text-align: center;
   overflow: hidden;
   position: relative;
@@ -88,26 +88,24 @@ page {
 
 .btn-primary:active {
   background: var(--accent-dark);
-  border-color: var(--accent-dark);
 }
 
 /* 次按钮：浅底 + 商务蓝文字 + 浅描边（替代原粉色底方案） */
 .btn-secondary {
-  background: var(--bg-card);
+  background: var(--accent-soft);
   color: var(--accent);
   border-radius: var(--radius-btn);
   padding: 22rpx 48rpx;
   font-size: 30rpx;
   font-weight: 500;
-  border: 2rpx solid var(--border-strong);
+  /* T00753 全局统一：按钮无边框，层级靠浅底 */
   text-align: center;
   overflow: hidden;
   position: relative;
 }
 
 .btn-secondary:active {
-  background: var(--accent-soft);
-  border-color: var(--accent);
+  background: var(--bg-subtle);
 }
 
 /* 按钮内容层：图标 + 文字水平居中 */
@@ -150,7 +148,7 @@ page {
 /* === 标准化图标按钮（ICON-BUTTON 规范） ===
    所有「图标即按钮」的场景统一引用本组类，保证跨页面尺寸与点击区一致：
    - 触控区 ≥ 88rpx（微信建议最小 40px ≈ 80rpx，留余量）
-   - 图标 44rpx，线框风格统一描边色 --text-secondary / 激活态 --accent
+   - 图标 44rpx，扁平风格统一前景色 --text-secondary / 激活态 --accent（T00753 去描边）
    - 无中文文案，语义靠图标 + aria-label 承载 */
 .icon-btn {
   display: flex;
@@ -159,10 +157,11 @@ page {
   min-width: 88rpx;
   min-height: 88rpx;
   border-radius: var(--radius-btn);
-  background: var(--bg-card);
-  border: 2rpx solid var(--border);
+  /* T00753 全局统一：图标按钮扁平化——无描边，靠底色/激活色区分 */
+  background: transparent;
+  border: none;
   color: var(--text-secondary);
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 
 .icon-btn:active {
@@ -171,7 +170,6 @@ page {
 
 .icon-btn.active {
   background: var(--accent-soft);
-  border-color: var(--accent);
 }
 
 .icon-btn-img {
@@ -259,9 +257,9 @@ page {
   padding: 0 40rpx !important;
   margin: 0 !important;
   border-radius: var(--radius-btn) !important;
-  background: var(--bg-card) !important;
+  background: var(--accent-soft) !important;
   color: var(--accent) !important;
-  border: 2rpx solid var(--border) !important;
+  /* T00753 全局统一：按钮无边框 */
   font-size: 26rpx !important;
 }
 

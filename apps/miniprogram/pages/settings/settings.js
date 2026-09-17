@@ -7,7 +7,7 @@
  * - 接入埋点
  */
 const STORAGE_KEY_SETTINGS = 'news_settings';
-const { setPlaybackRate, setAutoPlayNext } = require('../../services/audio');
+const { setPlaybackRate, setAutoPlayNext, setWifiOnlyAutoPlay } = require('../../services/audio');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 const { requestSubscribeMessageByType } = require('../../services/api');
 
@@ -91,6 +91,8 @@ Page({
     const value = e.detail.value;
     this.setData({ wifiOnlyAutoPlay: value });
     this.saveSettings({ wifiOnlyAutoPlay: value });
+    // 同步到 audio.js 全局开关：让「仅 WiFi 自动播放」真正生效（A3 接线）
+    setWifiOnlyAutoPlay(value);
     trackEvent('settings', 'change_wifi_only', '', value ? 1 : 0);
   },
 
@@ -130,7 +132,7 @@ Page({
     wx.showModal({
       title: '清除缓存',
       content: '将清除本地缓存（保留登录信息与设置），确定继续？',
-      confirmColor: '#FF6B8A',
+      confirmColor: '#B0554A',
       success: (res) => {
         if (!res.confirm) return;
         try {
@@ -149,5 +151,46 @@ Page({
         }
       },
     });
+  },
+
+  /**
+   * 手动检查更新（B6）：主动触发版本检测，弥补 onLaunch 仅 release 自动弹、无手动入口的问题。
+   * 有更新时弹重启确认；无更新明确提示「已是最新」；弱网/失败时降级提示。
+   */
+  onCheckUpdate() {
+    const updateManager = wx.getUpdateManager();
+    wx.showLoading({ title: '检查中...' });
+    updateManager.onCheckForUpdate((res) => {
+      wx.hideLoading();
+      if (res.hasUpdate) {
+        trackEvent('settings', 'check_update', 'has_update');
+      }
+    });
+    updateManager.onUpdateReady(() => {
+      wx.showModal({
+        title: '更新提示',
+        content: '新版本已就绪，是否重启应用？',
+        confirmColor: '#3F6C8F',
+        success: (r) => {
+          if (r.confirm) updateManager.applyUpdate();
+        },
+      });
+    });
+    updateManager.onUpdateFailed(() => {
+      wx.hideLoading();
+      wx.showToast({ title: '更新失败，请稍后重试', icon: 'none' });
+    });
+    // 兜底：若干时间内无任何回调（如已是最新且 onCheckForUpdate 未触发），给出明确反馈
+    setTimeout(() => {
+      wx.hideLoading();
+      wx.showToast({ title: '已是最新版本', icon: 'none' });
+    }, 2000);
+  },
+
+  /**
+   * 跳转关于页（B6）：设置页新增入口，避免在设置与关于间反复切换 tab
+   */
+  onOpenAbout() {
+    wx.navigateTo({ url: '/pages/about/about' });
   },
 });

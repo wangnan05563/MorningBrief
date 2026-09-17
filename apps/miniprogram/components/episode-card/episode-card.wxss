@@ -78,8 +78,9 @@
   justify-content: center;
   min-height: 88rpx;
   border-radius: var(--radius-pill);
-  background: var(--bg-card);
-  border: 2rpx solid var(--border);
+  /* T00753 全局统一：图标按钮扁平化——无描边（组件自包含，与 app.wxss 规范对齐） */
+  background: transparent;
+  border: none;
   transition: all 0.15s ease;
 }
 

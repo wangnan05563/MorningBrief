@@ -275,8 +275,8 @@
   height: 88rpx;
   padding: 0;
   border-radius: var(--radius-btn);
-  background: var(--bg-card);
-  border: 2rpx solid var(--border);
+  background: var(--accent-soft);
+  /* T00753 全局统一：按钮无边框 */
   color: var(--accent);
   transition: all 0.2s ease;
 }

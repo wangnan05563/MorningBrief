@@ -11,11 +11,11 @@
     </view>
     <view class="list-item">
       <text class="list-text">自动播放下一条</text>
-      <switch checked="{{autoPlayNext}}" bindchange="onAutoPlayNextChange" color="#5BA89B" />
+      <switch checked="{{autoPlayNext}}" bindchange="onAutoPlayNextChange" color="#3F6C8F" />
     </view>
     <view class="list-item">
       <text class="list-text">仅 WiFi 下自动播放</text>
-      <switch checked="{{wifiOnlyAutoPlay}}" bindchange="onWifiOnlyChange" color="#5BA89B" />
+      <switch checked="{{wifiOnlyAutoPlay}}" bindchange="onWifiOnlyChange" color="#3F6C8F" />
     </view>
   </view>
 
@@ -24,7 +24,7 @@
   <view class="card list-card">
     <view class="list-item">
       <text class="list-text">新节目通知</text>
-      <switch checked="{{notifyNewEpisode}}" bindchange="onNotifyChange" color="#5BA89B" />
+      <switch checked="{{notifyNewEpisode}}" bindchange="onNotifyChange" color="#3F6C8F" />
     </view>
   </view>
 
@@ -34,6 +34,19 @@
     <view class="list-item" bindtap="onClearCache">
       <text class="list-text">清除缓存</text>
       <view class="list-extra">{{cacheSize}} <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" /></view>
+    </view>
+  </view>
+
+  <!-- 关于与更新 -->
+  <view class="settings-section-title">关于与更新</view>
+  <view class="card list-card">
+    <view class="list-item" bindtap="onCheckUpdate">
+      <text class="list-text">检查更新</text>
+      <view class="list-extra"><image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" /></view>
+    </view>
+    <view class="list-item" bindtap="onOpenAbout">
+      <text class="list-text">关于南屿听记</text>
+      <view class="list-extra"><image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" /></view>
     </view>
   </view>
 </view>

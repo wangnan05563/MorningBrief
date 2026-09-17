@@ -99,7 +99,7 @@
 }
 .sub-btn.subscribed {
   background: var(--accent-soft);
-  border: 2rpx solid var(--border);
+  /* T00753 全局统一：按钮无边框 */
 }
 .sub-btn-icon {
   width: 40rpx;
@@ -161,7 +161,7 @@
 }
 .btn-ghost {
   background: var(--accent-soft);
-  border: 2rpx solid var(--border);
+  /* T00753 全局统一：按钮无边框 */
 }
 .btn-ghost .btn-icon {
   margin-right: 0;

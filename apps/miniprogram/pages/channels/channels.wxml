@@ -1,9 +1,16 @@
 <!-- 频道管理页 -->
 <view class="page-channels">
-  <!-- 加载中 -->
-  <view class="loading-mask" wx:if="{{loading}}">
-    <text>加载中...</text>
-    <!-- T00599：分级加载提示——慢加载文案 / 超时重试入口（T00602 单独落地；A8 骨架屏落地后由其版本接管） -->
+  <!-- 加载中骨架屏（A8）：频道卡占位，避免弱网白屏 -->
+  <view class="skeleton-wrap" wx:if="{{loading}}">
+    <view class="skeleton-card" wx:for="{{[1,2,3,4]}}" wx:key="*this">
+      <view class="sk-avatar shimmer"></view>
+      <view class="sk-lines">
+        <view class="sk-line shimmer"></view>
+        <view class="sk-line short shimmer"></view>
+      </view>
+      <view class="sk-btn shimmer"></view>
+    </view>
+    <!-- T00599：分级加载提示——慢加载文案 / 超时重试入口（骨架保持） -->
     <view class="load-hint" wx:if="{{loadingSlow}}">网络较慢，正在加载…</view>
     <view class="load-retry-wrap" wx:if="{{loadingTimedOut}}">
       <button class="load-retry-btn" bindtap="onRetryLoad" hover-class="none">重试</button>
@@ -48,3 +55,6 @@
     </view>
   </block>
 </view>
+
+<!-- 全局浮动播放器：离开 tab 后仍可看到并控制后台播放（B4） -->
+<floating-player />

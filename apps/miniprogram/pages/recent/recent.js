@@ -23,6 +23,11 @@ Page({
     this.loadRecent(true);
   },
 
+  onShow() {
+    // 从详情页返回时静默刷新最近播放列表（与 favorites 对齐），反映新播放记录
+    this.loadRecent(true);
+  },
+
   async loadRecent(first) {
     if (this.data.loading && !first) return;
     if (first) {

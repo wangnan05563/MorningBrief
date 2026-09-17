@@ -30,6 +30,7 @@
   display: flex;
   align-items: center;
   transition: background 0.2s, border-color 0.2s;
+  /* T00753：仅占位（选中态无边框），保留透明占位避免布局跳动 */
   border: 2rpx solid transparent;
 }
 .channel-item.selected {
@@ -98,8 +99,8 @@
   width: 88rpx;
   height: 88rpx;
   border-radius: var(--radius-btn);
-  background: var(--bg-subtle);
-  border: 2rpx solid var(--border);
+  background: var(--accent-soft);
+  /* T00753 全局统一：按钮无边框 */
 }
 
 .select-all-btn:active {

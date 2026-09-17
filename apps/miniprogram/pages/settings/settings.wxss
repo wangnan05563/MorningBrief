@@ -7,7 +7,7 @@
 .settings-section-title {
   padding: 32rpx 48rpx 12rpx;
   font-size: 26rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 /* 设置列表：复用 profile 页 list-item 风格 */
@@ -20,7 +20,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 28rpx 0;
-  border-bottom: 2rpx solid #F0F4F2;
+  border-bottom: 2rpx solid var(--bg-subtle);
 }
 
 .list-item:last-child {
@@ -29,14 +29,14 @@
 
 .list-text {
   font-size: 30rpx;
-  color: #2D3748;
+  color: var(--text-primary);
 }
 
 .list-extra {
   display: flex;
   align-items: center;
   font-size: 28rpx;
-  color: #A0AEC0;
+  color: var(--text-muted);
 }
 
 .list-arrow {

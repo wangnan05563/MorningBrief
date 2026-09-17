@@ -301,7 +301,7 @@
 
 .edit-btn-cancel {
   background: var(--bg-subtle);
-  border: 2rpx solid var(--border);
+  /* T00753 全局统一：按钮无边框 */
 }
 
 .edit-btn-confirm {
@@ -423,7 +423,7 @@
   border-radius: var(--radius-btn) !important;
   background: var(--bg-subtle) !important;
   color: var(--accent) !important;
-  border: 2rpx solid var(--border) !important;
+  /* T00753 全局统一：按钮无边框 */
   font-size: 26rpx !important;
 }
 
