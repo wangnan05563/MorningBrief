@@ -20,6 +20,8 @@
   <block wx:else>
     <!-- 顶部稿件图片轮播：进页自动从文稿解析，按出现顺序；自动播放 + 手动切换 + 加载失败占位 -->
     <view class="card carousel-card" wx:if="{{carouselImages.length > 0}}">
+      <!-- T00724：顶部流光动画——柔和光带沿播放框上边缘往复扫过 -->
+      <view class="light-sweep" aria-hidden="true"></view>
       <swiper
         class="carousel-swiper"
         indicator-dots="{{carouselImages.length > 1}}"
