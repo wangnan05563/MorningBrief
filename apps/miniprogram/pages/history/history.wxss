@@ -327,27 +327,31 @@
   margin-bottom: 8rpx;
 }
 
+/* 工具按钮（排序 / 播放列表）：T00753 反馈——去边框与背景，纯图标简洁风格 */
 .tool-chip {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 88rpx;
+  width: 88rpx;    /* 保留 88rpx 触控区（微信最小点击区建议） */
   height: 88rpx;
   padding: 0;
-  border-radius: var(--radius-btn);
-  background: var(--accent-soft);
-  /* T00753 全局统一：按钮无边框 */
+  border-radius: 50%;
+  background: transparent;
+  border: none;
   color: var(--accent);
-  transition: all 0.2s ease;
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
+/* 按下反馈：仅靠透明度与轻微缩放（无底色） */
 .tool-chip:active {
-  background: var(--accent-soft);
+  background: transparent;
+  opacity: 0.55;
+  transform: scale(0.94);
 }
 
 .tool-icon {
-  width: 40rpx;
-  height: 40rpx;
+  width: 44rpx;   /* 去底后适度放大，保证可辨识 */
+  height: 44rpx;
   transition: transform 0.2s ease;
 }
 
