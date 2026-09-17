@@ -76,6 +76,6 @@ export const recommendChannelSources = (id) => api.post(`/channels/${id}/recomme
 /**
  * 列出服务端预制封面（/channel-assets 下的 channel_{id}.{jpg|png|webp}）
  * 供「编辑频道」页直接选图，避免手输 URL
- * @returns {Promise<Array<{channel_id:number,name:string,url:string,size_kb:number}>>}
+ * @returns {Promise<Array<{channel_id:number,name:string,url:string,size_kb:number,mtime:number}>>} mtime=文件修改时间（秒），供缩略图加 ?v= 版本号
  */
 export const listCoverPresets = () => api.get('/channels/cover-presets')

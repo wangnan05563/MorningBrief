@@ -527,7 +527,7 @@
           :class="{ active: form.cover_url === p.url }"
           @click="applyCoverPreset(p)"
         >
-          <img class="cover-picker-thumb" :src="p.url" :alt="p.name" loading="lazy" />
+          <img class="cover-picker-thumb" :src="coverPreviewUrl(p)" :alt="p.name" loading="lazy" />
           <div class="cover-picker-name">#{{ p.channel_id }} {{ p.name }}</div>
           <div class="cover-picker-meta">{{ p.size_kb }} KB</div>
         </div>
@@ -766,6 +766,15 @@ async function openCoverPicker() {
   } finally {
     coverPresetsLoading.value = false
   }
+}
+
+/**
+ * 缩略图 URL：附文件 mtime 作版本号。
+ * 封面插画可能被重制替换（同路径换图），不带版本号时浏览器会沿用旧缓存，
+ * 表现为「封面图片未正常显示 / 显示旧图」。注意写入 cover_url 的仍是干净的 p.url。
+ */
+function coverPreviewUrl(preset) {
+  return preset.mtime ? `${preset.url}?v=${preset.mtime}` : preset.url
 }
 
 /** 点击缩略图即套用该预制封面（写入 cover_url，保存时随表单提交） */

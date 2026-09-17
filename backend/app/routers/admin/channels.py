@@ -818,6 +818,9 @@ async def list_cover_presets(
 
     扫描 channel_assets 目录下 channel_{id}.{jpg|png|webp}，文件名中的 id 与频道对齐，
     频道名作为展示标签返回；按频道 id 升序，便于与频道列表同序浏览。
+
+    另返回 mtime（文件修改时间，秒）：封面插画可能被重制替换（同路径换图），
+    前端据此给缩略图加 `?v=` 版本号，避免浏览器沿用旧图缓存。
     """
     asset_dir = resolve_channel_asset_dir()
     result = await db.execute(select(Channel.id, Channel.name))
@@ -832,11 +835,13 @@ async def list_cover_presets(
         if not m:
             continue
         cid = int(m.group(1))
+        stat = path.stat()
         presets.append({
             "channel_id": cid,
             "name": name_by_id.get(cid, path.stem),
             "url": _asset_url(path.name),
-            "size_kb": round(path.stat().st_size / 1024, 1),
+            "size_kb": round(stat.st_size / 1024, 1),
+            "mtime": int(stat.st_mtime),
         })
     presets.sort(key=lambda p: p["channel_id"])
     return success(data=presets)
