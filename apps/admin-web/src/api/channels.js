@@ -11,6 +11,17 @@ export const createChannel = (data) => api.post('/channels', data)
 export const updateChannel = (id, data) => api.put(`/channels/${id}`, data)
 export const deleteChannel = (id) => api.delete(`/channels/${id}`)
 
+// ===== T00730 频道图标：上传 / AI 生成 =====
+export const uploadChannelIcon = (id, file) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  return api.post(`/channels/${id}/icon`, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+export const generateChannelIcon = (id, prompt) =>
+  api.post(`/channels/${id}/icon/ai-generate`, { prompt }, { timeout: 180000 })
+
 /**
  * AI 自动生成频道提示词
  * 调用 LLM 根据频道 name + description 生成 intro/outro/constraint/template
@@ -51,8 +62,20 @@ export const recommendChannelBgm = (id) => api.post(`/channels/${id}/recommend-b
 /** 列出 rss.yaml 中所有可用的 RSS 源，供频道配置选择 */
 export const listRssSources = () => api.get('/channels/rss/sources')
 
+/** 列出 book_rss.yaml 中所有可用的书籍 RSS 预制源，供 audiobook 频道配置选择 */
+export const listBookRssSources = () => api.get('/channels/book-rss/sources')
+
 /**
  * AI 推荐频道 RSS 源与关键词（根据频道定位从可用源中选择最匹配的子集 + 生成关键词）
  * LLM 推荐耗时与 BGM 推荐相当，超时设为 60s 与 recommendChannelBgm 保持一致
  */
 export const recommendChannelSources = (id) => api.post(`/channels/${id}/recommend-sources`, {}, { timeout: 60000 })
+
+// ===== T00731 预制频道封面 =====
+
+/**
+ * 列出服务端预制封面（/channel-assets 下的 channel_{id}.{jpg|png|webp}）
+ * 供「编辑频道」页直接选图，避免手输 URL
+ * @returns {Promise<Array<{channel_id:number,name:string,url:string,size_kb:number}>>}
+ */
+export const listCoverPresets = () => api.get('/channels/cover-presets')

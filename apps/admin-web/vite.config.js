@@ -30,13 +30,22 @@ export default defineConfig(({ command }) => ({
     },
   },
   server: {
-    port: 5173,
+    // 端口固定 5181（5173 与其他项目冲突）；strictPort 禁止 Vite 自动跳号，
+    // 保证实际端口与测试/文档引用一致
+    port: 5181,
+    strictPort: true,
     // 开发环境代理：/news/admin/api → 后端 FastAPI（去除 /news 前缀）
     proxy: {
       '/news/admin/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/news/, ''),
+      },
+      // 频道资源（图标/预制封面）静态目录：生产同源直取 /channel-assets，
+      // dev 态代理到后端，保证图标与封面预览可见（T00730/T00731）
+      '/channel-assets': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
       },
     },
   },

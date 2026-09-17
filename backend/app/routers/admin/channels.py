@@ -1,22 +1,24 @@
-"""B 端频道管理路由。"""
-import asyncio
+﻿"""B 端频道管理路由。"""
 import logging
+import asyncio
 import json
 import os
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query, UploadFile, File, UploadFile, File
+from fastapi import APIRouter, Depends, Query, UploadFile, File
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache.manager import cache as cache_manager
+from app.core.audio_modes import VALID_GAP_MODES
 from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success, error
 from app.database import get_db
 from app.models import AuditLog, Channel
-from app.paths import resolve_bgm_dir
+from app.paths import resolve_bgm_dir, resolve_channel_asset_dir
 from app.services.channel_service import ChannelService, _TTL_CHANNELS
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,32 @@ router = APIRouter(prefix="/admin/api/v1/channels", tags=["B端-频道管理"])
 
 # 频道不存在错误消息常量（统一字面量，避免 S1192 字符串重复告警）
 _CHANNEL_NOT_FOUND_MSG = "频道不存在"
+
+
+def _normalize_schedule_time(v: str) -> str:
+    """将宽松的定时时间输入归一化为 HH:MM:SS。
+
+    兼容用户常见的简写形式（前端为自由文本输入框，未强制零填充）：
+    - 2 段：H:MM / HH:MM（秒默认补 0），如 "4:00" -> "04:00:00"
+    - 3 段：H:MM:SS / HH:MM:SS，如 "4:0:5" -> "04:00:05"
+    前后空格会被忽略；各段按 2 位零填充。非法格式抛出 ValueError 由 Pydantic 转 422。
+    """
+    v = v.strip()
+    parts = v.split(":")
+    if len(parts) not in (2, 3):
+        raise ValueError("schedule_time 格式应为 HH:MM:SS（或 HH:MM）")
+    try:
+        nums = [int(p) for p in parts]
+    except ValueError:
+        raise ValueError("schedule_time 时分秒必须为数字")
+    if len(nums) == 2:
+        h, m = nums
+        s = 0
+    else:
+        h, m, s = nums
+    if not (0 <= h <= 23 and 0 <= m <= 59 and 0 <= s <= 59):
+        raise ValueError("schedule_time 时分秒超出范围")
+    return f"{h:02d}:{m:02d}:{s:02d}"
 
 
 class ChannelCreateRequest(BaseModel):
@@ -47,6 +75,8 @@ class ChannelCreateRequest(BaseModel):
     enable_thinking_question: int | None = None
     # 频道专属 RSS 源列表（JSON 数组字符串，如 '["游民星空-资讯"]'），为空使用全部源
     rss_sources: str | None = None
+    # 频道专属书籍 RSS 源列表（JSON 数组字符串，如 '["豆瓣读书-书评"]'），仅 audiobook 频道使用
+    book_rss_sources: str | None = None
     # 频道关键词过滤（逗号分隔，如 "游戏,主机,PS5"），为空表示不过滤
     keywords: str | None = None
     min_duration_sec: int | None = None
@@ -84,20 +114,10 @@ class ChannelCreateRequest(BaseModel):
     @field_validator("schedule_time")
     @classmethod
     def validate_schedule_time(cls, v: str | None) -> str | None:
-        """校验定时时间格式 HH:MM:SS。"""
+        """校验并归一化定时时间：兼容 HH:MM:SS 与 HH:MM，统一输出 HH:MM:SS。"""
         if v is None or v == "":
             return None
-        v = v.strip()
-        parts = v.split(":")
-        if len(parts) != 3:
-            raise ValueError("schedule_time 格式应为 HH:MM:SS")
-        try:
-            h, m, s = int(parts[0]), int(parts[1]), int(parts[2])
-        except ValueError:
-            raise ValueError("schedule_time 时分秒必须为数字")
-        if not (0 <= h <= 23 and 0 <= m <= 59 and 0 <= s <= 59):
-            raise ValueError("schedule_time 时分秒超出范围")
-        return f"{h:02d}:{m:02d}:{s:02d}"
+        return _normalize_schedule_time(v)
 
     @field_validator("bgm_volume")
     @classmethod
@@ -117,8 +137,8 @@ class ChannelCreateRequest(BaseModel):
         if v == "":
             # 空字符串视为"继承全局"：兜底前端 inherit_bgm_gap 发送 null 之外的脏输入
             return None
-        if v not in ("silence", "bridge"):
-            raise ValueError("bgm_gap_mode 仅支持 silence / bridge")
+        if v not in VALID_GAP_MODES:
+            raise ValueError("bgm_gap_mode 仅支持 " + " / ".join(VALID_GAP_MODES))
         return v
 
     @field_validator("material_lookback_days")
@@ -195,6 +215,7 @@ class ChannelUpdateRequest(BaseModel):
     bgm_gap_mode: str | None = None
     enable_thinking_question: int | None = None
     rss_sources: str | None = None
+    book_rss_sources: str | None = None
     keywords: str | None = None
     # 展示排序权重：值越小越靠前；相等时按 id 兜底。运营可调整以控制小程序 tab 顺序
     display_order: int | None = None
@@ -220,17 +241,7 @@ class ChannelUpdateRequest(BaseModel):
     def validate_schedule_time(cls, v: str | None) -> str | None:
         if v is None or v == "":
             return ""
-        v = v.strip()
-        parts = v.split(":")
-        if len(parts) != 3:
-            raise ValueError("schedule_time 格式应为 HH:MM:SS")
-        try:
-            h, m, s = int(parts[0]), int(parts[1]), int(parts[2])
-        except ValueError:
-            raise ValueError("schedule_time 时分秒必须为数字")
-        if not (0 <= h <= 23 and 0 <= m <= 59 and 0 <= s <= 59):
-            raise ValueError("schedule_time 时分秒超出范围")
-        return f"{h:02d}:{m:02d}:{s:02d}"
+        return _normalize_schedule_time(v)
 
     @field_validator("bgm_volume")
     @classmethod
@@ -250,8 +261,8 @@ class ChannelUpdateRequest(BaseModel):
         if v == "":
             # 空字符串视为"继承全局"：兜底前端 inherit_bgm_gap 发送 null 之外的脏输入
             return None
-        if v not in ("silence", "bridge"):
-            raise ValueError("bgm_gap_mode 仅支持 silence / bridge")
+        if v not in VALID_GAP_MODES:
+            raise ValueError("bgm_gap_mode 仅支持 " + " / ".join(VALID_GAP_MODES))
         return v
 
     @field_validator("material_lookback_days")
@@ -333,6 +344,7 @@ def _channel_to_dict(ch) -> dict:
         "bgm_gap_mode": ch.bgm_gap_mode,
         "enable_thinking_question": ch.enable_thinking_question,
         "rss_sources": ch.rss_sources,
+        "book_rss_sources": ch.book_rss_sources,
         "keywords": ch.keywords,
         "min_duration_sec": ch.min_duration_sec,
         "display_order": ch.display_order,
@@ -392,6 +404,7 @@ async def create_channel(
             bgm_gap_mode=req.bgm_gap_mode,
             enable_thinking_question=req.enable_thinking_question,
             rss_sources=req.rss_sources,
+            book_rss_sources=req.book_rss_sources,
             keywords=req.keywords,
             min_duration_sec=req.min_duration_sec,
             display_order=req.display_order,
@@ -457,6 +470,7 @@ async def update_channel(
             bgm_gap_mode=req.bgm_gap_mode,
             enable_thinking_question=req.enable_thinking_question,
             rss_sources=req.rss_sources,
+            book_rss_sources=req.book_rss_sources,
             keywords=req.keywords,
             display_order=req.display_order,
             material_lookback_days=req.material_lookback_days,
@@ -695,6 +709,25 @@ async def list_rss_sources(
     return success(data={"sources": sources})
 
 
+@router.get("/book-rss/sources")
+async def list_book_rss_sources(
+    admin: AdminPayload = Depends(get_current_admin),
+):
+    """列出 book_rss.yaml 中所有可用的书籍 RSS 预制源，供 audiobook 频道配置选择。
+
+    admin + operator 均可查看。返回源名称、品类、权威度，前端用于多选下拉。
+    该预制源面向有声读物场景（条目即书/章），由 crawler 仅对 audiobook 频道加载。
+    """
+    from app.services.rss_source_service import (
+        load_book_fulltext_sources_summary,
+        load_book_rss_sources_summary,
+    )
+    # T00603：全文源与 RSS 书源合并返回，kind 字段区分（book_rss / fulltext），
+    # 前端多选下拉直接展示全部可选书籍源；旧前端忽略 kind 也不受影响。
+    sources = load_book_rss_sources_summary() + load_book_fulltext_sources_summary()
+    return success(data={"sources": sources})
+
+
 @router.post("/{channel_id}/recommend-bgm")
 async def recommend_bgm(
     channel_id: int,
@@ -758,6 +791,8 @@ async def recommend_sources(
         return error(code=400, message=str(e))
 
     return success(data=recommendation)
+
+
 # ===== T00730 频道图标：上传 / AI 生成 =====
 
 _ICON_ALLOWED = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}
@@ -772,6 +807,39 @@ def _media_base_url() -> str:
 def _asset_url(filename: str) -> str:
     """拼接 /channel-assets 静态 URL（相对路径，前端按当前 API 域名补全）。"""
     return f"/channel-assets/{filename}"
+
+
+@router.get("/cover-presets")
+async def list_cover_presets(
+    db: AsyncSession = Depends(get_db),
+    _: AdminPayload = Depends(require_admin),
+):
+    """列出预制频道封面（T00731），供「编辑频道」页直接选图，免手输 URL。
+
+    扫描 channel_assets 目录下 channel_{id}.{jpg|png|webp}，文件名中的 id 与频道对齐，
+    频道名作为展示标签返回；按频道 id 升序，便于与频道列表同序浏览。
+    """
+    asset_dir = resolve_channel_asset_dir()
+    result = await db.execute(select(Channel.id, Channel.name))
+    name_by_id = {cid: cname for cid, cname in result.all()}
+
+    presets: list[dict] = []
+    for path in sorted(asset_dir.iterdir()):
+        if not path.is_file() or path.suffix.lower() not in {".jpg", ".jpeg", ".png", ".webp"}:
+            continue
+        # 只认预制封面命名（channel_{id}.ext），排除 channel_{id}_icon.ext 图标文件
+        m = re.fullmatch(r"channel_(\d+)", path.stem)
+        if not m:
+            continue
+        cid = int(m.group(1))
+        presets.append({
+            "channel_id": cid,
+            "name": name_by_id.get(cid, path.stem),
+            "url": _asset_url(path.name),
+            "size_kb": round(path.stat().st_size / 1024, 1),
+        })
+    presets.sort(key=lambda p: p["channel_id"])
+    return success(data=presets)
 
 
 @router.post("/{channel_id}/icon")

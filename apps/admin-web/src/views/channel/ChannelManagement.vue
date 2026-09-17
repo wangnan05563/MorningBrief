@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-container channel-management">
     <!-- 工具栏：新增按钮（仅 admin 可见），标题由顶部导航栏提供 -->
     <div class="top-bar">
@@ -38,7 +38,8 @@
         </el-table-column>
         <el-table-column label="段间BGM" width="120">
           <template #default="{ row }">
-            <span v-if="row.bgm_gap_mode === 'bridge'">BGM桥接</span>
+            <span v-if="row.bgm_gap_mode === 'continuous'">连续衔接</span>
+            <span v-else-if="row.bgm_gap_mode === 'bridge'">BGM桥接</span>
             <span v-else-if="row.bgm_gap_mode === 'silence'">真实静音</span>
             <span v-else class="text-muted">继承全局</span>
           </template>
@@ -88,7 +89,7 @@
           <el-input v-model="form.description" type="textarea" :rows="2" placeholder="频道描述（选填）" />
         </el-form-item>
         <el-form-item label="定时触发">
-          <el-input v-model="form.schedule_time" placeholder="HH:MM:SS（如 04:00:00），留空使用全局默认" style="width: 280px" />
+          <el-input v-model="form.schedule_time" placeholder="HH:MM:SS 或 HH:MM（如 04:00:00 / 4:00），留空使用全局默认" style="width: 280px" />
           <span class="form-tip">为空则使用全局 cron（05:00）触发</span>
         </el-form-item>
         <el-form-item label="启用">
@@ -168,7 +169,29 @@
           <span class="form-tip">课程/资料类须显式「强提示」：AI 生成内容不构成专业建议</span>
         </el-form-item>
         <el-form-item label="封面图">
-          <el-input v-model="form.cover_url" placeholder="封面图 URL（留空用类型默认封面）" style="width: 360px" />
+          <div class="cover-editor">
+            <!-- 已选封面预览：3:4 移动端比例缩略图，加载失败给占位 -->
+            <el-image
+              v-if="form.cover_url"
+              class="cover-preview"
+              :src="form.cover_url"
+              fit="cover"
+            >
+              <template #error>
+                <div class="cover-preview cover-preview-empty">加载失败</div>
+              </template>
+            </el-image>
+            <div v-else class="cover-preview cover-preview-empty">无封面</div>
+            <div class="cover-fields">
+              <el-input v-model="form.cover_url" placeholder="封面图 URL（留空用类型默认封面）" style="width: 360px" />
+              <el-button :icon="Picture" style="margin-left: 8px" @click="openCoverPicker">
+                选择预制封面
+              </el-button>
+              <div class="form-tip">
+                预制封面为各频道主题专属插画（3:4，移动端适配），点击缩略图即可套用
+              </div>
+            </div>
+          </div>
         </el-form-item>
 
         <!-- 提示词区：折叠面板，减少视觉负担 -->
@@ -310,13 +333,14 @@
             <el-select
               v-model="form.bgm_gap_mode"
               :disabled="form.inherit_bgm_gap"
-              style="width: 200px"
+              style="width: 260px"
             >
-              <el-option label="真实静音（推荐）" value="silence" />
+              <el-option label="连续衔接（推荐，切换丝滑）" value="continuous" />
+              <el-option label="真实静音（段间停顿可感知）" value="silence" />
               <el-option label="BGM 桥接（旧版）" value="bridge" />
             </el-select>
           </div>
-          <span class="form-tip">段间静音处 BGM 的处理方式：真实静音=停顿可感知；BGM 桥接=旧版 BGM 铺满（无停顿感）</span>
+          <span class="form-tip">段间处理方式：连续衔接=段间交叉淡化无空档且 BGM 全程连续；真实静音=段间停顿可感知；BGM 桥接=旧版 BGM 铺满</span>
         </el-form-item>
         <el-form-item label="结尾思考">
           <el-switch
@@ -325,6 +349,50 @@
             :inactive-value="0"
           />
           <span class="form-tip">开启后每段新闻末尾自动追加引发思考的问题</span>
+        </el-form-item>
+
+        <!-- T00730 频道图标：上传 / AI 生成 → 预览 → 确认使用 -->
+        <el-form-item label="频道图标">
+          <div class="icon-editor">
+            <el-image
+              v-if="form.icon_url"
+              class="icon-preview"
+              :src="form.icon_url"
+              fit="cover"
+            >
+              <template #error>
+                <div class="icon-preview icon-preview-empty">无图标</div>
+              </template>
+            </el-image>
+            <div v-else class="icon-preview icon-preview-empty">无图标</div>
+            <div class="icon-actions">
+              <el-upload
+                :show-file-list="false"
+                accept=".png,.jpg,.jpeg,.webp"
+                :http-request="doUploadIcon"
+              >
+                <el-button size="small" :loading="iconUploading" :disabled="!editing">上传图标</el-button>
+              </el-upload>
+              <div class="ai-gen-row">
+                <el-input
+                  v-model="iconPrompt"
+                  size="small"
+                  placeholder="主题关键词，如：番茄计时器"
+                  style="width: 190px"
+                  :disabled="!editing"
+                />
+                <el-button
+                  size="small"
+                  type="primary"
+                  plain
+                  :loading="iconGenerating"
+                  :disabled="!editing || !iconPrompt"
+                  @click="onGenerateIcon"
+                >AI 生成</el-button>
+              </div>
+              <span class="form-tip">PNG/JPG/WebP ≤2MB；AI 生成为圆角方形图标，生成后自动设为频道图标（可再次生成替换）</span>
+            </div>
+          </div>
         </el-form-item>
 
         <!-- 数据源配置区：RSS 源白名单 + 关键词过滤 -->
@@ -439,6 +507,32 @@
         <BookPoolPanel v-if="poolDialogVisible && form.id" :channel-id="form.id" />
       </el-dialog>
     </el-dialog>
+
+    <!-- T00731：预制封面选择弹窗（缩略图网格，点击即套用到「封面图」） -->
+    <el-dialog
+      v-model="coverPickerVisible"
+      title="选择预制封面"
+      width="760px"
+      append-to-body
+      destroy-on-close
+    >
+      <div v-loading="coverPresetsLoading" class="cover-picker">
+        <div v-if="!coverPresetsLoading && coverPresets.length === 0" class="cover-picker-empty">
+          服务端暂无预制封面（channel_assets 目录为空）
+        </div>
+        <div
+          v-for="p in coverPresets"
+          :key="p.channel_id"
+          class="cover-picker-item"
+          :class="{ active: form.cover_url === p.url }"
+          @click="applyCoverPreset(p)"
+        >
+          <img class="cover-picker-thumb" :src="p.url" :alt="p.name" loading="lazy" />
+          <div class="cover-picker-name">#{{ p.channel_id }} {{ p.name }}</div>
+          <div class="cover-picker-meta">{{ p.size_kb }} KB</div>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -446,9 +540,10 @@
 defineOptions({ name: 'ChannelManagement' })
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
-import { Plus, VideoPlay, Upload } from '@element-plus/icons-vue'
+import { Plus, VideoPlay, Upload, Picture } from '@element-plus/icons-vue'
 import BookPoolPanel from './BookPoolPanel.vue'
 import { getScriptMode, setScriptMode } from '../../api/bookPool'
+import { uploadChannelIcon, generateChannelIcon, listCoverPresets } from '../../api/channels'
 import {
   listChannels, createChannel, updateChannel, deleteChannel, generateChannelPrompts,
   listBgmFiles, uploadBgmFile, recommendChannelBgm, listRssSources, listBookRssSources, recommendChannelSources,
@@ -490,6 +585,8 @@ const uploadProgress = ref(0)
 
 // RSS 源列表（从 rss.yaml 加载，供频道配置选择）
 const rssSourcesList = ref([])
+// 书籍 RSS 预制源列表（从 book_rss.yaml 加载，仅 audiobook 频道选择）
+const bookRssSourcesList = ref([])
 // AI 推荐 RSS 源 + 关键词 loading
 const recommendingSources = ref(false)
 // AI 推荐理由（展示 LLM 选择依据）
@@ -517,14 +614,17 @@ const form = reactive({
   // 是否继承全局段间静音（AI 服务页配置）：勾选时提交 null，让该频道回退到全局值，
   // 否则频道始终使用自身 segment_gap_sec，会完全遮蔽 AI 服务页的全局设置
   inherit_segment_gap: false,
-  // 段间 BGM 模式：'silence'=真实静音（默认），'bridge'=BGM 桥接（旧版）
-  bgm_gap_mode: 'silence',
+  // 段间 BGM 模式：'continuous'=连续衔接（默认，交叉淡化无空档 + BGM 全程连续），
+  // 'silence'=真实静音（段间停顿可感知），'bridge'=BGM 桥接（旧版）
+  bgm_gap_mode: 'continuous',
   // 是否继承全局段间 BGM 模式（settings.BGM_GAP_MODE）：勾选时提交 null，回退全局
   inherit_bgm_gap: true,
   // 是否在每段新闻末尾追加思考问题（1=开启，0=关闭）
   enable_thinking_question: 1,
   // 频道专属 RSS 源（数组，空数组表示使用全部源）
   rss_sources: [],
+  // 频道专属书籍 RSS 源（数组，仅 audiobook 频道；空数组表示使用 book_rss.yaml 全部源）
+  book_rss_sources: [],
   // 频道关键词过滤（逗号分隔字符串，空表示不过滤）
   keywords: '',
   // 素材周期回溯天数：null（配合 lookbackEnabled=false）表示继承系统动态回溯；
@@ -587,6 +687,15 @@ async function loadRssSources() {
   }
 }
 
+async function loadBookRssSources() {
+  try {
+    const data = await listBookRssSources()
+    bookRssSourcesList.value = data.sources || []
+  } catch {
+    bookRssSourcesList.value = []
+  }
+}
+
 function resetForm() {
   form.id = null
   form.name = ''
@@ -603,7 +712,7 @@ function resetForm() {
   form.bgm_volume = 0.15
   form.segment_gap_sec = 0.5
   form.inherit_segment_gap = false
-  form.bgm_gap_mode = 'silence'
+  form.bgm_gap_mode = 'continuous'
   form.inherit_bgm_gap = true
   form.enable_thinking_question = 1
   form.rss_sources = []
@@ -632,6 +741,66 @@ function openCreate() {
   loadRssSources()
   loadBookRssSources()
   dialogVisible.value = true
+}
+
+// ===== T00730 频道图标（上传 / AI 生成） =====
+const iconUploading = ref(false)
+const iconGenerating = ref(false)
+const iconPrompt = ref('')
+
+// ===== T00731 预制封面选择 =====
+const coverPickerVisible = ref(false)
+const coverPresetsLoading = ref(false)
+const coverPresets = ref([])
+
+/** 打开预制封面弹窗：首次打开时拉取列表，已缓存则直接复用 */
+async function openCoverPicker() {
+  coverPickerVisible.value = true
+  if (coverPresets.value.length > 0) return
+  coverPresetsLoading.value = true
+  try {
+    coverPresets.value = (await listCoverPresets()) || []
+  } catch (e) {
+    // 错误提示由拦截器统一处理
+    coverPresets.value = []
+  } finally {
+    coverPresetsLoading.value = false
+  }
+}
+
+/** 点击缩略图即套用该预制封面（写入 cover_url，保存时随表单提交） */
+function applyCoverPreset(preset) {
+  form.cover_url = preset.url
+  coverPickerVisible.value = false
+  ElMessage.success(`已套用封面：${preset.name}`)
+}
+
+async function doUploadIcon(opt) {
+  if (!form.id) return
+  iconUploading.value = true
+  try {
+    const res = await uploadChannelIcon(form.id, opt.file)
+    form.icon_url = res?.icon_url || form.icon_url
+    ElMessage.success('图标已上传')
+  } catch (e) {
+    // 错误提示由拦截器统一处理
+  } finally {
+    iconUploading.value = false
+  }
+}
+
+async function onGenerateIcon() {
+  if (!form.id || !iconPrompt.value.trim()) return
+  iconGenerating.value = true
+  try {
+    const res = await generateChannelIcon(form.id, iconPrompt.value.trim())
+    form.icon_url = res?.icon_url || form.icon_url
+    ElMessage.success('AI 图标已生成并设为频道图标')
+  } catch (e) {
+    // 失败提示由拦截器统一处理（含网络不可达的明确文案）
+  } finally {
+    iconGenerating.value = false
+  }
 }
 
 // ===== T00656 讲书稿模式（编辑弹窗内） =====
@@ -690,7 +859,7 @@ function openEdit(row) {
   form.segment_gap_sec = row.segment_gap_sec !== null && row.segment_gap_sec !== undefined ? row.segment_gap_sec : 0.5
   // 频道未显式配置段间 BGM 模式（NULL）即视为继承全局
   form.inherit_bgm_gap = (row.bgm_gap_mode === null || row.bgm_gap_mode === undefined)
-  form.bgm_gap_mode = row.bgm_gap_mode || 'silence'
+  form.bgm_gap_mode = row.bgm_gap_mode || 'continuous'
   form.enable_thinking_question = row.enable_thinking_question !== null && row.enable_thinking_question !== undefined ? row.enable_thinking_question : 1
   // RSS 源：后端存储为 JSON 数组字符串，前端解析为数组用于多选绑定
   try {
@@ -706,6 +875,7 @@ function openEdit(row) {
   }
   // T00656：读取讲书稿模式状态（驱动数据源配置区的灰显与素材池链接）
   loadBookPoolState(row.id)
+  form.icon_url = row.icon_url || ''
   form.keywords = row.keywords || ''
   // 素材回溯：后端返回 null 表示继承动态回溯，对应不勾选自定义；
   // 非 null 则回填天数并勾选自定义，使 el-input-number 可编辑
@@ -734,6 +904,7 @@ function openEdit(row) {
   sourcesRecommendReason.value = ''
   loadBgmList()
   loadRssSources()
+  loadBookRssSources()
   dialogVisible.value = true
 }
 
@@ -743,6 +914,8 @@ async function handleSubmit() {
   try {
     // rss_sources 数组序列化为 JSON 字符串存储，空数组序列化为 "[]"
     const rssSourcesJson = JSON.stringify(form.rss_sources || [])
+    // 书籍 RSS 源同样序列化为 JSON 字符串（仅 audiobook 频道使用）
+    const bookRssSourcesJson = JSON.stringify(form.book_rss_sources || [])
     // 扩展 / 学习频道字段：manual_material_ids 仅在 manual 策略且文本非空时
     // 序列化为 JSON 数组；否则提交 null（清空/禁用），避免脏数据残留
     const extPayload = {
@@ -783,6 +956,7 @@ async function handleSubmit() {
         bgm_gap_mode: form.inherit_bgm_gap ? null : form.bgm_gap_mode,
         enable_thinking_question: form.enable_thinking_question,
         rss_sources: rssSourcesJson,
+        book_rss_sources: bookRssSourcesJson,
         keywords: form.keywords || '',
         // 素材回溯：未勾选自定义则提交 null 继承动态；勾选则用 el-input-number 的值
         material_lookback_days: form.lookbackEnabled ? form.material_lookback_days : null,
@@ -806,6 +980,7 @@ async function handleSubmit() {
         bgm_gap_mode: form.inherit_bgm_gap ? null : form.bgm_gap_mode,
         enable_thinking_question: form.enable_thinking_question,
         rss_sources: rssSourcesJson,
+        book_rss_sources: bookRssSourcesJson,
         keywords: form.keywords || '',
         // 素材回溯：未勾选自定义则提交 null 继承动态；勾选则用填写的天数
         material_lookback_days: form.lookbackEnabled ? form.material_lookback_days : null,
@@ -1052,5 +1227,128 @@ onMounted(() => {
     background: rgba(64, 158, 255, 0.08);
     border-radius: 4px;
   }
+}
+</style>
+
+<style scoped>
+/*
+ * T00730 频道图标编辑 + T00731 预制封面选择
+ *
+ * 说明：本块此前误置于上一个样式块结束标签之后，属 Vue 静默忽略的
+ * 死样式（图标预览/操作区规则实际从未生效），T00731 一并修正为独立 scoped 块。
+ */
+.icon-editor {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.icon-preview {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  border: 1px solid #dcdfe6;
+  flex-shrink: 0;
+}
+.icon-preview-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  font-size: 12px;
+  background: #f5f7fa;
+}
+.icon-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-gen-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* T00731 封面编辑：3:4 预览 + 输入 + 选择按钮 */
+.cover-editor {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.cover-preview {
+  width: 108px;
+  height: 144px;
+  border-radius: 8px;
+  border: 1px solid #dcdfe6;
+  flex-shrink: 0;
+}
+.cover-preview-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  font-size: 12px;
+  background: #f5f7fa;
+}
+.cover-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.cover-fields .form-tip {
+  flex-basis: 100%;
+}
+
+/* T00731 预制封面网格 */
+.cover-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+  max-height: 460px;
+  overflow-y: auto;
+  min-height: 120px;
+}
+.cover-picker-item {
+  padding: 6px;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  text-align: center;
+}
+.cover-picker-item:hover {
+  border-color: #409eff;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.18);
+}
+.cover-picker-item.active {
+  border-color: #409eff;
+  background: rgba(64, 158, 255, 0.06);
+}
+.cover-picker-thumb {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 4px;
+  display: block;
+  background: #f5f7fa;
+}
+.cover-picker-name {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cover-picker-meta {
+  font-size: 11px;
+  color: #909399;
+}
+.cover-picker-empty {
+  grid-column: 1 / -1;
+  padding: 24px 0;
+  text-align: center;
+  color: #909399;
+  font-size: 13px;
 }
 </style>
