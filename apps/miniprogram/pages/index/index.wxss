@@ -688,8 +688,29 @@
   line-height: 1.5;
 }
 /* T00384：图标即按钮，方形触控区 */
+/* 偏爱空态设置按钮：T00753 反馈——去边框与背景，纯图标简洁风格
+   （图标用主题色变体 btn-settings-mint.png：原 btn-settings.png 为纯白，
+   去掉实心底后会不可见） */
 .preferred-empty-btn {
   width: 96rpx;
-  height: 96rpx;
+  height: 96rpx;      /* 保留触控区 */
   padding: 0;
+  margin: 16rpx auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.preferred-empty-btn:active {
+  opacity: 0.55;
+  transform: scale(0.94);
+}
+
+.preferred-empty-btn-icon {
+  width: 64rpx;
+  height: 64rpx;
 }
