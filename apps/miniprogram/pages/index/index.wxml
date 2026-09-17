@@ -5,7 +5,7 @@
     <view class="top-action" bindtap="onSearch">
       <image class="action-icon" lazy-load src="/images/icons/search.png" mode="aspectFit" />
     </view>
-    <scroll-view scroll-x class="channel-bar" wx:if="{{channels.length > 0}}">
+    <scroll-view scroll-x enable-flex class="channel-bar" wx:if="{{channels.length > 0}}">
       <block wx:for="{{channels}}" wx:key="id">
         <view wx:if="{{item.isGroupLabel}}" class="channel-group-label">{{item.label}}</view>
         <view

@@ -39,6 +39,12 @@
 
 .channel-bar {
   flex: 1;
+  /* T00753 修复：scroll-x 用 flex 布局（配合 enable-flex），子项不压缩不换行，
+     比 inline-block + white-space 更稳，避免横向滑动失效 */
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
   white-space: nowrap;
   margin: 0 16rpx;
   height: 64rpx;
@@ -48,8 +54,10 @@
 .channel-pill {
   position: relative;
   display: inline-block;
-  padding: 11rpx 20rpx;
-  margin-right: 8rpx;
+  /* 作为 flex 子项：不压缩、不换行，宽度按内容 */
+  flex: 0 0 auto;
+  padding: 11rpx 26rpx;
+  margin-right: 18rpx;
   border-radius: 0;
   font-size: 27rpx;
   color: var(--text-secondary);
