@@ -28,37 +28,97 @@
         mode="aspectFill"
       />
       <view class="nickname">{{userInfo.nickname || userInfo.nickName || '听友'}}</view>
-    </view>
-
-    <!-- 收听统计：4 项指标，2x2 网格 -->
-    <view class="card stat-card">
-      <view class="stat-item">
-        <view class="stat-num">{{durationLabel}}</view>
-        <view class="stat-label">累计收听时长</view>
-      </view>
-      <view class="stat-divider"></view>
-      <view class="stat-item">
-        <view class="stat-num">{{totalListenCount}}</view>
-        <view class="stat-label">累计收听期数</view>
-      </view>
-      <view class="stat-divider"></view>
-      <view class="stat-item">
-        <view class="stat-num">{{completedCount}}</view>
-        <view class="stat-label">完播期数</view>
-      </view>
-      <view class="stat-divider"></view>
-      <view class="stat-item">
-        <view class="stat-num">{{favoriteCount}}</view>
-        <view class="stat-label">收藏数</view>
+      <!-- T00726：统计信息悬浮于背景图之上、用户名下方（小字横排） -->
+      <view class="stats-row">
+        <view class="stats-cell">
+          <view class="stats-num">{{durationLabel}}</view>
+          <view class="stats-label">收听时长</view>
+        </view>
+        <view class="stats-cell">
+          <view class="stats-num">{{totalListenCount}}</view>
+          <view class="stats-label">收听期数</view>
+        </view>
+        <view class="stats-cell">
+          <view class="stats-num">{{completedCount}}</view>
+          <view class="stats-label">完播</view>
+        </view>
+        <view class="stats-cell">
+          <view class="stats-num">{{favoriteCount}}</view>
+          <view class="stats-label">收藏</view>
+        </view>
       </view>
     </view>
 
-    <!-- 我的课程（FR-MC-05）：已订阅的课程/有声读物 + 本地学习进度 -->
-    <view class="card course-card" wx:if="{{myCourses.length > 0}}">
-      <view class="course-card-title">我的课程</view>
+    <!-- T00726：双层 Tab（第一层＝频道类型，过滤"我的课程"；第二层＝功能入口） -->
+    <view class="tab-layer">
+      <view class="tab-bar">
+        <view
+          class="tab-item {{firstTab === 'news' ? 'tab-active' : ''}}"
+          bindtap="onFirstTab" data-tab="news"
+        >
+          <image class="tab-icon" src="/images/icons/newspaper.png" mode="aspectFit" />
+          <text>资讯</text>
+        </view>
+        <view
+          class="tab-item {{firstTab === 'audiobook' ? 'tab-active' : ''}}"
+          bindtap="onFirstTab" data-tab="audiobook"
+        >
+          <image class="tab-icon" src="/images/icons/headphones.png" mode="aspectFit" />
+          <text>听书</text>
+        </view>
+        <view
+          class="tab-item {{firstTab === 'course' ? 'tab-active' : ''}}"
+          bindtap="onFirstTab" data-tab="course"
+        >
+          <image class="tab-icon" src="/images/icons/music.png" mode="aspectFit" />
+          <text>课程</text>
+        </view>
+      </view>
+      <view class="tab-bar tab-bar-sub">
+        <view
+          class="tab-item {{secondTab === 'recent' ? 'tab-sub-active' : ''}}"
+          bindtap="onSecondTab" data-tab="recent"
+        >
+          <image class="tab-icon-sm" src="/images/icons/radio.png" mode="aspectFit" />
+          <text>最近</text>
+        </view>
+        <view
+          class="tab-item {{secondTab === 'favorites' ? 'tab-sub-active' : ''}}"
+          bindtap="onSecondTab" data-tab="favorites"
+        >
+          <image class="tab-icon-sm" src="/images/icons/favorite.png" mode="aspectFit" />
+          <text>收藏</text>
+        </view>
+        <view
+          class="tab-item {{secondTab === 'channels' ? 'tab-sub-active' : ''}}"
+          bindtap="onSecondTab" data-tab="channels"
+        >
+          <image class="tab-icon-sm" src="/images/icons/list.png" mode="aspectFit" />
+          <text>频道</text>
+        </view>
+        <view
+          class="tab-item {{secondTab === 'downloads' ? 'tab-sub-active' : ''}}"
+          bindtap="onSecondTab" data-tab="downloads"
+        >
+          <image class="tab-icon-sm" src="/images/icons/download.png" mode="aspectFit" />
+          <text>下载</text>
+        </view>
+        <view
+          class="tab-item {{secondTab === 'preferred' ? 'tab-sub-active' : ''}}"
+          bindtap="onSecondTab" data-tab="preferred"
+        >
+          <image class="tab-icon-sm" src="/images/icons/checks.png" mode="aspectFit" />
+          <text>偏爱</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 我的课程（FR-MC-05）：已订阅的课程/有声读物 + 本地学习进度（T00726：随第一层 Tab 过滤） -->
+    <view class="card course-card" wx:if="{{filteredCourses.length > 0}}">
+      <view class="course-card-title">我的{{firstTabLabel}}</view>
       <view
         class="course-item"
-        wx:for="{{myCourses}}"
+        wx:for="{{filteredCourses}}"
         wx:key="id"
         bindtap="onTapCourse"
         data-id="{{item.id}}"
@@ -77,31 +137,38 @@
       </view>
     </view>
     <view class="card course-empty" wx:elif="{{myCoursesLoaded}}">
-      <view class="course-empty-text">尚未订阅任何课程，去首页发现课程频道吧</view>
+      <view class="course-empty-text">{{firstTabEmptyText}}</view>
     </view>
 
-    <!-- 功能列表 -->
+    <!-- T00726：功能入口改为图标+文字网格（跳转行为不变） -->
+    <view class="card entry-grid">
+      <view class="entry-item" bindtap="onTapSetting" data-key="recent">
+        <image class="entry-icon" src="/images/icons/radio.png" mode="aspectFit" />
+        <text class="entry-text">最近播放</text>
+      </view>
+      <view class="entry-item" bindtap="onTapSetting" data-key="favorites">
+        <image class="entry-icon" src="/images/icons/favorite.png" mode="aspectFit" />
+        <text class="entry-text">我的收藏</text>
+      </view>
+      <view class="entry-item" bindtap="onTapSetting" data-key="channels">
+        <image class="entry-icon" src="/images/icons/list.png" mode="aspectFit" />
+        <text class="entry-text">我的频道</text>
+      </view>
+      <view class="entry-item" bindtap="onTapSetting" data-key="downloads">
+        <image class="entry-icon" src="/images/icons/download.png" mode="aspectFit" />
+        <text class="entry-text">我的下载</text>
+      </view>
+      <view class="entry-item" bindtap="onTapSetting" data-key="preferred">
+        <image class="entry-icon" src="/images/icons/checks.png" mode="aspectFit" />
+        <text class="entry-text">偏爱频道</text>
+      </view>
+      <view class="entry-item" bindtap="onTapSetting" data-key="feedback">
+        <image class="entry-icon" src="/images/icons/info.png" mode="aspectFit" />
+        <text class="entry-text">意见反馈</text>
+      </view>
+    </view>
+    <!-- 反馈与设置保持列表形态 -->
     <view class="card list-card">
-      <view class="list-item" bindtap="onTapSetting" data-key="recent">
-        <text class="list-text">最近播放</text>
-        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
-      </view>
-      <view class="list-item" bindtap="onTapSetting" data-key="favorites">
-        <text class="list-text">我的收藏</text>
-        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
-      </view>
-      <view class="list-item" bindtap="onTapSetting" data-key="channels">
-        <text class="list-text">我的频道</text>
-        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
-      </view>
-      <view class="list-item" bindtap="onTapSetting" data-key="downloads">
-        <text class="list-text">我的下载</text>
-        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
-      </view>
-      <view class="list-item" bindtap="onTapSetting" data-key="preferred">
-        <text class="list-text">偏爱频道设置</text>
-        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
-      </view>
       <view class="list-item" bindtap="onTapSetting" data-key="feedback">
         <text class="list-text">意见反馈</text>
         <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />

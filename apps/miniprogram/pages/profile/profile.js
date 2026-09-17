@@ -26,6 +26,12 @@ Page({
     durationLabel: '0分钟',   // 格式化后的收听时长
     myCourses: [],            // 我的课程（FR-MC-05）：已订阅的课程/有声读物频道 + 本地进度
     myCoursesLoaded: false,   // 防止加载完成前空态闪烁
+    // T00726 双层 Tab：第一层＝频道类型过滤；第二层＝功能入口选中态
+    firstTab: "audiobook",
+    secondTab: "recent",
+    filteredCourses: [],
+    firstTabLabel: "有声读物",
+    firstTabEmptyText: "尚未订阅听书类频道，去首页发现喜欢的书吧",
   },
 
   onShow() {
@@ -505,6 +511,7 @@ Page({
         })
       );
       this.setData({ myCourses: withProgress, myCoursesLoaded: true });
+      this.updateFilteredCourses();
     } catch (e) {
       console.warn('加载我的课程失败:', e.message || e);
     }
@@ -513,6 +520,44 @@ Page({
   /**
    * 点击「我的课程」中的某课：跳转课程主页（复用既有课程链路）
    */
+  /**
+   * T00726 双层 Tab：
+   * - 第一层（资讯/听书/课程）过滤「我的课程」列表（按 channel_type），
+   *   资讯类型无订阅内容（资讯节目不进课程列表）→ 空态引导去首页；
+   * - 第二层（最近/收藏/频道/下载/偏爱）为功能入口选中态（跳转行为不变）。
+   */
+  onFirstTab(e) {
+    const tab = e.currentTarget.dataset.tab;
+    if (!tab || tab === this.data.firstTab) return;
+    this.setData({ firstTab: tab });
+    this.updateFilteredCourses();
+  },
+
+  onSecondTab(e) {
+    const tab = e.currentTarget.dataset.tab;
+    if (tab && tab !== this.data.secondTab) {
+      this.setData({ secondTab: tab });
+    }
+  },
+
+  updateFilteredCourses() {
+    const tab = this.data.firstTab;
+    const labels = { news: "资讯", audiobook: "有声读物", course: "课程" };
+    const empties = {
+      news: "资讯节目在首页每日更新，这里暂无订阅内容",
+      audiobook: "尚未订阅听书类频道，去首页发现喜欢的书吧",
+      course: "尚未订阅课程类频道，去首页发现感兴趣的课程吧",
+    };
+    const filtered = this.data.myCourses.filter(
+      (c) => c.channel_type === tab
+    );
+    this.setData({
+      filteredCourses: filtered,
+      firstTabLabel: labels[tab] || "",
+      firstTabEmptyText: empties[tab] || "",
+    });
+  },
+
   onTapCourse(e) {
     const id = e.currentTarget.dataset.id;
     if (!id) return;
