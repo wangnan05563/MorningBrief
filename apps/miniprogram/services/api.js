@@ -364,11 +364,12 @@ const fetchPlayProgress = (episodeId) =>
  * 30s 节流 + 30s 缓存：throttle 保证 tab 切换短时间内不重复发请求，
  * cache 进一步在节流窗口内命中已缓存数据，双重保险减少后端压力
  */
-const fetchRecentPlaylogs = (page = 1, size = 20) =>
-  throttle('recent_playlogs_' + page + '_' + size, 30000, () =>
+// T00726：channelType 用于二层内容按首层类型分开查询（后端 channel_type 过滤）
+const fetchRecentPlaylogs = (page = 1, size = 20, channelType) =>
+  throttle('recent_playlogs_' + page + '_' + size + '_' + (channelType || 'all'), 30000, () =>
     request({
       url: '/playlogs/recent',
-      data: { page, size },
+      data: channelType ? { page, size, channel_type: channelType } : { page, size },
       _allowRetry: false,
       cache: true,
       cacheTTL: 30,
@@ -378,7 +379,8 @@ const fetchRecentPlaylogs = (page = 1, size = 20) =>
 // === 收藏接口 ===
 
 /** 收藏列表（后端已 join episode 详情，前端无需再 N+1 拉详情） */
-const getFavorites = () => request({ url: '/favorites' });
+const getFavorites = (channelType) =>
+  request({ url: '/favorites', data: channelType ? { channel_type: channelType } : {} });
 
 /** 添加收藏（幂等） */
 const addFavorite = (episodeId) =>

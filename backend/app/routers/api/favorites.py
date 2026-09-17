@@ -16,7 +16,7 @@ from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
 from app.core.write_gate import write_lock
 from app.database import get_db
-from app.models import Favorite, Episode, EpisodeStatus
+from app.models import Favorite, Episode, EpisodeStatus, Channel
 from app.services.user_service import get_user_openid
 
 router = APIRouter(prefix="/api/v1/favorites", tags=["C端-收藏"])
@@ -31,21 +31,35 @@ class FavoriteRequest(BaseModel):
 async def list_favorites(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    channel_type: str | None = Query(
+        None, description="按频道类型过滤（news/audiobook/course），T00726 二层内容按类型查询"
+    ),
     user: UserPayload = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """收藏列表分页：返回 episode_id 与收藏时间，前端按需拉详情。"""
     openid = await get_user_openid(db, user.user_id)
 
-    count_result = await db.execute(
-        select(func.count(Favorite.id)).where(Favorite.user_id == openid)
-    )
+    offset = (page - 1) * size
+    # T00726：按频道类型过滤——先取该类型的频道 id，再限制收藏的 episode 归属
+    fav_query = select(Favorite).where(Favorite.user_id == openid)
+    count_stmt = select(func.count(Favorite.id)).where(Favorite.user_id == openid)
+    if channel_type:
+        type_ids = (
+            await db.execute(select(Channel.id).where(Channel.channel_type == channel_type))
+        ).scalars().all()
+        fav_query = fav_query.join(Episode, Favorite.episode_id == Episode.id).where(
+            Episode.channel_id.in_(type_ids)
+        )
+        count_stmt = count_stmt.join(Episode, Favorite.episode_id == Episode.id).where(
+            Episode.channel_id.in_(type_ids)
+        )
+
+    count_result = await db.execute(count_stmt)
     total = count_result.scalar() or 0
 
-    offset = (page - 1) * size
     result = await db.execute(
-        select(Favorite)
-        .where(Favorite.user_id == openid)
+        fav_query
         .order_by(Favorite.created_at.desc())
         .offset(offset)
         .limit(size)

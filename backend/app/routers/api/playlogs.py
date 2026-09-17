@@ -9,7 +9,7 @@ from app.core.exceptions import NotFoundError
 from app.core.response import success
 from app.database import get_db
 from app.services.play_service import PlayService
-from app.models import PlayLog, Episode, EpisodeStatus
+from app.models import PlayLog, Episode, EpisodeStatus, Channel
 
 router = APIRouter(prefix="/api/v1/playlogs", tags=["C端-播放进度"])
 
@@ -109,6 +109,9 @@ async def get_recent_playlogs(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     channel_id: int | None = Query(None, gt=0, description="按频道过滤，不传则返回全部"),
+    channel_type: str | None = Query(
+        None, description="按频道类型过滤（news/audiobook/course），T00726 二层内容按类型查询"
+    ),
     user: UserPayload = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -134,8 +137,9 @@ async def get_recent_playlogs(
     # channel_id 过滤加在外层 JOIN Episode 之后：子查询保持按用户聚合不变，
     # 外层过滤确保结果与 count 口径一致
     base_query = (
-        select(PlayLog, Episode)
+        select(PlayLog, Episode, Channel)
         .join(Episode, PlayLog.episode_id == Episode.id)
+        .join(Channel, Episode.channel_id == Channel.id)
         .join(
             subq,
             (PlayLog.episode_id == subq.c.episode_id)
@@ -145,6 +149,9 @@ async def get_recent_playlogs(
     )
     if channel_id is not None:
         base_query = base_query.where(Episode.channel_id == channel_id)
+    # T00726：按频道类型过滤（首层 Tab），与前端「二层内容按类型分开查询」对齐
+    if channel_type:
+        base_query = base_query.where(Channel.channel_type == channel_type)
     base_query = base_query.order_by(PlayLog.played_at.desc()).offset(offset).limit(size)
     result = await db.execute(base_query)
     rows = result.all()
@@ -158,8 +165,11 @@ async def get_recent_playlogs(
             "position": log.position or 0,
             "completed": bool(log.completed),
             "played_at": log.played_at.isoformat() if log.played_at else None,
+            "channel_id": ep.channel_id,
+            "channel_name": ch.name if ch else None,
+            "channel_type": ch.channel_type if ch else None,
         }
-        for log, ep in rows
+        for log, ep, ch in rows
     ]
 
     # 总数（去重 episode 数）
@@ -168,10 +178,13 @@ async def get_recent_playlogs(
     count_query = (
         select(func.count(func.distinct(PlayLog.episode_id)))
         .join(Episode, PlayLog.episode_id == Episode.id)
+        .join(Channel, Episode.channel_id == Channel.id)
         .where(PlayLog.user_id == user.user_id)
     )
     if channel_id is not None:
         count_query = count_query.where(Episode.channel_id == channel_id)
+    if channel_type:
+        count_query = count_query.where(Channel.channel_type == channel_type)
     count_result = await db.execute(count_query)
     total = count_result.scalar() or 0
 

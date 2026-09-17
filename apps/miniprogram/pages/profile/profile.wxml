@@ -132,6 +132,12 @@
           <view class="second-more" bindtap="goSecondPage">查看全部 ↗</view>
         </block>
         <view wx:elif="{{secondEmpty}}" class="second-empty">{{secondEmpty}}</view>
+        <!-- 频道/下载/偏爱无内嵌列表时展示跳转卡 -->
+        <view
+          wx:if="{{secondEntry}}"
+          class="second-entry-card"
+          bindtap="goSecondPage"
+        >{{secondEntry.text}}</view>
       </view>
     </view>
 

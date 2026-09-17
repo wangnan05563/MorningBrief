@@ -12,6 +12,7 @@ const { fetchUserStats, updateUserProfile, uploadAvatar, fetchMySubscriptions, c
 const downloadStore = require('../../services/download');
 // 本地进度/收藏聚合（FR-MC-10 修复 GAP-11 统计恒为 0 的离线兜底）
 const { fetchRecentPlaylogs, getFavorites } = require('../../services/api');
+const { fetchChannels } = require('../../services/api');
 const localData = require('../../services/local-data');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 // T00593：从相册/相机自选头像（chooseAvatar 被隐私声明拦截时的降级路径）
@@ -538,6 +539,9 @@ Page({
     if (!tab || tab === this.data.firstTab) return;
     this.setData({ firstTab: tab });
     this.updateFilteredCourses();
+    // T00726 反馈：首层切换后二层内容必须按新类型重新查询（此前不重载 → 内容看起来一样）
+    this.setData({ secondList: [], secondEmpty: "", secondEntry: null });
+    this.loadSecondContent(this.data.secondTab);
   },
 
   onSecondTab(e) {
@@ -560,16 +564,20 @@ Page({
     if (tab === "recent") {
       this.setData({ secondLoading: true });
       try {
-        const res = await fetchRecentPlaylogs(1, 10);
+        const type = this.data.firstTab;
+        const res = await fetchRecentPlaylogs(1, 10, type);
         const list = (res && res.list) || [];
         this.setData({
           secondList: list.map((it, i) => ({
             key: "r" + (it.episode_id || i),
             id: it.episode_id,
             title: it.title || "节目",
-            meta: it.played_at ? "播放于 " + it.played_at.slice(0, 10) : "已播放",
+            meta: [
+              it.channel_name || "",
+              it.played_at ? "播放于 " + it.played_at.slice(0, 10) : "已播放",
+            ].filter(Boolean).join(" · "),
           })),
-          secondEmpty: list.length ? "" : "暂无播放记录，去首页挑一集听听吧",
+          secondEmpty: list.length ? "" : "该类型暂无播放记录，去首页挑一集听听吧",
         });
       } finally {
         this.setData({ secondLoading: false });
@@ -579,25 +587,49 @@ Page({
     if (tab === "favorites") {
       this.setData({ secondLoading: true });
       try {
-        const res = await getFavorites();
+        const type = this.data.firstTab;
+        const res = await getFavorites(type);
         const list = Array.isArray(res) ? res : (res && res.list) || [];
         this.setData({
           secondList: list.map((it, i) => ({
             key: "f" + (it.episode_id || i),
             id: it.episode_id,
-            title: "收藏的节目 #" + it.episode_id,
+            title: it.title || ("收藏的节目 #" + it.episode_id),
             meta: it.favorited_at ? "收藏于 " + String(it.favorited_at).slice(0, 10) : "",
           })),
-          secondEmpty: list.length ? "" : "暂无收藏，播放页点❤即可收藏",
+          secondEmpty: list.length ? "" : "该类型暂无收藏，播放页点❤即可收藏",
         });
       } finally {
         this.setData({ secondLoading: false });
       }
       return;
     }
-    // 频道 / 下载 / 偏爱：无轻量列表数据源，展示跳转卡
+    if (tab === "channels") {
+      // T00726：频道列表按首层类型过滤后内嵌展示（频道数据含 channel_type）
+      this.setData({ secondLoading: true });
+      try {
+        const res = await fetchChannels();
+        const list = (res && res.list) || (Array.isArray(res) ? res : []);
+        const type = this.data.firstTab;
+        const filtered = list.filter((c) => !type || c.channel_type === type);
+        this.setData({
+          secondList: filtered.map((c) => ({
+            key: "c" + c.id,
+            id: c.id,
+            title: c.name || ("频道 #" + c.id),
+            meta: c.type_label || c.channel_type || "",
+            isChannel: true,
+          })),
+          secondEmpty: filtered.length ? "" : "该类型暂无频道，去首页发现更多频道吧",
+        });
+      } finally {
+        this.setData({ secondLoading: false });
+      }
+      return;
+    }
+
+    // 下载 / 偏爱：无轻量列表数据源，展示跳转卡
     const entries = {
-      channels: { text: "前往我的频道，管理订阅与内容 ↗", url: SECOND_PAGES.channels },
       downloads: { text: "前往我的下载，查看已缓存节目 ↗", url: SECOND_PAGES.downloads },
       preferred: { text: "前往偏爱频道设置，定制首页关注列表 ↗", url: SECOND_PAGES.preferred },
     };
@@ -607,7 +639,14 @@ Page({
   onTapSecondItem(e) {
     const item = this.data.secondList[Number(e.currentTarget.dataset.index)];
     if (!item || !item.id) return;
-    wx.navigateTo({ url: "/pages/detail/detail?id=" + item.id });
+    // 频道项进频道内容页，节目项进详情页
+    const url = item.isChannel
+      ? "/pages/course/course?channelId=" + item.id
+      : "/pages/detail/detail?id=" + item.id;
+    wx.navigateTo({
+      url,
+      fail: () => wx.reLaunch({ url }),
+    });
   },
 
   goSecondPage() {
