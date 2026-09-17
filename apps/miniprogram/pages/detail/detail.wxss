@@ -274,6 +274,19 @@
 .seg-block {
   padding: 24rpx 0;
   border-bottom: 1rpx solid var(--bg-subtle);
+  /* T00725：点击定位/播放联动的高亮过渡 */
+  transition: background-color 0.3s ease;
+}
+/* 当前播放段落高亮：左侧强调条 + 浅色底 */
+.seg-block.seg-active {
+  background-color: rgba(63, 108, 143, 0.08);
+  box-shadow: inset 6rpx 0 0 0 var(--primary-color, #3f6c8f);
+  border-radius: 8rpx;
+  padding-left: 16rpx;
+  padding-right: 16rpx;
+}
+.seg-hover {
+  background-color: rgba(63, 108, 143, 0.05);
 }
 .seg-block:last-child {
   border-bottom: none;

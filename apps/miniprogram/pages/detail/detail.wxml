@@ -168,7 +168,16 @@
       <!-- 正文已展开：优先按段渲染（含封面图），无 segments 时降级为纯文本 -->
       <block wx:elif="{{scriptLoaded}}">
         <block wx:if="{{segments.length > 0}}">
-          <view class="seg-block" wx:for="{{segments}}" wx:key="seq">
+          <!-- T00725：点击段落定位播放进度并高亮；播放中自动高亮当前段（不滚动，避免打扰阅读） -->
+          <view
+            class="seg-block {{currentSegmentIndex === index ? 'seg-active' : ''}}"
+            id="seg-{{index}}"
+            data-index="{{index}}"
+            hover-class="seg-hover"
+            bindtap="onSegmentTap"
+            wx:for="{{segments}}"
+            wx:key="seq"
+          >
             <!-- 封面图：原站防盗链/删图时 onCoverError 自然降级隐藏 -->
             <image
               wx:if="{{item.cover_url}}"

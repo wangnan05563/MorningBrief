@@ -50,6 +50,7 @@ Page({
     episode: null,
     script: '',            // 稿件全文（向后兼容，旧稿件无 segments 时展示）
     segments: [],          // 稿件分段（含 cover_url，新稿件按段渲染图文）
+    currentSegmentIndex: -1,  // T00725：当前播放/选中文稿段索引（-1 = 无）
     scriptLoaded: false,
     scriptLoading: false,
     isPlaying: false,
@@ -414,6 +415,8 @@ Page({
           durationText: this.formatTime(du),
         });
       }
+      // T00725：播放进度联动——高亮当前段落（仅索引变化时 setData，不自动滚动避免打扰阅读）
+      this._updateCurrentSegment(ct);
       // 5s 节流上报后端进度
       // listened_seconds 取本周期实际播放增量（不包含暂停/缓冲时间），
       // 用于累加 User.total_listen_duration
@@ -501,6 +504,58 @@ Page({
       isPlaying: true,
       seekTimestamp: Date.now()
     });
+  },
+
+  /**
+   * T00725：点击文稿段落 → 定位播放进度并高亮该段，滚动到可视区域。
+   *
+   * - 正在播本集：seek 到该段 start_sec（audio.seek 已处理暂停态先 play 的限制）；
+   * - 未在播本集：先 playEpisode 起播本集，起播完成后再 seek 到段落位置
+   *   （playEpisode 内部会按历史进度恢复，之后 seek 覆盖为段落位置）；
+   * - 旧稿件无 start_sec 时间轴 → 明确提示，不做定位。
+   */
+  onSegmentTap(e) {
+    const idx = Number(e.currentTarget.dataset.index);
+    const seg = (this.data.segments || [])[idx];
+    if (!seg) return;
+    const start = Number(seg.start_sec);
+    if (!Number.isFinite(start)) {
+      wx.showToast({ title: '该稿件无时间轴，暂不支持定位', icon: 'none' });
+      return;
+    }
+    if (this.isCurrentEpisode()) {
+      seek(start);
+      this.setData({ isPlaying: true, seekTimestamp: Date.now() });
+    } else if (this.data.episode) {
+      Promise.resolve(playEpisode(this.data.episode))
+        .then(() => seek(start))
+        .catch(() => {});
+    }
+    this.setData({ currentSegmentIndex: idx });
+    // 定位高亮段到可视区域（页面级滚动）
+    wx.pageScrollTo({ selector: `#seg-${idx}`, duration: 300 });
+  },
+
+  /**
+   * T00725：按播放进度计算当前段落索引（仅索引变化时 setData，避免频繁渲染）。
+   * 线性扫描：segments 通常 ≤20 段，成本可忽略；无时间轴的旧稿件直接跳过。
+   */
+  _updateCurrentSegment(ct) {
+    const segs = this.data.segments || [];
+    if (!segs.length || !Number.isFinite(Number(segs[0].start_sec))) return;
+    let found = null;
+    for (let i = 0; i < segs.length; i += 1) {
+      const s = Number(segs[i].start_sec);
+      const e2 = Number(segs[i].end_sec);
+      if (!Number.isFinite(s)) continue;
+      if (ct >= s && (!Number.isFinite(e2) || ct < e2 || i === segs.length - 1)) {
+        found = i;
+        break;
+      }
+    }
+    if (found !== null && found !== this.data.currentSegmentIndex) {
+      this.setData({ currentSegmentIndex: found });
+    }
   },
 
   /**
