@@ -436,7 +436,7 @@
         append-to-body
         destroy-on-close
       >
-        <BookPoolPanel v-if="poolDialogVisible && editing" :channel-id="editing.id" />
+        <BookPoolPanel v-if="poolDialogVisible && form.id" :channel-id="form.id" />
       </el-dialog>
     </el-dialog>
   </div>
@@ -651,13 +651,15 @@ async function loadBookPoolState(channelId) {
 
 /** 弹窗内切换讲书稿模式（幂等；失败回滚开关显示） */
 async function onToggleBookPool(val) {
-  if (!editing.value) {
+  // T00715：频道 id 在 form.id（editing 只是布尔标志，editing.value.id === undefined）
+  if (!form.id) {
     bookPoolOn.value = false
+    ElMessage.warning('请先保存频道，再配置讲书稿模式')
     return
   }
   bookPoolLoading.value = true
   try {
-    const res = await setScriptMode(editing.value.id, val)
+    const res = await setScriptMode(form.id, val)
     bookPoolOn.value = !!res?.enabled
     ElMessage[res?.changed ? 'success' : 'info'](res?.message || (val ? '已开启讲书稿模式' : '已关闭讲书稿模式'))
   } catch (e) {
