@@ -27,7 +27,7 @@
         hover-class="none"
         aria-label="分享节目"
       >
-        <image class="top-action-icon" src="/images/icons/btn-share.png" mode="aspectFit" />
+        <image class="top-action-icon" src="/images/icons/btn-share-mint.png" mode="aspectFit" />
       </button>
       <view class="top-action" bindtap="onBackHome" aria-label="返回首页">
         <image class="top-action-icon" src="/images/icons/btn-home-mint.png" mode="aspectFit" />
