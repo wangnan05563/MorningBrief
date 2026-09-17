@@ -190,40 +190,82 @@
 }
 
 /* 圆形播放按钮：薄荷青 */
+/* 主播放键：T00753 追加——尺寸调小（112→96rpx），底色让位给内层胶片 */
 .play-btn {
-  width: 112rpx;
-  height: 112rpx;
+  width: 96rpx;
+  height: 96rpx;
   border-radius: 50%;
-  background: var(--accent);
+  background: transparent;
+  border: none;
+  box-shadow: none;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 6rpx 16rpx rgba(63, 108, 143, 0.45);
 }
 
 .play-icon {
-  width: 44rpx;
-  height: 44rpx;
+  position: relative;
+  z-index: 1;
+  width: 30rpx;
+  height: 30rpx;
 }
 
 /* T00722：播放进度环——conic-gradient 随播放进度由空心渐实（角度在 wxml 内联计算） */
 .progress-ring {
-  width: 112rpx;
-  height: 112rpx;
+  width: 96rpx;
+  height: 96rpx;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
 }
+
+/* 内层：旋转胶片（与列表播放键同配方，小一号 72rpx） */
 .ring-hole {
-  width: 88rpx;
-  height: 88rpx;
+  position: relative;
+  width: 72rpx;
+  height: 72rpx;
   border-radius: 50%;
-  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+  background: radial-gradient(
+    circle at 50% 50%,
+    var(--accent) 0 30%,
+    #8c9cb0 31% 41%,
+    #b3c0cf 42% 100%
+  );
+  box-shadow: 0 2rpx 8rpx rgba(63, 108, 143, 0.18), inset 0 0 0 1rpx rgba(255, 255, 255, 0.5);
+}
+
+/* 唱片纹路 + 非对称高光（高光用于表达转动） */
+.ring-hole::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    repeating-radial-gradient(
+      circle at 50% 50%,
+      rgba(255, 255, 255, 0.42) 0 2rpx,
+      rgba(255, 255, 255, 0) 2rpx 7rpx
+    ),
+    conic-gradient(
+      from 0deg,
+      rgba(255, 255, 255, 0.55) 0deg 26deg,
+      rgba(255, 255, 255, 0) 26deg 360deg
+    );
+  pointer-events: none;
+}
+
+.ring-hole.playing::before {
+  animation: disc-spin 9s linear infinite;
+}
+
+@keyframes disc-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* 上一首/下一首导航按钮（T00753：扁平化——去掉底色块，仅留点击区） */
