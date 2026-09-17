@@ -32,7 +32,7 @@
       <view class="stats-row">
         <view class="stats-cell">
           <view class="stats-num">{{durationLabel}}</view>
-          <view class="stats-label">收听时长</view>
+          <view class="stats-label">收听分钟</view>
         </view>
         <view class="stats-cell">
           <view class="stats-num">{{totalListenCount}}</view>

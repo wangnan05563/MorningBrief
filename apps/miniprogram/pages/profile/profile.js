@@ -343,7 +343,8 @@ Page({
       totalListenCount,
       completedCount,
       favoriteCount,
-      durationLabel: this.formatDuration(totalListenDuration),
+      // T00726 反馈：统计行改用分钟数（"15小时38分钟"过长会窜行）
+      durationLabel: String(Math.round(totalListenDuration / 60)),
     });
   },
 
