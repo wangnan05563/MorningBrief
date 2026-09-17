@@ -94,6 +94,7 @@ Page({
     // 轮播图：自动从稿件内容解析出的全部图片（按文稿出现顺序），含加载失败占位标记
     carouselImages: [],
     carouselIndex: 0,
+    carouselHeight: 420,   // T00724 反馈：轮播高度按当前图片比例自适应（rpx，300~640）
     // 轮播参数（集中配置，避免 WXML 字面量魔法数字）
     carouselInterval: 4000,
     carouselDuration: 500,
@@ -924,6 +925,23 @@ Page({
   /**
    * 轮播切换（自动播放或手动滑动都会触发）：更新当前下标用于计数器显示
    */
+  /**
+   * T00724 反馈：轮播图按原图比例自适应高度，消除固定高度造成的空白色带。
+   *
+   * 卡片内容宽 = 750 - 卡片左右 margin(32*2) = 686rpx；高度 = 686 * h / w，
+   * 钳制在 [300, 640] rpx：过窄图不至于塌陷、超长图不占满整屏。
+   * 仅当加载的是当前索引图片时更新，避免预加载的其它图切换瞬间改变高度。
+   */
+  onCarouselImageLoad(e) {
+    const detail = e && e.detail;
+    if (!detail || !detail.width || !detail.height) return;
+    const idx = Number(e.currentTarget.dataset.index);
+    if (Number.isFinite(idx) && idx !== this.data.carouselIndex) return;
+    const raw = Math.round((750 - 64) * detail.height / detail.width);
+    const h = Math.min(640, Math.max(300, raw));
+    if (h !== this.data.carouselHeight) this.setData({ carouselHeight: h });
+  },
+
   onCarouselChange(e) {
     const current = e.detail && e.detail.current;
     if (typeof current === 'number') this.setData({ carouselIndex: current });

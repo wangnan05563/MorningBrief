@@ -46,8 +46,10 @@
   overflow: hidden;
   box-shadow: 0 16rpx 40rpx rgba(0, 0, 0, 0.5);
 }
-.page-detail .carousel-swiper {
-  height: 520rpx;
+/* T00724 反馈：轮播高度改为按图片比例自适应（wxml 内联 carouselHeight），
+   不再固定 520rpx——固定值会把 360rpx 的图片顶出 160rpx 空白 */
+.carousel-swiper {
+  transition: height 0.25s ease;
 }
 
 /* ===== T00724 模块二：顶部流光动画（播放框上边缘的柔和光带，左右往复） ===== */
@@ -300,12 +302,11 @@
 }
 .carousel-item {
   width: 100%;
-  height: 360rpx;
 }
 .carousel-img {
   width: 100%;
-  height: 360rpx;
   display: block;
+  /* 高度由内联 carouselHeight 提供（随图片比例自适应） */
   background: var(--bg-subtle);
 }
 /* 单图加载失败占位：居中图标 + 文案，保持轮播区域高度不塌陷 */

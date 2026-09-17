@@ -24,6 +24,7 @@
       <view class="light-sweep" aria-hidden="true"></view>
       <swiper
         class="carousel-swiper"
+        style="height:{{carouselHeight}}rpx"
         indicator-dots="{{carouselImages.length > 1}}"
         indicator-color="rgba(255,255,255,0.5)"
         indicator-active-color="#3F6C8F"
@@ -41,14 +42,16 @@
           <image
             wx:if="{{!item.failed}}"
             class="carousel-img"
+            style="height:{{carouselHeight}}rpx"
             src="{{item.url}}"
-            mode="aspectFill"
+            mode="aspectFit"
             lazy-load
             data-index="{{index}}"
+            bindload="onCarouselImageLoad"
             binderror="onCarouselImageError"
             bindtap="onPreviewCarouselImage"
           />
-          <view wx:else class="carousel-fallback">
+          <view wx:else class="carousel-fallback" style="height:{{carouselHeight}}rpx">
             <image class="fallback-icon" src="/images/icons/alert.png" mode="aspectFit" />
             <text class="fallback-text">图片加载失败</text>
           </view>
