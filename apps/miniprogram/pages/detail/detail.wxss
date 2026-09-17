@@ -226,7 +226,7 @@
   justify-content: center;
 }
 
-/* 上一首/下一首导航按钮 */
+/* 上一首/下一首导航按钮（T00753：扁平化——去掉底色块，仅留点击区） */
 .nav-btn {
   width: 72rpx;
   height: 72rpx;
@@ -234,7 +234,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-subtle);
+  background: transparent;
+  border: none;
   flex-shrink: 0;
 }
 
@@ -350,14 +351,6 @@
 }
 
 /* "查看完整文稿"入口：T00384 改为图标按钮（方形触控区 88rpx） */
-.script-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 88rpx;
-  height: 88rpx;
-  padding: 0;
-}
 
 .script-body {
   font-size: 28rpx;
@@ -492,62 +485,45 @@
 }
 
 /* 底部操作 */
-.footer-actions {
-  display: flex;
-  padding: 0 24rpx;
-  margin-top: 16rpx;
-}
 
 /* T00384：图标即按钮，触控区抬到 100rpx，图标居中放大 */
-.footer-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  margin-left: 24rpx;
-  min-height: 100rpx;
-  line-height: 1;
-  padding: 0;
-}
 
-.footer-btn:first-child {
-  margin-left: 0;
-}
 
 /* 重置小程序 button 默认描边，贴合全局按钮风格 */
-.footer-btn::after {
-  border: none;
-}
 
 /* === 操作按钮区：倍速 + 收藏 + 列表 + 睡眠定时器 ===
    T00384（商务浅白）：
    - 去掉毛玻璃（backdrop-filter）与半透明白，改实色白底 + 浅描边
    - 图标即按钮：触控区抬到 88rpx（微信建议最小值），图标放大到 36rpx
    - 4 个 chip 等宽，仅保留「倍速值」「睡眠倒计时」两处动态状态文字 */
+/* T00753：6 个图标同一行——space-between + 每格 flex:1 1 0 自适应，窄屏不换行 */
 .action-row {
   display: flex;
-  justify-content: space-around;
+  align-items: center;
+  justify-content: space-between;
   margin-top: 24rpx;
-  gap: 16rpx;
+  gap: 8rpx;
+  flex-wrap: nowrap;
 }
 
+/* T00753：扁平化——去掉外边框与阴影，仅保留 88rpx 点击区与激活色 */
 .action-chip {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6rpx;
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 88rpx;
-  padding: 12rpx 10rpx;
+  padding: 12rpx 6rpx;
   border-radius: var(--radius-btn);
-  background: var(--bg-card);
+  background: transparent;
   color: var(--accent);
   font-size: 24rpx;
   white-space: nowrap;
-  border: 2rpx solid var(--border);
-  box-shadow: var(--shadow-card);
-  transition: all 0.2s ease;
+  border: none;
+  box-shadow: none;
+  transition: background-color 0.2s ease;
   overflow: hidden;
 }
 
@@ -555,16 +531,15 @@
   background: var(--bg-subtle);
 }
 
+/* 激活态：浅色底 + 主题色（不再用深蓝底白图标——页面已回归浅色主题） */
 .action-chip.active {
-  background: var(--accent);
-  color: var(--text-inverse);
-  border-color: var(--accent);
-  box-shadow: var(--shadow-raised);
+  background: rgba(63, 108, 143, 0.12);
+  color: var(--accent);
 }
 
 .chip-icon {
-  width: 36rpx;
-  height: 36rpx;
+  width: 40rpx;
+  height: 40rpx;
   flex-shrink: 0;
 }
 
@@ -1018,3 +993,39 @@
 }
 
 /* 防止点击弹窗内部时冒泡到遮罩层关闭 */
+
+/* ===== T00753 页面右上角：分享 / 首页（简化图标，无边框） ===== */
+.page-top-actions {
+  position: fixed;
+  top: 16rpx;
+  right: 24rpx;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+.top-action {
+  width: 64rpx;
+  height: 64rpx;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  /* 半透明白底：浮于轮播图/深色图上仍可辨识（非边框，属承载底而非装饰框） */
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 2rpx 8rpx rgba(31, 45, 61, 0.12);
+  line-height: 1;
+}
+.top-action::after {
+  border: none;
+}
+.top-action:active {
+  background: rgba(255, 255, 255, 0.62);
+}
+.top-action-icon {
+  width: 34rpx;
+  height: 34rpx;
+}
