@@ -608,7 +608,6 @@ class ContentService:
         from app.config import get_settings
         return get_settings().audio_base_url_resolved
 
-    @staticmethod
     async def _channel_cover_url(self, channel_id: int) -> str | None:
         """频道封面绝对 URL（T00731：预制封面），无封面返回 None。"""
         from app.models import Channel as ChannelModel
@@ -620,6 +619,7 @@ class ContentService:
             return None
         return curl if curl.startswith("http") else self._resolve_audio_base_url() + curl
 
+    @staticmethod
     def _episode_to_dict(episode: Episode) -> dict:
         """统一 Episode 序列化，避免多处重复。
 
