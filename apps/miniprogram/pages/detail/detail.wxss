@@ -1,41 +1,25 @@
 .page-detail {
   min-height: 100vh;
   padding-bottom: 60rpx;
-  /* ===== T00724 网易云风格深色舞台：重定义变量即整页翻转（所有组件走 var） ===== */
-  --text-primary: #f3f4f6;
-  --text-secondary: #d1d5db;
-  --text-muted: #9ca3af;
-  --text-inverse: #0f172a;
-  --bg-subtle: rgba(255, 255, 255, 0.08);
-  --bg-card: rgba(30, 41, 59, 0.78);
-  --bg-page: transparent;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.16);
-  --accent: #8fb8dd;
-  --accent-light: #b9d4ea;
-  --accent-soft: rgba(143, 184, 221, 0.16);
-  --warning-soft: rgba(245, 158, 11, 0.14);
-  --danger-soft: rgba(239, 68, 68, 0.14);
-  --shadow-card: 0 8rpx 24rpx rgba(0, 0, 0, 0.35);
-  --shadow-raised: 0 12rpx 32rpx rgba(0, 0, 0, 0.45);
-  background: linear-gradient(180deg, #0f172a 0%, #1e293b 45%, #0f172a 100%);
+  /* ===== T00724 浅色版（用户反馈：颜色过深）：轻量分层，不覆盖主题变量 =====
+     仅提供页面级渐变底 + 卡片阴影，文字/卡片/边框仍走全局浅色主题变量 */
+  background: linear-gradient(180deg, #eaf2f8 0%, #f6fafc 45%, #ffffff 100%);
 }
-/* 卡片深色表面（app.wxss 的 .card 用固定白底，需页内覆盖） */
+/* 卡片：白底 + 轻阴影（浅色下的层级感） */
 .page-detail .card {
-  background: rgba(30, 41, 59, 0.78);
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8rpx 24rpx rgba(31, 45, 61, 0.08);
 }
-/* 深色舞台下遮罩加深，弱化虚化图抢戏 */
+/* 虚化背景层：保留原稿件的柔化底图，但用高亮遮罩压平避免抢戏 */
 .page-detail .bg-blur-mask {
-  background: rgba(15, 23, 42, 0.7);
+  background: rgba(255, 255, 255, 0.78);
 }
-/* T00725 高亮在深底上的适配 */
+/* T00725 段落高亮在浅底上的适配 */
 .page-detail .seg-block.seg-active {
-  background-color: rgba(143, 184, 221, 0.16);
-  box-shadow: inset 6rpx 0 0 0 #8fb8dd;
+  background-color: rgba(63, 108, 143, 0.08);
+  box-shadow: inset 6rpx 0 0 0 #3f6c8f;
 }
 .page-detail .seg-hover {
-  background-color: rgba(143, 184, 221, 0.1);
+  background-color: rgba(63, 108, 143, 0.05);
 }
 
 /* ===== T00724 模块一：放大式播放框（封面轮播 = 视觉中心的圆角卡片） ===== */
@@ -44,15 +28,15 @@
   margin: 24rpx 32rpx;
   border-radius: 28rpx;
   overflow: hidden;
-  box-shadow: 0 16rpx 40rpx rgba(0, 0, 0, 0.5);
+  box-shadow: 0 12rpx 32rpx rgba(63, 108, 143, 0.16);
 }
-/* T00724 反馈：轮播高度改为按图片比例自适应（wxml 内联 carouselHeight），
-   不再固定 520rpx——固定值会把 360rpx 的图片顶出 160rpx 空白 */
+/* T00724 反馈：轮播高度按图片比例自适应（wxml 内联 carouselHeight），不固定高度 */
 .carousel-swiper {
   transition: height 0.25s ease;
 }
 
-/* ===== T00724 模块二：顶部流光动画（播放框上边缘的柔和光带，左右往复） ===== */
+/* ===== T00724 模块二：顶部流光动画（播放框上边缘的柔和光带，左右往复） =====
+   浅色底上用主题色（薄荷青→蓝）光带，保证可见但不刺眼 */
 .light-sweep {
   position: absolute;
   top: 0;
@@ -62,13 +46,13 @@
   border-radius: 0 0 8rpx 8rpx;
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(143, 184, 221, 0.35) 35%,
-    rgba(255, 255, 255, 0.85) 50%,
-    rgba(143, 184, 221, 0.35) 65%,
-    rgba(255, 255, 255, 0) 100%
+    rgba(63, 108, 143, 0) 0%,
+    rgba(63, 108, 143, 0.35) 35%,
+    rgba(143, 214, 208, 0.95) 50%,
+    rgba(63, 108, 143, 0.35) 65%,
+    rgba(63, 108, 143, 0) 100%
   );
-  filter: blur(2rpx);
+  filter: blur(1rpx);
   animation: light-sweep 3.2s ease-in-out infinite;
   pointer-events: none;
   z-index: 3;
@@ -80,21 +64,22 @@
   100% { left: 100%; opacity: 0; }
 }
 
-/* ===== T00724 模块三：歌词同步——当前行发光，其余行半透明 ===== */
+/* ===== T00724 模块三：歌词同步——当前行加粗发光，其余行半透明 =====
+   浅色底：当前行用主题色 + 柔和光晕；非当前行降低不透明度 */
 .page-detail .seg-block {
-  opacity: 0.5;
+  opacity: 0.55;
   transition: opacity 0.3s ease, background-color 0.3s ease;
 }
 .page-detail .seg-block.seg-active {
   opacity: 1;
 }
 .page-detail .seg-block.seg-active .seg-title {
-  color: #ffffff;
-  text-shadow: 0 0 16rpx rgba(143, 184, 221, 0.75);
+  color: #3f6c8f;
+  text-shadow: 0 0 12rpx rgba(63, 108, 143, 0.35);
 }
 .page-detail .seg-block.seg-active .seg-content {
-  color: #f3f4f6;
-  text-shadow: 0 0 12rpx rgba(143, 184, 221, 0.45);
+  color: var(--text-primary);
+  text-shadow: 0 0 10rpx rgba(63, 108, 143, 0.22);
 }
 
 /* 节目信息卡片 */
