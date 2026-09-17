@@ -14,16 +14,31 @@
   gap: 16rpx;
   padding: 16rpx 24rpx 8rpx;
 }
+/* 筛选 tab：与今日/历史页同款下划线风格（无背景 + 选中加粗 + 底部指示条） */
 .filter-chip {
-  padding: 8rpx 28rpx;
-  font-size: 26rpx;
+  position: relative;
+  padding: 8rpx 20rpx;
+  font-size: 27rpx;
   color: var(--text-secondary);
-  background: var(--bg-subtle);
-  border-radius: 999rpx;
-  line-height: 1.4;
+  background: transparent;
+  border-radius: 0;
+  line-height: 42rpx;
+  transition: color 0.2s ease, font-weight 0.2s ease;
 }
 .filter-chip.active {
-  color: var(--text-inverse);
+  color: var(--accent);
+  font-weight: 700;
+  background: transparent;
+}
+.filter-chip.active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 44rpx;
+  height: 6rpx;
+  border-radius: 3rpx;
   background: var(--accent);
 }
 
