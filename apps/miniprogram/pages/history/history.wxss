@@ -44,22 +44,37 @@
   height: 64rpx;
 }
 
+/* 频道导航 tab：与今日页同款下划线风格（无背景 + 选中加粗 + 底部指示条） */
 .channel-pill {
+  position: relative;
   display: inline-block;
-  padding: 12rpx 28rpx;
-  margin-right: 16rpx;
-  border-radius: 32rpx;
-  font-size: 26rpx;
-  color: var(--text-muted);
-  background: var(--bg-subtle);
-  transition: all 0.2s ease;
-  line-height: 40rpx;
+  padding: 11rpx 20rpx;
+  margin-right: 8rpx;
+  border-radius: 0;
+  font-size: 27rpx;
+  color: var(--text-secondary);
+  background: transparent;
+  transition: color 0.2s ease, font-weight 0.2s ease;
+  line-height: 42rpx;
 }
 
 .channel-pill.active {
+  color: var(--accent);
+  font-weight: 700;
+  background: transparent;
+  box-shadow: none;
+}
+
+.channel-pill.active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 44rpx;
+  height: 6rpx;
+  border-radius: 3rpx;
   background: var(--accent);
-  color: var(--text-inverse);
-  box-shadow: 0 4rpx 12rpx rgba(63, 108, 143, 0.3);
 }
 
 /* === 节目行卡片：与今日页完全一致 === */
