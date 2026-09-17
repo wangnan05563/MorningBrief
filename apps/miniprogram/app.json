@@ -33,19 +33,16 @@
     "list": [
       {
         "pagePath": "pages/index/index",
-        "text": "今日",
         "iconPath": "images/icons/tab-today-inactive.png",
         "selectedIconPath": "images/icons/tab-today-active.png"
       },
       {
         "pagePath": "pages/history/history",
-        "text": "历史",
         "iconPath": "images/icons/tab-history-inactive.png",
         "selectedIconPath": "images/icons/tab-history-active.png"
       },
       {
         "pagePath": "pages/profile/profile",
-        "text": "我的",
         "iconPath": "images/icons/tab-profile-inactive.png",
         "selectedIconPath": "images/icons/tab-profile-active.png"
       }
