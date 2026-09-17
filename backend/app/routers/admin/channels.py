@@ -1,21 +1,25 @@
 """B 端频道管理路由。"""
 import asyncio
+import logging
 import json
 import os
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query, UploadFile, File
-from pydantic import BaseModel, field_validator
+from fastapi import APIRouter, Depends, Query, UploadFile, File, UploadFile, File
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache.manager import cache as cache_manager
 from app.core.auth import AdminPayload, get_current_admin, require_admin
+from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success, error
 from app.database import get_db
-from app.models import AuditLog
+from app.models import AuditLog, Channel
 from app.paths import resolve_bgm_dir
 from app.services.channel_service import ChannelService, _TTL_CHANNELS
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin/api/v1/channels", tags=["B端-频道管理"])
 
@@ -754,3 +758,92 @@ async def recommend_sources(
         return error(code=400, message=str(e))
 
     return success(data=recommendation)
+# ===== T00730 频道图标：上传 / AI 生成 =====
+
+_ICON_ALLOWED = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}
+_ICON_MAX_BYTES = 2 * 1024 * 1024  # 2MB
+
+
+def _media_base_url() -> str:
+    """静态资源对外基础 URL（与音频/封面同源；复用 settings 的 audio_base_url 逻辑太重，此处取请求基址）。"""
+    return ""
+
+
+def _asset_url(filename: str) -> str:
+    """拼接 /channel-assets 静态 URL（相对路径，前端按当前 API 域名补全）。"""
+    return f"/channel-assets/{filename}"
+
+
+@router.post("/{channel_id}/icon")
+async def upload_channel_icon(
+    channel_id: int,
+    file: UploadFile = File(..., description="图标文件（PNG/JPG/WebP，≤2MB）"),
+    db: AsyncSession = Depends(get_db),
+    _: AdminPayload = Depends(require_admin),
+):
+    """上传频道图标（T00730）：命名 channel_{id}_icon.{ext}，存 /channel-assets 并写 icon_url。"""
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
+    if ext not in _ICON_ALLOWED:
+        raise BizError(code=400, message=f"不支持的图标格式：.{ext}（仅支持 PNG/JPG/WebP）")
+    raw = await file.read()
+    if len(raw) > _ICON_MAX_BYTES:
+        raise BizError(code=400, message="图标文件超过 2MB 限制")
+
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    ch = result.scalar_one_or_none()
+    if ch is None:
+        raise NotFoundError(f"频道 {channel_id} 不存在")
+
+    filename = f"channel_{channel_id}_icon.{ext}"
+    from app.paths import resolve_channel_asset_dir
+    dest = resolve_channel_asset_dir() / filename
+    dest.write_bytes(raw)
+
+    ch.icon_url = _asset_url(filename)
+    await db.commit()
+    logger.info("[channel] 频道 %s 图标已上传：%s（%d bytes）", channel_id, filename, len(raw))
+    return success(data={"icon_url": ch.icon_url, "filename": filename})
+
+
+class ChannelIconAIRequest(BaseModel):
+    prompt: str = Field(..., min_length=2, max_length=500, description="图标主题描述（如：番茄计时器、财经数据）")
+
+
+@router.post("/{channel_id}/icon/ai-generate")
+async def ai_generate_channel_icon(
+    channel_id: int,
+    req: ChannelIconAIRequest,
+    db: AsyncSession = Depends(get_db),
+    _: AdminPayload = Depends(require_admin),
+):
+    """AI 生成频道图标（T00730）：按主题描述生成图标并直接设为频道图标（预览即返回 URL）。
+
+    生成失败（服务未配置/网络不可达）抛明确错误，不落库、不影响原图标。
+    """
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    ch = result.scalar_one_or_none()
+    if ch is None:
+        raise NotFoundError(f"频道 {channel_id} 不存在")
+
+    from app.services import image_gen_service
+
+    prompt = (
+        f"Flat minimal app icon for a channel about {req.prompt.strip()}. "
+        "Rounded square composition, mint blue and deep navy palette, clean vector style, "
+        "centered single subject, no text, no watermark."
+    )
+    try:
+        raw = await asyncio.to_thread(
+            image_gen_service.generate_image, prompt, size="1K", ratio="1:1"
+        )
+    except image_gen_service.ImageGenError as e:
+        raise BizError(code=502, message=f"AI 生成失败：{e}")
+
+    filename = f"channel_{channel_id}_icon.png"
+    from app.paths import resolve_channel_asset_dir
+    (resolve_channel_asset_dir() / filename).write_bytes(raw)
+
+    ch.icon_url = _asset_url(filename)
+    await db.commit()
+    logger.info("[channel] 频道 %s 图标 AI 生成成功：%s（%d bytes）", channel_id, filename, len(raw))
+    return success(data={"icon_url": ch.icon_url, "filename": filename, "prompt": req.prompt})

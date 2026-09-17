@@ -302,6 +302,8 @@ async def _migrate_channel_schema() -> None:  # NOSONAR
             ("book_pool_cursor", "INTEGER NOT NULL DEFAULT 0"),
             ("book_pool_last_run_date", "TEXT"),
             ("book_pool_last_title", "TEXT"),
+            # T00730：频道图标（上传或 AI 生成），URL 形式存储
+            ("icon_url", "TEXT"),
         ]
         added = 0
         for col_name, col_type in new_columns:
@@ -982,6 +984,15 @@ def create_app() -> FastAPI:  # NOSONAR
         audio_dir = Path("data/audio_cache")
     audio_dir.mkdir(parents=True, exist_ok=True)
     app.mount("/audio", CORSStaticFiles(directory=str(audio_dir)), name="audio")
+
+    # 挂载 /channel-assets 静态目录：频道图标/预制封面（T00730/T00731）
+    try:
+        from app.paths import resolve_channel_asset_dir
+        channel_asset_dir = resolve_channel_asset_dir()
+    except Exception:
+        channel_asset_dir = Path("data/channel_assets")
+    channel_asset_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/channel-assets", CORSStaticFiles(directory=str(channel_asset_dir)), name="channel-assets")
 
     # 挂载 /bgm 静态目录：频道 BGM 文件（预制 + 用户上传），前端试听用
     # 目录与 paths.resolve_bgm_dir() 一致，开发态/打包态均自动创建

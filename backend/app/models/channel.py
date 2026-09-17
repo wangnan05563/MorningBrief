@@ -51,6 +51,8 @@ class Channel(Base):
     # 频道专属书籍 RSS 源列表（JSON 数组，存储 book_rss.yaml 中的 source name，如 ["豆瓣读书-书评"]）
     # 仅 audiobook 频道使用；为空时 crawler 不加载 book_rss.yaml 预制源。
     book_rss_sources: Mapped[Optional[str]] = mapped_column(Text, comment="频道专属书籍 RSS 源列表（JSON 数组，仅 audiobook）")
+    # T00730：频道图标（上传或 AI 生成），URL 形式存储（/channel-assets 静态服务）
+    icon_url: Mapped[Optional[str]] = mapped_column(String(512), comment="频道图标 URL（上传或 AI 生成）")
     # ==== T00656 讲书稿模式（script_mode=book_pool 时忽略频道书源，改从素材池按序取书）====
     # 内容来源模式：'' / 'channel' = 常规（频道书源）；'book_pool' = 讲书稿素材池
     script_mode: Mapped[Optional[str]] = mapped_column(

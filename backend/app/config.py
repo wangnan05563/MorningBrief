@@ -323,6 +323,11 @@ class Settings(BaseSettings):
     # 30 秒阈值覆盖用户切歌/试听前几秒退出的场景，是真实收听意图的最低门槛
     PLAY_COUNT_THRESHOLD_SEC: int = 30
 
+    # T00730/T00731：图像生成服务（agnes-image-2.5-flash，OpenAI 兼容 images/generations）
+    IMAGE_API_KEY: str = ""
+    IMAGE_API_BASE_URL: str = "https://apihub.agnes-ai.com/v1"
+    IMAGE_API_MODEL: str = "agnes-image-2.5-flash"
+
     # ---- 音频码率配置 ----
     # 语音播报场景 64kbps 已足够（MP3 单声道 44100Hz），128kbps 是音乐标准过度
     # 64k 相比 128k 文件体积减半，下载时间减半，对 Tailscale Funnel 链路收益显著

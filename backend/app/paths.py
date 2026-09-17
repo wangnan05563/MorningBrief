@@ -67,6 +67,17 @@ def resolve_avatar_dir() -> Path:
     return avatar_dir
 
 
+def resolve_channel_asset_dir() -> Path:
+    """频道图标/封面资源目录（T00730/T00731）。
+
+    频道图标（channel_{id}_icon.{ext}）与预制封面（channel_{id}.jpg）存放于此，
+    由 /channel-assets 静态挂载对外提供访问；与 avatars/bgm 同级持久化。
+    """
+    asset_dir = resolve_data_dir() / "channel_assets"
+    asset_dir.mkdir(parents=True, exist_ok=True)
+    return asset_dir
+
+
 def resolve_log_dir() -> Path:
     """日志目录。"""
     log_dir = get_app_root() / "logs"
@@ -151,3 +162,32 @@ def resolve_rss_sources_path() -> Path:
             return Path(meipass) / "app" / "workflow" / "crawler" / "sources" / "rss.yaml"
     # 开发态：app/paths.py 的上两级 = backend/
     return get_app_root() / "app" / "workflow" / "crawler" / "sources" / "rss.yaml"
+
+
+def resolve_book_rss_sources_path() -> Path:
+    """书籍 RSS 预制源配置文件路径（book_rss.yaml，只读资源）。
+
+    与 resolve_rss_sources_path 完全对称：仅 audiobook 频道使用，隔离于通用资讯 RSS。
+    打包态随 PyInstaller datas 打入 _MEIPASS，开发态位于 crawler/sources/book_rss.yaml。
+    """
+    if is_frozen():
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            return Path(meipass) / "app" / "workflow" / "crawler" / "sources" / "book_rss.yaml"
+    # 开发态：app/paths.py 的上两级 = backend/
+    return get_app_root() / "app" / "workflow" / "crawler" / "sources" / "book_rss.yaml"
+
+
+def resolve_book_fulltext_sources_path() -> Path:
+    """书籍「全文」预制源配置文件路径（book_fulltext.yaml，T00603，只读资源）。
+
+    与 resolve_book_rss_sources_path 完全对称：条目为书籍章节全文渠道
+    （wikisource / gutendex），面向 audiobook 频道的得到式形态。
+    打包态随 PyInstaller datas 打入 _MEIPASS，开发态位于 crawler/sources/book_fulltext.yaml。
+    """
+    if is_frozen():
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            return Path(meipass) / "app" / "workflow" / "crawler" / "sources" / "book_fulltext.yaml"
+    # 开发态：app/paths.py 的上两级 = backend/
+    return get_app_root() / "app" / "workflow" / "crawler" / "sources" / "book_fulltext.yaml"
