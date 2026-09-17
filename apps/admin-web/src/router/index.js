@@ -91,6 +91,13 @@ const routes = [
         meta: { title: '频道管理', icon: 'Menu', group: '内容运营' },
       },
       {
+        // T00716：素材库管理（增删改查 + 筛选分页；讲书稿素材池「从素材库加入」的入口）
+        path: 'channels/material-library',
+        name: 'MaterialLibrary',
+        component: () => import('../views/channel/MaterialLibrary.vue'),
+        meta: { title: '素材库管理', icon: 'Notebook', group: '内容运营' },
+      },
+      {
         // T00656：讲书稿模式与素材池（按频道配置开关/书单/排序/进度）
         path: 'channels/book-pool',
         name: 'BookPool',

@@ -138,6 +138,8 @@ async def _persist_material(
 async def list_materials(
     workflow_id: str = Query(None, description="按工作流 ID 过滤（运行期临时关联，终态后释放，详情页改用 channel_id）"),
     channel_id: int = Query(None, description="按频道 ID 过滤（素材本质是频道级素材池，详情页用此查询）"),
+    keyword: str = Query(None, description="按标题/来源模糊搜索（素材库管理页用）"),
+    status: str = Query(None, description="按状态过滤（pending/selected/skipped）"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -161,6 +163,14 @@ async def list_materials(
     if channel_id is not None:
         base_query = base_query.where(Material.channel_id == channel_id)
         count_query = count_query.where(Material.channel_id == channel_id)
+    # T00716：素材库管理页的查询能力（标题/来源模糊 + 状态过滤）
+    if keyword and keyword.strip():
+        like = f"%{keyword.strip()}%"
+        base_query = base_query.where(Material.title.like(like) | Material.source.like(like))
+        count_query = count_query.where(Material.title.like(like) | Material.source.like(like))
+    if status:
+        base_query = base_query.where(Material.status == status)
+        count_query = count_query.where(Material.status == status)
 
     total = (await db.execute(count_query)).scalar() or 0
 

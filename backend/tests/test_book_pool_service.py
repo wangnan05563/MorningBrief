@@ -276,3 +276,33 @@ class TestCandidates:
             await _seed_book(db_session, ch.id, t)
         res = await svc.list_candidates(db_session, ch.id, keyword="活着")
         assert [i["book_key"] for i in res["items"]] == ["活着"]
+
+class TestMaterialListFiltersT00716:
+    """素材库管理页的查询能力（T00716）：keyword（标题/来源模糊）+ status 过滤。"""
+
+    @pytest.mark.asyncio
+    async def test_list_filters_by_keyword_and_status(self, db_session, client, admin_token):
+        hdrs = {"Authorization": f"Bearer {admin_token['token']}"}
+        ch = Channel(name="T00716 频道", channel_type="audiobook", selection_strategy="outline")
+        db_session.add(ch)
+        await db_session.commit()
+        await db_session.refresh(ch)
+        for t in ("我只知道人是什么 · 第一章", "我只知道人是什么 · 第二章", "活着 · 序"):
+            db_session.add(Material(
+                source="我只知道人是什么" if "人是什么" in t else "活着",
+                source_type="list", title=t, content="正文" * 20,
+                url=f"https://example.com/t00716/{t}", status=MaterialStatus.pending.value,
+                channel_id=ch.id, crawled_at=date.today(),
+            ))
+        await db_session.commit()
+
+        base = "/admin/api/v1/materials"
+        # keyword 命中来源（书名聚合键）
+        r1 = client.get(base, params={"channel_id": ch.id, "keyword": "人是什么"}, headers=hdrs).json()
+        assert r1["code"] == 0 and r1["data"]["total"] == 2, r1
+        # status 过滤
+        r2 = client.get(base, params={"channel_id": ch.id, "status": "pending"}, headers=hdrs).json()
+        assert r2["data"]["total"] == 3
+        # 组合：keyword + status
+        r3 = client.get(base, params={"channel_id": ch.id, "keyword": "活着", "status": "pending"}, headers=hdrs).json()
+        assert r3["data"]["total"] == 1

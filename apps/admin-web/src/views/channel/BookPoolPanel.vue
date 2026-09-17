@@ -100,6 +100,8 @@
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="candidatesLoading" @click="loadCandidates">搜索</el-button>
+          <!-- T00716：素材库管理入口（增删改查在「素材库管理」页） -->
+          <el-link type="primary" style="margin-left: 12px" @click="goLibrary">管理素材 ↗</el-link>
         </el-form-item>
       </el-form>
       <el-table
@@ -154,6 +156,7 @@
  * - 调度与进度：取书间隔、末尾循环、进度展示与重置、下次生成预览（只读）。
  */
 import { computed, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import {
   addBooksToPool,
@@ -167,6 +170,8 @@ import {
   setScriptMode,
   updateBookPoolSchedule,
 } from '../../api/bookPool'
+
+const router = useRouter()
 
 const props = defineProps({
   channelId: { type: Number, required: true },
@@ -312,6 +317,11 @@ async function loadCandidates() {
 
 function onCandidateSelect(rows) {
   selectedCandidates.value = rows
+}
+
+/** T00716：跳转「素材库管理」页（增删改查；携带当前频道便于筛选） */
+function goLibrary() {
+  router.push({ path: '/channels/material-library', query: { channelId: props.channelId } })
 }
 
 async function onAddSelected() {
