@@ -67,17 +67,9 @@
         <el-table-column label="创建时间" min-width="170">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
-        <!-- T00656：内容来源模式（讲书稿模式 = 忽略频道书源，按素材池顺序逐日取书） -->
-        <el-table-column label="内容来源" width="120" align="center">
-          <template #default="{ row }">
-            <el-tag v-if="row.script_mode === 'book_pool'" type="success" size="small">讲书稿模式</el-tag>
-            <el-tag v-else type="info" size="small">频道书源</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column v-if="canOperate" label="操作" width="240">
+        <el-table-column v-if="canOperate" label="操作" width="160">
           <template #default="{ row }">
             <el-button size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button size="small" type="primary" plain @click="openBookPool(row)">讲书稿</el-button>
             <el-button size="small" type="danger" :loading="deletingIds.has(row.id)" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -355,6 +347,7 @@
             filterable
             collapse-tags
             collapse-tags-tooltip
+            :disabled="bookPoolOn"
             placeholder="留空使用全部源（全局模式）"
             style="width: 100%"
           >
@@ -365,7 +358,32 @@
               :value="src.name"
             />
           </el-select>
-          <span class="form-tip">选择频道专属 RSS 源，仅采集选中源的数据；留空使用全部源</span>
+          <span class="form-tip">
+            选择频道专属 RSS 源，仅采集选中源的数据；留空使用全部源
+            <template v-if="bookPoolOn">（讲书稿模式下书源已停用）</template>
+          </span>
+        </el-form-item>
+        <el-form-item v-if="form.channel_type === 'audiobook'" label="书籍 RSS 源">
+          <el-select
+            v-model="form.book_rss_sources"
+            multiple
+            filterable
+            collapse-tags
+            collapse-tags-tooltip
+            :disabled="bookPoolOn"
+            placeholder="留空使用全部书籍源（book_rss.yaml）"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="src in bookRssSourcesList"
+              :key="src.name"
+              :label="`${src.name}（${src.category_hint}）`"
+              :value="src.name"
+            />
+          </el-select>
+          <span class="form-tip"
+            >有声读物专属：从 book_rss.yaml 预制书籍源中选择；爬虫仅对 audiobook 频道加载这些源</span
+          >
         </el-form-item>
         <el-form-item label="关键词过滤">
           <el-input
@@ -380,11 +398,46 @@
             AI 推荐理由：{{ sourcesRecommendReason }}
           </div>
         </el-form-item>
+
+        <!-- T00656 讲书稿模式：开启后忽略频道书源，改从素材池按序逐日取书（书源灰显保留） -->
+        <el-form-item label="讲书稿模式">
+          <div class="book-pool-switch-row">
+            <el-switch
+              v-model="bookPoolOn"
+              :disabled="!editing"
+              :loading="bookPoolLoading"
+              @change="onToggleBookPool"
+            />
+            <span class="form-tip">
+              {{ bookPoolOn
+                ? '已开启：内容来自「讲书稿素材池」（按书单顺序逐日取书），上方书源已停用（灰显）'
+                : '开启后忽略频道书源，改按「讲书稿素材池」的顺序逐日取书生成讲书稿' }}
+            </span>
+          </div>
+          <el-link
+            v-if="bookPoolOn"
+            type="primary"
+            class="book-pool-link"
+            @click="poolDialogVisible = true"
+          >讲书稿素材池（书单 / 排序 / 进度）</el-link>
+          <span v-if="!editing" class="form-tip">（新频道请先保存，再配置讲书稿模式与素材池）</span>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="submitting" @click="handleSubmit">确认</el-button>
       </template>
+
+      <!-- T00656：讲书稿素材池弹窗（与「讲书稿素材池」页面映射同一组件与数据） -->
+      <el-dialog
+        v-model="poolDialogVisible"
+        title="讲书稿素材池"
+        width="900px"
+        append-to-body
+        destroy-on-close
+      >
+        <BookPoolPanel v-if="poolDialogVisible && editing" :channel-id="editing.id" />
+      </el-dialog>
     </el-dialog>
   </div>
 </template>
@@ -392,18 +445,15 @@
 <script setup>
 defineOptions({ name: 'ChannelManagement' })
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { Plus, VideoPlay, Upload } from '@element-plus/icons-vue'
+import BookPoolPanel from './BookPoolPanel.vue'
+import { getScriptMode, setScriptMode } from '../../api/bookPool'
 import {
   listChannels, createChannel, updateChannel, deleteChannel, generateChannelPrompts,
-  listBgmFiles, uploadBgmFile, recommendChannelBgm, listRssSources, recommendChannelSources,
+  listBgmFiles, uploadBgmFile, recommendChannelBgm, listRssSources, listBookRssSources, recommendChannelSources,
 } from '../../api/channels'
 import { formatTime } from '../../utils/format'
-
-// T00656：跳转「讲书稿素材池」页（开关/书单/进度在该页按频道配置）
-const router = useRouter()
-
 // 角色控制：直接读 localStorage，operator 隐藏增删改操作
 const role = localStorage.getItem('admin_role') || ''
 const canOperate = role === 'admin'
@@ -580,15 +630,41 @@ function openCreate() {
   resetForm()
   loadBgmList()
   loadRssSources()
+  loadBookRssSources()
   dialogVisible.value = true
 }
 
-/**
- * T00656：打开该频道的讲书稿素材池（开关 / 书单排序 / 进度在同一页完成，
- * 避免在"尚未保存的新频道"上切换模式——模式开关需要已有 channel_id）
- */
-function openBookPool(row) {
-  router.push({ path: '/channels/book-pool', query: { channelId: row.id } })
+// ===== T00656 讲书稿模式（编辑弹窗内） =====
+const bookPoolOn = ref(false)
+const bookPoolLoading = ref(false)
+const poolDialogVisible = ref(false)
+
+/** 编辑打开时读取该频道的讲书稿模式状态（驱动书源灰显与链接展示） */
+async function loadBookPoolState(channelId) {
+  try {
+    const data = await getScriptMode(channelId)
+    bookPoolOn.value = !!data?.enabled
+  } catch (e) {
+    bookPoolOn.value = false
+  }
+}
+
+/** 弹窗内切换讲书稿模式（幂等；失败回滚开关显示） */
+async function onToggleBookPool(val) {
+  if (!editing.value) {
+    bookPoolOn.value = false
+    return
+  }
+  bookPoolLoading.value = true
+  try {
+    const res = await setScriptMode(editing.value.id, val)
+    bookPoolOn.value = !!res?.enabled
+    ElMessage[res?.changed ? 'success' : 'info'](res?.message || (val ? '已开启讲书稿模式' : '已关闭讲书稿模式'))
+  } catch (e) {
+    bookPoolOn.value = !val
+  } finally {
+    bookPoolLoading.value = false
+  }
 }
 
 function openEdit(row) {
@@ -620,6 +696,14 @@ function openEdit(row) {
   } catch {
     form.rss_sources = []
   }
+  // 书籍 RSS 源：仅 audiobook 频道使用，同样 JSON 数组字符串解析
+  try {
+    form.book_rss_sources = row.book_rss_sources ? JSON.parse(row.book_rss_sources) : []
+  } catch {
+    form.book_rss_sources = []
+  }
+  // T00656：读取讲书稿模式状态（驱动数据源配置区的灰显与素材池链接）
+  loadBookPoolState(row.id)
   form.keywords = row.keywords || ''
   // 素材回溯：后端返回 null 表示继承动态回溯，对应不勾选自定义；
   // 非 null 则回填天数并勾选自定义，使 el-input-number 可编辑

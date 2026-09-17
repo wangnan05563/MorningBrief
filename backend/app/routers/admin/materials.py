@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.exceptions import NotFoundError, BizError
+from pathlib import Path
+
 from app.core.response import success
 from app.database import get_db
 from app.models import AuditLog, Material, MaterialSourceType
@@ -304,10 +306,19 @@ async def upload_document(
     每个章节作为一条 source_type=list 素材入库，按 content_hash 去重，避免重复上传。
     """
     raw = await file.read()
+    fname = file.filename or "document.txt"
     try:
-        chapters = parse_document(file.filename or "document.txt", raw)
+        chapters = parse_document(fname, raw)
     except UnsupportedFormatError as e:
         raise BizError(code=400, message=str(e))
+
+    # T00656 用户反馈：整本书按章节拆分后"零散难辨、无法整本挑选"。
+    # 以文件名（去扩展名）作为**书名**：「来源」自动置为书名（用户显式填写非默认来源时尊重输入）、
+    # 章节 title 加「书名 · 」前缀——素材库/讲书候选列表据此按书聚合（book_pool 的 book_key＝source），
+    # 实现整本挑选与讲解顺序聚合。去重键为章节 content_hash，不受影响（重复上传仍会被跳过）。
+    book_name = Path(fname).stem.strip() or "未命名书稿"
+    if source in ("", "文档上传"):
+        source = book_name
 
     created = []
     for ch in chapters:
@@ -315,7 +326,7 @@ async def upload_document(
             db,
             channel_id=channel_id,
             source=source,
-            title=ch.title,
+            title=f"{book_name} · {ch.title}"[:256],
             content=ch.content,
             category=category,
             source_type=MaterialSourceType.list.value,

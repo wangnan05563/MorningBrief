@@ -21,7 +21,7 @@ import json
 import logging
 from datetime import date
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Channel, Material
@@ -82,24 +82,15 @@ async def set_script_mode(db: AsyncSession, channel_id: int, enabled: bool) -> d
         return {"changed": False, **state,
                 "message": "已处于讲书稿模式，无需重复操作" if enabled else "当前为常规模式（频道书源）"}
 
-    if enabled:
-        # 首次进入：快照 + 清空（保留原始 JSON 文本，便于原样恢复）
-        ch.rss_sources_snapshot = ch.rss_sources if ch.rss_sources is not None else "[]"
-        ch.book_rss_sources_snapshot = ch.book_rss_sources if ch.book_rss_sources is not None else "[]"
-        ch.rss_sources = "[]"
-        ch.book_rss_sources = "[]"
-        ch.script_mode = MODE_BOOK_POOL
-        message = "已开启讲书稿模式：已清除频道书源（快照已保存），当前内容来自素材库"
-    else:
-        # 关闭：按快照恢复
-        if ch.rss_sources_snapshot is not None:
-            ch.rss_sources = ch.rss_sources_snapshot
-        if ch.book_rss_sources_snapshot is not None:
-            ch.book_rss_sources = ch.book_rss_sources_snapshot
-        ch.rss_sources_snapshot = None
-        ch.book_rss_sources_snapshot = None
-        ch.script_mode = MODE_CHANNEL
-        message = "已关闭讲书稿模式：频道书源已按快照恢复"
+    # T00656 用户反馈：开启后书源配置**灰显保留**而非清空——真正的采集隔离在 crawler
+    # 的 script_mode 行为分支（完全不采集），字段原值保留即可让用户关闭后无缝回到原配置，
+    # 也免去快照/恢复的复杂度（快照列保留但不再使用）。
+    ch.script_mode = MODE_BOOK_POOL if enabled else MODE_CHANNEL
+    message = (
+        "已开启讲书稿模式：频道书源已停用（配置保留、灰显），内容来自素材池"
+        if enabled else
+        "已关闭讲书稿模式：恢复按频道书源取材"
+    )
 
     await db.commit()
     logger.info("[book_pool] 频道 %s 讲书稿模式 → %s", channel_id, "开启" if enabled else "关闭")
@@ -139,19 +130,30 @@ async def list_pool(db: AsyncSession, channel_id: int) -> list[dict]:
     return [_item_to_dict(r) for r in rows]
 
 
-async def add_books(db: AsyncSession, channel_id: int, material_ids: list[int]) -> dict:
-    """把素材库中的书加入池（末尾追加；已存在的跳过——幂等）。"""
-    if not material_ids:
-        return {"added": 0, "skipped": 0, "message": "未选择书籍"}
-    mats = (await db.execute(
-        select(Material).where(Material.id.in_(material_ids))
-    )).scalars().all()
-    found = {m.id: m for m in mats}
-    missing = [mid for mid in material_ids if mid not in found]
+async def add_books(db: AsyncSession, channel_id: int, book_keys: list[str]) -> dict:
+    """按"书"加入池（T00656 用户反馈：整本书为单位挑选，不再散选章节）。
 
-    existing_ids = set((await db.execute(
-        select(BookPoolItem.material_id).where(BookPoolItem.channel_id == channel_id)
+    Args:
+        book_keys: 书籍聚合键列表（＝素材 `source`／书名）。一本书一个池项；
+            代表章节 material_id 取该书任一素材（仅展示引用）。
+
+    幂等：同 channel + book_key 已在池中的跳过。
+    """
+    keys = [k.strip() for k in (book_keys or []) if k and k.strip()]
+    if not keys:
+        return {"added": 0, "skipped": 0, "message": "未选择书籍"}
+
+    existing_keys = set((await db.execute(
+        select(BookPoolItem.book_key).where(BookPoolItem.channel_id == channel_id)
     )).scalars().all())
+
+    # 每个书键的代表素材（任一素材即可，按 id 取最早）
+    reps = (await db.execute(
+        select(Material.source, func.min(Material.id))
+        .where(Material.channel_id == channel_id, Material.source.in_(keys))
+        .group_by(Material.source)
+    )).all()
+    rep_map = {src: mid for src, mid in reps}
 
     next_sort = (await db.execute(
         select(func.coalesce(func.max(BookPoolItem.sort_index), -1)).where(BookPoolItem.channel_id == channel_id)
@@ -159,26 +161,33 @@ async def add_books(db: AsyncSession, channel_id: int, material_ids: list[int]) 
     next_sort = int(next_sort if next_sort is not None else -1) + 1
 
     added = 0
-    for mid in material_ids:
-        m = found.get(mid)
-        if m is None or mid in existing_ids:
+    skipped = 0
+    for key in keys:
+        if key in existing_keys:
+            skipped += 1
             continue
+        rep_mid = rep_map.get(key)
+        if rep_mid is None:
+            skipped += 1
+            logger.warning("[book_pool] 书键 %s 在频道 %s 无对应素材，跳过", key, channel_id)
+            continue
+        cat = (await db.execute(
+            select(Material.category).where(
+                Material.channel_id == channel_id, Material.source == key
+            ).limit(1)
+        )).scalar()
         db.add(BookPoolItem(
             channel_id=channel_id,
-            material_id=mid,
-            title=(m.title or f"素材 {mid}")[:256],
-            author=None,
-            category=m.category,
-            cover_url=m.cover_url,
+            material_id=rep_mid,
+            book_key=key[:256],
+            title=key[:256],
+            category=cat,
             sort_index=next_sort,
         ))
         next_sort += 1
         added += 1
     await db.commit()
-    skipped = len(material_ids) - added
-    msg = f"已加入 {added} 本" + (f"，跳过 {skipped} 本（重复或不存在）" if skipped else "")
-    if missing:
-        msg += f"；{len(missing)} 个素材不存在"
+    msg = f"已加入 {added} 本" + (f"，跳过 {skipped} 本（已在书单或无对应素材）" if skipped else "")
     return {"added": added, "skipped": skipped, "message": msg}
 
 
@@ -332,40 +341,58 @@ async def list_candidates(
     db: AsyncSession, channel_id: int | None = None, keyword: str | None = None,
     page: int = 1, size: int = 20,
 ) -> dict:
-    """可选书候选（来自素材库）：默认列出本频道素材，可按关键词过滤已排除池内已有的书。"""
-    stmt = select(Material)
+    """可选书候选（T00656 用户反馈：**按书聚合**，一行一本书，整本加入）。
+
+    聚合键 = `Material.source`（上传 EPUB/DOCX 时后端自动写为书名）。
+    返回每本书的：书名（book_key）、总章节数、待讲（pending）章节数、分类、
+    代表素材 id（sample_material_id，展示引用）、是否已在池（in_pool，前端禁用重复选择）。
+    """
+    conds = []
     if channel_id is not None:
-        stmt = stmt.where(Material.channel_id == channel_id)
-    if keyword:
+        conds.append(Material.channel_id == channel_id)
+    if keyword and keyword.strip():
         like = f"%{keyword.strip()}%"
-        stmt = stmt.where(Material.title.like(like))
+        conds.append(Material.title.like(like) | Material.source.like(like))
+
     total = (await db.execute(
-        select(func.count()).select_from(stmt.subquery())
+        select(func.count(func.distinct(Material.source))).where(*conds)
     )).scalar() or 0
-    rows = (await db.execute(
-        stmt.order_by(Material.id.desc()).offset((max(1, page) - 1) * size).limit(size)
-    )).scalars().all()
-    in_pool: set[int] = set()
+
+    pending_expr = func.sum(case((Material.status == MaterialStatus.pending.value, 1), else_=0))
+    agg = (await db.execute(
+        select(
+            Material.source,
+            func.count(Material.id).label("chapters"),
+            pending_expr.label("pending"),
+            func.min(Material.id).label("sample_id"),
+            func.max(Material.category).label("category"),
+        )
+        .where(*conds)
+        .group_by(Material.source)
+        .order_by(func.min(Material.id).asc())
+        .offset((max(1, page) - 1) * size)
+        .limit(size)
+    )).all()
+
+    in_pool: set[str] = set()
     if channel_id is not None:
         in_pool = set((await db.execute(
-            select(BookPoolItem.material_id).where(BookPoolItem.channel_id == channel_id)
+            select(BookPoolItem.book_key).where(BookPoolItem.channel_id == channel_id)
         )).scalars().all())
-    return {
-        "total": int(total),
-        "items": [
-            {
-                "material_id": m.id,
-                "title": m.title,
-                "category": m.category,
-                "source": m.source,
-                "source_type": m.source_type,
-                "status": m.status,
-                "cover_url": m.cover_url,
-                "in_pool": m.id in in_pool,
-            }
-            for m in rows
-        ],
-    }
+
+    items = [
+        {
+            "book_key": src,
+            "title": src,
+            "chapters": int(ch),
+            "pending_chapters": int(pd or 0),
+            "category": cat,
+            "sample_material_id": int(sid),
+            "in_pool": src in in_pool,
+        }
+        for src, ch, pd, sid, cat in agg
+    ]
+    return {"total": int(total), "items": items}
 
 
 # --------------------------------------------------------------------------
@@ -377,6 +404,7 @@ def _item_to_dict(r: BookPoolItem) -> dict:
         "id": r.id,
         "channel_id": r.channel_id,
         "material_id": r.material_id,
+        "book_key": r.book_key,
         "title": r.title,
         "author": r.author,
         "category": r.category,
@@ -408,12 +436,8 @@ async def collect_book_materials(db: AsyncSession, channel_id: int, item: dict) 
     Returns:
         待消费素材列表（可能为空：书尚未上传书稿）
     """
-    src = (await db.execute(
-        select(Material.source).where(Material.id == item["material_id"])
-    )).scalar()
-    conds = [Material.id == item["material_id"]]
-    if src:
-        conds.append(Material.source == src)
+    book_key = item.get("book_key") or item.get("title") or ""
+    conds = [Material.source == book_key] if book_key else []
     rows = (await db.execute(
         select(Material).where(
             Material.channel_id == channel_id,

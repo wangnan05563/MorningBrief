@@ -39,7 +39,10 @@ class ScheduleRequest(BaseModel):
 
 
 class AddBooksRequest(BaseModel):
-    material_ids: list[int] = Field(default_factory=list, description="素材库中的书籍素材 ID 列表")
+    book_sources: list[str] = Field(
+        default_factory=list,
+        description="书籍聚合键列表（＝素材 source／书名）。一本书一个池项，整本入池",
+    )
 
 
 class ReorderRequest(BaseModel):
@@ -107,8 +110,8 @@ async def add_books(
     db: AsyncSession = Depends(get_db),
     _: AdminPayload = Depends(require_admin),
 ):
-    """把素材库中的书加入池（末尾追加；已存在则跳过，幂等）。"""
-    return success(data=await svc.add_books(db, channel_id, req.material_ids))
+    """把书加入池（按书为单位，末尾追加；已存在则跳过，幂等）。"""
+    return success(data=await svc.add_books(db, channel_id, req.book_sources))
 
 
 @router.delete("/{channel_id}/book-pool/items/{item_id}")

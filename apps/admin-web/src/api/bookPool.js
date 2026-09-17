@@ -19,9 +19,9 @@ export const updateBookPoolSchedule = (channelId, data) =>
 /** 池列表（按取书顺序）+ 进度 */
 export const listBookPool = (channelId) => api.get(`/channels/${channelId}/book-pool`)
 
-/** 加入书籍（末尾追加，幂等） */
-export const addBooksToPool = (channelId, materialIds) =>
-  api.post(`/channels/${channelId}/book-pool/items`, { material_ids: materialIds })
+/** 加入书籍（按书为单位：book_sources＝书名/素材 source，末尾追加，幂等） */
+export const addBooksToPool = (channelId, bookSources) =>
+  api.post(`/channels/${channelId}/book-pool/items`, { book_sources: bookSources })
 
 /** 移出池 */
 export const removeBookFromPool = (channelId, itemId) =>

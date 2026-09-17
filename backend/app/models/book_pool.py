@@ -32,7 +32,11 @@ class BookPoolItem(Base):
         comment="所属频道（讲书稿模式的取书范围）",
     )
     material_id: Mapped[int] = mapped_column(
-        Integer, nullable=False, comment="引用素材库书籍的 material.id",
+        Integer, nullable=False, comment="代表章节的 material.id（该书任一章节，仅作展示引用）",
+    )
+    book_key: Mapped[str] = mapped_column(
+        String(256), nullable=False, default="",
+        comment="书籍聚合键＝素材 source（书名）。取书时按它聚合全书章节；池项以'书'为单位",
     )
     # 快照字段：素材改名/删除后列表仍可展示，避免联表与悬空引用
     title: Mapped[str] = mapped_column(String(256), nullable=False, comment="书名（快照）")

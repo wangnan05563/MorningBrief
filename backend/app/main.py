@@ -289,6 +289,8 @@ async def _migrate_channel_schema() -> None:  # NOSONAR
             ("type_label", "TEXT"),
             ("cover_url", "TEXT"),
             ("disclaimer_level", "TEXT NOT NULL DEFAULT 'none'"),
+            # 书籍 RSS 预制源白名单（仅 audiobook 频道）：存储 book_rss.yaml 中的 source name 数组
+            ("book_rss_sources", "TEXT"),
             # T00656 讲书稿模式：script_mode=book_pool 时忽略频道书源、改从素材池按序取书。
             # 快照列用于关闭模式时恢复原书源（不修改 rss.yaml，仅动频道字段）；
             # cursor/last_run_date/interval_days/loop 为按天取书的进度与调度状态。
@@ -309,6 +311,15 @@ async def _migrate_channel_schema() -> None:  # NOSONAR
         if added > 0:
             conn.commit()
             logger.info("[startup] channel 表迁移完成，新增 %d 列", added)
+
+        # T00656 反馈改造：book_pool_item 若在旧结构（无 book_key）下已建表，补列（幂等）。
+        # 新部署由 create_all 直接建出含 book_key 的表，此分支自然跳过。
+        cur.execute("PRAGMA table_info(book_pool_item)")
+        pool_cols = {row[1] for row in cur.fetchall()}
+        if pool_cols and "book_key" not in pool_cols:
+            cur.execute("ALTER TABLE book_pool_item ADD COLUMN book_key VARCHAR(256) NOT NULL DEFAULT ''")
+            conn.commit()
+            logger.info("[startup] book_pool_item 表迁移完成，新增 book_key 列")
     except Exception as e:
         logger.warning("[startup] channel 表迁移失败: %s", e)
     finally:
