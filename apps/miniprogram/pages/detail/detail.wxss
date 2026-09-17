@@ -685,21 +685,33 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 88rpx;
+  width: 88rpx;   /* 保留触控区 */
   height: 88rpx;
   padding: 0;
-  border-radius: var(--radius-btn);
-  background: var(--accent);
-  color: var(--text-inverse);
+  border-radius: 50%;
+  /* T00753 反馈：去边框与背景色，纯图标简洁风格 */
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
-.comment-submit-icon {
-  width: 40rpx;
-  height: 40rpx;
+.comment-submit:active {
+  opacity: 0.6;
+  transform: scale(0.94);
+}
+
+/* 发送图标：Feather Icons `send`（MIT 开源，线框风格），内联 SVG 免额外资源；
+   描边色与主题色一致 #3F6C8F */
+.comment-submit::after {
+  content: '';
+  width: 48rpx;
+  height: 48rpx;
+  background: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMzRjZDOEYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjIgMkwxMSAxMyIvPjxwYXRoIGQ9Ik0yMiAybC03IDIwLTQtOS05LTQgMjAtN3oiLz48L3N2Zz4=") center / contain no-repeat;
 }
 
 .comment-submit.disabled {
-  opacity: 0.5;
+  opacity: 0.35;
 }
 
 .comment-submit:active {

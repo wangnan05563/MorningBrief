@@ -281,7 +281,6 @@
           bindtap="onPostComment"
           aria-label="{{postingComment ? '发送中' : '发送评论'}}"
         >
-          <image class="comment-submit-icon" lazy-load src="/images/icons/btn-send.png" mode="aspectFit" />
         </view>
       </view>
 
