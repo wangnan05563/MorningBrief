@@ -107,13 +107,12 @@
           <image class="nav-icon" lazy-load src="/images/icons/skip-back.png" mode="aspectFit" />
         </view>
         <view class="play-btn" bindtap="onTogglePlay">
-          <!-- T00722：进度环——边缘随播放进度由空心渐实（conic-gradient，无需 JS 计算）
-               T00753 追加：环改主题色（浅色卡面可辨），内层换旋转胶片 -->
+          <!-- T00722：进度环——边缘随播放进度由空心渐实（conic-gradient，无需 JS 计算） -->
           <view
             class="progress-ring"
-            style="background: conic-gradient(#3F6C8F {{duration > 0 ? (currentTime / duration) * 360 : 0}}deg, rgba(63, 108, 143, 0.18) 0deg)"
+            style="background: conic-gradient(#FFFFFF {{duration > 0 ? (currentTime / duration) * 360 : 0}}deg, rgba(255, 255, 255, 0.28) 0deg)"
           >
-            <view class="ring-hole {{isPlaying ? 'playing' : ''}}">
+            <view class="ring-hole">
               <image class="play-icon" lazy-load src="{{isPlaying ? '/images/icons/pause.png' : '/images/icons/play.png'}}" mode="aspectFit" />
             </view>
           </view>
