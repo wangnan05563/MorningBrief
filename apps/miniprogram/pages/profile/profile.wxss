@@ -545,3 +545,54 @@
   color: #3d4653;
   font-size: 24rpx;
 }
+
+/* ===== T00726 反馈：第二层 Tab 内嵌内容 ===== */
+.second-panel {
+  margin-top: 16rpx;
+  padding: 8rpx 0;
+}
+.second-loading,
+.second-empty {
+  padding: 32rpx 24rpx;
+  color: #909399;
+  font-size: 24rpx;
+  text-align: center;
+}
+.second-item {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 24rpx;
+  border-bottom: 1rpx solid var(--bg-subtle);
+}
+.second-item:last-of-type {
+  border-bottom: none;
+}
+.second-item-main {
+  flex: 1;
+  min-width: 0;
+}
+.second-item-title {
+  color: #3d4653;
+  font-size: 26rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.second-item-meta {
+  margin-top: 4rpx;
+  color: #909399;
+  font-size: 20rpx;
+}
+.second-more {
+  padding: 16rpx 24rpx;
+  color: #3f6c8f;
+  font-size: 24rpx;
+  text-align: center;
+}
+.second-entry-card {
+  margin-top: 16rpx;
+  padding: 32rpx 24rpx;
+  color: #3f6c8f;
+  font-size: 26rpx;
+  text-align: center;
+}
