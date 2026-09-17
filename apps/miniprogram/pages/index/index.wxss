@@ -89,7 +89,9 @@
 }
 
 /* 已播放卡片：整体降透明度，与未播放的形成视觉区分 */
-.episode-row-card.played {
+/* T00753 追加：已播放仅弱化内容区，**播放键保持全彩**（否则与历史页碟片风格不一致） */
+.episode-row-card.played .row-cover,
+.episode-row-card.played .row-main {
   opacity: 0.6;
 }
 
@@ -191,13 +193,14 @@
   justify-content: center;
   overflow: hidden;
   /* 碟片样式：中心薄荷标签 + 外圈黑胶盘体（径向渐变模拟唱片） */
+  /* T00753 追加：配色调浅——盘体由近黑改浅灰蓝，浅色页面更柔和 */
   background: radial-gradient(
     circle at 50% 50%,
     var(--accent) 0 30%,
-    #2b3542 31% 41%,
-    #1f2733 42% 100%
+    #8c9cb0 31% 41%,
+    #b3c0cf 42% 100%
   );
-  box-shadow: 0 2rpx 8rpx rgba(31, 45, 61, 0.22), inset 0 0 0 1rpx rgba(255, 255, 255, 0.06);
+  box-shadow: 0 2rpx 8rpx rgba(63, 108, 143, 0.18), inset 0 0 0 1rpx rgba(255, 255, 255, 0.5);
 }
 
 /* 唱片纹路 + 非对称高光（高光用于表达"转动"） */
@@ -209,12 +212,12 @@
   background:
     repeating-radial-gradient(
       circle at 50% 50%,
-      rgba(255, 255, 255, 0.06) 0 2rpx,
+      rgba(255, 255, 255, 0.42) 0 2rpx,
       rgba(255, 255, 255, 0) 2rpx 7rpx
     ),
     conic-gradient(
       from 0deg,
-      rgba(255, 255, 255, 0.18) 0deg 26deg,
+      rgba(255, 255, 255, 0.55) 0deg 26deg,
       rgba(255, 255, 255, 0) 26deg 360deg
     );
   pointer-events: none;
