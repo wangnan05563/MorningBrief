@@ -33,6 +33,15 @@
         data-id="{{item.id}}"
         data-index="{{index}}"
       >
+        <!-- T00730 频道图标：上传/AI 生成；无图标回退频道首字圆形占位（与骨架屏 avatar 对齐） -->
+        <image
+          wx:if="{{item.icon_url}}"
+          class="channel-avatar"
+          src="{{item.icon_url}}"
+          mode="aspectFill"
+          lazy-load
+        />
+        <view wx:else class="channel-avatar channel-avatar-fallback">{{item.name[0] || '频'}}</view>
         <!-- 频道信息：点击切换到该频道 -->
         <view class="channel-info" data-id="{{item.id}}" bindtap="onTapChannel">
           <view class="channel-name">

@@ -70,3 +70,48 @@ def generate_image(prompt: str, *, size: str = "1K", ratio: str = "1:1",
     if not b64:
         raise ImageGenError("图像生成服务未返回图片数据")
     return base64.b64decode(b64)
+
+
+def test_connection(*, base_url: str = "", api_key: str = "", model: str = "",
+                    timeout: float = 10.0) -> dict:
+    """图片服务连接测试（T00730 配置页）：GET {base}/models 验证可达性与鉴权。
+
+    轻量探测（不真实出图，避免测试一次消耗一次生成配额）。
+    参数为空时回退 Settings 当前配置。返回 {ok, message}。
+    """
+    settings = get_settings()
+    key = api_key or (getattr(settings, "IMAGE_API_KEY", "") or "")
+    base = (base_url or getattr(settings, "IMAGE_API_BASE_URL", "") or
+            "https://apihub.agnes-ai.com/v1").rstrip("/")
+    mdl = model or (getattr(settings, "IMAGE_API_MODEL", "") or "agnes-image-2.5-flash")
+
+    if not key:
+        return {"ok": False, "message": "未配置 API Key"}
+
+    try:
+        resp = httpx.get(
+            f"{base}/models",
+            headers={"Authorization": f"Bearer {key}"},
+            timeout=timeout,
+        )
+    except httpx.HTTPError as e:
+        logger.warning("图片服务连接测试失败: %s", e)
+        return {"ok": False, "message": f"连接失败：{e.__class__.__name__}"}
+
+    if resp.status_code == 401:
+        return {"ok": False, "message": "鉴权失败（API Key 无效）"}
+    if resp.status_code != 200:
+        return {"ok": False, "message": f"服务返回 {resp.status_code}"}
+
+    # 尝试确认目标模型在列表中（部分兼容网关不返回模型列表，仅提示不判失败）
+    configured = mdl
+    found = None
+    try:
+        items = resp.json().get("data", []) or []
+        found = next((it.get("id") for it in items if it.get("id") == configured), None)
+    except ValueError:
+        pass
+    if configured and found is None:
+        return {"ok": True,
+                "message": f"连接成功（模型 {configured} 未在 /models 列表中，网关可能按需路由，不影响使用）"}
+    return {"ok": True, "message": f"连接成功，模型 {configured} 可用"}

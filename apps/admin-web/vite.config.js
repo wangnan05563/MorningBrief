@@ -41,8 +41,14 @@ export default defineConfig(({ command }) => ({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/news/, ''),
       },
-      // 频道资源（图标/预制封面）静态目录：生产同源直取 /channel-assets，
-      // dev 态代理到后端，保证图标与封面预览可见（T00730/T00731）
+      // 频道资源（图标/预制封面）静态目录：T00730 修复——前端预览统一带 /news 前缀
+      // （与 axios baseURL 同一约定，生产 Funnel 只路由 /news/*，裸 /channel-assets 会 404）
+      '/news/channel-assets': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/news/, ''),
+      },
+      // 兼容旧入口：不带前缀的裸路径仍代理（DB 里存量 icon_url/cover_url 为相对路径）
       '/channel-assets': {
         target: 'http://localhost:8000',
         changeOrigin: true,

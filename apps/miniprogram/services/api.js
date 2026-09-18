@@ -442,6 +442,7 @@ function normalizeChannel(ch) {
     channel_type: type,
     type_label: ch.type_label || skin.getChannelTypeLabel(type),
     cover_url: ch.cover_url || '',
+    icon_url: ch.icon_url || '',
     disclaimer_level: skin.getDisclaimerLevel(ch.disclaimer_level),
     selection_strategy: ch.selection_strategy || 'heat',
     episode_count: ch.episode_count || 0,

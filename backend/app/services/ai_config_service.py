@@ -100,6 +100,12 @@ CONFIG_KEY_MAP = {
     "llm_model": "LLM_MODEL",
     "llm_timeout_sec": "LLM_TIMEOUT_SEC",
     "llm_retry_attempts": "LLM_RETRY_ATTEMPTS",
+    # 单期节目最大段数上限（T00584 得到式听书：20-30 分钟需 15-20 段）
+    "llm_max_script_segments": "LLM_MAX_SCRIPT_SEGMENTS",
+    # 图片生成（T00730：频道图标 AI 生成，OpenAI 兼容 agnes 接口）
+    "image_api_key": "IMAGE_API_KEY",
+    "image_api_base_url": "IMAGE_API_BASE_URL",
+    "image_api_model": "IMAGE_API_MODEL",
     # TTS 通用 + 阿里云（保留原 key 兼容前端旧表单）
     "tts_provider": "TTS_PROVIDER",
     "tts_api_key": "ALIYUN_TTS_API_KEY",
@@ -548,12 +554,33 @@ class AIConfigService:
             "cross_voice": _parse_cross_voice(_get("tts_cross_voice", "TTS_CROSS_VOICE", "{}")),
         }
 
-        return {"llm": llm_config, "tts": tts_config}
+        return {"llm": llm_config, "tts": tts_config, "image": self._get_image_config(raw)}
+
+    def _get_image_config(self, raw: dict[str, str] | None = None) -> dict:
+        """图片生成配置段（T00730）：SQLite 覆盖优先，回退 Settings 默认值。"""
+        raw = raw if raw is not None else {}
+        settings = get_settings()
+
+        def _get(key: str, settings_attr: str, default: str = "") -> str:
+            val = raw.get(key)
+            if val is not None:
+                return val
+            return str(getattr(settings, settings_attr, default))
+
+        return {
+            "api_key": _mask_key(_get("image_api_key", "IMAGE_API_KEY")),
+            "base_url": _get("image_api_base_url", "IMAGE_API_BASE_URL"),
+            "model": _get("image_api_model", "IMAGE_API_MODEL"),
+        }
 
     # ---- 配置更新 ----
 
     async def update_config(
-        self, llm_config: dict, tts_config: dict, selected_preset: str = ""
+        self,
+        llm_config: dict,
+        tts_config: dict,
+        selected_preset: str = "",
+        image_config: dict | None = None,
     ) -> None:
         """保存配置到 SQLite 并热更新 Settings 单例。
 
@@ -572,6 +599,10 @@ class AIConfigService:
             updates[key] = value
         for key, value in self._normalize_tts(tts_config).items():
             updates[key] = value
+        # 图片生成配置（T00730）：可选段，旧前端不传时跳过
+        if image_config:
+            for key, value in self._normalize_image(image_config).items():
+                updates[key] = value
 
         # 同步保存预设配置（即使 updates 为空也需要更新预设配置）
         if selected_preset:
@@ -638,6 +669,21 @@ class AIConfigService:
         # TTS 段间静音时长（秒）：拼接时每段新闻之间的留白
         if "segment_gap_sec" in config:
             result["segment_gap_sec"] = str(config["segment_gap_sec"])
+        return result
+
+    def _normalize_image(self, config: dict) -> dict[str, str]:
+        """将前端图片生成配置转为 config_key -> value 映射（T00730）。
+
+        API Key 脱敏值跳过（未修改），空字符串清除。
+        """
+        result: dict[str, str] = {}
+        api_key = config.get("api_key", "")
+        if api_key and not _is_masked(api_key):
+            result["image_api_key"] = api_key
+        if "base_url" in config:
+            result["image_api_base_url"] = str(config["base_url"] or "")
+        if "model" in config:
+            result["image_api_model"] = str(config["model"] or "")
         return result
 
     def _normalize_tts(self, config: dict) -> dict[str, str]:  # NOSONAR

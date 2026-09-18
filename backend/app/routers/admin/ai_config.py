@@ -92,11 +92,20 @@ class TTSConfigBody(BaseModel):
     cross_voice: Optional[dict] = None
 
 
+class ImageConfigBody(BaseModel):
+    """图片生成配置（T00730：频道图标 AI 生成服务）。"""
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""
+
+
 class SaveConfigBody(BaseModel):
     llm: LLMConfigBody
     tts: TTSConfigBody
     # 当前选中的 LLM 预设 key（用于同步保存预设配置，空字符串表示未选择预设）
     selected_preset: str = ""
+    # 图片生成配置（可选段：旧前端不传时跳过，保持向后兼容）
+    image: Optional[ImageConfigBody] = None
 
 
 class VoiceSyncBody(BaseModel):
@@ -106,6 +115,13 @@ class VoiceSyncBody(BaseModel):
 
 
 class TestLLMBody(BaseModel):
+    base_url: str = ""
+    api_key: str = ""
+    model: str = ""
+
+
+class TestImageBody(BaseModel):
+    """图片服务连接测试（T00730）：携带表单值，空值回退已保存配置。"""
     base_url: str = ""
     api_key: str = ""
     model: str = ""
@@ -239,6 +255,7 @@ async def save_config(
         llm_config=body.llm.model_dump(),
         tts_config=body.tts.model_dump(),
         selected_preset=body.selected_preset,
+        image_config=body.image.model_dump() if body.image is not None else None,
     )
     return success(message="配置已保存")
 
@@ -252,6 +269,21 @@ async def test_llm(
     """测试 LLM 连接（发送最小化请求验证鉴权）。"""
     svc = AIConfigService(db)
     result = await svc.test_llm_connection(
+        base_url=body.base_url,
+        api_key=body.api_key,
+        model=body.model,
+    )
+    return success(data=result)
+
+
+@router.post("/test-image")
+async def test_image(
+    body: TestImageBody,
+    admin: AdminPayload = Depends(require_admin),
+):
+    """图片生成服务连接测试（T00730：GET {base}/models 轻量探测，不消耗生成配额）。"""
+    from app.services.image_gen_service import test_connection
+    result = test_connection(
         base_url=body.base_url,
         api_key=body.api_key,
         model=body.model,

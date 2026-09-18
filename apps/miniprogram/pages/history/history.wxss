@@ -114,6 +114,20 @@
   flex-shrink: 0;
   margin-right: 20rpx;
   padding: 8rpx;
+  position: relative; /* T00730：频道图标小标绝对定位锚点 */
+}
+
+/* 频道图标小标（T00730）：叠封面左上角，白描边+投影；与今日页同款 */
+.row-cover-icon {
+  position: absolute;
+  top: 2rpx;
+  left: 2rpx;
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 12rpx;
+  border: 2rpx solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.12);
+  background: #fff;
 }
 
 .row-cover-channel {

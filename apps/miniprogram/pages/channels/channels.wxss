@@ -1,5 +1,32 @@
 /* pages/channels/channels.wxss */
 
+/* T00730：频道卡头像（icon_url 上传/AI 生成）；无图标回退频道首字圆形占位
+   （骨架屏 .sk-avatar 88rpx 圆形早已预留头像位，此处补齐真实卡片） */
+.channel-item {
+  display: flex;
+  align-items: center;
+}
+.channel-info {
+  flex: 1;
+  min-width: 0;
+}
+.channel-avatar {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 50%;
+  margin-right: 20rpx;
+  flex-shrink: 0;
+  background: var(--accent-soft, #eef3f7);
+}
+.channel-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36rpx;
+  font-weight: 600;
+  color: var(--accent, #3f6c8f);
+}
+
 /* 频道类型标签（课程/有声书）：复用全局绿色系（FR-MC-02） */
 .channel-type-tag {
   display: inline-block;

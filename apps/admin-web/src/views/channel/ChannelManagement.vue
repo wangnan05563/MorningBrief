@@ -357,7 +357,7 @@
             <el-image
               v-if="form.icon_url"
               class="icon-preview"
-              :src="form.icon_url"
+              :src="assetPreviewUrl(form.icon_url)"
               fit="cover"
             >
               <template #error>
@@ -769,12 +769,26 @@ async function openCoverPicker() {
 }
 
 /**
+ * /channel-assets 静态资源预览 URL（T00730 修复「预制封面预览不显示」）：
+ * 统一带 /news 前缀——与 axios baseURL（/news/admin/api/v1）同一约定。
+ * 生产经 Tailscale Funnel 只路由 /news/*，裸 /channel-assets 请求 404（表现为预览图不显示，
+ * 但列表接口走 /news 正常，故「能看到图片大小」）；dev 由 Vite proxy /news/channel-assets 转发。
+ * DB 存储的仍是干净的相对路径，仅渲染时拼接。
+ */
+function assetPreviewUrl(path) {
+  if (!path) return ''
+  if (/^https?:\/\//.test(path)) return path
+  return path.startsWith('/news/') ? path : '/news' + path
+}
+
+/**
  * 缩略图 URL：附文件 mtime 作版本号。
  * 封面插画可能被重制替换（同路径换图），不带版本号时浏览器会沿用旧缓存，
  * 表现为「封面图片未正常显示 / 显示旧图」。注意写入 cover_url 的仍是干净的 p.url。
  */
 function coverPreviewUrl(preset) {
-  return preset.mtime ? `${preset.url}?v=${preset.mtime}` : preset.url
+  const base = assetPreviewUrl(preset.url)
+  return preset.mtime ? `${base}?v=${preset.mtime}` : base
 }
 
 /** 点击缩略图即套用该预制封面（写入 cover_url，保存时随表单提交） */

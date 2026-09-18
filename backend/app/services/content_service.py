@@ -53,7 +53,7 @@ class ContentService:
         """
         all_key = "episode:today:all"
         if channel_id is not None:
-            cache_key = f"episode:today:ch:{channel_id}"
+            cache_key = f"episode:today:ch:{channel_id}:v2"  # v2：+channel_icon 字段，旧缓存失效
             cached = await self.cache.get(cache_key)
             if cached:
                 return cached
@@ -83,7 +83,9 @@ class ContentService:
                 return None
             data = self._episode_to_dict(episodes[0])
             # T00731：附带频道封面（AI 预制封面），供首页卡片渲染
+            # T00730：附带频道图标（上传/AI 生成），供首页频道卡左上角小标
             data["channel_cover"] = await self._channel_cover_url(channel_id)
+            data["channel_icon"] = await self._channel_icon_url(channel_id)
             await self.cache.set(cache_key, data, ttl=TTL_TODAY)
             return data
 
@@ -97,20 +99,21 @@ class ContentService:
             unique.append(self._episode_to_dict(ep))
 
         # T00731：批量附带频道封面（一次 IN 查询避免 N+1），首页卡片渲染 AI 预制封面
+        # T00730：批量附带频道图标，供首页频道卡左上角小标
         if unique:
             from app.models import Channel as ChannelModel
             ch_ids = list(seen_channels)
             ch_rows = await self.db.execute(
-                select(ChannelModel.id, ChannelModel.cover_url).where(ChannelModel.id.in_(ch_ids))
+                select(ChannelModel.id, ChannelModel.cover_url, ChannelModel.icon_url).where(
+                    ChannelModel.id.in_(ch_ids)
+                )
             )
-            base = self._resolve_audio_base_url()
-            cover_map = {}
-            for cid, curl in ch_rows.all():
-                if curl:
-                    cover_map[cid] = curl if curl.startswith("http") else base + curl
+            cover_map, icon_map = self._channel_art_maps(ch_rows.all())
             for e in unique:
                 if e.get("channel_id") in cover_map:
                     e["channel_cover"] = cover_map[e["channel_id"]]
+                if e.get("channel_id") in icon_map:
+                    e["channel_icon"] = icon_map[e["channel_id"]]
 
         # 任务3：批量统计各 episode 的播放次数（一次 IN 查询避免 N+1）
         if unique:
@@ -219,23 +222,23 @@ class ContentService:
             for e in list_data:
                 e["play_count"] = count_map.get(e["id"], 0)
 
-        # 历史页缩略图：批量附带频道封面（与 get_today 同配方——一次 IN 查询避免 N+1，
+        # 历史页缩略图：批量附带频道封面/图标（与 get_today 同配方——一次 IN 查询避免 N+1，
         # 相对路径补音频同源 base，保证小程序 <image> 可直接加载）
         if list_data:
             from app.models import Channel as ChannelModel
             ch_ids = list({e["channel_id"] for e in list_data if e.get("channel_id") is not None})
             if ch_ids:
                 ch_rows = await self.db.execute(
-                    select(ChannelModel.id, ChannelModel.cover_url).where(ChannelModel.id.in_(ch_ids))
+                    select(ChannelModel.id, ChannelModel.cover_url, ChannelModel.icon_url).where(
+                        ChannelModel.id.in_(ch_ids)
+                    )
                 )
-                base = self._resolve_audio_base_url()
-                cover_map = {}
-                for cid, curl in ch_rows.all():
-                    if curl:
-                        cover_map[cid] = curl if curl.startswith("http") else base + curl
+                cover_map, icon_map = self._channel_art_maps(ch_rows.all())
                 for e in list_data:
                     if e.get("channel_id") in cover_map:
                         e["channel_cover"] = cover_map[e["channel_id"]]
+                    if e.get("channel_id") in icon_map:
+                        e["channel_icon"] = icon_map[e["channel_id"]]
 
         data = {"total": total, "list": list_data}
         await self.cache.set(cache_key, data, ttl=TTL_LIST)
@@ -637,6 +640,38 @@ class ContentService:
         if not curl:
             return None
         return curl if curl.startswith("http") else self._resolve_audio_base_url() + curl
+
+    async def _channel_icon_url(self, channel_id: int) -> str | None:
+        """频道图标绝对 URL（T00730：上传/AI 生成），无图标返回 None。"""
+        from app.models import Channel as ChannelModel
+        row = await self.db.execute(
+            select(ChannelModel.icon_url).where(ChannelModel.id == channel_id)
+        )
+        iurl = row.scalar_one_or_none()
+        if not iurl:
+            return None
+        return iurl if iurl.startswith("http") else self._resolve_audio_base_url() + iurl
+
+    @staticmethod
+    def _channel_art_maps(rows) -> tuple[dict, dict]:
+        """把 (id, cover_url, icon_url) 行转为绝对 URL 映射（批量防 N+1）。
+
+        返回 (cover_map, icon_map)，缺省的键不出现，前端按 falsy 回退。
+        """
+        base = ContentService._resolve_audio_base_url()
+
+        def _abs(p):
+            if not p:
+                return None
+            return p if p.startswith("http") else base + p
+
+        cover_map, icon_map = {}, {}
+        for cid, curl, iurl in rows:
+            if curl:
+                cover_map[cid] = _abs(curl)
+            if iurl:
+                icon_map[cid] = _abs(iurl)
+        return cover_map, icon_map
 
     @staticmethod
     def _episode_to_dict(episode: Episode) -> dict:

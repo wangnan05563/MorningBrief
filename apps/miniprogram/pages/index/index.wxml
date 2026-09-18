@@ -96,6 +96,14 @@
           <text class="row-cover-channel">{{item.channel_name || '节目'}}</text>
           <text class="row-cover-date">{{item.date_label || ''}}</text>
         </block>
+        <!-- T00730：频道图标小标（上传/AI 生成），叠封面左上角；历史页同款保持一致 -->
+        <image
+          wx:if="{{item.channel_icon}}"
+          class="row-cover-icon"
+          src="{{item.channel_icon}}"
+          mode="aspectFill"
+          lazy-load
+        />
         <text class="played-badge" wx:if="{{item.played}}">已播放</text>
       </view>
       <view class="row-main">

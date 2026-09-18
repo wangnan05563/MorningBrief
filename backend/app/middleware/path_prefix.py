@@ -23,7 +23,9 @@ class PathPrefixMiddleware:
             path = scope.get("path", "")
             # 仅剥离 API 路径的 /news 前缀：
             # 静态资源 /news/assets 已有独立挂载，SPA 路由由 fallback 处理
-            if path.startswith("/news/admin/api/") or path.startswith("/news/api/") or path.startswith("/news/audio/") or path.startswith("/news/bgm/") or path.startswith("/news/avatars/"):
+            # T00730：/news/channel-assets 同样剥离——admin 预览图标/封面统一带 /news 前缀
+            # （与 axios baseURL 同一约定），直连后端访问时由这里剥离命中静态挂载
+            if path.startswith("/news/admin/api/") or path.startswith("/news/api/") or path.startswith("/news/audio/") or path.startswith("/news/bgm/") or path.startswith("/news/avatars/") or path.startswith("/news/channel-assets/"):
                 scope["path"] = path[5:]
         await self.app(scope, receive, send)
 

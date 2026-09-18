@@ -699,6 +699,41 @@
         </el-card>
       </el-tab-pane>
 
+      <!-- 图片模型（T00730：频道图标 AI 生成服务） -->
+      <el-tab-pane label="图片模型" name="image">
+        <el-card shadow="never">
+          <el-form :model="imageForm" label-width="120px" class="config-form">
+            <el-form-item label="API Key">
+              <el-input
+                v-model="imageForm.api_key"
+                type="password"
+                show-password
+                placeholder="图像生成服务 API Key（留空沿用已保存值）"
+              />
+            </el-form-item>
+            <el-form-item label="API Base URL">
+              <el-input v-model="imageForm.base_url" placeholder="OpenAI 兼容 API 地址（如 https://apihub.agnes-ai.com/v1）" />
+            </el-form-item>
+            <el-form-item label="模型">
+              <el-input v-model="imageForm.model" placeholder="如 agnes-image-2.5-flash" />
+            </el-form-item>
+            <el-form-item label="连接测试">
+              <el-button :loading="testingImage" @click="handleTestImage">测试连接</el-button>
+              <el-tag
+                v-if="imageTestResult"
+                :type="imageTestResult.ok ? 'success' : 'danger'"
+                style="margin-left: 12px"
+              >
+                {{ imageTestResult.message }}
+              </el-tag>
+              <div class="field-tip" style="width: 100%; margin-top: 4px;">
+                用于「频道管理 → 编辑频道 → 频道图标」的 AI 生成；测试为轻量探测，不消耗生成配额
+              </div>
+            </el-form-item>
+          </el-form>
+        </el-card>
+      </el-tab-pane>
+
       <!-- 用量统计 -->
       <el-tab-pane label="用量统计" name="usage">
         <el-card shadow="never" v-loading="usageLoading">
@@ -773,6 +808,11 @@ const llmForm = ref({
   segment_gap_sec: 0.5,
 })
 const showLlmKey = ref(false)
+
+// 图片生成配置（T00730：频道图标 AI 生成服务，OpenAI 兼容接口）
+const imageForm = ref({ api_key: '', base_url: '', model: '' })
+const testingImage = ref(false)
+const imageTestResult = ref(null)
 const testingLlm = ref(false)
 const llmTestResult = ref(null)
 const selectedPreset = ref('')
@@ -1062,6 +1102,10 @@ async function loadConfig() {
     if (configData.tts) {
       Object.assign(ttsForm.value, configData.tts)
     }
+    // 填充图片生成配置（T00730）
+    if (configData.image) {
+      Object.assign(imageForm.value, configData.image)
+    }
     presets.value = presetData || []
     // 音色列表按当前 provider 加载（不同 provider 音色 ID 体系不同）
     await loadVoices(ttsForm.value.provider)
@@ -1141,6 +1185,7 @@ async function handleSave() {
       llm: llmForm.value,
       tts: ttsForm.value,
       selected_preset: selectedPreset.value,
+      image: imageForm.value,
     })
     ElMessage.success('配置已保存并热更新')
     // 保存后重新加载配置，刷新 presetConfigs 中的脱敏值
@@ -1151,6 +1196,26 @@ async function handleSave() {
     saving.value = false
   } finally {
     loading.value = false
+  }
+}
+
+// 图片服务连接测试（T00730）：透传表单值；Key 为脱敏值时不回传（后端回退已保存配置）
+async function handleTestImage() {
+  testingImage.value = true
+  imageTestResult.value = null
+  try {
+    const key = imageForm.value.api_key || ''
+    const data = await api.post('/ai/test-image', {
+      base_url: imageForm.value.base_url || '',
+      api_key: key.startsWith('****') ? '' : key,
+      model: imageForm.value.model || '',
+    })
+    imageTestResult.value = data || { ok: false, message: '无返回' }
+  } catch {
+    // 拦截器已弹出错误提示；此处兜底展示失败标签
+    imageTestResult.value = { ok: false, message: '请求失败（详见错误提示）' }
+  } finally {
+    testingImage.value = false
   }
 }
 
