@@ -40,6 +40,15 @@
       <view class="tool-chip" bindtap="onOpenQueue" aria-label="打开播放队列">
         <image class="tool-icon" lazy-load src="/images/icons/list.png" mode="aspectFit" />
       </view>
+      <!-- T00767：过滤按钮——单按钮循环 全部→未播→已播；Feather 线框图标随态切换+旋转入场 -->
+      <view
+        class="tool-chip filter-chip {{filterMode}}"
+        bindtap="onToggleFilter"
+        aria-label="{{filterMode === 'all' ? '当前显示全部，点击只看未播' : filterMode === 'unplayed' ? '当前只看未播，点击只看已播' : '当前只看已播，点击显示全部'}}"
+      >
+        <view class="filter-icon"></view>
+        <text class="filter-label">{{filterMode === 'all' ? '全部' : filterMode === 'unplayed' ? '未播' : '已播'}}</text>
+      </view>
     </view>
   </view>
 
@@ -51,6 +60,12 @@
     <view class="preferred-empty-btn" bindtap="onTapPreferredSettings" aria-label="去设置偏爱频道">
       <image class="preferred-empty-btn-icon" src="/images/icons/btn-settings-mint.png" mode="aspectFit" />
     </view>
+  </view>
+
+  <!-- T00767：过滤模式下无匹配（全量列表有数据，但当前 未播/已播 过滤为空） -->
+  <view class="empty-state" wx:elif="{{filterEmpty}}">
+    <image class="empty-icon-img" lazy-load src="/images/icons/newspaper.png" mode="aspectFit" />
+    <text>{{filterMode === 'played' ? '暂无已播节目' : '暂无未播节目'}}</text>
   </view>
 
   <!-- 空状态：已设置偏爱频道但过滤后无节目，或非偏爱模式下无历史 -->

@@ -534,3 +534,55 @@
   width: 64rpx;
   height: 64rpx;
 }
+
+/* ===== T00767：过滤按钮（播放队列右侧，单按钮循环 全部→未播→已播） ===== */
+/* 图标：Feather Icons（MIT 开源，线框风格，与评论区发送图标同源）内联 SVG，零新增图片资源 */
+.filter-chip {
+  width: auto;              /* 覆盖 tool-chip 的 88rpx 正圆：图标+微标签的胶囊 */
+  min-width: 88rpx;         /* 保留最小触控区 */
+  padding: 0 20rpx;
+  border-radius: 44rpx;
+  gap: 6rpx;
+  flex-direction: row;
+}
+
+.filter-icon {
+  width: 36rpx;
+  height: 36rpx;
+  background: center / contain no-repeat;
+  flex-shrink: 0;
+}
+
+.filter-chip.all .filter-icon {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMzRjZDOEYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48bGluZSB4MT0iOCIgeTE9IjYiIHgyPSIyMSIgeTI9IjYiPjwvbGluZT48bGluZSB4MT0iOCIgeTE9IjEyIiB4Mj0iMjEiIHkyPSIxMiI+PC9saW5lPjxsaW5lIHgxPSI4IiB5MT0iMTgiIHgyPSIyMSIgeTI9IjE4Ij48L2xpbmU+PGxpbmUgeDE9IjMiIHkxPSI2IiB4Mj0iMy4wMSIgeTI9IjYiPjwvbGluZT48bGluZSB4MT0iMyIgeTE9IjEyIiB4Mj0iMy4wMSIgeTI9IjEyIj48L2xpbmU+PGxpbmUgeDE9IjMiIHkxPSIxOCIgeDI9IjMuMDEiIHkyPSIxOCI+PC9saW5lPjwvc3ZnPg==");
+  animation: filter-in-a 0.35s ease;
+}
+.filter-chip.unplayed .filter-icon {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMzRjZDOEYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCI+PC9jaXJjbGU+PHBvbHlnb24gcG9pbnRzPSIxMCA4IDE2IDEyIDEwIDE2IDEwIDgiPjwvcG9seWdvbj48L3N2Zz4=");
+  animation: filter-in-b 0.35s ease;
+}
+.filter-chip.played .filter-icon {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMzRjZDOEYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjIgMTEuMDhWMTJhMTAgMTAgMCAxIDEtNS45My05LjE0Ij48L3BhdGg+PHBvbHlsaW5lIHBvaW50cz0iMjIgNCAxMiAxNC4wMSA5IDExLjAxIj48L3BvbHlsaW5lPjwvc3ZnPg==");
+  animation: filter-in-c 0.35s ease;
+}
+
+/* 切换动画：三个异名 keyframes 保证每次切态都重新触发（同名动画换类不重放） */
+@keyframes filter-in-a {
+  from { transform: rotate(-120deg) scale(0.4); opacity: 0.2; }
+  to   { transform: rotate(0deg) scale(1); opacity: 1; }
+}
+@keyframes filter-in-b {
+  from { transform: rotate(-120deg) scale(0.4); opacity: 0.2; }
+  to   { transform: rotate(0deg) scale(1); opacity: 1; }
+}
+@keyframes filter-in-c {
+  from { transform: rotate(-120deg) scale(0.4); opacity: 0.2; }
+  to   { transform: rotate(0deg) scale(1); opacity: 1; }
+}
+
+.filter-label {
+  font-size: 20rpx;
+  color: var(--accent);
+  font-weight: 600;
+  line-height: 1;
+}

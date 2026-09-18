@@ -47,6 +47,10 @@ Page({
     lastPlayedEpisode: null,
     // 已播放过的节目 id 集合（{ [id]: true }），用于列表行渲染"已播放"视觉标注
     playedSet: {},
+    // T00767：列表过滤模式（单按钮循环）all=全部 / unplayed=未播 / played=已播
+    filterMode: 'all',
+    // T00767：过滤模式下无匹配（全量列表有数据但视图为空），wxml 据此展示专用空态
+    filterEmpty: false,
     // "我的偏爱"模式：channel-pill 末尾的"我的偏爱"项用特殊 id 'preferred' 标识
     // 切换到该项时 isPreferredMode=true，currentChannelId 同步设为 'preferred'（仅用于 pill 高亮）
     // 数据拉取走 loadHistory 内的本地过滤分支：fetchHistory 拉全部频道，再按 preferredIds 过滤
@@ -136,6 +140,7 @@ Page({
     if (channelId === this.data.currentChannelId) return;
     // 先清空关联状态再 fetch，避免旧频道列表与续播卡片残留造成视觉串台
     // renderList/renderCount 同步重置，否则旧频道的渲染子集会残留
+    this._allList = []; // T00767：全量列表同步清空，防旧频道数据串入过滤视图
     this.setData({
       currentChannelId: channelId,
       isPreferredMode: channelId === 'preferred',
@@ -175,6 +180,7 @@ Page({
 
     // 偏爱模式 + 未设置偏爱频道：直接展示引导提示，不发请求
     if (this.data.isPreferredMode && preferredIds.length === 0) {
+      this._allList = []; // T00767：全量列表同步清空
       this.setData({
         list: [],
         renderList: [],
@@ -182,6 +188,7 @@ Page({
         page: 1,
         hasMore: false,
         preferredEmpty: true,
+        filterEmpty: false,
       });
       // 本地即刻决策、无网络等待：不留最短展示时长
       this._lc.finish(true);
@@ -190,7 +197,8 @@ Page({
 
     if (first) {
       // 重置渲染状态：renderList 清空、renderCount 回到初始步长
-      this.setData({ list: [], renderList: [], renderCount: RENDER_STEP, page: 1, hasMore: true, preferredEmpty: false });
+      this._allList = []; // T00767：首屏重置同步清空全量列表
+      this.setData({ list: [], renderList: [], renderCount: RENDER_STEP, page: 1, hasMore: true, preferredEmpty: false, filterEmpty: false });
     }
     if (!this.data.hasMore && !first) return;
 
@@ -211,20 +219,12 @@ Page({
 
       // 任务1：补充 channel_name + 规范化 title（历史节目也可能没有频道名）
       const enriched = items.map(ep => this._enrichEpisode(ep));
-      const newList = first ? enriched : this.data.list.concat(enriched);
-      // 计算渲染数量：
-      // - first=true：首批数据直接渲染前 RENDER_STEP 条（与初始 renderCount 对齐）
-      // - first=false：让新拉取的 enriched 立即可见，renderCount 同步扩展
-      //   注意 renderCount 不会超过 newList.length，slice 时会自动截断
-      const renderCount = first
-        ? Math.min(RENDER_STEP, newList.length)
-        : Math.min(this.data.renderCount + enriched.length, newList.length);
+      // T00767：全量列表存 _allList（不进 data，避免整表渲染）；list 仅存按过滤模式
+      // 过滤后的视图，渲染子集由 _applyFilter 统一计算
+      const newList = first ? enriched : (this._allList || []).concat(enriched);
+      this._allList = newList;
 
       this.setData({
-        list: newList,
-        // 同步渲染子集：wxml 只遍历 renderList，避免几百条一次性进渲染层
-        renderList: newList.slice(0, renderCount),
-        renderCount,
         total: res.total || 0,
         // 偏爱模式下 hasMore 不能用 newList.length < total 判断（total 是未过滤的总数）
         // 改用本次是否拉到完整一页 + 后端是否还有更多来判断
@@ -235,6 +235,8 @@ Page({
         // 偏爱模式下过滤后为空，显示"偏爱频道暂无历史节目"空状态（preferredEmpty=false时走通用空态）
         preferredEmpty: this.data.isPreferredMode && newList.length === 0,
       });
+      // T00767：视图列表/渲染子集/过滤空态统一由 _applyFilter 计算
+      this._applyFilter();
       // T00599：首屏走最短展示保护（消除骨架一闪）；上拉加载更多无骨架，立即收起
       this._lc.finish(!first);
     } catch (err) {
@@ -249,6 +251,39 @@ Page({
   /** T00599：慢加载超时后的重试入口（骨架下方"重试"按钮） */
   onRetryLoad() {
     this.loadHistory(true);
+  },
+
+  /**
+   * T00767：按过滤模式（all/unplayed/played）重算视图列表
+   * 全量数据存 this._allList（不进 data），list 仅存过滤后的视图；
+   * 渲染子集策略与原实现一致（renderList = list.slice(0, renderCount)，步长 RENDER_STEP）
+   */
+  _applyFilter() {
+    const all = this._allList || [];
+    const mode = this.data.filterMode;
+    const played = this.data.playedSet || {};
+    const view = mode === 'all'
+      ? all
+      : all.filter(ep => (mode === 'played' ? !!played[ep.id] : !played[ep.id]));
+    const renderCount = Math.min(RENDER_STEP, view.length);
+    this.setData({
+      list: view,
+      renderList: view.slice(0, renderCount),
+      renderCount,
+      filterEmpty: mode !== 'all' && all.length > 0 && view.length === 0,
+    });
+  },
+
+  /**
+   * T00767：过滤按钮——单按钮循环 全部 → 未播 → 已播 → 全部
+   * 切换后本地过滤已加载数据；上拉到底自动拉下一页补充（onReachBottom 链路不变）
+   */
+  onToggleFilter() {
+    const next = this.data.filterMode === 'all' ? 'unplayed'
+      : this.data.filterMode === 'unplayed' ? 'played' : 'all';
+    this.setData({ filterMode: next });
+    trackEvent('history', 'filter', '', next);
+    this._applyFilter();
   },
 
   onReachBottom() {
@@ -452,14 +487,13 @@ Page({
       const playedSet = {};
       playedIds.forEach(id => { playedSet[id] = true; });
       this.setData({ playedSet });
-      // 已播放集合就绪后，重新 enrich 历史列表以填充 played 字段
-      if (this.data.list.length > 0) {
-        const enriched = this.data.list.map(ep => this._enrichEpisode(ep));
-        // 同步刷新 renderList，否则已播放视觉标注不会反映到当前可见项上
-        this.setData({
-          list: enriched,
-          renderList: enriched.slice(0, this.data.renderCount),
-        });
+      // 已播放集合就绪后，重新 enrich 全量列表以填充 played 字段，再按过滤模式重算视图
+      // （T00767：过滤视图的已播/未播判定直接依赖 playedSet，必须联动刷新）
+      if (this._allList && this._allList.length > 0) {
+        this._allList = this._allList.map(ep => this._enrichEpisode(ep));
+      }
+      if (this._allList) {
+        this._applyFilter();
       }
     } catch (err) {
       // 静默失败：已播放标记非核心
