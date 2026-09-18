@@ -536,7 +536,8 @@
 }
 
 /* ===== T00767：过滤按钮（播放队列右侧，单按钮循环 全部→未播→已播） ===== */
-/* 图标：Feather Icons（MIT 开源，线框风格，与评论区发送图标同源）内联 SVG，零新增图片资源 */
+/* 图标：Feather Icons（MIT 开源，线框风格，与评论区发送图标同源）内联 SVG，零新增图片资源
+   全部=filter 漏斗（筛选语义；原 list 三横线与播放队列按钮图标重复，用户反馈后更换） */
 .filter-chip {
   width: auto;              /* 覆盖 tool-chip 的 88rpx 正圆：图标+微标签的胶囊 */
   min-width: 88rpx;         /* 保留最小触控区 */
@@ -554,7 +555,7 @@
 }
 
 .filter-chip.all .filter-icon {
-  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMzRjZDOEYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48bGluZSB4MT0iOCIgeTE9IjYiIHgyPSIyMSIgeTI9IjYiPjwvbGluZT48bGluZSB4MT0iOCIgeTE9IjEyIiB4Mj0iMjEiIHkyPSIxMiI+PC9saW5lPjxsaW5lIHgxPSI4IiB5MT0iMTgiIHgyPSIyMSIgeTI9IjE4Ij48L2xpbmU+PGxpbmUgeDE9IjMiIHkxPSI2IiB4Mj0iMy4wMSIgeTI9IjYiPjwvbGluZT48bGluZSB4MT0iMyIgeTE9IjEyIiB4Mj0iMy4wMSIgeTI9IjEyIj48L2xpbmU+PGxpbmUgeDE9IjMiIHkxPSIxOCIgeDI9IjMuMDEiIHkyPSIxOCI+PC9saW5lPjwvc3ZnPg==");
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMzRjZDOEYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cG9seWdvbiBwb2ludHM9IjIyIDMgMiAzIDEwIDEyLjQ2IDEwIDE5IDE0IDIxIDE0IDEyLjQ2IDIyIDMiLz48L3N2Zz4=");
   animation: filter-in-a 0.35s ease;
 }
 .filter-chip.unplayed .filter-icon {
