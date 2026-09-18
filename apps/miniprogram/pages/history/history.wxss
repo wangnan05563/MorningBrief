@@ -130,6 +130,14 @@
   margin-top: 6rpx;
 }
 
+/* 频道封面缩略图：与今日页 .row-cover-img 同款（撑满 120rpx 圆角块） */
+.row-cover-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 16rpx;
+  display: block;
+}
+
 /* 已播放角标：浅灰胶囊样式，与彩色封面形成对比 */
 .played-badge {
   font-size: 18rpx;

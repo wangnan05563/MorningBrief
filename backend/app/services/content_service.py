@@ -161,8 +161,9 @@ class ContentService:
             return {"total": 0, "list": []}
 
         # cache_key 包含 sort_order，避免不同排序命中同一缓存
+        # v2：本次新增 channel_cover 字段（历史页缩略图），旧缓存无此字段需失效
         sort_key = sort_order if sort_order in ("asc", "desc") else "desc"
-        cache_key = f"episode:list:page:{page}:ch:{channel_id}:sort:{sort_key}"
+        cache_key = f"episode:list:page:{page}:ch:{channel_id}:sort:{sort_key}:v2"
         cached = await self.cache.get(cache_key)
         if cached:
             return cached
@@ -217,6 +218,24 @@ class ContentService:
             count_map = {row[0]: row[1] for row in count_result.all()}
             for e in list_data:
                 e["play_count"] = count_map.get(e["id"], 0)
+
+        # 历史页缩略图：批量附带频道封面（与 get_today 同配方——一次 IN 查询避免 N+1，
+        # 相对路径补音频同源 base，保证小程序 <image> 可直接加载）
+        if list_data:
+            from app.models import Channel as ChannelModel
+            ch_ids = list({e["channel_id"] for e in list_data if e.get("channel_id") is not None})
+            if ch_ids:
+                ch_rows = await self.db.execute(
+                    select(ChannelModel.id, ChannelModel.cover_url).where(ChannelModel.id.in_(ch_ids))
+                )
+                base = self._resolve_audio_base_url()
+                cover_map = {}
+                for cid, curl in ch_rows.all():
+                    if curl:
+                        cover_map[cid] = curl if curl.startswith("http") else base + curl
+                for e in list_data:
+                    if e.get("channel_id") in cover_map:
+                        e["channel_cover"] = cover_map[e["channel_id"]]
 
         data = {"total": total, "list": list_data}
         await self.cache.set(cache_key, data, ttl=TTL_LIST)
