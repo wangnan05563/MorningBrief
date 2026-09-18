@@ -7,7 +7,7 @@
  * - 接入埋点
  */
 const STORAGE_KEY_SETTINGS = 'news_settings';
-const { setPlaybackRate, setAutoPlayNext, setWifiOnlyAutoPlay } = require('../../services/audio');
+const { setPlaybackRate, setAutoPlayNext, setWifiOnlyAutoPlay, setTransitionEnabled } = require('../../services/audio');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 const { requestSubscribeMessageByType } = require('../../services/api');
 
@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS = {
   defaultRate: 1.0,
   autoPlayNext: true,
   wifiOnlyAutoPlay: false,
+  transitionEnabled: false, // T00774：无缝过渡开关，默认关
   notifyNewEpisode: true,
 };
 
@@ -27,6 +28,7 @@ Page({
     defaultRate: 1.0,
     autoPlayNext: true,
     wifiOnlyAutoPlay: false,
+    transitionEnabled: false,
     notifyNewEpisode: true,
     rateOptions: [0.75, 1.0, 1.25, 1.5, 2.0],
     rateIndex: 1,
@@ -50,6 +52,7 @@ Page({
       defaultRate: settings.defaultRate,
       autoPlayNext: settings.autoPlayNext,
       wifiOnlyAutoPlay: settings.wifiOnlyAutoPlay,
+      transitionEnabled: settings.transitionEnabled,
       notifyNewEpisode: settings.notifyNewEpisode,
       rateIndex: rateIndex >= 0 ? rateIndex : 1,
     });
@@ -94,6 +97,16 @@ Page({
     // 同步到 audio.js 全局开关：让「仅 WiFi 自动播放」真正生效（A3 接线）
     setWifiOnlyAutoPlay(value);
     trackEvent('settings', 'change_wifi_only', '', value ? 1 : 0);
+  },
+
+  // T00774：无缝过渡开关——开启后预加载下一首详情+音频，连播/切歌零等待
+  onTransitionChange(e) {
+    const value = e.detail.value;
+    this.setData({ transitionEnabled: value });
+    this.saveSettings({ transitionEnabled: value });
+    // 同步到 audio.js 全局开关：开启时立即预热当前队列的下一首
+    setTransitionEnabled(value);
+    trackEvent('settings', 'change_transition', '', value ? 1 : 0);
   },
 
   onNotifyChange(e) {

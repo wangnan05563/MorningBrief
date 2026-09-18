@@ -17,6 +17,11 @@
       <text class="list-text">仅 WiFi 下自动播放</text>
       <switch checked="{{wifiOnlyAutoPlay}}" bindchange="onWifiOnlyChange" color="#3F6C8F" />
     </view>
+    <!-- T00774：无缝过渡——预加载下一首详情+音频，连播/切歌零等待；与自动连播开关解耦 -->
+    <view class="list-item">
+      <text class="list-text">无缝过渡（预载下一首）</text>
+      <switch checked="{{transitionEnabled}}" bindchange="onTransitionChange" color="#3F6C8F" />
+    </view>
   </view>
 
   <!-- 通知设置 -->

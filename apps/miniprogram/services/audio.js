@@ -38,6 +38,8 @@ let sleepListeners = [];       // 睡眠定时器状态变更监听器（页面�
 let queueListeners = [];       // 队列变更监听器
 let errorListeners = [];       // 播放错误监听器（页面订阅用，重置 isPlaying 等状态）
 let autoPlayNext = true;       // 自动连播开关（从 settings 读取）
+let wifiOnlyAutoPlay = false;  // 仅 WiFi 自动播放开关（从 settings 读取）
+let transitionEnabled = false; // T00774：无缝过渡开关（预加载下一首，默认关，从 settings 读取）
 let lastAppliedRate = null;    // 上次已应用的倍速（避免 onPlay 重复写入触发重新缓冲）
 let pendingSeek = 0;            // 待 seek 的目标位置（onCanplay 触发后清零，防止重复 seek）
 // 正在加载的节目 ID + URL：防止短时间内重复 playEpisode 导致 src 被覆盖清空
@@ -87,9 +89,12 @@ function loadSettings() {
     return {
       defaultRate: typeof saved.defaultRate === 'number' ? saved.defaultRate : DEFAULT_RATE,
       autoPlayNext: typeof saved.autoPlayNext === 'boolean' ? saved.autoPlayNext : true,
+      wifiOnlyAutoPlay: typeof saved.wifiOnlyAutoPlay === 'boolean' ? saved.wifiOnlyAutoPlay : false,
+      // T00774：无缝过渡开关，默认关闭（开启后预加载下一首详情+音频，实现零等待衔接）
+      transitionEnabled: saved.transitionEnabled === true,
     };
   } catch (e) {
-    return { defaultRate: DEFAULT_RATE, autoPlayNext: true };
+    return { defaultRate: DEFAULT_RATE, autoPlayNext: true, wifiOnlyAutoPlay: false, transitionEnabled: false };
   }
 }
 
@@ -103,6 +108,8 @@ function initPlayer() {
   // 启动时读取设置，初始化自动连播开关
   const settings = loadSettings();
   autoPlayNext = settings.autoPlayNext;
+  wifiOnlyAutoPlay = settings.wifiOnlyAutoPlay;
+  transitionEnabled = settings.transitionEnabled;
 
   audioManager = wx.getBackgroundAudioManager();
 
@@ -133,10 +140,11 @@ function initPlayer() {
     }
     stopProgressReport();
     notifyPlaybackListeners({ type: 'ended', episode: currentEpisode, paused: true });
-    // 自动连播：未开启睡眠定时器且开关打开时，播放队列下一首
+    // 自动连播：未开启睡眠定时器、开关打开、且符合「仅 WiFi 自动播放」网络条件时，播放队列下一首
     // sleepTimer 变量声明后从未赋值（实际操作的是 sleepTickTimer/sleepTailTimer），
     // 旧代码 !sleepTimer 永远为 true，导致开了睡眠定时器仍会自动连播
-    if (autoPlayNext && !sleepTickTimer && !sleepTailTimer) {
+    // wifiOnlyAutoPlay 开启时，仅在当前网络为 WiFi 才自动连播，避免蜂窝流量消耗
+    if (autoPlayNext && !sleepTickTimer && !sleepTailTimer && canAutoPlayOnCurrentNetwork()) {
       playNext();
     }
   });
@@ -346,6 +354,52 @@ function setAutoPlayNext(enabled) {
     data: { ...saved, autoPlayNext },
     fail: (e) => console.warn('[audio] 设置写入失败:', e && e.errMsg),
   });
+}
+
+/**
+ * 设置「仅 WiFi 自动播放」开关
+ * 打开后，自动连播（onEnded→playNext）在非 WiFi 网络下会被跳过，避免消耗蜂窝流量
+ */
+function setWifiOnlyAutoPlay(enabled) {
+  wifiOnlyAutoPlay = !!enabled;
+  const saved = wx.getStorageSync(STORAGE_KEY_SETTINGS) || {};
+  wx.setStorage({
+    key: STORAGE_KEY_SETTINGS,
+    data: { ...saved, wifiOnlyAutoPlay },
+    fail: (e) => console.warn('[audio] 设置写入失败:', e && e.errMsg),
+  });
+}
+
+/**
+ * 设置无缝过渡开关（T00774）
+ * - 开启：播放期间预加载下一首详情 + 预下载音频到本地，onEnded 切歌零等待（网易云式过渡）
+ * - 关闭：恢复独立切歌（切歌时现加载，详情与音频均不提前取）
+ * - 与「自动连播」开关解耦：连播行为由 autoPlayNext 控制，本开关只控制预加载
+ * 开启时立即为当前播放节目预热下一首，无需等待下一轮触发
+ */
+function setTransitionEnabled(enabled) {
+  transitionEnabled = !!enabled;
+  const saved = wx.getStorageSync(STORAGE_KEY_SETTINGS) || {};
+  wx.setStorage({
+    key: STORAGE_KEY_SETTINGS,
+    data: { ...saved, transitionEnabled },
+    fail: (e) => console.warn('[audio] 设置写入失败:', e && e.errMsg),
+  });
+  if (transitionEnabled) {
+    _preloadNextEpisode();
+  }
+}
+
+/**
+ * 仅 WiFi 自动播放闸门：开关开启且当前非 WiFi 网络时，禁止自动连播（节省流量）
+ * - 开关关闭：恒允许
+ * - app/globalData 不可用时（极端初始化边缘）退回允许，避免误伤自动连播
+ */
+function canAutoPlayOnCurrentNetwork() {
+  if (!wifiOnlyAutoPlay) return true;
+  const app = getApp();
+  if (!app || !app.globalData) return true;
+  return app.globalData.networkType === 'wifi';
 }
 
 /**
@@ -692,6 +746,10 @@ async function _autoFillQueue(currentEp) {
  * 失败时静默：playNext 会回退到 playEpisode 内的 fetch 路径
  */
 async function _preloadNextEpisode() {
+  // T00774：无缝过渡开关关闭时不预加载（详情/音频均切歌时现取），恢复"独立切歌"行为；
+  // playNext 内有 fetch 回退路径，关闭态下自动连播仍可用，只是切换时有加载间隔。
+  // 自动连播本身仍由「自动连播」开关控制，与本开关解耦（不改变既有行为）
+  if (!transitionEnabled) return;
   // 队列未初始化或已是末尾：无需预加载
   if (queueIndex < 0 || queueIndex >= playQueue.length - 1) return;
   const nextEp = playQueue[queueIndex + 1];
@@ -734,6 +792,9 @@ function _preloadNextAudio(episode) {
   if (!episode || !episode.audio_url) return;
   // 已有 localPath 的不重复下载，避免同一节目多次预下载浪费带宽
   if (episode.localPath) return;
+  // T00774：尊重「仅 WiFi 自动播放」——非 WiFi 网络不预下载整集音频（单曲 5~10MB），
+  // 避免蜂窝流量消耗；详情预取（JSON，KB 级）不受限
+  if (!canAutoPlayOnCurrentNetwork()) return;
 
   wx.downloadFile({
     url: episode.audio_url,
@@ -1362,6 +1423,9 @@ module.exports = {
   applyPlaybackRate,
   // 自动连播
   setAutoPlayNext,
+  setWifiOnlyAutoPlay,
+  // 无缝过渡（T00774）
+  setTransitionEnabled,
   // 队列
   setQueue,
   enqueue,
