@@ -1,4 +1,4 @@
-"""
+﻿"""
 FastAPI 应用入口
 
 单体应用架构：业务服务 + APScheduler + AI 工作流模块在同一进程内。
@@ -26,6 +26,9 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
 
+
+
+_PRAGMA_MATERIAL_INFO = "PRAGMA table_info(material)"
 def _read_range_sync(full_path: str, start: int, content_length: int) -> bytes:
     """同步读取文件指定字节范围（供 async 上下文通过 asyncio.to_thread 调用，避免阻塞事件循环）。"""
     with open(full_path, "rb") as f:
@@ -157,6 +160,7 @@ from app.routers.admin.stats import router as b_stats_router
 from app.routers.admin.tunnel import router as b_tunnel_router
 from app.routers.admin.workflows import router as b_workflows_router
 from app.routers.admin.ai_config import router as b_ai_config_router
+from app.routers.admin.assistant import router as b_assistant_router
 from app.routers.admin.channels import router as b_channels_router
 from app.routers.admin.queue import router as b_queue_router
 from app.routers.admin.materials import router as b_materials_router
@@ -342,7 +346,7 @@ async def _migrate_material_schema() -> None:  # NOSONAR
     conn = sqlite3.connect(db_path)
     try:
         cur = conn.cursor()
-        cur.execute("PRAGMA table_info(material)")
+        cur.execute(_PRAGMA_MATERIAL_INFO)
         existing_cols = {row[1] for row in cur.fetchall()}
 
         if "channel_id" not in existing_cols:
@@ -363,7 +367,7 @@ async def _migrate_cover_url_column() -> None:  # NOSONAR
     conn = sqlite3.connect(db_path)
     try:
         cur = conn.cursor()
-        cur.execute("PRAGMA table_info(material)")
+        cur.execute(_PRAGMA_MATERIAL_INFO)
         existing_cols = {row[1] for row in cur.fetchall()}
 
         if "cover_url" not in existing_cols:
@@ -391,7 +395,7 @@ async def _migrate_material_dedup_column() -> None:  # NOSONAR
     conn = sqlite3.connect(db_path)
     try:
         cur = conn.cursor()
-        cur.execute("PRAGMA table_info(material)")
+        cur.execute(_PRAGMA_MATERIAL_INFO)
         existing_cols = {row[1] for row in cur.fetchall()}
 
         if "dedup_key" not in existing_cols:
@@ -400,6 +404,101 @@ async def _migrate_material_dedup_column() -> None:  # NOSONAR
             logger.info("[startup] material 表迁移完成，新增 dedup_key 列")
     except Exception as e:
         logger.warning("[startup] material dedup_key 迁移失败: %s", e)
+    finally:
+        conn.close()
+
+
+async def _migrate_material_images_column() -> None:  # NOSONAR
+    """素材表结构迁移：为 material 表追加 images_json 列（幂等，T00766）。
+
+    文章全量图片 JSON 数组，供小程序详情页轮播。
+    SQLite create_all 不修改已存在表结构，需显式 ALTER TABLE。
+    """
+    import sqlite3
+    from app.paths import resolve_db_path
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(_PRAGMA_MATERIAL_INFO)
+        existing_cols = {row[1] for row in cur.fetchall()}
+
+        if "images_json" not in existing_cols:
+            cur.execute("ALTER TABLE material ADD COLUMN images_json TEXT")
+            conn.commit()
+            logger.info("[startup] material 表迁移完成，新增 images_json 列")
+    except Exception as e:
+        logger.warning("[startup] material images_json 迁移失败: %s", e)
+    finally:
+        conn.close()
+
+
+async def _migrate_material_source_type_constraint() -> None:  # NOSONAR
+    """素材表迁移：删除 material.source_type 上的旧 ck_material_source_type CHECK 约束（幂等）。
+
+    背景：早期 source_type 仅 rss/list 两值并加 CHECK 约束；扩展 book_rss/cos/api/qrcode
+    多输入渠道后，约束会拒绝新值导致入库失败。模型层已移除该约束（新库不带），
+    此处仅处理已存在数据库中的旧约束。
+
+    兼容性：部分运行环境的 bundled SQLite 不支持 ALTER TABLE ... DROP CONSTRAINT
+    （报 "near CONSTRAINT: syntax error"），原实现会静默失败、约束残留，
+    导致 audiobook/cos/api/qrcode 等素材永远无法入库。故改用表重建法
+    （rename → 建新表(去约束) → 拷数据 → 删旧表 → 改名 → 重建显式索引），
+    对所有 SQLite 版本通用。约束不存在时不执行重建，幂等安全。
+    """
+    import re
+    import sqlite3
+    from app.paths import resolve_db_path
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='material'")
+        row = cur.fetchone()
+        sql = (row[0] or "") if row else ""
+        if "ck_material_source_type" not in sql:
+            return  # 已迁移，幂等退出
+
+        # 定位约束文本及其平衡的闭合括号（CHECK 体内含嵌套括号，不能用简单 [^)]*）
+        cpos = sql.index("CONSTRAINT ck_material_source_type")
+        comma_pos = sql.rindex(",", 0, cpos)
+        popen = sql.index("(", cpos)
+        depth, j = 0, popen
+        while j < len(sql):
+            if sql[j] == "(":
+                depth += 1
+            elif sql[j] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        new_sql = sql[:comma_pos] + sql[j + 1:]
+
+        # 捕获显式索引（跳过自动索引：sql IS NULL），重建后恢复
+        cur.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type='index' "
+            "AND tbl_name='material' AND sql IS NOT NULL"
+        )
+        indexes = cur.fetchall()
+        # 动态读取列名，避免模型加列后硬编码失效
+        cur.execute("PRAGMA table_info(material)")
+        cols = [r[1] for r in cur.fetchall()]
+        cols_str = ",".join(cols)
+
+        cur.execute("ALTER TABLE material RENAME TO material_old")
+        cur.execute(new_sql.replace("CREATE TABLE material", "CREATE TABLE material_new"))
+        cur.execute(f"INSERT INTO material_new ({cols_str}) SELECT {cols_str} FROM material_old")
+        cur.execute("DROP TABLE material_old")
+        cur.execute("ALTER TABLE material_new RENAME TO material")
+        for _name, idx_sql in indexes:
+            cur.execute(idx_sql)
+        conn.commit()
+        logger.info("[startup] material 表迁移完成，移除 ck_material_source_type 约束（表重建法）")
+    except Exception as e:
+        conn.rollback()
+        logger.warning("[startup] material source_type 约束迁移失败: %s", e)
     finally:
         conn.close()
 
@@ -795,6 +894,8 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
     try:
         await _migrate_cover_url_column()
         await _migrate_material_dedup_column()
+        await _migrate_material_images_column()
+        await _migrate_material_source_type_constraint()
     except Exception as e:
         logger.warning("[startup] material cover_url migration failed: %s", e)
 
@@ -1007,6 +1108,7 @@ def create_app() -> FastAPI:  # NOSONAR
     app.include_router(b_tunnel_router)
     app.include_router(b_workflows_router)
     app.include_router(b_ai_config_router)
+    app.include_router(b_assistant_router)
     app.include_router(b_channels_router)
     app.include_router(b_queue_router)
     app.include_router(b_materials_router)

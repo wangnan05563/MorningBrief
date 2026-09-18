@@ -6,6 +6,7 @@ V1.2 起缓存层从 Redis 改为进程内 TTLCache：
 """
 from datetime import date
 
+import json
 import re
 
 from loguru import logger
@@ -425,7 +426,7 @@ class ContentService:
         sources 来自 Segment.material_ids 关联的 Material 表，按 seq 排序。
         """
         # cache_key 加 v2 后缀：本次新增 segments.cover_url 字段，旧缓存无此字段需失效
-        cache_key = f"script:detail:v2:{episode_id}"
+        cache_key = f"script:detail:v3:{episode_id}"  # v3：+images 字段（T00766），旧缓存失效
         cached = await self.cache.get(cache_key)
         if cached:
             return cached
@@ -471,6 +472,10 @@ class ContentService:
         #   第 1 段通常是开场白没有 material_ids，sources 直接从第 2 段开始）
         enriched_segments = []
         source_seq = 0  # sources 自己的 1-based 序号
+        # T00766：节目级全量图片集——按素材顺序聚合各素材 images_json（封面在前），
+        # 去重后截断上限（轮播 9 张足够，避免超长文章拖垮首屏）
+        episode_images: list[str] = []
+        _seen_imgs: set[str] = set()
         for seg in segments:
             if not isinstance(seg, dict):
                 enriched_segments.append(seg)
@@ -492,6 +497,15 @@ class ContentService:
                     # 取该 segment 第一个有封面的 material 作为分段封面
                     if not seg_cover and mat.cover_url:
                         seg_cover = mat.cover_url
+                    # T00766：聚合素材全量图片（JSON 解析失败按无图处理，不阻断响应）
+                    if mat.images_json:
+                        try:
+                            for u in json.loads(mat.images_json):
+                                if u and u not in _seen_imgs:
+                                    _seen_imgs.add(u)
+                                    episode_images.append(u)
+                        except (ValueError, TypeError):
+                            pass
             enriched_seg = dict(seg)
             if seg_cover:
                 enriched_seg["cover_url"] = seg_cover
@@ -502,6 +516,9 @@ class ContentService:
             "script": script.full_text,
             "segments": enriched_segments,
             "sources": sources,
+            # T00766：节目级图片集（去重、上限 9），前端轮播优先消费；
+            # 空数组时前端回退 segments 封面 / 正文图片标记
+            "images": episode_images[:9],
         }
         await self.cache.set(cache_key, data, ttl=TTL_SCRIPT)
         return data

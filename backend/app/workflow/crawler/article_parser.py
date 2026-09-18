@@ -24,8 +24,9 @@ _NOISE_TAGS = ("script", "style", "nav", "footer", "aside", "header", "form", "n
 async def extract(url: str, fallback_selectors: Optional[dict] = None) -> dict:
     """异步提取正文。
 
-    返回 {title, content, publish_time, cover_url}，失败时字段均为 None。
-    fallback_selectors 预留扩展点（按域名走 CSS 选择器规则），MVP 暂不启用。
+    返回 {title, content, publish_time, cover_url, images}，失败时除 images 外字段均为 None。
+    images（T00766）：文章全量图片绝对 URL 列表（封面在前、正文出现顺序、去重、过滤装饰图），
+    供小程序详情页轮播；解析失败时为空列表。
     """
     try:
         async with httpx.AsyncClient(
@@ -52,13 +53,13 @@ async def extract(url: str, fallback_selectors: Optional[dict] = None) -> dict:
     except Exception as e:
         # 网络错误、404、超时等：记录后返回 None 由上层兜底
         logger.warning("正文页面下载失败 url=%s err=%s", url, e)
-        return {"title": None, "content": None, "publish_time": None, "cover_url": None}
+        return {"title": None, "content": None, "publish_time": None, "cover_url": None, "images": []}
 
     try:
         return _parse_html(html, url)
     except Exception as e:
         logger.warning("正文解析失败 url=%s err=%s", url, e)
-        return {"title": None, "content": None, "publish_time": None, "cover_url": None}
+        return {"title": None, "content": None, "publish_time": None, "cover_url": None, "images": []}
 
 
 def _is_decorative_image(url: str) -> bool:
@@ -181,4 +182,27 @@ def _parse_html(html: str, base_url: str = "") -> dict:  # NOSONAR
 
     content = "\n\n".join(content_parts) if content_parts else None
 
-    return {"title": title, "content": content, "publish_time": None, "cover_url": cover_url}
+    # T00766：全量正文图片——封面在前 + article 内全部非装饰 <img>（src/data-src），
+    # 绝对 URL、按出现顺序去重；无 article 节点时兜底扫全页。
+    # 仅存 URL 不下载，原站防盗链/删图时小程序按 onError 自然降级
+    images: list[str] = []
+    seen_imgs: set[str] = set()
+    if cover_url:
+        images.append(cover_url)
+        seen_imgs.add(cover_url)
+    for img in (article_node.css("img") if article_node else tree.css("img")):
+        src = img.attrs.get("src") or img.attrs.get("data-src") or ""
+        if not src or _is_decorative_image(src):
+            continue
+        normalized = _normalize_img_url(src, base_url)
+        if normalized and normalized not in seen_imgs:
+            seen_imgs.add(normalized)
+            images.append(normalized)
+
+    return {
+        "title": title,
+        "content": content,
+        "publish_time": None,
+        "cover_url": cover_url,
+        "images": images,
+    }

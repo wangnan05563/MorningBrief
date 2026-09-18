@@ -679,7 +679,8 @@ Page({
         // segments 含 cover_url，按段渲染图文；旧稿件无 segments 时降级为纯文本
         const segments = (res && Array.isArray(res.segments)) ? res.segments : [];
         // 轮播图：从稿件全文内嵌图片 + 分段封面图解析出全部图片，按文稿出现顺序
-        const carouselImages = this.parseImages(content, segments);
+        // T00766：res.images 为节目级全量图片（爬虫采集），作为轮播第二层来源
+        const carouselImages = this.parseImages(content, segments, res && res.images);
         // 任务10：取 segments 第一张 cover_url，供揭示正文时刷新虚化背景（此处不立即 setData，避免越界改背景）
         const firstCover = segments.find(s => s && s.cover_url);
         this._scriptCache = { content, segments, sources, firstCover, carouselImages };
@@ -893,13 +894,14 @@ Page({
 
   /**
    * 解析稿件全部图片，按"文稿中出现顺序"返回 [{url, failed}]
-   * 来源两层：
+   * 来源三层（按序合并去重，同一 URL 只出现一次）：
    *  1) 稿件全文（script.full_text）内嵌的 markdown 图片 ![](url) 与 HTML <img src>
    *      —— 按文本出现先后，反映图文混排的真实顺序
-   *  2) 分段封面图 segments[].cover_url —— 按段顺序补充，去重
-   * 两层合并后去重（同一 URL 只出现一次），覆盖"全文无内嵌标记、图片仅存于分段封面"的常见情形。
+   *  2) 节目级全量图片 images（T00766：爬虫采集的文章全图，封面在前、正文出现顺序）
+   *  3) 分段封面图 segments[].cover_url —— 按段顺序补充
+   * 覆盖"全文无内嵌标记、素材图片仅存于 images_json"的主要情形。
    */
-  parseImages(script, segments) {
+  parseImages(script, segments, episodeImages) {
     const out = [];
     const seen = Object.create(null);
     const push = (url) => {
@@ -913,6 +915,9 @@ Page({
       while ((m = mdRe.exec(script)) !== null) push(m[1]);
       const htmlRe = /<img[^>]+src=["']([^"']+)["']/gi;
       while ((m = htmlRe.exec(script)) !== null) push(m[1]);
+    }
+    if (Array.isArray(episodeImages)) {
+      episodeImages.forEach((u) => push(u));
     }
     if (Array.isArray(segments)) {
       segments.forEach((s) => { if (s && s.cover_url) push(s.cover_url); });

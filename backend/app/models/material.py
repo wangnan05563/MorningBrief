@@ -11,8 +11,18 @@ from app.database import Base
 
 
 class MaterialSourceType(str, Enum):
+    # rss：通用资讯 RSS 爬取（news 频道）
     rss = "rss"
+    # list：手动录入 / 文档上传，无真实 URL，用 content_hash 去重
     list = "list"
+    # book_rss：书籍 RSS 预制源（仅 audiobook 频道），条目即书/章
+    book_rss = "book_rss"
+    # cos：从云端对象存储（COS）导入的对象，按 key 取回后解析
+    cos = "cos"
+    # api：通过 API / 网页 URL 拉取并解析的内容（含第三方接口、文章页）
+    api = "api"
+    # qrcode：二维码 / 链接分享进入的手动录入门户（来源标记为 qrcode）
+    qrcode = "qrcode"
 
 
 class MaterialStatus(str, Enum):
@@ -29,7 +39,10 @@ class Material(Base):
         Index("idx_category", "category"),
         Index("idx_simhash", "simhash"),
         Index("idx_material_channel", "channel_id"),
-        CheckConstraint("source_type IN ('rss', 'list')", name="ck_material_source_type"),
+        # 注意：source_type 不再加 CHECK 约束。
+        # 早期仅 rss/list 两值并加了 ck_material_source_type 约束，扩展 book_rss/cos/api/qrcode
+        # 后约束会拒绝新值。启动期迁移 _migrate_material_source_type_constraint 会删除旧约束，
+        # 新库由 create_all 直接不带该约束；枚举取值的合法性统一在应用层校验（materials 路由）。
         CheckConstraint("status IN ('pending', 'selected', 'skipped')", name="ck_material_status"),
         {"comment": "爬取素材表"},
     )
@@ -57,6 +70,9 @@ class Material(Base):
     # 封面图 URL：article_parser 从 og:image 提取，小程序文稿页按段展示
     # 仅存原站 URL 不下载，避免爬虫耗时与存储成本；原站删图时小程序自然降级为纯文本
     cover_url: Mapped[Optional[str]] = mapped_column(String(512), comment="封面图 URL（og:image）")
+    # T00766：文章全量图片（JSON 数组文本，按正文出现顺序、封面在前）
+    # 供小程序详情页轮播；NULL/[] 表示无图，前端回退 segments 封面
+    images_json: Mapped[Optional[str]] = mapped_column(Text, comment="文章全量图片 URL JSON 数组（T00766）")
     # 去重键（MVP 输入适配器）：list 类型素材（手动录入/文档上传）无真实 URL，
     # 用正文 content_hash 作为去重键；rss 类型可空（沿用 url 唯一约束）。
     # 唯一性判定：list 类型按 (source_type, dedup_key) 查重，rss 类型按 url 查重。

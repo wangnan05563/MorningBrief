@@ -23,7 +23,8 @@ from sqlalchemy import func, select, update
 from app.database import AsyncSessionLocal
 from app.models import Material, Channel
 from app.models.material import MaterialSourceType, MaterialStatus
-from app.services.rss_source_service import load_rss_sources
+from app.services.rss_source_service import load_rss_sources, load_book_rss_sources, load_book_fulltext_sources
+from app.workflow.crawler.fulltext_spider import crawl_fulltext_source
 from app.workflow.crawler.article_parser import extract as extract_article
 from app.workflow.crawler.dedup import add_to_dedup, is_duplicate
 from app.workflow.crawler.rss_spider import RSSSpider
@@ -42,6 +43,23 @@ async def _extract_content(entry: dict) -> dict:
     url = entry["url"]
     simhash = compute(title)
 
+    # 全文源（T00603）：正文已在爬取时预取（书籍章节全文），直接返回，避免对
+    # 维基文库/Gutenberg 页面再跑一次 article_parser（会拿到 HTML 噪声而非纯文本）
+    if entry.get("_fulltext"):
+        content = entry.get("content") or ""
+        return {
+            "title": title,
+            "url": url,
+            "simhash": simhash,
+            "content": content,
+            "summary": content[:200] if content else None,
+            "source": entry.get("source", ""),
+            "category_hint": entry.get("category_hint"),
+            "published_at": entry.get("published_at"),
+            "cover_url": None,
+            "images": [],
+        }
+
     article = await extract_article(url)
     content = article.get("content")
     if not content:
@@ -59,7 +77,9 @@ async def _extract_content(entry: dict) -> dict:
         "published_at": entry.get("published_at") or article.get("publish_time"),
         # 封面图由 article_parser 从 og:image 提取，透传到 Material 入库
         # 无封面图时为 None，小程序文稿页降级为纯文本展示
+        # T00766：images 为文章全量图片（封面在前），透传入库供详情页轮播
         "cover_url": article.get("cover_url"),
+        "images": article.get("images") or [],
     }
 
 
@@ -169,7 +189,7 @@ async def _count_channel_pending_materials(channel_id: Optional[int]) -> int:
 
     用途：书稿类内容经「素材录入」入库后，工作流 crawl 若未配置书源（或书源无新增），
     `原始 0 条` 属**预期**而非故障——此时应以素材池为准判断"是否有素材可用"。
-    仅对 outline/manual 策略生效：RSS 驱动频道仍严格按抓取结果判定，
+    仅对 outline/manual 策略生效：RSS 驱动频道（rss 策略）仍严格按抓取结果判定，
     避免"池里有旧 pending 素材"掩盖抓取失败、导致发布陈旧内容。
 
     Returns:
@@ -192,23 +212,26 @@ async def _count_channel_pending_materials(channel_id: Optional[int]) -> int:
     return int(cnt or 0)
 
 
-async def _insert_material(prepared: dict, workflow_id: str, session, channel_id=None) -> bool:
+async def _insert_material(prepared: dict, workflow_id: str, session, channel_id=None, source_type: str = "rss") -> bool:
     """事务内快速入库：去重检查 → INSERT → 加入去重表。
 
     仅包含 DB 操作，不涉及网络 I/O，写锁持有时间极短。
     入库成功后才写入去重表，保证 DB 与去重表状态一致。
+
+    source_type：素材来源类型。通用 RSS 爬取为 rss；audiobook 频道加载的
+    书籍 RSS 预制源为 book_rss；其余渠道（cos/api/qrcode/list）由 material 路由入库。
     """
     url = prepared["url"]
     title = prepared["title"]
     simhash = prepared["simhash"]
 
-    if await is_duplicate(url, title, simhash, session):
+    if await is_duplicate(url, title, simhash, session, source_type=source_type):
         logger.debug("跳过重复素材: %s", url)
         return False
 
     material = Material(
         source=prepared["source"],
-        source_type=MaterialSourceType.rss,
+        source_type=source_type,
         title=title,
         content=prepared["content"],
         summary=prepared["summary"],
@@ -221,6 +244,12 @@ async def _insert_material(prepared: dict, workflow_id: str, session, channel_id
         channel_id=channel_id,
         crawled_at=localnow_naive(),
         cover_url=prepared.get("cover_url"),
+        # T00766：全量图片 JSON 数组（封面在前）；空列表存 NULL 节省存储
+        images_json=(
+            json.dumps(prepared.get("images") or [], ensure_ascii=False)
+            if prepared.get("images")
+            else None
+        ),
     )
     session.add(material)
     await session.flush()
@@ -237,16 +266,19 @@ async def _crawl_source(source_config: dict) -> list[dict]:
     return await spider.fetch()
 
 
-async def _load_channel_filter(channel_id: Optional[int]) -> tuple[list[str], list[str]]:
+async def _load_channel_filter(channel_id: Optional[int]) -> tuple[list[str], list[str], str | None, list[str]]:
     """加载频道级数据源白名单和关键词过滤列表。
 
-    返回 (rss_sources, keywords)：
-    - rss_sources 为空列表表示使用所有源（兼容旧逻辑/未配置频道的全局模式）
+    返回 (rss_sources, keywords, channel_type, book_rss_sources)：
+    - rss_sources 为空列表表示使用所有通用源（兼容旧逻辑/未配置频道的全局模式）
     - keywords 为空列表表示不关键词过滤
+    - channel_type 为频道类型（news/course/audiobook），None 表示频道不存在
+    - book_rss_sources 为 audiobook 频道专属的书籍 RSS 源白名单（JSON name 数组），
+      仅当 channel_type=audiobook 时由 run() 用于加载 book_rss.yaml 预制源
     - channel_id 为 None 或频道不存在时回退到全局模式
     """
     if channel_id is None:
-        return [], []
+        return [], [], None, []
 
     from sqlalchemy import select
     async with AsyncSessionLocal() as session:
@@ -255,7 +287,7 @@ async def _load_channel_filter(channel_id: Optional[int]) -> tuple[list[str], li
             logger.warning("频道 ID %s 不存在，crawler 回退到全局模式", channel_id)
             # 显式 commit 释放只读事务，避免连接归还连接池时事务残留
             await session.commit()
-            return [], []
+            return [], [], None, []
 
         rss_sources: list[str] = []
         if ch.rss_sources:
@@ -269,17 +301,30 @@ async def _load_channel_filter(channel_id: Optional[int]) -> tuple[list[str], li
                     channel_id, ch.rss_sources,
                 )
 
+        book_rss_sources: list[str] = []
+        if ch.book_rss_sources:
+            try:
+                parsed = json.loads(ch.book_rss_sources)
+                if isinstance(parsed, list):
+                    book_rss_sources = [str(s) for s in parsed]
+            except (json.JSONDecodeError, TypeError):
+                logger.warning(
+                    "频道 %s book_rss_sources JSON 解析失败，忽略书籍 RSS 源: %s",
+                    channel_id, ch.book_rss_sources,
+                )
+
         keywords: list[str] = []
         if ch.keywords:
             keywords = [kw.strip() for kw in ch.keywords.split(",") if kw.strip()]
 
         logger.info(
-            "频道 %s 数据源过滤: rss_sources=%s keywords=%s",
-            channel_id, rss_sources or "(全部)", keywords or "(不过滤)",
+            "频道 %s 数据源过滤: channel_type=%s rss_sources=%s book_rss_sources=%s keywords=%s",
+            channel_id, ch.channel_type, rss_sources or "(全部)",
+            book_rss_sources or "(无)", keywords or "(不过滤)",
         )
         # 显式 commit 释放只读事务，避免连接归还连接池时事务残留导致写锁竞争
         await session.commit()
-        return rss_sources, keywords
+        return rss_sources, keywords, ch.channel_type, book_rss_sources
 
 
 async def _load_channel_meta(channel_id: int) -> tuple[str | None, str | None]:
@@ -435,7 +480,7 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
 
     # 加载频道级数据源白名单和关键词过滤配置
     # channel_id 为 None 或频道未配置时返回空列表，回退到全局模式
-    rss_sources_filter, keywords_filter = await _load_channel_filter(channel_id)
+    rss_sources_filter, keywords_filter, channel_type, book_rss_sources_filter = await _load_channel_filter(channel_id)
 
     # 加载 RSS 配置：复用 rss_source_service 统一加载逻辑
     # load_rss_sources 返回完整源配置（含 url/authority/qps），
@@ -443,7 +488,8 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
     all_sources = load_rss_sources()
 
     # 频道级数据源白名单过滤：rss_sources_filter 非空时仅保留白名单中的源
-    # 为空时使用全部源（兼容未配置 rss_sources 的频道/全局模式）
+    # audiobook 频道：空白名单 = 不爬通用资讯 RSS（避免混入新闻源），仅用书籍 RSS 预制源
+    # 其余类型：空白名单 = 使用全部通用源（兼容未配置 rss_sources 的频道/全局模式）
     if rss_sources_filter:
         sources = [
             src for src in all_sources
@@ -461,13 +507,59 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
             "频道 %s 数据源白名单过滤: %d/%d 个源命中",
             channel_id, len(sources), len(all_sources),
         )
+    elif channel_type == "audiobook":
+        sources = []
     else:
         sources = all_sources
-    logger.info("加载 RSS 源 %d 个", len(sources))
+
+    # 书籍 RSS 预制源：仅 audiobook 频道加载（book_rss.yaml）
+    # book_rss_sources_filter 非空时仅保留白名单中的书籍源；为空时加载全部书籍源
+    # book_source_names 用于后续入库时把书籍源条目标记为 source_type=book_rss
+    book_source_names: set[str] = set()
+    if channel_type == "audiobook":
+        all_book = load_book_rss_sources()
+        if book_rss_sources_filter:
+            book_sources = [s for s in all_book if s.get("name") in book_rss_sources_filter]
+            matched_book = {s.get("name") for s in book_sources}
+            missing_book = set(book_rss_sources_filter) - matched_book
+            if missing_book:
+                logger.warning(
+                    "频道 %s 配置的书籍 RSS 源在 book_rss.yaml 中不存在: %s",
+                    channel_id, missing_book,
+                )
+        else:
+            book_sources = all_book
+        if book_sources:
+            book_source_names = {s.get("name") for s in book_sources}
+            sources.extend(book_sources)
+            logger.info(
+                "频道 %s 合并书籍 RSS 源 %d 个（book_rss.yaml）",
+                channel_id, len(book_sources),
+            )
+    # 书籍「全文」预制源：仅 audiobook 频道加载（book_fulltext.yaml，T00603）
+    # 条目为整本书章节全文（wikisource/gutendex，带 provider 字段），由 fulltext_spider 抓取，
+    # 配合 outline 选题策略实现「一本书一条音频」的得到式形态。
+    # 白名单与 book_rss_sources 共用一套 name（channel.book_rss_sources），无 DB 变更。
+    fulltext_source_names: set[str] = set()
+    if channel_type == "audiobook":
+        all_fulltext = load_book_fulltext_sources()
+        if book_rss_sources_filter:
+            fulltext_sources = [s for s in all_fulltext if s.get("name") in book_rss_sources_filter]
+        else:
+            fulltext_sources = all_fulltext
+        if fulltext_sources:
+            fulltext_source_names = {s.get("name") for s in fulltext_sources}
+            sources.extend(fulltext_sources)
+            logger.info(
+                "频道 %s 合并书籍全文源 %d 个（book_fulltext.yaml）",
+                channel_id, len(fulltext_sources),
+            )
+    logger.info("加载数据源 %d 个（含书籍 RSS %d 个）", len(sources), len(book_source_names))
 
     # 并发爬取所有源：gather + return_exceptions 确保单源异常不影响其他
     # 同时收集每个源的爬取细节，供管理员定位"爬不到信息"问题
-    tasks = [_crawl_source(src) for src in sources]
+    # 分派：带 provider 的为全文源（fulltext_spider），其余为 feedparser RSS 源
+    tasks = [crawl_fulltext_source(src) if src.get("provider") else _crawl_source(src) for src in sources]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # 合并所有条目，异常的源跳过，但记录失败细节供 result 字段展示
@@ -650,6 +742,7 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
     material_count = 0
     insert_failures = 0
     # T00649：因"已在素材池/去重命中"而跳过的新增数——**不等于失败**
+    # （用户重跑工作流、或先经「素材录入」上传过同一内容时，全部条目都会落这里）
     duplicates_skipped = 0
     # IntegrityError 视为已入库跳过（防御性兜底）：
     # is_duplicate 已检查 dedup + material.url 双源，正常路径不应再触发 UNIQUE 冲突。
@@ -657,10 +750,17 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
     # 极端情况下仍可能触发，此时视为已入库跳过，不污染 insert_failures 统计。
     from sqlalchemy.exc import IntegrityError
     for prepared in prepared_list:
+        # 书籍 RSS 预制源（仅 audiobook 频道）入库标记为 book_rss，通用 RSS 仍为 rss
+        if prepared.get("source") in book_source_names:
+            src_type = "book_rss"
+        elif prepared.get("source") in fulltext_source_names:
+            src_type = "book_fulltext"
+        else:
+            src_type = "rss"
         try:
             async with AsyncSessionLocal() as session:
                 async with session.begin():
-                    if await _insert_material(prepared, workflow_id, session, channel_id):
+                    if await _insert_material(prepared, workflow_id, session, channel_id, source_type=src_type):
                         material_count += 1
                     else:
                         # _insert_material 返回 False = 去重命中（URL/dedup_key 已在池中）
@@ -689,7 +789,8 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
 
     # T00649：**去重命中不算失败**——素材已存在于池中（重跑工作流 / 先经「素材录入」上传过
     # 同一内容）时，本条 crawl 的实际语义是"素材可复用"，下游 rewrite 会按
-    # channel_id + status=pending 正常取到；旧实现把这种情况与"真无素材"一并判失败。
+    # channel_id + status=pending 正常取到；旧实现把这种情况与"真无素材"一并判失败，
+    # 用户重跑时必然报「入库 0 条」，与预期（复用已上传的书）相悖。
     if decide_crawl_outcome(material_count, duplicates_skipped) == "reuse":
         logger.info(
             "本次未新增素材，但 %d 条已在素材池中被去重跳过，视为成功复用"
