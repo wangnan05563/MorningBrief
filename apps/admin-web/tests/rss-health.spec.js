@@ -1,4 +1,4 @@
-﻿import { test, expect } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 import { setLoginState, rssHealthResponse } from './helpers/mock'
 
 /**
@@ -24,7 +24,8 @@ test.describe('RSS 源状态页面', () => {
   test('汇总卡片显示', async ({ page }) => {
     await page.goto('/stats/rss-health')
 
-    await expect(page.getByText('RSS 源可达性').first()).toBeVisible({ timeout: 30000 })
+    // T00811：内容区标题已移除，标题改由导航栏展示（meta.title=RSS 源状态）
+    await expect(page.getByText('RSS 源状态').first()).toBeVisible({ timeout: 30000 })
 
     // 4 个汇总卡片：源总数/正常/失败/未巡检
     await expect(page.getByText('源总数').first()).toBeVisible({ timeout: 30000 })

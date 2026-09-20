@@ -1,8 +1,7 @@
 <template>
   <div class="page-container rss-health-page">
-    <!-- 顶部操作区：标题 + 刷新按钮 -->
+    <!-- 顶部操作区：刷新与最近巡检（T00811：移除与导航栏重复的页面标题） -->
     <div class="top-bar">
-      <span class="page-title">RSS 源可达性</span>
       <div class="actions">
         <span v-if="lastCheckedAt" class="last-check">
           最近巡检：{{ formatTime(lastCheckedAt) }}

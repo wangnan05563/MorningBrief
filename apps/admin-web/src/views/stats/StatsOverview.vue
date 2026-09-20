@@ -1,8 +1,7 @@
 <template>
   <div class="page-container stats-page">
-    <!-- 顶部操作区：日期选择 -->
+    <!-- 顶部操作区：日期选择（T00811：移除与导航栏重复的页面标题） -->
     <div class="top-bar">
-      <span class="page-title">数据统计</span>
       <el-date-picker
         v-model="selectedDate"
         type="date"

@@ -1,8 +1,7 @@
 <template>
   <div class="page-container maintenance-page">
-    <!-- 顶部工具栏 -->
+    <!-- 顶部工具栏（T00811：移除与导航栏重复的页面标题） -->
     <div class="toolbar">
-      <h2 class="page-title">系统清理</h2>
       <el-button :icon="Refresh" :loading="loadingStatus" @click="loadStatus">
         刷新状态
       </el-button>

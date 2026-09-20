@@ -1,8 +1,7 @@
 <template>
   <div class="page-container channel-health-page">
-    <!-- 顶部操作区：标题 + 回溯天数切换 -->
+    <!-- 顶部操作区：回溯天数切换（T00811：移除与导航栏重复的页面标题） -->
     <div class="top-bar">
-      <span class="page-title">频道素材健康度</span>
       <el-radio-group v-model="rangeDays" @change="loadData">
         <el-radio-button :value="7">近 7 天</el-radio-button>
         <el-radio-button :value="14">近 14 天</el-radio-button>

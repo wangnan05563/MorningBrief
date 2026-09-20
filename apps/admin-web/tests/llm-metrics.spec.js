@@ -24,7 +24,8 @@ test.describe('LLM 重试指标页面', () => {
   test('派生率卡片显示', async ({ page }) => {
     await page.goto('/stats/llm-metrics')
 
-    await expect(page.getByText('LLM 字数重试命中率').first()).toBeVisible({ timeout: 30000 })
+    // T00811：内容区标题已移除，标题改由导航栏展示（meta.title=LLM 重试指标）
+    await expect(page.getByText('LLM 重试指标').first()).toBeVisible({ timeout: 30000 })
 
     // 3 个派生率卡片：触发率 / 改善率 / 未改善率
     await expect(page.getByText('触发率').first()).toBeVisible({ timeout: 30000 })

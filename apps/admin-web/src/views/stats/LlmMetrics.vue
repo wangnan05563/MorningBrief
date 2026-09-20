@@ -1,8 +1,7 @@
 <template>
   <div class="page-container llm-metrics-page">
-    <!-- 顶部操作区：标题 + 刷新按钮 -->
+    <!-- 顶部操作区：刷新按钮（T00811：移除与导航栏重复的页面标题） -->
     <div class="top-bar">
-      <span class="page-title">LLM 字数重试命中率</span>
       <el-button :icon="Refresh" :loading="loading" @click="loadData">刷新</el-button>
     </div>
 

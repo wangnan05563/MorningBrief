@@ -1,7 +1,7 @@
 <template>
   <div class="page-container ad-placements">
     <div class="toolbar">
-      <h2 class="page-title">投放规则管理</h2>
+      <!-- T00811：移除与导航栏重复的页面标题，仅保留操作按钮 -->
       <el-button type="primary" @click="openCreateDialog">
         <el-icon><Plus /></el-icon>
         <span>新建投放</span>

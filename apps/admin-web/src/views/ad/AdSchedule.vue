@@ -1,7 +1,7 @@
 <template>
   <div class="page-container ad-schedule">
     <div class="toolbar">
-      <h2 class="page-title">排期日历</h2>
+      <!-- T00811：移除与导航栏重复的页面标题，仅保留月份选择 -->
       <el-date-picker
         v-model="selectedMonth"
         type="month"

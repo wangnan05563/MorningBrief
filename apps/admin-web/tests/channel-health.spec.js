@@ -1,4 +1,4 @@
-﻿import { test, expect } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 import { setLoginState, channelHealthResponse } from './helpers/mock'
 
 /**
@@ -23,7 +23,8 @@ test.describe('频道健康度页面', () => {
   test('汇总卡片显示', async ({ page }) => {
     await page.goto('/stats/channel-health')
 
-    await expect(page.getByText('频道素材健康度').first()).toBeVisible({ timeout: 30000 })
+    // T00811：内容区标题已移除，标题改由导航栏展示（meta.title=频道健康度）
+    await expect(page.getByText('频道健康度').first()).toBeVisible({ timeout: 30000 })
 
     // 4 个汇总卡片：健康/警告/严重/频道总数
     await expect(page.getByText('健康').first()).toBeVisible({ timeout: 30000 })

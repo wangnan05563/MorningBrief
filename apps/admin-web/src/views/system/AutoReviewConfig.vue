@@ -1,8 +1,7 @@
 <template>
   <div class="page-container auto-review-page">
-    <!-- 顶部工具栏 -->
+    <!-- 顶部工具栏（T00811：移除与导航栏重复的页面标题） -->
     <div class="toolbar">
-      <h2 class="page-title">自动审批</h2>
       <el-button :icon="Refresh" :loading="loadingAll" @click="loadAll">
         刷新
       </el-button>

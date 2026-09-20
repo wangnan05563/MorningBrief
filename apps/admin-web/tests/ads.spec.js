@@ -56,7 +56,8 @@ test.describe('广告管理', () => {
   test('素材列表加载', async ({ page }) => {
     await page.goto('/ads/materials')
 
-    await expect(page.getByRole('heading', { name: '广告素材管理' })).toBeVisible({ timeout: 30000 })
+    // T00811：内容区标题已移除，标题改由导航栏展示（meta.title=广告素材）
+    await expect(page.getByText('广告素材').first()).toBeVisible({ timeout: 30000 })
     // 表格应展示 mock 数据
     await expect(page.getByText('品牌广告A')).toBeVisible({ timeout: 30000 })
     await expect(page.getByText('促销广告B')).toBeVisible({ timeout: 30000 })
@@ -88,7 +89,8 @@ test.describe('广告管理', () => {
   test('投放规则列表', async ({ page }) => {
     await page.goto('/ads/placements')
 
-    await expect(page.getByRole('heading', { name: '投放规则管理' })).toBeVisible({ timeout: 30000 })
+    // T00811：内容区标题已移除，标题改由导航栏展示（meta.title=投放规则）
+    await expect(page.getByText('投放规则').first()).toBeVisible({ timeout: 30000 })
     // 表格展示 mock 数据
     await expect(page.getByText('品牌广告A')).toBeVisible({ timeout: 30000 })
     await expect(page.getByText('促销广告B')).toBeVisible({ timeout: 30000 })
@@ -115,7 +117,8 @@ test.describe('广告管理', () => {
   test('排期日历显示', async ({ page }) => {
     await page.goto('/ads/schedule')
 
-    await expect(page.getByRole('heading', { name: '排期日历' })).toBeVisible({ timeout: 30000 })
+    // T00811：内容区标题已移除，标题改由导航栏展示（meta.title=排期日历）
+    await expect(page.getByText('排期日历').first()).toBeVisible({ timeout: 30000 })
 
     // 图例显示
     await expect(page.getByText('开头（head）')).toBeVisible({ timeout: 30000 })

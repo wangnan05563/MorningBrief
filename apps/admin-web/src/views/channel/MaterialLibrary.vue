@@ -4,7 +4,7 @@
     <el-card shadow="never">
       <template #header>
         <div class="page-header">
-          <span class="page-title">素材库管理</span>
+          <!-- T00811：移除与导航栏重复的页面标题，仅保留操作按钮 -->
           <el-button type="primary" size="small" @click="openCreate">手动录入素材</el-button>
         </div>
       </template>

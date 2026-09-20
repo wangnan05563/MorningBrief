@@ -1,8 +1,7 @@
 <template>
   <div class="page-container ad-materials">
-    <!-- 顶部工具栏：标题与主操作按钮分置两端，符合后台常见布局 -->
+    <!-- 顶部工具栏：主操作按钮（T00811：移除与导航栏重复的页面标题） -->
     <div class="toolbar">
-      <h2 class="page-title">广告素材管理</h2>
       <el-button type="primary" @click="openCreateDialog">
         <el-icon><Plus /></el-icon>
         <span>新增素材</span>

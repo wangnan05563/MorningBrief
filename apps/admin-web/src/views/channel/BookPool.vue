@@ -11,7 +11,7 @@
     <el-card shadow="never" :body-style="{ padding: 0 }">
       <template #header>
         <div class="page-header">
-          <span class="page-title">讲书稿素材池</span>
+          <!-- T00811：移除与导航栏重复的页面标题，保留频道选择 -->
           <el-select
             v-model="channelId"
             placeholder="选择频道"
