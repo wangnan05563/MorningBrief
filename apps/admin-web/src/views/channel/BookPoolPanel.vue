@@ -61,9 +61,9 @@
       <el-table-column prop="category" label="分类" width="110" />
       <el-table-column label="素材 ID" width="96">
         <template #default="{ row }">
-          <el-link type="primary" :href="`/materials?highlight=${row.material_id}`" target="_blank">
-            {{ row.material_id }}
-          </el-link>
+          <!-- T00775：原 href="/materials?highlight=id" 指向「素材录入」页且不处理 highlight（生产还缺 /news 前缀）
+               ——改为路由跳转到「素材库管理」并按素材 ID 定位。 -->
+          <el-link type="primary" @click="goMaterial(row)">{{ row.material_id || '-' }}</el-link>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="230" fixed="right">
@@ -321,7 +321,23 @@ function onCandidateSelect(rows) {
 
 /** T00716：跳转「素材库管理」页（增删改查；携带当前频道便于筛选） */
 function goLibrary() {
-  router.push({ path: '/channels/material-library', query: { channelId: props.channelId } })
+  // T00775：把弹窗里已输入的书名关键词一并带过去，跳转后直接命中该书的章节素材
+  router.push({
+    path: '/channels/material-library',
+    query: { channelId: props.channelId, keyword: candidateKeyword.value || undefined },
+  })
+}
+
+/** T00775：书单「素材 ID」→ 素材库管理页定位到该条素材（可编辑/删除） */
+function goMaterial(row) {
+  if (!row.material_id) {
+    ElMessage.info('该书目尚无代表素材（书稿未上传）')
+    return
+  }
+  router.push({
+    path: '/channels/material-library',
+    query: { channelId: props.channelId, materialId: row.material_id },
+  })
 }
 
 async function onAddSelected() {

@@ -8,6 +8,16 @@
         </div>
       </template>
 
+      <!-- T00775：从书单「素材 ID」深链跳转过来时提示定位结果，避免"查不到素材"的错觉 -->
+      <el-alert
+        v-if="locateHint"
+        type="success"
+        :closable="false"
+        show-icon
+        :title="locateHint"
+        style="margin-bottom: 10px"
+      />
+
       <el-form :inline="true" class="filter-form">
         <el-form-item label="频道">
           <el-select v-model="filters.channel_id" placeholder="全部频道" clearable filterable style="width: 200px" @change="onSearch">
@@ -135,6 +145,10 @@
  * - 删除：二次确认后删除（不影响讲书稿素材池，池项与素材是引用关系）。
  *
  * 入口：① 侧边菜单「内容运营 → 素材库管理」；② 讲书稿素材池「从素材库加入」弹窗的「管理素材」链接。
+ *
+ * T00775：后端 list_materials 返回 { total, list }，本页曾按 `items` 取值 → 列表恒为空
+ * （「从素材库加入」能看到书，点「管理素材」却查不到）。取值统一为 `list`，与
+ * WorkflowDetail 保持一致；同时支持 ?keyword / ?materialId 深链定位。
  */
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
@@ -162,6 +176,8 @@ const page = ref(1)
 const size = ref(20)
 const loading = ref(false)
 const filters = reactive({ channel_id: null, status: null, keyword: '' })
+// T00775：由深链（materialId）定位成功时的提示文案，空串表示未定位
+const locateHint = ref('')
 
 const editVisible = ref(false)
 const editForm = reactive({ id: null, title: '', source: '', category: '', status: 'pending', content: '' })
@@ -179,7 +195,8 @@ async function load() {
       page: page.value,
       size: size.value,
     })
-    items.value = data?.items || []
+    // T00775：后端返回键是 list（不是 items），取错键会导致列表恒为空
+    items.value = data?.list || []
     total.value = data?.total || 0
   } finally {
     loading.value = false
@@ -195,6 +212,7 @@ function onReset() {
   filters.channel_id = null
   filters.status = null
   filters.keyword = ''
+  locateHint.value = ''
   onSearch()
 }
 
@@ -280,8 +298,27 @@ onMounted(async () => {
   channels.value = await listChannels()
   const qid = Number(route.query.channelId)
   if (qid) filters.channel_id = qid
+  await applyDeepLink()
   await load()
 })
+
+/**
+ * T00775：深链定位（讲书稿书单「素材 ID」链接 / 「管理素材」按钮跳转）
+ * - keyword：直接回填搜索框；
+ * - materialId：拉详情取标题回填关键词，确保从书单跳过来能立刻看到那条素材。
+ */
+async function applyDeepLink() {
+  const mid = Number(route.query.materialId)
+  if (mid) {
+    try {
+      const detail = await getMaterial(mid)
+      filters.keyword = detail?.title || detail?.source || ''
+      locateHint.value = `已定位素材 ID ${mid}`
+      return
+    } catch { /* 拦截器已提示；素材可能已被删除，退回普通列表 */ }
+  }
+  if (route.query.keyword) filters.keyword = String(route.query.keyword)
+}
 </script>
 
 <style scoped>
