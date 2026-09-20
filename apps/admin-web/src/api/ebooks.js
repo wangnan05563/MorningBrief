@@ -18,6 +18,10 @@ export const searchEbooks = ({ keyword, category = '', limit = 20 }) =>
     params: { keyword, ...(category ? { category } : {}), limit },
   })
 
+// T00810：从书源索引无重复随机抽取书名（供「随机」按钮浏览；不足 limit 返回全部）
+export const getRandomEbooks = (limit = 10) =>
+  api.get('/ebooks/random', { params: { limit } })
+
 // 书源索引状态（就绪 / 构建进度）
 export const getEbookIndexStatus = () => api.get('/ebooks/index/status')
 

@@ -77,6 +77,8 @@
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="searching" @click="onSearch">检索</el-button>
+          <!-- T00810：随机浏览入口，紧邻检索按钮右侧，布局与菜单整体一致 -->
+          <el-button :loading="searching" @click="onRandom">随机</el-button>
           <el-button :disabled="searching" @click="onRefreshCategories">刷新分类</el-button>
         </el-form-item>
       </el-form>
@@ -122,7 +124,7 @@
         </el-table-column>
         <template #empty>
           <el-empty
-            :description="searched ? '没有匹配的书目（可尝试换关键词或先选分类）' : '输入关键词后点击「检索」'"
+            :description="searched ? '没有匹配的书目（可尝试换关键词或先选分类）' : '点击「检索」或「随机」开始浏览'"
             :image-size="90"
           />
         </template>
@@ -145,6 +147,7 @@ import {
   createDraftMaterial,
   getEbookCategories,
   getEbookIndexStatus,
+  getRandomEbooks,
   rebuildEbookIndex,
   searchEbooks,
 } from '../../api/ebooks'
@@ -217,6 +220,38 @@ async function onAddToBookList(row) {
   }
 }
 
+/**
+ * 统一结果落表：检索与随机共用同一套元信息赋值，避免两处漂移。
+ * 后端在检索/随机时若发现索引过期/缺失会自动触发后台重建 → 起轮询让用户看到进度。
+ */
+function applyResult(data) {
+  hits.value = data?.hits || []
+  scannedCount.value = (data?.scanned_categories || []).length
+  failedCategories.value = data?.failed_categories || []
+  indexReadyForQuery.value = !!data?.index_ready
+  indexStaleForQuery.value = !!data?.index_stale
+  indexAgeDays.value = data?.index_age_days ?? null
+  if (data?.auto_rebuild?.triggered) startPolling()
+  searched.value = true
+}
+
+/**
+ * T00810：随机抽取——从书源索引无重复抽取 10 本（不足返回全部），渲染到同一结果表。
+ * 随机是「浏览发现」路径：不依赖关键词/分类输入（后端从全索引抽样），点击只切换 loading。
+ */
+async function onRandom() {
+  searching.value = true
+  try {
+    const data = await getRandomEbooks(10)
+    applyResult(data)
+  } catch (e) {
+    // 索引未就绪（428）等由请求拦截器提示；刷新一次状态便于用户看到构建进度
+    await loadIndexStatus()
+  } finally {
+    searching.value = false
+  }
+}
+
 async function onSearch() {
   const kw = keyword.value.trim()
   if (!kw) {
@@ -232,15 +267,7 @@ async function onSearch() {
   searching.value = true
   try {
     const data = await searchEbooks({ keyword: kw, category: category.value, limit: limit.value })
-    hits.value = data?.hits || []
-    scannedCount.value = (data?.scanned_categories || []).length
-    failedCategories.value = data?.failed_categories || []
-    indexReadyForQuery.value = !!data?.index_ready
-    indexStaleForQuery.value = !!data?.index_stale
-    indexAgeDays.value = data?.index_age_days ?? null
-    // 后端在检索时若发现索引过期/缺失会自动触发后台重建 → 起轮询让用户看到进度
-    if (data?.auto_rebuild?.triggered) startPolling()
-    searched.value = true
+    applyResult(data)
   } catch (e) {
     // 索引缺失（428）等业务错误由拦截器提示；刷新一次状态便于用户看到进度
     await loadIndexStatus()

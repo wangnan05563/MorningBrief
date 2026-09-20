@@ -24,6 +24,19 @@ CAT_FAKE = {
 }
 
 
+def _write_index(path, books, category_count=1):
+    """直接写索引文件（绕开构建流程），便于测试随机抽取的边界场景。"""
+    import json as _json
+    from datetime import datetime, timezone as _tz
+
+    path.write_text(_json.dumps({
+        "built_at": datetime.now(_tz.utc).isoformat(),
+        "category_count": category_count,
+        "book_count": len(books),
+        "books": books,
+    }, ensure_ascii=False), encoding="utf-8")
+
+
 @pytest.fixture
 def tmp_index(monkeypatch, tmp_path):
     """索引文件重定向到临时目录，并注入假的分类抓取。"""
@@ -123,6 +136,41 @@ class TestSearchIndex:
 
 
 # ---------------------------------------------------------------------------
+# T00810：随机抽取
+# ---------------------------------------------------------------------------
+
+class TestRandomBooks:
+    def test_random_returns_limit_without_duplicate(self, tmp_index):
+        """抽取 10 本必须无重复（random.sample 语义）。"""
+        books = [{"title": f"书{i}", "author": "作者", "url": f"https://u/{i}", "category": "文学"}
+                 for i in range(15)]
+        _write_index(tmp_index, books)
+        res = idx.random_books(10)
+        assert res["index_ready"] is True
+        titles = [h["title"] for h in res["hits"]]
+        assert len(titles) == 10
+        assert len(set(titles)) == 10, "单次抽取内书名不得重复"
+
+    def test_random_returns_all_when_fewer(self, tmp_index):
+        """书目不足 10 本时返回全部可用书名。"""
+        _write_index(tmp_index, [{"title": f"书{i}", "author": "a", "url": f"https://u/{i}", "category": "文学"}
+                                 for i in range(5)])
+        res = idx.random_books(10)
+        assert len(res["hits"]) == 5, "不足 limit 应返回全部"
+        assert len({h["title"] for h in res["hits"]}) == 5
+
+    def test_random_no_index_not_ready(self, tmp_index):
+        res = idx.random_books(10)
+        assert res["hits"] == [] and res["index_ready"] is False
+
+    def test_random_respects_limit_param(self, tmp_index):
+        books = [{"title": f"书{i}", "author": "a", "url": f"https://u/{i}", "category": "文学"}
+                 for i in range(12)]
+        _write_index(tmp_index, books)
+        assert len(idx.random_books(3)["hits"]) == 3
+
+
+# ---------------------------------------------------------------------------
 # 路由层：三条检索路径（T00612）
 # ---------------------------------------------------------------------------
 
@@ -183,6 +231,37 @@ def test_search_without_index_triggers_build_and_hints(client, admin_token, stub
     body = resp.json()
     assert body["code"] == 428, body
     assert "索引" in body["message"] and "分类" in body["message"]
+    assert started.get("yes") is True, "应自动触发后台构建"
+
+
+def test_random_uses_index_when_ready(client, admin_token, stub_blacklist, tmp_index, monkeypatch):
+    """索引就绪 → /random 返回无重复随机书名，且不触网。"""
+    idx.build_index(fetch_categories=["文学"], max_workers=1)
+    monkeypatch.setattr(src_svc, "_fetch", lambda *a, **k: (_ for _ in ()).throw(AssertionError("不应触网")))
+    resp = client.get("/admin/api/v1/ebooks/random", params={"limit": 10},
+                      headers=_headers(admin_token))
+    body = resp.json()
+    assert body["code"] == 0, body
+    data = body["data"]
+    assert data["index_ready"] is True
+    titles = [h["title"] for h in data["hits"]]
+    assert len(titles) == 2, "索引只有 2 本，不足 limit 应全部返回"
+    assert len(set(titles)) == 2
+
+
+def test_random_without_index_triggers_build_and_hints(client, admin_token, stub_blacklist, tmp_index, monkeypatch):
+    """无索引 → /random 不挂超时：触发后台构建并返回可读提示（同 search 全量路径）。"""
+    started = {}
+
+    def _fake_start():
+        started["yes"] = True
+        return {"running": True, "done": 0, "total": 0}
+
+    monkeypatch.setattr(idx, "start_build_async", _fake_start)
+    resp = client.get("/admin/api/v1/ebooks/random", headers=_headers(admin_token))
+    body = resp.json()
+    assert body["code"] == 428, body
+    assert "索引" in body["message"]
     assert started.get("yes") is True, "应自动触发后台构建"
 
 

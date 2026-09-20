@@ -3,6 +3,7 @@
 端点：
 - GET /admin/api/v1/ebooks/categories  列出书源全部分类
 - GET /admin/api/v1/ebooks/search      按关键词检索书名/作者，返回下载链接
+- GET /admin/api/v1/ebooks/random      从书源索引无重复随机抽取书名（T00810）
 - GET /admin/api/v1/ebooks/index/status  书源索引状态（就绪/构建进度）
 - POST /admin/api/v1/ebooks/index/rebuild 重建书源索引（后台执行）
 - POST /admin/api/v1/ebooks/draft-material 加入待讲书单（写待上传书稿的素材占位）
@@ -108,6 +109,37 @@ async def search_ebooks(
             f"（构建中：{st.get('done', 0)}/{st.get('total', 0)}）"
         ),
     )
+
+
+@router.get("/random")
+async def random_ebooks(
+    limit: int = Query(10, ge=1, le=100, description="随机抽取上限"),
+    _: AdminPayload = Depends(require_admin),
+):
+    """T00810：从书源索引无重复随机抽取 limit 本书（供「随机」按钮浏览）。
+
+    为什么走索引：随机是对全量书目的抽样，必须依赖已构建的本地索引（同 search 全量路径）；
+    索引未就绪时与 search 一致——触发后台构建并返回可读提示，不挂到超时。
+    """
+    idx_svc = ebook_index_service
+    # 索引缺失/过期时自动后台重建（自愈），状态随响应回传供前端如实提示
+    auto_rebuild = idx_svc.maybe_auto_rebuild()
+    if not idx_svc.index_status().get("ready"):
+        st = idx_svc.start_build_async()
+        raise BizError(
+            code=428,
+            message=(
+                "书源索引尚未构建（首次需抓取全部 1000 个分类，约 2-5 分钟），"
+                "已自动开始构建，请稍后重试。"
+                f"（构建中：{st.get('done', 0)}/{st.get('total', 0)}）"
+            ),
+        )
+    res = idx_svc.random_books(limit)
+    st = idx_svc.index_status()
+    res["index_stale"] = bool(st.get("stale"))
+    res["index_age_days"] = st.get("age_days")
+    res["auto_rebuild"] = auto_rebuild
+    return success(data=res)
 
 
 @router.post("/draft-material")

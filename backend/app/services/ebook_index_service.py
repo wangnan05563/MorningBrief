@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -227,6 +228,30 @@ def search_index(keyword: str, category: str | None = None, limit: int = 20) -> 
         "scanned_categories": [f"index({idx.get('category_count', 0)} 分类)"],
         "failed_categories": [],
         "hits": hits,
+        "index_ready": True,
+        "index_built_at": idx.get("built_at"),
+    }
+
+
+def random_books(limit: int = 10) -> dict:
+    """从本地索引无重复随机抽取 limit 本书（T00810：找书工具「随机」按钮）。
+
+    为什么放后端：索引文件是全量书目（≳200MB 抓取产物），不可能拉到前端再抽样；
+    后端随机只读本地 json，毫秒级。与 search_index 返回结构对齐，前端结果表可直接复用。
+
+    无重复：`random.sample` 保证单次抽取内不重复；书名总数不足 limit 时返回全部
+    （约束要求：不足 10 本返回全部可用书名）。
+    """
+    idx = load_index()
+    if not idx:
+        return {"scanned_categories": [], "failed_categories": [],
+                "hits": [], "index_ready": False}
+    books = idx.get("books", [])
+    picked = random.sample(books, min(max(1, limit), len(books))) if books else []
+    return {
+        "scanned_categories": [f"index({idx.get('category_count', 0)} 分类)"],
+        "failed_categories": [],
+        "hits": picked,
         "index_ready": True,
         "index_built_at": idx.get("built_at"),
     }
