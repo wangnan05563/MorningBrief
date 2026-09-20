@@ -4,7 +4,11 @@
        导入按钮太靠近边缘」即此），与其它 25 个页面口径不一致。 -->
   <div class="book-pool page-container">
     <!-- 顶部：频道选择（讲书稿模式开关在下方面板内，与编辑弹窗的素材池弹窗映射同一组件） -->
-    <el-card shadow="never">
+    <!-- 标题卡片：内容全部放在 #header（标题 + 频道选择），默认插槽为空。
+         Element Plus 的空 body 仍有 20px 上下内边距 ⇒ 标题与下方面板之间多出一条
+         40px 空白带（用户反馈「中间有一行空行」），故显式清零 body 内边距。
+         若将来要往 body 放内容，请恢复默认内边距（去掉 :body-style）。 -->
+    <el-card shadow="never" :body-style="{ padding: 0 }">
       <template #header>
         <div class="page-header">
           <span class="page-title">讲书稿素材池</span>

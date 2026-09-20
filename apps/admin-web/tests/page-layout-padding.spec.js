@@ -60,4 +60,23 @@ test.describe('桌面页面内边距', () => {
         .toBeGreaterThanOrEqual(MIN_GAP)
     })
   }
+
+  test('讲书稿素材池：标题卡片不得出现空 body 占位（多出一条空白带）', async ({ page }) => {
+    await setLoginState(page, 'admin')
+    await page.goto('/channels/book-pool?channelId=1')
+
+    // 先确认页面真的渲染出来了，否则「没有空 body」会是假通过
+    await expect(page.locator('.pool-title')).toBeVisible()
+
+    // 该卡片内容全在 #header，默认插槽为空；EP 空 body 仍占 20px 上下内边距 = 40px 空白带
+    const empty = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.el-card__body'))
+        .filter((b) => {
+          const r = b.getBoundingClientRect()
+          return r.height > 4 && !(b.textContent || '').trim() && b.children.length === 0
+        })
+        .map((b) => Math.round(b.getBoundingClientRect().height)),
+    )
+    expect(empty, `存在空的卡片 body 占位：${JSON.stringify(empty)}px`).toEqual([])
+  })
 })
