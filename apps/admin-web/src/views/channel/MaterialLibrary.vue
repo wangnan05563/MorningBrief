@@ -1,5 +1,6 @@
 <template>
-  <div class="material-library">
+  <!-- page-container：补齐 24px 页面内边距（同 BookPool，缺它会 0px 贴边） -->
+  <div class="material-library page-container">
     <el-card shadow="never">
       <template #header>
         <div class="page-header">
