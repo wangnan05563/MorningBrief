@@ -28,6 +28,39 @@
             </ul>
           </div>
         </el-card>
+
+        <!-- T00809：采集到的图片——审核员据此核对抓取质量（是否抓到正文配图、有无脏图） -->
+        <el-card class="images-card">
+          <template #header>
+            <div class="card-header-row">
+              <span class="card-title">采集图片</span>
+              <span v-if="detail.images?.length" class="image-count">
+                共 {{ detail.image_total ?? detail.images.length }} 张<template
+                  v-if="(detail.image_total || 0) > detail.images.length"
+                >（展示前 {{ detail.images.length }} 张）</template>
+              </span>
+            </div>
+          </template>
+          <div v-if="detail.images?.length" class="image-grid">
+            <el-image
+              v-for="(url, i) in detail.images"
+              :key="url"
+              class="image-item"
+              :src="url"
+              fit="cover"
+              referrerpolicy="no-referrer"
+              :preview-src-list="detail.images"
+              :initial-index="i"
+              preview-teleported
+              hide-on-click-modal
+            >
+              <template #error>
+                <div class="image-fallback">加载失败</div>
+              </template>
+            </el-image>
+          </div>
+          <el-empty v-else description="本篇稿件引用的素材没有采集到图片" :image-size="72" />
+        </el-card>
       </el-col>
 
       <!-- 右侧：音频试听 + 审核操作 -->
@@ -227,6 +260,49 @@ onMounted(loadDetail)
       text-decoration: underline;
     }
   }
+}
+
+/* T00809 采集图片：缩略图网格 + 点击 el-image 预览（原图/换图浏览） */
+.images-card {
+  margin-top: 16px;
+}
+
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.image-count {
+  font-size: 12px;
+  color: $color-text-secondary;
+}
+
+.image-grid {
+  display: grid;
+  // 桌面端一行放 5-6 张，窗口变窄自动换行；审核员主要看"抓到了什么"，缩略图足够
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 8px;
+}
+
+.image-item {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid $color-border;
+  background: #f5f7fa;
+  cursor: zoom-in;
+}
+
+.image-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 12px;
+  color: $color-text-secondary;
 }
 
 .audio-card {

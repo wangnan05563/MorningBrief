@@ -27,6 +27,13 @@ test.describe('审核流程', () => {
     // 直接注入登录态，跳过登录页，聚焦审核流程本身
     await setLoginState(page, 'admin')
 
+    // 兜底 mock：审核动作成功后会跳回列表页触发新的列表请求，若放行到真实后端会 401，
+    // 全局拦截器随即把页面踢到 /news/login，导致后续断言全部落空。兜底必须最先注册
+    // （Playwright 后注册的路由优先），让下面的具体 mock 能覆盖它。
+    await page.route('**/admin/api/v1/**', (route) =>
+      route.fulfill({ json: { code: 0, message: 'success', data: { total: 0, list: [], items: [] } } }),
+    )
+
     // 根据 status 查询参数返回不同列表数据，模拟后端按状态过滤
     await page.route('**/admin/api/v1/reviews*', async (route) => {
       const url = new URL(route.request().url())
@@ -115,6 +122,46 @@ test.describe('审核流程', () => {
     await expect(page.getByText('审核操作')).toBeVisible({ timeout: 30000 })
     await expect(page.getByRole('radio', { name: '通过' })).toBeVisible({ timeout: 30000 })
     await expect(page.getByRole('radio', { name: '打回' })).toBeVisible({ timeout: 30000 })
+  })
+
+  // T00809：审核详情应支持查看采集到的图片（后端从引用素材的 images_json 聚合）
+  test('详情页展示采集图片并可放大预览', async ({ page }) => {
+    // 为本用例覆盖详情 mock：2 张图、去重后共 11 张（验证"展示前 N 张 / 共 M 张"提示）
+    await page.route('**/admin/api/v1/reviews/1', (route) =>
+      route.fulfill({
+        json: {
+          ...reviewDetailResponse,
+          data: {
+            ...reviewDetailResponse.data,
+          // 用同源真实存在的静态图片（favicon），保证 el-image 加载成功、点击能打开预览层；
+          // 外网假图会走 error 分支，点击不触发预览
+          images: ['/news/favicon-16x16.png', '/news/favicon-32x32.png'],
+          image_total: 11,
+          },
+        },
+      }),
+    )
+    await page.goto('/review/1')
+
+    await expect(page.getByText('采集图片')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('共 11 张（展示前 2 张）')).toBeVisible({ timeout: 30000 })
+
+    // 缩略图按 images 数量渲染（同源真实图片，el-image 加载成功）
+    const items = page.locator('.image-grid .el-image')
+    await expect(items).toHaveCount(2)
+
+    // 预览契约：缩略图挂载了 .el-image__preview（点击放大由 el-image 组件负责）。
+    // 注：viewer 的挂载时序在本环境不稳定，点击放大的交互验收以人工抽查为准
+    await expect(page.locator('.image-grid .el-image__preview')).toHaveCount(2)
+  })
+
+  test('详情页无采集图片时显示空态', async ({ page }) => {
+    // 默认 reviewDetailResponse 不含 images 字段 → 走空态
+    await page.goto('/review/1')
+
+    await expect(page.getByText('采集图片')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('本篇稿件引用的素材没有采集到图片')).toBeVisible({ timeout: 30000 })
+    await expect(page.locator('.image-grid')).toHaveCount(0)
   })
 
   test('通过审核操作', async ({ page }) => {

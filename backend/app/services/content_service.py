@@ -6,7 +6,6 @@ V1.2 起缓存层从 Redis 改为进程内 TTLCache：
 """
 from datetime import date
 
-import json
 import re
 
 from loguru import logger
@@ -17,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.cache.manager import cache as cache_manager
 from app.core.timeutil import localnow_naive
 from app.models import Episode, Script, Review, EpisodeStatus, Channel
+# T00809：素材图片聚合规则与审核详情共用（原先在本文件内联实现）
+from app.services.material_images import aggregate_material_images
 
 # 缓存 TTL（秒）：与数据变更频率匹配
 TTL_TODAY = 3600   # 今日节目 1 小时
@@ -473,9 +474,9 @@ class ContentService:
         enriched_segments = []
         source_seq = 0  # sources 自己的 1-based 序号
         # T00766：节目级全量图片集——按素材顺序聚合各素材 images_json（封面在前），
-        # 去重后截断上限（轮播 9 张足够，避免超长文章拖垮首屏）
-        episode_images: list[str] = []
-        _seen_imgs: set[str] = set()
+        # 去重后截断上限（轮播 9 张足够，避免超长文章拖垮首屏）。
+        # T00809：聚合规则抽到 material_images 助手，与审核详情共用同一口径
+        ordered_mats: list = []
         for seg in segments:
             if not isinstance(seg, dict):
                 enriched_segments.append(seg)
@@ -497,19 +498,13 @@ class ContentService:
                     # 取该 segment 第一个有封面的 material 作为分段封面
                     if not seg_cover and mat.cover_url:
                         seg_cover = mat.cover_url
-                    # T00766：聚合素材全量图片（JSON 解析失败按无图处理，不阻断响应）
-                    if mat.images_json:
-                        try:
-                            for u in json.loads(mat.images_json):
-                                if u and u not in _seen_imgs:
-                                    _seen_imgs.add(u)
-                                    episode_images.append(u)
-                        except (ValueError, TypeError):
-                            pass
+                    ordered_mats.append(mat)
             enriched_seg = dict(seg)
             if seg_cover:
                 enriched_seg["cover_url"] = seg_cover
             enriched_segments.append(enriched_seg)
+
+        episode_images = aggregate_material_images(ordered_mats)
 
         data = {
             "episode_id": episode_id,

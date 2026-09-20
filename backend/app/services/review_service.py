@@ -1,15 +1,22 @@
 """审核服务：审核列表、详情、审批/打回/替换。"""
+from typing import Optional
+
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import BizError, NotFoundError
 from app.core.timeutil import localnow_naive
-from app.models import Review, Workflow, Channel, Script, Episode
+from app.models import Review, Workflow, Channel, Script, Episode, Material
 from app.models.review import ReviewStatus
+from app.services.material_images import aggregate_material_images
 
 # 审核记录不存在的统一提示，集中管理避免多处硬编码字符串不一致
 _REVIEW_NOT_FOUND_MSG = "审核记录不存在"
+
+# 审核详情展示的采集图片上限：与节目脚本接口（T00766 轮播 9 张）保持一致，
+# 超长文章的图片集可能上百张，整段回传只会拖慢详情页首屏
+REVIEW_IMAGE_LIMIT = 9
 
 
 class ReviewService:
@@ -132,6 +139,10 @@ class ReviewService:
         cover_url = episode.cover_url if episode else None
         hls_url = episode.hls_url if episode else None
 
+        # T00809：采集到的图片——审核员需要核对「这篇稿子到底抓了哪些图」，
+        # 与节目脚本接口同一口径（按分段引用的素材顺序聚合、去重）。
+        images = await self._collect_review_images(script)
+
         return {
             "id": review.id,
             "workflow_id": review.workflow_id,
@@ -141,6 +152,10 @@ class ReviewService:
             # 封面图与 HLS 音频源：移动端详情可直接展示图片、用 HLS 播放语音内容
             "cover_url": cover_url,
             "hls_url": hls_url,
+            # 采集图片：images 为截断后的展示列表，image_total 为去重后总张数
+            # （供前端提示「展示前 N 张 / 共 M 张」，避免审核员误以为只抓到这么点）
+            "images": images[:REVIEW_IMAGE_LIMIT],
+            "image_total": len(images),
             "status": review.status if review.status else None,
             # 自动审批标记与触发原因，详情页展示追溯信息
             "auto_approved": bool(review.auto_approved),
@@ -149,6 +164,47 @@ class ReviewService:
             "reviewed_at": review.reviewed_at.isoformat() if review.reviewed_at else None,
             "created_at": review.created_at.isoformat() if review.created_at else None,
         }
+
+    async def _collect_review_images(self, script: Optional[Script]) -> list[str]:
+        """聚合本篇稿件关联素材的采集图片（去重保序，不做截断）。
+
+        取图顺序与节目脚本接口一致：**分段顺序 → 段内 material_ids 顺序**。
+        老脚本可能没有 material_ids（早期版本只记了 referenced_materials 的 URL），
+        此时按 URL 反查素材兜底，保证历史稿件也有图可看。
+        """
+        if script is None:
+            return []
+
+        # 1) 优先：分段引用的素材 ID（精确，且与节目侧同一顺序）
+        ordered_ids: list[int] = []
+        for seg in script.segments or []:
+            if not isinstance(seg, dict):
+                continue
+            for mid in seg.get("material_ids") or []:
+                if isinstance(mid, int) and mid not in ordered_ids:
+                    ordered_ids.append(mid)
+
+        materials: list[Material] = []
+        if ordered_ids:
+            rows = await self.db.execute(
+                select(Material).where(Material.id.in_(ordered_ids))
+            )
+            by_id = {m.id: m for m in rows.scalars().all()}
+            materials = [by_id[i] for i in ordered_ids if i in by_id]
+
+        # 2) 兜底：按引用素材 URL 反查（老脚本无 material_ids）
+        if not materials:
+            urls = [u for u in (script.referenced_materials or []) if isinstance(u, str) and u]
+            if urls:
+                rows = await self.db.execute(
+                    select(Material).where(Material.url.in_(urls))
+                )
+                by_url: dict[str, Material] = {}
+                for m in rows.scalars().all():
+                    by_url.setdefault(m.url, m)
+                materials = [by_url[u] for u in urls if u in by_url]
+
+        return aggregate_material_images(materials)
 
     async def handle_action(
         self,
