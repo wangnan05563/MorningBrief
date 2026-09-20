@@ -29,9 +29,12 @@ async def _seed_channel(db_session, name: str) -> Channel:
     return ch
 
 
-async def _seed_material(db_session, channel_id: int, source: str, title: str, status: str = "pending") -> Material:
+async def _seed_material(
+    db_session, channel_id: int, source: str, title: str,
+    status: str = "pending", source_type: str = "list",
+) -> Material:
     m = Material(
-        source=source, source_type="list", title=title, content="正文" * 20,
+        source=source, source_type=source_type, title=title, content="正文" * 20,
         url=f"https://example.com/t00775/{channel_id}/{title}", status=status,
         channel_id=channel_id, crawled_at=date.today(),
     )
@@ -89,6 +92,33 @@ class TestExactFiltersT00775:
         assert r["code"] == 0, r
         assert r["data"]["total"] == 1, "source 精确过滤不应把 % 当通配符"
         assert r["data"]["list"][0]["source"] == "100%纯干货"
+
+    @pytest.mark.asyncio
+    async def test_source_type_filter(self, db_session, client, admin_token):
+        """source_type 过滤：把「书稿文档」从海量 RSS 资讯里筛出来（素材库管理页「来源类型」）。"""
+        hdrs = {"Authorization": f"Bearer {admin_token['token']}"}
+        ch = await _seed_channel(db_session, "T00775 渠道过滤")
+        for i in range(3):
+            await _seed_material(db_session, ch.id, "某本书", f"某本书 · 第{i + 1}章")
+        await _seed_material(db_session, ch.id, "某RSS源", "一条资讯", source_type="rss")
+
+        r = client.get(_LIST_URL, params={"channel_id": ch.id, "source_type": "list"}, headers=hdrs).json()
+        assert r["code"] == 0, r
+        assert r["data"]["total"] == 3, "只看书稿应排除 RSS 素材"
+
+        r2 = client.get(_LIST_URL, params={"channel_id": ch.id, "source_type": "rss"}, headers=hdrs).json()
+        assert [x["source"] for x in r2["data"]["list"]] == ["某RSS源"]
+
+    @pytest.mark.asyncio
+    async def test_source_type_invalid_rejected(self, db_session, client, admin_token):
+        """非法 source_type 显式报错，不静默忽略（否则前端以为筛选生效却未过滤）。"""
+        hdrs = {"Authorization": f"Bearer {admin_token['token']}"}
+        ch = await _seed_channel(db_session, "T00775 非法渠道")
+        await _seed_material(db_session, ch.id, "某本书", "某本书 · 第一章")
+
+        r = client.get(_LIST_URL, params={"channel_id": ch.id, "source_type": "bogus"}, headers=hdrs).json()
+        assert r["code"] != 0, r
+        assert "不支持的 source_type" in r["message"]
 
 
 class TestAggregateByBookT00775:

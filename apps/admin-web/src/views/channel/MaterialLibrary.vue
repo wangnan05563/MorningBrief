@@ -37,6 +37,17 @@
             <el-option label="已跳过" value="skipped" />
           </el-select>
         </el-form-item>
+        <el-form-item label="来源类型">
+          <el-select
+            v-model="filters.source_type"
+            placeholder="全部渠道"
+            clearable
+            style="width: 210px"
+            @change="onSearch"
+          >
+            <el-option v-for="o in SOURCE_TYPE_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="关键词">
           <el-input v-model="filters.keyword" placeholder="标题 / 来源" clearable style="width: 220px" @keyup.enter="onSearch" />
         </el-form-item>
@@ -56,7 +67,13 @@
       <el-table v-if="viewMode === 'list'" :data="items" v-loading="loading" stripe style="width: 100%">
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="title" label="标题" min-width="240" show-overflow-tooltip />
-        <el-table-column prop="source" label="来源" width="150" show-overflow-tooltip />
+        <el-table-column label="来源" width="150" show-overflow-tooltip>
+          <template #default="{ row }">
+            <!-- T00775：点来源即按该来源（书名）精确过滤，从"看到一条"到"看到整本书"只需一次点击 -->
+            <el-link v-if="row.source" type="primary" @click="drilldownBook(row.source)">{{ row.source }}</el-link>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="category" label="分类" width="110" />
         <el-table-column label="状态" width="96">
           <template #default="{ row }">
@@ -188,7 +205,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { formatTime } from '../../utils/format'
 import { listChannels } from '../../api/channels'
-import api from '../../api'
+import { aggregateMaterials } from '../../api/materialLibrary'
 import {
   createMaterial,
   deleteMaterial,
@@ -197,12 +214,15 @@ import {
   updateMaterial,
 } from '../../api/materials'
 
-/**
- * 按书聚合（T00775）：GET /admin/api/v1/materials/aggregate，一行一本书。
- * 说明：本调用暂留在视图内而非 api/materials.js —— 该模块正被另一并发改动整体重写
- * （工作区未提交），在此处定义可避免本次提交裹挟他人改动；待其合入后应下沉到 api 层。
- */
-const aggregateMaterials = (params) => api.get('/materials/aggregate', { params })
+/** 录入渠道选项（与后端 MaterialSourceType 枚举一致）；书稿类混在海量 RSS 里很难翻到 */
+const SOURCE_TYPE_OPTIONS = [
+  { label: '书稿文档（上传/手动录入）', value: 'list' },
+  { label: '云端存储导入', value: 'cos' },
+  { label: '资讯 RSS', value: 'rss' },
+  { label: '书籍 RSS', value: 'book_rss' },
+  { label: 'URL / API 拉取', value: 'api' },
+  { label: '二维码 / 链接分享', value: 'qrcode' },
+]
 
 const route = useRoute()
 const STATUS_LABELS = { pending: '待消费', selected: '已选题', skipped: '已跳过' }
@@ -217,7 +237,7 @@ const total = ref(0)
 const page = ref(1)
 const size = ref(20)
 const loading = ref(false)
-const filters = reactive({ channel_id: null, status: null, keyword: '' })
+const filters = reactive({ channel_id: null, status: null, keyword: '', source_type: null })
 // T00775：视图模式——list=素材明细，book=按书聚合（讲书稿场景找整本书）
 const viewMode = ref('list')
 // T00775：精确过滤（后端 material_id / source 精确等值，不走 keyword 的 LIKE 模糊匹配）
@@ -265,6 +285,7 @@ async function load() {
       channel_id: filters.channel_id || undefined,
       status: filters.status || undefined,
       keyword: filters.keyword || undefined,
+      source_type: filters.source_type || undefined,
       material_id: materialIdFilter.value || undefined,
       source: sourceFilter.value || undefined,
       page: page.value,
@@ -287,15 +308,17 @@ function onReset() {
   filters.channel_id = null
   filters.status = null
   filters.keyword = ''
+  filters.source_type = null
   materialIdFilter.value = null
   sourceFilter.value = ''
   onSearch()
 }
 
-/** T00775：聚合视图点「查看章节」→ 切明细视图并按书名（source）精确过滤 */
+/** T00775：按来源（书名）精确过滤下钻；聚合视图点「查看章节」与明细表点「来源」共用 */
 function drilldownBook(source) {
   sourceFilter.value = source || ''
   viewMode.value = 'list'
+  page.value = 1
   onSearch()
 }
 

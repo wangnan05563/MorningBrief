@@ -143,6 +143,7 @@ async def list_materials(
     # T00775：精确过滤（绕开 keyword 的 LIKE 语义，避免标题含 % / _ 时被当作通配符）
     material_id: int = Query(None, description="按素材 ID 精确过滤（讲书稿书单「素材 ID」深链定位用）"),
     source: str = Query(None, description="按来源（书名）精确过滤（按书聚合视图点书名进明细用）"),
+    source_type: str = Query(None, description="按录入渠道过滤（list/cos=书稿文档，rss/book_rss=资讯与书评源，api/qrcode=外部拉取）"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -181,6 +182,18 @@ async def list_materials(
     if source and source.strip():
         base_query = base_query.where(Material.source == source.strip())
         count_query = count_query.where(Material.source == source.strip())
+    # T00775：按录入渠道过滤——「书稿素材」（list/cos）常被海量 RSS 资讯挤出前几页，
+    # 素材库管理页据此提供「只看书稿」筛选，避免"翻不到素材"。非法值显式报 400，
+    # 不做静默忽略（否则前端以为筛选生效但结果未过滤）。
+    if source_type:
+        allowed_types = {t.value for t in MaterialSourceType}
+        if source_type not in allowed_types:
+            raise BizError(
+                code=400,
+                message=f"不支持的 source_type: {source_type}（允许：{', '.join(sorted(allowed_types))}）",
+            )
+        base_query = base_query.where(Material.source_type == source_type)
+        count_query = count_query.where(Material.source_type == source_type)
 
     total = (await db.execute(count_query)).scalar() or 0
 

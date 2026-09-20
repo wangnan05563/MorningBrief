@@ -38,6 +38,15 @@ DisableProgramGroupPage=yes
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加选项:"
 
+[InstallDelete]
+; 升级安装：先整目录删除旧前端产物，再复制新版本。
+; 原因（T00775 实测）：apps/admin-web/dist/assets 里的 chunk 按内容哈希命名，
+; 只做覆盖式复制时，新版本中已被移除的 chunk 会一直残留在安装目录——实测安装目录里
+; 同时存在 9/18 与 9/20 两批 MaterialLibrary-*.js。一旦浏览器仍缓存旧 index.html，
+; 就会静默加载旧版页面（表现为「代码已修但页面上看不到」）。
+; admin-web 目录只放前端静态资源，无用户数据，可安全删除。
+Type: filesandordirs; Name: "{app}\admin-web"
+
 [Files]
 ; 整个 release\MorningBrief\ 目录打包进安装包
 ; 注意：.env 必须随包分发！release\MorningBrief\.env 由 build-exe.ps1 从 backend\.env

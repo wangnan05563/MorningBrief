@@ -130,6 +130,11 @@ mimetypes.add_type("image/svg+xml", ".svg")
 # PWA 清单文件：浏览器要求 application/manifest+json 才会解析
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
+# T00775：SPA 入口（index.html）禁止启发式缓存——它引用按内容哈希命名的 assets chunk，
+# 升级安装后旧 chunk 常残留（安装包不删除已移除文件），若浏览器复用旧 index.html，
+# 就会静默加载旧版本页面（改了的 bug 在页面上"看不到"）。带哈希的 chunk 可长缓存，入口不行。
+_NO_CACHE_HEADERS = {"Cache-Control": "no-cache, must-revalidate"}
+
 from app.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging_setup import setup_logging
@@ -1206,7 +1211,11 @@ def create_app() -> FastAPI:  # NOSONAR
             if str(candidate).startswith(str(dist_resolved) + "\\") and candidate.is_file():
                 return FileResponse(str(candidate))
             # SPA history 模式：返回 index.html，由前端路由接管
-            return FileResponse(str(dist_dir / "index.html"))
+            # T00775：index.html **必须每次回源校验**（no-cache, must-revalidate）。
+            # 它引用的是按内容哈希命名的 assets chunk：升级安装后旧 chunk 不会总被删除，
+            # 若浏览器沿用启发式缓存里的旧 index.html，就会静默加载旧版页面（表现为
+            # 「功能改了但页面上看不到」）。带哈希的 chunk 本身可长缓存，入口不可。
+            return FileResponse(str(dist_dir / "index.html"), headers=_NO_CACHE_HEADERS)
 
     return app
 

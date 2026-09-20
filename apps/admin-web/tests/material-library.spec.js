@@ -17,6 +17,7 @@ const RAW_MATERIALS = [
   {
     id: 101,
     source: BOOK,
+    source_type: 'list',
     title: `${BOOK} · 第一章`,
     category: '哲学',
     status: 'pending',
@@ -26,11 +27,22 @@ const RAW_MATERIALS = [
   {
     id: 102,
     source: BOOK,
+    source_type: 'list',
     title: `${BOOK} · 第二章`,
     category: '哲学',
     status: 'pending',
     crawled_at: '2026-09-18T10:01:00',
     url: 'list://1/bbbbbbbb',
+  },
+  {
+    id: 103,
+    source: '人民网-文化',
+    source_type: 'rss',
+    title: '一条文化资讯',
+    category: '娱乐',
+    status: 'pending',
+    crawled_at: '2026-09-18T11:00:00',
+    url: 'https://example.com/rss/103',
   },
 ]
 
@@ -76,12 +88,14 @@ test.describe('素材库管理', () => {
         // /materials/{id} 详情
         return route.fulfill({ json: DETAIL_RESPONSE })
       }
-      // 明细列表：模拟后端 material_id / source 精确过滤
+      // 明细列表：模拟后端 material_id / source / source_type 过滤
       const id = url.searchParams.get('material_id')
       const source = url.searchParams.get('source')
+      const sourceType = url.searchParams.get('source_type')
       let list = RAW_MATERIALS
       if (id) list = RAW_MATERIALS.filter((m) => String(m.id) === id)
       else if (source) list = RAW_MATERIALS.filter((m) => m.source === source)
+      else if (sourceType) list = RAW_MATERIALS.filter((m) => (m.source_type || 'list') === sourceType)
       return route.fulfill({ json: json({ total: list.length, list }) })
     })
   })
@@ -94,7 +108,31 @@ test.describe('素材库管理', () => {
     // 修复前：data.items 取不到值 → 表格恒为「没有匹配的素材」
     await expect(page.getByText(`${BOOK} · 第一章`)).toBeVisible({ timeout: 30000 })
     await expect(page.getByText(`${BOOK} · 第二章`)).toBeVisible({ timeout: 30000 })
-    await expect(page.getByText('没有匹配的素材')).toHaveCount(0)
+    await expect(page.getByText('一条文化资讯')).toBeVisible({ timeout: 30000 })
+  })
+
+  test('来源类型筛选：只看书稿，排除 RSS 资讯', async ({ page }) => {
+    await setLoginState(page, 'admin')
+    await page.goto('/channels/material-library?channelId=1')
+    await expect(page.getByText('一条文化资讯')).toBeVisible({ timeout: 30000 })
+
+    await page.locator('.filter-form .el-select').filter({ hasText: '全部渠道' }).click()
+    await page.getByRole('option', { name: '书稿文档（上传/手动录入）' }).click()
+
+    // 书稿保留，RSS 资讯被排除（请求带 source_type=list）
+    await expect(page.getByText('一条文化资讯')).toHaveCount(0, { timeout: 30000 })
+    await expect(page.getByText(`${BOOK} · 第一章`)).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('Total 2')).toBeVisible({ timeout: 30000 })
+  })
+
+  test('明细表点「来源」按书名精确下钻', async ({ page }) => {
+    await setLoginState(page, 'admin')
+    await page.goto('/channels/material-library?channelId=1')
+
+    await page.locator('.el-table__row', { hasText: '一条文化资讯' }).getByText('人民网-文化').click()
+    await expect(page.getByText('已按书名《人民网-文化》过滤')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('一条文化资讯')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText(`${BOOK} · 第一章`)).toHaveCount(0)
   })
 
   test('按素材 ID 深链精确过滤（书单「素材 ID」入口）', async ({ page }) => {
