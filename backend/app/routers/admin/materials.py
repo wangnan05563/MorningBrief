@@ -10,7 +10,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, UploadFile, File, Form
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AdminPayload, get_current_admin, require_admin
@@ -19,7 +19,7 @@ from pathlib import Path
 
 from app.core.response import success
 from app.database import get_db
-from app.models import AuditLog, Material, MaterialSourceType
+from app.models import AuditLog, Material, MaterialSourceType, MaterialStatus
 from app.services.document_ingest import parse_document, compute_content_hash, UnsupportedFormatError
 
 router = APIRouter(prefix="/admin/api/v1/materials", tags=["B端-素材管理"])
@@ -140,6 +140,9 @@ async def list_materials(
     channel_id: int = Query(None, description="按频道 ID 过滤（素材本质是频道级素材池，详情页用此查询）"),
     keyword: str = Query(None, description="按标题/来源模糊搜索（素材库管理页用）"),
     status: str = Query(None, description="按状态过滤（pending/selected/skipped）"),
+    # T00775：精确过滤（绕开 keyword 的 LIKE 语义，避免标题含 % / _ 时被当作通配符）
+    material_id: int = Query(None, description="按素材 ID 精确过滤（讲书稿书单「素材 ID」深链定位用）"),
+    source: str = Query(None, description="按来源（书名）精确过滤（按书聚合视图点书名进明细用）"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -171,6 +174,13 @@ async def list_materials(
     if status:
         base_query = base_query.where(Material.status == status)
         count_query = count_query.where(Material.status == status)
+    # T00775：精确过滤优先于模糊 keyword（两者同时传时取交集）
+    if material_id is not None:
+        base_query = base_query.where(Material.id == material_id)
+        count_query = count_query.where(Material.id == material_id)
+    if source and source.strip():
+        base_query = base_query.where(Material.source == source.strip())
+        count_query = count_query.where(Material.source == source.strip())
 
     total = (await db.execute(count_query)).scalar() or 0
 
@@ -195,6 +205,70 @@ async def list_materials(
                 "url": m.url,
             }
             for m in items
+        ],
+    })
+
+
+@router.get("/aggregate")
+async def aggregate_materials(
+    channel_id: int = Query(None, description="按频道 ID 过滤（素材是频道级素材池，聚合视图须先选频道）"),
+    keyword: str = Query(None, description="按书名（来源）模糊搜索"),
+    status: str = Query(None, description="按状态过滤（pending/selected/skipped），仅统计命中该状态的章节"),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(get_current_admin),
+):
+    """按书聚合浏览素材（T00775 遗留建议）：一行一本书，解决「章节零散找不到整本书」。
+
+    聚合键 = `Material.source`（文档上传时后端已自动写为书名，与讲书稿 book_key 同源）。
+    返回每本书的：书名、分类、章节数、待消费章节数、最近入库时间、代表素材 ID
+    （点书名进入明细时用 ?source=书名 精确过滤，列表项据此全部命中同一本书）。
+
+    注意：本路由必须声明在 `/{material_id}` 之前，否则路径会被当作素材 ID 解析。
+    """
+    conds = []
+    if channel_id is not None:
+        conds.append(Material.channel_id == channel_id)
+    if keyword and keyword.strip():
+        like = f"%{keyword.strip()}%"
+        conds.append(Material.title.like(like) | Material.source.like(like))
+    if status:
+        conds.append(Material.status == status)
+
+    total = (await db.execute(
+        select(func.count(func.distinct(Material.source))).where(*conds)
+    )).scalar() or 0
+
+    pending_expr = func.sum(case((Material.status == MaterialStatus.pending.value, 1), else_=0))
+    rows = (await db.execute(
+        select(
+            Material.source,
+            func.count(Material.id).label("chapters"),
+            pending_expr.label("pending"),
+            func.min(Material.id).label("sample_id"),
+            func.max(Material.category).label("category"),
+            func.max(Material.crawled_at).label("latest_at"),
+        )
+        .where(*conds)
+        .group_by(Material.source)
+        .order_by(func.max(Material.crawled_at).desc())
+        .offset((page - 1) * size)
+        .limit(size)
+    )).all()
+
+    return success(data={
+        "total": int(total),
+        "list": [
+            {
+                "source": src,
+                "category": cat,
+                "chapters": int(ch),
+                "pending_chapters": int(pd or 0),
+                "sample_material_id": int(sid),
+                "latest_at": latest.isoformat() if latest else None,
+            }
+            for src, ch, pd, sid, cat, latest in rows
         ],
     })
 

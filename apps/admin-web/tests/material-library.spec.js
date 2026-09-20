@@ -4,56 +4,58 @@ import { setLoginState, channelsListResponse } from './helpers/mock'
 /**
  * 素材库管理页 E2E（T00775）
  *
- * 回归点：后端 GET /admin/api/v1/materials 返回 { total, list }，页面曾按 `items`
- * 取值导致列表恒为空（「从素材库加入书籍」能看到书，点「管理素材」跳过去查不到）。
- * 本用例用真实浏览器渲染真实组件，断言按 `list` 解析后表格能渲染出素材行。
+ * 回归点：
+ * 1) 后端 GET /admin/api/v1/materials 返回 { total, list }，页面曾按 `items`
+ *    取值导致列表恒为空（「从素材库加入书籍」能看到书，点「管理素材」跳过去查不到）；
+ * 2) 深链定位改走 material_id 精确过滤（不再用标题关键词模糊匹配）；
+ * 3) 新增「按书聚合」视图（一行一本书），点书名下钻到该书明细。
  */
 
-// 素材列表 mock：严格按后端契约 { code, message, data: { total, list } }
-const materialsListResponse = {
-  code: 0,
-  message: 'success',
-  data: {
-    total: 2,
-    list: [
-      {
-        id: 101,
-        source: '我只知道人是什么',
-        title: '我只知道人是什么 · 第一章',
-        category: '哲学',
-        status: 'pending',
-        crawled_at: '2026-09-18T10:00:00',
-        url: 'list://1/aaaaaaaa',
-      },
-      {
-        id: 102,
-        source: '我只知道人是什么',
-        title: '我只知道人是什么 · 第二章',
-        category: '哲学',
-        status: 'pending',
-        crawled_at: '2026-09-18T10:01:00',
-        url: 'list://1/bbbbbbbb',
-      },
-    ],
-  },
-}
+const BOOK = '我只知道人是什么'
 
-const materialDetailResponse = {
-  code: 0,
-  message: 'success',
-  data: {
-    id: 102,
-    source: '我只知道人是什么',
-    source_type: 'list',
-    title: '我只知道人是什么 · 第二章',
-    content: '正文正文正文',
+const RAW_MATERIALS = [
+  {
+    id: 101,
+    source: BOOK,
+    title: `${BOOK} · 第一章`,
     category: '哲学',
     status: 'pending',
-    channel_id: 1,
+    crawled_at: '2026-09-18T10:00:00',
+    url: 'list://1/aaaaaaaa',
+  },
+  {
+    id: 102,
+    source: BOOK,
+    title: `${BOOK} · 第二章`,
+    category: '哲学',
+    status: 'pending',
     crawled_at: '2026-09-18T10:01:00',
     url: 'list://1/bbbbbbbb',
   },
-}
+]
+
+const json = (data) => ({ code: 0, message: 'success', data })
+
+const AGGREGATE_RESPONSE = json({
+  total: 1,
+  list: [
+    {
+      source: BOOK,
+      category: '哲学',
+      chapters: 2,
+      pending_chapters: 2,
+      sample_material_id: 101,
+      latest_at: '2026-09-18T10:01:00',
+    },
+  ],
+})
+
+const DETAIL_RESPONSE = json({
+  ...RAW_MATERIALS[1],
+  source_type: 'list',
+  content: '正文正文正文',
+  channel_id: 1,
+})
 
 test.describe('素材库管理', () => {
   // vite 首次按需编译路由组件可能耗时 15-25s，给到 30s 避免 flaky
@@ -63,12 +65,25 @@ test.describe('素材库管理', () => {
     await page.route('**/admin/api/v1/channels**', (route) =>
       route.fulfill({ json: channelsListResponse }),
     )
-    await page.route('**/admin/api/v1/materials/**', (route) =>
-      route.fulfill({ json: materialDetailResponse }),
-    )
-    await page.route('**/admin/api/v1/materials**', (route) =>
-      route.fulfill({ json: materialsListResponse }),
-    )
+    // 单一 handler 按 pathname 分支：多个重叠 glob 会互相覆盖（后注册/通配符优先级不可控）
+    await page.route('**/admin/api/v1/materials**', (route) => {
+      const url = new URL(route.request().url())
+      const path = url.pathname
+      if (path.endsWith('/materials/aggregate')) {
+        return route.fulfill({ json: AGGREGATE_RESPONSE })
+      }
+      if (!path.endsWith('/materials')) {
+        // /materials/{id} 详情
+        return route.fulfill({ json: DETAIL_RESPONSE })
+      }
+      // 明细列表：模拟后端 material_id / source 精确过滤
+      const id = url.searchParams.get('material_id')
+      const source = url.searchParams.get('source')
+      let list = RAW_MATERIALS
+      if (id) list = RAW_MATERIALS.filter((m) => String(m.id) === id)
+      else if (source) list = RAW_MATERIALS.filter((m) => m.source === source)
+      return route.fulfill({ json: json({ total: list.length, list }) })
+    })
   })
 
   test('列表渲染素材（后端返回 list 键）', async ({ page }) => {
@@ -77,17 +92,33 @@ test.describe('素材库管理', () => {
 
     await expect(page.getByText('素材库管理').first()).toBeVisible({ timeout: 30000 })
     // 修复前：data.items 取不到值 → 表格恒为「没有匹配的素材」
-    await expect(page.getByText('我只知道人是什么 · 第一章')).toBeVisible({ timeout: 30000 })
-    await expect(page.getByText('我只知道人是什么 · 第二章')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText(`${BOOK} · 第一章`)).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText(`${BOOK} · 第二章`)).toBeVisible({ timeout: 30000 })
     await expect(page.getByText('没有匹配的素材')).toHaveCount(0)
   })
 
-  test('按素材 ID 深链定位（书单「素材 ID」入口）', async ({ page }) => {
+  test('按素材 ID 深链精确过滤（书单「素材 ID」入口）', async ({ page }) => {
     await setLoginState(page, 'admin')
     await page.goto('/channels/material-library?channelId=1&materialId=102')
 
-    // 深链定位提示 + 关键词回填命中该素材
-    await expect(page.getByText('已定位素材 ID 102')).toBeVisible({ timeout: 30000 })
-    await expect(page.getByText('我只知道人是什么 · 第二章')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('已按素材 ID 102 定位')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText(`${BOOK} · 第二章`)).toBeVisible({ timeout: 30000 })
+    // 精确过滤：同书另一章（101）不应出现
+    await expect(page.getByText(`${BOOK} · 第一章`)).toHaveCount(0)
+  })
+
+  test('按书聚合视图：一行一本书，点书名下钻明细', async ({ page }) => {
+    await setLoginState(page, 'admin')
+    await page.goto('/channels/material-library?channelId=1')
+
+    // Element Plus radio-button：真实可点区域是内层 span（label），不是隐藏的 input
+    await page.locator('.el-radio-button__inner', { hasText: '按书聚合' }).click()
+    await expect(page.getByRole('cell', { name: BOOK, exact: true })).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('2 章（待消费 2）')).toBeVisible({ timeout: 30000 })
+
+    // 下钻：切回明细视图并按书名精确过滤
+    await page.getByRole('button', { name: '查看章节' }).click()
+    await expect(page.getByText(`已按书名《${BOOK}》过滤`)).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText(`${BOOK} · 第一章`)).toBeVisible({ timeout: 30000 })
   })
 })

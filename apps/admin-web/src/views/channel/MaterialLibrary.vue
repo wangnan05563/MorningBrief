@@ -8,15 +8,21 @@
         </div>
       </template>
 
-      <!-- T00775：从书单「素材 ID」深链跳转过来时提示定位结果，避免"查不到素材"的错觉 -->
+      <!-- T00775：由深链/聚合视图下钻产生的筛选条件提示（可一键清除），避免"查不到素材"的错觉 -->
       <el-alert
-        v-if="locateHint"
+        v-if="activeScopes.length"
         type="success"
         :closable="false"
         show-icon
-        :title="locateHint"
         style="margin-bottom: 10px"
-      />
+      >
+        <template #title>
+          <div class="scope-bar">
+            <span v-for="s in activeScopes" :key="s.key">{{ s.text }}</span>
+            <el-button link type="primary" @click="clearScope">清除筛选</el-button>
+          </div>
+        </template>
+      </el-alert>
 
       <el-form :inline="true" class="filter-form">
         <el-form-item label="频道">
@@ -38,9 +44,16 @@
           <el-button type="primary" :loading="loading" @click="onSearch">搜索</el-button>
           <el-button @click="onReset">重置</el-button>
         </el-form-item>
+        <el-form-item label="视图">
+          <el-radio-group v-model="viewMode" size="small" @change="onSearch">
+            <el-radio-button value="list">明细</el-radio-button>
+            <el-radio-button value="book">按书聚合</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
       </el-form>
 
-      <el-table :data="items" v-loading="loading" stripe style="width: 100%">
+      <!-- 明细视图：一条素材一行 -->
+      <el-table v-if="viewMode === 'list'" :data="items" v-loading="loading" stripe style="width: 100%">
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="title" label="标题" min-width="240" show-overflow-tooltip />
         <el-table-column prop="source" label="来源" width="150" show-overflow-tooltip />
@@ -60,6 +73,26 @@
           </template>
         </el-table-column>
         <template #empty><el-empty description="没有匹配的素材" :image-size="90" /></template>
+      </el-table>
+
+      <!-- 按书聚合视图（T00775 遗留建议）：一行一本书，点书名下钻到该书全部章节 -->
+      <el-table v-else :data="books" v-loading="loading" stripe style="width: 100%">
+        <el-table-column prop="source" label="书名" min-width="240" show-overflow-tooltip />
+        <el-table-column prop="category" label="分类" width="120" />
+        <el-table-column label="章节" width="150">
+          <template #default="{ row }">{{ row.chapters }} 章（待消费 {{ row.pending_chapters }}）</template>
+        </el-table-column>
+        <el-table-column label="最近入库" width="170">
+          <template #default="{ row }">{{ formatTime(row.latest_at) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="140" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" @click="drilldownBook(row.source)">查看章节</el-button>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <el-empty description="没有可聚合的书——上传 EPUB/DOCX 时「来源」会记为书名" :image-size="90" />
+        </template>
       </el-table>
 
       <el-pagination
@@ -150,11 +183,12 @@
  * （「从素材库加入」能看到书，点「管理素材」却查不到）。取值统一为 `list`，与
  * WorkflowDetail 保持一致；同时支持 ?keyword / ?materialId 深链定位。
  */
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { formatTime } from '../../utils/format'
 import { listChannels } from '../../api/channels'
+import api from '../../api'
 import {
   createMaterial,
   deleteMaterial,
@@ -162,6 +196,13 @@ import {
   listMaterials,
   updateMaterial,
 } from '../../api/materials'
+
+/**
+ * 按书聚合（T00775）：GET /admin/api/v1/materials/aggregate，一行一本书。
+ * 说明：本调用暂留在视图内而非 api/materials.js —— 该模块正被另一并发改动整体重写
+ * （工作区未提交），在此处定义可避免本次提交裹挟他人改动；待其合入后应下沉到 api 层。
+ */
+const aggregateMaterials = (params) => api.get('/materials/aggregate', { params })
 
 const route = useRoute()
 const STATUS_LABELS = { pending: '待消费', selected: '已选题', skipped: '已跳过' }
@@ -171,13 +212,17 @@ const statusTagType = (s) => STATUS_TAGS[s] || 'info'
 
 const channels = ref([])
 const items = ref([])
+const books = ref([])
 const total = ref(0)
 const page = ref(1)
 const size = ref(20)
 const loading = ref(false)
 const filters = reactive({ channel_id: null, status: null, keyword: '' })
-// T00775：由深链（materialId）定位成功时的提示文案，空串表示未定位
-const locateHint = ref('')
+// T00775：视图模式——list=素材明细，book=按书聚合（讲书稿场景找整本书）
+const viewMode = ref('list')
+// T00775：精确过滤（后端 material_id / source 精确等值，不走 keyword 的 LIKE 模糊匹配）
+const materialIdFilter = ref(null)
+const sourceFilter = ref('')
 
 const editVisible = ref(false)
 const editForm = reactive({ id: null, title: '', source: '', category: '', status: 'pending', content: '' })
@@ -185,13 +230,43 @@ const createVisible = ref(false)
 const createForm = reactive({ channel_id: null, source: '', title: '', category: '', content: '' })
 const saving = ref(false)
 
+/** 当前生效的精确定位条件（展示为可清除的提示条） */
+const activeScopes = computed(() => {
+  const scopes = []
+  if (materialIdFilter.value) scopes.push({ key: 'id', text: `已按素材 ID ${materialIdFilter.value} 定位` })
+  if (sourceFilter.value) scopes.push({ key: 'source', text: `已按书名《${sourceFilter.value}》过滤` })
+  return scopes
+})
+
+function clearScope() {
+  materialIdFilter.value = null
+  sourceFilter.value = ''
+  onSearch()
+}
+
 async function load() {
   loading.value = true
   try {
+    if (viewMode.value === 'book') {
+      // 按书聚合：一行一本书（source＝书名），点书名下钻进明细视图
+      const data = await aggregateMaterials({
+        channel_id: filters.channel_id || undefined,
+        keyword: filters.keyword || undefined,
+        status: filters.status || undefined,
+        page: page.value,
+        size: size.value,
+      })
+      // 注意键名是 list（不是 items）——见 T00775 根因
+      books.value = data?.list || []
+      total.value = data?.total || 0
+      return
+    }
     const data = await listMaterials({
       channel_id: filters.channel_id || undefined,
       status: filters.status || undefined,
       keyword: filters.keyword || undefined,
+      material_id: materialIdFilter.value || undefined,
+      source: sourceFilter.value || undefined,
       page: page.value,
       size: size.value,
     })
@@ -212,7 +287,15 @@ function onReset() {
   filters.channel_id = null
   filters.status = null
   filters.keyword = ''
-  locateHint.value = ''
+  materialIdFilter.value = null
+  sourceFilter.value = ''
+  onSearch()
+}
+
+/** T00775：聚合视图点「查看章节」→ 切明细视图并按书名（source）精确过滤 */
+function drilldownBook(source) {
+  sourceFilter.value = source || ''
+  viewMode.value = 'list'
   onSearch()
 }
 
@@ -298,25 +381,30 @@ onMounted(async () => {
   channels.value = await listChannels()
   const qid = Number(route.query.channelId)
   if (qid) filters.channel_id = qid
-  await applyDeepLink()
+  applyDeepLink()
   await load()
 })
 
 /**
  * T00775：深链定位（讲书稿书单「素材 ID」链接 / 「管理素材」按钮跳转）
+ * - materialId：走后端 material_id 精确等值过滤（不再用标题关键词模糊匹配，
+ *   避免标题含 % / _ 时被当作 LIKE 通配符）；
  * - keyword：直接回填搜索框；
- * - materialId：拉详情取标题回填关键词，确保从书单跳过来能立刻看到那条素材。
+ * - view=book：直接落到按书聚合视图。
  */
-async function applyDeepLink() {
+function applyDeepLink() {
   const mid = Number(route.query.materialId)
   if (mid) {
-    try {
-      const detail = await getMaterial(mid)
-      filters.keyword = detail?.title || detail?.source || ''
-      locateHint.value = `已定位素材 ID ${mid}`
-      return
-    } catch { /* 拦截器已提示；素材可能已被删除，退回普通列表 */ }
+    materialIdFilter.value = mid
+    viewMode.value = 'list'
+    return
   }
+  if (route.query.source) {
+    sourceFilter.value = String(route.query.source)
+    viewMode.value = 'list'
+    return
+  }
+  if (route.query.view === 'book') viewMode.value = 'book'
   if (route.query.keyword) filters.keyword = String(route.query.keyword)
 }
 </script>
@@ -332,6 +420,12 @@ async function applyDeepLink() {
 }
 .filter-form {
   margin-bottom: 4px;
+}
+/* T00775：精确定位条件的提示条（限定了某项时才出现，带一键清除） */
+.scope-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .form-tip {
   display: block;
