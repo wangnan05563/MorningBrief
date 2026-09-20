@@ -67,6 +67,26 @@ html, body {
   border-radius: $radius-sm !important;
 }
 
+/* === 禁用态按钮：修「隐形按钮」 ===
+ * 根因：variables.scss 把 Element Plus 的 primary light-3/5/7/9 全部指向同一色值
+ *       --color-primary-light，而 EP 的「禁用态 plain 按钮」用 light-5 作文字色、
+ *       light-9 作背景色 —— 两者相等导致文字与背景同色，按钮看起来完全空白
+ *       （实测频道编辑弹窗「频道图标 → AI 生成」禁用时 color == background
+ *        == rgb(181,234,215)）；实底按钮的禁用态用白色文字压在浅底上同样不可读。
+ * 处理：显式给出可读的禁用态配色（灰字 + 浅灰底，WCAG AA）。不改动整体色阶，
+ *       避免影响 tag / plain hover 等既有视觉。
+ * 说明：global.scss 在 element-plus/dist/index.css 之后加载，同权重即可覆盖；
+ *       仍保留 !important 以压过 EP 的分类型选择器（如 .el-button--primary.is-disabled）。
+ */
+.el-button.is-disabled,
+.el-button.is-disabled:hover,
+.el-button.is-disabled:focus,
+.el-button.is-disabled:active {
+  color: var(--el-text-color-placeholder, #a8abb2) !important;
+  background-color: var(--el-fill-color-light, #f5f7fa) !important;
+  border-color: var(--el-border-color-lighter, #ebeef5) !important;
+}
+
 .el-dialog {
   border-radius: $radius-lg !important;
 }
