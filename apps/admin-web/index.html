@@ -18,6 +18,70 @@
     <title>MorningBrief 运营后台</title>
   </head>
   <body>
+    <!-- T00827：桌面端启动画面（splash）。内联样式独立于构建产物，HTML 解析即渲染，
+         避免"点开页面后短暂白屏/无反馈"；进度由 main.js 按真实初始化阶段驱动，
+         后端就绪（/news/api/health/ready）后淡出移除。 -->
+    <div id="app-splash" aria-hidden="true">
+      <div class="app-splash__inner">
+        <img class="app-splash__logo" src="./favicon.svg" alt="MorningBrief" />
+        <div class="app-splash__name">MorningBrief</div>
+        <div class="app-splash__track">
+          <div id="app-splash-bar" class="app-splash__bar" style="width: 10%"></div>
+        </div>
+        <div id="app-splash-text" class="app-splash__text">正在加载应用资源…</div>
+      </div>
+      <style>
+        #app-splash {
+          position: fixed;
+          inset: 0;
+          z-index: 99999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #ffffff;
+          transition: opacity 0.4s ease;
+        }
+        #app-splash.app-splash--done {
+          opacity: 0;
+          pointer-events: none;
+        }
+        .app-splash__inner {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 14px;
+          max-width: 320px;
+          text-align: center;
+        }
+        .app-splash__logo {
+          width: 64px;
+          height: 64px;
+        }
+        .app-splash__name {
+          font-size: 20px;
+          font-weight: 600;
+          color: #1f2d3d;
+          letter-spacing: 1px;
+        }
+        .app-splash__track {
+          width: 220px;
+          height: 6px;
+          border-radius: 3px;
+          background: #eef2f6;
+          overflow: hidden;
+        }
+        .app-splash__bar {
+          height: 100%;
+          border-radius: 3px;
+          background: #5bc0be;
+          transition: width 0.35s ease;
+        }
+        .app-splash__text {
+          font-size: 13px;
+          color: #909399;
+        }
+      </style>
+    </div>
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
   </body>

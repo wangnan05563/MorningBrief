@@ -45,6 +45,32 @@ import './styles/global.scss'
 // 全局安全的 ElMessage：页面隐藏/恢复中时静默丢弃，防止 DOM 插入激活最小化窗口
 import { ElMessage } from './utils/message'
 
+// ============================================================
+// T00827：桌面端启动画面（splash）进度控制
+// 进度阶段与真实初始化对应：HTML 解析 10% → 模块加载 30% → Vue 挂载 60% → 后端就绪 100%
+// ============================================================
+const splashEl = document.getElementById('app-splash')
+const splashBar = document.getElementById('app-splash-bar')
+const splashText = document.getElementById('app-splash-text')
+let splashDone = false
+
+function setSplash(percent, text) {
+  if (splashDone || !splashEl) return
+  if (splashBar) splashBar.style.width = `${percent}%`
+  if (splashText) splashText.textContent = text
+}
+
+function hideSplash() {
+  if (splashDone || !splashEl) return
+  splashDone = true
+  // 淡出动画结束后移除 DOM，避免遮罩层常驻（splash 是首屏一次性元素）
+  splashEl.classList.add('app-splash--done')
+  setTimeout(() => splashEl.remove(), 500)
+}
+
+// 模块加载完成（构建产物 JS 已执行）→ 界面初始化阶段
+setSplash(30, '正在初始化界面…')
+
 // 主题初始化：在 Vue 挂载前设置 data-theme 属性，避免主题闪烁
 // 此处直接读取 localStorage 并设置属性，无需等待 Pinia 初始化
 const savedTheme = localStorage.getItem('admin_theme') || 'macaron'
@@ -67,3 +93,33 @@ app.use(ElementPlus, { locale: undefined })
 app.config.globalProperties.$message = ElMessage
 
 app.mount('#app')
+
+// ============================================================
+// T00827：服务就绪探测——轮询后端就绪探针，真实反映后端初始化阶段
+// ============================================================
+setSplash(60, '正在连接服务…')
+
+const probeReady = async (tries = 0) => {
+  if (splashDone) return
+  try {
+    // /news 前缀：dev 由 Vite 代理、生产由 Funnel 路由到后端；ready 探针在 SQLite
+    // 核心依赖就绪前返回 503，就绪后返回 200（比存活探针更能反映"可开始使用"）
+    const res = await fetch('/news/api/health/ready')
+    if (res.ok) {
+      setSplash(100, '启动完成')
+      setTimeout(hideSplash, 300)
+      return
+    }
+    // 仅 503 代表"后端可达但初始化中"（继续轮询，最多 10s）；
+    // 502/504 等代理错误说明后端不可达（dev/E2E 无后端在跑）→ 快速收起，避免 splash 常驻拖慢首屏
+    if (res.status === 503) {
+      if (tries < 20) setTimeout(() => probeReady(tries + 1), 500)
+      else hideSplash()
+      return
+    }
+  } catch {
+    // 网络级失败（连接拒绝）同样视为无后端，快速收起
+  }
+  setTimeout(hideSplash, 2000)
+}
+probeReady()
