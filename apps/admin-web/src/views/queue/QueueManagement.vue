@@ -117,7 +117,7 @@
       >
         <!-- 多选列：row-key + reserve-selection 保证轮询刷新后勾选状态按 id 保留 -->
         <el-table-column type="selection" width="48" :reserve-selection="true" />
-        <el-table-column prop="channel_name" label="频道" min-width="120" sortable="custom" />
+        <el-table-column prop="channel_name" label="频道" min-width="120" sortable="custom" show-overflow-tooltip />
         <el-table-column prop="priority" label="优先级" width="90" sortable="custom" />
         <el-table-column prop="status" label="状态" width="100" sortable="custom">
           <template #default="{ row }">

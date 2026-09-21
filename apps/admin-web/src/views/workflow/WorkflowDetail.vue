@@ -166,7 +166,7 @@
               <IconButton size="small" :icon="Refresh" label="刷新" desc="重新加载音频文件列表" @click="loadAudioFiles" />
             </div>
             <el-table :data="audioFiles.tts" v-loading="audioFiles.loading" size="small" stripe>
-              <el-table-column prop="name" label="文件名" min-width="200" />
+              <el-table-column prop="name" label="文件名" min-width="200" show-overflow-tooltip />
               <el-table-column label="大小" width="100">
                 <template #default="{ row }">{{ formatFileSize(row.size_bytes) }}</template>
               </el-table-column>

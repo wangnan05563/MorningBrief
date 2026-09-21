@@ -69,7 +69,9 @@
             <div class="name-cell" @click="row.isFolder ? enterFolder(row) : null">
               <el-icon v-if="row.isFolder" class="name-icon folder"><FolderOpened /></el-icon>
               <el-icon v-else class="name-icon"><Document /></el-icon>
-              <span :class="{ 'is-folder': row.isFolder }">{{ row.name }}</span>
+              <el-tooltip :content="row.name" placement="top" :fallback-placements="['bottom', 'left', 'right']">
+                <span :class="{ 'is-folder': row.isFolder }">{{ row.name }}</span>
+              </el-tooltip>
             </div>
           </template>
         </el-table-column>

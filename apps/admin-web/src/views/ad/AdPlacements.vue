@@ -13,7 +13,7 @@
 
     <div class="card-soft table-card">
       <el-table :data="tableData" v-loading="loading" stripe>
-        <el-table-column prop="material_name" label="素材名称" min-width="160" />
+        <el-table-column prop="material_name" label="素材名称" min-width="160" show-overflow-tooltip />
         <el-table-column label="广告位" width="120" align="center">
           <template #default="{ row }">
             <el-tag :type="positionTagType(row.position)" size="small">

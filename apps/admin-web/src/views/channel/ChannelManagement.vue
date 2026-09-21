@@ -7,7 +7,7 @@
 
     <el-card shadow="never">
       <el-table :data="list" v-loading="loading" stripe>
-        <el-table-column prop="name" label="名称" min-width="120" />
+        <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
         <el-table-column label="类型" width="110">
           <template #default="{ row }">
