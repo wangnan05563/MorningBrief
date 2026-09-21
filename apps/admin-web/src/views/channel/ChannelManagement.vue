@@ -120,6 +120,7 @@
             <el-tooltip
               content="当天 pending 素材不足时，系统自动将选材时间范围放宽到最近 N 天。不勾选则继承系统动态回溯（按频道近 7 天入库频率 3/7/14 天），避免短节目依赖 BGM 补足。"
               placement="top"
+              :fallback-placements="['bottom', 'left', 'right']"
             >
               <span class="form-tip" style="cursor: help">范围 1-90 天，留空继承动态</span>
             </el-tooltip>

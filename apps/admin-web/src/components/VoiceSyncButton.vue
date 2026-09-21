@@ -3,6 +3,7 @@
     :disabled="syncSupported"
     :content="unsupportedTip"
     placement="top"
+    :fallback-placements="['bottom', 'left', 'right']"
   >
     <span class="voice-sync-wrap">
       <el-button

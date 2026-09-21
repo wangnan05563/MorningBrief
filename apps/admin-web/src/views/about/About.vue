@@ -8,7 +8,7 @@
         <div class="brand-info">
           <div class="version-row">
             <span class="version-label">版本：{{ info.version }}</span>
-            <el-tooltip content="复制完整版本号" placement="top">
+            <el-tooltip content="复制完整版本号" placement="top" :fallback-placements="['bottom', 'left', 'right']">
               <el-icon class="copy-btn" @click="copyVersion"><CopyDocument /></el-icon>
             </el-tooltip>
           </div>
@@ -98,7 +98,7 @@
 
     <!-- 页脚 -->
     <div class="footer">
-      <el-tooltip content="本工具仅供个人研究学习，详见 README 中的「风险免责」" placement="top">
+      <el-tooltip content="本工具仅供个人研究学习，详见 README 中的「风险免责」" placement="top" :fallback-placements="['bottom', 'left', 'right']">
         <span class="footer-text">© {{ year }} MorningBrief · 语音新闻播报平台</span>
       </el-tooltip>
     </div>

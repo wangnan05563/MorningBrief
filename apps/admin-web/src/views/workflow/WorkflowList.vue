@@ -78,6 +78,7 @@
         <el-tooltip
           content="文档/手动选题场景：素材已入库，跳过爬虫从改写开始。课程/资料类频道手动触发须开启"
           placement="top"
+          :fallback-placements="['bottom', 'left', 'right']"
         >
           <span class="skip-crawl-switch">
             <el-switch v-model="skipCrawl" :active-value="true" :inactive-value="false" />

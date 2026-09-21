@@ -3,6 +3,7 @@
     v-if="tooltip"
     :content="tip"
     placement="top"
+    :fallback-placements="['bottom', 'left', 'right']"
     :disabled="!tip"
     :show-after="150"
   >

@@ -46,7 +46,7 @@
         </div>
         <div class="header-right">
           <!-- 主题切换入口：调色板图标，全局可达 -->
-          <el-tooltip content="主题设置" placement="bottom">
+          <el-tooltip content="主题设置" placement="bottom" :fallback-placements="['top', 'left', 'right']">
             <el-icon class="theme-btn" @click="openThemeSwitcher">
               <Brush />
             </el-icon>
