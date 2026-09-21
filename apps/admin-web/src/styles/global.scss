@@ -56,6 +56,24 @@ html, body {
   padding: 24px;
 }
 
+/* === T00833 响应式（优先保证 1366px+ 桌面体验，更窄窗口防挤压/截断） ===
+ * 仅全局兜底：收窄内边距 + 工具栏允许换行，不改各页 scoped 布局细节，
+ * 1366px+ 屏宽不受影响（媒体查询仅对更窄窗口生效）。 */
+@media (max-width: 1439.98px) {
+  .page-container {
+    padding: 16px;
+  }
+
+  /* 顶部操作栏：按钮/选择器多时允许换行，避免被挤压截断 */
+  .page-container .toolbar,
+  .page-container .top-bar,
+  .page-container .page-header,
+  .page-container .index-row {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+}
+
 /* === Element Plus 组件圆角增强 === */
 .el-card {
   border-radius: $radius-lg !important;
