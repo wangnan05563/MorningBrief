@@ -446,6 +446,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useDraft } from '../../composables/useDraft'
 import { Check, View, Refresh, Hide, Connection, Close } from '@element-plus/icons-vue'
 import { ElMessage } from '../../utils/message'
 import {
@@ -496,6 +497,9 @@ const configForm = reactive({
   email_to: '',
   admin_base_url: '',
 })
+// T00828：断点续录——表单变化自动持久化，重新进入页面恢复未提交输入（密钥字段不落盘）
+const { apply: applyDraft, track: trackDraft, commit: commitDraft } = useDraft('notification-config')
+const enableDraft = trackDraft(configForm, { excludePaths: ['dingtalk_secret', 'email_smtp_password'] })
 
 async function loadConfig() {
   configLoading.value = true
@@ -530,6 +534,7 @@ async function handleSaveConfig() {
   try {
     await saveNotificationConfig({ ...configForm })
     ElMessage.success('配置已保存')
+    commitDraft()
     // 重新加载以刷新脱敏显示与 detected_base_url
     await loadConfig()
   } catch (e) {
@@ -728,8 +733,11 @@ function formatTime(iso) {
   }
 }
 
-onMounted(() => {
-  loadConfig()
+onMounted(async () => {
+  await loadConfig()
+  // T00828：服务端配置加载完成后恢复草稿，再启用持久化（避免初始化赋值误入草稿）
+  applyDraft(configForm)
+  enableDraft()
   loadTemplates()
   loadLogs()
 })

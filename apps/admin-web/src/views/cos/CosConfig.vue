@@ -139,6 +139,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useDraft } from '../../composables/useDraft'
 import { Check, Connection, View, Hide } from '@element-plus/icons-vue'
 import { ElMessage } from '../../utils/message'
 import {
@@ -161,6 +162,9 @@ const form = ref({
   bucket: '',
   cdn_domain: '',
 })
+// T00828：断点续录（SecretId/SecretKey 敏感字段不落盘）
+const { apply: applyDraft, track: trackDraft, commit: commitDraft } = useDraft('cos-config')
+const enableDraft = trackDraft(form, { excludePaths: ['secret_id', 'secret_key'] })
 
 // 配置就绪状态（进入页面快速判断）
 const status = ref({ configured: false, bucket: '', region: '', cdn_domain: '' })
@@ -215,6 +219,7 @@ async function handleSave() {
       cdn_domain: form.value.cdn_domain,
     })
     ElMessage.success('COS 配置已保存并热更新')
+    commitDraft()
     await loadConfig()
   } finally {
     saving.value = false
@@ -234,7 +239,11 @@ async function handleTest() {
   }
 }
 
-onMounted(loadConfig)
+onMounted(async () => {
+  await loadConfig()
+  applyDraft(form)
+  enableDraft()
+})
 </script>
 
 <style scoped lang="scss">

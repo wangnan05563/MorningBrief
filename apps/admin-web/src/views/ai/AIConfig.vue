@@ -801,6 +801,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useDraft } from '../../composables/useDraft'
 import { useRoute, useRouter } from 'vue-router'
 
 import { ElMessage, ElMessageBox } from '../../utils/message'
@@ -826,6 +827,9 @@ const llmForm = ref({
   target_duration_sec: 600,
   segment_gap_sec: 0.5,
 })
+// T00828：断点续录——LLM 主配置表单（api_key 敏感字段不落盘）
+const { apply: applyDraft, track: trackDraft, commit: commitDraft } = useDraft('ai-config-llm')
+const enableDraft = trackDraft(llmForm, { excludePaths: ['api_key'] })
 const showLlmKey = ref(false)
 
 // 图片生成配置（T00730：频道图标 AI 生成服务，OpenAI 兼容接口）
@@ -1207,6 +1211,7 @@ async function handleSave() {
       image: imageForm.value,
     })
     ElMessage.success('配置已保存并热更新')
+    commitDraft()
     // 保存后重新加载配置，刷新 presetConfigs 中的脱敏值
     await loadConfig()
     saving.value = false
@@ -1505,6 +1510,9 @@ onMounted(async () => {
   } catch (e) {
     // loadConfig 内部已兜底，这里防止 onMounted 异步异常冒泡为 uncaught rejection
   }
+  // T00828：加载完成后恢复草稿再启用持久化
+  applyDraft(llmForm)
+  enableDraft()
   applyCalculatorParams()
 })
 

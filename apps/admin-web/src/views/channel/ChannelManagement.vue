@@ -502,7 +502,7 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <IconButton :icon="Close" label="取消" desc="关闭弹窗，放弃修改" @click="dialogVisible = false" />
+        <IconButton :icon="Close" label="取消" desc="关闭弹窗，放弃修改" @click="onCancelDialog" />
         <IconButton type="primary" :loading="submitting" :icon="Check" label="确认" desc="保存频道配置" @click="handleSubmit" />
       </template>
 
@@ -750,6 +750,11 @@ function openCreate() {
   loadBgmList()
   loadRssSources()
   loadBookRssSources()
+  // T00828：断点续录——同频道的未保存草稿恢复（不同频道/新增不套用）
+  try {
+    const draft = JSON.parse(localStorage.getItem('mb_channel_draft') || 'null')
+    if (draft && draft.id === form.id) Object.assign(form, draft)
+  } catch { /* 草稿损坏则忽略 */ }
   dialogVisible.value = true
 }
 
@@ -1021,11 +1026,23 @@ async function handleSubmit() {
       })
       ElMessage.success('已创建')
     }
+    // T00828：保存成功清除弹窗草稿
+    localStorage.removeItem('mb_channel_draft')
     dialogVisible.value = false
     await loadList()
   } finally {
     submitting.value = false
   }
+}
+
+// T00828：取消关闭弹窗时保存未提交草稿（仅编辑态、有 id 时），供同频道重开恢复
+function onCancelDialog() {
+  if (editing.value && form.id) {
+    try {
+      localStorage.setItem('mb_channel_draft', JSON.stringify(form))
+    } catch { /* localStorage 不可用时降级：不保存草稿 */ }
+  }
+  dialogVisible.value = false
 }
 
 async function handleToggle(row, val) {

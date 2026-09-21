@@ -272,6 +272,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useDraft } from '../../composables/useDraft'
 import { Refresh, Setting, Plus, DataLine, CircleCheck, CircleClose, Timer, List, WarningFilled, Check } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -294,6 +295,9 @@ const form = reactive({
   require_steps_first_success: true,
   keyword_whitelist: [],
 })
+// T00828：断点续录——表单变化自动持久化，重新进入恢复
+const { apply: applyDraft, track: trackDraft, commit: commitDraft } = useDraft('auto-review-config')
+const enableDraft = trackDraft(form)
 const keywordInput = ref('')
 
 // 统计数据
@@ -339,6 +343,7 @@ async function saveConfig() {
     })
     config.value = res
     ElMessage.success('配置已保存，下次工作流创建审核记录时按新配置判定')
+    commitDraft()
   } catch (err) {
     ElMessage.error('保存失败：' + (err.message || '未知错误'))
   } finally {
@@ -465,8 +470,11 @@ function formatRules(reasonJson) {
   }
 }
 
-onMounted(() => {
-  loadAll()
+onMounted(async () => {
+  await loadAll()
+  // T00828：加载完成后恢复草稿再启用持久化
+  applyDraft(form)
+  enableDraft()
 })
 </script>
 

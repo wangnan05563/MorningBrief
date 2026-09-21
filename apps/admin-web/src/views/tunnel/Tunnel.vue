@@ -346,6 +346,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { useDraft } from '../../composables/useDraft'
 import { ElMessage } from '../../utils/message'
 import {
   CopyDocument, Link, VideoPlay, VideoPause, Setting, Check,
@@ -378,6 +379,9 @@ const form = ref({
   hostname: '',
   cert_file: '',
 })
+// T00828：断点续录（cpolar_authtoken 为令牌，不落盘）
+const { apply: applyDraft, track: trackDraft, commit: commitDraft } = useDraft('tunnel-config')
+const enableDraft = trackDraft(form, { excludePaths: ['cpolar_authtoken'] })
 
 // 下载失败指引
 const downloadError = ref(null)
@@ -529,6 +533,7 @@ async function handleSaveConfig() {
       cert_file: form.value.cert_file,
     })
     ElMessage.success('配置已保存，下次启动隧道时生效')
+    commitDraft()
     await loadConfig()
   } catch (error) {
     const resp = error?.response?.data || error
@@ -706,6 +711,9 @@ watch(isRunning, (running) => {
 onMounted(async () => {
   loading.value = true
   await Promise.all([loadStatus(), loadConfig()])
+  // T00828：加载完成后恢复草稿再启用持久化
+  applyDraft(form)
+  enableDraft()
   loading.value = false
   startPolling()
   document.addEventListener('visibilitychange', handleVisibilityChange)
