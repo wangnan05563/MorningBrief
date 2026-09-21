@@ -19,14 +19,14 @@
         </div>
         <div class="update-btn-wrap">
           <!-- 五态按钮：idle / loading / latest / newer / error -->
-          <el-button
+          <IconButton
             v-if="updateState.kind === 'idle'"
             type="primary"
             :icon="Refresh"
+            label="检查更新"
+            desc="检查 GitHub 是否有新版本"
             @click="runCheckUpdate"
-          >
-            检查更新
-          </el-button>
+          />
           <el-button v-else-if="updateState.kind === 'loading'" loading>检查中…</el-button>
           <el-button
             v-else-if="updateState.kind === 'latest'"
@@ -47,15 +47,15 @@
               发布于 {{ _formatPublishedAt(updateState.publishedAt) }}
             </span>
           </el-button>
-          <el-button
+          <IconButton
             v-else
             type="danger"
-            :icon="WarningFilled"
             plain
+            :icon="Refresh"
+            :label="updateState.reason === 'network' ? '网络异常，点击重试' : '服务异常，点击重试'"
+            desc="重新检查更新"
             @click="runCheckUpdate"
-          >
-            {{ updateState.reason === 'network' ? '网络异常' : '服务异常' }} · 重试
-          </el-button>
+          />
         </div>
       </div>
     </div>
@@ -141,7 +141,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from '../../utils/message'
 import {
-  Refresh, CopyDocument, CircleCheckFilled, Top, WarningFilled, TopRight, Search,
+  Refresh, CopyDocument, CircleCheckFilled, Top, TopRight, Search,
 } from '@element-plus/icons-vue'
 import { getAbout, checkUpdate } from '../../api/about'
 

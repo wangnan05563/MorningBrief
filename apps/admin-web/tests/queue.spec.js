@@ -139,8 +139,8 @@ test.describe('队列管理', () => {
 
     // 点击改优先级按钮打开 popover（每行都有，用 first）
     await page.getByRole('button', { name: '改优先级' }).first().click()
-    // popover 内确定按钮：用 visible 过滤避免匹配未打开的 popover
-    await page.locator('.priority-popover button', { hasText: '确定' }).first().click()
+    // popover 内确定按钮（T00812 后为纯图标，用 aria-label 定位）：用 visible 过滤避免匹配未打开的 popover
+    await page.locator('.priority-popover').getByRole('button', { name: '确定' }).first().click()
 
     // 成功提示
     await expect(page.locator('.el-message').getByText('优先级已更新')).toBeVisible({ timeout: 30000 })

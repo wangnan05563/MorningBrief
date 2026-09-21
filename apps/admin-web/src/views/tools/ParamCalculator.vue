@@ -1,9 +1,13 @@
 <template>
   <div class="page-container param-calculator">
     <div class="top-bar">
-      <el-button type="primary" :icon="ArrowRight" @click="goToAiConfig">
-        应用到 AI 配置
-      </el-button>
+      <IconButton
+        type="primary"
+        label="应用到 AI 配置"
+        desc="将当前三参数带入 AI 配置页"
+        :icon="ArrowRight"
+        @click="goToAiConfig"
+      />
     </div>
 
     <el-alert
@@ -38,14 +42,14 @@
             >
               计算中
             </el-tag>
-            <el-button
+            <IconButton
               v-else
               size="small"
+              label="锁定此项"
+              desc="锁定时长，由其他参数计算得出"
               :icon="Lock"
               @click="lockParam('duration')"
-            >
-              锁定此项
-            </el-button>
+            />
           </div>
         </template>
 
@@ -87,14 +91,14 @@
             >
               计算中
             </el-tag>
-            <el-button
+            <IconButton
               v-else
               size="small"
+              label="锁定此项"
+              desc="锁定总字数，由其他参数计算得出"
               :icon="Lock"
               @click="lockParam('words')"
-            >
-              锁定此项
-            </el-button>
+            />
           </div>
         </template>
 
@@ -136,14 +140,14 @@
             >
               计算中
             </el-tag>
-            <el-button
+            <IconButton
               v-else
               size="small"
+              label="锁定此项"
+              desc="锁定语速倍率，由其他参数计算得出"
               :icon="Lock"
               @click="lockParam('rate')"
-            >
-              锁定此项
-            </el-button>
+            />
           </div>
         </template>
 
@@ -179,15 +183,15 @@
         </div>
       </template>
       <div class="preset-buttons">
-        <el-button
+        <IconButton
           v-for="p in presets"
           :key="p.key"
           class="preset-btn"
+          :label="p.label"
+          :desc="`${p.duration / 60}分钟 · ${p.rate}x · ${p.expectedWords}字`"
+          :icon="ArrowRight"
           @click="applyPreset(p)"
-        >
-          <span class="preset-label">{{ p.label }}</span>
-          <span class="preset-hint">{{ p.duration / 60 }}分钟 · {{ p.rate }}x · {{ p.expectedWords }}字</span>
-        </el-button>
+        />
       </div>
     </el-card>
   </div>

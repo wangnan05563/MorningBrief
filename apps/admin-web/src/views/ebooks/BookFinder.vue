@@ -39,12 +39,15 @@
             不选分类的全量搜索需先构建本地索引；也可先选择具体分类立即搜索
           </span>
         </template>
-        <el-button
+        <IconButton
           size="small"
           :loading="building"
           :disabled="building"
+          :icon="Refresh"
+          :label="indexReady ? '重建索引' : '构建索引'"
+          :desc="indexReady ? '重建本地书源索引' : '构建本地书源索引'"
           @click="onRebuildIndex"
-        >{{ indexReady ? '重建索引' : '构建索引' }}</el-button>
+        />
       </div>
     </el-card>
 
@@ -76,10 +79,10 @@
           <el-input-number v-model="limit" :min="1" :max="100" :step="10" controls-position="right" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :loading="searching" @click="onSearch">检索</el-button>
+          <IconButton type="primary" :loading="searching" :icon="Search" label="检索" desc="按关键词与分类检索书目" @click="onSearch" />
           <!-- T00810：随机浏览入口，紧邻检索按钮右侧，布局与菜单整体一致 -->
-          <el-button :loading="searching" @click="onRandom">随机</el-button>
-          <el-button :disabled="searching" @click="onRefreshCategories">刷新分类</el-button>
+          <IconButton :loading="searching" :icon="Sort" label="随机" desc="随机抽取书目浏览" @click="onRandom" />
+          <IconButton :disabled="searching" :icon="Refresh" label="刷新分类" desc="重新拉取书源分类列表" @click="onRefreshCategories" />
         </el-form-item>
       </el-form>
 
@@ -115,11 +118,14 @@
         <!-- T00626：一键加入待讲书单（写素材占位，运营据此补齐书稿） -->
         <el-table-column label="待讲书单" width="130" fixed="right">
           <template #default="{ row }">
-            <el-button
+            <IconButton
               size="small"
               :loading="draftingUrl === row.url"
+              :icon="Check"
+              label="加入书单"
+              desc="把该书加入待讲书单"
               @click="onAddToBookList(row)"
-            >加入书单</el-button>
+            />
           </template>
         </el-table-column>
         <template #empty>
@@ -142,6 +148,7 @@
  * - 取件后走既有「素材录入」（支持 .epub/.docx/.html/.txt/.md）入库，再由频道工作流改写。
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { Refresh, Search, Sort, Check } from '@element-plus/icons-vue'
 import { ElMessage } from '../../utils/message'
 import {
   createDraftMaterial,

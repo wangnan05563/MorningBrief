@@ -54,15 +54,16 @@
           />
         </el-form-item>
         <el-form-item>
-          <el-button
+          <IconButton
             type="primary"
             size="large"
             class="login-btn"
+            :icon="Check"
             :loading="loading"
+            label="登录"
+            desc="提交用户名密码登录系统"
             @click="handleLogin"
-          >
-            登录
-          </el-button>
+          />
         </el-form-item>
       </el-form>
     </div>
@@ -83,7 +84,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from '../../utils/message'
-import { User, Lock } from '@element-plus/icons-vue'
+import { User, Lock, Check } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
 
 // publicPath 跟随 Vite base：base='/news/' 时 publicPath='/news/'

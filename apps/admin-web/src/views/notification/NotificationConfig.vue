@@ -1,15 +1,15 @@
 <template>
   <div class="page-container notification-config">
     <div class="top-bar">
-      <el-button
+      <IconButton
         v-if="activeTab === 'config'"
         type="primary"
         :icon="Check"
         :loading="saving"
+        label="保存配置"
+        desc="保存当前通知配置"
         @click="handleSaveConfig"
-      >
-        保存配置
-      </el-button>
+      />
     </div>
 
     <el-tabs v-model="activeTab" class="config-tabs">
@@ -55,9 +55,12 @@
                 placeholder="https://oapi.dingtalk.com/robot/send?access_token=xxx"
               >
                 <template #append>
-                  <el-button @click="showWebhook = !showWebhook">
-                    {{ showWebhook ? '隐藏' : '显示' }}
-                  </el-button>
+                  <IconButton
+                    :icon="showWebhook ? Hide : View"
+                    :label="showWebhook ? '隐藏' : '显示'"
+                    desc="切换密钥可见性"
+                    @click="showWebhook = !showWebhook"
+                  />
                 </template>
               </el-input>
               <div class="field-tip">
@@ -71,9 +74,12 @@
                 placeholder="SEC开头（可选，配置后启用加签验证）"
               >
                 <template #append>
-                  <el-button @click="showSecret = !showSecret">
-                    {{ showSecret ? '隐藏' : '显示' }}
-                  </el-button>
+                  <IconButton
+                    :icon="showSecret ? Hide : View"
+                    :label="showSecret ? '隐藏' : '显示'"
+                    desc="切换密钥可见性"
+                    @click="showSecret = !showSecret"
+                  />
                 </template>
               </el-input>
               <div class="field-tip">
@@ -92,9 +98,12 @@
                 placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
               >
                 <template #append>
-                  <el-button @click="showWecomWebhook = !showWecomWebhook">
-                    {{ showWecomWebhook ? '隐藏' : '显示' }}
-                  </el-button>
+                  <IconButton
+                    :icon="showWecomWebhook ? Hide : View"
+                    :label="showWecomWebhook ? '隐藏' : '显示'"
+                    desc="切换密钥可见性"
+                    @click="showWecomWebhook = !showWecomWebhook"
+                  />
                 </template>
               </el-input>
               <div class="field-tip">
@@ -137,9 +146,12 @@
                 placeholder="SMTP 授权码（非邮箱登录密码）"
               >
                 <template #append>
-                  <el-button @click="showEmailPwd = !showEmailPwd">
-                    {{ showEmailPwd ? '隐藏' : '显示' }}
-                  </el-button>
+                  <IconButton
+                    :icon="showEmailPwd ? Hide : View"
+                    :label="showEmailPwd ? '隐藏' : '显示'"
+                    desc="切换密钥可见性"
+                    @click="showEmailPwd = !showEmailPwd"
+                  />
                 </template>
               </el-input>
               <div class="field-tip">
@@ -158,14 +170,15 @@
           <el-divider content-position="left">测试发送</el-divider>
           <el-form :model="configForm" label-width="160px" class="config-form">
             <el-form-item>
-              <el-button
+              <IconButton
                 type="primary"
                 plain
+                :icon="Connection"
                 :loading="testing"
+                label="测试发送"
+                desc="向所有已配置渠道发送测试通知"
                 @click="handleTestSend"
-              >
-                测试发送到所有已配置渠道
-              </el-button>
+              />
               <el-tag
                 v-if="testResult"
                 :type="testResult.success ? 'success' : 'danger'"
@@ -182,7 +195,7 @@
             <el-form-item label="Admin Web 地址">
               <el-input
                 v-model="configForm.admin_base_url"
-                placeholder="https://your-domain.com 或 http://localhost:5173"
+                placeholder="https://your-domain.com 或 http://localhost:5181"
               />
               <div class="field-tip">
                 钉钉消息中的跳转链接基础地址。留空则使用后端自动检测值：
@@ -228,24 +241,24 @@
                   inactive-text="禁用"
                   @change="handleTemplateChange(tpl)"
                 />
-                <el-button
+                <IconButton
                   size="small"
                   :icon="View"
+                  label="预览"
+                  desc="预览模板渲染效果"
                   @click="handlePreview(tpl)"
                   style="margin-left: 12px"
-                >
-                  预览
-                </el-button>
-                <el-button
+                />
+                <IconButton
                   size="small"
                   type="primary"
                   :icon="Check"
                   :loading="tpl._saving"
+                  label="保存"
+                  desc="保存模板修改"
                   @click="handleSaveTemplate(tpl)"
                   style="margin-left: 8px"
-                >
-                  保存
-                </el-button>
+                />
               </div>
             </div>
 
@@ -317,13 +330,13 @@
               <el-option label="失败" value="failed" />
               <el-option label="已抑制" value="suppressed" />
             </el-select>
-            <el-button
+            <IconButton
               :icon="Refresh"
+              label="刷新"
+              desc="重新加载发送日志"
               @click="loadLogs"
               style="margin-left: 12px"
-            >
-              刷新
-            </el-button>
+            />
           </div>
 
           <el-table
@@ -357,15 +370,16 @@
             </el-table-column>
             <el-table-column label="操作" width="100" fixed="right">
               <template #default="{ row }">
-                <el-button
+                <IconButton
                   size="small"
                   type="primary"
                   link
+                  :icon="Refresh"
                   :loading="row._resending"
+                  label="重发"
+                  desc="重新发送该条通知"
                   @click="handleResend(row)"
-                >
-                  重发
-                </el-button>
+                />
               </template>
             </el-table-column>
           </el-table>
@@ -416,14 +430,15 @@
       </div>
 
       <template #footer>
-        <el-button @click="previewVisible = false">关闭</el-button>
-        <el-button
+        <IconButton :icon="Close" label="关闭" desc="关闭预览对话框" @click="previewVisible = false" />
+        <IconButton
           type="primary"
+          :icon="View"
           :loading="previewing"
+          label="渲染预览"
+          desc="使用测试值渲染模板预览"
           @click="handleDoPreview"
-        >
-          渲染预览
-        </el-button>
+        />
       </template>
     </el-dialog>
   </div>
@@ -431,7 +446,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { Check, View, Refresh } from '@element-plus/icons-vue'
+import { Check, View, Refresh, Hide, Connection, Close } from '@element-plus/icons-vue'
 import { ElMessage } from '../../utils/message'
 import {
   getNotificationConfig,

@@ -1,7 +1,7 @@
 <template>
   <div class="review-detail page-container" v-loading="loading">
     <div class="detail-header">
-      <el-button :icon="ArrowLeft" plain @click="goBack">返回</el-button>
+      <IconButton :icon="ArrowLeft" plain label="返回" desc="返回审核列表" @click="goBack" />
       <div class="header-info">
         <span class="info-item">日期：<strong>{{ detail.episode_date }}</strong></span>
         <span class="info-item">工作流ID：<strong>{{ detail.workflow_id }}</strong></span>
@@ -99,7 +99,7 @@
               <el-input v-model="reason" type="textarea" :rows="3" placeholder="请输入理由" />
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" :loading="submitting" @click="handleSubmit">提交</el-button>
+              <IconButton type="primary" :loading="submitting" :icon="Check" label="提交" desc="提交当前审核操作" @click="handleSubmit" />
             </el-form-item>
           </el-form>
         </el-card>
@@ -120,7 +120,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
-import { ArrowLeft } from '@element-plus/icons-vue'
+import { ArrowLeft, Check } from '@element-plus/icons-vue'
 import api from '../../api'
 
 const route = useRoute()

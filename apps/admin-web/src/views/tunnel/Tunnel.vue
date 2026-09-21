@@ -15,38 +15,46 @@
           </div>
           <div class="status-url" v-if="status?.public_url">
             <el-tag type="success" effect="dark" class="url-tag">{{ status.public_url }}</el-tag>
-            <el-button link type="primary" @click="copyUrl(status.public_url)">
-              <el-icon><CopyDocument /></el-icon>
-              <span>复制</span>
-            </el-button>
-            <el-button link type="primary" @click="openUrl(status.public_url + (status.path_prefix || ''))">
-              <el-icon><Link /></el-icon>
-              <span>打开</span>
-            </el-button>
+            <IconButton
+              link
+              type="primary"
+              label="复制"
+              desc="复制公网地址到剪贴板"
+              :icon="CopyDocument"
+              @click="copyUrl(status.public_url)"
+            />
+            <IconButton
+              link
+              type="primary"
+              label="打开"
+              desc="在新窗口打开公网地址"
+              :icon="Link"
+              @click="openUrl(status.public_url + (status.path_prefix || ''))"
+            />
           </div>
           <div class="status-url text-muted" v-else>
             隧道未启动，暂无公网地址
           </div>
         </div>
         <div class="status-right">
-          <el-button
+          <IconButton
             type="primary"
             :loading="starting"
             :disabled="isRunning"
+            label="启动隧道"
+            desc="启动隧道并建立公网连接"
+            :icon="VideoPlay"
             @click="handleStart"
-          >
-            <el-icon><VideoPlay /></el-icon>
-            <span>启动隧道</span>
-          </el-button>
-          <el-button
+          />
+          <IconButton
             type="danger"
             :loading="stopping"
             :disabled="!isRunning"
+            label="停止"
+            desc="停止当前隧道"
+            :icon="VideoPause"
             @click="handleStop"
-          >
-            <el-icon><VideoPause /></el-icon>
-            <span>停止</span>
-          </el-button>
+          />
         </div>
       </div>
     </div>
@@ -65,22 +73,29 @@
         <p class="strong">请手动下载并放置到以下路径：</p>
         <div class="manual-path">
           <code>{{ downloadError.data.manual_path }}</code>
-          <el-button link type="primary" size="small" @click="copyUrl(downloadError.data.manual_path)">
-            复制路径
-          </el-button>
+          <IconButton
+            link
+            type="primary"
+            size="small"
+            label="复制路径"
+            desc="复制二进制放置路径"
+            :icon="CopyDocument"
+            @click="copyUrl(downloadError.data.manual_path)"
+          />
         </div>
         <div class="download-links">
           <span class="text-muted">下载源：</span>
-          <el-button
+          <IconButton
             v-for="url in downloadError.data.download_urls"
             :key="url"
             link
             type="primary"
             size="small"
+            :label="url.length > 60 ? url.slice(0, 60) + '...' : url"
+            desc="打开该下载源"
+            :icon="Link"
             @click="openUrl(url)"
-          >
-            {{ url.length > 60 ? url.slice(0, 60) + '...' : url }}
-          </el-button>
+          />
         </div>
         <p class="text-muted">放置后重新点击「启动隧道」即可</p>
       </div>
@@ -97,10 +112,13 @@
       <template #title>Tailscale Funnel 需要授权</template>
       <div class="tailscale-auth">
         <p>{{ tailscaleAuthError.message }}</p>
-        <el-button type="primary" @click="openUrl(tailscaleAuthError.data.auth_url)">
-          <el-icon><Link /></el-icon>
-          <span>前往授权</span>
-        </el-button>
+        <IconButton
+          type="primary"
+          label="前往授权"
+          desc="在浏览器打开授权地址"
+          :icon="ArrowRight"
+          @click="openUrl(tailscaleAuthError.data.auth_url)"
+        />
         <p class="text-muted">授权完成后，重新点击「启动隧道」</p>
       </div>
     </el-alert>
@@ -152,15 +170,24 @@
                 点击下方按钮启动 Cloudflare 授权，浏览器会自动打开授权页面。
                 完成授权后系统会自动检测并进入下一步。
               </div>
-              <el-button type="primary" :loading="loginLoading" @click="handleCloudflareLogin">
-                <el-icon><Key /></el-icon>
-                <span>开始授权</span>
-              </el-button>
+              <IconButton
+                type="primary"
+                :loading="loginLoading"
+                label="开始授权"
+                desc="启动 Cloudflare 授权流程"
+                :icon="Key"
+                @click="handleCloudflareLogin"
+              />
               <div v-if="loginResult?.auth_url" class="auth-url-box">
                 <span class="text-muted">如果浏览器未自动打开，请手动点击：</span>
-                <el-button link type="primary" @click="openUrl(loginResult.auth_url)">
-                  打开授权链接
-                </el-button>
+                <IconButton
+                  link
+                  type="primary"
+                  label="打开授权链接"
+                  desc="手动打开授权页面"
+                  :icon="Link"
+                  @click="openUrl(loginResult.auth_url)"
+                />
               </div>
               <div v-if="loginResult?.status === 'waiting'" class="login-status">
                 <el-icon class="is-loading"><Loading /></el-icon>
@@ -178,14 +205,15 @@
                 placeholder="输入隧道名称（如 MorningBrief-tunnel）"
                 style="max-width: 320px"
               />
-              <el-button
+              <IconButton
                 type="primary"
                 :loading="createLoading"
                 :disabled="!createTunnelName.trim()"
+                label="创建隧道"
+                desc="创建 Cloudflare 命名隧道"
+                :icon="Plus"
                 @click="handleCloudflareCreate"
-              >
-                创建隧道
-              </el-button>
+              />
               <div v-if="config?.tunnel_id" class="create-result">
                 <el-tag type="success" effect="plain">已创建</el-tag>
                 <span class="text-muted">ID: {{ config.tunnel_id }}</span>
@@ -202,14 +230,15 @@
                 placeholder="输入域名（如 news.example.com）"
                 style="max-width: 320px"
               />
-              <el-button
+              <IconButton
                 type="primary"
                 :loading="routeLoading"
                 :disabled="!routeHostname.trim()"
+                label="配置 DNS"
+                desc="提交 DNS 路由配置"
+                :icon="Check"
                 @click="handleCloudflareRouteDns"
-              >
-                配置 DNS
-              </el-button>
+              />
             </template>
 
             <!-- 完成 -->
@@ -276,10 +305,14 @@
         </el-form-item>
 
         <el-form-item>
-          <el-button type="primary" :loading="savingConfig" @click="handleSaveConfig">
-            <el-icon><Check /></el-icon>
-            <span>保存配置</span>
-          </el-button>
+          <IconButton
+            type="primary"
+            :loading="savingConfig"
+            label="保存配置"
+            desc="保存隧道配置，下次启动生效"
+            :icon="Check"
+            @click="handleSaveConfig"
+          />
         </el-form-item>
       </el-form>
     </div>
@@ -316,7 +349,7 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { ElMessage } from '../../utils/message'
 import {
   CopyDocument, Link, VideoPlay, VideoPause, Setting, Check,
-  MagicStick, Key, Loading,
+  MagicStick, Key, Loading, Plus, ArrowRight,
 } from '@element-plus/icons-vue'
 import api from '../../api'
 

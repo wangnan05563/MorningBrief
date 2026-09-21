@@ -29,9 +29,27 @@
           </el-breadcrumb>
         </div>
         <el-button-group style="margin-left: 12px">
-          <el-button :icon="Upload" :disabled="!configured" @click="triggerUpload">上传文件</el-button>
-          <el-button :icon="FolderAdd" :disabled="!configured" @click="openNewFolder">新建文件夹</el-button>
-          <el-button :icon="Refresh" :loading="loading" @click="loadList">刷新</el-button>
+          <IconButton
+            label="上传文件"
+            desc="上传文件到当前目录"
+            :icon="Upload"
+            :disabled="!configured"
+            @click="triggerUpload"
+          />
+          <IconButton
+            label="新建文件夹"
+            desc="在当前目录新建文件夹"
+            :icon="Plus"
+            :disabled="!configured"
+            @click="openNewFolder"
+          />
+          <IconButton
+            label="刷新"
+            desc="重新加载当前目录列表"
+            :icon="Refresh"
+            :loading="loading"
+            @click="loadList"
+          />
         </el-button-group>
         <input
           ref="fileInput"
@@ -60,25 +78,31 @@
         <el-table-column prop="content_type" label="类型" width="160" />
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button
+            <IconButton
               v-if="!row.isFolder"
               type="primary"
               link
+              label="下载"
+              desc="下载该文件"
               :icon="Download"
               @click="handleDownload(row)"
-            >下载</el-button>
-            <el-button
+            />
+            <IconButton
               type="primary"
               link
+              label="重命名"
+              desc="重命名或移动该对象"
               :icon="Edit"
               @click="openRename(row)"
-            >重命名</el-button>
-            <el-button
+            />
+            <IconButton
               type="danger"
               link
+              label="删除"
+              desc="删除该对象"
               :icon="Delete"
               @click="handleDelete(row)"
-            >删除</el-button>
+            />
           </template>
         </el-table-column>
       </el-table>
@@ -92,8 +116,20 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="newFolderVisible = false">取消</el-button>
-        <el-button type="primary" :loading="opLoading" @click="confirmNewFolder">确定</el-button>
+        <IconButton
+          label="取消"
+          desc="关闭对话框"
+          :icon="Close"
+          @click="newFolderVisible = false"
+        />
+        <IconButton
+          type="primary"
+          :loading="opLoading"
+          label="确定"
+          desc="创建该文件夹"
+          :icon="Check"
+          @click="confirmNewFolder"
+        />
       </template>
     </el-dialog>
 
@@ -112,8 +148,20 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="renameVisible = false">取消</el-button>
-        <el-button type="primary" :loading="opLoading" @click="confirmRename">确定</el-button>
+        <IconButton
+          label="取消"
+          desc="关闭对话框"
+          :icon="Close"
+          @click="renameVisible = false"
+        />
+        <IconButton
+          type="primary"
+          :loading="opLoading"
+          label="确定"
+          desc="确认重命名"
+          :icon="Check"
+          @click="confirmRename"
+        />
       </template>
     </el-dialog>
   </div>
@@ -122,7 +170,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import {
-  Upload, FolderAdd, FolderOpened, Refresh, Download, Edit, Delete, Document,
+  Upload, FolderOpened, Refresh, Download, Edit, Delete, Document,
+  Plus, Close, Check,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import {

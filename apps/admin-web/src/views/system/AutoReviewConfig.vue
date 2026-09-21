@@ -2,9 +2,13 @@
   <div class="page-container auto-review-page">
     <!-- 顶部工具栏（T00811：移除与导航栏重复的页面标题） -->
     <div class="toolbar">
-      <el-button :icon="Refresh" :loading="loadingAll" @click="loadAll">
-        刷新
-      </el-button>
+      <IconButton
+        label="刷新"
+        desc="重新加载配置、统计与历史"
+        :icon="Refresh"
+        :loading="loadingAll"
+        @click="loadAll"
+      />
     </div>
 
     <!-- 配置区域 -->
@@ -82,7 +86,12 @@
               placeholder="输入关键词后按回车添加（留空表示不启用此规则）"
               @keyup.enter="addKeyword"
             />
-            <el-button :icon="Plus" @click="addKeyword">添加</el-button>
+            <IconButton
+              label="添加"
+              desc="将输入的关键词加入白名单"
+              :icon="Plus"
+              @click="addKeyword"
+            />
           </div>
           <div class="keyword-tags">
             <el-tag
@@ -101,9 +110,14 @@
         </el-form-item>
 
         <el-form-item>
-          <el-button type="primary" :loading="saving" @click="saveConfig">
-            保存配置
-          </el-button>
+          <IconButton
+            type="primary"
+            :loading="saving"
+            label="保存配置"
+            desc="保存自动审批规则配置"
+            :icon="Check"
+            @click="saveConfig"
+          />
         </el-form-item>
       </el-form>
     </div>
@@ -228,15 +242,16 @@
         </el-table-column>
         <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
-            <el-button
+            <IconButton
               v-if="!row.success && row.review_id"
               size="small"
               type="primary"
               link
+              label="重试"
+              desc="重新执行该失败的自动审批"
+              :icon="Refresh"
               @click="retryStat(row)"
-            >
-              重试
-            </el-button>
+            />
           </template>
         </el-table-column>
       </el-table>
@@ -257,7 +272,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { Refresh, Setting, Plus, DataLine, CircleCheck, CircleClose, Timer, List, WarningFilled } from '@element-plus/icons-vue'
+import { Refresh, Setting, Plus, DataLine, CircleCheck, CircleClose, Timer, List, WarningFilled, Check } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getAutoReviewConfig,

@@ -1,8 +1,8 @@
-﻿<template>
+<template>
   <div class="page-container channel-management">
     <!-- 工具栏：新增按钮（仅 admin 可见），标题由顶部导航栏提供 -->
     <div class="top-bar">
-      <el-button v-if="canOperate" type="primary" :icon="Plus" @click="openCreate">新增频道</el-button>
+      <IconButton v-if="canOperate" type="primary" :icon="Plus" label="新增频道" desc="新建一个频道" @click="openCreate" />
     </div>
 
     <el-card shadow="never">
@@ -70,8 +70,8 @@
         </el-table-column>
         <el-table-column v-if="canOperate" label="操作" width="160">
           <template #default="{ row }">
-            <el-button size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button size="small" type="danger" :loading="deletingIds.has(row.id)" @click="handleDelete(row)">删除</el-button>
+            <IconButton size="small" :icon="Edit" label="编辑" desc="编辑该频道" @click="openEdit(row)" />
+            <IconButton size="small" type="danger" :loading="deletingIds.has(row.id)" :icon="Delete" label="删除" desc="删除该频道" @click="handleDelete(row)" />
           </template>
         </el-table-column>
       </el-table>
@@ -184,9 +184,7 @@
             <div v-else class="cover-preview cover-preview-empty">无封面</div>
             <div class="cover-fields">
               <el-input v-model="form.cover_url" placeholder="封面图 URL（留空用类型默认封面）" style="width: 360px" />
-              <el-button :icon="Picture" style="margin-left: 8px" @click="openCoverPicker">
-                选择预制封面
-              </el-button>
+              <IconButton :icon="View" style="margin-left: 8px" label="选择预制封面" desc="打开预制封面选择弹窗" @click="openCoverPicker" />
               <div class="form-tip">
                 预制封面为各频道主题专属插画（3:4，移动端适配），点击缩略图即可套用
               </div>
@@ -197,14 +195,17 @@
         <!-- 提示词区：折叠面板，减少视觉负担 -->
         <el-divider content-position="left">
           <span>频道提示词</span>
-          <el-button
+          <IconButton
             v-if="editing"
             type="primary"
             link
             :loading="generating"
+            :icon="Refresh"
+            label="AI 重新生成"
+            desc="调用 AI 重新生成频道提示词"
             @click="handleGeneratePrompts"
             style="margin-left: 12px"
-          >AI 重新生成</el-button>
+          />
         </el-divider>
         <el-collapse v-model="promptCollapse">
           <el-collapse-item title="开场白（intro）" name="intro">
@@ -252,19 +253,24 @@
               </el-option-group>
             </el-select>
             <!-- 试听按钮：选了 BGM 后才显示，用原生 audio 避免组件库依赖 -->
-            <el-button
+            <IconButton
               v-if="form.bgm_path"
               :icon="VideoPlay"
+              label="试听"
+              desc="试听当前选中的 BGM"
               @click="handlePreviewBgm"
-            >试听</el-button>
+            />
             <!-- AI 推荐：仅编辑模式可用，调用 LLM 根据频道定位推荐 -->
-            <el-button
+            <IconButton
               v-if="editing"
               type="primary"
               link
               :loading="recommendingBgm"
+              :icon="Refresh"
+              label="AI 推荐"
+              desc="调用 AI 推荐合适的 BGM"
               @click="handleRecommendBgm"
-            >AI 推荐</el-button>
+            />
             <!-- 上传自定义 BGM -->
             <el-upload
               :show-file-list="false"
@@ -272,9 +278,7 @@
               :http-request="handleBgmUpload"
               accept=".mp3,.wav,.m4a,.aac,.ogg"
             >
-              <el-button :icon="Upload" :loading="uploadingBgm">
-                {{ uploadingBgm ? `上传中 ${uploadProgress}%` : '上传 BGM' }}
-              </el-button>
+              <IconButton :icon="Plus" :loading="uploadingBgm" :label="uploadingBgm ? `上传中 ${uploadProgress}%` : '上传 BGM'" desc="上传自定义 BGM 文件" />
             </el-upload>
           </div>
           <!-- 试听播放器：选中 BGM 时显示，原生 controls 避免组件耦合 -->
@@ -371,7 +375,7 @@
                 accept=".png,.jpg,.jpeg,.webp"
                 :http-request="doUploadIcon"
               >
-                <el-button size="small" :loading="iconUploading" :disabled="!editing">上传图标</el-button>
+                <IconButton size="small" :loading="iconUploading" :disabled="!editing" :icon="Plus" label="上传图标" desc="上传频道图标（PNG/JPG/WebP）" />
               </el-upload>
               <div class="ai-gen-row">
                 <el-input
@@ -381,14 +385,17 @@
                   style="width: 190px"
                   :disabled="!editing"
                 />
-                <el-button
+                <IconButton
                   size="small"
                   type="primary"
                   plain
                   :loading="iconGenerating"
                   :disabled="!editing || !iconPrompt"
+                  :icon="Refresh"
+                  label="AI 生成"
+                  desc="调用 AI 生成频道图标"
                   @click="onGenerateIcon"
-                >AI 生成</el-button>
+                />
               </div>
               <span class="form-tip">PNG/JPG/WebP ≤2MB；AI 生成为圆角方形图标，生成后自动设为频道图标（可再次生成替换）</span>
             </div>
@@ -399,14 +406,17 @@
         <el-divider content-position="left">
           <span>数据源配置</span>
           <!-- AI 推荐：仅编辑模式可用，与 BGM 推荐按钮风格保持一致 -->
-          <el-button
+          <IconButton
             v-if="editing"
             type="primary"
             link
             :loading="recommendingSources"
+            :icon="Refresh"
+            label="AI 推荐"
+            desc="调用 AI 推荐 RSS 源与关键词"
             @click="handleRecommendSources"
             style="margin-left: 12px"
-          >AI 推荐</el-button>
+          />
         </el-divider>
         <el-form-item label="RSS 源">
           <el-select
@@ -492,8 +502,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">确认</el-button>
+        <IconButton :icon="Close" label="取消" desc="关闭弹窗，放弃修改" @click="dialogVisible = false" />
+        <IconButton type="primary" :loading="submitting" :icon="Check" label="确认" desc="保存频道配置" @click="handleSubmit" />
       </template>
 
       <!-- T00656：讲书稿素材池弹窗（与「讲书稿素材池」页面映射同一组件与数据） -->
@@ -540,7 +550,7 @@
 defineOptions({ name: 'ChannelManagement' })
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
-import { Plus, VideoPlay, Upload, Picture } from '@element-plus/icons-vue'
+import { Plus, VideoPlay, Edit, Delete, View, Refresh, Close, Check } from '@element-plus/icons-vue'
 import BookPoolPanel from './BookPoolPanel.vue'
 import { getScriptMode, setScriptMode } from '../../api/bookPool'
 import { uploadChannelIcon, generateChannelIcon, listCoverPresets } from '../../api/channels'

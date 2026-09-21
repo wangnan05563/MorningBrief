@@ -51,28 +51,28 @@
           <el-option label="定时" value="cron" />
           <el-option label="手动" value="manual" />
         </el-select>
-        <el-button :icon="Refresh" @click="resetFilters">重置</el-button>
+        <IconButton :icon="RefreshLeft" label="重置" desc="清空筛选条件并刷新列表" @click="resetFilters" />
       </div>
       <div class="top-actions">
         <!-- 全频道启动：仅 admin 可见，醒目绿色按钮，确认弹窗防误操作 -->
-        <el-button
+        <IconButton
           v-if="userStore.isAdmin"
           type="success"
-          :icon="Promotion"
           :loading="triggeringAll"
+          :icon="VideoPlay"
+          label="全频道启动"
+          desc="立即触发所有活跃频道的工作流"
           @click="handleTriggerAll"
-        >
-          全频道启动
-        </el-button>
-        <el-button
+        />
+        <IconButton
           v-if="userStore.isAdmin"
           type="primary"
-          :icon="VideoPlay"
           :loading="triggering"
+          :icon="VideoPlay"
+          label="手动触发"
+          desc="立即触发一期工作流"
           @click="handleTrigger"
-        >
-          手动触发
-        </el-button>
+        />
         <!-- 跳过爬虫开关：文档/手动选题场景素材已入库，工作流从 rewrite 开始。
              课程/资料类频道手动触发须开启；新闻频道开启会因无素材而失败（运营自负）。-->
         <el-tooltip
@@ -85,16 +85,16 @@
           </span>
         </el-tooltip>
         <!-- 批量删除：仅 admin 可见，未选中时禁用；选中时显示计数 -->
-        <el-button
+        <IconButton
           v-if="userStore.isAdmin"
           type="danger"
-          :icon="Delete"
           :disabled="selectedRows.length === 0 || deleting"
           :loading="deleting"
+          :icon="Delete"
+          label="批量删除"
+          desc="删除选中的工作流及其关联记录"
           @click="handleBatchDelete"
-        >
-          批量删除
-        </el-button>
+        />
         <!-- 选中计数提示：让用户明确即将删除的范围，避免误操作 -->
         <span v-if="selectedRows.length > 0" class="selected-count">
           已选 {{ selectedRows.length }} 项
@@ -226,20 +226,20 @@
             </el-table>
             <!-- 失败重试：仅在有失败频道时显示 -->
             <div v-if="triggerAllResult.failed.length > 0" class="retry-bar">
-              <el-button
+              <IconButton
                 type="warning"
-                :icon="RefreshRight"
                 :loading="retrying"
+                :icon="Refresh"
+                label="重试失败频道"
+                desc="重新触发本次全频道启动中失败的频道"
                 @click="retryFailedChannels"
-              >
-                重试失败频道
-              </el-button>
+              />
             </div>
           </el-tab-pane>
         </el-tabs>
       </div>
       <template #footer>
-        <el-button @click="triggerAllDialogVisible = false">关闭</el-button>
+        <IconButton :icon="Close" label="关闭" desc="关闭结果对话框" @click="triggerAllDialogVisible = false" />
       </template>
     </el-dialog>
   </div>
@@ -249,7 +249,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
-import { VideoPlay, Delete, Refresh, Promotion, RefreshRight } from '@element-plus/icons-vue'
+import { VideoPlay, Delete, Refresh, RefreshLeft, Close } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
 import api from '../../api'
 import { listChannels } from '../../api/channels'

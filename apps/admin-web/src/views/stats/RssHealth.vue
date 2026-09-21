@@ -6,14 +6,14 @@
         <span v-if="lastCheckedAt" class="last-check">
           最近巡检：{{ formatTime(lastCheckedAt) }}
         </span>
-        <el-button
+        <IconButton
           type="primary"
           :loading="refreshing"
+          label="立即巡检"
+          desc="触发后端探测所有 RSS 源可达性"
           :icon="Refresh"
           @click="refresh"
-        >
-          立即巡检
-        </el-button>
+        />
       </div>
     </div>
 

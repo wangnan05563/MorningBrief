@@ -5,7 +5,7 @@
       <template #header>
         <div class="page-header">
           <!-- T00811：移除与导航栏重复的页面标题，仅保留操作按钮 -->
-          <el-button type="primary" size="small" @click="openCreate">手动录入素材</el-button>
+          <IconButton type="primary" size="small" :icon="Plus" label="手动录入素材" desc="手动新增一条素材" @click="openCreate" />
         </div>
       </template>
 
@@ -20,7 +20,7 @@
         <template #title>
           <div class="scope-bar">
             <span v-for="s in activeScopes" :key="s.key">{{ s.text }}</span>
-            <el-button link type="primary" @click="clearScope">清除筛选</el-button>
+            <IconButton link type="primary" :icon="Close" label="清除筛选" desc="清除精确定位条件" @click="clearScope" />
           </div>
         </template>
       </el-alert>
@@ -53,8 +53,8 @@
           <el-input v-model="filters.keyword" placeholder="标题 / 来源" clearable style="width: 220px" @keyup.enter="onSearch" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :loading="loading" @click="onSearch">搜索</el-button>
-          <el-button @click="onReset">重置</el-button>
+          <IconButton type="primary" :loading="loading" :icon="Search" label="搜索" desc="按当前条件查询素材" @click="onSearch" />
+          <IconButton :icon="RefreshLeft" label="重置" desc="重置筛选条件" @click="onReset" />
         </el-form-item>
         <el-form-item label="视图">
           <el-radio-group v-model="viewMode" size="small" @change="onSearch">
@@ -86,8 +86,8 @@
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button size="small" type="danger" plain @click="onDelete(row)">删除</el-button>
+            <IconButton size="small" :icon="Edit" label="编辑" desc="编辑该素材" @click="openEdit(row)" />
+            <IconButton size="small" type="danger" plain :icon="Delete" label="删除" desc="删除该素材" @click="onDelete(row)" />
           </template>
         </el-table-column>
         <template #empty><el-empty description="没有匹配的素材" :image-size="90" /></template>
@@ -105,7 +105,7 @@
         </el-table-column>
         <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="drilldownBook(row.source)">查看章节</el-button>
+            <IconButton size="small" :icon="View" label="查看章节" desc="下钻查看该书的章节素材" @click="drilldownBook(row.source)" />
           </template>
         </el-table-column>
         <template #empty>
@@ -150,8 +150,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="editVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="onSaveEdit">保存</el-button>
+        <IconButton :icon="Close" label="取消" desc="关闭弹窗，放弃修改" @click="editVisible = false" />
+        <IconButton type="primary" :loading="saving" :icon="Check" label="保存" desc="保存素材修改" @click="onSaveEdit" />
       </template>
     </el-dialog>
 
@@ -177,8 +177,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="onSaveCreate">保存</el-button>
+        <IconButton :icon="Close" label="取消" desc="关闭弹窗，放弃录入" @click="createVisible = false" />
+        <IconButton type="primary" :loading="saving" :icon="Check" label="保存" desc="保存素材录入" @click="onSaveCreate" />
       </template>
     </el-dialog>
   </div>
@@ -203,6 +203,7 @@
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { Plus, Close, Search, RefreshLeft, Edit, Delete, View, Check } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { formatTime } from '../../utils/format'
 import { listChannels } from '../../api/channels'

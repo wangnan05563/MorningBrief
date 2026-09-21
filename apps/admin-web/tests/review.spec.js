@@ -210,9 +210,9 @@ test.describe('审核流程', () => {
     // 等待列表加载
     await expect(page.getByText('wf-001')).toBeVisible({ timeout: 30000 })
 
-    // 批量操作栏在待审核 tab 下应可见
-    await expect(page.getByText('批量通过')).toBeVisible({ timeout: 30000 })
-    await expect(page.getByText('批量打回')).toBeVisible({ timeout: 30000 })
+    // 批量操作栏在待审核 tab 下应可见（T00812 后为纯图标按钮，用 aria-label 定位）
+    await expect(page.getByRole('button', { name: '批量通过' })).toBeVisible({ timeout: 30000 })
+    await expect(page.getByRole('button', { name: '批量打回' })).toBeVisible({ timeout: 30000 })
 
     // 初始未选中时按钮 disabled
     await expect(page.getByRole('button', { name: '批量通过' })).toBeDisabled({ timeout: 30000 })

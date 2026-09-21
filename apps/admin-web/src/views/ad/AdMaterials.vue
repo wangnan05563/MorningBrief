@@ -2,10 +2,13 @@
   <div class="page-container ad-materials">
     <!-- 顶部工具栏：主操作按钮（T00811：移除与导航栏重复的页面标题） -->
     <div class="toolbar">
-      <el-button type="primary" @click="openCreateDialog">
-        <el-icon><Plus /></el-icon>
-        <span>新增素材</span>
-      </el-button>
+      <IconButton
+        type="primary"
+        label="新增素材"
+        desc="打开新增素材对话框"
+        :icon="Plus"
+        @click="openCreateDialog"
+      />
     </div>
 
     <!-- 表格卡片化：复用全局 .card-soft 保持视觉一致 -->
@@ -27,19 +30,23 @@
         </el-table-column>
         <el-table-column label="操作" width="180" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="playAudio(row)">
-              <el-icon><VideoPlay /></el-icon>
-              <span>试听</span>
-            </el-button>
-            <el-button
+            <IconButton
+              link
+              type="primary"
+              label="试听"
+              desc="播放该素材音频"
+              :icon="VideoPlay"
+              @click="playAudio(row)"
+            />
+            <IconButton
               link
               type="danger"
               :disabled="row.is_default"
+              label="删除"
+              desc="删除该素材"
+              :icon="Delete"
               @click="handleDelete(row)"
-            >
-              <el-icon><Delete /></el-icon>
-              <span>删除</span>
-            </el-button>
+            />
           </template>
         </el-table-column>
       </el-table>
@@ -91,10 +98,20 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">
-          确定
-        </el-button>
+        <IconButton
+          label="取消"
+          desc="关闭对话框"
+          :icon="Close"
+          @click="dialogVisible = false"
+        />
+        <IconButton
+          type="primary"
+          :loading="submitting"
+          label="确定"
+          desc="提交新增素材"
+          :icon="Check"
+          @click="handleSubmit"
+        />
       </template>
     </el-dialog>
 
@@ -106,6 +123,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
+import { Plus, VideoPlay, Delete, Close, Check } from '@element-plus/icons-vue'
 
 import api from '../../api'
 

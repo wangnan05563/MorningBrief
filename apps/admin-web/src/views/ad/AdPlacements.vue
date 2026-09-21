@@ -2,10 +2,13 @@
   <div class="page-container ad-placements">
     <div class="toolbar">
       <!-- T00811：移除与导航栏重复的页面标题，仅保留操作按钮 -->
-      <el-button type="primary" @click="openCreateDialog">
-        <el-icon><Plus /></el-icon>
-        <span>新建投放</span>
-      </el-button>
+      <IconButton
+        type="primary"
+        label="新建投放"
+        desc="打开新建投放对话框"
+        :icon="Plus"
+        @click="openCreateDialog"
+      />
     </div>
 
     <div class="card-soft table-card">
@@ -22,7 +25,14 @@
         <el-table-column prop="end_date" label="结束日期" width="140" align="center" />
         <el-table-column label="操作" width="120" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
+            <IconButton
+              link
+              type="danger"
+              label="删除"
+              desc="删除该投放规则"
+              :icon="Delete"
+              @click="handleDelete(row)"
+            />
           </template>
         </el-table-column>
       </el-table>
@@ -82,10 +92,20 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">
-          确定
-        </el-button>
+        <IconButton
+          label="取消"
+          desc="关闭对话框"
+          :icon="Close"
+          @click="dialogVisible = false"
+        />
+        <IconButton
+          type="primary"
+          :loading="submitting"
+          label="确定"
+          desc="提交新建投放"
+          :icon="Check"
+          @click="handleSubmit"
+        />
       </template>
     </el-dialog>
   </div>
@@ -94,6 +114,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
+import { Plus, Delete, Close, Check } from '@element-plus/icons-vue'
 
 import api from '../../api'
 

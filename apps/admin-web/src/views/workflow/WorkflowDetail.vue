@@ -3,7 +3,7 @@
     <!-- 顶部：仅保留返回按钮，去掉页面标题（导航栏已显示页面名称）
          spacer 占位把后续可能新增的按钮推到右侧 -->
     <div class="top-bar">
-      <el-button :icon="ArrowLeft" plain @click="router.back()">返回</el-button>
+      <IconButton :icon="ArrowLeft" plain label="返回" desc="返回工作流列表" @click="router.back()" />
       <span class="spacer" />
     </div>
 
@@ -86,8 +86,8 @@
           </template>
           <div class="panel-content">
             <div class="panel-toolbar">
-              <el-button size="small" type="primary" :icon="Plus" @click="openMaterialDialog()">新增素材</el-button>
-              <el-button size="small" :icon="Refresh" @click="loadMaterials">刷新</el-button>
+              <IconButton size="small" type="primary" :icon="Plus" label="新增素材" desc="新增一条素材" @click="openMaterialDialog()" />
+              <IconButton size="small" :icon="Refresh" label="刷新" desc="重新加载素材列表" @click="loadMaterials" />
             </div>
             <el-table :data="materials.list" v-loading="materials.loading" size="small" stripe>
               <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
@@ -100,9 +100,9 @@
               </el-table-column>
               <el-table-column label="操作" width="200" fixed="right">
                 <template #default="{ row }">
-                  <el-button size="small" link @click="viewMaterial(row)">查看</el-button>
-                  <el-button size="small" link @click="openMaterialDialog(row)">编辑</el-button>
-                  <el-button size="small" link type="danger" @click="handleDeleteMaterial(row)">删除</el-button>
+                  <IconButton size="small" link :icon="View" label="查看" desc="查看素材全文" @click="viewMaterial(row)" />
+                  <IconButton size="small" link :icon="Edit" label="编辑" desc="编辑该素材" @click="openMaterialDialog(row)" />
+                  <IconButton size="small" link type="danger" :icon="Delete" label="删除" desc="删除该素材" @click="handleDeleteMaterial(row)" />
                 </template>
               </el-table-column>
             </el-table>
@@ -136,8 +136,8 @@
                   </el-descriptions-item>
                 </el-descriptions>
                 <div class="panel-toolbar">
-                  <el-button size="small" type="primary" :icon="Edit" @click="openSegmentsEditor">编辑分段</el-button>
-                  <el-button size="small" type="danger" :icon="Delete" @click="handleDeleteScript">删除稿件</el-button>
+                  <IconButton size="small" type="primary" :icon="Edit" label="编辑分段" desc="编辑稿件各分段标题与内容" @click="openSegmentsEditor" />
+                  <IconButton size="small" type="danger" :icon="Delete" label="删除稿件" desc="删除该稿件" @click="handleDeleteScript" />
                 </div>
                 <el-table :data="script.data.segments" size="small" stripe>
                   <el-table-column prop="seq" label="#" width="50" />
@@ -163,7 +163,7 @@
           </template>
           <div class="panel-content">
             <div class="panel-toolbar">
-              <el-button size="small" :icon="Refresh" @click="loadAudioFiles">刷新</el-button>
+              <IconButton size="small" :icon="Refresh" label="刷新" desc="重新加载音频文件列表" @click="loadAudioFiles" />
             </div>
             <el-table :data="audioFiles.tts" v-loading="audioFiles.loading" size="small" stripe>
               <el-table-column prop="name" label="文件名" min-width="200" />
@@ -180,21 +180,22 @@
                       preload="none"
                       class="audio-bar"
                     />
-                    <el-button
+                    <IconButton
                       v-else
                       size="small"
                       link
                       :loading="row.loading"
+                      :icon="VideoPlay"
+                      label="点击加载播放"
+                      desc="加载并播放该音频片段"
                       @click="ensureTtsBlob(row)"
-                    >
-                      点击加载播放
-                    </el-button>
+                    />
                   </div>
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="80" fixed="right">
                 <template #default="{ row }">
-                  <el-button v-if="!row.remote" size="small" link type="danger" @click="handleDeleteTts(row.name)">删除</el-button>
+                  <IconButton v-if="!row.remote" size="small" link type="danger" :icon="Delete" label="删除" desc="删除该音频片段" @click="handleDeleteTts(row.name)" />
                 </template>
               </el-table-column>
             </el-table>
@@ -223,17 +224,18 @@
                     autoplay
                     class="audio-bar"
                   />
-                  <el-button
+                  <IconButton
                     v-else
                     type="primary"
                     :loading="episodePlayer.loading"
+                    :icon="VideoPlay"
+                    label="点击加载播放"
+                    desc="加载并播放成品音频"
                     @click="ensureEpisodeBlob"
-                  >
-                    点击加载播放
-                  </el-button>
+                  />
                 </div>
                 <div class="panel-toolbar">
-                  <el-button v-if="!audioFiles.episode?.remote" size="small" type="danger" :icon="Delete" @click="handleDeleteEpisode">删除成品</el-button>
+                  <IconButton v-if="!audioFiles.episode?.remote" size="small" type="danger" :icon="Delete" label="删除成品" desc="删除成品音频" @click="handleDeleteEpisode" />
                 </div>
               </template>
               <el-empty v-else-if="!audioFiles.loading" description="尚未生成成品音频" />
@@ -257,16 +259,22 @@
                   <el-descriptions-item label="创建时间">{{ formatTime(review.data.created_at) }}</el-descriptions-item>
                 </el-descriptions>
                 <div class="panel-toolbar">
-                  <el-button
+                  <IconButton
                     v-if="review.data.status === 'pending'"
                     size="small" type="success"
+                    :icon="Check"
+                    label="通过"
+                    desc="审核通过该稿件"
                     @click="onReviewAction('approve')"
-                  >通过</el-button>
-                  <el-button
+                  />
+                  <IconButton
                     v-if="review.data.status === 'pending'"
                     size="small" type="danger"
+                    :icon="Close"
+                    label="打回"
+                    desc="打回该稿件"
                     @click="onReviewAction('reject')"
-                  >打回</el-button>
+                  />
                 </div>
               </template>
               <el-empty v-else-if="!review.loading" description="该工作流暂无审核记录" />
@@ -283,15 +291,15 @@
         <el-select v-model="retryStep" placeholder="选择步骤" style="width: 200px">
           <el-option v-for="s in STEP_ORDER" :key="s" :label="stepLabel(s)" :value="s" />
         </el-select>
-        <el-button
+        <IconButton
           type="primary"
-          :icon="RefreshRight"
           :disabled="!retryStep"
           :loading="retrying"
+          :icon="Refresh"
+          label="重跑"
+          desc="从指定步骤断点续跑该工作流"
           @click="handleRetry"
-        >
-          重跑
-        </el-button>
+        />
       </div>
     </el-card>
 
@@ -332,13 +340,16 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="materialDialog.visible = false">取消</el-button>
-        <el-button
+        <IconButton :icon="Close" label="取消" desc="关闭弹窗，放弃修改" @click="materialDialog.visible = false" />
+        <IconButton
           type="primary"
           :loading="materialDialog.saving"
           :disabled="materialDialog.contentLoading"
+          :icon="Check"
+          label="保存"
+          desc="保存素材修改"
           @click="saveMaterial"
-        >保存</el-button>
+        />
       </template>
     </el-dialog>
 
@@ -349,15 +360,15 @@
           <div class="segment-header">
             <span class="segment-seq">#{{ idx + 1 }}</span>
             <el-input v-model="seg.title" placeholder="段标题" class="segment-title" />
-            <el-button size="small" type="danger" :icon="Delete" circle @click="removeSegment(idx)" />
+            <IconButton size="small" type="danger" :icon="Delete" circle label="删除分段" desc="删除该分段" @click="removeSegment(idx)" />
           </div>
           <el-input v-model="seg.content" type="textarea" :rows="4" placeholder="段正文" />
         </div>
-        <el-button :icon="Plus" @click="addSegment" class="add-segment">新增分段</el-button>
+        <IconButton :icon="Plus" label="新增分段" desc="在末尾追加一个分段" @click="addSegment" class="add-segment" />
       </div>
       <template #footer>
-        <el-button @click="segmentsEditor.visible = false">取消</el-button>
-        <el-button type="primary" :loading="segmentsEditor.saving" @click="saveSegments">保存</el-button>
+        <IconButton :icon="Close" label="取消" desc="关闭弹窗，放弃修改" @click="segmentsEditor.visible = false" />
+        <IconButton type="primary" :loading="segmentsEditor.saving" :icon="Check" label="保存" desc="保存分段修改" @click="saveSegments" />
       </template>
     </el-dialog>
 
@@ -379,7 +390,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
-import { ArrowLeft, RefreshRight, Plus, Edit, Delete, Refresh } from '@element-plus/icons-vue'
+import { ArrowLeft, Plus, Edit, Delete, Refresh, View, VideoPlay, Check, Close } from '@element-plus/icons-vue'
 import api from '../../api'
 import { subscribe } from '../../utils/sse'
 import { cleanupLoadingMasks } from '../../utils/window-guard'

@@ -13,24 +13,26 @@
       </span>
       <span class="batch-info" v-else>勾选下方记录后可批量操作</span>
       <div class="batch-actions">
-        <el-button
+        <IconButton
           type="success"
           size="small"
           :disabled="selectedRows.length === 0 || batchLoading"
           :loading="batchLoading && batchAction === 'approve'"
+          :icon="Select"
+          label="批量通过"
+          desc="批量通过选中的审核记录并自动发布"
           @click="handleBatchApprove"
-        >
-          批量通过
-        </el-button>
-        <el-button
+        />
+        <IconButton
           type="danger"
           size="small"
           :disabled="selectedRows.length === 0 || batchLoading"
           :loading="batchLoading && batchAction === 'reject'"
+          :icon="Close"
+          label="批量打回"
+          desc="批量打回选中的审核记录"
           @click="handleBatchReject"
-        >
-          批量打回
-        </el-button>
+        />
       </div>
     </div>
 
@@ -76,7 +78,7 @@
       </el-table-column>
       <el-table-column label="操作" width="120" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" size="small" @click="goReview(row.id)">审核</el-button>
+          <IconButton type="primary" size="small" :icon="View" label="审核" desc="进入该稿件的审核详情" @click="goReview(row.id)" />
         </template>
       </el-table-column>
     </el-table>
@@ -107,6 +109,7 @@
  */
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { Select, Close, View } from '@element-plus/icons-vue'
 import api from '../../api'
 import { batchHandleReviewAction } from '../../api/reviews'
 import { ElMessage, ElMessageBox } from '../../utils/message'

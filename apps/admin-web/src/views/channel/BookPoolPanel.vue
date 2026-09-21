@@ -39,8 +39,8 @@
         </span>
       </el-form-item>
       <el-form-item>
-        <el-button :loading="previewLoading" @click="onPreview">预览下次生成</el-button>
-        <el-button type="warning" plain @click="onResetProgress">重置进度</el-button>
+        <IconButton :loading="previewLoading" :icon="View" label="预览下次生成" desc="预览下次将取哪本书" @click="onPreview" />
+        <IconButton type="warning" plain :icon="RefreshLeft" label="重置进度" desc="重置进度，从书单第一本重新开始" @click="onResetProgress" />
       </el-form-item>
     </el-form>
     <el-alert v-if="preview" :type="previewType" :closable="false" show-icon :title="previewText" />
@@ -48,7 +48,7 @@
     <!-- 书单（顺序即取书顺序） -->
     <div class="pool-header">
       <span class="pool-title">书单（顺序即取书顺序）</span>
-      <el-button type="primary" size="small" @click="openCandidates">从素材库加入</el-button>
+      <IconButton type="primary" size="small" :icon="Plus" label="从素材库加入" desc="从素材库按书聚合选择加入书单" @click="openCandidates" />
     </div>
     <el-table :data="items" v-loading="loading" stripe style="width: 100%">
       <el-table-column label="顺序" width="86">
@@ -68,9 +68,9 @@
       </el-table-column>
       <el-table-column label="操作" width="230" fixed="right">
         <template #default="{ row, $index }">
-          <el-button size="small" :disabled="$index === 0" @click="onMove(row, 'up')">上移</el-button>
-          <el-button size="small" :disabled="$index === items.length - 1" @click="onMove(row, 'down')">下移</el-button>
-          <el-button size="small" type="danger" plain @click="onRemove(row)">移出</el-button>
+          <IconButton size="small" :disabled="$index === 0" :icon="ArrowUp" label="上移" desc="在书单中上移该条目" @click="onMove(row, 'up')" />
+          <IconButton size="small" :disabled="$index === items.length - 1" :icon="ArrowDown" label="下移" desc="在书单中下移该条目" @click="onMove(row, 'down')" />
+          <IconButton size="small" type="danger" plain :icon="Delete" label="移出" desc="将该书移出书单" @click="onRemove(row)" />
         </template>
       </el-table-column>
       <template #empty>
@@ -99,7 +99,7 @@
           />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :loading="candidatesLoading" @click="loadCandidates">搜索</el-button>
+          <IconButton type="primary" :loading="candidatesLoading" :icon="Search" label="搜索" desc="按书名搜索可加入的书籍" @click="loadCandidates" />
           <!-- T00716：素材库管理入口（增删改查在「素材库管理」页） -->
           <el-link type="primary" style="margin-left: 12px" @click="goLibrary">管理素材 ↗</el-link>
         </el-form-item>
@@ -133,10 +133,8 @@
       <template #footer>
         <div class="dialog-footer">
           <span>已选 {{ selectedCandidates.length }} 本</span>
-          <el-button @click="candidatesVisible = false">取消</el-button>
-          <el-button type="primary" :disabled="!selectedCandidates.length" :loading="adding" @click="onAddSelected">
-            加入书单
-          </el-button>
+          <IconButton :icon="Close" label="取消" desc="关闭弹窗" @click="candidatesVisible = false" />
+          <IconButton type="primary" :disabled="!selectedCandidates.length" :loading="adding" :icon="Check" label="加入书单" desc="将选中的书加入书单" @click="onAddSelected" />
         </div>
       </template>
     </el-dialog>
@@ -157,6 +155,7 @@
  */
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { View, RefreshLeft, Plus, ArrowUp, ArrowDown, Delete, Search, Close, Check } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import {
   addBooksToPool,

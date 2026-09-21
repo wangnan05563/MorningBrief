@@ -2,7 +2,13 @@
   <div class="page-container llm-metrics-page">
     <!-- 顶部操作区：刷新按钮（T00811：移除与导航栏重复的页面标题） -->
     <div class="top-bar">
-      <el-button :icon="Refresh" :loading="loading" @click="loadData">刷新</el-button>
+      <IconButton
+        label="刷新"
+        desc="重新拉取 LLM 指标数据"
+        :icon="Refresh"
+        :loading="loading"
+        @click="loadData"
+      />
     </div>
 
     <!-- 说明卡：解释指标含义，便于运维理解派生率意义 -->

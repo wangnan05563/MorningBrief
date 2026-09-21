@@ -1,9 +1,7 @@
 <template>
   <div class="page-container ai-config">
     <div class="top-bar">
-      <el-button type="primary" :icon="Check" :loading="saving" @click="handleSave">
-        保存配置
-      </el-button>
+      <IconButton type="primary" :icon="Check" :loading="saving" label="保存配置" desc="保存当前配置" @click="handleSave" />
     </div>
 
     <el-tabs v-model="activeTab" class="config-tabs" @tab-change="handleTabChange">
@@ -36,16 +34,16 @@
             >
               获取 API Key
             </el-link>
-            <el-button
+            <IconButton
               type="warning"
               plain
               :icon="RefreshLeft"
               :loading="resetting"
               style="margin-left: auto"
+              label="恢复初始配置"
+              desc="恢复 LLM 初始配置"
               @click="handleResetConfig"
-            >
-              恢复初始配置
-            </el-button>
+            />
           </div>
 
           <el-form :model="llmForm" label-width="120px" class="config-form">
@@ -81,9 +79,12 @@
                 placeholder="输入 LLM API Key"
               >
                 <template #append>
-                  <el-button @click="showLlmKey = !showLlmKey">
-                    {{ showLlmKey ? '隐藏' : '显示' }}
-                  </el-button>
+                  <IconButton
+                    :icon="showLlmKey ? Hide : View"
+                    :label="showLlmKey ? '隐藏' : '显示'"
+                    desc="切换密钥可见性"
+                    @click="showLlmKey = !showLlmKey"
+                  />
                 </template>
               </el-input>
             </el-form-item>
@@ -108,13 +109,13 @@
                     :value="m.id"
                   />
                 </el-select>
-                <el-button
+                <IconButton
                   :icon="Refresh"
                   :loading="fetchingModels"
+                  label="拉取可用模型"
+                  desc="从当前 Base URL 拉取可用模型列表"
                   @click="handleFetchModels"
-                >
-                  拉取可用模型
-                </el-button>
+                />
               </div>
               <span class="field-tip">点击「拉取可用模型」回填下拉选项；也可直接输入列表外的模型名</span>
             </el-form-item>
@@ -125,14 +126,15 @@
               <el-input-number v-model="llmForm.retry_attempts" :min="0" :max="10" />
             </el-form-item>
             <el-form-item>
-              <el-button
+              <IconButton
                 type="primary"
                 plain
+                :icon="Connection"
                 :loading="testingLlm"
+                label="测试连接"
+                desc="测试 LLM 连接是否正常"
                 @click="handleTestLLM"
-              >
-                测试连接
-              </el-button>
+              />
               <el-tag
                 v-if="llmTestResult"
                 :type="llmTestResult.success ? 'success' : 'danger'"
@@ -271,9 +273,12 @@
                 placeholder="NLS AccessToken（32位hex，非 AccessKey Secret）"
               >
                 <template #append>
-                  <el-button @click="showTtsKey = !showTtsKey">
-                    {{ showTtsKey ? '隐藏' : '显示' }}
-                  </el-button>
+                  <IconButton
+                    :icon="showTtsKey ? Hide : View"
+                    :label="showTtsKey ? '隐藏' : '显示'"
+                    desc="切换密钥可见性"
+                    @click="showTtsKey = !showTtsKey"
+                  />
                 </template>
               </el-input>
               <div class="field-tip">
@@ -287,9 +292,12 @@
                 placeholder="NLS 项目 AppKey"
               >
                 <template #append>
-                  <el-button @click="showTtsAppkey = !showTtsAppkey">
-                    {{ showTtsAppkey ? '隐藏' : '显示' }}
-                  </el-button>
+                  <IconButton
+                    :icon="showTtsAppkey ? Hide : View"
+                    :label="showTtsAppkey ? '隐藏' : '显示'"
+                    desc="切换密钥可见性"
+                    @click="showTtsAppkey = !showTtsAppkey"
+                  />
                 </template>
               </el-input>
               <div class="field-tip">
@@ -414,9 +422,12 @@
                 placeholder="留空则回退到 COS_SECRET_ID"
               >
                 <template #append>
-                  <el-button @click="showTencentId = !showTencentId">
-                    {{ showTencentId ? '隐藏' : '显示' }}
-                  </el-button>
+                  <IconButton
+                    :icon="showTencentId ? Hide : View"
+                    :label="showTencentId ? '隐藏' : '显示'"
+                    desc="切换密钥可见性"
+                    @click="showTencentId = !showTencentId"
+                  />
                 </template>
               </el-input>
             </el-form-item>
@@ -427,9 +438,12 @@
                 placeholder="留空则回退到 COS_SECRET_KEY"
               >
                 <template #append>
-                  <el-button @click="showTencentKey = !showTencentKey">
-                    {{ showTencentKey ? '隐藏' : '显示' }}
-                  </el-button>
+                  <IconButton
+                    :icon="showTencentKey ? Hide : View"
+                    :label="showTencentKey ? '隐藏' : '显示'"
+                    desc="切换密钥可见性"
+                    @click="showTencentKey = !showTencentKey"
+                  />
                 </template>
               </el-input>
             </el-form-item>
@@ -513,14 +527,15 @@
               <span class="field-tip">倍率，1.0 为正常，&gt;1 加快，&lt;1 减慢</span>
             </el-form-item>
             <el-form-item label="模型下载">
-              <el-button
+              <IconButton
                 type="warning"
                 plain
+                :icon="Download"
                 :loading="downloadingTts"
+                label="下载模型"
+                desc="后台下载本地 TTS 模型权重"
                 @click="handleDownloadTtsModels"
-              >
-                下载模型
-              </el-button>
+              />
               <el-tag
                 v-if="ttsDownloadStatus"
                 :type="ttsDownloadStatus.status === 'success' ? 'success' : (ttsDownloadStatus.status === 'failed' ? 'danger' : 'info')"
@@ -603,14 +618,15 @@
               <span class="field-tip">noise_scale，影响音色随机性/自然度</span>
             </el-form-item>
             <el-form-item label="模型下载">
-              <el-button
+              <IconButton
                 type="warning"
                 plain
+                :icon="Download"
                 :loading="downloadingTts"
+                label="下载模型"
+                desc="后台下载本地 TTS 模型权重"
                 @click="handleDownloadTtsModels"
-              >
-                下载模型
-              </el-button>
+              />
               <el-tag
                 v-if="ttsDownloadStatus"
                 :type="ttsDownloadStatus.status === 'success' ? 'success' : (ttsDownloadStatus.status === 'failed' ? 'danger' : 'info')"
@@ -631,14 +647,15 @@
             <div class="preset-section" style="border-bottom: none; padding-bottom: 0; margin-bottom: 12px;">
               <span class="section-label">风格预设：</span>
               <el-button-group>
-                <el-button
+                <IconButton
                   v-for="p in currentTtsPresets"
                   :key="p.name"
                   size="small"
+                  :icon="ArrowRight"
+                  :label="p.name"
+                  desc="应用该风格预设参数"
                   @click="applyTtsPreset(p)"
-                >
-                  {{ p.name }}
-                </el-button>
+                />
               </el-button-group>
               <span class="field-tip" style="margin-left: 12px;">点击预设一键填入参数，然后试音</span>
             </div>
@@ -653,14 +670,15 @@
                 />
               </el-form-item>
               <el-form-item>
-                <el-button
+                <IconButton
                   type="primary"
                   plain
+                  :icon="VideoPlay"
                   :loading="previewing"
+                  label="试音"
+                  desc="用当前 TTS 参数合成试听音频"
                   @click="handlePreviewTTS"
-                >
-                  试音
-                </el-button>
+                />
                 <audio
                   v-if="previewAudioUrl"
                   :src="previewAudioUrl"
@@ -679,14 +697,15 @@
             style="margin-top: 16px; border-top: 1px solid var(--el-border-color); padding-top: 16px;"
           >
             <el-form-item>
-              <el-button
+              <IconButton
                 type="primary"
                 plain
+                :icon="Connection"
                 :loading="testingTts"
+                label="测试连接"
+                desc="测试 TTS 连接是否正常"
                 @click="handleTestTTS"
-              >
-                测试连接
-              </el-button>
+              />
               <el-tag
                 v-if="ttsTestResult"
                 :type="ttsTestResult.success ? 'success' : 'danger'"
@@ -718,7 +737,7 @@
               <el-input v-model="imageForm.model" placeholder="如 agnes-image-2.5-flash" />
             </el-form-item>
             <el-form-item label="连接测试">
-              <el-button :loading="testingImage" @click="handleTestImage">测试连接</el-button>
+              <IconButton :icon="Connection" :loading="testingImage" label="测试连接" desc="测试图片生成服务连接是否正常" @click="handleTestImage" />
               <el-tag
                 v-if="imageTestResult"
                 :type="imageTestResult.ok ? 'success' : 'danger'"
@@ -785,7 +804,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { ElMessage, ElMessageBox } from '../../utils/message'
-import { Check, Refresh, RefreshLeft } from '@element-plus/icons-vue'
+import { Check, Refresh, RefreshLeft, Hide, View, Connection, Download, ArrowRight, VideoPlay } from '@element-plus/icons-vue'
 import api from '../../api'
 // T00388：TTS 音色官方同步按钮（音色组合 + 各引擎音色下拉右侧）
 import VoiceSyncButton from '../../components/VoiceSyncButton.vue'

@@ -48,18 +48,31 @@
               />
             </div>
             <div class="toolbar-right">
-              <el-button size="small" :icon="Plus" @click="openCreateDialog">新增</el-button>
-              <el-button
+              <IconButton
+                size="small"
+                label="新增"
+                desc="新增一行记录"
+                :icon="Plus"
+                @click="openCreateDialog"
+              />
+              <IconButton
                 size="small"
                 type="danger"
                 :icon="Delete"
                 :disabled="selectedRows.length === 0"
+                :label="`批量删除 (${selectedRows.length})`"
+                desc="删除选中的多行记录"
                 @click="handleBatchDelete"
-              >
-                批量删除 ({{ selectedRows.length }})
-              </el-button>
+              />
               <el-dropdown @command="handleExport">
-                <el-button size="small" :icon="Download">导出</el-button>
+                <!-- T00812：dropdown 触发按钮关闭 Tooltip，避免与下拉菜单同时弹出 -->
+                <IconButton
+                  size="small"
+                  label="导出"
+                  desc="导出当前表数据"
+                  :icon="Download"
+                  :tooltip="false"
+                />
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item command="csv">导出 CSV</el-dropdown-item>
@@ -67,10 +80,34 @@
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
-              <el-button size="small" :icon="Upload" @click="importDialogVisible = true">导入</el-button>
-              <el-button size="small" :icon="View" @click="schemaDialogVisible = true">表结构</el-button>
-              <el-button size="small" :icon="Document" @click="loadAuditLogs">审计日志</el-button>
-              <el-button size="small" :icon="Refresh" @click="loadRows">刷新</el-button>
+              <IconButton
+                size="small"
+                label="导入"
+                desc="从 CSV/JSON 导入数据"
+                :icon="Upload"
+                @click="importDialogVisible = true"
+              />
+              <IconButton
+                size="small"
+                label="表结构"
+                desc="查看当前表结构"
+                :icon="View"
+                @click="schemaDialogVisible = true"
+              />
+              <IconButton
+                size="small"
+                label="审计日志"
+                desc="查看操作审计日志"
+                :icon="Document"
+                @click="loadAuditLogs"
+              />
+              <IconButton
+                size="small"
+                label="刷新"
+                desc="重新加载当前表数据"
+                :icon="Refresh"
+                @click="loadRows"
+              />
             </div>
           </div>
 
@@ -109,8 +146,23 @@
             </el-table-column>
             <el-table-column label="操作" width="120" fixed="right">
               <template #default="{ row }">
-                <el-button size="small" text @click="openEditDialog(row)">编辑</el-button>
-                <el-button size="small" text type="danger" @click="handleDelete(row)">删除</el-button>
+                <IconButton
+                  size="small"
+                  text
+                  label="编辑"
+                  desc="编辑该行记录"
+                  :icon="Edit"
+                  @click="openEditDialog(row)"
+                />
+                <IconButton
+                  size="small"
+                  text
+                  type="danger"
+                  label="删除"
+                  desc="删除该行记录"
+                  :icon="Delete"
+                  @click="handleDelete(row)"
+                />
               </template>
             </el-table-column>
           </el-table>
@@ -159,8 +211,19 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="formDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitForm">确认</el-button>
+        <IconButton
+          label="取消"
+          desc="关闭对话框"
+          :icon="Close"
+          @click="formDialogVisible = false"
+        />
+        <IconButton
+          type="primary"
+          label="确认"
+          desc="保存当前行记录"
+          :icon="Check"
+          @click="submitForm"
+        />
       </template>
     </el-dialog>
 
@@ -230,8 +293,19 @@
         </el-radio-group>
       </div>
       <template #footer>
-        <el-button @click="importDialogVisible = false">取消</el-button>
-        <el-button type="warning" @click="handleImport">确认导入</el-button>
+        <IconButton
+          label="取消"
+          desc="关闭对话框"
+          :icon="Close"
+          @click="importDialogVisible = false"
+        />
+        <IconButton
+          type="warning"
+          label="确认导入"
+          desc="将粘贴内容写入数据库"
+          :icon="Check"
+          @click="handleImport"
+        />
       </template>
     </el-dialog>
 
@@ -258,10 +332,20 @@
       <p class="confirm-hint">请输入 <code>CONFIRM_DELETE</code> 以确认删除操作：</p>
       <el-input v-model="deleteConfirmInput" placeholder="CONFIRM_DELETE" clearable />
       <template #footer>
-        <el-button @click="deleteDialogVisible = false">取消</el-button>
-        <el-button type="danger" :disabled="deleteConfirmInput !== 'CONFIRM_DELETE'" @click="confirmDelete">
-          确认删除
-        </el-button>
+        <IconButton
+          label="取消"
+          desc="关闭对话框"
+          :icon="Close"
+          @click="deleteDialogVisible = false"
+        />
+        <IconButton
+          type="danger"
+          :disabled="deleteConfirmInput !== 'CONFIRM_DELETE'"
+          label="确认删除"
+          desc="执行删除操作"
+          :icon="Delete"
+          @click="confirmDelete"
+        />
       </template>
     </el-dialog>
   </div>
@@ -272,6 +356,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from '../../utils/message'
 import {
   Search, Plus, Delete, Download, Upload, View, Document, Refresh, Lock, EditPen,
+  Close, Edit, Check,
 } from '@element-plus/icons-vue'
 import {
   listTables, getTableSchema, listRows,

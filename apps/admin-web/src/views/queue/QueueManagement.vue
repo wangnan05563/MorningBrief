@@ -41,7 +41,7 @@
           <el-slider v-model="config.concurrency" :min="1" :max="5" class="concurrency-slider" />
           <span class="config-value">{{ config.concurrency }}</span>
         </template>
-        <el-button type="primary" :loading="savingConfig" @click="saveConfig">保存配置</el-button>
+        <IconButton type="primary" :loading="savingConfig" :icon="Check" label="保存配置" desc="保存执行模式与并发数配置" @click="saveConfig" />
       </div>
     </el-card>
 
@@ -87,15 +87,15 @@
         </el-col>
         <!-- 批量删除：仅 admin 可见，未选中时禁用；选中时显示计数 -->
         <el-col :span="6" class="batch-delete-col" v-if="canOperate">
-          <el-button
+          <IconButton
             type="danger"
-            :icon="Delete"
             :disabled="selectedRows.length === 0 || deleting"
             :loading="deleting"
+            :icon="Delete"
+            label="批量删除"
+            desc="删除选中的任务及其关联记录"
             @click="handleBatchDelete"
-          >
-            批量删除
-          </el-button>
+          />
           <span v-if="selectedRows.length > 0" class="selected-count">
             已选 {{ selectedRows.length }} 项
           </span>
@@ -133,39 +133,42 @@
         <!-- 操作列：admin 可执行取消/改优先级/重试，operator 只能查看详情 -->
         <el-table-column v-if="canOperate" label="操作" width="300">
           <template #default="{ row }">
-            <el-button
+            <IconButton
               v-if="row.status === 'queued'"
               size="small"
               type="danger"
               :loading="cancelingIds.has(row.id)"
+              :icon="Close"
+              label="取消"
+              desc="取消该任务"
               @click="handleCancel(row.id)"
-            >
-              取消
-            </el-button>
+            />
             <el-popover trigger="click" width="240" placement="top" @show="editingPriority = row.priority">
+              <!-- T00812：popover reference 与内部按钮关闭 Tooltip，避免悬浮提示与弹层/下拉同时弹出、阻断 popover 触发 -->
               <template #reference>
-                <el-button size="small" type="warning" :loading="priorityIds.has(row.id)">改优先级</el-button>
+                <IconButton size="small" type="warning" :loading="priorityIds.has(row.id)" :icon="Edit" label="改优先级" desc="修改该任务的优先级" :tooltip="false" />
               </template>
               <div class="priority-popover">
                 <el-input-number v-model="editingPriority" :min="1" :max="10" />
-                <el-button size="small" type="primary" :loading="priorityIds.has(row.id)" @click="handlePriority(row)">确定</el-button>
+                <IconButton size="small" type="primary" :loading="priorityIds.has(row.id)" :icon="Check" label="确定" desc="应用新的优先级" :tooltip="false" @click="handlePriority(row)" />
               </div>
             </el-popover>
-            <el-button
+            <IconButton
               v-if="row.status === 'failed'"
               size="small"
               type="primary"
               :loading="retryingIds.has(row.id)"
+              :icon="Refresh"
+              label="重试"
+              desc="从失败步骤断点续跑该任务"
               @click="handleRetry(row.id)"
-            >
-              重试
-            </el-button>
-            <el-button size="small" @click="openDetail(row)">详情</el-button>
+            />
+            <IconButton size="small" :icon="View" label="详情" desc="查看任务详情" @click="openDetail(row)" />
           </template>
         </el-table-column>
         <el-table-column v-else label="操作" width="100">
           <template #default="{ row }">
-            <el-button size="small" @click="openDetail(row)">详情</el-button>
+            <IconButton size="small" :icon="View" label="详情" desc="查看任务详情" @click="openDetail(row)" />
           </template>
         </el-table-column>
       </el-table>
@@ -225,7 +228,7 @@
 defineOptions({ name: 'QueueManagement' })
 import { ref, reactive, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
-import { Delete } from '@element-plus/icons-vue'
+import { Delete, Check, Close, Edit, Refresh, View } from '@element-plus/icons-vue'
 import {
   getQueueStats,
   listQueueTasks,

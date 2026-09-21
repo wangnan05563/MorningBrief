@@ -2,9 +2,13 @@
   <div class="page-container maintenance-page">
     <!-- 顶部工具栏（T00811：移除与导航栏重复的页面标题） -->
     <div class="toolbar">
-      <el-button :icon="Refresh" :loading="loadingStatus" @click="loadStatus">
-        刷新状态
-      </el-button>
+      <IconButton
+        label="刷新状态"
+        desc="重新拉取存储状态"
+        :icon="Refresh"
+        :loading="loadingStatus"
+        @click="loadStatus"
+      />
     </div>
 
     <!-- 存储状态卡片 -->
@@ -82,15 +86,14 @@
               </div>
             </el-form-item>
             <el-form-item>
-              <el-button
+              <IconButton
                 :type="cacheForm.dry_run ? 'primary' : 'danger'"
                 :loading="cacheLoading"
-                style="width: 100%"
+                :label="cacheForm.dry_run ? '预览清理' : '立即执行清理'"
+                :desc="cacheForm.dry_run ? '仅预览，不实际删除' : '执行真实删除，不可恢复'"
+                :icon="Delete"
                 @click="handleCleanup('cache')"
-              >
-                <el-icon><Delete /></el-icon>
-                <span>{{ cacheForm.dry_run ? '预览清理' : '立即执行清理' }}</span>
-              </el-button>
+              />
             </el-form-item>
           </el-form>
           <CleanupResult v-if="cacheResult" :result="cacheResult" />
@@ -136,15 +139,14 @@
               </div>
             </el-form-item>
             <el-form-item>
-              <el-button
+              <IconButton
                 :type="dbForm.dry_run ? 'primary' : 'danger'"
                 :loading="dbLoading"
-                style="width: 100%"
+                :label="dbForm.dry_run ? '预览清理' : '立即执行清理'"
+                :desc="dbForm.dry_run ? '仅预览，不实际删除' : '执行真实删除，不可恢复'"
+                :icon="Delete"
                 @click="handleCleanup('database')"
-              >
-                <el-icon><Delete /></el-icon>
-                <span>{{ dbForm.dry_run ? '预览清理' : '立即执行清理' }}</span>
-              </el-button>
+              />
             </el-form-item>
           </el-form>
           <CleanupResult v-if="dbResult" :result="dbResult" />
@@ -185,15 +187,14 @@
               </div>
             </el-form-item>
             <el-form-item>
-              <el-button
+              <IconButton
                 :type="logForm.dry_run ? 'primary' : 'danger'"
                 :loading="logLoading"
-                style="width: 100%"
+                :label="logForm.dry_run ? '预览清理' : '立即执行清理'"
+                :desc="logForm.dry_run ? '仅预览，不实际删除' : '执行真实删除，不可恢复'"
+                :icon="Delete"
                 @click="handleCleanup('logs')"
-              >
-                <el-icon><Delete /></el-icon>
-                <span>{{ logForm.dry_run ? '预览清理' : '立即执行清理' }}</span>
-              </el-button>
+              />
             </el-form-item>
           </el-form>
           <CleanupResult v-if="logResult" :result="logResult" />

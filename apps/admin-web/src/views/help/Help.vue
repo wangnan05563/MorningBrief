@@ -11,9 +11,7 @@
             本文档详细介绍各功能模块的使用方法，包括核心功能、操作步骤、使用场景、参数配置和注意事项。
           </p>
         </div>
-        <el-button type="primary" plain :icon="Document" @click="openApiDocs">
-          API 文档
-        </el-button>
+        <IconButton type="primary" plain :icon="Document" label="API 文档" desc="打开后端 API 文档" @click="openApiDocs" />
       </div>
     </div>
 

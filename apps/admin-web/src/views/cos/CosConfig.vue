@@ -3,18 +3,23 @@
     <div class="top-bar">
       <el-tag v-if="status.configured" type="success" effect="dark">COS 已配置</el-tag>
       <el-tag v-else type="info">{{ status.bucket ? '凭证未齐' : '尚未配置' }}</el-tag>
-      <el-button
+      <IconButton
         type="primary"
         plain
         :loading="testing"
-        style="margin-left: 12px"
+        label="测试连接"
+        desc="测试 COS 凭证与存储桶连通性"
+        :icon="Connection"
         @click="handleTest"
-      >
-        测试连接
-      </el-button>
-      <el-button type="primary" :icon="Check" :loading="saving" @click="handleSave">
-        保存配置
-      </el-button>
+      />
+      <IconButton
+        type="primary"
+        :loading="saving"
+        label="保存配置"
+        desc="保存并热更新 COS 配置"
+        :icon="Check"
+        @click="handleSave"
+      />
     </div>
 
     <!-- 连接测试结果 -->
@@ -49,7 +54,12 @@
             placeholder="腾讯云 API 密钥 ID（AKID...）"
           >
             <template #append>
-              <el-button @click="showId = !showId">{{ showId ? '隐藏' : '显示' }}</el-button>
+              <IconButton
+                :label="showId ? '隐藏' : '显示'"
+                desc="切换密钥明文显示"
+                :icon="showId ? View : Hide"
+                @click="showId = !showId"
+              />
             </template>
           </el-input>
           <div class="field-tip" v-if="isMasked(form.secret_id)">当前为已保存的脱敏值，留空表示不修改</div>
@@ -62,7 +72,12 @@
             placeholder="腾讯云 API 密钥 Key"
           >
             <template #append>
-              <el-button @click="showKey = !showKey">{{ showKey ? '隐藏' : '显示' }}</el-button>
+              <IconButton
+                :label="showKey ? '隐藏' : '显示'"
+                desc="切换密钥明文显示"
+                :icon="showKey ? View : Hide"
+                @click="showKey = !showKey"
+              />
             </template>
           </el-input>
           <div class="field-tip" v-if="isMasked(form.secret_key)">当前为已保存的脱敏值，留空表示不修改</div>
@@ -124,7 +139,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { Check } from '@element-plus/icons-vue'
+import { Check, Connection, View, Hide } from '@element-plus/icons-vue'
 import { ElMessage } from '../../utils/message'
 import {
   getCosConfig,
