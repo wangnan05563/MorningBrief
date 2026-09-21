@@ -71,6 +71,7 @@
                   label="导出"
                   desc="导出当前表数据"
                   :icon="Download"
+                  :loading="exporting"
                   :tooltip="false"
                 />
                 <template #dropdown>
@@ -570,12 +571,16 @@ async function confirmDelete() {
 }
 
 // ---- 导出 ----
+const exporting = ref(false)
 async function handleExport(format) {
+  exporting.value = true
   try {
     await exportRows(selectedTable.value, format)
     ElMessage.success('导出成功')
   } catch (e) {
     console.warn('handleExport failed:', e)
+  } finally {
+    exporting.value = false
   }
 }
 

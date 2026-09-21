@@ -247,6 +247,7 @@
               size="small"
               type="primary"
               link
+              :loading="retryingStat === row.workflow_id"
               label="重试"
               desc="重新执行该失败的自动审批"
               :icon="Refresh"
@@ -406,7 +407,9 @@ async function loadHistory() {
 }
 
 // 重试失败的自动审批
+const retryingStat = ref('')
 async function retryStat(row) {
+  retryingStat.value = row.workflow_id
   try {
     await ElMessageBox.confirm(
       `确认重试 workflow_id=${row.workflow_id} 的自动审批？仅当审核记录仍为 pending 时才会执行。`,
@@ -414,6 +417,7 @@ async function retryStat(row) {
       { type: 'warning', confirmButtonText: '确认重试', cancelButtonText: '取消' }
     )
   } catch {
+    retryingStat.value = ''
     return
   }
 
@@ -428,6 +432,8 @@ async function retryStat(row) {
     await Promise.all([loadStats(), loadHistory()])
   } catch (err) {
     ElMessage.error('重试失败：' + (err.message || '未知错误'))
+  } finally {
+    retryingStat.value = ''
   }
 }
 
