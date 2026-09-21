@@ -211,19 +211,19 @@
           <el-tab-pane :label="`成功 (${triggerAllResult.triggered.length})`">
             <el-table :data="triggerAllResult.triggered" size="small" max-height="280">
               <el-table-column prop="channel_name" label="频道" width="180" />
-              <el-table-column prop="workflow_id" label="工作流 ID" />
+              <el-table-column prop="workflow_id" label="工作流 ID" min-width="160" show-overflow-tooltip />
             </el-table>
           </el-tab-pane>
           <el-tab-pane :label="`跳过 (${triggerAllResult.skipped.length})`">
             <el-table :data="triggerAllResult.skipped" size="small" max-height="280">
               <el-table-column prop="channel_name" label="频道" width="180" />
-              <el-table-column prop="reason" label="跳过原因" />
+              <el-table-column prop="reason" label="跳过原因" min-width="200" show-overflow-tooltip />
             </el-table>
           </el-tab-pane>
           <el-tab-pane :label="`失败 (${triggerAllResult.failed.length})`">
             <el-table :data="triggerAllResult.failed" size="small" max-height="280">
               <el-table-column prop="channel_name" label="频道" width="180" />
-              <el-table-column prop="error" label="错误信息" show-overflow-tooltip />
+              <el-table-column prop="error" label="错误信息" min-width="240" show-overflow-tooltip />
             </el-table>
             <!-- 失败重试：仅在有失败频道时显示 -->
             <div v-if="triggerAllResult.failed.length > 0" class="retry-bar">
