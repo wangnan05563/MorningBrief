@@ -78,6 +78,13 @@
   </el-container>
   <!-- 主题切换对话框：通过 ref 暴露 open 方法 -->
   <ThemeSwitcher ref="themeSwitcherRef" />
+  <!-- 新手指引（T00863）：首次访问自动弹出，非首次通过右下角常驻按钮唤起 -->
+  <GuideOverlay />
+  <el-tooltip v-if="hasGuide" content="新手指引" placement="left">
+    <button class="guide-fab" aria-label="新手指引" @click="openGuide">
+      <el-icon><QuestionFilled /></el-icon>
+    </button>
+  </el-tooltip>
 </template>
 
 <script setup>
@@ -87,6 +94,10 @@ import { useUserStore } from '../stores/user'
 import { useThemeStore } from '../stores/theme'
 import { ElMessageBox } from '../utils/message'
 import ThemeSwitcher from '../components/ThemeSwitcher.vue'
+import GuideOverlay from '../components/GuideOverlay.vue'
+import { QuestionFilled } from '@element-plus/icons-vue'
+import { useGuide } from '../guide/useGuide'
+import { GUIDE_STEPS } from '../guide/guideConfig'
 
 const route = useRoute()
 const router = useRouter()
@@ -97,9 +108,43 @@ const themeStore = useThemeStore()
 const themeSwitcherRef = ref()
 
 // 初始化主题：确保进入后台时已应用 localStorage 中的主题
+// T00863：引导单例与当前路由（声明须在 watch 之前，否则 immediate 回调访问到 TDZ 报错）
+const guide = useGuide()
+const currentPath = ref('')
+
+// 若当前菜单未引导过，延时弹出首访引导（等页面渲染完成）
+// 已在引导中则不重复触发（isDone 为 false 且 active 时说明首次引导进行中）
+function maybeGuide(path) {
+  const cfg = GUIDE_STEPS[path]
+  if (!cfg) return
+  if (!guide.isDone(path) && !guide.active.value) {
+    setTimeout(() => guide.open(path, cfg), 350)
+  }
+}
+
 onMounted(() => {
   themeStore.initTheme()
 })
+
+// T00863：路由变化（含刷新直进，immediate 首次即触发）后检查该菜单是否需要引导
+watch(
+  () => route.path,
+  (p) => {
+    currentPath.value = p
+    maybeGuide(p)
+  },
+  { immediate: true }
+)
+
+const hasGuide = computed(
+  () => !!GUIDE_STEPS[currentPath.value] && !guide.active.value
+)
+
+// 常驻按钮：重放当前页的引导流程（已引导过的用户也能再看）
+function openGuide() {
+  const cfg = GUIDE_STEPS[currentPath.value]
+  if (cfg) guide.open(currentPath.value, cfg)
+}
 
 function openThemeSwitcher() {
   themeSwitcherRef.value?.open()
@@ -186,6 +231,30 @@ async function handleCommand(command) {
 
 <style scoped lang="scss">
 @use '../styles/variables.scss' as *;
+
+/* T00863：新手指引常驻按钮（右下角悬浮，不遮挡顶部操作栏） */
+.guide-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 10000;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: $color-primary;
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease;
+}
+.guide-fab:hover {
+  transform: scale(1.08);
+}
 
 .layout {
   height: 100vh;
