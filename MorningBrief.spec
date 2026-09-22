@@ -1,9 +1,9 @@
-﻿# -*- mode: python ; coding: utf-8 -*-
+# -*- mode: python ; coding: utf-8 -*-
 """
 MorningBrief PyInstaller 打包配置
 
 产物结构（COLLECT 模式，目录形式）：
-  dist/MorningBrief/
+  release/MorningBrief/
     MorningBrief.exe              ← 启动入口
     _internal/               ← Python 运行时 + 依赖 + app 代码
       app/                   ← FastAPI 应用
@@ -66,6 +66,10 @@ hiddenimports += ['pydantic', 'pydantic_settings', 'pydantic.deprecated']
 # edge-tts：edge_tts.Communicate 通过字符串动态导入，PyInstaller 静态分析看不到
 hiddenimports += collect_submodules('edge_tts')
 
+# PyMuPDF(fitz)：PDF 文本层提取（T00585 下一步）
+# 原生二进制（_fitz / mupdf）由 PyInstaller 的 PyMuPDF hook（hooks-contrib）自动收集
+hiddenimports += collect_submodules('fitz')
+
 # COS SDK（cos-python-sdk-v5 无动态导入，无需额外 hiddenimport）
 
 # ============================================================
@@ -94,6 +98,11 @@ explicit_datas = [
     (os.path.join(_backend_dir, 'app', 'workflow', 'crawler', 'sources', 'lists.yaml'),
      os.path.join('app', 'workflow', 'crawler', 'sources')),
     (os.path.join(_backend_dir, 'app', 'workflow', 'crawler', 'sources', 'rss.yaml'),
+     os.path.join('app', 'workflow', 'crawler', 'sources')),
+    (os.path.join(_backend_dir, 'app', 'workflow', 'crawler', 'sources', 'book_rss.yaml'),
+     os.path.join('app', 'workflow', 'crawler', 'sources')),
+    # 书籍「全文」预制源（T00603：book_fulltext.yaml，audiobook 得到式形态）
+    (os.path.join(_backend_dir, 'app', 'workflow', 'crawler', 'sources', 'book_fulltext.yaml'),
      os.path.join('app', 'workflow', 'crawler', 'sources')),
     # LLM 提示词与敏感词
     (os.path.join(_backend_dir, 'app', 'workflow', 'llm', 'prompts', 'rewrite.txt'),
@@ -175,6 +184,15 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 # EXE（入口可执行文件）
 # ============================================================
 
+# exe 图标：优先使用产品定制图标（release/assets/MorningBrief.ico），
+# 缺失时降级为 PyInstaller 默认控制台图标，避免 FileNotFoundError
+# 让整个打包中断——Analysis/PYZ 步骤通常要跑 2-5 分钟，若最后一步
+# 因图标缺失而前功尽弃，容错比视觉一致性更重要。
+_icon_path = os.path.join(_project_root, 'release', 'assets', 'MorningBrief.ico')
+_icon_kwargs = {}
+if os.path.exists(_icon_path):
+    _icon_kwargs['icon'] = _icon_path
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -191,7 +209,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=os.path.join(_project_root, 'release', 'assets', 'MorningBrief.ico'),  # exe 应用图标
+    **_icon_kwargs,
 )
 
 # ============================================================
@@ -207,4 +225,8 @@ coll = COLLECT(
     upx=True,
     upx_exclude=[],
     name='MorningBrief',
+    # 实际输出目录由 build-exe.ps1 通过 `pyinstaller ... --distpath release` 指定：
+    # PyInstaller 6.x 的 COLLECT 不接受 distpath 参数，onedir 输出完全取决于全局
+    # CONF['distpath']，而它只能由 --distpath 命令行参数设置（见 build_main.build()）。
+    # 因此此处不写 distpath，否则会被静默忽略。
 )
