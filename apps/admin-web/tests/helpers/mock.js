@@ -5,6 +5,14 @@
  * code === 0 表示业务成功，axios 拦截器会解包返回 data
  */
 
+// ============== 当月日期：日历/排期 mock 需覆盖当前渲染月份，否则每月失效（T00811 建议2） ==============
+const _now = new Date()
+const _y = _now.getFullYear()
+const _m = String(_now.getMonth() + 1).padStart(2, '0')
+const _last = String(new Date(_y, _now.getMonth() + 1, 0).getDate()).padStart(2, '0')
+const monthStart = `${_y}-${_m}-01`
+const monthEnd = `${_y}-${_m}-${_last}`
+
 // ============== 登录相关 ==============
 export const loginSuccessResponse = {
   code: 0,
@@ -214,14 +222,14 @@ export const adScheduleResponse = {
       {
         material_name: '品牌广告A',
         position: 'head',
-        start_date: '2026-07-01',
-        end_date: '2026-07-31',
+        start_date: monthStart,
+        end_date: monthEnd,
       },
       {
         material_name: '促销广告B',
         position: 'mid',
-        start_date: '2026-07-05',
-        end_date: '2026-07-10',
+        start_date: `${_y}-${_m}-05`,
+        end_date: `${_y}-${_m}-10`,
       },
     ],
   },
