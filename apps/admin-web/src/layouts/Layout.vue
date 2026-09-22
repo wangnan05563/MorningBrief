@@ -136,9 +136,8 @@ watch(
   { immediate: true }
 )
 
-const hasGuide = computed(
-  () => !!GUIDE_STEPS[currentPath.value] && !guide.active.value
-)
+// T00886：新手指引按钮默认隐藏（避免全局右下角常驻打扰），仅在帮助文档页作为主动唤起入口显示
+const hasGuide = computed(() => currentPath.value === '/help' && !guide.active.value)
 
 // 常驻按钮：重放当前页的引导流程（已引导过的用户也能再看）
 function openGuide() {
