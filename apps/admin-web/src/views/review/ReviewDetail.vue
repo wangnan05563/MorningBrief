@@ -34,16 +34,21 @@
           <template #header>
             <div class="card-header-row">
               <span class="card-title">采集图片</span>
-              <span v-if="detail.images?.length" class="image-count">
-                共 {{ detail.image_total ?? detail.images.length }} 张<template
-                  v-if="(detail.image_total || 0) > detail.images.length"
-                >（展示前 {{ detail.images.length }} 张）</template>
-              </span>
+              <span v-if="detail.images?.length" class="image-count">共 {{ detail.image_total ?? detail.images.length }} 张</span>
+              <IconButton
+                v-if="(detail.images?.length || 0) > IMAGE_SHOW_LIMIT"
+                link
+                type="primary"
+                :icon="ZoomIn"
+                label="查看全部图片"
+                desc="查看本篇采集到的全部图片"
+                @click="galleryVisible = true"
+              />
             </div>
           </template>
           <div v-if="detail.images?.length" class="image-grid">
             <el-image
-              v-for="(url, i) in detail.images"
+              v-for="(url, i) in detail.images.slice(0, IMAGE_SHOW_LIMIT)"
               :key="url"
               class="image-item"
               :src="url"
@@ -61,6 +66,28 @@
           </div>
           <el-empty v-else description="本篇稿件引用的素材没有采集到图片" :image-size="72" />
         </el-card>
+        <!-- T00809 下一步：查看全部采集图片弹窗（全量列表，可点击放大预览） -->
+        <el-dialog v-model="galleryVisible" title="全部采集图片" width="840px">
+          <div class="gallery-grid">
+            <el-image
+              v-for="(url, i) in detail.images || []"
+              :key="url"
+              class="image-item"
+              :src="url"
+              fit="cover"
+              referrerpolicy="no-referrer"
+              :preview-src-list="detail.images || []"
+              :initial-index="i"
+              preview-teleported
+              hide-on-click-modal
+            >
+              <template #error><div class="image-fallback">加载失败</div></template>
+            </el-image>
+          </div>
+          <template #footer>
+            <el-button type="primary" @click="galleryVisible = false">关闭</el-button>
+          </template>
+        </el-dialog>
       </el-col>
 
       <!-- 右侧：音频试听 + 审核操作 -->
@@ -120,7 +147,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
-import { ArrowLeft, Check } from '@element-plus/icons-vue'
+import { ArrowLeft, Check, ZoomIn } from '@element-plus/icons-vue'
 import api from '../../api'
 
 const route = useRoute()
@@ -129,6 +156,9 @@ const router = useRouter()
 const loading = ref(false)
 const submitting = ref(false)
 const detail = ref({})
+// T00809 下一步：默认展示前 9 张缩略图，「查看全部」弹窗展示全量（后端已返回完整 images）
+const IMAGE_SHOW_LIMIT = 9
+const galleryVisible = ref(false)
 const action = ref('approve')
 const segmentId = ref(null)
 const reason = ref('')
@@ -303,6 +333,15 @@ onMounted(loadDetail)
   height: 100%;
   font-size: 12px;
   color: $color-text-secondary;
+}
+
+/* T00809 下一步：「查看全部」弹窗的大图网格——复用卡片缩略图并放大尺寸 */
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 .audio-card {

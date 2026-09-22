@@ -23,7 +23,7 @@ class ReviewService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def list_reviews(
+    async def list_reviews(  # NOSONAR
         self, status: str, page: int, size: int,
         workflow_id: str = None,
     ) -> dict:
@@ -152,9 +152,9 @@ class ReviewService:
             # 封面图与 HLS 音频源：移动端详情可直接展示图片、用 HLS 播放语音内容
             "cover_url": cover_url,
             "hls_url": hls_url,
-            # 采集图片：images 为截断后的展示列表，image_total 为去重后总张数
-            # （供前端提示「展示前 N 张 / 共 M 张」，避免审核员误以为只抓到这么点）
-            "images": images[:REVIEW_IMAGE_LIMIT],
+            # 采集图片：images 为完整去重列表（前端自取前 N 展示 +「查看全部」弹窗全显），
+            # image_total 与列表长度一致，供计数/超量提示（T00809 下一步）
+            "images": list(images),
             "image_total": len(images),
             "status": review.status if review.status else None,
             # 自动审批标记与触发原因，详情页展示追溯信息

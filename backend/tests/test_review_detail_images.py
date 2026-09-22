@@ -82,7 +82,8 @@ async def test_images_truncated_but_total_kept(db_session):
 
     detail = await ReviewService(db_session).get_review_detail(review.id)
 
-    assert len(detail["images"]) == REVIEW_IMAGE_LIMIT
+    # T00809 下一步：后端返回完整 images（不再截断），前端自取前 N 展示 +「查看全部」弹窗全显
+    assert len(detail["images"]) == len(many)
     assert detail["image_total"] == len(many)
 
 
