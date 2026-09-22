@@ -45,3 +45,19 @@ export function getAbout() {
 export function checkUpdate() {
   return api.get('/about/check-update')
 }
+
+/**
+ * 触发一键升级（桌面端：下载更新包并自动替换重启）
+ * @returns {Promise<UpgradeState>}
+ */
+export function startUpgrade() {
+  return api.post('/about/upgrade')
+}
+
+/**
+ * 轮询升级进度
+ * @returns {Promise<UpgradeState>}
+ */
+export function getUpgradeStatus() {
+  return api.get('/about/upgrade/status')
+}

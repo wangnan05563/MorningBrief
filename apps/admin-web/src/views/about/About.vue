@@ -18,44 +18,63 @@
           </div>
         </div>
         <div class="update-btn-wrap">
+          <!-- 一键升级进度（T00879）：下载中展示进度条，终态提示重启/错误重试 -->
+          <div v-if="upgradeState.active" class="upgrade-panel">
+            <div v-if="upgradeState.state === 'error'" class="upgrade-error-row">
+              <el-button type="danger" plain :icon="Refresh" @click="runUpgrade">
+                升级失败，重试
+              </el-button>
+              <span class="upgrade-msg">{{ upgradeState.error }}</span>
+            </div>
+            <template v-else>
+              <div class="upgrade-line">
+                <el-icon class="is-loading upgrade-spin"><Loading /></el-icon>
+                <span class="upgrade-msg">{{ upgradeState.message }}</span>
+              </div>
+              <el-progress
+                v-if="upgradeState.state === 'downloading' && upgradeState.percent >= 0"
+                :percentage="upgradeState.percent"
+                :stroke-width="6"
+                class="upgrade-progress"
+              />
+            </template>
+          </div>
+
           <!-- 五态按钮：idle / loading / latest / newer / error -->
-          <IconButton
-            v-if="updateState.kind === 'idle'"
-            type="primary"
-            :icon="Refresh"
-            label="检查更新"
-            desc="检查 GitHub 是否有新版本"
-            @click="runCheckUpdate"
-          />
-          <el-button v-else-if="updateState.kind === 'loading'" loading>检查中…</el-button>
-          <el-button
-            v-else-if="updateState.kind === 'latest'"
-            type="success"
-            :icon="CircleCheckFilled"
-            plain
-          >
-            已是最新
-          </el-button>
-          <el-button
-            v-else-if="updateState.kind === 'newer'"
-            type="primary"
-            :icon="Top"
-            @click="openRelease"
-          >
-            有新版本 ({{ updateState.latest }})
-            <span v-if="updateState.publishedAt" class="update-sub">
-              发布于 {{ _formatPublishedAt(updateState.publishedAt) }}
-            </span>
-          </el-button>
-          <IconButton
-            v-else
-            type="danger"
-            plain
-            :icon="Refresh"
-            :label="updateState.reason === 'network' ? '网络异常，点击重试' : '服务异常，点击重试'"
-            desc="重新检查更新"
-            @click="runCheckUpdate"
-          />
+          <template v-else>
+            <IconButton
+              v-if="updateState.kind === 'idle'"
+              type="primary"
+              :icon="Refresh"
+              label="检查更新"
+              desc="检查 GitHub 是否有新版本"
+              @click="runCheckUpdate"
+            />
+            <el-button v-else-if="updateState.kind === 'loading'" loading>检查中…</el-button>
+            <el-button
+              v-else-if="updateState.kind === 'latest'"
+              type="success"
+              :icon="CircleCheckFilled"
+              plain
+            >
+              已是最新
+            </el-button>
+            <div v-else-if="updateState.kind === 'newer'" class="newer-btns">
+              <el-button type="primary" :icon="Download" @click="runUpgrade">
+                立即更新 ({{ updateState.latest }})
+              </el-button>
+              <el-button plain :icon="Top" @click="openRelease">查看详情</el-button>
+            </div>
+            <IconButton
+              v-else
+              type="danger"
+              plain
+              :icon="Refresh"
+              :label="updateState.reason === 'network' ? '网络异常，点击重试' : '服务异常，点击重试'"
+              desc="重新检查更新"
+              @click="runCheckUpdate"
+            />
+          </template>
         </div>
       </div>
     </div>
@@ -141,9 +160,9 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from '../../utils/message'
 import {
-  Refresh, CopyDocument, CircleCheckFilled, Top, TopRight, Search,
+  Refresh, CopyDocument, CircleCheckFilled, Top, TopRight, Search, Download, Loading,
 } from '@element-plus/icons-vue'
-import { getAbout, checkUpdate } from '../../api/about'
+import { getAbout, checkUpdate, startUpgrade, getUpgradeStatus } from '../../api/about'
 
 const router = useRouter()
 
@@ -166,6 +185,10 @@ let latestTimer = null
 let autoCheckTimer = null
 let mountDelayTimer = null
 let isChecking = false
+
+// 一键升级状态（T00879）：active 时进入升级进度面板；终态含 restarting/dev_staged/error
+const upgradeState = ref({ active: false, state: 'idle', percent: -1, message: '', error: '' })
+let pollTimer = null
 
 // 开源声明 Modal
 const licensesOpen = ref(false)
@@ -346,6 +369,63 @@ function openRelease() {
   }
 }
 
+// 触发一键升级：先调起后端下载，再轮询进度直至进入终态
+// 为什么轮询：后端下载整包耗时可达分钟级，POST 同步等待会占用 axios 连接，
+// 改为立即返回 + 轮询 /about/upgrade/status，前端持续刷新进度条
+async function runUpgrade() {
+  if (pollTimer) {
+    clearTimeout(pollTimer)
+    pollTimer = null
+  }
+  upgradeState.value = {
+    active: true,
+    state: 'downloading',
+    percent: -1,
+    message: '正在准备更新包…',
+    error: '',
+  }
+  try {
+    await startUpgrade()
+  } catch (e) {
+    // 启动失败（如未配置仓库/无更新包）给出可读提示与重试入口
+    upgradeState.value = {
+      active: true,
+      state: 'error',
+      percent: -1,
+      message: '启动升级失败',
+      error: e?.message || '请稍后重试',
+    }
+    return
+  }
+  pollUpgradeStatus()
+}
+
+async function pollUpgradeStatus() {
+  if (pollTimer) {
+    clearTimeout(pollTimer)
+    pollTimer = null
+  }
+  try {
+    const s = await getUpgradeStatus()
+    upgradeState.value = {
+      active: true,
+      state: s.state,
+      percent: s.percent,
+      message: s.message || '',
+      error: s.error || '',
+    }
+    // restarting/dev_staged/error 为终态，无需继续轮询
+    const terminal = ['restarting', 'dev_staged', 'error']
+    if (!terminal.includes(s.state)) {
+      pollTimer = setTimeout(pollUpgradeStatus, 2000)
+    }
+  } catch (e) {
+    // 轮询瞬时失败不中断升级，短暂后重试即可
+    upgradeState.value = { ...upgradeState.value, state: 'downloading' }
+    pollTimer = setTimeout(pollUpgradeStatus, 2000)
+  }
+}
+
 async function copyVersion() {
   try {
     await navigator.clipboard.writeText(info.value.version)
@@ -389,6 +469,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   // 卸载时清理所有 timer，避免内存泄漏与对已卸载组件调用 setState
+  if (pollTimer) {
+    clearTimeout(pollTimer)
+    pollTimer = null
+  }
   if (mountDelayTimer) {
     clearTimeout(mountDelayTimer)
     mountDelayTimer = null
@@ -486,6 +570,47 @@ onUnmounted(() => {
     font-size: 12px;
     opacity: 0.85;
     font-weight: 400;
+  }
+
+  .newer-btns {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .upgrade-panel {
+    min-width: 240px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .upgrade-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: $color-text-primary;
+  }
+
+  .upgrade-spin {
+    color: $color-primary;
+    font-size: 15px;
+  }
+
+  .upgrade-msg {
+    font-size: 13px;
+    color: $color-text-primary;
+  }
+
+  .upgrade-progress {
+    width: 240px;
+  }
+
+  .upgrade-error-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
 }
 

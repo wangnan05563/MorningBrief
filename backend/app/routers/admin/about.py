@@ -20,11 +20,16 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
 
 from app.core.auth import AdminPayload, require_admin
 from app.core.response import success
+from app.services.upgrade_service import (
+    get_upgrade_state,
+    pick_release_asset,
+    start_upgrade,
+)
 
 router = APIRouter(prefix="/admin/api/v1/about", tags=["关于"])
 
@@ -172,6 +177,8 @@ async def _fetch_latest_release() -> dict[str, Any] | None:
             "html_url": str(data.get("html_url", _RELEASE_URL)),
             "published_at": str(data.get("published_at", "")),
             "name": str(data.get("name", "")),
+            # 更新包资产：供前端"立即更新"一键下载安装；无 zip 时为 None
+            "asset": pick_release_asset(data),
         }
     except httpx.TimeoutException:
         logger.warning("[about] GitHub API 请求超时，降级返回本地版本")
@@ -252,12 +259,46 @@ async def check_update(
         "source": "remote",
         # 额外元信息（可选，前端用于展示发布时间）
         "published_at": release["published_at"],
+        # 更新包资产（zip）：一键更新按钮的数据来源；has_update=False 或无 zip 时为 None
+        "asset": release.get("asset"),
     }
 
     # 写入缓存：仅缓存成功响应
     _cache["data"] = result
     _cache["fetched_at"] = now
     return success(data=result)
+
+
+@router.post("/upgrade")
+async def trigger_upgrade(
+    admin: AdminPayload = Depends(require_admin),
+) -> dict[str, Any]:
+    """触发一键升级：下载最新 release 更新包并安装（桌面端自动替换重启）。
+
+    安全性：更新包地址由服务端从配置仓库的 latest release 解析，
+    不接收前端传入的任意 URL，避免被当作任意下载/安装后门。
+    """
+    if not _REPO_URL:
+        raise HTTPException(status_code=400, detail="未配置 REPO_URL，无法进行升级")
+    release = await _fetch_latest_release()
+    if release is None:
+        raise HTTPException(status_code=400, detail="无法从仓库获取最新版本，请稍后重试")
+    asset = release.get("asset")
+    if not asset:
+        raise HTTPException(status_code=400, detail="当前最新版本未提供更新包（zip）")
+    try:
+        state = await start_upgrade(release["tag_name"], asset)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return success(data=state)
+
+
+@router.get("/upgrade/status")
+async def upgrade_status(
+    admin: AdminPayload = Depends(require_admin),
+) -> dict[str, Any]:
+    """查询升级进度（供前端轮询展示下载/重启状态）。"""
+    return success(data=get_upgrade_state())
 
 
 def _reset_cache_for_test() -> None:

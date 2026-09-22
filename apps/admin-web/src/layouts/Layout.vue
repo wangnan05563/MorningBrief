@@ -98,6 +98,7 @@ import GuideOverlay from '../components/GuideOverlay.vue'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { useGuide } from '../guide/useGuide'
 import { GUIDE_STEPS } from '../guide/guideConfig'
+import { checkUpdate } from '../api/about'
 
 const route = useRoute()
 const router = useRouter()
@@ -122,8 +123,32 @@ function maybeGuide(path) {
   }
 }
 
+// T00879：启动时静默检测一次版本更新，有新版本提示用户前往「关于」页一键更新
+// 为何只在 admin 触发：about 路由 requireRole=admin，运营角色跳转会 401，白提示
+// 为何用 confirm 而非轻提示：给出明确「去更新」按钮，用户无需寻找入口
+async function autoCheckUpdate() {
+  if (userStore.role !== 'admin') return
+  try {
+    const res = await checkUpdate()
+    if (res.has_update) {
+      ElMessageBox.confirm(
+        `发现新版本 ${res.latest}，是否前往「关于」页一键更新？`,
+        '版本更新',
+        { confirmButtonText: '去更新', cancelButtonText: '稍后', type: 'info' },
+      )
+        .then(() => { router.push('/about') })
+        // 用户选「稍后」或弹窗被阻断时静默忽略
+        .catch(() => {})
+    }
+  } catch (e) {
+    // 静默失败：网络异常或未配置仓库时不打扰用户
+  }
+}
+
 onMounted(() => {
   themeStore.initTheme()
+  // 延时静默检测更新，避免与首屏渲染争抢
+  setTimeout(autoCheckUpdate, 1500)
 })
 
 // T00863：路由变化（含刷新直进，immediate 首次即触发）后检查该菜单是否需要引导

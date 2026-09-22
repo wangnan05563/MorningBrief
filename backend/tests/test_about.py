@@ -411,3 +411,68 @@ async def test_fetch_latest_release_handles_timeout():
     ):
         result = await _fetch_latest_release()
     assert result is None
+
+
+# ====================== 升级端点测试（T00879） ======================
+
+def test_upgrade_requires_admin(client, user_token):
+    """非 admin token 访问 /upgrade 与 /upgrade/status 被拒。"""
+    resp = client.post(
+        "/admin/api/v1/about/upgrade",
+        headers={"Authorization": f"Bearer {user_token['token']}"},
+    )
+    assert resp.status_code in (401, 403)
+    resp2 = client.get(
+        "/admin/api/v1/about/upgrade/status",
+        headers={"Authorization": f"Bearer {user_token['token']}"},
+    )
+    assert resp2.status_code in (401, 403)
+
+
+def test_upgrade_rejects_without_asset(client, admin_token):
+    """release 无更新包资产时升级端返回 400（避免对空包发起下载）。"""
+    mock_fetch = AsyncMock(return_value={
+        "tag_name": "v99.99.99",
+        "html_url": "https://github.com/your-org/MorningBrief/releases/tag/v99.99.99",
+        "published_at": "2026-07-21T00:00:00Z",
+        "name": "Release v99.99.99",
+        "asset": None,
+    })
+    with patch(
+        "app.routers.admin.about._fetch_latest_release",
+        mock_fetch,
+    ):
+        resp = client.post(
+            "/admin/api/v1/about/upgrade",
+            headers=_admin_headers(admin_token),
+        )
+    assert resp.status_code == 400
+
+
+def test_check_update_exposes_asset_given_release_zip(client, admin_token):
+    """远端 release 含更新包安装器时，check-update 返回 asset 供前端一键更新。"""
+    mock_fetch = AsyncMock(return_value={
+        "tag_name": "v99.99.99",
+        "html_url": "https://github.com/your-org/MorningBrief/releases/tag/v99.99.99",
+        "published_at": "2026-07-21T00:00:00Z",
+        "name": "Release v99.99.99",
+        "asset": {
+            "name": "MorningBrief-Setup-v99.99.99.exe",
+            "size_bytes": 12345,
+            "download_url": "https://github.com/your-org/MorningBrief/releases/download/v99.99.99/MorningBrief-Setup-v99.99.99.exe",
+        },
+    })
+    with patch(
+        "app.routers.admin.about._fetch_latest_release",
+        mock_fetch,
+    ):
+        resp = client.get(
+            "/admin/api/v1/about/check-update",
+            headers=_admin_headers(admin_token),
+        )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["has_update"] is True
+    assert data["asset"] is not None
+    assert data["asset"]["name"].endswith(".exe")
+    assert "download_url" in data["asset"]
