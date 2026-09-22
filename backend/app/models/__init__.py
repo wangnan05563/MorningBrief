@@ -28,7 +28,7 @@
 from app.models.user import User
 from app.models.admin_user import AdminUser
 from app.models.script import Script, ScriptStatus
-from app.models.material import Material, MaterialStatus, MaterialSourceType
+from app.models.material import Material, MaterialMediaType, MaterialStatus, MaterialSourceType
 from app.models.ad_material import AdMaterial
 from app.models.ad_placement import AdPlacement, AdPosition
 # Channel 必须在 Workflow 之前导入：workflow.channel_id 外键引用 channel.id，
@@ -87,6 +87,7 @@ __all__ = [
     "Material",
     "MaterialStatus",
     "MaterialSourceType",
+    "MaterialMediaType",
     "AdMaterial",
     "AdPlacement",
     "AdPosition",

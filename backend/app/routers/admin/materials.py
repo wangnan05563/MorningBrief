@@ -19,7 +19,7 @@ from pathlib import Path
 
 from app.core.response import success
 from app.database import get_db
-from app.models import AuditLog, Material, MaterialSourceType, MaterialStatus
+from app.models import AuditLog, Material, MaterialMediaType, MaterialSourceType, MaterialStatus
 from app.services.document_ingest import parse_document, compute_content_hash, UnsupportedFormatError
 
 router = APIRouter(prefix="/admin/api/v1/materials", tags=["B端-素材管理"])
@@ -49,6 +49,10 @@ class MaterialCreateRequest(BaseModel):
     url: Optional[str] = None
     category: Optional[str] = None
     source_type: str = "list"
+    # T00716 多媒体扩展：文本素材不传（默认 text）；image/video 传 media_url（可选缩略图）
+    media_type: Optional[str] = None
+    media_url: Optional[str] = None
+    media_thumb_url: Optional[str] = None
 
 
 class MaterialUpdateRequest(BaseModel):
@@ -61,6 +65,10 @@ class MaterialUpdateRequest(BaseModel):
     summary: Optional[str] = None
     category: Optional[str] = None
     status: Optional[str] = None
+    # T00716 多媒体扩展：编辑时允许更新类型与媒体 URL（文本素材不传则保持原值）
+    media_type: Optional[str] = None
+    media_url: Optional[str] = None
+    media_thumb_url: Optional[str] = None
 
 
 def _material_to_dict(m: Material) -> dict:
@@ -79,6 +87,9 @@ def _material_to_dict(m: Material) -> dict:
         "status": m.status,
         "channel_id": m.channel_id,
         "workflow_id": m.workflow_id,
+        "media_type": m.media_type,
+        "media_url": m.media_url,
+        "media_thumb_url": m.media_thumb_url,
     }
 
 
@@ -93,6 +104,9 @@ async def _persist_material(
     source_type: str = MaterialSourceType.list.value,
     url: str | None = None,
     dedup_key: str | None = None,
+    media_type: str | None = None,
+    media_url: str | None = None,
+    media_thumb_url: str | None = None,
 ) -> Material:
     """入库单条素材，按 source_type 选择去重策略（list/cos 用 dedup_key，其余用 url）。
 
@@ -120,6 +134,9 @@ async def _persist_material(
             url=synthetic_url,
             dedup_key=key,
             category=category,
+            media_type=media_type or MaterialMediaType.text.value,
+            media_url=media_url,
+            media_thumb_url=media_thumb_url,
         )
     else:
         if not url:
@@ -135,6 +152,9 @@ async def _persist_material(
             content=content,
             url=url,
             category=category,
+            media_type=media_type or MaterialMediaType.text.value,
+            media_url=media_url,
+            media_thumb_url=media_thumb_url,
         )
     db.add(m)
     await db.commit()
@@ -152,6 +172,7 @@ async def list_materials(
     material_id: int = Query(None, description="按素材 ID 精确过滤（讲书稿书单「素材 ID」深链定位用）"),
     source: str = Query(None, description="按来源（书名）精确过滤（按书聚合视图点书名进明细用）"),
     source_type: str = Query(None, description="按录入渠道过滤（list/cos=书稿文档，rss/book_rss=资讯与书评源，api/qrcode=外部拉取）"),
+    media_type: str = Query(None, description="按素材媒体类型过滤（text/image/video，T00716）"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -202,6 +223,16 @@ async def list_materials(
             )
         base_query = base_query.where(Material.source_type == source_type)
         count_query = count_query.where(Material.source_type == source_type)
+    # T00716：按媒体类型过滤（text/image/video）；非法值显式 400，不做静默忽略
+    if media_type:
+        allowed_media = {t.value for t in MaterialMediaType}
+        if media_type not in allowed_media:
+            raise BizError(
+                code=400,
+                message=f"不支持的 media_type: {media_type}（允许：{', '.join(sorted(allowed_media))}）",
+            )
+        base_query = base_query.where(Material.media_type == media_type)
+        count_query = count_query.where(Material.media_type == media_type)
 
     total = (await db.execute(count_query)).scalar() or 0
 
@@ -224,6 +255,9 @@ async def list_materials(
                 "status": m.status,
                 "crawled_at": m.crawled_at.isoformat() if m.crawled_at else None,
                 "url": m.url,
+                "media_type": m.media_type,
+                "media_url": m.media_url,
+                "media_thumb_url": m.media_thumb_url,
             }
             for m in items
         ],
@@ -328,6 +362,14 @@ async def create_material(
         )
     # list 类型无真实 URL（合成 url + dedup_key），其余类型必须提供真实 url
     is_list = req.source_type == MaterialSourceType.list.value
+    # T00716：校验媒体类型取值（应用层，DB 无 CHECK 约束）
+    if req.media_type is not None:
+        allowed_media = {t.value for t in MaterialMediaType}
+        if req.media_type not in allowed_media:
+            raise BizError(
+                code=400,
+                message=f"不支持的 media_type: {req.media_type}（允许：{', '.join(sorted(allowed_media))}）",
+            )
     m = await _persist_material(
         db,
         channel_id=req.channel_id,
@@ -338,6 +380,9 @@ async def create_material(
         source_type=req.source_type,
         url=None if is_list else req.url,
         dedup_key=compute_content_hash(req.content) if is_list else None,
+        media_type=req.media_type,
+        media_url=req.media_url,
+        media_thumb_url=req.media_thumb_url,
     )
     # 回填运行期关联（文档上传场景无 workflow，留空）
     if req.workflow_id:

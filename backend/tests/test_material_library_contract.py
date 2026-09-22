@@ -161,6 +161,77 @@ class TestAggregateByBookT00775:
         assert r3["data"]["total"] == 2
 
 
+class TestMediaTypeT00716:
+    """多媒体素材扩展：媒体类型字段写入、按类型筛选、媒体素材不进讲书稿聚合。"""
+
+    @pytest.mark.asyncio
+    async def test_create_media_material_saved(self, db_session, client, admin_token):
+        """创建 image 素材：media_type/media_url 正确入库并可读回。"""
+        hdrs = {"Authorization": f"Bearer {admin_token['token']}"}
+        ch = await _seed_channel(db_session, "T00716 媒体")
+        r = client.post(
+            _LIST_URL,
+            json={
+                "workflow_id": "", "channel_id": ch.id, "source": "图库",
+                "title": "示例图片", "content": "图片描述",
+                "source_type": "list", "media_type": "image",
+                "media_url": "https://example.com/a.png", "media_thumb_url": "https://example.com/thumb.png",
+            },
+            headers=hdrs,
+        ).json()
+        assert r["code"] == 0, r
+        assert r["data"]["media_type"] == "image"
+        assert r["data"]["media_url"] == "https://example.com/a.png"
+
+    @pytest.mark.asyncio
+    async def test_list_filter_by_media_type(self, db_session, client, admin_token):
+        """list 支持按 media_type 精确过滤。"""
+        hdrs = {"Authorization": f"Bearer {admin_token['token']}"}
+        ch = await _seed_channel(db_session, "T00716 筛选")
+        await _seed_material(db_session, ch.id, "书", "文本一章", source_type="list")
+        r = client.post(
+            _LIST_URL,
+            json={"workflow_id": "", "channel_id": ch.id, "source": "图库",
+                  "title": "图片", "content": "描述", "source_type": "list",
+                  "media_type": "image", "media_url": "https://example.com/b.png"},
+            headers=hdrs,
+        )
+        assert r.json()["code"] == 0, r.json()
+
+        rv = client.get(_LIST_URL, params={"channel_id": ch.id, "media_type": "image"}, headers=hdrs).json()
+        assert rv["data"]["total"] == 1
+        assert rv["data"]["list"][0]["media_type"] == "image"
+
+        rt = client.get(_LIST_URL, params={"channel_id": ch.id, "media_type": "text"}, headers=hdrs).json()
+        assert rt["data"]["total"] == 1
+        assert rt["data"]["list"][0]["media_type"] == "text"
+
+    @pytest.mark.asyncio
+    async def test_media_material_excluded_from_book_chapters(self, db_session, client, admin_token):
+        """image 素材不作为讲书稿章节素材（T00716 媒体隔离）；仅 text 可入选。"""
+        from app.services import book_pool_service
+
+        hdrs = {"Authorization": f"Bearer {admin_token['token']}"}
+        ch = await _seed_channel(db_session, "T00716 隔离")
+        tp = await _seed_material(db_session, ch.id, "某本书", "某本书·第一章", source_type="list")
+        # 同 source 的 image 素材（媒体，不应入选）
+        mp = client.post(
+            _LIST_URL,
+            json={"workflow_id": "", "channel_id": ch.id, "source": "某本书",
+                  "title": "封面图", "content": "封面图描述", "source_type": "list",
+                  "media_type": "image", "media_url": "https://example.com/cover.png"},
+            headers=hdrs,
+        ).json()
+        assert mp["code"] == 0, mp
+
+        rows = await book_pool_service.collect_book_materials(
+            db_session, ch.id, {"book_key": "某本书"}
+        )
+        # 仅文本章节入选，image 被排除
+        assert len(rows) == 1
+        assert rows[0].id == tp.id
+
+
 class TestDeleteBySourceT00895:
     """按书名（source）批量删除整本书素材（素材库「按书聚合」视图删除）。"""
 

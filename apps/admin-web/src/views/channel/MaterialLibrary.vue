@@ -49,6 +49,11 @@
             <el-option v-for="o in SOURCE_TYPE_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
+        <el-form-item label="媒体类型">
+          <el-select v-model="filters.media_type" placeholder="全部类型" clearable style="width: 130px" @change="onSearch">
+            <el-option v-for="o in MEDIA_TYPE_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="关键词">
           <el-input v-model="filters.keyword" placeholder="标题 / 来源" clearable style="width: 220px" @keyup.enter="onSearch" />
         </el-form-item>
@@ -83,6 +88,26 @@
         </el-table-column>
         <el-table-column label="创建时间" width="170">
           <template #default="{ row }">{{ formatTime(row.crawled_at) }}</template>
+        </el-table-column>
+        <!-- T00716：媒体类型列 + 预览列（图片缩略图 / 视频徽标） -->
+        <el-table-column label="类型" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag size="small" :type="mediaTagType(row.media_type)">{{ mediaLabel(row.media_type) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="预览" width="96" align="center">
+          <template #default="{ row }">
+            <el-image
+              v-if="row.media_type === 'image' && row.media_url"
+              :src="row.media_url"
+              :preview-src-list="[row.media_url]"
+              fit="cover"
+              style="width: 56px; height: 64px; border-radius: 6px"
+            />
+            <el-tag v-else-if="row.media_type === 'video'" size="small" type="warning">视频</el-tag>
+            <el-icon v-else-if="row.media_type === 'image'" class="muted"><Picture /></el-icon>
+            <span v-else>-</span>
+          </template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
@@ -156,6 +181,25 @@
             <el-option label="已跳过" value="skipped" />
           </el-select>
         </el-form-item>
+        <!-- T00716：媒体类型 + 媒体 URL（text 素材隐藏媒体输入） -->
+        <el-form-item label="媒体类型">
+          <el-select v-model="editForm.media_type" style="width: 160px">
+            <el-option v-for="o in MEDIA_TYPE_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="editForm.media_type !== 'text'" label="媒体 URL">
+          <el-input v-model="editForm.media_url" placeholder="图片/视频资源 URL" style="width: 400px" />
+        </el-form-item>
+        <el-form-item v-if="editForm.media_type === 'image'" label="缩略图">
+          <el-input v-model="editForm.media_thumb_url" placeholder="可选：缩略图 URL" style="width: 400px" />
+          <el-image
+            v-if="editForm.media_url"
+            :src="editForm.media_url"
+            :preview-src-list="[editForm.media_url]"
+            fit="cover"
+            style="width: 56px; height: 80px; border-radius: 6px; margin-left: 8px"
+          />
+        </el-form-item>
         <el-form-item label="正文">
           <el-input v-model="editForm.content" type="textarea" :rows="8" />
         </el-form-item>
@@ -182,6 +226,15 @@
         </el-form-item>
         <el-form-item label="分类">
           <el-input v-model="createForm.category" maxlength="64" />
+        </el-form-item>
+        <!-- T00716：媒体类型 + 媒体 URL（text 素材隐藏，图片/视频可填 URL 预览） -->
+        <el-form-item label="媒体类型">
+          <el-select v-model="createForm.media_type" style="width: 160px">
+            <el-option v-for="o in MEDIA_TYPE_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="createForm.media_type !== 'text'" label="媒体 URL">
+          <el-input v-model="createForm.media_url" placeholder="图片/视频资源 URL" style="width: 400px" />
         </el-form-item>
         <el-form-item label="正文">
           <el-input v-model="createForm.content" type="textarea" :rows="8" placeholder="素材正文全文（必填）" />
@@ -214,7 +267,7 @@
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Plus, Close, Search, RefreshLeft, Edit, Delete, View, Check } from '@element-plus/icons-vue'
+import { Plus, Close, Search, RefreshLeft, Edit, Delete, View, Check, Picture } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { formatTime } from '../../utils/format'
 import { useUserStore } from '../../stores/user'
@@ -239,11 +292,21 @@ const SOURCE_TYPE_OPTIONS = [
   { label: '二维码 / 链接分享', value: 'qrcode' },
 ]
 
+/** T00716：媒体类型选项（录入/筛选/预览用）——text=文本，image=图片，video=视频 */
+const MEDIA_TYPE_OPTIONS = [
+  { label: '文本', value: 'text' },
+  { label: '图片', value: 'image' },
+  { label: '视频', value: 'video' },
+]
+
 const route = useRoute()
 const STATUS_LABELS = { pending: '待消费', selected: '已选题', skipped: '已跳过' }
 const STATUS_TAGS = { pending: 'info', selected: 'success', skipped: 'warning' }
 const statusLabel = (s) => STATUS_LABELS[s] || s || '-'
 const statusTagType = (s) => STATUS_TAGS[s] || 'info'
+// T00716：媒体类型展示辅助
+const mediaLabel = (t) => MEDIA_TYPE_OPTIONS.find((o) => o.value === t)?.label || t || '文本'
+const mediaTagType = (t) => ({ text: 'info', image: 'success', video: 'warning' })[t] || 'info'
 
 const channels = ref([])
 const items = ref([])
@@ -252,7 +315,7 @@ const total = ref(0)
 const page = ref(1)
 const size = ref(20)
 const loading = ref(false)
-const filters = reactive({ channel_id: null, status: null, keyword: '', source_type: null })
+const filters = reactive({ channel_id: null, status: null, keyword: '', source_type: null, media_type: null })
 // T00775：视图模式——list=素材明细，book=按书聚合（讲书稿场景找整本书）
 const viewMode = ref('list')
 // T00775：精确过滤（后端 material_id / source 精确等值，不走 keyword 的 LIKE 模糊匹配）
@@ -260,9 +323,9 @@ const materialIdFilter = ref(null)
 const sourceFilter = ref('')
 
 const editVisible = ref(false)
-const editForm = reactive({ id: null, title: '', source: '', category: '', status: 'pending', content: '' })
+const editForm = reactive({ id: null, title: '', source: '', category: '', status: 'pending', content: '', media_type: 'text', media_url: '', media_thumb_url: '' })
 const createVisible = ref(false)
-const createForm = reactive({ channel_id: null, source: '', title: '', category: '', content: '' })
+const createForm = reactive({ channel_id: null, source: '', title: '', category: '', content: '', media_type: 'text', media_url: '', media_thumb_url: '' })
 const saving = ref(false)
 
 // T00895：整本书聚合删除仅 admin 可用；deletingBook 记录进行中书名用于按钮 loading
@@ -306,6 +369,7 @@ async function load() {
       status: filters.status || undefined,
       keyword: filters.keyword || undefined,
       source_type: filters.source_type || undefined,
+      media_type: filters.media_type || undefined,
       material_id: materialIdFilter.value || undefined,
       source: sourceFilter.value || undefined,
       page: page.value,
@@ -329,6 +393,7 @@ function onReset() {
   filters.status = null
   filters.keyword = ''
   filters.source_type = null
+  filters.media_type = null
   materialIdFilter.value = null
   sourceFilter.value = ''
   onSearch()
@@ -351,6 +416,9 @@ async function openEdit(row) {
   editForm.category = detail?.category || ''
   editForm.status = detail?.status || 'pending'
   editForm.content = detail?.content || ''
+  editForm.media_type = detail?.media_type || 'text'
+  editForm.media_url = detail?.media_url || ''
+  editForm.media_thumb_url = detail?.media_thumb_url || ''
   editVisible.value = true
 }
 
@@ -367,6 +435,9 @@ async function onSaveEdit() {
       category: editForm.category || null,
       status: editForm.status,
       content: editForm.content,
+      media_type: editForm.media_type,
+      media_url: editForm.media_url || null,
+      media_thumb_url: editForm.media_thumb_url || null,
     })
     ElMessage.success('已保存')
     editVisible.value = false
@@ -382,6 +453,9 @@ function openCreate() {
   createForm.title = ''
   createForm.category = ''
   createForm.content = ''
+  createForm.media_type = 'text'
+  createForm.media_url = ''
+  createForm.media_thumb_url = ''
   createVisible.value = true
 }
 
@@ -400,6 +474,9 @@ async function onSaveCreate() {
       content: createForm.content,
       category: createForm.category || null,
       source_type: 'list',
+      media_type: createForm.media_type,
+      media_url: createForm.media_url || null,
+      media_thumb_url: createForm.media_thumb_url || null,
     })
     ElMessage.success('已录入素材库')
     createVisible.value = false

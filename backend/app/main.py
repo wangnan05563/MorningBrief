@@ -1,4 +1,4 @@
-﻿"""
+"""
 FastAPI 应用入口
 
 单体应用架构：业务服务 + APScheduler + AI 工作流模块在同一进程内。
@@ -362,6 +362,39 @@ async def _migrate_material_schema() -> None:  # NOSONAR
         logger.warning("[startup] material 表迁移失败: %s", e)
     finally:
         conn.close()
+
+async def _migrate_material_media_column() -> None:  # NOSONAR
+    """素材表迁移：追加媒体类型字段（T00716 多媒体素材扩展，幂等）。
+
+    SQLite 的 create_all 不会修改已存在表结构，需 ALTER TABLE 追加三列：
+      media_type        素材类型 text/image/video（默认 text，既有文本素材兼容）
+      media_url         媒体资源 URL / 静态路径（text 素材为空）
+      media_thumb_url   媒体缩略图 URL（图片/视频预览用）
+    """
+    import sqlite3
+    from app.paths import resolve_db_path
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(_PRAGMA_MATERIAL_INFO)
+        existing = {row[1] for row in cur.fetchall()}
+        alters = {
+            "media_type": "ALTER TABLE material ADD COLUMN media_type TEXT NOT NULL DEFAULT 'text'",
+            "media_url": "ALTER TABLE material ADD COLUMN media_url TEXT",
+            "media_thumb_url": "ALTER TABLE material ADD COLUMN media_thumb_url TEXT",
+        }
+        for col, stmt in alters.items():
+            if col not in existing:
+                cur.execute(stmt)
+        conn.commit()
+        logger.info("[startup] material 表迁移完成，新增 media 列")
+    except Exception as e:
+        logger.warning("[startup] material 表迁移失败: %s", e)
+    finally:
+        conn.close()
+
 
 async def _migrate_cover_url_column() -> None:  # NOSONAR
     """For material table migration: add cover_url column (idempotent).    SQLite create_all does not modify existing table structure.    cover_url stores the og:image cover URL for frontend segment images.    """
@@ -901,6 +934,7 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
         await _migrate_material_dedup_column()
         await _migrate_material_images_column()
         await _migrate_material_source_type_constraint()
+        await _migrate_material_media_column()
     except Exception as e:
         logger.warning("[startup] material cover_url migration failed: %s", e)
 

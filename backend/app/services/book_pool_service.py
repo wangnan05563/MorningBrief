@@ -24,7 +24,7 @@ from datetime import date
 from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Channel, Material
+from app.models import Channel, Material, MaterialMediaType
 from app.models.book_pool import BookPoolItem
 from app.models.material import MaterialStatus
 
@@ -442,6 +442,8 @@ async def collect_book_materials(db: AsyncSession, channel_id: int, item: dict) 
         select(Material).where(
             Material.channel_id == channel_id,
             Material.status == MaterialStatus.pending.value,
+            # T00716：仅文本素材可作讲书稿章节，媒体素材（图片/视频）不进语音链路
+            Material.media_type == MaterialMediaType.text.value,
             or_(*conds),
         ).order_by(Material.id.asc())
     )).scalars().all()

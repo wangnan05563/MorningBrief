@@ -31,6 +31,13 @@ class MaterialStatus(str, Enum):
     skipped = "skipped"
 
 
+class MaterialMediaType(str, Enum):
+    # 文本素材（默认，语音链路唯一消费类型）；image/video 为多媒体素材（仅管理/预览）
+    text = "text"
+    image = "image"
+    video = "video"
+
+
 class Material(Base):
     __tablename__ = "material"
     __table_args__ = (
@@ -73,6 +80,14 @@ class Material(Base):
     # T00766：文章全量图片（JSON 数组文本，按正文出现顺序、封面在前）
     # 供小程序详情页轮播；NULL/[] 表示无图，前端回退 segments 封面
     images_json: Mapped[Optional[str]] = mapped_column(Text, comment="文章全量图片 URL JSON 数组（T00766）")
+    # T00716：多媒体素材扩展——类型 + 媒体 URL + 缩略图 URL。
+    # 默认 text（既有文本素材 media_url 为空），image/video 均由管理/录入页手动写入，
+    # 语音链路（crawler→rewriter→tts）仅消费 text 素材，媒体素材不进语音生成。
+    media_type: Mapped[str] = mapped_column(
+        String(16), default=MaterialMediaType.text.value, nullable=False,
+    )
+    media_url: Mapped[Optional[str]] = mapped_column(String(1024), comment="媒体资源 URL（图片/视频）")
+    media_thumb_url: Mapped[Optional[str]] = mapped_column(String(1024), comment="媒体缩略图 URL")
     # 去重键（MVP 输入适配器）：list 类型素材（手动录入/文档上传）无真实 URL，
     # 用正文 content_hash 作为去重键；rss 类型可空（沿用 url 唯一约束）。
     # 唯一性判定：list 类型按 (source_type, dedup_key) 查重，rss 类型按 url 查重。
