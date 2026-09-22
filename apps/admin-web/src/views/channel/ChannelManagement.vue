@@ -68,7 +68,8 @@
         <el-table-column label="创建时间" min-width="170">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column v-if="canOperate" label="操作" width="160">
+        <!-- T00894：操作列右侧冻结，横向滚动时保持可见 -->
+        <el-table-column v-if="canOperate" label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <IconButton size="small" :icon="Edit" label="编辑" desc="编辑该频道" @click="openEdit(row)" />
             <IconButton size="small" type="danger" :loading="deletingIds.has(row.id)" :icon="Delete" label="删除" desc="删除该频道" @click="handleDelete(row)" />

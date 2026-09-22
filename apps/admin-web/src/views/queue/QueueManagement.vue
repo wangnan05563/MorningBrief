@@ -130,8 +130,8 @@
         <el-table-column label="耗时" width="120">
           <template #default="{ row }">{{ formatDuration(row) }}</template>
         </el-table-column>
-        <!-- 操作列：admin 可执行取消/改优先级/重试，operator 只能查看详情 -->
-        <el-table-column v-if="canOperate" label="操作" width="300">
+        <!-- 操作列：admin 可执行取消/改优先级/重试，operator 只能查看详情；T00894 右侧冻结 -->
+        <el-table-column v-if="canOperate" label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <IconButton
               v-if="row.status === 'queued'"
@@ -166,7 +166,7 @@
             <IconButton size="small" :icon="View" label="详情" desc="查看任务详情" @click="openDetail(row)" />
           </template>
         </el-table-column>
-        <el-table-column v-else label="操作" width="100">
+        <el-table-column v-else label="操作" width="100" fixed="right">
           <template #default="{ row }">
             <IconButton size="small" :icon="View" label="详情" desc="查看任务详情" @click="openDetail(row)" />
           </template>
