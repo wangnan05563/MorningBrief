@@ -103,9 +103,20 @@
         <el-table-column label="最近入库" width="170">
           <template #default="{ row }">{{ formatTime(row.latest_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <IconButton size="small" :icon="View" label="查看章节" desc="下钻查看该书的章节素材" @click="drilldownBook(row.source)" />
+            <!-- T00895：删除整本书聚合（仅 admin 显示）；点击弹二次确认 -->
+            <IconButton
+              v-if="canOperate"
+              size="small"
+              type="danger"
+              :loading="deletingBook === row.source"
+              :icon="Delete"
+              label="删除"
+              desc="删除该书名下全部章节素材"
+              @click="onDeleteBook(row)"
+            />
           </template>
         </el-table-column>
         <template #empty>
@@ -206,11 +217,13 @@ import { useRoute } from 'vue-router'
 import { Plus, Close, Search, RefreshLeft, Edit, Delete, View, Check } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { formatTime } from '../../utils/format'
+import { useUserStore } from '../../stores/user'
 import { listChannels } from '../../api/channels'
 import { aggregateMaterials } from '../../api/materialLibrary'
 import {
   createMaterial,
   deleteMaterial,
+  deleteMaterialsBySource,
   getMaterial,
   listMaterials,
   updateMaterial,
@@ -251,6 +264,11 @@ const editForm = reactive({ id: null, title: '', source: '', category: '', statu
 const createVisible = ref(false)
 const createForm = reactive({ channel_id: null, source: '', title: '', category: '', content: '' })
 const saving = ref(false)
+
+// T00895：整本书聚合删除仅 admin 可用；deletingBook 记录进行中书名用于按钮 loading
+const userStore = useUserStore()
+const canOperate = computed(() => userStore.role === 'admin')
+const deletingBook = ref('')
 
 /** 当前生效的精确定位条件（展示为可清除的提示条） */
 const activeScopes = computed(() => {
@@ -400,6 +418,28 @@ async function onDelete(row) {
   await deleteMaterial(row.id)
   ElMessage.success('已删除')
   await load()
+}
+
+// T00895：删除整本书聚合记录（按来源删除该书全部章节素材）
+// 必须二次确认且提示不可恢复；后端返回 deleted=0 时视为该书名已无关联素材，友好提示
+async function onDeleteBook(row) {
+  await ElMessageBox.confirm(
+    `确定删除《${row.source}》全部 ${row.chapters} 条章节素材？删除后不可恢复。`,
+    '删除整本书',
+    { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
+  )
+  deletingBook.value = row.source
+  try {
+    const data = await deleteMaterialsBySource(row.source, filters.channel_id || undefined)
+    if (!data || !data.deleted) {
+      ElMessage.info(data?.message || '该书名下无关联素材')
+    } else {
+      ElMessage.success(`已删除 ${data.deleted} 条素材`)
+    }
+    await load()
+  } finally {
+    deletingBook.value = ''
+  }
 }
 
 onMounted(async () => {

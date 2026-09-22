@@ -31,15 +31,22 @@ _MATERIAL_NOT_FOUND_MSG = "素材不存在"
 class MaterialCreateRequest(BaseModel):
     """手动新增素材请求体。
 
-    source_type 默认 list：手动添加的素材与 rss 爬取的素材区分开，
-    便于后续按来源类型筛选与统计。
+    source_type 取值（应用层校验，DB 层无 CHECK 约束）：
+    - list：手动录入 / 文档上传（无真实 URL，用 content_hash 去重）
+    - rss：通用资讯 RSS 爬取
+    - book_rss：书籍 RSS 预制源（仅 audiobook 频道）
+    - cos：云端对象存储导入
+    - api：API / 网页 URL 拉取
+    - qrcode：二维码 / 链接分享进入的手动录入门户
     """
     workflow_id: str
     channel_id: Optional[int] = None
     source: str
     title: str
     content: str
-    url: str
+    # url 对 list 类型无需提供（路由内部按 content_hash 合成）；
+    # 非 list 类型（rss/book_rss/api/qrcode）缺失时由 _persist_material 返回 400
+    url: Optional[str] = None
     category: Optional[str] = None
     source_type: str = "list"
 
@@ -87,22 +94,23 @@ async def _persist_material(
     url: str | None = None,
     dedup_key: str | None = None,
 ) -> Material:
-    """入库单条素材，按 source_type 选择去重策略（list 用 dedup_key，rss 用 url）。
+    """入库单条素材，按 source_type 选择去重策略（list/cos 用 dedup_key，其余用 url）。
 
-    list 类型无真实 URL，url 用合成值 list://{channel_id}/{dedup_key[:16]} 满足
-    NOT NULL + 唯一约束；去重判定走 (source_type, dedup_key)，与 rss 的 url 唯一键解耦。
+    list / cos 无真实 Web URL（cos 为对象存储 key，非可访问 URL），url 用合成值
+    {source_type}://{channel_id}/{dedup_key[:16]} 满足 NOT NULL + 唯一约束；
+    去重判定走 (source_type, dedup_key)。rss/book_rss/api/qrcode 有真实 URL，走 url 唯一键。
     """
-    if source_type == MaterialSourceType.list.value:
+    if source_type in (MaterialSourceType.list.value, MaterialSourceType.cos.value):
         key = dedup_key or compute_content_hash(content)
         dup = await db.execute(
             select(Material.id).where(
-                Material.source_type == MaterialSourceType.list.value,
+                Material.source_type == source_type,
                 Material.dedup_key == key,
             )
         )
         if dup.scalar_one_or_none() is not None:
             raise BizError(code=409, message="素材内容已存在（重复上传）")
-        synthetic_url = f"list://{channel_id or 0}/{key[:16]}"
+        synthetic_url = f"{source_type}://{channel_id or 0}/{key[:16]}"
         m = Material(
             channel_id=channel_id,
             source=source,
@@ -115,7 +123,7 @@ async def _persist_material(
         )
     else:
         if not url:
-            raise BizError(code=400, message="rss 类型素材必须提供 url")
+            raise BizError(code=400, message="非 list 类型素材（rss/book_rss/cos/api/qrcode）必须提供 url")
         dup = await db.execute(select(Material.id).where(Material.url == url))
         if dup.scalar_one_or_none() is not None:
             raise BizError(code=409, message="URL 已存在")
@@ -308,9 +316,18 @@ async def create_material(
 ):
     """手动新增素材。
 
-    去重按 source_type 分流：rss 走 url 唯一约束，list 走 dedup_key。
+    去重按 source_type 分流：list 走 dedup_key（合成 url），其余类型走 url 唯一约束。
     workflow_id 为运行期临时关联，可空。
     """
+    # 应用层校验 source_type 合法性（DB 层已无 CHECK 约束，枚举扩展无需迁移）
+    allowed_types = {t.value for t in MaterialSourceType}
+    if req.source_type not in allowed_types:
+        raise BizError(
+            code=400,
+            message=f"不支持的 source_type: {req.source_type}（允许：{', '.join(sorted(allowed_types))}）",
+        )
+    # list 类型无真实 URL（合成 url + dedup_key），其余类型必须提供真实 url
+    is_list = req.source_type == MaterialSourceType.list.value
     m = await _persist_material(
         db,
         channel_id=req.channel_id,
@@ -319,8 +336,8 @@ async def create_material(
         content=req.content,
         category=req.category,
         source_type=req.source_type,
-        url=req.url if req.source_type == MaterialSourceType.rss.value else None,
-        dedup_key=compute_content_hash(req.content) if req.source_type == MaterialSourceType.list.value else None,
+        url=None if is_list else req.url,
+        dedup_key=compute_content_hash(req.content) if is_list else None,
     )
     # 回填运行期关联（文档上传场景无 workflow，留空）
     if req.workflow_id:
@@ -359,6 +376,37 @@ async def update_material(
     return success(data=_material_to_dict(m))
 
 
+@router.delete("")
+async def delete_materials_by_source(
+    source: str = Query(..., min_length=1, max_length=64,
+                        description="按书名（来源）精确删除该本书的全部章节素材"),
+    channel_id: int = Query(None, description="限定频道，聚合视图删除应传当前筛选频道"),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """按书名（source）批量删除整本书的素材（T00895）。
+
+    素材库「按书聚合」视图一行对应一本书的多条章节素材；为保证事务一致，
+    用一条 DELETE 按 source 精确删除，而非前端逐条调用 DELETE /{material_id}。
+    与单条删除一致采用硬删除（Material 无被引用外键），并记录删除总数的审计日志。
+    注意：本空路径路由须在 /{material_id} 之前声明，避免路径被当作素材 ID 解析。
+    """
+    conds = [Material.source == source]
+    if channel_id is not None:
+        conds.append(Material.channel_id == channel_id)
+    ids = (await db.execute(select(Material.id).where(*conds))).scalars().all()
+    if not ids:
+        return success(data={"deleted": 0, "message": "该书名下无关联素材"})
+    for mid in ids:
+        await db.delete(await db.get(Material, mid))
+    db.add(AuditLog(
+        category="material", action="delete", target=source, operator=admin.username,
+        detail=json.dumps({"source": source, "deleted_count": len(ids)}, ensure_ascii=False),
+    ))
+    await db.commit()
+    return success(data={"deleted": len(ids)})
+
+
 @router.delete("/{material_id}")
 async def delete_material(
     material_id: int,
@@ -392,7 +440,7 @@ async def delete_material(
 async def upload_document(
     file: UploadFile = File(...),
     channel_id: int = Form(..., description="目标课程/资料频道 ID"),
-    source: str = Form("文档上传", description="素材来源名称"),
+    source: str = Form("文档上传", description="素材来源名称（即书名，用于按书聚合）"),
     category: Optional[str] = Form(None, description="可选分类"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
@@ -431,3 +479,144 @@ async def upload_document(
         )
         created.append(_material_to_dict(m))
     return success(data={"count": len(created), "list": created})
+
+
+class ImportUrlRequest(BaseModel):
+    """从 URL / API 拉取素材请求体。
+
+    适用于「API 接口拉取」与「二维码/链接分享」两条渠道：
+    - source_type=api：对接 CMS / 知识库 / 第三方接口返回的文章页或 JSON
+    - source_type=qrcode：分享链接（运营扫码后在此拉取并人工复核）
+    """
+    url: str
+    channel_id: int
+    source: str = "URL拉取"
+    category: Optional[str] = None
+    source_type: str = MaterialSourceType.api.value
+
+
+@router.post("/import-url")
+async def import_from_url(
+    req: ImportUrlRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """从 URL / API 拉取并解析为单条素材入库（课程/有声读物频道均可用）。
+
+    复用 article_parser.extract 抓取正文（支持文章页与多数 API 返回内容），
+    source_type 默认 api（API 拉取），分享场景可传 qrcode。
+    解析失败（无正文）返回 400，由运营改用「手动录入」补充。
+    """
+    if req.source_type not in (MaterialSourceType.api.value, MaterialSourceType.qrcode.value):
+        raise BizError(code=400, message="import-url 仅支持 source_type=api 或 qrcode")
+    from app.workflow.crawler.article_parser import extract as extract_article
+    try:
+        article = await extract_article(req.url)
+    except Exception as e:
+        raise BizError(code=400, message=f"URL 拉取失败：{str(e)[:200]}")
+    content = article.get("content")
+    if not content:
+        raise BizError(code=400, message="无法从该 URL 提取正文，请确认链接为文章页或有效 API")
+    title = article.get("title") or req.url
+    m = await _persist_material(
+        db,
+        channel_id=req.channel_id,
+        source=req.source,
+        title=title,
+        content=content,
+        category=req.category,
+        source_type=req.source_type,
+        url=req.url,
+        cover_url=article.get("cover_url"),
+    )
+    return success(data=_material_to_dict(m))
+
+
+class ImportCosRequest(BaseModel):
+    """从云端对象存储（COS）导入素材请求体。
+
+    适用于「云端存储导入」渠道：团队素材已存对象存储，按 key 取回后解析为章节素材。
+    """
+    key: str
+    channel_id: int
+    source: str = "COS导入"
+    category: Optional[str] = None
+
+
+@router.post("/import-cos")
+async def import_from_cos(
+    req: ImportCosRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """从 COS 对象导入并解析为章节素材批量入库（source_type=cos）。
+
+    每个章节作为一条素材入库，按 content_hash 去重，避免重复导入。
+    COS 未配置时返回 400 提示先配置；不支持的扩展名返回 400。
+    """
+    from app.services.cos_storage_service import CosStorageService
+    from app.services.document_ingest import parse_document, compute_content_hash, UnsupportedFormatError
+
+    svc = CosStorageService()
+    try:
+        raw = await svc.get_object_bytes(req.key)
+    except BizError:
+        raise
+    except Exception as e:
+        raise BizError(code=400, message=f"COS 对象读取失败：{str(e)[:200]}")
+
+    filename = req.key.rsplit("/", 1)[-1] or "cos_object"
+    try:
+        chapters = parse_document(filename, raw)
+    except UnsupportedFormatError as e:
+        raise BizError(code=400, message=str(e))
+
+    created = []
+    for ch in chapters:
+        m = await _persist_material(
+            db,
+            channel_id=req.channel_id,
+            source=req.source,
+            title=ch.title,
+            content=ch.content,
+            category=req.category,
+            source_type=MaterialSourceType.cos.value,
+            dedup_key=compute_content_hash(ch.content),
+        )
+        created.append(_material_to_dict(m))
+    return success(data={"count": len(created), "list": created})
+
+
+class SharePreviewRequest(BaseModel):
+    """二维码/链接分享预览请求体。
+
+    分享进入后先拉取链接内容预览，运营人工复核后再通过手动录入（source_type=qrcode）正式入库。
+    """
+    url: str
+    channel_id: int
+
+
+@router.post("/share")
+async def share_preview(
+    req: SharePreviewRequest,
+    admin: AdminPayload = Depends(require_admin),
+):
+    """二维码/链接分享进入的预览门户（不直接入库）。
+
+    拉取分享链接的正文预览，返回 title/content 供前端预填「手动录入」表单
+    （source_type=qrcode），由运营复核后提交，避免自动入库脏数据。
+    """
+    from app.workflow.crawler.article_parser import extract as extract_article
+    try:
+        article = await extract_article(req.url)
+    except Exception as e:
+        return success(data={"url": req.url, "available": False, "error": str(e)[:200]})
+    content = article.get("content")
+    title = article.get("title") or req.url
+    return success(data={
+        "url": req.url,
+        "title": title,
+        "content": content,
+        "source_type": MaterialSourceType.qrcode.value,
+        "available": bool(content),
+    })

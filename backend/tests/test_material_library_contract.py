@@ -160,3 +160,48 @@ class TestAggregateByBookT00775:
         r3 = client.get(_AGG_URL, params={"channel_id": ch.id}, headers=hdrs).json()
         assert r3["data"]["total"] == 2
 
+
+class TestDeleteBySourceT00895:
+    """按书名（source）批量删除整本书素材（素材库「按书聚合」视图删除）。"""
+
+    @pytest.mark.asyncio
+    async def test_delete_by_source_removes_all(self, db_session, client, admin_token):
+        """删除一本书的全部章节素材，且不影响其他书名。"""
+        hdrs = {"Authorization": f"Bearer {admin_token['token']}"}
+        ch = await _seed_channel(db_session, "T00895 删除")
+        for t in ("第一章", "第二章"):
+            await _seed_material(db_session, ch.id, "只删这本书", f"只删这本书 · {t}")
+        await _seed_material(db_session, ch.id, "保留这本书", "保留这本书 · 第一章")
+
+        r = client.delete(
+            _LIST_URL, params={"source": "只删这本书", "channel_id": ch.id}, headers=hdrs,
+        ).json()
+        assert r["code"] == 0, r
+        assert r["data"]["deleted"] == 2
+
+        r2 = client.get(_LIST_URL, params={"channel_id": ch.id}, headers=hdrs).json()
+        assert r2["data"]["total"] == 1
+        assert r2["data"]["list"][0]["source"] == "保留这本书"
+
+    @pytest.mark.asyncio
+    async def test_delete_by_source_no_match_friendly(self, db_session, client, admin_token):
+        """目标书名下无素材时返回 deleted=0 与友好提示，而非报错。"""
+        hdrs = {"Authorization": f"Bearer {admin_token['token']}"}
+        ch = await _seed_channel(db_session, "T00895 空删除")
+        r = client.delete(
+            _LIST_URL, params={"source": "不存在的书", "channel_id": ch.id}, headers=hdrs,
+        ).json()
+        assert r["code"] == 0
+        assert r["data"]["deleted"] == 0
+        assert "无关联素材" in r["data"]["message"]
+
+    @pytest.mark.asyncio
+    async def test_delete_by_source_requires_admin(self, db_session, client, user_token):
+        """非 admin 无权按书删除（整本书删除为敏感操作）。"""
+        r = client.delete(
+            _LIST_URL,
+            params={"source": "x", "channel_id": 1},
+            headers={"Authorization": f"Bearer {user_token['token']}"},
+        )
+        assert r.status_code in (401, 403)
+
