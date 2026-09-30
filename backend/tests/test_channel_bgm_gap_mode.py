@@ -1,13 +1,17 @@
 """频道级段间 BGM 模式（bgm_gap_mode）校验测试。
 
-bgm_gap_mode 仅接受 silence / bridge / None，非法值应在请求体校验阶段被拒绝，
-避免脏数据进入 BGM 拼接分支（concat.build_bgm_bridge / build_bgm_overlay）。
+bgm_gap_mode 仅接受 continuous / silence / bridge / None，非法值应在请求体校验阶段
+被拒绝，避免脏数据进入段间拼接分支（concat.build_crossfade_cmd / build_bgm_overlay /
+build_bgm_continuous / build_bgm_bridge）。
 
 语义约定：
-- None           -> 继承全局 settings.BGM_GAP_MODE
+- None           -> 继承全局 settings.BGM_GAP_MODE（默认 continuous）
 - ""（空串）      -> 兜底视为继承全局（归一为 None）
 - 带空白的合法值  -> 去空白后归一（" bridge " -> "bridge"）
 - 其余非法值      -> ValueError
+
+注意：本层只做「去空白」，不做大小写归一——大小写不符仍按非法拒绝，
+保持「存进来的必然是小写枚举」这一契约（读取侧 normalize_gap_mode 才做容错归一）。
 
 纯请求体校验，无需 DB / ffmpeg。
 """
@@ -15,7 +19,7 @@ import pytest
 
 from app.routers.admin.channels import ChannelCreateRequest, ChannelUpdateRequest
 
-_VALID = [None, "silence", "bridge"]
+_VALID = [None, "continuous", "silence", "bridge"]
 
 # (原始输入, 归一后期望)：带空白的合法值应被去空白后接受
 _NORMALIZED = [(" bridge ", "bridge"), ("  silence  ", "silence"), ("BRIDGE".lower(), "bridge")]

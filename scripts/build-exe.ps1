@@ -25,7 +25,7 @@
     .\build-exe.ps1 -SkipSPA -SkipDeps
     快速重建：跳过前端和依赖（仅 Python 代码变更时用）。
 .NOTES
-    产物：dist/MorningBrief/MorningBrief.exe
+    产物：release/MorningBrief/MorningBrief.exe
     V1.2 起单机 exe 部署：SQLite 嵌入式数据库 + TTLCache 进程内缓存，无需 MySQL/Redis/Docker。
 #>
 [CmdletBinding()]
@@ -48,7 +48,7 @@ $buildVenv      = ".venv-build"
 $buildPython    = "$buildVenv\Scripts\python.exe"
 $buildPyInstaller = "$buildVenv\Scripts\pyinstaller.exe"
 $buildReadyMark = "$buildVenv\.MorningBrief-build-ready"
-$distDir        = "release\dist\MorningBrief"
+$distDir        = "release\MorningBrief"
 $frontendDir    = "apps/admin-web"
 $specFile       = "MorningBrief.spec"
 $backendDir     = "backend"
@@ -126,7 +126,7 @@ function Invoke-BuildPip {
 
 if ($Clean) {
     Write-Step "[Clean] 清理所有缓存..."
-    foreach ($p in @(".venv-build", "apps/admin-web\node_modules", "release/dist", "release/build")) {
+    foreach ($p in @(".venv-build", "apps/admin-web\node_modules", "release/MorningBrief", "release/build")) {
         if (Test-Path $p) {
             Write-Host "  删除 $p" -ForegroundColor DarkGray
             Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue
@@ -249,6 +249,28 @@ if (Test-Path $buildInfoScript) {
     Write-Warn "build_info.py 不存在，跳过元信息生成（关于页 SHA/日期将为默认值）"
 }
 
+# ============== 3.6 确保产品图标存在 ==============
+# MorningBrief.spec 的 exe 图标与 installer.iss 的 SetupIconFile 都引用
+# release/assets/MorningBrief.ico。首次克隆或 -Clean 后该文件缺失，
+# spec 会静默降级为 PyInstaller 默认图标，但 installer.iss 会直接编译失败。
+# 缺失时调用 generate-icons.ps1（Windows 自带 .NET GDI+ 绘制，无需额外依赖）。
+
+$setupIconPath = "release\assets\MorningBrief.ico"
+if (-not (Test-Path $setupIconPath)) {
+    Write-Step "[3.6/6] 产品图标缺失，调用 generate-icons.ps1 生成..."
+    $iconScript = Join-Path $PSScriptRoot "generate-icons.ps1"
+    if (Test-Path $iconScript) {
+        & $iconScript
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $setupIconPath)) {
+            Write-Warn "图标生成失败，安装包将回退到 Inno Setup 默认图标（exe 图标不受影响）"
+        } else {
+            Write-OK "产品图标已生成: $setupIconPath"
+        }
+    } else {
+        Write-Warn "generate-icons.ps1 不存在，跳过图标生成"
+    }
+}
+
 # ============== 4. PyInstaller 打包 ==============
 
 Write-Step "[4/6] 执行 PyInstaller 打包"
@@ -261,9 +283,17 @@ if (Test-Path $distDir) {
 if (Test-Path "build") {
     Remove-Item -Recurse -Force "build" -ErrorAction SilentlyContinue
 }
+# 清理 PyInstaller 默认 dist/（历史构建残留）：spec 已改输出到 release/，
+# 旧默认 dist\MorningBrief 不再使用，避免与 release/ 混淆占用空间
+if (Test-Path "dist") {
+    Remove-Item -Recurse -Force "dist" -ErrorAction SilentlyContinue
+}
 
 # 执行 PyInstaller，使用 spec 文件
-& $buildPyInstaller $specFile --noconfirm
+# 关键：--distpath "release" 让 COLLECT 输出到 release/MorningBrief，
+# 与 $distDir / installer.iss / start.ps1 完全一致。PyInstaller 6.x 的 COLLECT 不接受
+# distpath 参数，输出目录只能由 --distpath 命令行参数（全局 CONF['distpath']）决定。
+& $buildPyInstaller $specFile --noconfirm --distpath "release"
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller 打包失败" }
 Write-OK "PyInstaller 打包完成"
 
@@ -341,11 +371,18 @@ Write-Host "  [5.3.2] Copy BGM preset files..."
 $bgmSrc = "$repoRoot\\backend\\data\\bgm\\preset"
 $bgmDst = "$distDir\\data\\bgm\\preset"
 if (Test-Path $bgmSrc) {
-    # Remove existing file with same name (from previous buggy build) before creating directory
-    if (Test-Path $bgmDst -PathType Leaf) { Remove-Item -Force $bgmDst }
-    New-Item -ItemType Directory -Force (Split-Path $bgmDst) | Out-Null
-    Copy-Item -Recurse -Force "$bgmSrc\\*" $bgmDst
+    # 移除历史bug遗留：目标路径可能被错误创建为同名 FILE（之前
+    # Split-Path $bgmDst 仅创建父目录 data/bgm，未创建 preset/，
+    # Copy-Item 把源首文件直接写成了叫 "preset" 的文件）。
+    # 此处无论 Leaf 还是错误目录，一律强制删除后重建，确保一致。
+    if (Test-Path $bgmDst) { Remove-Item -Recurse -Force $bgmDst -ErrorAction SilentlyContinue }
+    # 直接创建 $bgmDst（preset 目录），不是它的父目录——Split-Path
+    # 取的是 data/bgm，目标不存在时 Copy-Item 会把 source 内容重命名
+    # 成叫 $bgmDst 的文件（非目录），这是 bug 根因。
+    New-Item -ItemType Directory -Force $bgmDst | Out-Null
+    Copy-Item -Path "$bgmSrc\\*" -Destination $bgmDst -Recurse -Force
     $bgmCount = (Get-ChildItem $bgmDst -File).Count
+    if ($bgmCount -eq 0) { throw "BGM preset copied 0 files, source=$bgmSrc" }
     Write-OK "BGM preset copied ($bgmCount files)"
 } else {
     Write-Warn "BGM preset source not found: $bgmSrc"
@@ -380,8 +417,14 @@ Write-Host "  [5.3.1] 初始化默认管理员..."
 $dbPath = "$distDir\data\news.db"
 $seedScript = "$backendDir\seed_admin.py"
 if (Test-Path $seedScript) {
-    python "$seedScript" "$dbPath"
-    Write-OK "默认管理员已初始化（admin/admin123)"
+    # 必须用 build venv 的 python（bcrypt 等依赖仅装在 .venv-build），
+    # 不能用裸 python（走系统 python，缺 bcrypt 会 ModuleNotFoundError）。
+    & $buildPython "$seedScript" "$dbPath"
+    if ($LASTEXITCODE -eq 0) {
+        Write-OK "默认管理员已初始化（admin/admin123)"
+    } else {
+        Write-Warn "默认管理员初始化失败（seed_admin.py 退出码 $LASTEXITCODE），请检查 .venv-build 依赖是否完整"
+    }
 } else {
     Write-Warn "seed_admin.py 不存在，跳过管理员初始化"
 }
@@ -460,9 +503,10 @@ AppPublisher=MorningBrief
 DefaultDirName={autopf}\MorningBrief
 DefaultGroupName=MorningBrief
 ; 复用产品图标（release\assets\MorningBrief.ico，与 exe 同源），避免安装包显示 Inno 默认图标
+; 若仓库未生成该 ICO（首次克隆），请先运行生成脚本或注释下行，ISCC 会使用默认图标
 SetupIconFile=release\assets\MorningBrief.ico
 UninstallDisplayIcon={app}\MorningBrief.exe
-OutputDir=release/dist
+OutputDir=release
 OutputBaseFilename=MorningBrief-Setup-v{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
@@ -473,8 +517,8 @@ DisableProgramGroupPage=yes
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加:"
 [Files]
-; 打包 dist/MorningBrief/ 下所有文件（排除日志和数据）
-Source: "release\dist\MorningBrief\*"; DestDir: "{app}"; Excludes: "*.log,logs\*,data\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+; 打包 release/MorningBrief/ 下所有文件（排除日志和数据）
+Source: "release\MorningBrief\*"; DestDir: "{app}"; Excludes: "*.log,logs\*,data\*"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
 Name: "{group}\MorningBrief"; Filename: "{app}\MorningBrief.exe"
 Name: "{commondesktop}\MorningBrief"; Filename: "{app}\MorningBrief.exe"; Tasks: desktopicon
@@ -503,7 +547,7 @@ Filename: "{app}\MorningBrief.exe"; Description: "启动 MorningBrief"; Flags: n
         if ($LASTEXITCODE -ne 0) {
             Write-Warn "安装包编译失败"
         } else {
-            $setupExe = "release\dist\MorningBrief-Setup-v$version.exe"
+            $setupExe = "release\MorningBrief-Setup-v$version.exe"
             Write-OK "安装包已生成: $setupExe"
         }
     }
@@ -521,8 +565,8 @@ Write-Host ("  目录大小: {0:N1} MB" -f $size)
 Write-Host "  EXE:      $distDir\MorningBrief.exe"
 Write-Host ""
 Write-Host "  使用方式:" -ForegroundColor Cyan
-Write-Host "    1. 编辑 dist\MorningBrief\.env 填入实际密钥（JWT_SECRET / LLM_API_KEY / COS_* 等）"
-Write-Host "    2. 双击 dist\MorningBrief\MorningBrief.exe 启动服务（SQLite 嵌入式，无需外部数据库）"
+Write-Host "    1. 编辑 release\MorningBrief\.env 填入实际密钥（JWT_SECRET / LLM_API_KEY / COS_* 等）"
+Write-Host "    2. 双击 release\MorningBrief\MorningBrief.exe 启动服务（SQLite 嵌入式，无需外部数据库）"
 Write-Host "    3. 访问 http://127.0.0.1:8000/docs"
 Write-Host "========================================" -ForegroundColor Green
 

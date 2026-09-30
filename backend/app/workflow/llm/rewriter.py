@@ -48,9 +48,116 @@ _COURSE_INTRO_FILE = "course_intro.txt"
 _COURSE_OUTRO_FILE = "course_outro.txt"
 # 课程/资料类频道类型集合（与 models/channel.py channel_type 取值保持一致）
 _COURSE_CHANNEL_TYPES = frozenset({"course"})
+# 有声读物单本讲书频道类型（T00914：用于注入书籍解读专项约束 + 书源隔离）
+_AUDIOBOOK_CHANNEL_TYPES = frozenset({"audiobook"})
+
+# 书籍解读专项约束（T00914 质量改善 B5/B6/C8/C9）：
+# 注入每个 audiobook 段改写 prompt，规避反复出现的书外素材嫁接与新闻播报套话串味
+_AUDIOBOOK_QUALITY_RULE = (
+    "【书籍解读专项要求】1. 内容必须严格源自当前书籍章节素材，禁止引用或嫁接书外作品、"
+    "新闻事件、产业动态、娱乐节目讯息。2. 禁止使用“视线转向产业资本动向”“从开发商动态来看”"
+    "“另一款大作”“硬件之外软件也有看点”“顺带提一下一款新作”等新闻播报拼接套话。"
+    "3. 若需提及作者、书名、出版信息，只能依据所选素材原文，不得臆造或张冠李戴。"
+    "4. 段与段按书籍章节内在逻辑自然过渡，保持连贯，不打断、不跳章拼贴。"
+)
+
+# 复检残留的书外套话衔接短语 → 中性承接（T00914 复检发现 prompt 约束无法 100% 杜绝
+# 这类新闻播报句式，故在改写结果落库前做程序化兜底清洗；值为空串表示直接删除该片段）
+_AUDIOBOOK_BRIDGE_CLEANUP = {
+    "视线转向产业资本动向": "回到书中，" if False else "",
+    "从开发商动态来看": "回到书中，",
+    "从开发商": "",
+    "从另一个平台来看，": "回到书中，",
+    "从另一个平台来看": "回到书中，",
+    "换个赛道来看": "回到书中，",
+    "换个赛道。": "回到书中，",
+    "换个赛道": "回到书中，",
+    "再来看一条订阅服务变化": "",
+    "把镜头转向另一款大作": "",
+    "另一款大作": "",
+    "硬件之外，软件也有看点": "",
+    "顺带提一下这种新作": "",
+}
+
+
+def _clean_audiobook_bridge_phrases(text: str) -> tuple[str, int]:
+    """清洗 audiobook 段中残留的新闻播报式书外套话衔接短语。
+
+    返回 (清洗后文本, 命中短语数)。prompt 层面的《书籍解读专项要求》约束属于软约束，
+    复检（T00914 §5.3）证实现有模型仍会偶发产出，故在改写结果落库前用该函数兜底，
+    把“从开发商动态来看”“换个赛道”等一律换成中性的“回到书中”承接语或删除，
+    以保证最终文稿衔接连贯、不串味新闻平台。纯文本无副作用，便于单测。
+    """
+    if not text:
+        return text, 0
+    hits = 0
+    for phrase, repl in _AUDIOBOOK_BRIDGE_CLEANUP.items():
+        if phrase in text:
+            text = text.replace(phrase, repl)
+            hits += 1
+    # 规整替换残留的连续标点：替换后可能出现三个连续逗号/句号
+    # 单次 replace 对三连只收掉一对，故循环直到不再含连续标点
+    while "，，" in text or "。。" in text:
+        text = text.replace("，，", "，").replace("。。", "。")
+    return text, hits
+
+
+def _clean_audiobook_segment_content(seg: dict, channel_type: str | None) -> dict:
+    """改写段落库前兜底清洗，仅对 audiobook 频道执行。
+
+    与 prompt 注入的软约束互补：模型仍偶发产出新闻播报式衔接触（T00914 复检验证），
+    故在 append 进 segments 前统一调用它，把残留套话换成“回到书中”承接或删除，
+    保证整稿衔接连贯。非 audiobook 频道不做任何改动，避免误伤正常新闻衔接。
+    """
+    if channel_type not in _AUDIOBOOK_CHANNEL_TYPES:
+        return seg
+    content, hits = _clean_audiobook_bridge_phrases(seg.get("content", ""))
+    if hits:
+        logger.info("书外套话衔接短语清洗 %d 处 material_id=%s", hits, seg.get("material_id"))
+        return {**seg, "content": content}
+    return seg
+
+
+async def _build_audiobook_quality_rule(channel_id: int | None, book_title: str) -> str:
+    """动态构建 audiobook 书籍解读约束：在通用规则基础上注入唯一书名与真实作者。
+
+    T00914 复检（§5.5）发现同一本书被轮次外写成「余华/昆德拉/余秋雨」交替错配，
+    根因是系统未把唯一书名/作者事实注入 prompt，LLM 只能臆造。作者取自
+    book_pool_item.author，运营未填写（author=None）时退化为仅书名锚定，并显式要求
+    “作者未提供则不得编造”。任何 DB 读取失败都降级为通用规则，绝不阻断改写。
+    """
+    rule = _AUDIOBOOK_QUALITY_RULE
+    if not book_title:
+        return rule
+    title_line = (
+        f"5. 本书唯一书名是《{book_title}》，正文统一以“{book_title}”指代本书，"
+        "严禁用“这本新作”“这部作品”“另一款大作”等泛指，也不许引用任何其他书名来指代本书。"
+    )
+    author = None
+    if channel_id:
+        try:
+            from app.models import BookPoolItem
+            from sqlalchemy import select
+            async with AsyncSessionLocal() as session:
+                author = (await session.execute(
+                    select(BookPoolItem.author).where(
+                        BookPoolItem.channel_id == channel_id,
+                        BookPoolItem.title == book_title,
+                    ).limit(1)
+                )).scalar_one_or_none()
+        except Exception as e:
+            logger.warning("读取书籍作者失败，降级为仅书名约束: %s", e)
+    if author:
+        return rule + title_line + f" 6. 本书作者是“{author}”，凡需提及作者只能写“{author}”，严禁写成他人。"
+    return rule + title_line + " 6. 若书籍素材未提供作者信息，则全文不要擅自编造作者姓名。"
 
 # 提示词文件内容缓存（模块加载后不变，避免每次改写重复读盘）
 _PROMPT_FILE_CACHE: dict[str, str] = {}
+
+# 频道级时长保底的安全范围（与 _get_target_duration_sec 的全局 clamp 保持一致，
+# 防运营误配极端值导致字数反算失真；30 分钟=1800s 为上限）
+_MIN_CHANNEL_DURATION = 180
+_MAX_CHANNEL_DURATION = 1800
 
 
 def _load_prompt_file(filename: str) -> str:
@@ -727,6 +834,7 @@ def _build_prompt(
     enable_thinking_question: bool = True,
     style_hint: str = None,
     book_context: dict | None = None,
+    quality_rule: str = None,
 ) -> str:
     """构建改写 prompt（读 rewrite.txt 模板，填入素材信息 + 动态字数要求）。
 
@@ -741,6 +849,8 @@ def _build_prompt(
             None 时不追加。由 _rewrite_one_with_limit 按 seq 号从 style_library 轮换选取
         book_context: T00626 单本讲书分集变量（book_title/part_label/part_brief/
             part_link/next_episode_hint 等），由 book_part_planner 生成；None 时按空串填充
+        quality_rule: 内容质量专项约束（T00914：audiaudio 频道注入书籍解读要求），
+            None 时不追加。追加在 prompt 最末，高于素材内容指令生效
     """
     template = template_text if template_text else PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
     # 预计算字数范围，供模板中 {words_min}/{words_max} 使用
@@ -792,6 +902,9 @@ def _build_prompt(
     # 第一层过滤：在 prompt 末尾追加敏感词规避约束，引导 LLM 主动避开
     if extra_constraint:
         prompt = prompt + "\n" + extra_constraint
+    # 内容质量专项约束追加在 prompt 最末，使其优先于素材内容指令生效
+    if quality_rule:
+        prompt = prompt + "\n" + quality_rule
     return prompt
 
 
@@ -805,6 +918,7 @@ async def _rewrite_one(  # NOSONAR S3776: 双层过滤改写主逻辑，职责�
     enable_thinking_question: bool = True,
     style_hint: str = None,
     book_context: dict | None = None,
+    quality_rule: str = None,
 ) -> dict:
     """改写单条素材（LLD 7.3 双层过滤）。
 
@@ -826,6 +940,7 @@ async def _rewrite_one(  # NOSONAR S3776: 双层过滤改写主逻辑，职责�
         enable_thinking_question: 是否在 prompt 中注入结尾思考问题要求
         style_hint: 风格多样性提示（开场白/过渡词/同义词/段落结构变体），
             None 时不追加。由 _rewrite_one_with_limit 按 seq 号轮换注入
+        quality_rule: 内容质量专项约束（T00914 audio 频道），透传给 _build_prompt
 
     Returns:
         {title, content, estimated_duration, source_url, material_id, cover_url}
@@ -845,6 +960,7 @@ async def _rewrite_one(  # NOSONAR S3776: 双层过滤改写主逻辑，职责�
         enable_thinking_question=enable_thinking_question,
         style_hint=style_hint,
         book_context=book_context,
+        quality_rule=quality_rule,
     )
     raw = await _call_llm(prompt)
 
@@ -1518,6 +1634,7 @@ async def _fetch_channel_prompts(channel_id: int) -> dict:
                 "selection_strategy": None,
                 "manual_material_ids": None,
                 "channel_type": None,
+                "min_duration_sec": None,
             }
         return {
             "name": ch.name,
@@ -1535,7 +1652,41 @@ async def _fetch_channel_prompts(channel_id: int) -> dict:
             "manual_material_ids": _parse_material_ids(ch.manual_material_ids),
             # 频道类型（news/course/audiobook）：course 自动套用课程模板与课程文案
             "channel_type": ch.channel_type,
+            # 频道级时长保底（秒）：非空时覆盖全局目标时长，驱动自动扩稿（T00914 A1）
+            "min_duration_sec": ch.min_duration_sec,
         }
+
+
+def _filter_audiobook_sources(materials: list[dict], min_segments: int = 3) -> list[dict]:
+    """T00914 C10：audiobook 频道（讲书稿模式）书源隔离。
+
+    讲书稿模式下频道素材池的 `source` 统一等于书名（book_pool 的 book_key＝source）。
+    以出现章节数最多的 source 作为"当前书"锚，剔除外链/书外素材（报告实测混入
+    culture.people.com.cn 的文化节目《大敦煌》《非来不可》即因此串味）。
+    锚定不唯一或剔除后不足 min_segments 时降级保留（不阻断工作流），仅告警。
+    """
+    if not materials:
+        return materials
+    counts: dict[str, int] = {}
+    for m in materials:
+        counts[m.get("source")] = counts.get(m.get("source"), 0) + 1
+    if len(counts) <= 1:
+        return materials
+    # 锚：章节数最多的 source；并列时不可靠，直接降级保留
+    top = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
+    if len(top) > 1 and top[0][1] == top[1][1]:
+        logger.warning("[书源隔离] 书名锚不唯一 %s，降级不过滤", {k: v for k, v in top[:2]})
+        return materials
+    anchor, anchor_n = top[0]
+    filtered = [m for m in materials if m.get("source") == anchor]
+    if len(filtered) < min_segments:
+        logger.warning("[书源隔离] 锚定《%s》后仅剩 %d/<%d 段，降级保留原始素材池",
+                       anchor, len(filtered), min_segments)
+        return materials
+    dropped = [m.get("title") or m.get("source") for m in materials if m.get("source") != anchor]
+    logger.warning("[书源隔离] 剔除 %d 条书外素材（锚定书名《%s》，剩余 %d 条）: %s",
+                   len(materials) - len(filtered), anchor, len(filtered), dropped[:10])
+    return filtered
 
 
 async def _filter_materials_by_relevance(
@@ -1687,7 +1838,11 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
     # 0.5 读取目标时长 + TTS 语速倍率，反算每段目标字数
     # 数学关系：总字数 = 目标时长 × 基础语速 × 倍率 / 60
     # 用户调整目标时长或 TTS 语速时，自动协同调整稿件字数
-    target_sec = _get_target_duration_sec()
+    # 频道级 min_duration_sec 优先：audiobook 等频道需更长篇幅驱动自动扩稿，
+    # 无频道级配置时回退全局目标时长，二者都收敛到 180~1800s 安全区间
+    channel_min_sec = (channel_prompts or {}).get("min_duration_sec")
+    target_sec = channel_min_sec or _get_target_duration_sec()
+    target_sec = max(_MIN_CHANNEL_DURATION, min(_MAX_CHANNEL_DURATION, int(target_sec)))
     rate_multiplier = _get_rate_multiplier()
     target_segments, words_per_segment = _calc_segment_words(target_sec, rate_multiplier)
     segment_duration = int(words_per_segment / (WORDS_PER_MINUTE * rate_multiplier) * 60)
@@ -1709,6 +1864,11 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         "当日 pending 素材 %d 条（channel_id=%s lookback=%s）",
         len(materials), channel_id, material_lookback_days,
     )
+
+    # T00914 C10：audiobook 频道书源隔离——按 source 锚定当前书书名，剔除书外素材。
+    # 须在空判断前执行：外链混入可能导致素材全为书外内容，提前告警更利于定位根因
+    if channel_type in _AUDIOBOOK_CHANNEL_TYPES:
+        materials = _filter_audiobook_sources(materials, MIN_VALID_SEGMENTS)
 
     if not materials:
         # 查询 material 表诊断信息，帮助定位根因
@@ -1813,6 +1973,14 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
     channel_id_for_style = channel_id
     total_for_style = len(selected)
 
+    # T00914 内容质量专项约束：仅 audiobook 频道注入书籍解读规则（防书外嫁接/新闻套话串味），
+    # 其他频道不注入。quality_rule 在 _rewrite_one 里透传到 _build_prompt 追加到 prompt 最末。
+    quality_rule = None
+    if channel_type in _AUDIOBOOK_CHANNEL_TYPES:
+        # 以选中素材的 source（锚定书名）为唯一事实锚，注入书名与真实作者约束
+        anchor_title = (selected[0].get("source") or "") if selected else ""
+        quality_rule = await _build_audiobook_quality_rule(channel_id, anchor_title)
+
     # T00626：讲书频道（audiobook）单本分集编排——按素材序列估算改写总量，
     # 自动划分 单集 / 上·下 / 上·中·下 并生成篇名、覆盖说明与衔接语，
     # 结果按 material_id 注入改写模板的 {book_title}/{part_label}/... 占位符。
@@ -1848,6 +2016,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                 enable_thinking_question=channel_prompts["enable_thinking_question"] if channel_prompts else True,
                 style_hint=style_hint,
                 book_context=book_ctx_map.get(m.get("id")),
+                quality_rule=quality_rule,
             )
 
     # enumerate 从 1 开始：seq=1 用开场白（intro），seq>=2 用过渡词（transition）
@@ -1872,7 +2041,9 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                     constraint_text=channel_prompts["constraint_prompt"] if channel_prompts else None,
                     enable_thinking_question=channel_prompts["enable_thinking_question"] if channel_prompts else True,
                     style_hint=style_hint,
+                    quality_rule=quality_rule,
                 )
+                r = _clean_audiobook_segment_content(r, channel_type)
                 segments.append({**r, "seq": len(segments) + 1})
             except Exception as e:
                 logger.warning("素材 %s 二次改写失败: %s", m["id"], e)
@@ -1899,6 +2070,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                 "error_message": str(r)[:300],
             })
         else:
+            r = _clean_audiobook_segment_content(r, channel_type)
             segments.append({**r, "seq": len(segments) + 1})
 
     if len(segments) < effective_min_segments:
@@ -1995,6 +2167,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                     break
                 try:
                     sup_seg = await _rewrite_one_with_limit(unused_materials[i], i + 1)
+                    sup_seg = _clean_audiobook_segment_content(sup_seg, channel_type)
                     segments.append({**sup_seg, "seq": len(segments) + 1})
                     # 重新组装以更新时长估算
                     assembled = _assemble_script(

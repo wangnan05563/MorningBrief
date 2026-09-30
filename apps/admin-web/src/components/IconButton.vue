@@ -23,6 +23,7 @@
       <el-icon v-if="icon && !loading" class="icon-btn__icon">
         <component :is="icon" />
       </el-icon>
+      <span v-if="inlineText" class="icon-btn__text">{{ inlineText }}</span>
     </el-button>
   </el-tooltip>
   <!-- 无 Tooltip 形态：用于 el-dropdown 触发按钮等已有悬浮语义的场景，避免提示与下拉菜单同时弹出 -->
@@ -43,6 +44,7 @@
     <el-icon v-if="icon && !loading" class="icon-btn__icon">
       <component :is="icon" />
     </el-icon>
+    <span v-if="inlineText" class="icon-btn__text">{{ inlineText }}</span>
   </el-button>
 </template>
 
@@ -67,6 +69,8 @@ const props = defineProps({
   icon: { type: [Object, Function], required: true },
   label: { type: String, required: true },
   desc: { type: String, default: '' },
+  // 图标旁可选内联精简文字：仅需图标+文字同显以区分类似按钮时设置，默认隐藏
+  inlineText: { type: String, default: '' },
   type: { type: String, default: '' },
   size: { type: String, default: 'default' },
   plain: { type: Boolean, default: false },
@@ -95,6 +99,12 @@ function handleClick(e) {
   // 点击反馈动画：缩放 + 轻微旋转，形成「图标切换」的动效观感（T00812）
   .icon-btn__icon {
     transition: transform 0.18s ease;
+  }
+
+  .icon-btn__text {
+    margin-left: 6px;
+    font-size: 13px;
+    line-height: 1;
   }
 
   &:active .icon-btn__icon {

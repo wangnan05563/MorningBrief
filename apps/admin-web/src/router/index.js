@@ -105,6 +105,12 @@ const routes = [
         meta: { title: '讲书稿素材池', icon: 'Collection', group: '内容运营' },
       },
       {
+        path: 'materials',
+        name: 'Materials',
+        component: () => import('../views/channel/CourseMaterials.vue'),
+        meta: { title: '素材录入', icon: 'Files', group: '内容运营' },
+      },
+      {
         path: 'ebooks',
         name: 'BookFinder',
         component: () => import('../views/ebooks/BookFinder.vue'),
@@ -139,6 +145,12 @@ const routes = [
         name: 'AIConfig',
         component: () => import('../views/ai/AIConfig.vue'),
         meta: { title: 'AI 服务', icon: 'Cpu', group: 'AI 自动化', requireRole: 'admin' },
+      },
+      {
+        path: 'ai-qa',
+        name: 'AIQA',
+        component: () => import('../views/ai/KnowledgeQA.vue'),
+        meta: { title: '智能助手', icon: 'MagicStick', group: 'AI 自动化', requireRole: 'admin' },
       },
       {
         path: 'cos-config',

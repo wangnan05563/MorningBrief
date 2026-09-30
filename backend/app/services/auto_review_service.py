@@ -174,6 +174,11 @@ class AutoReviewService:
             # 未执行内容安全检测：视为不安全
             return False, "未执行内容安全检测"
 
+        # T00914 D11：skipped 表示检测未真实执行（微信 API 失败/凭证缺失），
+        # 即使 safe=True 也不能当作"检测通过"放行——否则 40003 类错误会让
+        # 违规内容绕过门禁。保守视为不安全，转人工审核兜底。
+        if content_security.get("skipped"):
+            return False, f"内容安全检测未真实执行（skipped: {content_security.get('error') or '未知原因'}）"
 
         if not content_security.get("safe"):
             # 检测命中违规：明确不安全

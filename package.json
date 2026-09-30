@@ -1,0 +1,6 @@
+{
+    "private":  true,
+    "description":  "MorningBrief - Voice News Broadcast Platform (backend + admin-web + miniprogram + scf)",
+    "name":  "MorningBrief",
+    "version":  "1.0.20260929.001"
+}

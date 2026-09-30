@@ -1,4 +1,4 @@
-"""工作流调度服务：编排 4 个工作流模块的串行执行 + APScheduler 定时任务（LLD 5.1）。
+﻿"""工作流调度服务：编排 4 个工作流模块的串行执行 + APScheduler 定时任务（LLD 5.1）。
 
 职责：
 1. 注册定时任务（每日 05:00 触发、06:00 兜底、06:30 备播检查、播放日志落库、分区维护）
@@ -29,7 +29,7 @@ from app.core.exceptions import ParamError
 from app.core.timeutil import localnow_naive
 from app.database import AsyncSessionLocal
 from app.models import Episode, EpisodeStatus, Review, ReviewStatus, Script, Workflow, WorkflowStep
-from app.models import CrawlerDedup, Material
+from app.models import CrawlerDedup, Material, User
 from app.models.channel import Channel
 from app.models.queue_config import QueueConfig
 from app.models.workflow import (
@@ -1166,9 +1166,24 @@ class WorkflowScheduler:
                     step_record.id, WorkflowStepStatus.failed,
                     retry_count=attempt + 1, error=str(last_error),
                 )
-                break
+                raise
             except Exception as e:
                 last_error = e
+                # 账号级 LLM 错误（余额不足/鉴权失败，T00582）：重试无效，直接判失败。
+                # 如硅基流动 402 余额不足，3 次步骤重试只会把同一个 402 再打 N 遍素材。
+                if getattr(e, "account_level", False):
+                    failed_details = getattr(e, "failure_details", None)
+                    await self._update_step_status(
+                        step_record.id, WorkflowStepStatus.failed,
+                        retry_count=attempt + 1, error=str(e),
+                        result=({"failure_details": failed_details} if failed_details else None),
+                    )
+                    logger.error(
+                        "AI 账号级错误（余额不足/鉴权失败），重试无效，步骤直接失败 "
+                        "workflow_id=%s step=%s attempt=%d: %s",
+                        workflow_id, step_name.value, attempt + 1, e,
+                    )
+                    return
                 await self._update_step_status(
                     step_record.id, WorkflowStepStatus.retrying,
                     retry_count=attempt + 1, error=str(e),
@@ -1280,9 +1295,18 @@ class WorkflowScheduler:
             return
 
         # 调用检测服务（内部已处理所有异常，不会抛出）
+        # msgSecCheck v2 的 openid 必填且必须是真实小程序用户，传非法串会返回
+        # errcode=40003 invalid openid 导致检测整体 skipped（报告 D11 实测）。
+        # 工作流无具体用户，取任一个已注册用户 openid 作为合规入参即可满足校验；
+        # 无用户时留空，check_text 会按"未配置"跳过并告警，不阻断主流程。
         try:
+            async with AsyncSessionLocal() as session:
+                openid = (await session.execute(
+                    select(User.openid).where(User.openid.isnot(None), User.openid != "")
+                    .limit(1)
+                )).scalar_one_or_none()
             from app.services.content_security_service import ContentSecurityService
-            security_result = await ContentSecurityService.check_text(full_text)
+            security_result = await ContentSecurityService.check_text(full_text, openid or "")
         except Exception as e:
             # 防御性兜底：即使 check_text 内部漏处理异常也不影响工作流
             logger.warning(

@@ -78,7 +78,7 @@ def test_load_rss_returns_empty_when_no_file(fresh_service, monkeypatch):
 def test_load_rss_summary_format(fresh_service, mock_resolve_rss_path):
     summary = fresh_service.load_rss_sources_summary()
     assert len(summary) == 2
-    assert set(summary[0].keys()) == {"name", "category_hint", "authority"}
+    assert set(summary[0].keys()) == {"name", "category_hint", "authority", "kind"}
     assert "url" not in summary[0]
 
 

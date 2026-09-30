@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     MorningBrief 图标生成脚本（PNG + ICO）
 .DESCRIPTION

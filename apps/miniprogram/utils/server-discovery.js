@@ -156,7 +156,7 @@ function fetchLanIpsFromBootstrap(bootstrapUrl) {
             const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
             const lanIps = data?.data?.lan_ips;
             if (Array.isArray(lanIps) && lanIps.length > 0) {
-              console.log('[server-discovery] 从引导地址拉取到局域网 IP:', lanIps);
+              console.warn('[server-discovery] 从引导地址拉取到局域网 IP:', lanIps);
               resolve(lanIps);
               return;
             }
@@ -187,17 +187,17 @@ function probeCandidate(url) {
           try {
             const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
             if (res.statusCode === 401) {
-              console.log('[server-discovery] 探测成功(401):', url);
+              console.warn('[server-discovery] 探测成功(401):', url);
               resolve(url);
             } else if (data && typeof data.code === "number" && data.data !== null && typeof data.data === "object") {
-              console.log('[server-discovery] 探测成功:', url, '->', res.statusCode, 'code:', data.code);
+              console.warn('[server-discovery] 探测成功:', url, '->', res.statusCode, 'code:', data.code);
               resolve(url);
             } else {
-              console.log('[server-discovery] 非 API 响应，跳过:', url, 'statusCode:', res.statusCode);
+              console.warn('[server-discovery] 非 API 响应，跳过:', url, 'statusCode:', res.statusCode);
               resolve(null);
             }
           } catch (e) {
-            console.log('[server-discovery] 非 JSON 响应，跳过:', url);
+            console.warn('[server-discovery] 非 JSON 响应，跳过:', url);
             resolve(null);
           }
         } else { resolve(null); }
@@ -297,7 +297,7 @@ async function discoverServer() {
   function add(url) { if (url && !seen.has(url)) { seen.add(url); candidates.push(url); } }
   const devTools = isDevTools();
   const realDeviceDebug = isRealDeviceDebug();
-  console.log('[server-discovery] 运行环境:', devTools ? '开发者工具' : (realDeviceDebug ? '真机调试' : '真机'));
+  console.warn('[server-discovery] 运行环境:', devTools ? '开发者工具' : (realDeviceDebug ? '真机调试' : '真机'));
 
   add(getManualBaseUrl());
   add(getLastSuccessBaseUrl());
@@ -307,7 +307,7 @@ async function discoverServer() {
     add(`http://localhost:${DEFAULT_PORT}${API_PREFIX}`);
   }
   const deviceIP = await getLocalIPAddress();
-  console.log('[server-discovery] 设备局域网 IP:', deviceIP || '(获取失败)');
+  console.warn('[server-discovery] 设备局域网 IP:', deviceIP || '(获取失败)');
   // 真机调试模式下 getLocalIPAddress 失败时给出明确的诊断提示
   // 这是真机调试网络异常的最常见根因：无法推断局域网候选，只剩 Tailscale 兜底
   if (realDeviceDebug && !deviceIP) {
@@ -337,11 +337,11 @@ async function discoverServer() {
         add(`http://${ip}:${DEFAULT_PORT}${API_PREFIX}`);
         add(`http://${ip}:8080${API_PREFIX}`);
       });
-      console.log('[server-discovery] 从引导地址拉取到局域网 IP，已加入候选:', lanIps);
+      console.warn('[server-discovery] 从引导地址拉取到局域网 IP，已加入候选:', lanIps);
     }
   }
 
-  console.log(`[server-discovery] 候选地址 ${candidates.length} 个:`, candidates);
+  console.warn(`[server-discovery] 候选地址 ${candidates.length} 个:`, candidates);
   if (candidates.length === 0) {
     const fallback = `http://127.0.0.1:${DEFAULT_PORT}${API_PREFIX}`;
     console.warn('[server-discovery] 无候选地址，使用兜底:', fallback);
@@ -349,7 +349,7 @@ async function discoverServer() {
   }
   const discovered = await raceFirstSuccess(candidates, DISCOVER_TOTAL_TIMEOUT_MS);
   if (discovered) {
-    console.log('[server-discovery] 发现后端地址:', discovered);
+    console.warn('[server-discovery] 发现后端地址:', discovered);
     setLastSuccessBaseUrl(discovered);
     return discovered;
   }
@@ -370,10 +370,10 @@ async function discoverServer() {
   console.warn('[server-discovery] 开发模式下自动发现失败，弹窗引导用户手动输入');
   const userInput = await promptManualInput(realDeviceDebug);
   if (userInput && isValidBaseUrl(userInput)) {
-    console.log('[server-discovery] 用户手动输入有效:', userInput);
+    console.warn('[server-discovery] 用户手动输入有效:', userInput);
     const probed = await probeCandidate(userInput);
     if (probed) {
-      console.log('[server-discovery] 用户输入地址探测成功:', userInput);
+      console.warn('[server-discovery] 用户输入地址探测成功:', userInput);
       wx.removeStorageSync(STORAGE_KEY_MANUAL);
       setLastSuccessBaseUrl(userInput);
       return userInput;
@@ -406,7 +406,7 @@ function promptManualInput(realDeviceDebug) {
       cancelText: '用兜底',
       success: (res) => {
         if (!res.confirm) {
-          console.log('[server-discovery] 用户取消手动输入，将使用兜底');
+          console.warn('[server-discovery] 用户取消手动输入，将使用兜底');
           resolve(null);
           return;
         }

@@ -72,12 +72,17 @@ async def run_ffmpeg(cmd: list[str]) -> None:
         )
 
 
-async def get_audio_duration(file_path: str) -> int:
-    """用 ffprobe 探测音频时长(秒),返回整数。
+async def get_audio_duration_f(file_path: str) -> float:
+    """用 ffprobe 探测音频时长,返回浮点秒(精确值)。
+
+    为什么需要浮点版本:BGM 叠加轨按分段时长切片,若用整数秒(取整)会与
+    主音频的实际分段时长产生每段最多 1s 的偏差,且逐段累积——叠加轨相对
+    主音频漂移,表现为段边界(音色切换点)处 BGM 空白后突然跳回。
+    BGM 切片必须用与主音频一致的精确时长。
 
     ffprobe 是同步阻塞调用,用 asyncio.to_thread 包装避免阻塞事件循环。
     """
-    def _probe() -> int:
+    def _probe() -> float:
         cmd = [
             resolve_ffprobe_path(), "-v", "error",
             "-show_entries", "format=duration",
@@ -87,9 +92,18 @@ async def get_audio_duration(file_path: str) -> int:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode != 0:
             raise StitchError(f"ffprobe 探测失败: {result.stderr[-500:]}")
-        return int(float(result.stdout.strip()))
+        return float(result.stdout.strip())
 
     return await asyncio.to_thread(_probe)
+
+
+async def get_audio_duration(file_path: str) -> int:
+    """用 ffprobe 探测音频时长(秒),返回整数。
+
+    供时长校验/循环长度等"整秒足够"的场景使用;
+    BGM 分段切片对齐必须用 get_audio_duration_f(浮点)。
+    """
+    return int(await get_audio_duration_f(file_path))
 
 
 async def download_file(url: str, dest_path: str) -> None:
@@ -192,6 +206,71 @@ def build_full_concat_cmd(inputs: list[str], output_path: str) -> list[str]:
     ]
 
 
+def build_crossfade_cmd(
+    input_paths: list[str],
+    crossfade_sec: float,
+    output_path: str,
+) -> list[str]:
+    """构造分段「交叉淡化」拼接命令（消除段间空档，双人播报切换丝滑）。
+
+    与 build_concat_cmd 的本质区别：
+    - concat demuxer 是首尾硬接，段间必须插入静音 gap 才能避免爆音，听感上就是
+      「播报人切换处有短暂空档」——双人（交叉音色）播报时尤其明显；
+    - acrossfade 让相邻两段在 crossfade_sec 内重叠并交叉淡化，段间不存在静音空档，
+      且两个不同音色不会硬切产生「啪」的断裂声。
+
+    实现要点：
+    - N 段需要 N-1 次 acrossfade，链式串接（[0][1]→[a1]，[a1][2]→[a2] …）；
+    - 所有输入一次性 -i 传入，只重编码一次，避免多轮转码累积质量损失；
+    - 交叉淡化会让相邻段重叠，总时长比朴素相加短 (N-1)×crossfade_sec，
+      调用方做时长校验/预估时需按此扣减；
+    - 单段（N==1）无需交叉淡化，直接重编码统一音频参数即可。
+
+    Args:
+        input_paths: 按播放顺序排列的分段音频路径（至少 1 个）
+        crossfade_sec: 交叉淡化时长（秒），必须小于最短分段时长
+        output_path: 输出主音频路径
+
+    Raises:
+        StitchError: 输入为空
+    """
+    n = len(input_paths)
+    if n == 0:
+        raise StitchError("交叉淡化拼接需要至少 1 段输入")
+    if n == 1:
+        return [
+            resolve_ffmpeg_path(), "-y", "-i", input_paths[0],
+            "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
+            "-ar", "44100", "-ac", "1",
+            output_path,
+        ]
+
+    input_args: list[str] = []
+    for p in input_paths:
+        input_args.extend(["-i", p])
+
+    # 链式 acrossfade：prev 为上一级输出标签，最后一级落到 [out]
+    # c1/c2=tri 为三角形曲线，交叉点两侧能量和恒定，是语音衔接最稳的选择
+    d = max(0.01, float(crossfade_sec))
+    chain: list[str] = []
+    for i in range(1, n):
+        prev = "[0:a]" if i == 1 else f"[a{i - 1}]"
+        out_label = _FFMPEG_OUT_LABEL if i == n - 1 else f"[a{i}]"
+        chain.append(
+            f"{prev}[{i}:a]acrossfade=d={d:.3f}:c1=tri:c2=tri{out_label}"
+        )
+
+    return [
+        resolve_ffmpeg_path(), "-y",
+        *input_args,
+        "-filter_complex", ";".join(chain),
+        "-map", _FFMPEG_OUT_LABEL,
+        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
+        "-ar", "44100", "-ac", "1",
+        output_path,
+    ]
+
+
 async def generate_silence(duration_sec: float, output_path: str) -> None:
     """生成指定时长的静音 mp3 文件。
 
@@ -227,30 +306,67 @@ async def build_bgm_overlay(
     - 段间静音处直接复用 gap_path（纯静音）
     最终叠加轨与主音频 amix，段间即真实停顿，使"段间静音"可被听觉感知。
 
+    实现关键（两个实测过的 ffmpeg 坑，都会让 BGM「消失／错位」）：
+    1. 先把 BGM 循环成**一条足够长的实体源文件**，再对源做输入侧 seek 切片。
+       直接在切片命令里用 `-stream_loop -1` 是不可行的：
+       - `-ss` 放 `-i` 前（输入侧）时输出侧 `-t` 被忽略，实测请求 2.5s 产出 4.496s，
+         切片逐段变长，叠加轨与主音频彻底错位；
+       - `-ss` 放 `-i` 后（输出侧）时，seek 偏移超出「剩余循环内容」会产出整段静音，
+         实测 start=3.0 / 源长 4.0 / dur=2.5 的切片音量 -91dB（BGM 整段消失）。
+    2. 循环源长度取 `BGM 长度 + 最长分段 + 1s`：切片偏移已按 BGM 长度取模（< 源长），
+       再加最长分段即可保证任意切片都能取满，不会读越过文件尾。
+
     Args:
         bgm_path: BGM 文件绝对路径
-        seg_durations: 各 TTS 分段时长（秒），用于切片长度与连续偏移
+        seg_durations: 各 TTS 分段时长（秒，浮点），用于切片长度与连续偏移。
+            必须传主音频实际分段时长（拼接前 ffprobe 实测），而非 TTS 上报的
+            整数秒——整数取整会导致切片与主音频逐段错位，段边界（音色切换点）
+            处 BGM 空白后跳回。
         gap_path: 段间静音文件（generate_silence 产物），直接复用为叠加轨的静音段
         volume: BGM 音量（0.0-1.0）
         output_path: 叠加轨输出路径
         tmp_dir: 临时目录（切片文件写入此处，随主流程统一清理）
     """
-    bgm_len = await get_audio_duration(bgm_path)
+    bgm_len = await get_audio_duration_f(bgm_path)
     parts: list[str] = []
     offset = 0.0
     n = len(seg_durations)
-    for i, dur in enumerate(seg_durations):
-        dur = float(dur)
+    durs = [float(d) for d in seg_durations]
+
+    # 预循环：生成一条长度足够的 BGM 源，后续所有切片都在它上面做输入侧 seek
+    max_dur = max(durs) if durs else 0.0
+    needed = (bgm_len if bgm_len > 0 else max_dur) + max_dur + 1.0
+    looped_src = str(Path(tmp_dir) / "bgm_looped_src.mp3")
+    await run_ffmpeg([
+        resolve_ffmpeg_path(), "-y",
+        "-stream_loop", "-1", "-i", bgm_path,
+        "-t", f"{needed:.3f}",
+        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
+        "-ar", "44100", "-ac", "1",
+        looped_src,
+    ])
+
+    for i, dur in enumerate(durs):
         slice_path = str(Path(tmp_dir) / f"bgm_slice_{i}.mp3")
-        # 连续偏移取模 BGM 长度，配合 -stream_loop -1 跨循环 seek，保证 BGM 连续不跳变
+        # 连续偏移取模 BGM 长度，保证 BGM 在整期节目里连续推进、循环处不跳变
         start = offset % bgm_len if bgm_len > 0 else 0.0
+        # 每个切片加淡入/淡出，避免段边界处 BGM 被硬切产生"啪"的断裂感：
+        # - 淡入 0.08s 消除切片起点的爆音
+        # - 淡出 0.3s 让 BGM 在段间停顿前自然收束（而非戛然而止）
+        fade_in_d = min(0.08, dur / 4)
+        fade_out_d = min(0.3, dur / 4)
+        fade_out_st = max(0.0, dur - fade_out_d)
+        filter_chain = (
+            f"volume={volume},"
+            f"afade=t=in:st=0:d={fade_in_d:.3f},"
+            f"afade=t=out:st={fade_out_st:.3f}:d={fade_out_d:.3f}"
+        )
         cmd = [
             resolve_ffmpeg_path(), "-y",
-            "-stream_loop", "-1",
             "-ss", f"{start:.3f}",
-            "-i", bgm_path,
+            "-i", looped_src,
             "-t", f"{dur:.3f}",
-            "-af", f"volume={volume}",
+            "-af", filter_chain,
             "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
             "-ar", "44100", "-ac", "1",
             slice_path,
@@ -282,12 +398,56 @@ async def build_bgm_bridge(
         "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
         "-ar", "44100", "-ac", "1", bgm_looped,
     ])
-    await run_ffmpeg([
+    await run_ffmpeg(build_amix_cmd(main_path, bgm_looped, output_path))
+
+
+def build_amix_cmd(
+    main_path: str, overlay_path: str, output_path: str,
+) -> list[str]:
+    """构造「主音频 + 叠加轨」混音命令。
+
+    抽为公共函数的原因：无 BGM 段间静音模式、BGM 桥接模式、BGM 连续模式
+    三处都需要同一套 amix 参数，重复字面量既易写错也触发 S1192。
+    duration=first 以主音频长度为准，叠加轨更长时自动截断。
+    """
+    return [
         resolve_ffmpeg_path(), "-y",
-        "-i", main_path, "-i", bgm_looped,
+        "-i", main_path, "-i", overlay_path,
         "-filter_complex", "amix=inputs=2:duration=first",
         "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-        "-ar", "44100", "-ac", "1", output_path,
+        "-ar", "44100", "-ac", "1",
+        output_path,
+    ]
+
+
+async def build_bgm_continuous(
+    bgm_path: str, total_dur: float, volume: float, output_path: str,
+) -> None:
+    """生成「铺满整期节目」的连续 BGM 叠加轨（段间不中断）。
+
+    与 build_bgm_overlay（按段切片 + 段间插静音）的本质区别：
+    - 按段切片会在每个段边界处各自编码并加淡入/淡出，听感上 BGM 在每次播报人切换点
+      「断一下再回来」（用户反馈：双人播报切换时 bgm 会中断）；
+    - 本函数只生成一条连续 BGM 流（-stream_loop -1 循环铺满目标时长），
+      整期节目 BGM 一次不断，配合主音频的段间交叉淡化即为「切换丝滑」。
+
+    只编码一次 BGM，随后交给 amix 与主音频混合，音量由 volume 控制。
+
+    Args:
+        bgm_path: BGM 文件绝对路径
+        total_dur: 目标时长（秒），应传主音频实际时长
+        volume: BGM 音量（0.0-1.0）
+        output_path: 叠加轨输出路径
+    """
+    await run_ffmpeg([
+        resolve_ffmpeg_path(), "-y",
+        "-stream_loop", "-1",
+        "-i", bgm_path,
+        "-t", f"{float(total_dur):.3f}",
+        "-af", f"volume={volume}",
+        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
+        "-ar", "44100", "-ac", "1",
+        output_path,
     ])
 
 

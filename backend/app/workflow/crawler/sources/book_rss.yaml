@@ -1,0 +1,87 @@
+# 书籍 RSS 预制源（面向有声读物 / audiobook 频道）
+#
+# 与 rss.yaml 完全同构，但仅由 crawler 对 channel_type=audiobook 的频道加载。
+# 条目即「书 / 章 / 书评」，建议源站提供 author / book 等元数据（article_parser 会尽力提取）。
+#
+# 这是一份「预制选择源」清单：运营在频道配置页从下方 name 中多选即可，
+# 无需改动代码。请按需增删条目（URL 失效的源 crawler 会优雅跳过并告警）。
+#
+# 字段说明：
+#   name          源名称（频道配置页下拉展示，必填且唯一；**已配置频道按 name 引用，不要改名**）
+#   url           RSS / Atom feed 地址（必填）
+#   authority     权威度 0~1（用于 AI 选题打分，可选，默认 0.5）
+#   category_hint 品类提示（如 书评 / 新书 / 古籍，可选）
+#   qps           单源抓取限速（预留，当前未实现限速，默认 1）
+#
+# 可用性维护（T00581，2026-09-14 全量探针复验）：
+#   - 所有 url 均以 requests + feedparser（与 crawler 同链路）实测 200 且 entries>0；
+#   - 看理想官方域名（vistopia.com.tw / .com.cn）均已失效，改用公众号镜像（anyfeeder）；
+#   - 豆瓣「新书速递」feed（/feed/latest）已 404 且无替代，条目移除；
+#   - URL 失效时优先「换镜像保 name」，确无替代再删条目（避免已配置频道引用悬空）。
+sources:
+- name: 豆瓣读书-最新书评
+  url: https://www.douban.com/feed/review/book
+  authority: 0.85
+  category_hint: 书评
+  qps: 1
+- name: 书格-古籍善本
+  url: https://new.shuge.org/feed/
+  authority: 0.8
+  category_hint: 古籍
+  qps: 1
+- name: Kindle伴侣-电子书资讯
+  url: https://bookfere.com/feed
+  authority: 0.78
+  category_hint: 电子书
+  qps: 1
+- name: 看理想-人文谈话
+  # 官方域名已失效（.com.tw SSL 错误 / .com.cn 404），改用公众号镜像（anyfeeder）
+  url: https://plink.anyfeeder.com/weixin/ikanlixiang
+  authority: 0.78
+  category_hint: 人文
+  qps: 1
+- name: 机核-游戏文化播客
+  url: https://www.gcores.com/rss
+  authority: 0.8
+  category_hint: 游戏文化
+  qps: 1
+- name: 新京报书评周刊
+  # 顶级书评媒体（公众号镜像）：文学/社科/历史/艺术，每周更新
+  url: https://plink.anyfeeder.com/weixin/ibookreview
+  authority: 0.9
+  category_hint: 书评
+  qps: 1
+- name: 上海书评
+  # 《东方早报·上海书评》书评重镇（feedx 镜像）
+  url: https://feedx.net/rss/shanghaishuping.xml
+  authority: 0.85
+  category_hint: 书评
+  qps: 1
+- name: 单读
+  # 单读（上海理想国）人文阅读与长文（公众号镜像）
+  url: https://plink.anyfeeder.com/weixin/dandureading
+  authority: 0.75
+  category_hint: 人文阅读
+  qps: 1
+- name: LibriVox-最新有声书
+  # 公有领域有声书（英文），与 audiobook 频道形态最契合；条目为英文，AI 改写时需转中文
+  url: https://librivox.org/rss/latest_releases
+  authority: 0.7
+  category_hint: 有声书
+  qps: 1
+# 已验证可用、暂未启用的候选（探针实测 200 且有条目；需要时取消注释即可）：
+# - name: 卫报-书评
+#   url: https://www.theguardian.com/books/rss
+#   authority: 0.75
+#   category_hint: 书评
+#   qps: 1
+# - name: LitHub-文学城
+#   url: https://lithub.com/feed/
+#   authority: 0.7
+#   category_hint: 书评
+#   qps: 1
+global:
+  timeout_sec: 30
+  retry: 2
+  user_agent: MorningBriefBot/1.0
+  respect_robots_txt: true

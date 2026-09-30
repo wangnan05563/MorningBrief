@@ -85,7 +85,8 @@ function applyHighlight() {
   }
   target.classList.add('mb-guide-highlight')
   highlightEl = target
-  target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  // 即时定位目标到视口中央，避免 smooth 滚动过程中 rect 处于过渡态导致气泡错位/靠边
+  target.scrollIntoView({ block: 'center', behavior: 'auto' })
   nextTick(() => layoutBubble(target))
 }
 
@@ -93,17 +94,29 @@ function layoutBubble(target) {
   const bubble = bubbleEl.value
   if (!bubble) return
   const rect = target.getBoundingClientRect()
+  const vh = window.innerHeight
   const bh = bubble.offsetHeight || 160
-  let top = rect.bottom + GAP
-  let dir = 'bottom'
-  if (top + bh > window.innerHeight - 16) {
+  const left = Math.min(Math.max(16, rect.left + rect.width / 2 - BUBBLE_W / 2), window.innerWidth - BUBBLE_W - 16)
+  bubble.style.left = `${left}px`
+
+  // 优先目标下方；下方放不下翻上方；两者空间都不足（如目标横向铺满视口）则垂直居中兜底。
+  // 兜底分支配合气泡 max-height+内部滚动，保证内容与操作按钮绝不超出视口、始终可点。
+  const margin = 16
+  const spaceBelow = vh - margin - rect.bottom - GAP
+  const spaceAbove = rect.top - margin - GAP
+  let top
+  let dir
+  if (spaceBelow >= bh) {
+    top = rect.bottom + GAP
+    dir = 'bottom'
+  } else if (spaceAbove >= bh) {
     top = rect.top - GAP - bh
     dir = 'top'
-    if (top < 16) top = 16 // 目标本身贴近视口上下边缘时兜底，避免气泡出界
+  } else {
+    top = Math.max(margin, Math.round((vh - bh) / 2))
+    dir = 'center'
   }
-  const left = Math.min(Math.max(16, rect.left + rect.width / 2 - BUBBLE_W / 2), window.innerWidth - BUBBLE_W - 16)
   place.value = dir
-  bubble.style.left = `${left}px`
   bubble.style.top = `${top}px`
 }
 
@@ -166,6 +179,10 @@ onBeforeUnmount(() => {
   color: #1f2937;
   font-size: 13px;
   box-sizing: border-box;
+  /* 限高 + 内部滚动：目标贴近视口边缘或内容较多时，气泡也绝不超出视口，
+     保证「上一步 / 下一步 / 完成」等操作按钮始终可点（T00863 修复引导第二步被截断） */
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
 }
 .mb-guide-close {
   position: absolute;

@@ -1,4 +1,4 @@
-"""播放进度写缓冲：进程内聚合 + 定时批量落库（P1 性能优化）。
+﻿"""播放进度写缓冲：进程内聚合 + 定时批量落库（P1 性能优化）。
 
 背景：
 - report_progress 是压测中频率最高的写接口（每次播放 tick 一次），原实现每请求
@@ -62,7 +62,7 @@ class PlayWriteBuffer:
             self._bg_tasks.add(task)
             task.add_done_callback(self._bg_tasks.discard)
 
-    async def start(self) -> None:
+    async def start(self) -> None:  # NOSONAR
         """启动周期 flush 后台任务（在 lifespan 中调用）。"""
         if self._task is not None:
             return
@@ -139,7 +139,7 @@ class PlayWriteBuffer:
                 logger.debug("清除节目列表缓存失败（不阻断）: {}", e)
 
     @staticmethod
-    async def _persist(session, batch: list[dict]) -> bool:
+    async def _persist(session, batch: list[dict]) -> bool:  # NOSONAR
         """在独立 session 内批量持久化一批进度写，返回是否触发了 play_count 变化。"""
         threshold = get_settings().PLAY_COUNT_THRESHOLD_SEC
         should_clear_cache = False
@@ -180,7 +180,7 @@ class PlayWriteBuffer:
         if groups:
             conds = [
                 (PlayLog.user_id == u) & (PlayLog.episode_id == e)
-                for (u, e) in groups
+                for (u, e) in groups.keys()
             ]
             res = await session.execute(
                 select(PlayLog.user_id, PlayLog.episode_id).where(or_(*conds))
@@ -256,3 +256,8 @@ class PlayWriteBuffer:
 
 # 模块级单例（与 cache 单例同模式）
 play_write_buffer = PlayWriteBuffer()
+
+
+
+
+

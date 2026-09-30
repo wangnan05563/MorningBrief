@@ -2,21 +2,35 @@
 .SYNOPSIS
     MorningBrief 服务启动脚本（V1.2 单机 exe / 开发模式）
 .DESCRIPTION
-    智能启动 MorningBrief 后端服务：
+    智能启动 MorningBrief 后端服务，并在确认全部依赖就绪后自动打开系统登录页面：
     1. 优先启动开发模式（.venv + backend\launcher.py）
     2. 回退到系统 python 开发模式
-    3. 最后回退到已构建的 exe（release\dist\MorningBrief\MorningBrief.exe）
-    启动后写入 PID 到 .run\MorningBrief.pid，供 stop.ps1 使用。
+    3. 最后回退到已构建的 exe（release\MorningBrief\MorningBrief.exe）
+
+    启动成功判定（全部满足才视为就绪，否则不打开登录页）：
+      - 服务进程已启动且存活（未中途崩溃）
+      - 监听端口已开放且 /api/health 返回 200
+      - 系统登录页面（前端 SPA /login）可访问（200，间接校验前端已构建）
+    仅当上述全部就绪时，才自动调用默认浏览器打开登录页面；
+    若任一阶段失败或超时，则不打开页面并给出明确错误提示与日志。
+    启动成功后写入 PID 到 .run\MorningBrief.pid，供 stop.ps1 使用。
 .PARAMETER Dev
     强制开发模式（venv 优先，回退系统 python），忽略 exe。
 .PARAMETER Exe
-    强制 exe 模式（要求 release\dist\MorningBrief\MorningBrief.exe 存在）。
+    强制 exe 模式（要求 release\MorningBrief\MorningBrief.exe 存在）。
+.PARAMETER NoOpen
+    启动成功后不自动打开浏览器，仅打印登录地址（适用于服务器 / CI / 无桌面会话）。
+.PARAMETER Timeout
+    等待服务就绪的最大秒数（默认 30）。
 .EXAMPLE
     .\start.ps1
-    自动选择模式（优先 venv → 系统 python → exe）。
+    自动选择模式并在启动成功后自动打开登录页面。
 .EXAMPLE
     .\start.ps1 -Dev
     强制开发模式。
+.EXAMPLE
+    .\start.ps1 -NoOpen
+    启动但不自动打开浏览器。
 .NOTES
     适用：Windows 10/11 x64，PowerShell 5.1+
 #>
@@ -25,7 +39,12 @@
 [CmdletBinding()]
 param(
     [switch]$Dev,
-    [switch]$Exe
+    [switch]$Exe,
+    [switch]$NoOpen,
+    # 默认等待 120 秒：开发模式 venv 冷启动时 Python 解释器加载模块约需 30-50 秒，
+    # 加上 uvicorn 初始化（FTS5 索引迁移、调度器启动等），实测首启约 54 秒。
+    # 30 秒默认值过短会导致「服务实际已成功却误报失败」。仍可用 -Timeout 覆盖。
+    [int]$Timeout = 120
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,11 +56,142 @@ function Write-Warn  { param([string]$Message) Write-Host "$StepPrefix   [WARN] 
 function Write-Err   { param([string]$Message) Write-Host "$StepPrefix   [FAIL] $Message" -ForegroundColor Red }
 
 # ============================================================
+# 就绪判定与副作用辅助函数
+# ============================================================
+
+<#
+.SYNOPSIS
+    轮询等待服务就绪（端口监听 + /api/health 返回 200）。
+.DESCRIPTION
+    每轮先检查服务进程是否已崩溃（提前失败），再用 netstat 确认端口监听，
+    最后请求健康检查接口。全部通过返回 $true，超时返回 $false。
+    期间会把实际监听端口的进程 PID 回写到 $Script:ServicePid。
+#>
+function Wait-ServiceReady {
+    param(
+        [string]$Host_,
+        [int]$Port,
+        [string]$HealthUrl,
+        [int]$TimeoutSec
+    )
+    $ready = $false
+    for ($i = 1; $i -le $TimeoutSec; $i++) {
+        # 进程已退出：无需继续等待，交由外层判定失败
+        if ($Script:ServiceProc -and $Script:ServiceProc.HasExited) {
+            Write-Host "x" -NoNewline -ForegroundColor Red
+            Write-Host ""
+            break
+        }
+        # 端口监听扫描（netstat 在 Stop 模式下仍安全：成功退出码为 0，且已重定向 stderr）
+        $netstatLine = netstat -aon 2>$null | Select-String ":$Port.*LISTENING" | Select-Object -First 1
+        if ($netstatLine -and $netstatLine -match '\s+(\d+)\s*$') {
+            $Script:ServicePid = [int]$Matches[1]
+            try {
+                $resp = Invoke-WebRequest -Uri $HealthUrl -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+                if ($resp.StatusCode -eq 200) {
+                    $ready = $true
+                    break
+                }
+            } catch {
+                Write-Host "." -NoNewline -ForegroundColor DarkGray
+            }
+        } else {
+            Write-Host "." -NoNewline -ForegroundColor DarkGray
+        }
+        Start-Sleep -Seconds 1
+    }
+    Write-Host ""
+    return $ready
+}
+
+<#
+.SYNOPSIS
+    校验系统登录页面（前端 SPA）是否可访问。
+.DESCRIPTION
+    GET /login 返回 200 表示后端已正确托管前端；若前端未构建，
+    该路由会 404，从而暴露「前端依赖缺失」这一就绪失败原因。
+#>
+function Test-LoginPage {
+    param(
+        [string]$Url,
+        [int]$TimeoutSec = 3
+    )
+    try {
+        $resp = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec $TimeoutSec -ErrorAction Stop
+        return ($resp.StatusCode -eq 200)
+    } catch {
+        return $false
+    }
+}
+
+<#
+.SYNOPSIS
+    自动打开系统登录页面（默认浏览器）。
+.DESCRIPTION
+    仅交互式桌面会话才弹出默认浏览器（避免无桌面 / 服务会话下误调用）。
+    失败时不阻断启动流程，仅提示手动地址。
+#>
+function Open-LoginPage {
+    param([string]$Url)
+    if (-not [Environment]::UserInteractive) {
+        Write-Warn "当前为非交互式会话，跳过自动打开浏览器；请手动访问: $Url"
+        return
+    }
+    try {
+        # Start-Process 对 http(s) URL 调用系统默认浏览器 = 桌面登录窗口
+        Start-Process $Url
+        Write-OK "已自动打开系统登录页面（默认浏览器）"
+    } catch {
+        Write-Warn "无法自动打开浏览器: $_"
+        Write-Host "  请手动访问: $Url" -ForegroundColor Cyan
+    }
+}
+
+<#
+.SYNOPSIS
+    启动失败时打印关键日志与排查建议。
+#>
+function Show-StartupFailure {
+    param(
+        [string]$ErrLog,
+        [string]$StartupLog
+    )
+    Write-Host ""
+    Write-Host "  启动日志（末尾 20 行）:" -ForegroundColor Yellow
+    if (Test-Path $StartupLog) {
+        Get-Content $StartupLog -Tail 20 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+    } else {
+        Write-Host "    （无启动日志）" -ForegroundColor DarkGray
+    }
+    Write-Host "  错误日志（末尾 20 行）:" -ForegroundColor Yellow
+    if (Test-Path $ErrLog) {
+        Get-Content $ErrLog -Tail 20 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+    } else {
+        Write-Host "    （无错误日志）" -ForegroundColor DarkGray
+    }
+    Write-Host ""
+    Write-Host "  排查建议:" -ForegroundColor Yellow
+    Write-Host "    1. 确认 backend\.env（或 exe 同目录 .env）中 APP_PORT / APP_HOST 配置正确" -ForegroundColor Gray
+    Write-Host "    2. 开发模式需 venv 安装依赖：backend\.venv\Scripts\pip install -r backend\requirements.txt" -ForegroundColor Gray
+    Write-Host "    3. 手动验证健康检查: $healthUrl" -ForegroundColor Gray
+}
+
+<#
+.SYNOPSIS
+    清理 PID 文件（启动失败时不应残留「运行中」标记）。
+#>
+function Clear-PidFile {
+    if (Test-Path $PidFile) {
+        Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# ============================================================
 # 路径常量
 # ============================================================
 
 $Script:ProjectRoot = (Resolve-Path "$PSScriptRoot\..").Path
-$Script:ExePath     = Join-Path $ProjectRoot "release\dist\MorningBrief\MorningBrief.exe"
+$Script:ExePath     = Join-Path $ProjectRoot "release\MorningBrief\MorningBrief.exe"
 # 支持多种常见 venv 目录名（.venv / .venv-build / venv），按优先级取第一个存在的
 # 原因：项目构建环境可能使用 .venv-build 而非标准 .venv，避免回退到缺依赖的系统 Python
 $Script:VenvPython  = $null
@@ -60,6 +210,10 @@ if ($sysPyCmd) { $Script:SystemPython = $sysPyCmd.Source }
 $Script:RunDir      = Join-Path $ProjectRoot ".run"
 $Script:PidFile     = Join-Path $RunDir "MorningBrief.pid"
 $Script:LogFile     = Join-Path $ProjectRoot "runtime\logs\service-start.log"
+
+# 服务进程句柄与 PID（就绪判定与 stop.ps1 共用）
+$Script:ServiceProc = $null
+$Script:ServicePid  = $null
 
 # ============================================================
 # 模式选择
@@ -143,7 +297,7 @@ if ($mode -eq "exe") {
 # 检查是否已有实例运行
 # ============================================================
 
-Write-Step "[1/3] 检查现有实例"
+Write-Step "[1/4] 检查现有实例"
 
 if (Test-Path $PidFile) {
     $oldPid = Get-Content $PidFile -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -181,7 +335,7 @@ Write-OK "无冲突实例"
 # 准备运行时目录
 # ============================================================
 
-Write-Step "[2/3] 准备运行时目录"
+Write-Step "[2/4] 准备运行时目录"
 
 # .run 目录存放 PID 文件（不入库）
 if (-not (Test-Path $RunDir)) {
@@ -201,7 +355,7 @@ Write-OK "目录就绪"
 # 启动服务
 # ============================================================
 
-Write-Step "[3/3] 启动服务进程"
+Write-Step "[3/4] 启动服务进程"
 
 # 直接启动服务进程（不通过 cmd /c 包装）
 # 原因：cmd /c 遇到多个引号对会剥离首尾引号，导致命令损坏、exe 从未启动
@@ -234,7 +388,8 @@ try {
 
     # $proc.Id 是真正的服务进程 PID
     # 健康检查循环中的 netstat 仍用于确认端口实际监听（服务就绪判据）
-    $servicePid = $proc.Id
+    $Script:ServicePid  = $proc.Id
+    $Script:ServiceProc = $proc
     Write-OK "服务已在后台启动（日志输出至 logs/service-start.log）"
 } catch {
     Write-Err "启动失败: $_"
@@ -242,15 +397,14 @@ try {
 }
 
 # ============================================================
-# 等待健康检查
+# [4/4] 等待并校验服务就绪
 # ============================================================
 
-Write-Host ""
-Write-Host "  等待服务就绪（最多 30 秒）..." -ForegroundColor Cyan
+Write-Step "[4/4] 等待并校验服务就绪"
 
+# 从 .env 解析监听地址与端口（健康检查与登录页均基于此）
 $host_ = "127.0.0.1"
 $port = 8000
-# 从 .env 读取端口（如有）
 $envFile = Join-Path $ProjectRoot "backend\.env"
 if ($mode -eq "exe") { $envFile = Join-Path (Split-Path $ExePath) ".env" }
 if (Test-Path $envFile) {
@@ -266,58 +420,85 @@ if (Test-Path $envFile) {
 }
 
 $healthUrl = "http://${host_}:${port}/api/health"
-$ready = $false
+$loginUrl  = "http://${host_}:${port}/login"
 
-for ($i = 1; $i -le 30; $i++) {
-    Start-Sleep -Seconds 1
-    # 通过端口扫描确认服务已监听，再发健康检查请求
-    # $servicePid 已从 Start-Process -PassThru 获取，netstat 仅用于端口就绪验证
-    $netstatLine = netstat -aon | Select-String ":$port.*LISTENING" | Select-Object -First 1
-    if ($netstatLine -and $netstatLine -match '\s+(\d+)\s*$') {
-        $servicePid = [int]$Matches[1]
-        try {
-            $resp = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
-            if ($resp.StatusCode -eq 200) {
-                $ready = $true
-                break
-            }
-        } catch {
-            Write-Host "." -NoNewline -ForegroundColor DarkGray
-        }
-    } else {
-        Write-Host "." -NoNewline -ForegroundColor DarkGray
+Write-Host "  健康检查: $healthUrl" -ForegroundColor DarkGray
+Write-Host "  登录页面: $loginUrl" -ForegroundColor DarkGray
+Write-Host "  最多等待 $Timeout 秒..." -ForegroundColor Cyan
+Write-Host ""
+
+# 阶段一：端口监听 + 后端健康检查
+$ready = Wait-ServiceReady -Host_ $host_ -Port $port -HealthUrl $healthUrl -TimeoutSec $Timeout
+
+# 阶段二：进程存活校验（防止启动后崩溃）
+$processAlive = $false
+if ($Script:ServicePid) {
+    $p = Get-Process -Id $Script:ServicePid -ErrorAction SilentlyContinue
+    $processAlive = ($null -ne $p) -and (-not $p.HasExited)
+}
+
+if (-not $ready -or -not $processAlive) {
+    # ---- 启动失败：不打开登录页，给出明确提示与日志 ----
+    if ($Script:ServicePid -and -not $processAlive) {
+        Write-Err "服务进程在启动后异常退出（PID=$Script:ServicePid），请检查下方日志"
+    } elseif (-not $ready) {
+        Write-Err "服务在 $Timeout 秒内未通过健康检查（端口未监听或接口异常）"
     }
+    Show-StartupFailure -ErrLog $errLogFile -StartupLog $LogFile
+    Clear-PidFile
+    Write-Host ""
+    exit 1
 }
+
+# 阶段三：系统登录页面（前端 SPA）就绪校验
+# 同时验证「前端已构建」这一依赖，避免打开一个不存在的页面
+Write-Step "校验系统登录页面可访问性"
+if (-not (Test-LoginPage -Url $loginUrl)) {
+    Write-Err "后端已就绪，但系统登录页面（前端）未返回 200"
+    Write-Host "  可能前端未构建；请运行 scripts\前端构建.bat 后重试" -ForegroundColor Gray
+    Write-Host "  手动验证: $loginUrl" -ForegroundColor Gray
+    Clear-PidFile
+    Write-Host ""
+    exit 1
+}
+Write-OK "登录页面可访问: $loginUrl"
+
+# ============================================================
+# 写入 PID 并展示结果
+# ============================================================
+
+if ($Script:ServicePid) {
+    Set-Content -Path $PidFile -Value $Script:ServicePid -Encoding UTF8
+    Write-Host "  PID 文件: $PidFile (PID=$Script:ServicePid)" -ForegroundColor DarkGray
+}
+
 Write-Host ""
+Write-Host "============================================================" -ForegroundColor Green
+Write-Host "  服务启动成功！" -ForegroundColor Green
+Write-Host "============================================================" -ForegroundColor Green
+Write-Host "  PID:         $Script:ServicePid"
+Write-Host "  健康检查:    $healthUrl"
+Write-Host "  API 文档:    http://${host_}:${port}/docs"
+Write-Host "  运营后台:    http://${host_}:${port}/admin/"
+Write-Host "  登录页面:    $loginUrl"
+Write-Host "  日志窗口:    请查看 runtime/logs/service-start.log"
+Write-Host ""
+Write-Host "  停止服务:    双击 scripts\停止服务.bat" -ForegroundColor Cyan
+Write-Host "============================================================" -ForegroundColor Green
 
-# 写入 PID 文件（Start-Process -PassThru 返回的服务进程 PID，供 stop.ps1 使用）
-if ($servicePid) {
-    Set-Content -Path $PidFile -Value $servicePid -Encoding UTF8
-    Write-Host "  PID 文件: $PidFile (PID=$servicePid)" -ForegroundColor DarkGray
-}
+# ============================================================
+# 自动打开系统登录页面（仅在启动成功时执行）
+# ============================================================
 
-if ($ready) {
+if ($NoOpen) {
     Write-Host ""
-    Write-Host "============================================================" -ForegroundColor Green
-    Write-Host "  服务启动成功！" -ForegroundColor Green
-    Write-Host "============================================================" -ForegroundColor Green
-    Write-Host "  PID:         $servicePid"
-    Write-Host "  健康检查:    $healthUrl"
-    Write-Host "  API 文档:    http://${host_}:${port}/docs"
-    Write-Host "  运营后台:    http://${host_}:${port}/admin/"
-    Write-Host "  日志窗口:    请查看 runtime/logs/service-start.log"
-    Write-Host ""
-    Write-Host "  停止服务:    双击 scripts\停止服务.bat" -ForegroundColor Cyan
-    Write-Host "============================================================" -ForegroundColor Green
+    Write-Host "  已跳过自动打开浏览器（-NoOpen）。请手动访问: $loginUrl" -ForegroundColor Cyan
 } else {
-    Write-Warn "服务已启动但 30 秒内未通过健康检查"
-    Write-Host "  可能仍在初始化，或 .env 配置有误" -ForegroundColor Gray
-    Write-Host "  手动验证: $healthUrl" -ForegroundColor Gray
-    Write-Host "  查看日志:   请查看 runtime/logs/service-start.log" -ForegroundColor Gray
+    Open-LoginPage -Url $loginUrl
 }
 
 Write-Host ""
-return 0
+exit 0
 
 
 

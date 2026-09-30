@@ -1,4 +1,4 @@
-"""SQLite 单写者串行化闸门（P0-1 性能优化，进程内、不引入 MySQL/Redis）。
+﻿"""SQLite 单写者串行化闸门（P0-1 性能优化，进程内、不引入 MySQL/Redis）。
 
 问题根因
 --------
@@ -26,19 +26,17 @@
            db.add(obj); await db.commit()
 """
 import asyncio
-from typing import Awaitable, Callable, TypeVar
+from typing import Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
 
-T = TypeVar("T")
-
 # 全局写锁：保证同一时刻只有一个写事务在提交。
 _write_lock = asyncio.Lock()
 
 
-async def serialized_write(
+async def serialized_write[T](
     fn: Callable[[AsyncSession], Awaitable[T]],
     session: AsyncSession | None = None,
 ) -> T:

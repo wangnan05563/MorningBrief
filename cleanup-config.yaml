@@ -236,7 +236,7 @@ review_categories:
 # 凡"看起来像构建/缓存目录"或"依赖/数据目录"的目标，先与此列表比对；命中则保留。
 # 未命中再 grep 代码确认是否被解析器/静态伺服引用，未引用才是孤儿产物。
 preserve_roots:
-  - "release/dist/"        # 运行时交付根（含发布 exe）
+  - "release/"             # 运行时交付根（含发布 exe 与安装包）
   - "release/build/"       # 编译/交付产物根（本仓库 build/ 含交付物，显式保护）
   - "runtime/data/"        # 运行时数据（含 .db 用户数据 / 交付物）
   - "node_modules/"        # 运行时依赖（不可删）

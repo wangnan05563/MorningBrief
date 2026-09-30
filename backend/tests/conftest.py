@@ -110,11 +110,11 @@ sys.modules.setdefault("openai", _oai_mod)
 
 # ---- qcloud_cos ----
 # tts/uploader.py 中 from qcloud_cos import CosConfig, CosS3Client
-# 真实包未安装时启用以下桩；真实包已安装则 setdefault 不覆盖，跑真实 SDK。
-# 桩需实现 cos/client.py 的 CosClientWrapper 实际调用的全部方法（put_object /
-# get_object / delete_object / list_objects / head_object / get_presigned_download_url
-# / copy_object / delete_objects / object_exists），否则测试环境 is_cos_configured()
-# 为真时会抛 AttributeError，被业务层捕获降级但刷出误导性 WARNING。
+# 默认注入占位 stub（不装真实 SDK）：CosS3Client 方法返回 wrapper 期望形状、
+# 预签名 URL 带 "presigned" 字样（build_object_url 私有读分支的单测依赖该字样）。
+# T00921：stub 必须同时提供 CosServiceError / CosClientError 异常类，否则端点
+# 「文件管理」相关测试硬导入这两个名字会收集失败（原 stub 缺失导致 500 复现链路
+# 无法在测试环境表达，见 conftest 历史）。
 class _FakeCosS3Client:
     """qcloud_cos.CosS3Client 测试桩：方法均为无副作用占位，返回 wrapper 期望的形状。"""
 
@@ -156,6 +156,9 @@ class _FakeCosS3Client:
     def get_presigned_download_url(self, **kwargs):
         return "https://examplebucket.cos.example.com/fake-presigned"
 
+    def get_presigned_url(self, **kwargs):
+        return "https://examplebucket.cos.example.com/fake-presigned-put"
+
     def copy_object(self, **kwargs):
         return None
 
@@ -166,10 +169,26 @@ class _FakeCosS3Client:
         return False
 
 
+class _FakeCosServiceError(Exception):
+    """COS 服务错误异常占位：多参构造下 str() 含原因文本，供语义化分类断言。"""
+
+    def __init__(self, method, message, status, *args, **kwargs):
+        super().__init__(message)
+        self._method = method
+        self._message = message
+        self._status = status
+
+
+class _FakeCosClientError(Exception):
+    """COS 客户端错误异常占位（网络/连接类失败）。"""
+
+
 _cos_mod = types.ModuleType("qcloud_cos")
 _cos_mod.CosConfig = type("CosConfig", (), {"__init__": lambda self, **k: None})
 _cos_mod.CosS3Client = _FakeCosS3Client
-sys.modules.setdefault("qcloud_cos", _cos_mod)
+_cos_mod.CosServiceError = _FakeCosServiceError
+_cos_mod.CosClientError = _FakeCosClientError
+sys.modules["qcloud_cos"] = _cos_mod
 
 
 # ---- jieba ----

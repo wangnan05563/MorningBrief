@@ -1,4 +1,4 @@
-# MorningBrief 全接口性能测试 Runner（本地多场景串行）
+﻿# MorningBrief 全接口性能测试 Runner（本地多场景串行）
 # 每个场景独立调用 JMeter，输出 results_<Sx>/result.jtl + reports_<Sx>/index.html
 # 用法： .\run_perf.ps1
 

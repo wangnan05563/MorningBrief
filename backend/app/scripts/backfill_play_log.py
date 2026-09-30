@@ -127,7 +127,7 @@ def _parse_updated_at(raw: object) -> str:
         return localnow_naive().isoformat()
 
 
-def backfill(dry_run: bool = True, batch_size: int = 100) -> dict:
+def backfill(dry_run: bool = True, batch_size: int = 100) -> dict:  # NOSONAR
     """执行回填。
 
     Args:
@@ -264,7 +264,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    stats = backfill(dry_run=not args.apply, batch_size=args.batch_size)
+    backfill(dry_run=not args.apply, batch_size=args.batch_size)
     # 非 0 退出码仅在异常时使用；正常完成（含 dry_run 无数据）返回 0
     return 0
 

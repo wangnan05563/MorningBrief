@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     生产机后端诊断脚本（在 win-20260220ins 上以【管理员】PowerShell 运行）
 .DESCRIPTION
@@ -47,7 +47,7 @@ $scanDirs = @(
     "C:\Program Files (x86)\MorningBrief",
     "C:\MorningBrief",
     "D:\MorningBrief",
-    "D:\code\otherProjects\20_News\release\dist\MorningBrief",
+    "D:\code\otherProjects\20_News\release\MorningBrief",
     $PSScriptRoot,
     (Get-Location).Path
 )

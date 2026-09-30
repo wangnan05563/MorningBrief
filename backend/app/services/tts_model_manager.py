@@ -109,15 +109,21 @@ def _flatten_voice(voice_dir: str, voice: str) -> bool:
     return False
 
 
+def _write_file_sync(dest: str, chunks: list[bytes]) -> None:
+    """同步写入文件（asyncio.to_thread 包装）。"""
+    with open(dest, "wb") as f:
+        for chunk in chunks:
+            f.write(chunk)
+
+
 async def _download_file(url: str, dest: str) -> None:
     """流式下载文件到 dest（httpx 异步）。"""
     async with httpx.AsyncClient(timeout=300.0, follow_redirects=True) as client:
         async with client.stream("GET", url) as resp:
             if resp.status_code != 200:
                 raise RuntimeError(f"HTTP {resp.status_code} 下载失败: {url}")
-            with open(dest, "wb") as f:
-                async for chunk in resp.aiter_bytes(1024 * 64):
-                    f.write(chunk)
+            chunks = [c async for c in resp.aiter_bytes(1024 * 64)]
+    await asyncio.to_thread(_write_file_sync, dest, chunks)
 
 
 async def _download_piper(voice: str, voice_dir: str) -> dict:
@@ -191,7 +197,7 @@ async def _download_piper(voice: str, voice_dir: str) -> dict:
 
 # ---- Kokoro 下载（预热触发 HF 权重下载） ----
 
-async def _download_kokoro(lang: str, voice: str) -> dict:
+async def _download_kokoro(lang: str, _voice: str) -> dict:
     """预热 Kokoro 模型：首次实例化 KPipeline 会从 HuggingFace 下载并缓存权重。
 
     若 kokoro 包未安装，返回安装指引（模型权重无法在缺包情况下获取）。
@@ -256,3 +262,5 @@ async def run_download(provider: str, **params) -> dict:
         progress=1.0 if result.get("success") else None,
     )
     return result
+
+

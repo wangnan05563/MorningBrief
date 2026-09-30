@@ -1,8 +1,7 @@
 @echo off
-chcp 65001 >nul 2>&1
+chcp 936 >nul 2>&1
 setlocal
 
-REM Keep this entry script ASCII-only for reliable cmd.exe parsing.
 cd /d "%~dp0.."
 
 echo ========================================
@@ -17,9 +16,23 @@ echo   4. PyInstaller packaging
 echo   5. Copy external resources
 echo   6. Generate installer (Inno Setup, auto-install if missing)
 echo.
-echo Output: release\dist\MorningBrief\MorningBrief.exe
+echo Output: release\MorningBrief\MorningBrief.exe
 echo.
 
+REM [Step 0/6] Generate unique build version before packaging.
+REM   - Writes MAJOR.MINOR.YYYYMMDD.NNN to project root package.json (user request)
+REM   - Syncs same version to backend\VERSION for build-exe.ps1 / ISCC / About page
+REM   - Every run increments NNN (or resets to 001 on new day) to guarantee uniqueness
+echo [Pre-build 0/6] Assigning unique build version...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0prebuild-version.ps1"
+set "VER_EXIT_CODE=%ERRORLEVEL%"
+if not "%VER_EXIT_CODE%"=="0" (
+    echo.
+    echo [ERROR] Version bump failed. Build aborted.
+    pause
+    exit /b %VER_EXIT_CODE%
+)
+echo.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build-exe.ps1" %*
 set "BUILD_EXIT_CODE=%ERRORLEVEL%"
 
@@ -34,13 +47,13 @@ echo.
 echo ========================================
 echo   Build Complete!
 echo ========================================
-echo   Output dir: release\dist\MorningBrief\
-echo   EXE:        release\dist\MorningBrief\MorningBrief.exe
-echo   Installer:  release\dist\MorningBrief-Setup-v*.exe (if Inno Setup enabled)
+echo   Output dir: release\MorningBrief\
+echo   EXE:        release\MorningBrief\MorningBrief.exe
+echo   Installer:  release\MorningBrief-Setup-v*.exe (if Inno Setup enabled)
 echo.
 echo   Notes:
 echo   - V1.2: SQLite embedded + TTLCache, no MySQL/Redis/Docker needed
 echo   - Edit .env in exe dir before first run (JWT_SECRET / LLM_API_KEY / COS_*)
 echo ========================================
-pause
+pause >nul
 exit /b 0

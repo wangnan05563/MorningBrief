@@ -186,6 +186,7 @@ admin-web/vite.config.js.timestamp-*.mjs
 /sonar-*.txt
 /pytest-output.log
 .workbuddy
+.trae
 
 # 2026-08-08 清理补充：根目录 _ 前缀调试脚本（patch/modify/fix 临时）
 /_*.py
@@ -251,3 +252,4 @@ test-last-run.txt
 # 清理隔离区（24h 恢复窗口，绝不入库）
 runtime/.cleanup-trash-*/
 
+release/

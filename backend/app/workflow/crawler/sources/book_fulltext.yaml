@@ -1,0 +1,52 @@
+# 书籍「全文」预制源（T00603：面向 audiobook 频道的得到式形态——整本书内容，非书评）
+#
+# 与 book_rss.yaml 的区别：条目不是 RSS 文章，而是**书籍章节全文**（免 key 公版/开放获取渠道，
+# 爬虫直接预取正文入库，单章 = 一条素材），配合 outline 选题策略按章节顺序改写 → 得到式音频。
+#
+# 字段说明（按 provider 不同）：
+#   name          源名称（与 book_rss_sources 白名单共用一套 name，必填且唯一）
+#   provider      渠道类型：wikisource | gutendex（必填）
+#   authority     权威度 0~1（可选）
+#   category_hint 品类提示（可选）
+#   pages         wikisource：维基文库页面标题数组（必填）
+#   gutenberg_id  gutendex：Gutenberg 书目 id（与 query 二选一）
+#   query         gutendex：检索词（与 languages 配合）
+#   languages     gutendex：语言过滤（如 zh）
+#   max_chapters  gutendex：单本书最多产出素材条数（默认 40，防超长书刷爆素材表）
+#
+# 渠道可用性（2026-09-15 实测，scripts/probe_book_channels.py 可复跑）：
+#   - 维基文库 MediaWiki API ✅（免 key；CC BY-SA，对外发布需署名；UA 已带项目标识）；
+#   - Gutendex / Gutenberg ✅（免 key；公版）；
+#   - CTEXT gettext ❌ 需注册 IP 或 API key（免费账号可申请；接入时给 source 加 api_key 字段
+#     并在 fulltext_spider 增加 ctext provider 即可）——暂不列入。
+sources:
+- name: 维基文库-論語
+  provider: wikisource
+  authority: 0.9
+  category_hint: 古籍
+  pages:
+  - 論語/學而第一
+  - 論語/為政第二
+  - 論語/八佾第三
+  - 論語/里仁第四
+  - 論語/公冶長第五
+  - 論語/雍也第六
+- name: 维基文库-道德經
+  provider: wikisource
+  authority: 0.9
+  category_hint: 古籍
+  pages:
+  - 道德經
+- name: 维基文库-孟子/梁惠王上
+  provider: wikisource
+  authority: 0.88
+  category_hint: 古籍
+  pages:
+  - 孟子/梁惠王上
+- name: Gutendex-唐詩三百首
+  provider: gutendex
+  authority: 0.82
+  category_hint: 古典詩詞
+  languages: zh
+  query: 唐詩三百首
+  max_chapters: 40

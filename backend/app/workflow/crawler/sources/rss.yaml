@@ -536,6 +536,119 @@ sources:
   authority: 0.8
   category_hint: 财经
   qps: 1
+# ===== 2026-08-31 新增：三轮全网搜索 + 真实验证通过（V2+V3，21 条，去重后）=====
+# --- 科技 ---
+- name: 开源中国社区
+  url: https://www.oschina.net/news/rss
+  authority: 0.82
+  category_hint: 科技
+  qps: 1
+- name: InfoQ中文站
+  url: https://www.infoq.cn/feed/
+  authority: 0.83
+  category_hint: 科技
+  qps: 1
+- name: 阮一峰的网络日志
+  url: https://www.ruanyifeng.com/blog/atom.xml
+  authority: 0.84
+  category_hint: 科技
+  qps: 1
+- name: cnBeta业界资讯
+  url: https://www.cnbeta.com.tw/backend.php
+  authority: 0.78
+  category_hint: 科技
+  qps: 1
+- name: DZone技术聚合
+  url: http://feeds.dzone.com/home
+  authority: 0.80
+  category_hint: 科技
+  qps: 1
+- name: 宝玉的博客-AI
+  url: https://baoyu.io/feed.xml
+  authority: 0.81
+  category_hint: 科技
+  qps: 1
+- name: MacTalk池建强
+  url: http://macshuo.com/?feed=rss2
+  authority: 0.79
+  category_hint: 科技
+  qps: 1
+# --- 国际 ---
+- name: 中新网-国际
+  url: http://www.chinanews.com.cn/rss/world.xml
+  authority: 0.90
+  category_hint: 国际
+  qps: 1
+# --- 社会 ---
+- name: 中新网-社会
+  url: http://www.chinanews.com.cn/rss/society.xml
+  authority: 0.90
+  category_hint: 社会
+  qps: 1
+# --- 娱乐 ---
+- name: Variety娱乐产业
+  url: https://variety.com/feed/
+  authority: 0.84
+  category_hint: 娱乐
+  qps: 1
+- name: The Hollywood Reporter
+  url: https://www.hollywoodreporter.com/feed/
+  authority: 0.83
+  category_hint: 娱乐
+  qps: 1
+- name: BangShowbiz娱乐新闻
+  url: https://www.bangshowbiz.com/feed/
+  authority: 0.78
+  category_hint: 娱乐
+  qps: 1
+# --- 教育 ---
+- name: 芥末堆
+  url: https://www.jiemodui.com/rss.xml
+  authority: 0.83
+  category_hint: 教育
+  qps: 1
+# --- 体育 ---
+- name: The Guardian足球
+  url: https://www.theguardian.com/football/rss
+  authority: 0.84
+  category_hint: 体育
+  qps: 1
+- name: The Guardian体育
+  url: https://www.theguardian.com/sport/rss
+  authority: 0.84
+  category_hint: 体育
+  qps: 1
+- name: 天空体育
+  url: https://www.skysports.com/rss/12040
+  authority: 0.83
+  category_hint: 体育
+  qps: 1
+- name: Yahoo体育
+  url: https://sports.yahoo.com/rss/
+  authority: 0.80
+  category_hint: 体育
+  qps: 1
+- name: RealGM篮球
+  url: https://basketball.realgm.com/rss/wiretap/0/0.xml
+  authority: 0.80
+  category_hint: 体育
+  qps: 1
+# --- 财经 ---
+- name: Investing财经
+  url: https://www.investing.com/rss/news.rss
+  authority: 0.82
+  category_hint: 财经
+  qps: 1
+- name: MarketWatch财经
+  url: https://feeds.content.dowjones.io/public/rss/mw_topstories
+  authority: 0.84
+  category_hint: 财经
+  qps: 1
+- name: FT金融时报中文
+  url: https://www.ftchinese.com/rss/feed
+  authority: 0.88
+  category_hint: 财经
+  qps: 1
 global:
   timeout_sec: 30
   retry: 2

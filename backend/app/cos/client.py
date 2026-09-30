@@ -101,10 +101,10 @@ class CosClientWrapper:
 
     async def list_objects_delimited(
         self,
-        Prefix: str = "",
-        Delimiter: str = "/",
-        Marker: str = "",
-        MaxKeys: int = 1000,
+        prefix: str = "",
+        delimiter: str = "/",
+        marker: str = "",
+        max_keys: int = 1000,
     ) -> dict:  # NOSONAR
         """列举对象（支持目录模拟）。
 
@@ -115,12 +115,12 @@ class CosClientWrapper:
         client = _get_cos_client()
         kwargs: dict = {
             "Bucket": settings.COS_BUCKET,
-            "Prefix": Prefix,
-            "Delimiter": Delimiter,
-            "MaxKeys": MaxKeys,
+            "Prefix": prefix,
+            "Delimiter": delimiter,
+            "MaxKeys": max_keys,
         }
-        if Marker:
-            kwargs["Marker"] = Marker
+        if marker:
+            kwargs["Marker"] = marker
         return await asyncio.to_thread(client.list_objects, **kwargs)
 
     async def head_object(self, Key: str) -> dict:  # NOSONAR
@@ -151,7 +151,7 @@ class CosClientWrapper:
         )
 
     async def get_presigned_upload_url(
-        self, Key: str, Expired: int = 300, ContentType: str = None
+        self, key: str, expired: int = 300, _content_type: str = None
     ) -> str:  # NOSONAR
         """生成对象上传预签名 URL（PUT 方法，小程序/前端直传 COS 用）。
 
@@ -163,8 +163,8 @@ class CosClientWrapper:
         kwargs: dict = {
             "Method": "PUT",
             "Bucket": settings.COS_BUCKET,
-            "Key": Key,
-            "Expired": Expired,
+            "Key": key,
+            "Expired": expired,
         }
         return await asyncio.to_thread(client.get_presigned_url, **kwargs)
 
@@ -213,7 +213,7 @@ def reset_cos_client() -> None:
     _cos_client = None
 
 
-def build_object_url(Key: str) -> str:
+def build_object_url(key: str) -> str:
     """拼出对象可公开访问的 URL（CDN 直链优先，否则 COS 默认域名）。
 
     与 cos_storage_service.get_download_url 的 CDN 逻辑保持一致口径。
@@ -234,11 +234,11 @@ def build_object_url(Key: str) -> str:
         parsed = urlparse(cdn)
         netloc = parsed.netloc or cdn
         scheme = parsed.scheme or "https"
-        return f"{scheme}://{netloc.rstrip('/')}/{Key.lstrip('/')}"
+        return f"{scheme}://{netloc.rstrip('/')}/{key.lstrip('/')}"
     if cfg.COS_OBJECTS_PUBLIC_READ:
         return (
             f"https://{cfg.COS_BUCKET}.cos.{cfg.COS_REGION}.myqcloud.com/"
-            f"{Key.lstrip('/')}"
+            f"{key.lstrip('/')}"
         )
     # 私有读兜底：回退预签名私有 URL，避免公开直链 403（注意有时效）
     logger.warning(
@@ -247,7 +247,7 @@ def build_object_url(Key: str) -> str:
     )
     client = _get_cos_client()
     return client.get_presigned_download_url(
-        Bucket=cfg.COS_BUCKET, Key=Key, Expired=300
+        Bucket=cfg.COS_BUCKET, Key=key, Expired=300
     )
 
 

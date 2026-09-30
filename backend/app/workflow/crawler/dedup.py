@@ -33,7 +33,13 @@ from app.models.material import Material
 logger = logging.getLogger(__name__)
 
 
-async def is_duplicate(url: str, title: str, simhash: str, db: AsyncSession) -> bool:
+async def is_duplicate(
+    url: str,
+    title: str,
+    simhash: str,
+    db: AsyncSession,
+    source_type: str | None = None,
+) -> bool:
     """判断素材是否重复。
 
     URL 命中 → 重复；SimHash 与已存指纹汉明距离 ≤3 → 重复。
@@ -44,11 +50,19 @@ async def is_duplicate(url: str, title: str, simhash: str, db: AsyncSession) -> 
     2. material.url 命中 → 重复（dedup 被清理但 material 仍存在）
     任一命中即跳过 INSERT，避免 UNIQUE constraint failed。
 
+    source_type 例外（2026-08-18 修复）：book_rss（有声读物书籍源）豁免
+    SimHash 近似去重，仅走 URL 精确去重。原因：书籍评论/书评标题风格相近
+    （尤其豆瓣书评与豆瓣影评、不同书评之间），全局 SimHash 易误判为近似重复，
+    导致有声读物频道抓取 0 素材而工作流失败。书籍内容按 URL 精确去重即可
+    （material.url UNIQUE 兜底），不同 URL 的同类书评视为不同内容，允许入库。
+    通用 RSS 仍走完整 SimHash 近似去重，避免重复新闻。
+
     Args:
         url: 素材 URL
         title: 素材标题（预留扩展）
         simhash: 标题 SimHash 指纹
         db: 异步会话
+        source_type: 素材来源类型（rss/book_rss/...），book_rss 豁免 SimHash
     """
     url_hash = hashlib.md5(url.encode()).hexdigest()
 
@@ -69,6 +83,11 @@ async def is_duplicate(url: str, title: str, simhash: str, db: AsyncSession) -> 
     if material_result.scalar_one_or_none() is not None:
         logger.debug("material.url 命中（dedup 已被 TTL 清理）: %s", url)
         return True
+
+    # 书籍 RSS（有声读物）豁免 SimHash 近似去重：仅 URL 精确去重即足够，
+    # 避免书评标题风格相近被全局 SimHash 误判为重复而抓取 0 素材。
+    if source_type == "book_rss":
+        return False
 
     # SimHash 近似去重：遍历已存指纹，任一相似即判重
     # 规模小（百级），全表遍历可接受

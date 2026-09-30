@@ -207,6 +207,11 @@ class ContentSecurityService:
         # - suggest="risky"：命中违规
         # - label：违规类型（100=广告, 10001=涉政, 20001=色情, 20002=辱骂, 21000=暴恐等）
         result_items = data.get("result", []) or []
+        # 兼容异常返回：msgSecCheck 在部分合法场景下 result 字段可能是字符串而非数组，
+        # 直接逐字符迭代会导致 item.get 崩溃，把 content_security 合并整体拖垮（fail-closed）。
+        # 此处仅当是 list 才参与解析，其余一律视为无违规项，保证合并 succeed。
+        if not isinstance(result_items, list):
+            result_items = []
         detail = []
         any_risky = False
         for item in result_items:

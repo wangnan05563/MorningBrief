@@ -1,0 +1,185 @@
+﻿
+[1440] {
+ "vw": 1440,
+ "sw": 1440,
+ "hOverflow": 0,
+ "cards": [
+  {
+   "w": 281,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  },
+  {
+   "w": 281,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  },
+  {
+   "w": 281,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  },
+  {
+   "w": 281,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  }
+ ],
+ "overflowEls": [],
+ "bodySw": 1440
+}
+
+[1280] {
+ "vw": 1280,
+ "sw": 1280,
+ "hOverflow": 0,
+ "cards": [
+  {
+   "w": 245,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  },
+  {
+   "w": 245,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  },
+  {
+   "w": 245,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  },
+  {
+   "w": 245,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  }
+ ],
+ "overflowEls": [],
+ "bodySw": 1280
+}
+
+[1152] {
+ "vw": 1152,
+ "sw": 1152,
+ "hOverflow": 0,
+ "cards": [
+  {
+   "w": 442,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  },
+  {
+   "w": 442,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  },
+  {
+   "w": 442,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  },
+  {
+   "w": 442,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  }
+ ],
+ "overflowEls": [
+  "el-table__header",
+  "",
+  "el-table_1_column_7 is-leaf el-table__ce",
+  "cell",
+  "el-scrollbar__view",
+  "el-table__body",
+  "el-table__row",
+  "el-table_1_column_7 el-table__cell",
+  "el-table__row el-table__row--striped"
+ ],
+ "bodySw": 1152
+}
+
+[1024] {
+ "vw": 1024,
+ "sw": 1024,
+ "hOverflow": 0,
+ "cards": [
+  {
+   "w": 378,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  },
+  {
+   "w": 378,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  },
+  {
+   "w": 378,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  },
+  {
+   "w": 378,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  }
+ ],
+ "overflowEls": [
+  "el-table__header",
+  "",
+  "el-table_1_column_7 is-leaf el-table__ce",
+  "cell",
+  "el-scrollbar__view",
+  "el-table__body",
+  "el-table__row",
+  "text-error",
+  "el-table_1_column_7 el-table__cell",
+  "el-table__row el-table__row--striped"
+ ],
+ "bodySw": 1024
+}
+
+[900] {
+ "vw": 900,
+ "sw": 900,
+ "hOverflow": 0,
+ "cards": [
+  {
+   "w": 316,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  },
+  {
+   "w": 316,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  },
+  {
+   "w": 316,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  },
+  {
+   "w": 316,
+   "overflowValRight": -17,
+   "overflowValLeft": -17
+  }
+ ],
+ "overflowEls": [
+  "el-table__header",
+  "",
+  "el-table_1_column_6 is-leaf el-table__ce",
+  "cell",
+  "el-table_1_column_7 is-leaf el-table__ce",
+  "el-scrollbar__view",
+  "el-table__body",
+  "el-table__row",
+  "text-error",
+  "el-table_1_column_6 el-table__cell",
+  "el-table_1_column_7 el-table__cell",
+  "el-table__row el-table__row--striped"
+ ],
+ "bodySw": 900
+}
+DONE

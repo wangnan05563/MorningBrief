@@ -1,8 +1,7 @@
 @echo off
-chcp 65001 >nul 2>&1
+chcp 936 >nul 2>&1
 setlocal
 
-REM Keep this entry script ASCII-only for reliable cmd.exe parsing.
 cd /d "%~dp0.."
 
 echo ========================================
@@ -12,7 +11,6 @@ echo.
 echo Launch mode is selected automatically.
 echo Optional arguments: -Dev or -Exe
 echo.
-
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0start.ps1" %*
 set "START_EXIT_CODE=%ERRORLEVEL%"
 

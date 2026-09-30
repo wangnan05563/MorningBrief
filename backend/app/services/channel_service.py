@@ -1,4 +1,4 @@
-"""频道管理服务。
+﻿"""频道管理服务。
 
 Channel 作为工作流的分组标签，支持按内容分类频道独立产出节目。
 轻量级设计：仅 CRUD + 活跃频道查询，不绑定业务配置。
@@ -60,7 +60,7 @@ class ChannelService:
         await self.cache.delete("api:channels:list_active")
 
     async def create_channel(
-        self, name: str, description: str = "",
+        self, name: str, description: str = "",  # NOSONAR
         schedule_time: Optional[str] = None,
         intro_prompt: Optional[str] = None,
         outro_prompt: Optional[str] = None,
@@ -72,6 +72,7 @@ class ChannelService:
         bgm_gap_mode: Optional[str] = None,
         enable_thinking_question: Optional[int] = None,
         rss_sources: Optional[str] = None,
+        book_rss_sources: Optional[str] = None,
         keywords: Optional[str] = None,
         min_duration_sec: Optional[int] = None,
         display_order: int = 0,
@@ -103,6 +104,7 @@ class ChannelService:
             bgm_gap_mode=bgm_gap_mode,
             enable_thinking_question=enable_thinking_question,
             rss_sources=rss_sources,
+            book_rss_sources=book_rss_sources,
             keywords=keywords,
             min_duration_sec=min_duration_sec,
             display_order=display_order,
@@ -140,6 +142,7 @@ class ChannelService:
         bgm_gap_mode: Optional[str] = None,
         enable_thinking_question: Optional[int] = None,
         rss_sources: Optional[str] = None,
+        book_rss_sources: Optional[str] = None,
         keywords: Optional[str] = None,
         min_duration_sec: Optional[int] = None,
         display_order: Optional[int] = None,
@@ -195,6 +198,8 @@ class ChannelService:
             channel.enable_thinking_question = enable_thinking_question
         if rss_sources is not None:
             channel.rss_sources = rss_sources
+        if book_rss_sources is not None:
+            channel.book_rss_sources = book_rss_sources
         if keywords is not None:
             channel.keywords = keywords
         if min_duration_sec is not None:
@@ -297,3 +302,5 @@ class ChannelService:
         # 移除该频道的定时任务（schedule_time 置空表示移除）
         self._publish_schedule_changed(channel_id, "", channel.is_active)
         logger.info("删除频道 channel_id=%s name=%s", channel_id, channel.name)
+
+

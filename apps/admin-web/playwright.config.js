@@ -18,7 +18,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://localhost:5181',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     // vite 首次编译各路由组件较慢，需更长导航超时
@@ -31,7 +31,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npm run dev',
-    url: 'http://localhost:5173',
+    url: 'http://localhost:5181',
     // 本地复用已运行的 dev server，避免每次跑测试都重启
     reuseExistingServer: !process.env.CI,
     // vite 首次冷启动 + 依赖预构建可能耗时 2-3 分钟（Windows + HDD 环境）

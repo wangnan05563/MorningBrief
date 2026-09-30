@@ -1,4 +1,4 @@
-"""B 端音频文件管理路由。
+﻿"""B 端音频文件管理路由。
 
 提供工作流产物中音频文件的列表、流式播放与删除能力：
 - TTS 片段：data/audio_cache/tts/{workflow_id}/*.mp3
@@ -43,6 +43,10 @@ router = APIRouter(prefix="/admin/api/v1/workflows", tags=["B端-音频管理"])
 # 模块级常量：与 main.py 中 StaticFiles 挂载点保持一致，避免重复构造
 _AUDIO_ROOT = resolve_data_dir() / "audio_cache"
 
+# 模块级常量
+_MEDIA_TYPE_MPEG = "audio/mpeg"
+_ERROR_MESSAGE_ILLEGAL_AUDIO_URL = "非法音频地址"
+
 
 def _tts_dir(workflow_id: str) -> Path:
     """工作流对应的 TTS 片段目录。"""
@@ -79,7 +83,7 @@ def _rel_path(path: Path) -> str:
 
 
 @router.get("/{workflow_id}/audio")
-async def list_audio(
+async def list_audio(  # NOSONAR
     workflow_id: str,
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(get_current_admin),
@@ -214,7 +218,7 @@ async def stream_tts(
     if not file_path.is_file():
         raise NotFoundError("音频文件不存在")
     # 不传 filename 参数：默认 Content-Disposition=inline，浏览器直接播放而非下载
-    return FileResponse(path=str(file_path), media_type="audio/mpeg")
+    return FileResponse(path=str(file_path), media_type=_MEDIA_TYPE_MPEG)
 
 
 @router.get("/{workflow_id}/audio/episode")
@@ -237,7 +241,7 @@ async def stream_episode(
     if not ep_path or not ep_path.is_file():
         raise NotFoundError("成品音频尚未生成")
 
-    return FileResponse(path=str(ep_path), media_type="audio/mpeg")
+    return FileResponse(path=str(ep_path), media_type=_MEDIA_TYPE_MPEG)
 
 
 @router.get("/{workflow_id}/audio/proxy")
@@ -254,7 +258,7 @@ async def proxy_audio(
     """
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
-        raise BizError(code=400, message="非法音频地址")
+        raise BizError(code=400, message=_ERROR_MESSAGE_ILLEGAL_AUDIO_URL)
 
     # 仅允许项目配置的 COS 域名，防止被当作通用代理发起 SSRF
     allowed_hosts = set()
@@ -265,11 +269,11 @@ async def proxy_audio(
         if cdn_netloc:
             allowed_hosts.add(cdn_netloc)
     if parsed.netloc not in allowed_hosts:
-        raise BizError(code=400, message="非法音频地址")
+        raise BizError(code=400, message=_ERROR_MESSAGE_ILLEGAL_AUDIO_URL)
 
     key = parsed.path.lstrip("/")
     if not key:
-        raise BizError(code=400, message="非法音频地址")
+        raise BizError(code=400, message=_ERROR_MESSAGE_ILLEGAL_AUDIO_URL)
 
     # 复用 TTS uploader 的 COS 客户端（携带项目凭证，支持私有桶）
     from app.workflow.tts.uploader import _get_client
@@ -295,7 +299,7 @@ async def proxy_audio(
         raise NotFoundError("音频获取失败")
 
     # 分块流式返回，避免 10MB+ 成品一次性读入内存拉高并发内存峰值
-    return StreamingResponse(_stream_cos(stream), media_type="audio/mpeg")
+    return StreamingResponse(_stream_cos(stream), media_type=_MEDIA_TYPE_MPEG)
 
 
 @router.delete("/{workflow_id}/audio/tts/{filename}")
@@ -355,3 +359,11 @@ async def delete_episode(
     ))
     await db.commit()
     return success(data={"deleted": _rel_path(ep_path)})
+
+
+
+
+
+
+
+

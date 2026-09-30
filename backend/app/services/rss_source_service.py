@@ -20,7 +20,7 @@ import httpx
 import yaml
 
 from app.core.timeutil import localnow_naive
-from app.paths import resolve_rss_sources_path
+from app.paths import resolve_rss_sources_path, resolve_book_rss_sources_path
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,89 @@ def load_rss_sources_summary() -> list[dict[str, Any]]:
     供前端下拉选择与 LLM 推荐使用，避免 url/qps 等内部字段泄漏到前端或干扰 LLM。
     """
     sources = load_rss_sources()
+    return [
+        {
+            "name": s.get("name", ""),
+            "category_hint": s.get("category_hint", ""),
+            "authority": s.get("authority", 0.5),
+            "kind": "book_rss",
+        }
+        for s in sources
+    ]
+
+
+def load_book_rss_sources() -> list[dict[str, Any]]:
+    """加载 book_rss.yaml 中所有可用的书籍 RSS 预制源。
+
+    与 load_rss_sources 完全对称，但仅面向 audiobook 频道（条目即书/章）。
+    book_rss.yaml 不存在或为空时返回空列表，调用方需自行处理空场景。
+    """
+    book_rss_path = resolve_book_rss_sources_path()
+    if not book_rss_path.exists():
+        logger.warning("book_rss.yaml 不存在: %s", book_rss_path)
+        return []
+
+    with open(book_rss_path, "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f) or {}
+
+    sources = config.get("sources", [])
+    if not isinstance(sources, list):
+        logger.warning("book_rss.yaml sources 字段非列表，按空列表处理")
+        return []
+
+    return sources
+
+
+def load_book_fulltext_sources() -> list[dict[str, Any]]:
+    """加载 book_fulltext.yaml 中所有可用的书籍「全文」预制源（T00603）。
+
+    与 load_book_rss_sources 完全对称，但条目为**章节全文渠道**（wikisource / gutendex，
+    带 provider 字段），由 crawler 的 fulltext_spider 抓取——产出「整本书内容」而非书评。
+    book_fulltext.yaml 不存在或为空时返回空列表，调用方需自行处理空场景。
+    """
+    from app.paths import resolve_book_fulltext_sources_path
+
+    path = resolve_book_fulltext_sources_path()
+    if not path.exists():
+        logger.warning("book_fulltext.yaml 不存在: %s", path)
+        return []
+
+    with open(path, "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f) or {}
+
+    sources = config.get("sources", [])
+    if not isinstance(sources, list):
+        logger.warning("book_fulltext.yaml sources 字段非列表，按空列表处理")
+        return []
+
+    # 全文源必须声明 provider，否则 crawler 无法分派
+    valid = [s for s in sources if isinstance(s, dict) and s.get("provider")]
+    dropped = len(sources) - len(valid)
+    if dropped:
+        logger.warning("book_fulltext.yaml 有 %d 条缺 provider 的源，已忽略", dropped)
+    return valid
+
+
+def load_book_fulltext_sources_summary() -> list[dict[str, Any]]:
+    """书籍全文源的精简摘要（仅 name/category_hint/authority/provider）。"""
+    return [
+        {
+            "name": s.get("name", ""),
+            "category_hint": s.get("category_hint", ""),
+            "authority": s.get("authority", 0.5),
+            "provider": s.get("provider", ""),
+            "kind": "fulltext",
+        }
+        for s in load_book_fulltext_sources()
+    ]
+
+
+def load_book_rss_sources_summary() -> list[dict[str, Any]]:
+    """加载书籍 RSS 源的精简摘要（仅 name/category_hint/authority）。
+
+    供前端 audiobook 频道配置下拉选择，避免 url/qps 等内部字段泄漏。
+    """
+    sources = load_book_rss_sources()
     return [
         {
             "name": s.get("name", ""),

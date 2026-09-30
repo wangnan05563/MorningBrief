@@ -123,9 +123,11 @@
     </div>
 
     <!-- 统计指标卡片 -->
-    <div class="stats-section" v-loading="loadingStats">
-      <el-row :gutter="16">
-        <el-col :span="6">
+      <div class="stats-section" v-loading="loadingStats">
+        <el-row :gutter="16">
+          <!-- 响应式栅格：窄视口(<1200)自动 2 列，避免 4 列卡片被压得过窄（原 span=6 固定四列）
+               在 1366 屏 + 125% 缩放等场景下被挤压换行/文字截断 -->
+          <el-col :xs="12" :sm="12" :md="12" :lg="6">
           <div class="card-soft stat-card">
             <div class="stat-header">
               <el-icon class="stat-icon"><DataLine /></el-icon>
@@ -134,7 +136,7 @@
             <div class="stat-value">{{ stats?.total ?? 0 }}</div>
           </div>
         </el-col>
-        <el-col :span="6">
+        <el-col :xs="12" :sm="12" :md="12" :lg="6">
           <div class="card-soft stat-card">
             <div class="stat-header">
               <el-icon class="stat-icon success-icon"><CircleCheck /></el-icon>
@@ -144,7 +146,7 @@
             <div class="stat-detail">成功率 {{ formatPercent(stats?.success_rate) }}</div>
           </div>
         </el-col>
-        <el-col :span="6">
+        <el-col :xs="12" :sm="12" :md="12" :lg="6">
           <div class="card-soft stat-card">
             <div class="stat-header">
               <el-icon class="stat-icon fail-icon"><CircleClose /></el-icon>
@@ -153,7 +155,7 @@
             <div class="stat-value">{{ stats?.failed_count ?? 0 }}</div>
           </div>
         </el-col>
-        <el-col :span="6">
+        <el-col :xs="12" :sm="12" :md="12" :lg="6">
           <div class="card-soft stat-card">
             <div class="stat-header">
               <el-icon class="stat-icon time-icon"><Timer /></el-icon>
@@ -491,6 +493,12 @@ onMounted(async () => {
   gap: 16px;
 }
 
+/* 规则配置、统计区与同级卡片统一内边距，避免字段/开关/按钮贴卡片边缘（T00920 布局修复） */
+.config-section,
+.stats-section {
+  padding: 16px;
+}
+
 .toolbar {
   display: flex;
   justify-content: space-between;
@@ -568,10 +576,14 @@ onMounted(async () => {
   align-items: center;
   gap: 16px;
   margin: 16px 0;
+  /* 窄视口下日期选择器(固定较宽)+统计文本并排会溢出容器，允许换行 */
+  flex-wrap: wrap;
 }
 
 .stat-card {
   padding: 16px;
+  /* 响应式 2 列时卡片分两行，底部间距避免与下行卡片紧贴 */
+  margin-bottom: 16px;
 }
 
 .stat-header {

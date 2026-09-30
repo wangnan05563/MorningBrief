@@ -34,6 +34,7 @@ from app.workflow.tts.base_provider import (
     TTSTimeoutError,
     TTSServiceError,
 )
+from app.workflow.text_clean import strip_markdown_residue
 from app.workflow.tts.tts_factory import get_tts_provider
 from app.workflow.tts.audio_postprocess import (
     normalize_loudness,
@@ -122,7 +123,17 @@ async def synthesize_segment(text: str, voice: str = None) -> bytes:
     预算控制：调用前检查三重预算（token/费用/频率），超限直接抛
     TTSRateLimitError 避免无效请求打到外部 API；调用成功后按字符数
     记录用量更新预算计数。
+
+    文本清洗：入口处对文本做 Markdown/超链接残留清理（最后一道防线），
+    覆盖历史脏数据与任何绕过 rewriter 源头清洗的写入路径——否则 LLM 残留的
+    **、#、[链接](url) 等符号会被 TTS 念成「星号」「井号」「方括号」或逐字
+    读出 URL。清洗后为空则抛错跳过该段（配合上层 return_exceptions 隔离）。
     """
+    # 最后一道防线：清理 Markdown 符号与超链接残留（幂等，干净文本无副作用）
+    text = strip_markdown_residue(text)
+    if not text:
+        raise TTSError("分段文本清洗后为空（原文仅含 Markdown 符号/链接），跳过合成")
+
     # 预算检查：超限时不发起请求（避免外部 API 计费）
     allowed, reason = check_budget(service_type="tts")
     if not allowed:

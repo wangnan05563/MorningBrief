@@ -198,3 +198,73 @@ async def test_get_metadata(cos_configured, monkeypatch):
     assert meta["size"] == 100
     assert meta["key"] == "a.txt"
     assert meta["etag"] == "abc"
+
+
+# ---- T00921：COS SDK 异常应转成语义化 BizError，而非冒泡成 500「服务内部错误」 ----
+
+# qcloud_cos 真实异常类：CosServiceError(exec 双参不适用，业务层透传时保留原信息)
+from qcloud_cos import CosClientError, CosServiceError  # noqa: E402
+
+
+def _svc_error(message: str) -> CosServiceError:
+    """构造携带可读原因 msg 的 COS 服务错误。
+
+    真实 qcloud_cos 的 get_error_code() 用 digest_xml 解析响应 body，
+    需要同时含 Code/Message/Resource/RequestId 四个节点；缺任一都会让
+    get_error_code() 退化为 "Unknown"、str() 变成固定兜底串，导致关键词
+    分类失效。这里按 COS 真实 XML 错误响应格式构造。
+    """
+    body = (
+        "<Error>"
+        f"<Code>{message}</Code>"
+        f"<Message>{message}</Message>"
+        "<Resource>test-bucket</Resource>"
+        "<RequestId>test-request</RequestId>"
+        "</Error>"
+    )
+    return CosServiceError("GET /", body, 403)
+
+
+async def test_list_path_cos_service_error_translated(cos_configured, monkeypatch):
+    """列表接口遇到 COS 服务异常时应抛 BizError 而非让异常冒泡为 500。"""
+    monkeypatch.setattr(
+        _instance(), "list_objects_delimited",
+        AsyncMock(side_effect=_svc_error("AccessDenied: no permission")),
+    )
+    svc = cos_storage_service.CosStorageService()
+    with pytest.raises(BizError) as exc_info:
+        await svc.list_path("")
+    # 转成业务异常（code=502），避免前端看到笼统的「服务内部错误」
+    assert exc_info.value.code == 502
+
+
+async def test_list_path_cos_client_error_translated(cos_configured, monkeypatch):
+    """网络/连接类异常（CosClientError）同样转成 BizError，不冒泡为 500。"""
+    monkeypatch.setattr(
+        _instance(), "list_objects_delimited",
+        AsyncMock(side_effect=CosClientError("connection reset")),
+    )
+    svc = cos_storage_service.CosStorageService()
+    with pytest.raises(BizError) as exc_info:
+        await svc.list_path("")
+    assert exc_info.value.code == 502
+
+
+async def test_upload_service_error_translated(cos_configured, monkeypatch):
+    """上传接口同样受保护：SDK 异常不冒泡成 500。"""
+    monkeypatch.setattr(
+        _instance(), "put_object",
+        AsyncMock(side_effect=_svc_error("NoSuchBucket")),
+    )
+    svc = cos_storage_service.CosStorageService()
+    with pytest.raises(BizError) as exc_info:
+        await svc.upload_file("a.txt", b"data")
+    assert exc_info.value.code == 502
+
+
+def test_cos_sdk_message_classify():
+    """语义化函数应把常见 COS 错误码映射为可读中文提示（对齐 test_connection 口径）。"""
+    msg = cos_storage_service._cos_sdk_message(_svc_error("AccessDenied"))
+    assert "凭证无效" in msg
+    msg2 = cos_storage_service._cos_sdk_message(RuntimeError("NoSuchBucket"))
+    assert "存储桶" in msg2

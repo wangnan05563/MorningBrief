@@ -225,3 +225,31 @@ def test_upload_file(client, admin_token, cos_configured, monkeypatch):
     )
     assert resp.status_code == 200
     assert resp.json()["data"]["key"] == "docs/a.txt"
+
+
+def test_objects_list_cos_error_returns_semantic_message(
+    client, admin_token, cos_configured, monkeypatch
+):
+    """T00921：COS 服务异常时列表接口返回 502 + 语义化 message，而非 500「服务内部错误」。
+
+    修复前 CosServiceError 未被捕获，冒泡到全局兜底 Exception 处理器返回笼统的
+    「服务内部错误」；修复后由 _cos_call 转成语义化 BizError(502)。
+    """
+    from qcloud_cos import CosServiceError
+
+    body = (
+        "<Error><Code>AccessDenied</Code><Message>no permission</Message>"
+        "<Resource>r</Resource><RequestId>i</RequestId></Error>"
+    )
+    monkeypatch.setattr(
+        cos_client_mod.cos_client,
+        "list_objects_delimited",
+        AsyncMock(side_effect=CosServiceError("GET /", body, 403)),
+    )
+    resp = client.get(
+        "/admin/api/v1/cos/objects", params={"prefix": ""}, headers=_admin_headers(admin_token)
+    )
+    assert resp.status_code == 502
+    msg = resp.json()["message"]
+    assert "凭证无效" in msg
+    assert msg != "服务内部错误"

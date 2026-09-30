@@ -1,4 +1,4 @@
-"""云端 COS 配置管理服务（V1.5 新增）。
+﻿"""云端 COS 配置管理服务（V1.5 新增）。
 
 职责（与 ai_config_service 对齐）：
 1. 配置 CRUD（从 SQLite cos_config 表读写）
@@ -226,7 +226,7 @@ class CosConfigService:
         settings = get_settings()
         try:
             # 列举桶根（最多 1 个对象即可验证可读），用分隔符模拟目录避免大桶全量列举
-            resp = await cos_client.list_objects_delimited(
+            _ = await cos_client.list_objects_delimited(
                 Prefix="", Delimiter="/", MaxKeys=1
             )
             # 能拿到响应即说明凭证与 Bucket 有效

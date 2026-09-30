@@ -1,4 +1,4 @@
-"""云端 COS 存储管理服务（V1.5 新增）。
+﻿"""云端 COS 存储管理服务（V1.5 新增）。
 
 在 app.cos.client.cos_client 异步封装之上，提供面向管理界面的对象存储操作：
 - 目录/文件列举（用 Delimiter 模拟目录树）
@@ -14,6 +14,7 @@
 避免创建空客户端抛晦涩错误。KEY/Prefix 做路径穿越校验，拒绝绝对路径与 ".."。
 """
 import logging
+from functools import wraps
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -22,6 +23,15 @@ from app.core.exceptions import BizError
 from app.cos.client import cos_client, is_cos_configured
 
 logger = logging.getLogger(__name__)
+
+# COS SDK 异常软依赖导入：qcloud_cos 缺失（如纯前端/仅语法检查场景）时降级为 Exception
+try:
+    from qcloud_cos import CosClientError, CosServiceError
+except Exception:  # noqa: BLE001 — 依赖缺失不应阻断服务启动
+    CosClientError = CosServiceError = Exception
+
+# 模块级常量
+_ERROR_MESSAGE_COS_NOT_CONFIGURED = "COS 未配置：请先在「云端配置」页填写凭证"
 
 # 单页列举上限；多页自动翻页（最多 10 页，覆盖 1 万对象，超出视为异常大桶需分批）
 _LIST_PAGE_SIZE = 1000
@@ -50,6 +60,49 @@ def _normalize_prefix(prefix: str) -> str:
     return prefix
 
 
+def _cos_sdk_message(exc: Exception) -> str:
+    """从 COS SDK 异常提取可读的原因消息（尽量语义化，避免原样 500）。
+
+    与 CosConfigService.test_connection 的语义化口径保持一致：把凭证无效、
+    Bucket 不存在、权限不足等常见 COS 服务错误转成运营可直接理解的中文提示，
+    而不是让异常一路冒泡到全局兜底返回「服务内部错误」。
+    """
+    raw = str(exc) or ""
+    if isinstance(exc, CosServiceError):
+        # 优先取 SDK 解析出的错误码/消息；get_error_code 可能返回 Unknown
+        code = getattr(exc, "get_error_code", lambda: "")()
+        detail = (code and code != "Unknown" and code) or raw
+    else:
+        detail = raw
+    if "AccessDenied" in raw or "403" in raw:
+        return "COS 凭证无效或无 Bucket 访问权限（AccessDenied）"
+    if "NoSuchBucket" in raw or "NoSuchKey" in raw:
+        return f"COS 存储桶/对象不存在: {_cos_bucket()}"
+    if "SecretId" in raw or "SecretKey" in raw:
+        return "COS SecretId / SecretKey 无效"
+    if "RequestTimeTooSkewed" in raw or "时间" in raw:
+        return "COS 请求时间偏差过大，请检查服务器时钟"
+    return detail or "COS 服务调用失败"
+
+
+def _cos_bucket() -> str:
+    """返回当前生效的 Bucket 名（语义化消息里展示用）。"""
+    return getattr(get_settings(), "COS_BUCKET", "") or ""
+
+
+async def _cos_call(coro):
+    """执行一次 COS SDK 异步调用，把 SDK 异常统一转成语义化 BizError。
+
+    过滤掉 CosServiceError / CosClientError —— 这两类是 SDK 定义的所有失败路径，
+    qcloud_cos 只抛这两种异常，其余异常（编程错误等）仍应正常上抛暴露。
+    转成的 BizError 带具体原因，配合全局异常处理给前端友好提示而非 500。
+    """
+    try:
+        return await coro
+    except (CosServiceError, CosClientError) as e:
+        raise BizError(code=502, message=_cos_sdk_message(e), http_status=502) from e
+
+
 class CosStorageService:
     """云端 COS 存储管理服务。
 
@@ -58,7 +111,7 @@ class CosStorageService:
 
     # ---- 列举 ----
 
-    async def list_path(self, prefix: str = "") -> dict:
+    async def list_path(self, prefix: str = "") -> dict:  # NOSONAR
         """列举某前缀下的目录与文件（模拟目录树）。
 
         返回结构：
@@ -74,7 +127,7 @@ class CosStorageService:
         空桶 / 空前缀返回空列表，不抛异常。
         """
         if not is_cos_configured():
-            raise BizError(code=400, message="COS 未配置：请先在「云端配置」页填写凭证")
+            raise BizError(code=400, message=_ERROR_MESSAGE_COS_NOT_CONFIGURED)
 
         prefix = _normalize_prefix(prefix)
         _validate_key(prefix) if prefix else None
@@ -86,9 +139,9 @@ class CosStorageService:
 
         while pages < _LIST_MAX_PAGES:
             pages += 1
-            resp = await cos_client.list_objects_delimited(
+            resp = await _cos_call(cos_client.list_objects_delimited(
                 Prefix=prefix, Delimiter="/", Marker=marker, MaxKeys=_LIST_PAGE_SIZE
-            )
+            ))
             # 子目录：CommonPrefixes 中的 Prefix 形如 "folder/sub/"
             for cp in resp.get("CommonPrefixes", []) or []:
                 sub = cp.get("Prefix", "")
@@ -132,10 +185,10 @@ class CosStorageService:
         key 为该对象的完整路径（含前缀）。返回 {key, size, content_type}。
         """
         if not is_cos_configured():
-            raise BizError(code=400, message="COS 未配置：请先在「云端配置」页填写凭证")
+            raise BizError(code=400, message=_ERROR_MESSAGE_COS_NOT_CONFIGURED)
         _validate_key(key)
 
-        await cos_client.put_object(Key=key, Body=data, ContentType=content_type)
+        await _cos_call(cos_client.put_object(Key=key, Body=data, ContentType=content_type))
         return {"key": key, "size": len(data), "content_type": content_type or ""}
 
     # ---- 下载 ----
@@ -146,7 +199,7 @@ class CosStorageService:
         CDN 域名已配置时返回 CDN 直链（公开访问更快）；否则返回 COS 预签名 URL。
         """
         if not is_cos_configured():
-            raise BizError(code=400, message="COS 未配置：请先在「云端配置」页填写凭证")
+            raise BizError(code=400, message=_ERROR_MESSAGE_COS_NOT_CONFIGURED)
         _validate_key(key)
 
         settings = get_settings()
@@ -156,16 +209,32 @@ class CosStorageService:
             netloc = urlparse(cdn).netloc or cdn
             scheme = urlparse(cdn).scheme or "https"
             return f"{scheme}://{netloc.rstrip('/')}/{key.lstrip('/')}"
-        return await cos_client.get_presigned_download_url(Key=key, Expired=expired)
+        return await _cos_call(cos_client.get_presigned_download_url(Key=key, Expired=expired))
+
+    # ---- 下载对象字节（素材导入场景） ----
+
+    async def get_object_bytes(self, key: str) -> bytes:
+        """下载对象原始字节，用于 COS 素材导入（云端存储导入渠道）。
+
+        先用 is_cos_configured 守卫（未配置抛可读异常），KEY 做路径穿越校验，
+        下载失败（对象不存在/无权限）抛 404 业务异常。
+        """
+        if not is_cos_configured():
+            raise BizError(code=400, message=_ERROR_MESSAGE_COS_NOT_CONFIGURED)
+        _validate_key(key)
+        data = await cos_client.get_object_bytes(key)
+        if data is None:
+            raise BizError(code=404, message=f"对象下载失败或不存在: {key}")
+        return data
 
     # ---- 删除 ----
 
     async def delete_file(self, key: str) -> None:
         """删除单个对象。"""
         if not is_cos_configured():
-            raise BizError(code=400, message="COS 未配置：请先在「云端配置」页填写凭证")
+            raise BizError(code=400, message=_ERROR_MESSAGE_COS_NOT_CONFIGURED)
         _validate_key(key)
-        await cos_client.delete_object(Key=key)
+        await _cos_call(cos_client.delete_object(Key=key))
 
     async def delete_folder(self, prefix: str) -> int:
         """删除整个文件夹（列举前缀下所有对象后批量删除）。
@@ -173,7 +242,7 @@ class CosStorageService:
         返回删除的对象数量（含占位对象本身）。空文件夹（仅占位对象）也能删。
         """
         if not is_cos_configured():
-            raise BizError(code=400, message="COS 未配置：请先在「云端配置」页填写凭证")
+            raise BizError(code=400, message=_ERROR_MESSAGE_COS_NOT_CONFIGURED)
         prefix = _normalize_prefix(prefix)
         _validate_key(prefix)
 
@@ -183,7 +252,7 @@ class CosStorageService:
         # 分批删除，避免单次请求对象过多
         batch_size = 500
         for i in range(0, len(keys), batch_size):
-            await cos_client.delete_objects(keys[i:i + batch_size])
+            await _cos_call(cos_client.delete_objects(keys[i:i + batch_size]))
         return len(keys)
 
     # ---- 文件夹 ----
@@ -194,13 +263,13 @@ class CosStorageService:
         prefix 为该目录的完整路径（含结尾 /）。返回 {key}。
         """
         if not is_cos_configured():
-            raise BizError(code=400, message="COS 未配置：请先在「云端配置」页填写凭证")
+            raise BizError(code=400, message=_ERROR_MESSAGE_COS_NOT_CONFIGURED)
         prefix = _normalize_prefix(prefix)
         _validate_key(prefix)
 
-        await cos_client.put_object(
+        await _cos_call(cos_client.put_object(
             Key=prefix, Body=b"", ContentType="application/x-directory"
-        )
+        ))
         return {"key": prefix}
 
     # ---- 重命名 / 移动 ----
@@ -213,15 +282,15 @@ class CosStorageService:
         返回 {moved: N}（移动的对象数）。
         """
         if not is_cos_configured():
-            raise BizError(code=400, message="COS 未配置：请先在「云端配置」页填写凭证")
+            raise BizError(code=400, message=_ERROR_MESSAGE_COS_NOT_CONFIGURED)
         # 文件夹移动
         if source_key.endswith("/"):
             return await self._move_prefix(source_key, dest_key)
         _validate_key(source_key)
         _validate_key(dest_key)
 
-        await cos_client.copy_object(SourceKey=source_key, Key=dest_key)
-        await cos_client.delete_object(Key=source_key)
+        await _cos_call(cos_client.copy_object(SourceKey=source_key, Key=dest_key))
+        await _cos_call(cos_client.delete_object(Key=source_key))
         return {"moved": 1}
 
     async def _move_prefix(self, source_prefix: str, dest_prefix: str) -> dict:
@@ -238,11 +307,11 @@ class CosStorageService:
             # 计算目标 key：把源前缀替换为目标前缀
             rel = src[len(source_prefix):] if src.startswith(source_prefix) else src
             dst = dest_prefix + rel
-            await cos_client.copy_object(SourceKey=src, Key=dst)
+            await _cos_call(cos_client.copy_object(SourceKey=src, Key=dst))
         # 复制成功后删除源（分批）
         batch_size = 500
         for i in range(0, len(keys), batch_size):
-            await cos_client.delete_objects(keys[i:i + batch_size])
+            await _cos_call(cos_client.delete_objects(keys[i:i + batch_size]))
         return {"moved": len(keys)}
 
     # ---- 元数据 ----
@@ -250,9 +319,9 @@ class CosStorageService:
     async def get_metadata(self, key: str) -> dict:
         """获取对象元数据。"""
         if not is_cos_configured():
-            raise BizError(code=400, message="COS 未配置：请先在「云端配置」页填写凭证")
+            raise BizError(code=400, message=_ERROR_MESSAGE_COS_NOT_CONFIGURED)
         _validate_key(key)
-        meta = await cos_client.head_object(Key=key)
+        meta = await _cos_call(cos_client.head_object(Key=key))
         meta["key"] = key
         return meta
 
@@ -265,9 +334,9 @@ class CosStorageService:
         pages = 0
         while pages < _LIST_MAX_PAGES:
             pages += 1
-            resp = await cos_client.list_objects_delimited(
+            resp = await _cos_call(cos_client.list_objects_delimited(
                 Prefix=prefix, Marker=marker, MaxKeys=_LIST_PAGE_SIZE
-            )
+            ))
             for item in resp.get("Contents", []) or []:
                 k = item.get("Key")
                 if k:
@@ -293,3 +362,6 @@ def _normalize_last_modified(value) -> str:
         return value.isoformat()
     except Exception:
         return str(value)
+
+
+

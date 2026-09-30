@@ -1,4 +1,4 @@
-"""内网穿透 Provider 插件化实现。
+﻿"""内网穿透 Provider 插件化实现。
 
 设计决策：
 - 抽象基类 TunnelProvider 定义统一接口，TunnelService 委托具体实现
@@ -792,7 +792,7 @@ class TailscaleProvider(TunnelProvider):
                         break
             if not isinstance(handlers, dict) or self._path_prefix not in handlers:
                 # fallback: Funnel已启用，直接构造URL
-                logger.info("[tailscale] Handlers check failed", self._path_prefix)
+                logger.info("[tailscale] Handlers check failed: %s", self._path_prefix)
                 return f"https://{host}{self._path_prefix}"
             return f"https://{host}{self._path_prefix}"
 
@@ -940,3 +940,5 @@ def create_provider(provider_name: str, local_port: int, **kwargs) -> TunnelProv
             f"未知的 tunnel provider: {provider_name}，可选: {list(_PROVIDER_REGISTRY.keys())}"
         )
     return cls(local_port=local_port, **kwargs)
+
+

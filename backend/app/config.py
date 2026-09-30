@@ -1,4 +1,4 @@
-"""应用配置管理（V1.2：SQLite + TTLCache 替代 MySQL + Redis）。
+﻿"""应用配置管理（V1.2：SQLite + TTLCache 替代 MySQL + Redis）。
 
 使用 pydantic-settings 从环境变量加载配置，统一入口避免散落的 os.getenv 调用。
 按职责分组，便于维护时定位配置项。
@@ -54,7 +54,7 @@ def detect_lan_ip() -> str:
     return "127.0.0.1"
 
 
-def get_all_lan_ips() -> list[str]:
+def get_all_lan_ips() -> list[str]:  # NOSONAR
     """获取本机所有 IPv4 地址（排除回环、Tailscale、APIPA）。
 
     用于真机调试模式：后端通过 /api/health 暴露所有局域网 IP，
@@ -182,6 +182,10 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "qwen-max"
     LLM_TIMEOUT_SEC: int = 30
     LLM_RETRY_ATTEMPTS: int = 3
+    # 单期节目最大段数上限（T00584 得到式听书）：默认 10 段 ≈ 10-18 分钟；
+    # 「一本书一条完整音频」需要 15-20 段（20-30 分钟），可经 ai_config 键
+    # llm_max_script_segments 运行时调整（上限同时受素材数与目标时长约束）
+    LLM_MAX_SCRIPT_SEGMENTS: int = 10
 
     # ---- 阿里云 TTS API ----
     ALIYUN_TTS_API_KEY: str = ""
@@ -326,7 +330,7 @@ class Settings(BaseSettings):
     # T00730/T00731：图像生成服务（agnes-image-2.5-flash，OpenAI 兼容 images/generations）
     IMAGE_API_KEY: str = ""
     IMAGE_API_BASE_URL: str = "https://apihub.agnes-ai.com/v1"
-    IMAGE_API_MODEL: str = "agnes-image-2.5-flash"
+    IMAGE_API_MODEL: str = "agnes-image-2.5-flash" 
 
     # ---- 音频码率配置 ----
     # 语音播报场景 64kbps 已足够（MP3 单声道 44100Hz），128kbps 是音乐标准过度
@@ -355,10 +359,17 @@ class Settings(BaseSettings):
     # TTS 段间 0.5s 静音过渡处 BGM 自然浮现，形成衔接节奏感
     BGM_VOLUME: float = 0.15
     # TTS 段间过渡时长（秒）：段与段之间插入的静音长度，BGM 在此时段显现
+    # 仅在 BGM_GAP_MODE=silence / bridge 时生效；continuous 模式用交叉淡化替代静音
     SEGMENT_GAP_SEC: float = 0.5
     # 段间 BGM 模式（全局默认，频道可覆盖）：
-    #   "silence" = 段间真实静音（停顿可感知，推荐）；"bridge" = 段间 BGM 桥接（旧版行为）
-    BGM_GAP_MODE: str = "silence"
+    #   "continuous" = 段间交叉淡化直连（无空档）+ BGM 全程连续（默认，双人播报切换丝滑）
+    #   "silence"    = 段间真实静音 + BGM 按段切片（停顿可感知）
+    #   "bridge"     = 段间真实静音 + BGM 连续铺满（旧版 BGM 桥接）
+    BGM_GAP_MODE: str = "continuous"
+    # 段间交叉淡化时长（秒）：仅 continuous 模式生效，用于消除播报人切换时的静音空档。
+    # 取值需远小于最短分段时长（拼接时会按最短段 dur/3 自动收敛），
+    # 0.10-0.20 听感最自然：太短仍能感到硬切，太长两个音色会互相「叠字」。
+    SEGMENT_CROSSFADE_SEC: float = 0.12
 
     # ---- 爬虫配置 ----
     # 去重表保留天数：3 天后过期，允许爬虫重新爬取同源新闻
@@ -480,3 +491,5 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """单例配置，避免重复读取 .env 文件。"""
     return Settings()
+
+

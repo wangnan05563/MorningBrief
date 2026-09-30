@@ -14,7 +14,7 @@
  */
 function track(event, properties) {
   // 统一加 [tracker] 前缀，便于在控制台日志中过滤业务埋点
-  console.log('[tracker]', event, properties || {});
+  console.warn('[tracker]', event, properties || {});
 }
 
 /**

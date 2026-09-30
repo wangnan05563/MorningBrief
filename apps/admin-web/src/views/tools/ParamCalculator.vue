@@ -5,7 +5,7 @@
         type="primary"
         label="应用到 AI 配置"
         desc="将当前三参数带入 AI 配置页"
-        :icon="ArrowRight"
+        :icon="Promotion"
         @click="goToAiConfig"
       />
     </div>
@@ -48,6 +48,7 @@
               label="锁定此项"
               desc="锁定时长，由其他参数计算得出"
               :icon="Lock"
+              inline-text="时长"
               @click="lockParam('duration')"
             />
           </div>
@@ -97,6 +98,7 @@
               label="锁定此项"
               desc="锁定总字数，由其他参数计算得出"
               :icon="Lock"
+              inline-text="字数"
               @click="lockParam('words')"
             />
           </div>
@@ -146,6 +148,7 @@
               label="锁定此项"
               desc="锁定语速倍率，由其他参数计算得出"
               :icon="Lock"
+              inline-text="倍率"
               @click="lockParam('rate')"
             />
           </div>
@@ -189,7 +192,7 @@
           class="preset-btn"
           :label="p.label"
           :desc="`${p.duration / 60}分钟 · ${p.rate}x · ${p.expectedWords}字`"
-          :icon="ArrowRight"
+          :icon="p.icon"
           @click="applyPreset(p)"
         />
       </div>
@@ -206,7 +209,11 @@ import {
   Odometer,
   MagicStick,
   Lock,
-  ArrowRight,
+  Promotion,
+  Lightning,
+  Star,
+  Files,
+  TrendCharts,
 } from '@element-plus/icons-vue'
 
 // 项目常量：与 AIConfig 中 calculatedWords 公式保持一致
@@ -223,10 +230,10 @@ const rateMultiplier = ref(1.0)
 const lockedParam = ref('rate')
 
 const presets = [
-  { key: 'express', label: '新闻速递', duration: 300, rate: 1.0, expectedWords: 1050 },
-  { key: 'standard', label: '标准节目', duration: 480, rate: 1.0, expectedWords: 1680 },
-  { key: 'full', label: '完整节目', duration: 600, rate: 1.0, expectedWords: 2100 },
-  { key: 'fast', label: '快节奏精华', duration: 600, rate: 1.5, expectedWords: 3150 },
+  { key: 'express', label: '新闻速递', icon: Lightning, duration: 300, rate: 1.0, expectedWords: 1050 },
+  { key: 'standard', label: '标准节目', icon: Star, duration: 480, rate: 1.0, expectedWords: 1680 },
+  { key: 'full', label: '完整节目', icon: Files, duration: 600, rate: 1.0, expectedWords: 2100 },
+  { key: 'fast', label: '快节奏精华', icon: TrendCharts, duration: 600, rate: 1.5, expectedWords: 3150 },
 ]
 
 // 根据当前锁定项，由另外两个参数推算锁定项的值

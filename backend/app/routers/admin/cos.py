@@ -1,4 +1,4 @@
-"""B 端云端 COS 配置与管理路由（V1.5 新增）。
+﻿"""B 端云端 COS 配置与管理路由（V1.5 新增）。
 
 端点：
 - GET  /admin/api/v1/cos/config          获取 COS 配置（SecretId/SecretKey 脱敏）
@@ -26,6 +26,9 @@ from app.database import get_db
 from app.services.cos_config_service import CosConfigService
 from app.services.cos_storage_service import CosStorageService
 
+
+
+_DESC_OBJECT_KEY = "对象 Key"
 router = APIRouter(prefix="/admin/api/v1/cos", tags=["B端-云端存储"])
 
 
@@ -150,7 +153,7 @@ async def upload_file(
 
 @router.get("/download")
 async def get_download(
-    key: str = Query(..., description="对象 Key"),
+    key: str = Query(..., description=_DESC_OBJECT_KEY),
     expired: int = Query(300, description="预签名有效期（秒），CDN 模式忽略"),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -162,7 +165,7 @@ async def get_download(
 
 @router.delete("/object")
 async def delete_object(
-    key: str = Query(..., description="对象 Key"),
+    key: str = Query(..., description=_DESC_OBJECT_KEY),
     admin: AdminPayload = Depends(require_admin),
 ):
     """删除单个对象。"""
@@ -209,7 +212,7 @@ async def move_object(
 
 @router.get("/metadata")
 async def get_metadata(
-    key: str = Query(..., description="对象 Key"),
+    key: str = Query(..., description=_DESC_OBJECT_KEY),
     admin: AdminPayload = Depends(require_admin),
 ):
     """获取对象元数据（大小 / 最后修改 / 类型 / ETag）。"""

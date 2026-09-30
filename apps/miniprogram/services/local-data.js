@@ -464,15 +464,23 @@ function getPreferredChannels() {
 /**
  * 设置偏爱频道（全量覆盖）
  * @param {Array<number>} channelIds - 偏爱频道 ID 数组
+ * @returns {boolean} 是否保存成功（未登录/openid 缺失时为 false，便于调用方给出反馈而非静默丢失）
  */
 function setPreferredChannels(channelIds) {
   const openid = getOpenid();
-  if (!openid) return;
+  if (!openid) {
+    // A5：未登录时按 openid 隔离的存储无目标 key，原先静默 return 会让用户误以为已保存。
+    // 改为返回 false + 告警，由调用方弹 toast 拦截，避免偏爱设置静默丢失。
+    console.warn('[local-data] 未登录，跳过保存偏爱频道（openid 缺失）');
+    return false;
+  }
   const ids = (channelIds || []).filter((id) => id != null);
   try {
     wx.setStorageSync(preferredChannelsKey(openid), ids);
+    return true;
   } catch (e) {
     console.warn('[local-data] 保存偏爱频道失败:', e.message);
+    return false;
   }
 }
 
