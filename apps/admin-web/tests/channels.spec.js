@@ -160,4 +160,40 @@ test.describe('频道管理', () => {
     // 成功提示（用 first 避免匹配到前序测试残留的 el-message）
     await expect(page.locator('.el-message').getByText(/已禁用|已启用/).first()).toBeVisible({ timeout: 30000 })
   })
+
+  // T00732 编辑弹窗布局重构：20+ 字段按语义拆 4 页签，防止回退为单页长滚动
+  test('编辑弹窗按 4 页签分组展示', async ({ page }) => {
+    await setLoginState(page, 'admin')
+    await page.goto('/channels')
+
+    await expect(page.getByText('科技频道')).toBeVisible({ timeout: 30000 })
+    await page.getByRole('button', { name: '编辑' }).first().click()
+    const dlg = page.locator('.el-dialog').filter({ hasText: '编辑频道' })
+    await expect(dlg).toBeVisible({ timeout: 30000 })
+
+    // 4 个页签齐备
+    for (const t of ['基础信息', '采集与选题', '提示词与合规', '音频与 BGM']) {
+      await expect(dlg.locator('.el-tabs__item').filter({ hasText: t })).toBeVisible()
+    }
+
+    // 默认页签=基础信息：核心字段可见，其他页签字段隐藏（el-tabs 非懒渲染，display:none）
+    await expect(dlg.getByText('频道类型', { exact: true })).toBeVisible()
+    await expect(dlg.getByText('BGM 文件', { exact: true })).toBeHidden()
+    await expect(dlg.getByText('RSS 源', { exact: true })).toBeHidden()
+
+    // 切「音频与 BGM」：BGM 字段可见、基础字段隐藏
+    await dlg.locator('.el-tabs__item').filter({ hasText: '音频与 BGM' }).click()
+    await expect(dlg.getByText('BGM 文件', { exact: true })).toBeVisible()
+    await expect(dlg.getByText('频道类型', { exact: true })).toBeHidden()
+
+    // 切「提示词与合规」：提示词折叠面板与合规字段同页签
+    await dlg.locator('.el-tabs__item').filter({ hasText: '提示词与合规' }).click()
+    await expect(dlg.getByText('敏感词约束（constraint）')).toBeVisible()
+    await expect(dlg.getByText('风险提示', { exact: true })).toBeVisible()
+
+    // 切「采集与选题」：数据源分区在
+    await dlg.locator('.el-tabs__item').filter({ hasText: '采集与选题' }).click()
+    await expect(dlg.getByText('RSS 源', { exact: true })).toBeVisible()
+    await expect(dlg.getByText('讲书稿模式', { exact: true })).toBeVisible()
+  })
 })

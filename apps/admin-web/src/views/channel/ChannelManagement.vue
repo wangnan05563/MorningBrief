@@ -81,17 +81,27 @@
     <!-- 新增/编辑弹窗：复用同一 Dialog，通过 editing 标志区分 -->
     <el-dialog v-model="dialogVisible" :title="editing ? '编辑频道' : '新增频道'" width="720px" :close-on-click-modal="false">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
-        <!-- 基本信息区 -->
-        <el-divider content-position="left">基本信息</el-divider>
+        <!-- T00732 布局重构：高频核心字段前置「基础信息」，低频高级字段按语义拆入
+             「采集与选题 / 提示词与合规 / 音频与 BGM」三个页签，消除单页长滚动；
+             所有字段、校验与提交逻辑保持不变，仅重排分组 -->
+        <el-tabs v-model="activeTab" class="edit-tabs">
+          <el-tab-pane label="基础信息" name="basic">
         <el-form-item label="名称" prop="name">
           <el-input v-model="form.name" placeholder="请输入频道名称" />
         </el-form-item>
         <el-form-item label="描述" prop="description">
           <el-input v-model="form.description" type="textarea" :rows="2" placeholder="频道描述（选填）" />
         </el-form-item>
-        <el-form-item label="定时触发">
-          <el-input v-model="form.schedule_time" placeholder="HH:MM:SS 或 HH:MM（如 04:00:00 / 4:00），留空使用全局默认" style="width: 280px" />
-          <span class="form-tip">为空则使用全局 cron（05:00）触发</span>
+        <el-form-item label="频道类型">
+          <el-select v-model="form.channel_type" style="width: 200px">
+            <el-option label="资讯（默认）" value="news" />
+            <el-option label="课程" value="course" />
+            <el-option label="有声读物" value="audiobook" />
+          </el-select>
+          <span class="form-tip">课程/有声读物走章节列表 + 学习进度 UI，并自动展示合规提示</span>
+        </el-form-item>
+        <el-form-item label="类型标签">
+          <el-input v-model="form.type_label" placeholder="如：课程 / 有声读物（冗余中文标签，留空用默认映射）" style="width: 320px" />
         </el-form-item>
         <el-form-item label="启用">
           <el-switch v-model="form.is_active" :active-value="1" :inactive-value="0" />
@@ -105,70 +115,6 @@
             style="width: 160px"
           />
           <span class="form-tip">数值越小越靠前（小程序/首页 tab 顺序），默认 0</span>
-        </el-form-item>
-        <el-form-item label="素材回溯">
-          <div class="lookback-wrap">
-            <el-checkbox v-model="form.lookbackEnabled">自定义素材回溯天数</el-checkbox>
-            <el-input-number
-              v-model="form.material_lookback_days"
-              :min="1"
-              :max="90"
-              :step="1"
-              :disabled="!form.lookbackEnabled"
-              controls-position="right"
-              style="width: 160px"
-            />
-            <el-tooltip
-              content="当天 pending 素材不足时，系统自动将选材时间范围放宽到最近 N 天。不勾选则继承系统动态回溯（按频道近 7 天入库频率 3/7/14 天），避免短节目依赖 BGM 补足。"
-              placement="top"
-              :fallback-placements="['bottom', 'left', 'right']"
-            >
-              <span class="form-tip" style="cursor: help">范围 1-90 天，留空继承动态</span>
-            </el-tooltip>
-          </div>
-        </el-form-item>
-
-        <!-- 新增频道时可选 AI 自动生成提示词 -->
-        <el-form-item v-if="!editing" label="AI 生成">
-          <el-checkbox v-model="form.auto_generate_prompts">创建后自动调用 AI 生成提示词</el-checkbox>
-        </el-form-item>
-
-        <!-- 扩展 / 学习频道配置区：类型、选题策略、广告、风险提示、封面 -->
-        <el-divider content-position="left">扩展 / 学习频道</el-divider>
-        <el-form-item label="频道类型">
-          <el-select v-model="form.channel_type" style="width: 200px">
-            <el-option label="资讯（默认）" value="news" />
-            <el-option label="课程" value="course" />
-            <el-option label="有声读物" value="audiobook" />
-          </el-select>
-          <span class="form-tip">课程/有声读物走章节列表 + 学习进度 UI，并自动展示合规提示</span>
-        </el-form-item>
-        <el-form-item label="类型标签">
-          <el-input v-model="form.type_label" placeholder="如：课程 / 有声读物（冗余中文标签，留空用默认映射）" style="width: 320px" />
-        </el-form-item>
-        <el-form-item label="选题策略">
-          <el-select v-model="form.selection_strategy" clearable style="width: 240px">
-            <el-option label="按热度（默认）" value="heat" />
-            <el-option label="按文档章节顺序" value="outline" />
-            <el-option label="手动指定素材" value="manual" />
-          </el-select>
-          <span class="form-tip">课程频道建议选「按文档章节顺序」；手动需配合下方素材 ID</span>
-        </el-form-item>
-        <el-form-item v-if="form.selection_strategy === 'manual'" label="素材 ID">
-          <el-input v-model="form.manual_material_ids_text" placeholder="逗号分隔的素材 ID，如：12,13,14" style="width: 320px" />
-          <span class="form-tip">仅「手动指定素材」时生效，按列表顺序选题</span>
-        </el-form-item>
-        <el-form-item label="投放广告">
-          <el-switch v-model="form.enable_ad" :active-value="1" :inactive-value="0" />
-          <span class="form-tip">课程/资料频道建议关闭，避免 AI 生成内容插播广告</span>
-        </el-form-item>
-        <el-form-item label="风险提示">
-          <el-select v-model="form.disclaimer_level" style="width: 220px">
-            <el-option label="无（资讯）" value="none" />
-            <el-option label="普通" value="normal" />
-            <el-option label="强提示（课程/资料）" value="strong" />
-          </el-select>
-          <span class="form-tip">课程/资料类须显式「强提示」：AI 生成内容不构成专业建议</span>
         </el-form-item>
         <el-form-item label="封面图">
           <div class="cover-editor">
@@ -193,7 +139,194 @@
             </div>
           </div>
         </el-form-item>
-
+        <!-- T00730 频道图标：上传 / AI 生成 → 预览 → 确认使用 -->
+        <el-form-item label="频道图标">
+          <div class="icon-editor">
+            <el-image
+              v-if="form.icon_url"
+              class="icon-preview"
+              :src="assetPreviewUrl(form.icon_url)"
+              fit="cover"
+            >
+              <template #error>
+                <div class="icon-preview icon-preview-empty">加载失败</div>
+              </template>
+            </el-image>
+            <div v-else class="icon-preview icon-preview-empty">无图标</div>
+            <div class="icon-actions">
+              <el-upload
+                :show-file-list="false"
+                accept=".png,.jpg,.jpeg,.webp"
+                :http-request="doUploadIcon"
+              >
+                <IconButton size="small" :loading="iconUploading" :disabled="!editing" :icon="Plus" label="上传图标" desc="上传频道图标（PNG/JPG/WebP）" />
+              </el-upload>
+              <div class="ai-gen-row">
+                <el-input
+                  v-model="iconPrompt"
+                  size="small"
+                  placeholder="主题关键词，如：番茄计时器"
+                  style="width: 190px"
+                  :disabled="!editing"
+                />
+                <IconButton
+                  size="small"
+                  type="primary"
+                  plain
+                  :loading="iconGenerating"
+                  :disabled="!editing || !iconPrompt"
+                  :icon="Refresh"
+                  label="AI 生成"
+                  desc="调用 AI 生成频道图标"
+                  @click="onGenerateIcon"
+                />
+              </div>
+              <span class="form-tip">PNG/JPG/WebP ≤2MB；AI 生成为圆角方形图标，生成后自动设为频道图标（可再次生成替换）</span>
+            </div>
+          </div>
+        </el-form-item>
+          </el-tab-pane>
+          <el-tab-pane label="采集与选题" name="collect">
+        <el-form-item label="定时触发">
+          <el-input v-model="form.schedule_time" placeholder="HH:MM:SS 或 HH:MM（如 04:00:00 / 4:00），留空使用全局默认" style="width: 280px" />
+          <span class="form-tip">为空则使用全局 cron（05:00）触发</span>
+        </el-form-item>
+        <el-form-item label="素材回溯">
+          <div class="lookback-wrap">
+            <el-checkbox v-model="form.lookbackEnabled">自定义素材回溯天数</el-checkbox>
+            <el-input-number
+              v-model="form.material_lookback_days"
+              :min="1"
+              :max="90"
+              :step="1"
+              :disabled="!form.lookbackEnabled"
+              controls-position="right"
+              style="width: 160px"
+            />
+            <el-tooltip
+              content="当天 pending 素材不足时，系统自动将选材时间范围放宽到最近 N 天。不勾选则继承系统动态回溯（按频道近 7 天入库频率 3/7/14 天），避免短节目依赖 BGM 补足。"
+              placement="top"
+              :fallback-placements="['bottom', 'left', 'right']"
+            >
+              <span class="form-tip" style="cursor: help">范围 1-90 天，留空继承动态</span>
+            </el-tooltip>
+          </div>
+        </el-form-item>
+        <el-form-item label="选题策略">
+          <el-select v-model="form.selection_strategy" clearable style="width: 240px">
+            <el-option label="按热度（默认）" value="heat" />
+            <el-option label="按文档章节顺序" value="outline" />
+            <el-option label="手动指定素材" value="manual" />
+          </el-select>
+          <span class="form-tip">课程频道建议选「按文档章节顺序」；手动需配合下方素材 ID</span>
+        </el-form-item>
+        <el-form-item v-if="form.selection_strategy === 'manual'" label="素材 ID">
+          <el-input v-model="form.manual_material_ids_text" placeholder="逗号分隔的素材 ID，如：12,13,14" style="width: 320px" />
+          <span class="form-tip">仅「手动指定素材」时生效，按列表顺序选题</span>
+        </el-form-item>
+        <!-- 数据源配置区：RSS 源白名单 + 关键词过滤 -->
+        <el-divider content-position="left">
+          <span>数据源配置</span>
+          <!-- AI 推荐：仅编辑模式可用，与 BGM 推荐按钮风格保持一致 -->
+          <IconButton
+            v-if="editing"
+            type="primary"
+            link
+            :loading="recommendingSources"
+            :icon="Refresh"
+            label="AI 推荐"
+            desc="调用 AI 推荐 RSS 源与关键词"
+            @click="handleRecommendSources"
+            style="margin-left: 12px"
+          />
+        </el-divider>
+        <el-form-item label="RSS 源">
+          <el-select
+            v-model="form.rss_sources"
+            multiple
+            filterable
+            collapse-tags
+            collapse-tags-tooltip
+            :disabled="bookPoolOn"
+            placeholder="留空使用全部源（全局模式）"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="src in rssSourcesList"
+              :key="src.name"
+              :label="`${src.name}（${src.category_hint}）`"
+              :value="src.name"
+            />
+          </el-select>
+          <span class="form-tip">
+            选择频道专属 RSS 源，仅采集选中源的数据；留空使用全部源
+            <template v-if="bookPoolOn">（讲书稿模式下书源已停用）</template>
+          </span>
+        </el-form-item>
+        <el-form-item v-if="form.channel_type === 'audiobook'" label="书籍 RSS 源">
+          <el-select
+            v-model="form.book_rss_sources"
+            multiple
+            filterable
+            collapse-tags
+            collapse-tags-tooltip
+            :disabled="bookPoolOn"
+            placeholder="留空使用全部书籍源（book_rss.yaml）"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="src in bookRssSourcesList"
+              :key="src.name"
+              :label="`${src.name}（${src.category_hint}）`"
+              :value="src.name"
+            />
+          </el-select>
+          <span class="form-tip"
+            >有声读物专属：从 book_rss.yaml 预制书籍源中选择；爬虫仅对 audiobook 频道加载这些源</span
+          >
+        </el-form-item>
+        <el-form-item label="关键词过滤">
+          <el-input
+            v-model="form.keywords"
+            type="textarea"
+            :rows="2"
+            placeholder="逗号分隔，如：游戏,主机,PS5,Xbox,任天堂。留空表示不过滤"
+          />
+          <span class="form-tip">标题包含任一关键词的素材才会入库，在正文提取前过滤以节省网络请求</span>
+          <!-- AI 推荐理由：展示 LLM 的选择依据，增强可解释性，复用通用 recommend-reason 类 -->
+          <div v-if="sourcesRecommendReason" class="recommend-reason">
+            AI 推荐理由：{{ sourcesRecommendReason }}
+          </div>
+        </el-form-item>
+        <!-- T00656 讲书稿模式：开启后忽略频道书源，改从素材池按序逐日取书（书源灰显保留） -->
+        <el-form-item label="讲书稿模式">
+          <div class="book-pool-switch-row">
+            <el-switch
+              v-model="bookPoolOn"
+              :disabled="!editing"
+              :loading="bookPoolLoading"
+              @change="onToggleBookPool"
+            />
+            <span class="form-tip">
+              {{ bookPoolOn
+                ? '已开启：内容来自「讲书稿素材池」（按书单顺序逐日取书），上方书源已停用（灰显）'
+                : '开启后忽略频道书源，改按「讲书稿素材池」的顺序逐日取书生成讲书稿' }}
+            </span>
+          </div>
+          <el-link
+            v-if="bookPoolOn"
+            type="primary"
+            class="book-pool-link"
+            @click="poolDialogVisible = true"
+          >讲书稿素材池（书单 / 排序 / 进度）</el-link>
+          <span v-if="!editing" class="form-tip">（新频道请先保存，再配置讲书稿模式与素材池）</span>
+        </el-form-item>
+          </el-tab-pane>
+          <el-tab-pane label="提示词与合规" name="prompts">
+        <!-- 新增频道时可选 AI 自动生成提示词 -->
+        <el-form-item v-if="!editing" label="AI 生成">
+          <el-checkbox v-model="form.auto_generate_prompts">创建后自动调用 AI 生成提示词</el-checkbox>
+        </el-form-item>
         <!-- 提示词区：折叠面板，减少视觉负担 -->
         <el-divider content-position="left">
           <span>频道提示词</span>
@@ -223,9 +356,21 @@
             <el-input v-model="form.rewrite_template" type="textarea" :rows="8" placeholder="留空使用默认 rewrite.txt 模板" />
           </el-collapse-item>
         </el-collapse>
-
+        <el-form-item label="投放广告">
+          <el-switch v-model="form.enable_ad" :active-value="1" :inactive-value="0" />
+          <span class="form-tip">课程/资料频道建议关闭，避免 AI 生成内容插播广告</span>
+        </el-form-item>
+        <el-form-item label="风险提示">
+          <el-select v-model="form.disclaimer_level" style="width: 220px">
+            <el-option label="无（资讯）" value="none" />
+            <el-option label="普通" value="normal" />
+            <el-option label="强提示（课程/资料）" value="strong" />
+          </el-select>
+          <span class="form-tip">课程/资料类须显式「强提示」：AI 生成内容不构成专业建议</span>
+        </el-form-item>
+          </el-tab-pane>
+          <el-tab-pane label="音频与 BGM" name="audio">
         <!-- BGM 设置区：选择预制/上传自定义/AI推荐/试听 -->
-        <el-divider content-position="left">背景音乐（BGM）</el-divider>
         <el-form-item label="BGM 文件">
           <div class="bgm-controls">
             <!-- 下拉选择：预制 + 自定义 BGM 列表 -->
@@ -306,9 +451,7 @@
           />
           <span class="form-tip">留空/0.15 为默认，TTS 播报期间垫底音量</span>
         </el-form-item>
-
         <!-- 音频节奏区：段间静音 + 思考问题开关 -->
-        <el-divider content-position="left">音频节奏</el-divider>
         <el-form-item label="段间静音">
           <div class="gap-controls">
             <el-checkbox
@@ -356,152 +499,8 @@
           />
           <span class="form-tip">开启后每段新闻末尾自动追加引发思考的问题</span>
         </el-form-item>
-
-        <!-- T00730 频道图标：上传 / AI 生成 → 预览 → 确认使用 -->
-        <el-form-item label="频道图标">
-          <div class="icon-editor">
-            <el-image
-              v-if="form.icon_url"
-              class="icon-preview"
-              :src="assetPreviewUrl(form.icon_url)"
-              fit="cover"
-            >
-              <template #error>
-                <div class="icon-preview icon-preview-empty">无图标</div>
-              </template>
-            </el-image>
-            <div v-else class="icon-preview icon-preview-empty">无图标</div>
-            <div class="icon-actions">
-              <el-upload
-                :show-file-list="false"
-                accept=".png,.jpg,.jpeg,.webp"
-                :http-request="doUploadIcon"
-              >
-                <IconButton size="small" :loading="iconUploading" :disabled="!editing" :icon="Plus" label="上传图标" desc="上传频道图标（PNG/JPG/WebP）" />
-              </el-upload>
-              <div class="ai-gen-row">
-                <el-input
-                  v-model="iconPrompt"
-                  size="small"
-                  placeholder="主题关键词，如：番茄计时器"
-                  style="width: 190px"
-                  :disabled="!editing"
-                />
-                <IconButton
-                  size="small"
-                  type="primary"
-                  plain
-                  :loading="iconGenerating"
-                  :disabled="!editing || !iconPrompt"
-                  :icon="Refresh"
-                  label="AI 生成"
-                  desc="调用 AI 生成频道图标"
-                  @click="onGenerateIcon"
-                />
-              </div>
-              <span class="form-tip">PNG/JPG/WebP ≤2MB；AI 生成为圆角方形图标，生成后自动设为频道图标（可再次生成替换）</span>
-            </div>
-          </div>
-        </el-form-item>
-
-        <!-- 数据源配置区：RSS 源白名单 + 关键词过滤 -->
-        <el-divider content-position="left">
-          <span>数据源配置</span>
-          <!-- AI 推荐：仅编辑模式可用，与 BGM 推荐按钮风格保持一致 -->
-          <IconButton
-            v-if="editing"
-            type="primary"
-            link
-            :loading="recommendingSources"
-            :icon="Refresh"
-            label="AI 推荐"
-            desc="调用 AI 推荐 RSS 源与关键词"
-            @click="handleRecommendSources"
-            style="margin-left: 12px"
-          />
-        </el-divider>
-        <el-form-item label="RSS 源">
-          <el-select
-            v-model="form.rss_sources"
-            multiple
-            filterable
-            collapse-tags
-            collapse-tags-tooltip
-            :disabled="bookPoolOn"
-            placeholder="留空使用全部源（全局模式）"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="src in rssSourcesList"
-              :key="src.name"
-              :label="`${src.name}（${src.category_hint}）`"
-              :value="src.name"
-            />
-          </el-select>
-          <span class="form-tip">
-            选择频道专属 RSS 源，仅采集选中源的数据；留空使用全部源
-            <template v-if="bookPoolOn">（讲书稿模式下书源已停用）</template>
-          </span>
-        </el-form-item>
-        <el-form-item v-if="form.channel_type === 'audiobook'" label="书籍 RSS 源">
-          <el-select
-            v-model="form.book_rss_sources"
-            multiple
-            filterable
-            collapse-tags
-            collapse-tags-tooltip
-            :disabled="bookPoolOn"
-            placeholder="留空使用全部书籍源（book_rss.yaml）"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="src in bookRssSourcesList"
-              :key="src.name"
-              :label="`${src.name}（${src.category_hint}）`"
-              :value="src.name"
-            />
-          </el-select>
-          <span class="form-tip"
-            >有声读物专属：从 book_rss.yaml 预制书籍源中选择；爬虫仅对 audiobook 频道加载这些源</span
-          >
-        </el-form-item>
-        <el-form-item label="关键词过滤">
-          <el-input
-            v-model="form.keywords"
-            type="textarea"
-            :rows="2"
-            placeholder="逗号分隔，如：游戏,主机,PS5,Xbox,任天堂。留空表示不过滤"
-          />
-          <span class="form-tip">标题包含任一关键词的素材才会入库，在正文提取前过滤以节省网络请求</span>
-          <!-- AI 推荐理由：展示 LLM 的选择依据，增强可解释性，复用通用 recommend-reason 类 -->
-          <div v-if="sourcesRecommendReason" class="recommend-reason">
-            AI 推荐理由：{{ sourcesRecommendReason }}
-          </div>
-        </el-form-item>
-
-        <!-- T00656 讲书稿模式：开启后忽略频道书源，改从素材池按序逐日取书（书源灰显保留） -->
-        <el-form-item label="讲书稿模式">
-          <div class="book-pool-switch-row">
-            <el-switch
-              v-model="bookPoolOn"
-              :disabled="!editing"
-              :loading="bookPoolLoading"
-              @change="onToggleBookPool"
-            />
-            <span class="form-tip">
-              {{ bookPoolOn
-                ? '已开启：内容来自「讲书稿素材池」（按书单顺序逐日取书），上方书源已停用（灰显）'
-                : '开启后忽略频道书源，改按「讲书稿素材池」的顺序逐日取书生成讲书稿' }}
-            </span>
-          </div>
-          <el-link
-            v-if="bookPoolOn"
-            type="primary"
-            class="book-pool-link"
-            @click="poolDialogVisible = true"
-          >讲书稿素材池（书单 / 排序 / 进度）</el-link>
-          <span v-if="!editing" class="form-tip">（新频道请先保存，再配置讲书稿模式与素材池）</span>
-        </el-form-item>
+          </el-tab-pane>
+        </el-tabs>
       </el-form>
       <template #footer>
         <IconButton :icon="Close" label="取消" desc="关闭弹窗，放弃修改" @click="onCancelDialog" />
@@ -572,6 +571,8 @@ const editing = ref(false)
 const submitting = ref(false)
 const generating = ref(false)
 const formRef = ref()
+// T00732 编辑弹窗页签：默认落在「基础信息」（唯一必填项 name 所在页签）
+const activeTab = ref('basic')
 
 // 行级删除按钮 loading（P1-2.2 防重复点击）
 const deletingIds = ref(new Set())
@@ -741,6 +742,7 @@ function resetForm() {
   form.disclaimer_level = 'none'
   form.cover_url = ''
   promptCollapse.value = ['intro']
+  activeTab.value = 'basic'
   showAudioPlayer.value = false
   bgmRecommendReason.value = ''
   sourcesRecommendReason.value = ''
@@ -939,6 +941,7 @@ function openEdit(row) {
   form.disclaimer_level = row.disclaimer_level || 'none'
   form.cover_url = row.cover_url || ''
   promptCollapse.value = ['intro']
+  activeTab.value = 'basic'
   showAudioPlayer.value = false
   bgmRecommendReason.value = ''
   sourcesRecommendReason.value = ''
@@ -949,7 +952,13 @@ function openEdit(row) {
 }
 
 async function handleSubmit() {
-  await formRef.value.validate()
+  try {
+    await formRef.value.validate()
+  } catch {
+    // T00732 校验失败：自动切到含出错字段的页签（当前唯一必填 name 在「基础信息」），避免错误提示藏在未激活页签里
+    activeTab.value = 'basic'
+    return
+  }
   submitting.value = true
   try {
     // rss_sources 数组序列化为 JSON 字符串存储，空数组序列化为 "[]"
@@ -1228,6 +1237,18 @@ onMounted(() => {
 
 <style scoped lang="scss">
 @use '../../styles/variables.scss' as *;
+
+// T00732 编辑弹窗页签布局：内容区限高内部滚动，弹窗不再随表单无限拉长
+.edit-tabs {
+  :deep(.el-tabs__header) {
+    margin-bottom: 16px;
+  }
+
+  :deep(.el-tabs__content) {
+    max-height: 56vh;
+    overflow-y: auto;
+  }
+}
 
 .channel-management {
   .top-bar {
