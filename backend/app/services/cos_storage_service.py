@@ -140,7 +140,7 @@ class CosStorageService:
         while pages < _LIST_MAX_PAGES:
             pages += 1
             resp = await _cos_call(cos_client.list_objects_delimited(
-                Prefix=prefix, Delimiter="/", Marker=marker, MaxKeys=_LIST_PAGE_SIZE
+                prefix=prefix, delimiter="/", marker=marker, max_keys=_LIST_PAGE_SIZE
             ))
             # 子目录：CommonPrefixes 中的 Prefix 形如 "folder/sub/"
             for cp in resp.get("CommonPrefixes", []) or []:
@@ -335,7 +335,7 @@ class CosStorageService:
         while pages < _LIST_MAX_PAGES:
             pages += 1
             resp = await _cos_call(cos_client.list_objects_delimited(
-                Prefix=prefix, Marker=marker, MaxKeys=_LIST_PAGE_SIZE
+                prefix=prefix, marker=marker, max_keys=_LIST_PAGE_SIZE
             ))
             for item in resp.get("Contents", []) or []:
                 k = item.get("Key")
