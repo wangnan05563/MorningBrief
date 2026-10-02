@@ -112,18 +112,21 @@ async def _persist_material(
 
     list / cos 无真实 Web URL（cos 为对象存储 key，非可访问 URL），url 用合成值
     {source_type}://{channel_id}/{dedup_key[:16]} 满足 NOT NULL + 唯一约束；
-    去重判定走 (source_type, dedup_key)。rss/book_rss/api/qrcode 有真实 URL，走 url 唯一键。
+    去重判定走 (source_type, channel_id, dedup_key)——T01521 频道级查重：
+    同内容可录入不同频道（多频道分发），同频道内重复仍 409。
+    rss/book_rss/api/qrcode 有真实 URL，走 url 唯一键（全局）。
     """
     if source_type in (MaterialSourceType.list.value, MaterialSourceType.cos.value):
         key = dedup_key or compute_content_hash(content)
         dup = await db.execute(
             select(Material.id).where(
                 Material.source_type == source_type,
+                Material.channel_id == channel_id,
                 Material.dedup_key == key,
             )
         )
         if dup.scalar_one_or_none() is not None:
-            raise BizError(code=409, message="素材内容已存在（重复上传）")
+            raise BizError(code=409, message="该频道已存在相同内容的素材（重复上传）")
         synthetic_url = f"{source_type}://{channel_id or 0}/{key[:16]}"
         m = Material(
             channel_id=channel_id,

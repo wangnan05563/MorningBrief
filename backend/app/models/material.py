@@ -90,7 +90,8 @@ class Material(Base):
     media_thumb_url: Mapped[Optional[str]] = mapped_column(String(1024), comment="媒体缩略图 URL")
     # 去重键（MVP 输入适配器）：list 类型素材（手动录入/文档上传）无真实 URL，
     # 用正文 content_hash 作为去重键；rss 类型可空（沿用 url 唯一约束）。
-    # 唯一性判定：list 类型按 (source_type, dedup_key) 查重，rss 类型按 url 查重。
+    # 唯一性判定：list/cos 类型按 (source_type, channel_id, dedup_key) 频道级查重（T01521），
+    # rss 类型按 url 查重（全局）。
     dedup_key: Mapped[Optional[str]] = mapped_column(
         String(64), comment="去重键：list 类型存 content_hash，rss 类型为空"
     )

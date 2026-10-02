@@ -5,8 +5,9 @@
 
 去重策略（见 routers/admin/materials.py::_persist_material）：
 - list / cos：无真实 Web URL（cos 为对象 key），用合成 url
-  {source_type}://{channel_id}/{dedup_key[:16]} + (source_type, dedup_key) 查重
-- rss / book_rss / api / qrcode：有真实 URL，走 url 唯一约束
+  {source_type}://{channel_id}/{dedup_key[:16]} + (source_type, channel_id, dedup_key)
+  **频道级**查重（T01521：同内容可入不同频道，同频道内重复 409）
+- rss / book_rss / api / qrcode：有真实 URL，走 url 唯一约束（全局）
 
 运行：backend 目录下 .venv/Scripts/python -m pytest tests/test_material_source_types.py
 """
@@ -39,6 +40,77 @@ async def test_persist_list_dedup_by_content_hash(db_session):
             source="手动录入",
             title="T1",
             content="同一段正文",  # 相同内容 -> 命中 dedup_key
+            source_type=MaterialSourceType.list.value,
+        )
+    assert exc.value.code == 409
+
+
+async def test_persist_list_channel_scoped_dedup_cross_channel_allowed(db_session):
+    """T01521 频道级查重：同内容录入不同频道成功，同频道重复仍 409。"""
+    content = "跨频道分发的同一段正文"
+    m1 = await _persist_material(
+        db_session,
+        channel_id=10,
+        source="手动录入",
+        title="A",
+        content=content,
+        source_type=MaterialSourceType.list.value,
+    )
+    # 不同频道：同 content_hash 不再 409，正常入库
+    m2 = await _persist_material(
+        db_session,
+        channel_id=20,
+        source="手动录入",
+        title="A",
+        content=content,
+        source_type=MaterialSourceType.list.value,
+    )
+    assert m2.id != m1.id
+    assert m2.dedup_key == m1.dedup_key
+    # 合成 url 含 channel_id，DB 唯一约束天然不冲突
+    assert m2.url.startswith("list://20/") and m1.url.startswith("list://10/")
+
+    # 同频道重复仍 409
+    with pytest.raises(BizError) as exc:
+        await _persist_material(
+            db_session,
+            channel_id=20,
+            source="手动录入",
+            title="A",
+            content=content,
+            source_type=MaterialSourceType.list.value,
+        )
+    assert exc.value.code == 409
+
+
+async def test_persist_list_channel_scoped_dedup_channel_none_isolated(db_session):
+    """channel_id 为空与有值频道互不干扰（IS NULL 精确匹配）。"""
+    content = "无频道归属的正文"
+    m1 = await _persist_material(
+        db_session,
+        channel_id=None,
+        source="手动录入",
+        title="N",
+        content=content,
+        source_type=MaterialSourceType.list.value,
+    )
+    m2 = await _persist_material(
+        db_session,
+        channel_id=30,
+        source="手动录入",
+        title="N",
+        content=content,
+        source_type=MaterialSourceType.list.value,
+    )
+    assert m2.id != m1.id
+    # NULL 频道内部重复仍 409
+    with pytest.raises(BizError) as exc:
+        await _persist_material(
+            db_session,
+            channel_id=None,
+            source="手动录入",
+            title="N",
+            content=content,
             source_type=MaterialSourceType.list.value,
         )
     assert exc.value.code == 409
