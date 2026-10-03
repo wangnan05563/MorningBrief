@@ -29,8 +29,20 @@ logger = logging.getLogger(__name__)
 # 备份文件命名模式：news_backup_YYYYMMDD_HHMMSS.db
 _BACKUP_NAME_PATTERN = re.compile(r"^news_backup_(\d{8})_(\d{6})\.db$")
 
+# 预备份（恢复/维护前的手工快照）命名模式：news_pre_<场景>_YYYY-MM-DD.db
+# 这类文件由人工或运维脚本创建，不参与日常轮转，但同样会占满磁盘，
+# 因此纳入清理范围（保留窗口比常规备份更短，见 _DEFAULT_KEEP_PRE_BACKUP_DAYS）。
+_PRE_BACKUP_NAME_PATTERN = re.compile(r"^news_pre_[A-Za-z0-9_]+_(\d{4})-(\d{2})-(\d{2})\.db$")
+
 # 备份文件保留天数（与 MAINTENANCE_DEDUP_RETAIN_DAYS 等保持一致的 7 天窗口）
 _DEFAULT_KEEP_DAYS = 7
+
+# 预备份快照的保留天数：仅用于「出事后回滚」，无需像常规备份那样留一周
+_DEFAULT_KEEP_PRE_BACKUP_DAYS = 3
+
+# 保留的最大份数（与天数窗口双保险）：
+# 单库 30MB 时 7 份即 210MB，若一天多次手动备份很容易撑爆磁盘。
+_MAX_KEEP_FILES = 7
 
 
 def _resolve_backup_dir() -> Path:
@@ -103,41 +115,90 @@ class BackupService:
         return str(backup_path)
 
     @staticmethod
-    async def cleanup_old_backups(keep_days: int = _DEFAULT_KEEP_DAYS) -> int:
+    async def cleanup_old_backups(
+        keep_days: int = _DEFAULT_KEEP_DAYS,
+        max_files: int = _MAX_KEEP_FILES,
+    ) -> int:
         """清理过期备份，返回清理的文件数。
+
+        三层判定（任一命中即删）：
+        1. **天数窗口**：常规备份按文件名时间戳超过 keep_days；预备份快照用更短的
+           pre_keep_days（默认 3 天）——它们只是「出事后回滚」用，无需留一周。
+        2. **份数上限**：即使全部在窗口内，常规备份也只保留最新 max_files 份。
+           防止一天内多次手动备份把磁盘撑爆（历史问题：9 份 × ~30MB）。
+        3. 两种模式都不匹配的**不删**（如 `README.txt`、随手改名的 .db），
+           避免误删人工快照。
 
         按 backup 文件名中的时间戳判断保留窗口，而非文件 mtime：
         原因是文件复制/移动会改变 mtime，而文件名时间戳是备份生成时刻的稳定记录。
         """
+        pre_keep_days = min(keep_days, _DEFAULT_KEEP_PRE_BACKUP_DAYS)
+
         backup_dir = _resolve_backup_dir()
         # 列目录操作可能阻塞，放到线程池
         entries = await asyncio.to_thread(_list_dir_safe, backup_dir)
         if not entries:
             return 0
 
+        now = datetime.now()
         # 计算保留截止时间（文件名时间戳 < cutoff 的删除）
         # 用本地日期计算，与备份文件命名时区一致
-        cutoff = datetime.now() - timedelta(days=keep_days)
-        cutoff_str = cutoff.strftime("%Y%m%d")
+        cutoff_str = (now - timedelta(days=keep_days)).strftime("%Y%m%d")
+        pre_cutoff = now - timedelta(days=pre_keep_days)
 
         deleted = 0
+        keep_candidates: list[tuple[str, Path]] = []  # (YYYYMMDD, path) 供份数上限判定
+
         for entry in entries:
             match = _BACKUP_NAME_PATTERN.match(entry.name)
-            if not match:
-                continue
-            # 文件名中的 YYYYMMDD 部分与 cutoff 比较（字符串比较等价于日期比较）
-            backup_date_str = match.group(1)
-            if backup_date_str < cutoff_str:
-                try:
-                    await asyncio.to_thread(_safe_unlink, entry.path)
+            if match:
+                backup_date_str = match.group(1)
+                if backup_date_str < cutoff_str:
+                    await BackupService._remove_backup(entry)
                     deleted += 1
-                    logger.info("已清理过期备份 %s", entry.name)
+                else:
+                    keep_candidates.append((backup_date_str, entry))
+                continue
+
+            pre_match = _PRE_BACKUP_NAME_PATTERN.match(entry.name)
+            if pre_match:
+                try:
+                    snapshot_date = datetime(
+                        int(pre_match.group(1)), int(pre_match.group(2)), int(pre_match.group(3))
+                    )
+                except ValueError:
+                    continue  # 日期非法：不动它，交人工判断
+                if snapshot_date < pre_cutoff:
+                    await BackupService._remove_backup(entry)
+                    deleted += 1
+                continue
+
+            # 未匹配任何命名模式：人工文件，不自动删
+
+        # 份数上限：窗口内的常规备份超出 max_files 时，删最旧的
+        if len(keep_candidates) > max_files:
+            keep_candidates.sort(key=lambda item: item[0], reverse=True)
+            for _, path in keep_candidates[max_files:]:
+                try:
+                    await asyncio.to_thread(_safe_unlink, path)
+                    deleted += 1
+                    logger.info("已清理超出份数上限的备份 %s", path.name)
                 except Exception as e:
-                    logger.warning("清理过期备份失败 %s: %s", entry.name, e)
+                    logger.warning("清理超出份数上限的备份失败 %s: %s", path.name, e)
 
         if deleted > 0:
-            logger.info("过期备份清理完成，共删除 %d 个文件", deleted)
+            logger.info("备份清理完成，共删除 %d 个文件（保留窗口 %d 天 / 最多 %d 份）",
+                        deleted, keep_days, max_files)
         return deleted
+
+    @staticmethod
+    async def _remove_backup(entry: Path) -> None:
+        """删除单个过期备份，失败仅告警不抛出。"""
+        try:
+            await asyncio.to_thread(_safe_unlink, entry)
+            logger.info("已清理过期备份 %s", entry.name)
+        except Exception as e:
+            logger.warning("清理过期备份失败 %s: %s", entry.name, e)
 
     @staticmethod
     async def list_backups() -> list[dict]:
@@ -156,10 +217,10 @@ class BackupService:
             match = _BACKUP_NAME_PATTERN.match(entry.name)
             if not match:
                 continue
-            stat = await asyncio.to_thread(_get_stat_dict, entry.path)
+            stat = await asyncio.to_thread(_get_stat_dict, entry)
             backups.append({
                 "filename": entry.name,
-                "path": str(entry.path),
+                "path": str(entry),
                 "size_mb": round(stat["size_mb"], 2),
                 "created_at": stat["mtime_iso"],
             })

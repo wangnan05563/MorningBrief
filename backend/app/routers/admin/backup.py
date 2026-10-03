@@ -140,22 +140,34 @@ async def restore_backup(
 
 @router.post("/cleanup")
 async def cleanup_backups(
+    keep_days: int = 7,
+    max_files: int = 7,
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
-    """手动清理过期备份（保留最近 7 天）。
+    """手动清理过期备份。
 
-    定时任务每日 04:00 已自动清理，此接口供运维主动清理场景使用。
+    默认保留最近 7 天且最多 7 份（单库 30MB 时上限约 210MB）。
+    定时任务每日 04:00 已自动清理，此接口供运维主动清理或临时收紧窗口。
+
+    Args:
+        keep_days: 常规备份保留天数，下限 0（0 表示只按份数上限清）。
+        max_files: 常规备份最大份数，下限 1。
     """
-    deleted = await BackupService.cleanup_old_backups()
+    keep_days = max(0, keep_days)
+    max_files = max(1, max_files)
+    deleted = await BackupService.cleanup_old_backups(keep_days=keep_days, max_files=max_files)
 
     db.add(AuditLog(
         category="backup",
         action="cleanup",
         target="backup_files",
         operator=admin.username,
-        detail=f'{{"deleted": {deleted}}}',
+        detail=f'{{"deleted": {deleted}, "keep_days": {keep_days}, "max_files": {max_files}}}',
     ))
     await db.commit()
 
-    return success(data={"deleted": deleted}, message=f"已清理 {deleted} 个过期备份")
+    return success(
+        data={"deleted": deleted, "keep_days": keep_days, "max_files": max_files},
+        message=f"已清理 {deleted} 个过期备份（保留 {keep_days} 天 / 最多 {max_files} 份）",
+    )
