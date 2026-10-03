@@ -25,9 +25,10 @@ from datetime import date
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-DB = HERE.parent / "backend" / "data" / "news.db"
-BACKUP_DIR = HERE.parent / "backend" / "data" / "backup"
-LOGS_DIR = HERE.parent / "backend" / "logs"
+_REPO = HERE.parent if (HERE.parent / "backend").exists() else HERE.parent.parent
+DB = _REPO / "backend" / "data" / "news.db"
+BACKUP_DIR = _REPO / "backend" / "data" / "backup"
+LOGS_DIR = _REPO / "backend" / "logs"
 
 PERF_USER_Q = "SELECT id FROM user WHERE openid LIKE 'jmeter_perf_%'"
 PERF_USER_STR_Q = "SELECT CAST(id AS TEXT) FROM user WHERE openid LIKE 'jmeter_perf_%'"
