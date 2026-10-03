@@ -593,33 +593,15 @@ class AIConfigService:
         切换 TTS provider 或修改音色等配置后，清空 tts_factory 的 provider
         缓存，使下次 synthesize 调用时重新创建实例读取最新配置。
         """
-        updates: dict[str, str] = {}
-
-        for key, value in self._normalize_llm(llm_config).items():
-            updates[key] = value
-        for key, value in self._normalize_tts(tts_config).items():
-            updates[key] = value
+        updates: dict[str, str] = self._normalize_llm(llm_config)
+        updates.update(self._normalize_tts(tts_config))
         # 图片生成配置（T00730）：可选段，旧前端不传时跳过
         if image_config:
-            for key, value in self._normalize_image(image_config).items():
-                updates[key] = value
+            updates.update(self._normalize_image(image_config))
 
         # 同步保存预设配置（即使 updates 为空也需要更新预设配置）
         if selected_preset:
-            # 解析实际的 api_key 明文值：
-            # 脱敏值 → 从数据库读取当前明文，fallback 到 Settings 默认值（与 get_config_for_frontend 一致）
-            # 新值/空值 → 直接使用（用户修改或清空了 API Key）
-            api_key_for_preset = llm_config.get("api_key", "")
-            if api_key_for_preset and _is_masked(api_key_for_preset):
-                api_key_for_preset = await self.get_config_value("llm_api_key")
-                if not api_key_for_preset:
-                    api_key_for_preset = get_settings().LLM_API_KEY or ""
-            await self._save_preset_config(
-                preset_key=selected_preset,
-                api_key=api_key_for_preset,
-                base_url=llm_config.get("base_url", ""),
-                model=llm_config.get("model", ""),
-            )
+            await self._sync_preset_config(selected_preset, llm_config)
 
         if not updates:
             return
@@ -633,17 +615,42 @@ class AIConfigService:
         # 热更新 Settings 内存单例
         self._apply_to_settings(updates)
 
-        # TTS 配置变更时清空 provider 工厂缓存，确保下次合成使用新配置
-        # edge_* 前缀覆盖 Edge-TTS 的 config_key（voice/rate/volume/pitch）
-        if any(k.startswith(("tts_", "edge_", "tencent_tts_", "kokoro_", "piper_")) for k in updates):
-            try:
-                from app.workflow.tts.tts_factory import invalidate
-                invalidate()
-                logger.info("TTS provider 工厂缓存已清空（配置变更）")
-            except Exception as e:
-                logger.warning("清空 TTS provider 缓存失败: %s", e)
+        self._invalidate_tts_cache_on_change(updates)
 
         logger.info("AI 配置已更新 keys=%s", list(updates.keys()))
+
+    async def _sync_preset_config(self, selected_preset: str, llm_config: dict) -> None:
+        """同步保存预设配置（切换预设时返显之前保存的配置）。
+
+        解析实际的 api_key 明文值：
+        - 脱敏值 → 从数据库读取当前明文，fallback 到 Settings 默认值（与 get_config_for_frontend 一致）
+        - 新值/空值 → 直接使用（用户修改或清空了 API Key）
+        """
+        api_key_for_preset = llm_config.get("api_key", "")
+        if api_key_for_preset and _is_masked(api_key_for_preset):
+            api_key_for_preset = await self.get_config_value("llm_api_key")
+            if not api_key_for_preset:
+                api_key_for_preset = get_settings().LLM_API_KEY or ""
+        await self._save_preset_config(
+            preset_key=selected_preset,
+            api_key=api_key_for_preset,
+            base_url=llm_config.get("base_url", ""),
+            model=llm_config.get("model", ""),
+        )
+
+    def _invalidate_tts_cache_on_change(self, updates: dict[str, str]) -> None:
+        """TTS 配置变更时清空 provider 工厂缓存，确保下次合成使用新配置。
+
+        edge_* 前缀覆盖 Edge-TTS 的 config_key（voice/rate/volume/pitch）。
+        """
+        if not any(k.startswith(("tts_", "edge_", "tencent_tts_", "kokoro_", "piper_")) for k in updates):
+            return
+        try:
+            from app.workflow.tts.tts_factory import invalidate
+            invalidate()
+            logger.info("TTS provider 工厂缓存已清空（配置变更）")
+        except Exception as e:
+            logger.warning("清空 TTS provider 缓存失败: %s", e)
 
     def _normalize_llm(self, config: dict) -> dict[str, str]:
         """将前端 LLM 配置转为 config_key -> value 映射。
@@ -1367,68 +1374,73 @@ class AIConfigService:
 
         headers = {"Authorization": f"Bearer {api_key}"}
         timeout = float(settings.LLM_TIMEOUT_SEC or 30)
-        last_net_err = None
 
         async with httpx.AsyncClient(timeout=timeout) as client:
-            for url in candidates:
-                try:
-                    resp = await client.get(url, headers=headers)
-                except httpx.TimeoutException:
-                    return {
-                        "success": False,
-                        "models": [],
-                        "message": f"连接超时（>{int(timeout)}s），请检查 API Base URL 是否可达：{base_url}",
-                    }
-                except httpx.RequestError as e:
-                    # 候选地址逐个尝试，仅当全部失败才报不可达
-                    last_net_err = f"无法连接到 {base_url}：{e}"
-                    continue
-
-                if resp.status_code == 200:
-                    try:
-                        payload = resp.json()
-                    except Exception:
-                        return {
-                            "success": False,
-                            "models": [],
-                            "message": "接口返回内容不是合法 JSON，请确认 Base URL 指向 OpenAI 兼容的 /models 接口",
-                        }
-                    models = self._parse_models(payload)
-                    if not models:
-                        return {
-                            "success": False,
-                            "models": [],
-                            "message": "接口返回模型列表为空，请确认该账户是否有可用模型",
-                        }
-                    return {
-                        "success": True,
-                        "models": models,
-                        "message": f"成功获取 {len(models)} 个模型",
-                    }
-                elif resp.status_code == 401:
-                    return {
-                        "success": False,
-                        "models": [],
-                        "message": "API Key 无效或已过期（401），请检查后重试",
-                    }
-                elif resp.status_code == 404:
-                    # 尝试下一个候选地址（/v1/models）
-                    continue
-                else:
-                    snippet = resp.text[:200]
-                    return {
-                        "success": False,
-                        "models": [],
-                        "message": f"服务返回 {resp.status_code}: {snippet}",
-                    }
-
+            result, last_net_err = await self._try_fetch_models(
+                client, candidates, headers, base_url, timeout,
+            )
+        if result is not None:
+            return result
         if last_net_err:
-            return {"success": False, "models": [], "message": last_net_err}
-        return {
-            "success": False,
-            "models": [],
-            "message": "未找到模型接口（已尝试 /models 与 /v1/models），请确认 Base URL 是否正确",
-        }
+            return self._models_fail(last_net_err)
+        return self._models_fail(
+            "未找到模型接口（已尝试 /models 与 /v1/models），请确认 Base URL 是否正确"
+        )
+
+    @staticmethod
+    def _models_fail(message: str) -> dict:
+        """统一构造拉取模型列表的失败返回。"""
+        return {"success": False, "models": [], "message": message}
+
+    async def _try_fetch_models(
+        self, client, candidates: list[str], headers: dict, base_url: str, timeout_sec: float,
+    ) -> tuple[dict | None, str | None]:
+        """逐个候选地址请求 /models。
+
+        返回 (result, last_net_err)：result 非 None 即为最终返回；
+        (None, err) 表示网络失败（err 为最后一次网络错误文案）；
+        (None, None) 表示候选全部 404。
+        """
+        last_net_err: str | None = None
+        for url in candidates:
+            try:
+                resp = await client.get(url, headers=headers)
+            except httpx.TimeoutException:
+                return self._models_fail(
+                    f"连接超时（>{int(timeout_sec)}s），请检查 API Base URL 是否可达：{base_url}"
+                ), None
+            except httpx.RequestError as e:
+                # 候选地址逐个尝试，仅当全部失败才报不可达
+                last_net_err = f"无法连接到 {base_url}：{e}"
+                continue
+            result = self._handle_models_response(resp)
+            if result is not None:
+                return result, None
+        return None, last_net_err
+
+    def _handle_models_response(self, resp) -> dict | None:
+        """处理 /models 响应。返回 None 表示 404（继续尝试下一候选地址）。"""
+        if resp.status_code == 200:
+            try:
+                payload = resp.json()
+            except Exception:
+                return self._models_fail(
+                    "接口返回内容不是合法 JSON，请确认 Base URL 指向 OpenAI 兼容的 /models 接口"
+                )
+            models = self._parse_models(payload)
+            if not models:
+                return self._models_fail("接口返回模型列表为空，请确认该账户是否有可用模型")
+            return {
+                "success": True,
+                "models": models,
+                "message": f"成功获取 {len(models)} 个模型",
+            }
+        if resp.status_code == 401:
+            return self._models_fail("API Key 无效或已过期（401），请检查后重试")
+        if resp.status_code == 404:
+            # 尝试下一个候选地址（/v1/models）
+            return None
+        return self._models_fail(f"服务返回 {resp.status_code}: {resp.text[:200]}")
 
     @staticmethod
     def _parse_models(payload: dict) -> list[dict]:
@@ -1791,6 +1803,34 @@ class AIConfigService:
         await self.db.commit()
         return {"provider": provider, "is_custom": False, "count": len(self._static_voices(provider))}
 
+    _EDGE_GENDER = {"Female": "女声", "Male": "男声"}
+    _EDGE_LOCALE_ZH = {
+        "zh-CN": "普通话", "zh-HK": "粤语", "zh-TW": "台湾国语",
+        "zh-CN-liaoning": "东北话", "zh-CN-shaanxi": "陕西话",
+    }
+
+    @classmethod
+    def _edge_voice_item(cls, v: dict) -> dict | None:
+        """单条微软官方音色 → 展示项；非中文音色（与静态清单同口径）返回 None。"""
+        locale = str(v.get("Locale") or "")
+        short = str(v.get("ShortName") or "")
+        # 与静态清单同口径：只收中文（zh-CN / zh-HK 等中文变体）
+        if not short or not locale.lower().startswith("zh"):
+            return None
+        gender = cls._EDGE_GENDER.get(str(v.get("Gender") or ""), str(v.get("Gender") or "未知"))
+        # VoicePersonalities 是官方标签数组（如 ["Warm"]），需 join 成字符串避免 list repr 泄漏
+        tag_obj = v.get("VoiceTag") or {}
+        raw_tag = tag_obj.get("VoicePersonalities") or []
+        if isinstance(raw_tag, list):
+            personalities = "·".join(str(x) for x in raw_tag)
+        else:
+            personalities = str(raw_tag)
+        # 展示名：完整 ShortName（即配置值，便于核对）+ 口语化 locale/性别/风格标注
+        locale_desc = cls._EDGE_LOCALE_ZH.get(locale, locale)
+        parts = [p for p in (locale_desc, gender, personalities) if p]
+        label = f"{short}（{'·'.join(parts)}）" if parts else short
+        return {"key": short, "label": label}
+
     @staticmethod
     async def _fetch_edge_voices() -> tuple[list[dict], str]:
         """拉取微软 Edge/Azure 官方 Neural 音色目录，仅保留中文（与静态清单口径一致）。"""
@@ -1804,35 +1844,46 @@ class AIConfigService:
         except Exception as e:
             raise BizError(f"微软官方音色目录拉取失败：{type(e).__name__}: {e}") from e
 
-        _GENDER = {"Female": "女声", "Male": "男声"}
-        _LOCALE_ZH = {
-            "zh-CN": "普通话", "zh-HK": "粤语", "zh-TW": "台湾国语",
-            "zh-CN-liaoning": "东北话", "zh-CN-shaanxi": "陕西话",
-        }
         items: list[dict] = []
         seen: set[str] = set()
         for v in raw:
-            locale = str(v.get("Locale") or "")
-            short = str(v.get("ShortName") or "")
-            # 与静态清单同口径：只收中文（zh-CN / zh-HK 等中文变体）
-            if not short or not locale.lower().startswith("zh") or short in seen:
+            item = AIConfigService._edge_voice_item(v)
+            if item is None or item["key"] in seen:
                 continue
-            seen.add(short)
-            gender = _GENDER.get(str(v.get("Gender") or ""), str(v.get("Gender") or "未知"))
-            # VoicePersonalities 是官方标签数组（如 ["Warm"]），需 join 成字符串避免 list repr 泄漏
-            tag_obj = v.get("VoiceTag") or {}
-            raw_tag = tag_obj.get("VoicePersonalities") or []
-            if isinstance(raw_tag, list):
-                personalities = "·".join(str(x) for x in raw_tag)
-            else:
-                personalities = str(raw_tag)
-            # 展示名：完整 ShortName（即配置值，便于核对）+ 口语化 locale/性别/风格标注
-            display = short
-            locale_desc = _LOCALE_ZH.get(locale, locale)
-            parts = [p for p in (locale_desc, gender, personalities) if p]
-            items.append({"key": short, "label": f"{display}（{'·'.join(parts)}）" if parts else display})
+            seen.add(item["key"])
+            items.append(item)
         items.sort(key=lambda x: (0 if x["key"].startswith("zh-CN") else 1, x["key"]))
         return items, "microsoft-edge-list-voices"
+
+    @staticmethod
+    def _tts_field(v: dict, key: str) -> str:
+        """取腾讯音色字段并清洗（缺失/None 统一为空串）。"""
+        return str(v.get(key) or "").strip()
+
+    @classmethod
+    def _tencent_voice_item(cls, v: dict) -> dict | None:
+        """单条腾讯云官方音色 → 展示项；缺 VoiceType 时返回 None。"""
+        voice_type = cls._tts_field(v, "VoiceType")
+        name = cls._tts_field(v, "VoiceName")
+        if not voice_type:
+            return None
+        desc = cls._tts_field(v, "VoiceDesc")
+        style = cls._tts_field(v, "VoiceHumanStyle")
+        tag = cls._tts_field(v, "VoiceTypeTag").replace(",", "·")
+        gender_raw = cls._tts_field(v, "VoiceGender")
+        if gender_raw == "female":
+            gender = "女声"
+        elif gender_raw == "male":
+            gender = "男声"
+        else:
+            gender = ""
+        # VoiceDesc（如"阳光男声"）常已含性别，去重避免出现"阳光男声·男声"
+        if gender and (gender[0] in desc or gender[0] in style):
+            gender = ""
+        parts = [p for p in ((style or desc), gender, tag) if p]
+        display = name or voice_type
+        label = f"{display}（{'·'.join(parts)}）" if parts else display
+        return {"key": voice_type, "label": label}
 
     @staticmethod
     async def _fetch_tencent_voices() -> tuple[list[dict], str]:
@@ -1870,21 +1921,10 @@ class AIConfigService:
         seen: set[str] = set()
         for category in response.get("CategoryVoiceList") or []:
             for v in category.get("VoiceList") or []:
-                voice_type = str(v.get("VoiceType") or "").strip()
-                name = str(v.get("VoiceName") or "").strip()
-                if not voice_type or voice_type in seen:
+                item = AIConfigService._tencent_voice_item(v)
+                if item is None or item["key"] in seen:
                     continue
-                seen.add(voice_type)
-                desc = str(v.get("VoiceDesc") or "").strip()
-                style = str(v.get("VoiceHumanStyle") or "").strip()
-                tag = str(v.get("VoiceTypeTag") or "").strip().replace(",", "·")
-                gender_raw = str(v.get("VoiceGender") or "")
-                gender = "女声" if gender_raw == "female" else ("男声" if gender_raw == "male" else "")
-                # VoiceDesc（如"阳光男声"）常已含性别，去重避免出现"阳光男声·男声"
-                if gender and (gender[0] in desc or gender[0] in style):
-                    gender = ""
-                parts = [p for p in (style or desc, gender, tag) if p]
-                label = f"{name or voice_type}（{'·'.join(parts)}）" if parts else f"{name or voice_type}"
-                items.append({"key": voice_type, "label": label})
+                seen.add(item["key"])
+                items.append(item)
         return items, "tencent-describe-voices"
 

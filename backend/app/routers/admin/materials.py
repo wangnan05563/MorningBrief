@@ -107,6 +107,7 @@ async def _persist_material(
     media_type: str | None = None,
     media_url: str | None = None,
     media_thumb_url: str | None = None,
+    cover_url: str | None = None,
 ) -> Material:
     """入库单条素材，按 source_type 选择去重策略（list/cos 用 dedup_key，其余用 url）。
 
@@ -140,6 +141,7 @@ async def _persist_material(
             media_type=media_type or MaterialMediaType.text.value,
             media_url=media_url,
             media_thumb_url=media_thumb_url,
+            cover_url=cover_url,
         )
     else:
         if not url:
@@ -158,11 +160,32 @@ async def _persist_material(
             media_type=media_type or MaterialMediaType.text.value,
             media_url=media_url,
             media_thumb_url=media_thumb_url,
+            cover_url=cover_url,
         )
     db.add(m)
     await db.commit()
     await db.refresh(m)
     return m
+
+
+def _ensure_source_type_supported(source_type: str) -> None:
+    """非法 source_type 显式报 400，不做静默忽略（否则前端以为筛选生效但结果未过滤）。"""
+    allowed_types = {t.value for t in MaterialSourceType}
+    if source_type not in allowed_types:
+        raise BizError(
+            code=400,
+            message=f"不支持的 source_type: {source_type}（允许：{', '.join(sorted(allowed_types))}）",
+        )
+
+
+def _ensure_media_type_supported(media_type: str) -> None:
+    """非法 media_type 显式报 400，不做静默忽略（T00716 媒体类型过滤）。"""
+    allowed_media = {t.value for t in MaterialMediaType}
+    if media_type not in allowed_media:
+        raise BizError(
+            code=400,
+            message=f"不支持的 media_type: {media_type}（允许：{', '.join(sorted(allowed_media))}）",
+        )
 
 
 @router.get("")
@@ -215,25 +238,14 @@ async def list_materials(
         base_query = base_query.where(Material.source == source.strip())
         count_query = count_query.where(Material.source == source.strip())
     # T00775：按录入渠道过滤——「书稿素材」（list/cos）常被海量 RSS 资讯挤出前几页，
-    # 素材库管理页据此提供「只看书稿」筛选，避免"翻不到素材"。非法值显式报 400，
-    # 不做静默忽略（否则前端以为筛选生效但结果未过滤）。
+    # 素材库管理页据此提供「只看书稿」筛选，避免"翻不到素材"。非法值显式报 400。
     if source_type:
-        allowed_types = {t.value for t in MaterialSourceType}
-        if source_type not in allowed_types:
-            raise BizError(
-                code=400,
-                message=f"不支持的 source_type: {source_type}（允许：{', '.join(sorted(allowed_types))}）",
-            )
+        _ensure_source_type_supported(source_type)
         base_query = base_query.where(Material.source_type == source_type)
         count_query = count_query.where(Material.source_type == source_type)
     # T00716：按媒体类型过滤（text/image/video）；非法值显式 400，不做静默忽略
     if media_type:
-        allowed_media = {t.value for t in MaterialMediaType}
-        if media_type not in allowed_media:
-            raise BizError(
-                code=400,
-                message=f"不支持的 media_type: {media_type}（允许：{', '.join(sorted(allowed_media))}）",
-            )
+        _ensure_media_type_supported(media_type)
         base_query = base_query.where(Material.media_type == media_type)
         count_query = count_query.where(Material.media_type == media_type)
 

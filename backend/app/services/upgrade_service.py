@@ -80,7 +80,7 @@ def get_upgrade_state() -> dict:
     return dict(_UPGRADE)
 
 
-async def start_upgrade(tag: str, asset: dict) -> dict:
+def start_upgrade(tag: str, asset: dict) -> dict:
     """触发一次升级。已有升级进行中时直接返回现有进度，避免重复下载。"""
     global _UPGRADE_TASK
     if not asset or not asset.get("download_url"):

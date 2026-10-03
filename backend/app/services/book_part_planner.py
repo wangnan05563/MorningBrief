@@ -91,16 +91,40 @@ def plan_book_parts(
     ests = [estimate_chapter_words(m.get("content"), words_per_segment) for m in chapters]
     total = sum(ests)
     t1, t2 = thresholds
-    parts = 1 if total <= t1 else (2 if total <= t2 else 3)
+    parts = _decide_parts(total, t1, t2)
     labels = PART_LABELS[parts]
 
-    # 均衡贪心切分：累计达到 total/parts 且剩余章节足够填满后续篇时切篇
-    target = total / parts
+    buckets = _split_buckets(ests, parts)
+
+    book_title = extract_book_title(chapters[0].get("source"), chapters[0].get("title"))
+    assignments = _build_assignments(chapters, buckets, labels, parts, book_title)
+
+    return {
+        "book_title": book_title,
+        "parts": parts,
+        "total_words_estimate": total,
+        "assignments": assignments,
+        "part_chapters": [[chapters[i].get("id") for i in b] for b in buckets],
+    }
+
+
+def _decide_parts(total: int, t1: int, t2: int) -> int:
+    """按总字数与阈值决定分篇数（≤t1 一篇 / ≤t2 两篇 / 其余三篇）。"""
+    if total <= t1:
+        return 1
+    if total <= t2:
+        return 2
+    return 3
+
+
+def _split_buckets(ests: list[int], parts: int) -> list[list[int]]:
+    """均衡贪心切分：累计达到 total/parts 且剩余章节足够填满后续篇时切篇。"""
+    target = sum(ests) / parts
     buckets: list[list[int]] = [[] for _ in range(parts)]
     bucket_idx = 0
     acc = 0
     for i, est in enumerate(ests):
-        remaining_chapters = len(chapters) - i
+        remaining_chapters = len(ests) - i
         remaining_parts = parts - bucket_idx - 1
         if (
             bucket_idx < parts - 1
@@ -111,8 +135,13 @@ def plan_book_parts(
             acc = 0
         buckets[bucket_idx].append(i)
         acc += est
+    return buckets
 
-    book_title = extract_book_title(chapters[0].get("source"), chapters[0].get("title"))
+
+def _build_assignments(
+    chapters: list[dict], buckets: list[list[int]], labels: tuple, parts: int, book_title: str,
+) -> dict:
+    """按分篇结果构造 material_id → 分篇元信息（标签/序号/简介/衔接语/下集预告）。"""
     assignments: dict = {}
     for pi, bucket in enumerate(buckets):
         if not bucket:
@@ -139,11 +168,4 @@ def plan_book_parts(
                 "part_link": link,
                 "next_episode_hint": next_hint,
             }
-
-    return {
-        "book_title": book_title,
-        "parts": parts,
-        "total_words_estimate": total,
-        "assignments": assignments,
-        "part_chapters": [[chapters[i].get("id") for i in b] for b in buckets],
-    }
+    return assignments

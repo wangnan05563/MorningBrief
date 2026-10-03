@@ -5,6 +5,7 @@
 
 复用 rewriter.py 的 LLM 客户端与预算控制逻辑，保持调用风格一致。
 """
+import asyncio
 import json
 import logging
 
@@ -86,7 +87,7 @@ def parse_llm_json(raw: str, label: str = "llm") -> dict:
     raise ValueError(f"{label} 响应不是合法 JSON（前 200 字符: {candidate[:200]!r}）")
 
 
-async def _chat_json(prompt: str, timeout: float, label: str) -> dict:
+async def _chat_json(prompt: str, timeout_sec: float, label: str) -> dict:
     """调用 LLM 并解析 JSON；解析失败自动发起**一次**自修复重试（T00621）。
 
     失败重试把原始输出与解析错误喂回模型，要求只输出修正后的 JSON——
@@ -95,11 +96,12 @@ async def _chat_json(prompt: str, timeout: float, label: str) -> dict:
     """
 
     async def _call(p: str) -> str:
-        resp = await _get_client().chat.completions.create(
-            model=settings.LLM_MODEL,
-            messages=[{"role": "user", "content": p}],
-            timeout=timeout,
-        )
+        # 超时用上下文管理器约束整次调用（S7483：不在请求方法上散传 timeout 参数）
+        async with asyncio.timeout(timeout_sec):
+            resp = await _get_client().chat.completions.create(
+                model=settings.LLM_MODEL,
+                messages=[{"role": "user", "content": p}],
+            )
         usage = getattr(resp, "usage", None)
         record_call(
             service_type="llm",

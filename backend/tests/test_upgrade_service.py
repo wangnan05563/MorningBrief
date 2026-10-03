@@ -78,7 +78,7 @@ async def test_run_upgrade_develop_mode_staged():
     with patch.object(us, "is_frozen", return_value=False), \
          patch.object(us, "get_app_root", return_value=Path("/tmp/fake-app")), \
          patch.object(us, "_download_release", new=AsyncMock()):
-        await us.start_upgrade("v1.1.0", asset)
+        us.start_upgrade("v1.1.0", asset)
         await asyncio.wait_for(us._UPGRADE_TASK, timeout=5)
     state = us.get_upgrade_state()
     assert state["state"] == "dev_staged"
@@ -96,7 +96,7 @@ async def test_run_upgrade_launches_installer_when_frozen():
          patch.object(us, "get_app_root", return_value=Path("C:/fake-app")), \
          patch.object(us, "_download_release", new=AsyncMock()), \
          patch.object(us, "_launch_installer") as mock_launch:
-        await us.start_upgrade("v1.1.0", asset)
+        us.start_upgrade("v1.1.0", asset)
         await asyncio.wait_for(us._UPGRADE_TASK, timeout=5)
     state = us.get_upgrade_state()
     assert state["state"] == "restarting"
@@ -114,7 +114,7 @@ async def test_run_upgrade_download_failure_sets_error():
          patch.object(us, "get_app_root", return_value=Path("/tmp/fake-app")), \
          patch.object(us, "_download_release",
                       new=AsyncMock(side_effect=RuntimeError("网络中断"))):
-        await us.start_upgrade("v1.1.0", asset)
+        us.start_upgrade("v1.1.0", asset)
         await asyncio.wait_for(us._UPGRADE_TASK, timeout=5)
     state = us.get_upgrade_state()
     assert state["state"] == "error"
@@ -126,4 +126,4 @@ async def test_start_upgrade_rejects_missing_download_url():
     """资产缺少下载地址时拒绝启动并抛出可读错误。"""
     us._reset_upgrade_for_test()
     with pytest.raises(ValueError):
-        await us.start_upgrade("v1.1.0", {"name": "a.exe", "size_bytes": 0})
+        us.start_upgrade("v1.1.0", {"name": "a.exe", "size_bytes": 0})

@@ -132,8 +132,8 @@ def _pick_text_format(formats: dict) -> str | None:
     return None
 
 
-def _gutendex(src: dict) -> list[dict]:
-    """按 `gutenberg_id` 或 `query(+languages)` 解析书目 → 下载 text/plain 全文 → 切章。"""
+def _resolve_gutendex_book(src: dict) -> dict:
+    """按 `gutenberg_id` 或 `query(+languages)` 查询 Gutendex，返回首个含 text/plain 的书目。"""
     if src.get("gutenberg_id"):
         data = _get_json(_GUTENDEX, {"ids": src["gutenberg_id"]})
     else:
@@ -144,14 +144,27 @@ def _gutendex(src: dict) -> list[dict]:
             params["search"] = src["query"]
         data = _get_json(_GUTENDEX, params)
     results = (data or {}).get("results") or []
-    book = None
     for b in results:
         if _pick_text_format(b.get("formats") or {}):
-            book = b
-            break
-    if not book:
-        raise ValueError(f"书源 {src.get('name')} 未找到可下载的 text/plain 文本")
+            return b
+    raise ValueError(f"书源 {src.get('name')} 未找到可下载的 text/plain 文本")
 
+
+def _truncate_gutenberg_entries(entries: list[dict], max_chapters: int, book_id, book_title) -> list[dict]:
+    """按 max_chapters 截断；截断后重排 url 去重键（避免截断尾巴上的重复键）。"""
+    if len(entries) <= max_chapters:
+        return entries
+    logger.warning("[fulltext] Gutendex《%s》切出 %d 条，截断为 %d 条",
+                   book_title, len(entries), max_chapters)
+    entries = entries[:max_chapters]
+    for i, e in enumerate(entries, 1):
+        e["url"] = f"https://www.gutenberg.org/ebooks/{book_id}#{i}"  # 截断后重排去重键
+    return entries
+
+
+def _gutendex(src: dict) -> list[dict]:
+    """按 `gutenberg_id` 或 `query(+languages)` 解析书目 → 下载 text/plain 全文 → 切章。"""
+    book = _resolve_gutendex_book(src)
     text_url = _pick_text_format(book["formats"])
     text = _get_text(text_url)
     # Gutenberg 头尾有许可证样板，粗略去头（从首个空行分隔块开始）
@@ -160,13 +173,7 @@ def _gutendex(src: dict) -> list[dict]:
         src["name"], book.get("title") or src["name"],
         f"https://www.gutenberg.org/ebooks/{book['id']}", text, src.get("category_hint"),
     )
-    if len(entries) > max_chapters:
-        logger.warning("[fulltext] Gutendex《%s》切出 %d 条，截断为 %d 条",
-                       book.get("title"), len(entries), max_chapters)
-        entries = entries[:max_chapters]
-        for i, e in enumerate(entries, 1):
-            e["url"] = f"https://www.gutenberg.org/ebooks/{book['id']}#{i}"  # 截断后重排去重键
-    return entries
+    return _truncate_gutenberg_entries(entries, max_chapters, book["id"], book.get("title"))
 
 
 # ---------------------------------------------------------------------------

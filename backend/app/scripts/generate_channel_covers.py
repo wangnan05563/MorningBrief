@@ -117,7 +117,7 @@ async def main_async(run: bool, assign: bool, only: list[int] | None) -> int:
 
             if assign and not ch.cover_url:
                 ch.cover_url = f"/channel-assets/{filename}"
-                print(f"    已自动设为频道封面（原 cover_url 为空）")
+                print("    已自动设为频道封面（原 cover_url 为空）")
         if assign:
             await db.commit()
         if failed:

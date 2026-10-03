@@ -98,7 +98,7 @@ async def signed_tencent_post(
       让上层调用方只需处理一种异常类型。
     """
     payload = payload or {}
-    # ensure_ascii=False + 紧凑分隔符：签名与发送共用同一字节串
+    # 签名与发送共用同一字节串：序列化时禁用 ASCII 转义并采用紧凑分隔符
     payload_bytes = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     timestamp = int(datetime.now(tz=timezone.utc).timestamp())
     authorization = tc3_authorization(

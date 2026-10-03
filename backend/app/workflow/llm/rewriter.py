@@ -63,15 +63,16 @@ _AUDIOBOOK_QUALITY_RULE = (
 
 # 复检残留的书外套话衔接短语 → 中性承接（T00914 复检发现 prompt 约束无法 100% 杜绝
 # 这类新闻播报句式，故在改写结果落库前做程序化兜底清洗；值为空串表示直接删除该片段）
+_BRIDGE_REPL = "回到书中，"
 _AUDIOBOOK_BRIDGE_CLEANUP = {
-    "视线转向产业资本动向": "回到书中，" if False else "",
-    "从开发商动态来看": "回到书中，",
+    "视线转向产业资本动向": "",
+    "从开发商动态来看": _BRIDGE_REPL,
     "从开发商": "",
-    "从另一个平台来看，": "回到书中，",
-    "从另一个平台来看": "回到书中，",
-    "换个赛道来看": "回到书中，",
-    "换个赛道。": "回到书中，",
-    "换个赛道": "回到书中，",
+    "从另一个平台来看，": _BRIDGE_REPL,
+    "从另一个平台来看": _BRIDGE_REPL,
+    "换个赛道来看": _BRIDGE_REPL,
+    "换个赛道。": _BRIDGE_REPL,
+    "换个赛道": _BRIDGE_REPL,
     "再来看一条订阅服务变化": "",
     "把镜头转向另一款大作": "",
     "另一款大作": "",
@@ -617,7 +618,7 @@ def is_account_level_error(exc: BaseException) -> bool:
     return any(m in lowered for m in markers)
 
 
-def account_error_hint(exc: BaseException) -> str:
+def account_error_hint(_exc: BaseException) -> str:
     """账号级错误的运维指引（含当前提供商 base_url，便于定位是哪家的余额）。"""
     base_url = ""
     try:
@@ -1675,9 +1676,9 @@ def _filter_audiobook_sources(materials: list[dict], min_segments: int = 3) -> l
     # 锚：章节数最多的 source；并列时不可靠，直接降级保留
     top = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
     if len(top) > 1 and top[0][1] == top[1][1]:
-        logger.warning("[书源隔离] 书名锚不唯一 %s，降级不过滤", {k: v for k, v in top[:2]})
+        logger.warning("[书源隔离] 书名锚不唯一 %s，降级不过滤", dict(top[:2]))
         return materials
-    anchor, anchor_n = top[0]
+    anchor, _anchor_n = top[0]
     filtered = [m for m in materials if m.get("source") == anchor]
     if len(filtered) < min_segments:
         logger.warning("[书源隔离] 锚定《%s》后仅剩 %d/<%d 段，降级保留原始素材池",

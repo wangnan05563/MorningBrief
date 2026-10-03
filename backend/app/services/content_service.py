@@ -198,53 +198,62 @@ class ContentService:
         result = await self.db.execute(list_stmt)
         episodes = result.scalars().all()
 
-        list_data = [
-            {
-                "id": ep.id,
-                "date": ep.date.isoformat() if ep.date else None,
-                "title": ep.title,
-                "duration": ep.duration,
-                "cover_url": ep.cover_url,
-                "categories": ep.categories or [],
-                "channel_id": ep.channel_id,
-            }
-            for ep in episodes
-        ]
-
-        # 任务3：批量统计各 episode 的播放次数（一次 IN 查询避免 N+1）
-        if list_data:
-            from app.models import PlayLog
-            ep_ids = [e["id"] for e in list_data]
-            count_result = await self.db.execute(
-                select(PlayLog.episode_id, func.count(PlayLog.id))
-                .where(PlayLog.episode_id.in_(ep_ids))
-                .group_by(PlayLog.episode_id)
-            )
-            count_map = {row[0]: row[1] for row in count_result.all()}
-            for e in list_data:
-                e["play_count"] = count_map.get(e["id"], 0)
-
-        # 历史页缩略图：批量附带频道封面/图标（与 get_today 同配方——一次 IN 查询避免 N+1，
-        # 相对路径补音频同源 base，保证小程序 <image> 可直接加载）
-        if list_data:
-            from app.models import Channel as ChannelModel
-            ch_ids = list({e["channel_id"] for e in list_data if e.get("channel_id") is not None})
-            if ch_ids:
-                ch_rows = await self.db.execute(
-                    select(ChannelModel.id, ChannelModel.cover_url, ChannelModel.icon_url).where(
-                        ChannelModel.id.in_(ch_ids)
-                    )
-                )
-                cover_map, icon_map = self._channel_art_maps(ch_rows.all())
-                for e in list_data:
-                    if e.get("channel_id") in cover_map:
-                        e["channel_cover"] = cover_map[e["channel_id"]]
-                    if e.get("channel_id") in icon_map:
-                        e["channel_icon"] = icon_map[e["channel_id"]]
+        list_data = [self._episode_list_item(ep) for ep in episodes]
+        await self._attach_play_counts(list_data)
+        await self._attach_channel_art(list_data)
 
         data = {"total": total, "list": list_data}
         await self.cache.set(cache_key, data, ttl=TTL_LIST)
         return data
+
+    @staticmethod
+    def _episode_list_item(ep: Episode) -> dict:
+        """历史列表单项摘要字段。"""
+        return {
+            "id": ep.id,
+            "date": ep.date.isoformat() if ep.date else None,
+            "title": ep.title,
+            "duration": ep.duration,
+            "cover_url": ep.cover_url,
+            "categories": ep.categories or [],
+            "channel_id": ep.channel_id,
+        }
+
+    async def _attach_play_counts(self, list_data: list[dict]) -> None:
+        """任务3：批量统计各 episode 的播放次数（一次 IN 查询避免 N+1）。"""
+        if not list_data:
+            return
+        from app.models import PlayLog
+        ep_ids = [e["id"] for e in list_data]
+        count_result = await self.db.execute(
+            select(PlayLog.episode_id, func.count(PlayLog.id))
+            .where(PlayLog.episode_id.in_(ep_ids))
+            .group_by(PlayLog.episode_id)
+        )
+        count_map = {row[0]: row[1] for row in count_result.all()}
+        for e in list_data:
+            e["play_count"] = count_map.get(e["id"], 0)
+
+    async def _attach_channel_art(self, list_data: list[dict]) -> None:
+        """历史页缩略图：批量附带频道封面/图标（与 get_today 同配方——一次 IN 查询
+        避免 N+1，相对路径补音频同源 base，保证小程序 <image> 可直接加载）。"""
+        if not list_data:
+            return
+        from app.models import Channel as ChannelModel
+        ch_ids = list({e["channel_id"] for e in list_data if e.get("channel_id") is not None})
+        if not ch_ids:
+            return
+        ch_rows = await self.db.execute(
+            select(ChannelModel.id, ChannelModel.cover_url, ChannelModel.icon_url).where(
+                ChannelModel.id.in_(ch_ids)
+            )
+        )
+        cover_map, icon_map = self._channel_art_maps(ch_rows.all())
+        for e in list_data:
+            if e.get("channel_id") in cover_map:
+                e["channel_cover"] = cover_map[e["channel_id"]]
+            if e.get("channel_id") in icon_map:
+                e["channel_icon"] = icon_map[e["channel_id"]]
 
     # FR-MC-07 D1 修正(R1)：前端「课程」筛选含 audiobook（与首页分组一致），
     # 后端按聚合组过滤，避免有声书频道在「课程」筛选下被遗漏。
@@ -545,20 +554,7 @@ class ContentService:
         script = result.scalar_one_or_none()
 
         # 3. 读 workflow 获取 channel_id（多频道架构）
-        # Workflow 主键字段名为 id（comment=workflow_id），不是 workflow_id
-        from app.models import Workflow, Channel
-        channel_id = None
-        channel_name = None
-        if workflow_id:
-            wf_result = await self.db.execute(
-                select(Workflow.channel_id).where(Workflow.id == workflow_id)
-            )
-            channel_id = wf_result.scalar_one_or_none()
-            if channel_id:
-                ch_result = await self.db.execute(
-                    select(Channel.name).where(Channel.id == channel_id)
-                )
-                channel_name = ch_result.scalar_one_or_none()
+        channel_id, channel_name = await self._resolve_publish_channel(workflow_id)
         # 任务1：标题必须含频道名（无 channel_name 时降级为原模板，避免破坏既有数据）
         date_part = f"{review.episode_date.month}月{review.episode_date.day}日"
         if channel_name:
@@ -596,24 +592,51 @@ class ContentService:
         await self.cache.delete_pattern("episode:search:*")
 
         # T00656：讲书稿模式——标题用书名（而非"日期 · 频道名"），并在**发布成功后**推进取书进度。
-        # 为什么放在这里：publish_episode 是所有发布路径（自动审批/人工审核/内部回调）的收敛点，
-        # 且"发布成功"是唯一确定的成功点——放 crawl 会在失败重跑时丢书。
         if channel_id:
-            try:
-                from app.services import book_pool_service as book_pool_svc
-                pick = await book_pool_svc.pick_next_book(self.db, channel_id, review.episode_date)
-                if pick.get("status") == "ok":
-                    book_title = ((pick.get("item") or {}).get("title") or "").strip()
-                    if book_title:
-                        episode.title = f"{date_part} · 《{book_title}》讲书"[:256]
-                        await self.db.commit()
-                    await book_pool_svc.mark_published(
-                        self.db, channel_id, book_title, review.episode_date,
-                    )
-            except Exception as e:  # noqa: BLE001 — 进度推进失败不应影响节目发布
-                logger.warning("讲书稿进度推进失败（不影响发布）: %s", e)
+            await self._advance_book_pool_after_publish(date_part, episode, review)
 
         return episode.id
+
+    async def _resolve_publish_channel(self, workflow_id: int | None) -> tuple[int | None, str | None]:
+        """读 workflow 获取 channel_id 与频道名（多频道架构）。
+
+        Workflow 主键字段名为 id（comment=workflow_id），不是 workflow_id。
+        返回 (channel_id, channel_name)，workflow 不存在/无频道时为 (None, None)。
+        """
+        if not workflow_id:
+            return None, None
+        from app.models import Workflow, Channel
+        wf_result = await self.db.execute(
+            select(Workflow.channel_id).where(Workflow.id == workflow_id)
+        )
+        channel_id = wf_result.scalar_one_or_none()
+        if not channel_id:
+            return None, None
+        ch_result = await self.db.execute(
+            select(Channel.name).where(Channel.id == channel_id)
+        )
+        return channel_id, ch_result.scalar_one_or_none()
+
+    async def _advance_book_pool_after_publish(self, date_part: str, episode, review) -> None:
+        """T00656 讲书稿模式收尾：标题改用书名，并在发布成功后推进取书进度。
+
+        为什么放在这里：publish_episode 是所有发布路径（自动审批/人工审核/内部回调）
+        的收敛点，且"发布成功"是唯一确定的成功点——放 crawl 会在失败重跑时丢书。
+        进度推进失败仅告警，不影响节目发布结果。
+        """
+        try:
+            from app.services import book_pool_service as book_pool_svc
+            pick = await book_pool_svc.pick_next_book(self.db, episode.channel_id, review.episode_date)
+            if pick.get("status") == "ok":
+                book_title = ((pick.get("item") or {}).get("title") or "").strip()
+                if book_title:
+                    episode.title = f"{date_part} · 《{book_title}》讲书"[:256]
+                    await self.db.commit()
+                await book_pool_svc.mark_published(
+                    self.db, episode.channel_id, book_title, review.episode_date,
+                )
+        except Exception as e:  # noqa: BLE001 — 进度推进失败不应影响节目发布
+            logger.warning("讲书稿进度推进失败（不影响发布）: %s", e)
 
     @staticmethod
     def _resolve_audio_base_url() -> str:

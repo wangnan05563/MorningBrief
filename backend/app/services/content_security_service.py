@@ -38,6 +38,44 @@ _MSG_SEC_CHECK_URL = f"{settings.WX_API_BASE}/wxa/msg_sec_check"
 _HTTP_TIMEOUT = 10.0
 
 
+def _skipped_result(error: str) -> dict:
+    """构造「检测未执行」的统一返回（未配置/网络失败/API 错误等，均不阻断主流程）。"""
+    return {
+        "safe": True,
+        "detail": [],
+        "checked_at": localnow_naive().isoformat(),
+        "skipped": True,
+        "error": error,
+    }
+
+
+def _parse_sec_check_result(data: dict) -> tuple[bool, list[dict]]:
+    """解析 msgSecCheck v2 检测结果，返回 (safe, detail)。
+
+    result 是数组，每项含 trace_id/suggest/label 等：
+    - suggest="pass"：通过；suggest="risky"：命中违规
+    - label：违规类型（100=广告, 10001=涉政, 20001=色情, 20002=辱骂, 21000=暴恐等）
+    兼容异常返回：部分合法场景下 result 可能是字符串而非数组，逐字符迭代会崩，
+    仅当是 list 才参与解析，其余一律视为无违规项（fail-closed 保合并成功）。
+    """
+    result_items = data.get("result", []) or []
+    if not isinstance(result_items, list):
+        result_items = []
+    detail: list[dict] = []
+    any_risky = False
+    for item in result_items:
+        suggest = item.get("suggest", "pass")
+        label = item.get("label", 0)
+        if suggest == "risky":
+            any_risky = True
+            detail.append({
+                "suggest": suggest,
+                "label": label,
+                "trace_id": item.get("trace_id", ""),
+            })
+    return not any_risky, detail
+
+
 class ContentSecurityService:
     """微信内容安全检测服务。
 
@@ -123,24 +161,12 @@ class ContentSecurityService:
         """
         # 空内容直接判定安全，避免无意义 API 调用
         if not content or not content.strip():
-            return {
-                "safe": True,
-                "detail": [],
-                "checked_at": localnow_naive().isoformat(),
-                "skipped": True,
-                "error": "内容为空，跳过检测",
-            }
+            return _skipped_result("内容为空，跳过检测")
 
         access_token = await ContentSecurityService._get_access_token()
         # access_token 未配置或获取失败：跳过检测，不阻断工作流
         if not access_token:
-            return {
-                "safe": True,
-                "detail": [],
-                "checked_at": localnow_naive().isoformat(),
-                "skipped": True,
-                "error": "微信 access_token 未配置或获取失败",
-            }
+            return _skipped_result("微信 access_token 未配置或获取失败")
 
         # msgSecCheck v2 请求体
         # scene=1：资料场景（对应稿件审核）；version=2：使用新版检测策略
@@ -159,22 +185,10 @@ class ContentSecurityService:
         except httpx.HTTPError as e:
             # 网络错误不阻断工作流：记录原因，标记 skipped
             logger.warning("msgSecCheck 网络异常（跳过检测）: %s", e)
-            return {
-                "safe": True,
-                "detail": [],
-                "checked_at": localnow_naive().isoformat(),
-                "skipped": True,
-                "error": f"网络异常: {e}",
-            }
+            return _skipped_result(f"网络异常: {e}")
         except Exception as e:
             logger.warning("msgSecCheck 调用异常（跳过检测）: %s", e)
-            return {
-                "safe": True,
-                "detail": [],
-                "checked_at": localnow_naive().isoformat(),
-                "skipped": True,
-                "error": f"调用异常: {e}",
-            }
+            return _skipped_result(f"调用异常: {e}")
 
         checked_at = localnow_naive().isoformat()
 
@@ -193,39 +207,14 @@ class ContentSecurityService:
                 "msgSecCheck 返回错误 errcode=%s errmsg=%s",
                 errcode, data.get("errmsg"),
             )
-            return {
-                "safe": True,
-                "detail": [],
-                "checked_at": checked_at,
-                "skipped": True,
-                "error": f"微信 API 错误 errcode={errcode} errmsg={data.get('errmsg', '')}",
-            }
+            return _skipped_result(
+                f"微信 API 错误 errcode={errcode} errmsg={data.get('errmsg', '')}"
+            )
 
         # 解析检测结果
-        # result 是数组，每项含 trace_id/suggest/label 等
-        # - suggest="pass"：通过
-        # - suggest="risky"：命中违规
-        # - label：违规类型（100=广告, 10001=涉政, 20001=色情, 20002=辱骂, 21000=暴恐等）
-        result_items = data.get("result", []) or []
-        # 兼容异常返回：msgSecCheck 在部分合法场景下 result 字段可能是字符串而非数组，
-        # 直接逐字符迭代会导致 item.get 崩溃，把 content_security 合并整体拖垮（fail-closed）。
-        # 此处仅当是 list 才参与解析，其余一律视为无违规项，保证合并 succeed。
-        if not isinstance(result_items, list):
-            result_items = []
-        detail = []
-        any_risky = False
-        for item in result_items:
-            suggest = item.get("suggest", "pass")
-            label = item.get("label", 0)
-            if suggest == "risky":
-                any_risky = True
-                detail.append({
-                    "suggest": suggest,
-                    "label": label,
-                    "trace_id": item.get("trace_id", ""),
-                })
+        safe, detail = _parse_sec_check_result(data)
 
-        if any_risky:
+        if detail:
             logger.warning(
                 "内容安全检测命中违规 detail=%s（不阻断工作流，已有敏感词替换机制）",
                 detail,
@@ -234,7 +223,7 @@ class ContentSecurityService:
             logger.debug("内容安全检测通过")
 
         return {
-            "safe": not any_risky,
+            "safe": safe,
             "detail": detail,
             "checked_at": checked_at,
             "skipped": False,

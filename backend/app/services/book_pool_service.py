@@ -153,7 +153,7 @@ async def add_books(db: AsyncSession, channel_id: int, book_keys: list[str]) -> 
         .where(Material.channel_id == channel_id, Material.source.in_(keys))
         .group_by(Material.source)
     )).all()
-    rep_map = {src: mid for src, mid in reps}
+    rep_map = dict(reps)
 
     next_sort = (await db.execute(
         select(func.coalesce(func.max(BookPoolItem.sort_index), -1)).where(BookPoolItem.channel_id == channel_id)

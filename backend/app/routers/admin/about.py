@@ -287,7 +287,7 @@ async def trigger_upgrade(
     if not asset:
         raise HTTPException(status_code=400, detail="当前最新版本未提供更新包（zip）")
     try:
-        state = await start_upgrade(release["tag_name"], asset)
+        state = start_upgrade(release["tag_name"], asset)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return success(data=state)

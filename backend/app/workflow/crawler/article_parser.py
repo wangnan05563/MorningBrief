@@ -21,7 +21,7 @@ settings = get_settings()
 _NOISE_TAGS = ("script", "style", "nav", "footer", "aside", "header", "form", "noscript")
 
 
-async def extract(url: str, fallback_selectors: Optional[dict] = None) -> dict:
+async def extract(url: str, _fallback_selectors: Optional[dict] = None) -> dict:
     """异步提取正文。
 
     返回 {title, content, publish_time, cover_url, images}，失败时除 images 外字段均为 None。

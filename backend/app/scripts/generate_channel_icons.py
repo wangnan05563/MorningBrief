@@ -48,7 +48,7 @@ ICON_THEMES: dict[int, str] = {
 }
 
 
-def build_icon_prompt(channel_id: int, themes: str) -> str:
+def build_icon_prompt(_channel_id: int, themes: str) -> str:
     """构造方形图标的生成提示词：扁平无文字、低饱和商务蓝、主题可识别。"""
     return (
         f"Flat minimalist 1:1 app icon for an audio platform, central symbolic: {themes}. "
@@ -70,6 +70,32 @@ def compress_to_png(raw: bytes, size: int = 512) -> bytes:
     return buf.getvalue()
 
 
+def _gen_icon_for_channel(ch: Channel, run: bool, out_dir) -> tuple[bool, str | None]:
+    """为单个频道生成图标并落盘。返回 (是否成功, 失败时的频道名)。
+
+    文件已存在 / dry-run（run=False）时返回 (False, None)，不计入失败；
+    仅真实生成失败时返回 (False, ch.name)。
+    """
+    filename = f"channel_{ch.id}_icon.png"
+    dest = out_dir / filename
+    if dest.exists():
+        print(f"  跳过 频道 {ch.id}《{ch.name}》：{filename} 已存在")
+        return False, None
+    theme = ICON_THEMES.get(ch.id) or (ch.description or ch.name)[:60]
+    if not run:
+        print(f"  [dry-run] 频道 {ch.id}《{ch.name}》→ {filename}")
+        return False, None
+    try:
+        raw = generate_image(build_icon_prompt(ch.id, theme), size="1K", ratio="1:1")
+    except ImageGenError as e:
+        print(f"  [fail] 频道 {ch.id}《{ch.name}》：{e}")
+        return False, ch.name
+    png = compress_to_png(raw)
+    dest.write_bytes(png)
+    print(f"  [ok] 频道 {ch.id}《{ch.name}》→ {filename}（{len(png) // 1024}KB）")
+    return True, None
+
+
 async def main_async(run: bool, assign: bool, only: list[int] | None) -> int:
     async with AsyncSessionLocal() as db:
         stmt = select(Channel).order_by(Channel.id.asc())
@@ -84,29 +110,14 @@ async def main_async(run: bool, assign: bool, only: list[int] | None) -> int:
         failed: list[str] = []
         done = 0
         for ch in channels:
-            filename = f"channel_{ch.id}_icon.png"
-            dest = out_dir / filename
-            if dest.exists():
-                print(f"  跳过 频道 {ch.id}《{ch.name}》：{filename} 已存在")
-                continue
-            theme = ICON_THEMES.get(ch.id) or (ch.description or ch.name)[:60]
-            if not run:
-                print(f"  [dry-run] 频道 {ch.id}《{ch.name}》→ {filename}")
-                continue
-            try:
-                raw = generate_image(build_icon_prompt(ch.id, theme), size="1K", ratio="1:1")
-            except ImageGenError as e:
-                print(f"  [fail] 频道 {ch.id}《{ch.name}》：{e}")
-                failed.append(ch.name)
-                continue
-            png = compress_to_png(raw)
-            dest.write_bytes(png)
-            print(f"  [ok] 频道 {ch.id}《{ch.name}》→ {filename}（{len(png) // 1024}KB）")
-            done += 1
-
-            if assign and not ch.icon_url:
-                ch.icon_url = f"/channel-assets/{filename}"
-                print(f"    已设为频道图标（原 icon_url 为空）")
+            ok, fail_name = _gen_icon_for_channel(ch, run, out_dir)
+            if ok:
+                done += 1
+                if assign and not ch.icon_url:
+                    ch.icon_url = f"/channel-assets/channel_{ch.id}_icon.png"
+                    print("    已设为频道图标（原 icon_url 为空）")
+            elif fail_name:
+                failed.append(fail_name)
         if assign:
             await db.commit()
         print(f"[icons] 完成 {done} 张；{len(failed)} 个失败：{failed}")

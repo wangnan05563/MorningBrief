@@ -266,6 +266,22 @@ async def _crawl_source(source_config: dict) -> list[dict]:
     return await spider.fetch()
 
 
+def _parse_source_name_list(raw: str | None, channel_id: int, field: str, warn_action: str) -> list[str]:
+    """解析频道上的 JSON 字符串数组字段（rss_sources / book_rss_sources）。
+
+    解析失败或非数组一律回退空列表并告警（warn_action 描述回退语义，用于日志）。
+    """
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            return [str(s) for s in parsed]
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("频道 %s %s JSON 解析失败，%s: %s", channel_id, field, warn_action, raw)
+    return []
+
+
 async def _load_channel_filter(channel_id: Optional[int]) -> tuple[list[str], list[str], str | None, list[str]]:
     """加载频道级数据源白名单和关键词过滤列表。
 
@@ -289,29 +305,10 @@ async def _load_channel_filter(channel_id: Optional[int]) -> tuple[list[str], li
             await session.commit()
             return [], [], None, []
 
-        rss_sources: list[str] = []
-        if ch.rss_sources:
-            try:
-                parsed = json.loads(ch.rss_sources)
-                if isinstance(parsed, list):
-                    rss_sources = [str(s) for s in parsed]
-            except (json.JSONDecodeError, TypeError):
-                logger.warning(
-                    "频道 %s rss_sources JSON 解析失败，回退到全局源: %s",
-                    channel_id, ch.rss_sources,
-                )
-
-        book_rss_sources: list[str] = []
-        if ch.book_rss_sources:
-            try:
-                parsed = json.loads(ch.book_rss_sources)
-                if isinstance(parsed, list):
-                    book_rss_sources = [str(s) for s in parsed]
-            except (json.JSONDecodeError, TypeError):
-                logger.warning(
-                    "频道 %s book_rss_sources JSON 解析失败，忽略书籍 RSS 源: %s",
-                    channel_id, ch.book_rss_sources,
-                )
+        rss_sources = _parse_source_name_list(ch.rss_sources, channel_id, "rss_sources", "回退到全局源")
+        book_rss_sources = _parse_source_name_list(
+            ch.book_rss_sources, channel_id, "book_rss_sources", "忽略书籍 RSS 源"
+        )
 
         keywords: list[str] = []
         if ch.keywords:

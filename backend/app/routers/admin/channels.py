@@ -824,7 +824,7 @@ async def list_cover_presets(
     """
     asset_dir = resolve_channel_asset_dir()
     result = await db.execute(select(Channel.id, Channel.name))
-    name_by_id = {cid: cname for cid, cname in result.all()}
+    name_by_id = dict(result.all())
 
     presets: list[dict] = []
     for path in sorted(asset_dir.iterdir()):

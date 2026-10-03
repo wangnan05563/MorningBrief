@@ -29,6 +29,9 @@ from starlette.responses import Response
 
 
 _PRAGMA_MATERIAL_INFO = "PRAGMA table_info(material)"
+# 启动期迁移常用 SQL 片段 / 日志模板（S1192：避免重复字面量）
+_SQL_INT_NOT_NULL_DEFAULT0 = "INTEGER NOT NULL DEFAULT 0"
+_LOG_MATERIAL_MIGRATE_FAIL = "[startup] material 表迁移失败: %s"
 def _read_range_sync(full_path: str, start: int, content_length: int) -> bytes:
     """同步读取文件指定字节范围（供 async 上下文通过 asyncio.to_thread 调用，避免阻塞事件循环）。"""
     with open(full_path, "rb") as f:
@@ -281,7 +284,7 @@ async def _migrate_channel_schema() -> None:  # NOSONAR
             ("min_duration_sec", "INTEGER"),
             # 展示排序权重：缓存命中判定以现有列集合为准，新增列需追加到此列表
             # NOT NULL DEFAULT 0 回填存量频道，避免 NULL 排序歧义
-            ("display_order", "INTEGER NOT NULL DEFAULT 0"),
+            ("display_order", _SQL_INT_NOT_NULL_DEFAULT0),
             # 频道级素材周期回溯天数：为空时回退 rewriter 动态值（3/7/14 天）
             ("material_lookback_days", "INTEGER"),
             # 业务范围扩展 MVP 字段：
@@ -307,8 +310,8 @@ async def _migrate_channel_schema() -> None:  # NOSONAR
             ("rss_sources_snapshot", "TEXT"),
             ("book_rss_sources_snapshot", "TEXT"),
             ("book_pool_interval_days", "INTEGER NOT NULL DEFAULT 1"),
-            ("book_pool_loop", "INTEGER NOT NULL DEFAULT 0"),
-            ("book_pool_cursor", "INTEGER NOT NULL DEFAULT 0"),
+            ("book_pool_loop", _SQL_INT_NOT_NULL_DEFAULT0),
+            ("book_pool_cursor", _SQL_INT_NOT_NULL_DEFAULT0),
             ("book_pool_last_run_date", "TEXT"),
             ("book_pool_last_title", "TEXT"),
             # T00730：频道图标（上传或 AI 生成），URL 形式存储
@@ -359,7 +362,7 @@ async def _migrate_material_schema() -> None:  # NOSONAR
             conn.commit()
             logger.info("[startup] material 表迁移完成，新增 channel_id 列")
     except Exception as e:
-        logger.warning("[startup] material 表迁移失败: %s", e)
+        logger.warning(_LOG_MATERIAL_MIGRATE_FAIL, e)
     finally:
         conn.close()
 
@@ -391,7 +394,7 @@ async def _migrate_material_media_column() -> None:  # NOSONAR
         conn.commit()
         logger.info("[startup] material 表迁移完成，新增 media 列")
     except Exception as e:
-        logger.warning("[startup] material 表迁移失败: %s", e)
+        logger.warning(_LOG_MATERIAL_MIGRATE_FAIL, e)
     finally:
         conn.close()
 
@@ -736,7 +739,7 @@ async def _migrate_user_disabled_column() -> None:  # NOSONAR
         cur.execute("PRAGMA table_info(user)")
         existing = {row[1] for row in cur.fetchall()}
         if "disabled" not in existing:
-            cur.execute("ALTER TABLE user ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0")
+            cur.execute("ALTER TABLE user ADD COLUMN disabled " + _SQL_INT_NOT_NULL_DEFAULT0)
             conn.commit()
             logger.info("[startup] user 表迁移完成，新增 disabled 列")
     except Exception as e:
@@ -926,7 +929,7 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
     try:
         await _migrate_material_schema()
     except Exception as e:
-        logger.warning("[startup] material 表迁移失败: %s", e)
+        logger.warning(_LOG_MATERIAL_MIGRATE_FAIL, e)
 
     # material table cover_url column migration (idempotent)
     try:

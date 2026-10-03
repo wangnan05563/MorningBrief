@@ -19,6 +19,18 @@ _REVIEW_NOT_FOUND_MSG = "审核记录不存在"
 REVIEW_IMAGE_LIMIT = 9
 
 
+def _ordered_material_ids(segments) -> list[int]:
+    """从脚本分段中提取素材 ID（分段顺序 → 段内顺序，去重保序，忽略非法项）。"""
+    ordered_ids: list[int] = []
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        for mid in seg.get("material_ids") or []:
+            if isinstance(mid, int) and mid not in ordered_ids:
+                ordered_ids.append(mid)
+    return ordered_ids
+
+
 class ReviewService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -139,7 +151,7 @@ class ReviewService:
         cover_url = episode.cover_url if episode else None
         hls_url = episode.hls_url if episode else None
 
-        # T00809：采集到的图片——审核员需要核对「这篇稿子到底抓了哪些图」，
+        # T00809 图片核对——审核员需要核对「这篇稿子到底抓了哪些图」，
         # 与节目脚本接口同一口径（按分段引用的素材顺序聚合、去重）。
         images = await self._collect_review_images(script)
 
@@ -176,35 +188,37 @@ class ReviewService:
             return []
 
         # 1) 优先：分段引用的素材 ID（精确，且与节目侧同一顺序）
-        ordered_ids: list[int] = []
-        for seg in script.segments or []:
-            if not isinstance(seg, dict):
-                continue
-            for mid in seg.get("material_ids") or []:
-                if isinstance(mid, int) and mid not in ordered_ids:
-                    ordered_ids.append(mid)
-
-        materials: list[Material] = []
-        if ordered_ids:
-            rows = await self.db.execute(
-                select(Material).where(Material.id.in_(ordered_ids))
-            )
-            by_id = {m.id: m for m in rows.scalars().all()}
-            materials = [by_id[i] for i in ordered_ids if i in by_id]
+        ordered_ids = _ordered_material_ids(script.segments or [])
+        materials = await self._load_materials_by_ids(ordered_ids)
 
         # 2) 兜底：按引用素材 URL 反查（老脚本无 material_ids）
         if not materials:
             urls = [u for u in (script.referenced_materials or []) if isinstance(u, str) and u]
-            if urls:
-                rows = await self.db.execute(
-                    select(Material).where(Material.url.in_(urls))
-                )
-                by_url: dict[str, Material] = {}
-                for m in rows.scalars().all():
-                    by_url.setdefault(m.url, m)
-                materials = [by_url[u] for u in urls if u in by_url]
+            materials = await self._load_materials_by_urls(urls)
 
         return aggregate_material_images(materials)
+
+    async def _load_materials_by_ids(self, ordered_ids: list[int]) -> list[Material]:
+        """按 ID 列表取素材，并保持入参顺序（缺失 ID 自动跳过）。"""
+        if not ordered_ids:
+            return []
+        rows = await self.db.execute(
+            select(Material).where(Material.id.in_(ordered_ids))
+        )
+        by_id = {m.id: m for m in rows.scalars().all()}
+        return [by_id[i] for i in ordered_ids if i in by_id]
+
+    async def _load_materials_by_urls(self, urls: list[str]) -> list[Material]:
+        """按 URL 列表取素材，并保持入参顺序（同一 URL 多条时取首条）。"""
+        if not urls:
+            return []
+        rows = await self.db.execute(
+            select(Material).where(Material.url.in_(urls))
+        )
+        by_url: dict[str, Material] = {}
+        for m in rows.scalars().all():
+            by_url.setdefault(m.url, m)
+        return [by_url[u] for u in urls if u in by_url]
 
     async def handle_action(
         self,

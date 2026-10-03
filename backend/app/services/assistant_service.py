@@ -222,29 +222,39 @@ async def _call_llm_plan(db: AsyncSession, user_message: str, model: str = "") -
     return data, raw, None
 
 
+def _normalize_switch(raw_val: Any) -> int:
+    """switch 字段归一化：LLM 可能返回 true/false/1/0，统一成后端整数 1/0。"""
+    return 1 if raw_val in (True, 1, "1", "true", "on") else 0
+
+
+def _normalize_number(field: dict, raw_val: Any) -> Any:
+    """number 字段归一化：非法值回退默认。"""
+    try:
+        return int(raw_val)
+    except (TypeError, ValueError):
+        return field.get("default")
+
+
+def _normalize_select(field: dict, raw_val: Any) -> Any:
+    """select 字段归一化：不在合法选项内时回退默认，避免 LLM 幻觉值污染前端表单。"""
+    options = field.get("options") or []
+    if options and raw_val not in {o["value"] for o in options}:
+        return field.get("default")
+    return raw_val
+
+
 def _normalize_field(field: dict, raw_val: Any) -> Any:
     """按字段类型对 LLM 返回的字段值做归一化。"""
     if raw_val is None:
         return field.get("default")
     ftype = field.get("type")
     if ftype == "switch":
-        # LLM 可能返回 true/false/1/0，统一成后端整数 1/0
-        return 1 if raw_val in (True, 1, "1", "true", "on") else 0
+        return _normalize_switch(raw_val)
     if ftype == "number":
-        try:
-            return int(raw_val)
-        except (TypeError, ValueError):
-            return field.get("default")
+        return _normalize_number(field, raw_val)
     if ftype == "select":
-        options = field.get("options") or []
-        if options:
-            valid = {o["value"] for o in options}
-            if raw_val not in valid:
-                return field.get("default")
-        return raw_val
+        return _normalize_select(field, raw_val)
     # text / textarea
-    if raw_val is None:
-        return None
     return str(raw_val).strip() or None
 
 
@@ -299,6 +309,24 @@ async def plan_action(
     }, None
 
 
+async def _auto_generate_prompts(svc: ChannelService, channel) -> None:
+    """创建频道后自动生成提示词；失败仅告警，不阻塞频道创建结果。"""
+    try:
+        from app.services.channel_prompt_service import generate_prompts_for_channel
+
+        prompts = await generate_prompts_for_channel(channel.name, channel.description or "")
+        await svc.update_channel(
+            channel_id=channel.id,
+            intro_prompt=prompts["intro_prompt"],
+            outro_prompt=prompts["outro_prompt"],
+            constraint_prompt=prompts["constraint_prompt"],
+            rewrite_template=prompts["rewrite_template"],
+        )
+    # 明确吞掉并告警，不阻塞频道创建
+    except Exception as e:  # NOSONAR
+        logger.warning("智能助手创建频道后自动生成提示词失败: %s", e, exc_info=True)
+
+
 async def execute_action(db: AsyncSession, action: dict) -> tuple[dict | None, str | None]:
     """校验并落地一个经管理员确认的动作草稿。
 
@@ -342,19 +370,7 @@ async def execute_action(db: AsyncSession, action: dict) -> tuple[dict | None, s
         return None, str(e)
 
     if auto_gen:
-        try:
-            from app.services.channel_prompt_service import generate_prompts_for_channel
-
-            prompts = await generate_prompts_for_channel(channel.name, channel.description or "")
-            await svc.update_channel(
-                channel_id=channel.id,
-                intro_prompt=prompts["intro_prompt"],
-                outro_prompt=prompts["outro_prompt"],
-                constraint_prompt=prompts["constraint_prompt"],
-                rewrite_template=prompts["rewrite_template"],
-            )
-        except Exception as e:  # NOSONAR: 明确吞掉并告警，不阻塞频道创建
-            logger.warning("智能助手创建频道后自动生成提示词失败: %s", e, exc_info=True)
+        await _auto_generate_prompts(svc, channel)
 
     logger.info("智能助手创建频道 channel_id=%s name=%s", channel.id, channel.name)
     return {"channel_id": channel.id, "name": channel.name}, None

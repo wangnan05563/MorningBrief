@@ -60,20 +60,16 @@ def main() -> int:
                 skipped += 1
                 continue
             cur_cover = row[0] or ""
-            if cur_cover.startswith("/channel-assets/"):
-                conn.execute(
-                    "UPDATE channel SET cover_url = ? WHERE id = ?",
-                    (f"/channel-assets/{src.name}", ch_id),
-                )
-                assigned += 1
-            elif not cur_cover:
+            # 已挂 /channel-assets 封面（可被重制图替换）或尚无封面 → 设为频道封面；
+            # 已有人工配置的外部封面不覆盖
+            if cur_cover.startswith("/channel-assets/") or not cur_cover:
                 conn.execute(
                     "UPDATE channel SET cover_url = ? WHERE id = ?",
                     (f"/channel-assets/{src.name}", ch_id),
                 )
                 assigned += 1
             else:
-                skipped += 1  # 已有人工配置的封面，不覆盖
+                skipped += 1
         conn.commit()
 
         print(f"[done] 复制封面 {copied} 张；设为频道封面 {assigned} 个；跳过 {skipped} 个"

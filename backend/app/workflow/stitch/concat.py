@@ -53,6 +53,9 @@ from app.workflow.tts.uploader import upload_to_cos, upload_hls_directory
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+# 混音后主音频临时文件名（BGM 三种铺法共用，S1192：避免重复字面量）
+_MAIN_BGM_FILENAME = "main_bgm.mp3"
+
 # 时长校验区间按 settings.TARGET_DURATION_SEC 动态计算:
 #   允许范围 = [target × 0.80, target × 1.20]
 # 即默认 600s → [480, 720]，用户调整 target_sec 后范围自动跟随
@@ -307,7 +310,7 @@ async def concat(  # NOSONAR
             await build_bgm_continuous(
                 str(bgm_path), main_dur, bgm_volume, bgm_overlay_path,
             )
-            bgm_mix_path = str(tmp_dir / "main_bgm.mp3")
+            bgm_mix_path = str(tmp_dir / _MAIN_BGM_FILENAME)
             await run_ffmpeg(build_amix_cmd(main_path, bgm_overlay_path, bgm_mix_path))
             main_path = bgm_mix_path
             logger.info(
@@ -316,7 +319,7 @@ async def concat(  # NOSONAR
             )
         elif bgm_path and bgm_gap_mode == "bridge":
             # 旧版 BGM 桥接：整段循环 BGM 均匀叠加，段间静音处表现为 BGM 桥接
-            bgm_mix_path = str(tmp_dir / "main_bgm.mp3")
+            bgm_mix_path = str(tmp_dir / _MAIN_BGM_FILENAME)
             await build_bgm_bridge(
                 main_path, str(bgm_path), bgm_volume, bgm_mix_path, str(tmp_dir),
             )
@@ -332,7 +335,7 @@ async def concat(  # NOSONAR
                 str(bgm_path), seg_durations, gap_path,
                 bgm_volume, bgm_overlay_path, str(tmp_dir),
             )
-            bgm_mix_path = str(tmp_dir / "main_bgm.mp3")
+            bgm_mix_path = str(tmp_dir / _MAIN_BGM_FILENAME)
             await run_ffmpeg(build_amix_cmd(main_path, bgm_overlay_path, bgm_mix_path))
             main_path = bgm_mix_path
             logger.info(

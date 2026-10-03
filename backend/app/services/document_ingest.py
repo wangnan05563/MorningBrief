@@ -63,13 +63,14 @@ _MAX_CHAPTER_CHARS = 1200
 _MIN_MERGE_CHARS = 30
 
 # 仍不支持格式 → 用户侧动作提示（零依赖前提下无法解析，引导转格式而非装库）
+_KINDLE_HINT = "Kindle 专有格式；建议用 Calibre 等工具转存为 EPUB 后上传"
 _UNSUPPORTED_HINTS = {
     ".pdf": "PDF 需文本层提取库；建议用阅读器「另存为 TXT」或转存 EPUB 后上传",
     ".doc": "旧版 Word 二进制格式；建议用 Word/WPS「另存为 .docx」后上传",
-    ".mobi": "Kindle 专有格式；建议用 Calibre 等工具转存为 EPUB 后上传",
-    ".azw3": "Kindle 专有格式；建议用 Calibre 等工具转存为 EPUB 后上传",
-    ".azw": "Kindle 专有格式；建议用 Calibre 等工具转存为 EPUB 后上传",
-    ".prc": "Kindle 专有格式；建议用 Calibre 等工具转存为 EPUB 后上传",
+    ".mobi": _KINDLE_HINT,
+    ".azw3": _KINDLE_HINT,
+    ".azw": _KINDLE_HINT,
+    ".prc": _KINDLE_HINT,
 }
 
 
@@ -251,6 +252,33 @@ def _html_to_text(raw: bytes) -> tuple[str, str | None]:
     return parser.get_text(), parser.first_heading
 
 
+def _extract_epub_spine_lines(zf, manifest: dict, spine_ids: list, opf_dir: str) -> list[str]:
+    """按 spine 顺序逐篇提取正文行（每篇 XHTML = 一章）。
+
+    篇内已有标题（h1-h3）则直接用；无标题的篇（封面/版权页等）用序号兜底。
+    """
+    lines: list[str] = []
+    order = 0
+    for idref in spine_ids:
+        href = manifest.get(idref)
+        if not href:
+            continue
+        path = posixpath.normpath(posixpath.join(opf_dir, href)) if opf_dir else href
+        try:
+            doc_raw = zf.read(path)
+        except KeyError:
+            logger.warning("[document_ingest] EPUB spine 条目缺失，跳过: %s", path)
+            continue
+        text, doc_title = _html_to_text(doc_raw)
+        if not text:
+            continue
+        order += 1
+        if not (text.startswith("# ") or "\n# " in text):
+            lines.append(f"# {doc_title or f'第{order}节'}")
+        lines.append(text)
+    return lines
+
+
 def _parse_epub(raw: bytes, filename: str) -> list[Chapter]:
     """解析 EPUB：ZIP 容器 → container.xml → OPF → spine 阅读顺序逐篇提取。
 
@@ -289,26 +317,7 @@ def _parse_epub(raw: bytes, filename: str) -> list[Chapter]:
     opf_dir = posixpath.dirname(opf_path)
 
     # 3. 按 spine 顺序逐篇提取（每篇 XHTML = 一章）
-    lines: list[str] = []
-    order = 0
-    for idref in spine_ids:
-        href = manifest.get(idref)
-        if not href:
-            continue
-        path = posixpath.normpath(posixpath.join(opf_dir, href)) if opf_dir else href
-        try:
-            doc_raw = zf.read(path)
-        except KeyError:
-            logger.warning("[document_ingest] EPUB spine 条目缺失，跳过: %s", path)
-            continue
-        text, doc_title = _html_to_text(doc_raw)
-        if not text:
-            continue
-        order += 1
-        # 篇内已有标题（h1-h3）则直接用；无标题的篇（封面/版权页等）用序号兜底
-        if not (text.startswith("# ") or "\n# " in text):
-            lines.append(f"# {doc_title or f'第{order}节'}")
-        lines.append(text)
+    lines = _extract_epub_spine_lines(zf, manifest, spine_ids, opf_dir)
     if not lines:
         raise DocumentIngestError(f"EPUB 未提取到任何正文内容: {filename}")
 

@@ -77,6 +77,29 @@ def list_categories(force: bool = False) -> list[str]:
     return sorted(set(re.findall(r"md/([^)\s]+?)\.md", readme)))
 
 
+def _search_result(keyword: str, scanned: list[str], failed: list[str], hits: list[dict]) -> dict:
+    """统一构造 search 返回结构。"""
+    return {
+        "keyword": keyword,
+        "scanned_categories": scanned,
+        "failed_categories": failed,
+        "hits": hits,
+    }
+
+
+def _match_books_in_category(text: str, kw: str, category: str, hits: list[dict], limit: int) -> bool:
+    """把该分类下命中关键词（书名/作者）的书目追加进 hits。
+
+    达到 limit（防止全量扫描结果过大）时返回 True，调用方提前收口。
+    """
+    for b in parse_category(text):
+        if kw in b["title"].lower() or kw in (b["author"] or "").lower():
+            hits.append({**b, "category": category})
+            if len(hits) >= max(1, limit):
+                return True
+    return False
+
+
 def search(keyword: str, category: str | None = None, limit: int = 20, force: bool = False) -> dict:
     """按关键词检索书名/作者。
 
@@ -91,7 +114,7 @@ def search(keyword: str, category: str | None = None, limit: int = 20, force: bo
     """
     kw = (keyword or "").strip().lower()
     if not kw:
-        return {"keyword": keyword, "scanned_categories": [], "failed_categories": [], "hits": []}
+        return _search_result(keyword, [], [], [])
 
     cats = [category] if category else list_categories(force=force)
     hits: list[dict] = []
@@ -106,22 +129,9 @@ def search(keyword: str, category: str | None = None, limit: int = 20, force: bo
             logger.warning("[ebook_source] 分类 %s 拉取失败: %s", c, e)
             continue
         scanned.append(c)
-        for b in parse_category(text):
-            if kw in b["title"].lower() or kw in (b["author"] or "").lower():
-                hits.append({**b, "category": c})
-                if len(hits) >= max(1, limit):
-                    return {
-                        "keyword": keyword,
-                        "scanned_categories": scanned,
-                        "failed_categories": failed,
-                        "hits": hits,
-                    }
+        if _match_books_in_category(text, kw, c, hits, limit):
+            return _search_result(keyword, scanned, failed, hits)
 
     logger.info("[ebook_source] 检索「%s」命中 %d 条（扫描 %d 分类，失败 %d）",
                 keyword, len(hits), len(scanned), len(failed))
-    return {
-        "keyword": keyword,
-        "scanned_categories": scanned,
-        "failed_categories": failed,
-        "hits": hits,
-    }
+    return _search_result(keyword, scanned, failed, hits)
