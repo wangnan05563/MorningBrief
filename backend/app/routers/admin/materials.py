@@ -90,6 +90,7 @@ def _material_to_dict(m: Material) -> dict:
         "media_type": m.media_type,
         "media_url": m.media_url,
         "media_thumb_url": m.media_thumb_url,
+        "cover_url": m.cover_url,
     }
 
 
