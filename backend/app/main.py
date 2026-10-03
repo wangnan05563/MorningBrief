@@ -901,6 +901,8 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
         log_level=settings.LOG_LEVEL,
         log_dir=log_dir,
         log_file_max_mb=settings.LOG_FILE_MAX_MB,
+        retention_days=settings.LOG_RETENTION_DAYS,
+        dir_max_mb=settings.LOG_DIR_MAX_MB,
     )
 
     # 注册事件循环异常处理器：过滤浏览器提前断开连接导致的 WinError 10054 噪声

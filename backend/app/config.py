@@ -389,6 +389,14 @@ class Settings(BaseSettings):
     # 单个日志文件大小上限（MB）：达到即滚动新文件，防止单日刷爆磁盘
     # 背景：2026-09-10 单日日志达 68MB（admin 轮询 + DEBUG 级），按日滚动不足以兜底
     LOG_FILE_MAX_MB: int = 10
+    # 日志保留天数（loguru retention）：按文件 mtime 清理过期滚动分片
+    # 背景：原先硬编码 "14 days"，按单日 34MB 上界估算可占 476MB，
+    # 在 D 盘余量紧张时是主要压力来源，故改为可配置并默认收紧到 7 天
+    LOG_RETENTION_DAYS: int = 7
+    # 日志目录总量上限（MB）：超出时按 mtime 由旧到新删除最旧的分片
+    # 与 retention 构成双保险——retention 只看单文件年龄，
+    # 压测/批量导入等高频场景可在数小时内刷出数十个当日分片（年龄全在窗口内）
+    LOG_DIR_MAX_MB: int = 200
 
     # ---- FFmpeg 依赖 ----
     # BtbN/FFmpeg-Builds 共享构建下载源（gpl-shared，含 ffmpeg.exe/ffprobe.exe + DLL）
