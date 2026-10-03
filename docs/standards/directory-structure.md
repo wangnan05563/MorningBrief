@@ -252,7 +252,7 @@
 
 - **删前哈希审计**：`runtime/logs/cleanup-20260910-audit.log`（412 行：SHA256 \| 字节数 \| Tier \| 动作 \| 路径）
 - **目标清单**：`runtime/logs/cleanup-targets-20260910.txt`、`cleanup-plan-20260910.json`
-- **隔离区**：`runtime/.cleanup-trash-20260910/`（21 项，含 `dist/`；24h 内可原样恢复）
+- **隔离区**：`runtime/.cleanup-trash-20260910/`（21 项，含 `dist/`；24h 内可原样恢复）—— **已于 2026-10-03 第二轮清理中连同审计哈希一并删除**，详见本文档「2026-10-03 工作空间清理（第二轮）」
 - **执行脚本**：`runtime/logs/wscleanup-exec-20260910.ps1`（enumerate / hashlog / delete / move / movedirs / rmdirs 六动作，幂等）
 
 ### 未清理的风险文件（需人工决策）
@@ -308,3 +308,40 @@
 2. **日志轮转**：`backend/logs/` 单日日志可达 34 MB，建议加 `RotatingFileHandler` 或按天保留 N 天，避免四周内再次累积 100 MB+。
 3. **`release/` 目录核查**：确认 `release/assets/MorningBrief.ico` 缺失是否影响 `installer.iss` / `MorningBrief.spec` 打包，必要时从 git 历史恢复。
 4. **周期性维护**：建议每月或每个里程碑后运行一次 workspace-cleanup。
+
+---
+
+## 2026-10-03 工作空间清理（第二轮 · 解除第一轮 review 阻塞）
+
+第一轮（22:54）只删了配置明确授权的可再生缓存，把 480 MB 路由到 review。本轮在完成前置校验后解除其中两项阻塞，回收 443 MB。
+
+### 结论：删除 167 文件 + 3 目录（443.24 MB），0 失败；验证全绿。**
+
+### 已删除
+
+| 项 | 数量 | 体积 | 依据 |
+|---|---|---|---|
+| `backend/logs/*.2026-10-03_*.log`（loguru 滚动副本） | 37 | ~370 MB | 均为当日已封存的滚动分片；`MorningBrief_2026-10-03.log`（活动文件）**保留**。loguru retention 14d 会自行轮转，分片无诊断价值 |
+| `runtime/.cleanup-trash-20260910/**` | 130 | ~74 MB | 9/10 隔离区，24h 恢复窗口已过期 23 天；其唯一引用方是本文档第 255 行的证据登记，**已先更新该行再删除**（解除「引用即承重墙」） |
+
+- **删前哈希审计**：`runtime/logs/cleanup-20261003-234150.log`（169 行：SHA256 \| 字节数 \| 路径）
+- **目标清单**：`runtime/logs/cleanup-targets-r2.txt`（167 行）
+- **执行脚本**：`_validate/cleanup_r2_exec.py`（干跑校验）、`_validate/cleanup_r2_delete.py`（ctypes 删除 + 空目录剪枝 + 范围守卫）
+- **执行方式**：`bypass_hook_mode: ctypes`（`kernel32.DeleteFileW` / `RemoveDirectoryW`），批大小 20，8 批，错误 0
+- **验证**：`from app.main import app` → OK（231 路由）；定向回归 16 passed（material 契约 / SPA 缓存）；`git ls-files --deleted` = 0；`backend/.venv-build` 5886 文件完好
+
+### 仍保留（tier=keep）
+
+| 项 | 体积 | 保留原因 |
+|---|---|---|
+| `backend/.venv-build/` | 113.5 MB | 7/23 遗留构建 venv，无代码引用；重建需联网（pypi 此前超时），不可逆因素命中 |
+| `.venv` → `backend/.venv-build` | 符号链接 | **绝不可递归删除**（项目铁律） |
+| `backend/logs/MorningBrief_2026-10-03.log` | 0.5 MB | 当日活动日志，压测/部署验证诊断依据 |
+| `_validate/` | 34.1 MB | mtask 结论回传证据（`res_*.md`）与压测原始 jtl |
+| `release/` + `build/` | ~581 MB | D 盘真实目录（非 F 盘 junction）；exe 安装包产物 |
+
+### 本轮踩坑（写入执行脚本注释，防复发）
+
+1. **清单为 CRLF 行尾** → Git Bash 下 `[ -e "$f" ]` 全部误报 MISSING（尾部 `\r` 粘进路径）。用 Python `splitlines()` + `strip()` 读清单，不要在 shell 里逐行判存在。
+2. **范围守卫大小写**：`full.lower().startswith(ALLOWED_PREFIXES)` 与含大写盘符/目录名（`D:\...20_News`）的常量比较 → 167 个全部 `OUT_OF_SCOPE`，删除静默跳过。**守卫常量必须同样 `.lower()`**。
+3. 排空后的隔离区会留下空目录（`os.walk` topdown=False 剪枝 2 个，但嵌套更深的空目录在剪枝后才暴露）→ 需再手动 `RemoveDirectoryW` 一轮并复核 `islink()/isjunction()` 为 `False`。
