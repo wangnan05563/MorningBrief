@@ -24,7 +24,10 @@ BACKEND_DIR = __file__.rsplit("\\", 2)[0] if "\\" in __file__ else __file__.rspl
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-DB_PATH = HERE.parent / "backend" / "data" / "news.db"
+# 脚本位于 <repo>/scripts/jmeter_test/，DB 在 <repo>/backend/data/news.db；
+# 兼容两种情况：jmeter_test/ 直接在 repo 根下也能定位。
+_repo = HERE.parent if (HERE.parent / "backend").exists() else HERE.parent.parent
+DB_PATH = _repo / "backend" / "data" / "news.db"
 USER_INFO = HERE / "test_user_info.json"
 
 KEYWORDS = ["科技", "财经", "体育", "国际", "健康", "文化", "教育", "汽车", "房产", "游戏", "AI", "新能源"]
@@ -182,18 +185,18 @@ def main() -> int:
             for chid in random.sample(range(1, total_channels + 1), min(8, total_channels)):
                 csub_rows.append((uid, chid, now_iso()))
         if fav_rows:
-            cur.executemany("INSERT INTO favorite (user_id, episode_id, created_at) VALUES (?,?,?)", fav_rows)
+            cur.executemany("INSERT OR IGNORE INTO favorite (user_id, episode_id, created_at) VALUES (?,?,?)", fav_rows)
         if plog_rows:
             cur.executemany(
-                "INSERT INTO play_log (user_id, episode_id, position, duration, completed, played_at) "
+                "INSERT OR IGNORE INTO play_log (user_id, episode_id, position, duration, completed, played_at) "
                 "VALUES (?,?,?,?,?,?)", plog_rows)
         if pprog_rows:
             cur.executemany(
-                "INSERT INTO play_progress (user_id, episode_id, position, duration, completed, updated_at) "
+                "INSERT OR IGNORE INTO play_progress (user_id, episode_id, position, duration, completed, updated_at) "
                 "VALUES (?,?,?,?,?,?)", pprog_rows)
         if csub_rows:
             cur.executemany(
-                "INSERT INTO channel_subscription (user_id, channel_id, created_at) VALUES (?,?,?)", csub_rows)
+                "INSERT OR IGNORE INTO channel_subscription (user_id, channel_id, created_at) VALUES (?,?,?)", csub_rows)
 
         # 6) 反馈适量
         fb_categories = ["bug", "suggestion", "praise", "other"]
