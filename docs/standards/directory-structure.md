@@ -345,3 +345,12 @@
 1. **清单为 CRLF 行尾** → Git Bash 下 `[ -e "$f" ]` 全部误报 MISSING（尾部 `\r` 粘进路径）。用 Python `splitlines()` + `strip()` 读清单，不要在 shell 里逐行判存在。
 2. **范围守卫大小写**：`full.lower().startswith(ALLOWED_PREFIXES)` 与含大写盘符/目录名（`D:\...20_News`）的常量比较 → 167 个全部 `OUT_OF_SCOPE`，删除静默跳过。**守卫常量必须同样 `.lower()`**。
 3. 排空后的隔离区会留下空目录（`os.walk` topdown=False 剪枝 2 个，但嵌套更深的空目录在剪枝后才暴露）→ 需再手动 `RemoveDirectoryW` 一轮并复核 `islink()/isjunction()` 为 `False`。
+
+### 后续建议（第二轮后更新）
+
+1. ~~**DB 备份轮转策略**~~ **已治理（2026-10-04）**：`backup_service` 原有 7 天窗口，但存在两个缺口——`list_backups` 因 `entry.path`（`_list_dir_safe` 实际返回 `Path` 而非 `DirEntry`）必然 500（7/12 引入，潜伏 82 天）；`news_pre_<scene>_<date>.db` 预备份快照不匹配命名模式，永久孤儿。已新增预备份模式（3 天短窗口）+ 份数上限（7 份）+ 14 个单测 + HTTP 冒烟。详见 commit `77fc930`。
+   - **实际占用更正**：本轮实测 `backend/data/backup/` 仅剩 1 份 41MB，此前「9 份 205MB」记录已过期（轮转机制一直在生效）。
+2. **日志轮转**：`backend/logs/` 仍缺 `RotatingFileHandler`，单日可达 34MB（retention 14d）。本轮已清当日滚动分片 370MB，但机制未修，建议尽快加按天保留 N 天。
+3. **`release/` 目录核查**：确认 `release/assets/MorningBrief.ico` 缺失是否影响 `installer.iss` / `MorningBrief.spec` 打包，必要时从 git 历史恢复。
+4. **测试环境补依赖**：`numpy`（`test_kokoro_provider.py`）与 `PyMuPDF`（`test_document_ingest_formats.py::TestPdf` 2 failed）未装，全量 pytest 需 `--ignore=tests/test_kokoro_provider.py` 才能收集完成。
+5. **周期性维护**：建议每月或每个里程碑后运行一次 workspace-cleanup。
