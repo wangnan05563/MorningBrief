@@ -5,6 +5,6 @@
 """
 from __future__ import annotations
 
-__version__ = "1.0.20260929.001"
-build_date = "2026-09-29"
-git_sha = "45bc938"
+__version__ = "1.0.20261002.002"
+build_date = "2026-10-02"
+git_sha = "7f548c8"
