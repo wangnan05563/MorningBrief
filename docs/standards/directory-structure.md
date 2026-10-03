@@ -354,3 +354,37 @@
 3. **`release/` 目录核查**：确认 `release/assets/MorningBrief.ico` 缺失是否影响 `installer.iss` / `MorningBrief.spec` 打包，必要时从 git 历史恢复。
 4. **测试环境补依赖**：`numpy`（`test_kokoro_provider.py`）与 `PyMuPDF`（`test_document_ingest_formats.py::TestPdf` 2 failed）未装，全量 pytest 需 `--ignore=tests/test_kokoro_provider.py` 才能收集完成。
 5. **周期性维护**：建议每月或每个里程碑后运行一次 workspace-cleanup。
+
+---
+
+## 2026-10-04 日志轮转机制修复
+
+清理文档的后续建议第 2 项（`backend/logs/` 缺总量控制）已治理。
+
+### 结论：retention 可配置（14d → 7d）+ 新增目录总量上限 200MB，917 passed。**
+
+| 项 | 改前 | 改后 |
+|---|---|---|
+| 保留天数 | 硬编码 `"14 days"` | `LOG_RETENTION_DAYS=7`（可配置） |
+| 目录总量上限 | **无** | `LOG_DIR_MAX_MB=200`（启动时兜底清理） |
+| 单文件滚动 | 10MB + 跨日（已存在） | 不变 |
+
+### 为什么需要总量上限
+
+loguru 的 retention 按**单文件 mtime** 清理。压测/批量导入等高频场景可在数小时内刷出数十个当日分片，它们 mtime 全在 14 天窗口内 → **retention 一个都删不掉**。2026-10-03 清理前 `backend/logs/` 单日累积 370MB 即此机制的结果。
+
+`_enforce_dir_quota()` 启动时按目录总量兜底：超限从 mtime 最旧的分片开始删，只删 `MorningBrief_*.log`（不碰同目录人工文件），跳过符号链接，**最新那片（活动分片）永不删**，失败仅 continue 不阻断启动。
+
+### 验证
+
+- 新增 `tests/test_logging_quota.py` **14 用例**（该模块此前零覆盖）；全量 **917 passed / 2 failed**（2 failed 为缺 PyMuPDF 的环境问题）
+- **回退-恢复双向验证**：bug 注入 → 用例 FAIL；恢复 → PASS
+- 部署级冒烟：`setup_logging(dir_max_mb=5)` 对 30MB 分片实跑 → 剩 6 片、活动片保留；`TestClient(app)` 走完整 lifespan → 接口 200
+
+### 教训（已写入项目记忆）
+
+`_enforce_dir_quota` 初版循环里 `total` 与 `freed` 都表示已删除量却各自累加，`total - freed` 重复扣减 → 40MB 总量 / 5MB 限额只删 18MB 就停手。原测试全是「删 1 个即达标」的场景，**全绿也抓不到**。通则：**算术/循环类逻辑的测试必须逼被测代码走完整循环多次**。
+
+### 遗留
+
+`MAINTENANCE_LARGE_LOG_MB`（`config.py`）定义了但全项目无人使用——死配置，未擅自删除，待确认是否保留。
