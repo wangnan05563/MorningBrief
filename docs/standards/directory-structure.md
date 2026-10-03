@@ -264,6 +264,44 @@
 | `backend/fix_client.py` | 9.7 KB | 已隔离；untracked 一次性修复脚本，待确认是否仍需 |
 | `release/assets/MorningBrief.ico` | — | **本轮之前即已缺失**（`git ls-files --deleted` 可见，不在本轮目标清单内），且整个 `release/` 目录当前不存在，待确认是否被历史打包脚本清除 |
 
+---
+
+## 2026-10-03 清理轮次（T01363 收尾后）
+
+**结论：删除 295 文件 / 22 目录（3.8 MB），全部为可再生缓存；480 MB 空间因证据/活跃/不可再生原因保留待决。**
+
+### 已删除（tier=delete，配置 `cache_dirs` 明确列入）
+
+| 项 | 数量 | 体积 | 依据 |
+|---|---|---|---|
+| `backend/**/__pycache__/*.pyc` | 290 | 3.7 MB | `garbage_patterns.cache_dirs` 明确列入 `__pycache__/`，完全可再生 |
+| `backend/.pytest_cache/` | 5 | 0.1 MB | 同上，明确列入 `.pytest_cache/` |
+
+- **删前哈希审计**：`runtime/logs/cleanup-20261003-225430.log`（290 行：SHA256 \| 字节数 \| 路径）
+- **目标清单**：`runtime/logs/cleanup-targets.txt`
+- **执行方式**：`bypass_hook_mode: ctypes` + `flatten_directories` + 批大小 20（295 文件 → 15 批），错误 0
+- **验证**：`from app.main import app` → OK（231 路由）；定向回归 25 passed（material 契约 / content_security / upgrade_service）
+
+### 保留待决（tier=review，未自动删）
+
+| 项 | 体积 | 保留原因 |
+|---|---|---|
+| `runtime/.cleanup-trash-20260910/` | 73.2 MB | 9/10 隔离区，24h 恢复窗口早已过期，但**本文档第 255 行将其登记为审计证据**——按「引用即承重墙」原则，删除前需先更新本文档的证据登记 |
+| `backend/.venv-build/` | 113.5 MB | 7/23 遗留构建 venv，无代码引用（`build-exe.ps1` 用的是仓库根 `.venv-build`）；重建需联网装依赖，当前环境 pypi 不可达 → 不可逆因素命中，路由 review |
+| `.venv` → `backend/.venv-build` | 符号链接 | **绝不可递归删除**：根 `.venv` 是指向 `backend/.venv-build` 的 symlink，沿链接删除会清空真实 venv 内容（项目铁律） |
+| `backend/logs/` | 370.5 MB | 38 个文件全部为当日（10-03）运行日志，是压测与部署验证的诊断依据；loguru retention 14d 会自动轮转 |
+| `_validate/` | 34.1 MB | mtask 任务结论回传证据归档（`res_*.md`）与压测原始 jtl |
+
+### 本轮发现的配置漂移（`cleanup-config.yaml`，未擅自修改）
+
+1. **`verification.command` 引用 `xianyu_hunter`（另一项目）** → 验证命令必然 FAIL，本轮改用真实导入 `from app.main import app` 降级验证
+2. `service_indicators.pid_files` → `runtime/logs/{web,app}.pid` 不存在
+3. `service_indicators.file_occupancy_probes` → `runtime/data/xianyu.db` 不存在（实际 `news.db`）
+4. `workspace.frontend_dir: "frontend"` → 本项目前端在 `apps/admin-web`
+5. 配置缺失 12 个 section（`actions`/`quarantine`/`recovery`/`evidence_gate`/`preserve_paths`/`semantic_divergence`/`sizing`/`diagnostics`/`report`/`dependency_check`/`capability_probe`/`ignored_audit`）→ 按 skill fallback 表，`recovery` 缺失要求所有候选路由 quarantine，故本轮 delete 桶仅限配置明确授权的 `cache_dirs`
+6. **记忆漂移**：项目记忆记录 `build/`、`release/` 是指向 `F:\MorningBrief_build\` 的 NTFS junction，但实测 `os.path.isjunction()` 均为 `False`、`islink()` 亦为 `False` → 二者是 D 盘真实目录（release 569 MB / build 12 MB），D 盘空间压力应按真实占用计算
+
+
 ### 后续建议
 
 1. **DB 备份轮转策略**：`backend/data/backup/` 已积累 9 份快照（每份 ~19–29 MB，共 ~205 MB），建议在 `backup_service` 中加保留窗口（如仅留最近 3 份 + 每周 1 份）。
