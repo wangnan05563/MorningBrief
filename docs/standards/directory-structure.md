@@ -387,4 +387,5 @@ loguru 的 retention 按**单文件 mtime** 清理。压测/批量导入等高�
 
 ### 遗留
 
-`MAINTENANCE_LARGE_LOG_MB`（`config.py`）定义了但全项目无人使用——死配置，未擅自删除，待确认是否保留。
+~~`MAINTENANCE_LARGE_LOG_MB`（`config.py`）定义了但全项目无人使用——死配置，未擅自删除，待确认是否保留。~~
+**已清理（2026-10-04 上午）**：该键零引用，语义被 `LOG_FILE_MAX_MB`（单文件滚动）+ `LOG_DIR_MAX_MB`（目录总量兜底）完整覆盖，留着会让人误以为有两套日志阈值机制。已从 `config.py` 与 `backend/.env` 同时移除，并在原位留注释说明去向。

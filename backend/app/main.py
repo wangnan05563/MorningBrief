@@ -1024,6 +1024,22 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
     from app.services.workflow_scheduler import workflow_scheduler
     await workflow_scheduler.start()
 
+    # 启动时补跑一次过期备份清理（2026-10-04）。
+    # 原因：清理只挂在每日 04:00 的进程内 cron 上，若应用长期不开机（桌面端
+    # 很常见），备份目录会一直累积无人回收——孤儿预备份快照就是这么攒下来的。
+    # 启动时补跑是幂等的，且这批文件已超出保留窗口，删掉无副作用。
+    try:
+        from app.services.backup_service import BackupService
+        _deleted = await BackupService.cleanup_old_backups()
+        if _deleted > 0:
+            logger.info("[startup] 已清理过期备份 %d 个", _deleted)
+        # data/ 根目录的恢复残留快照（恢复流程异常时可能漏删）也一并收掉
+        _stale = await BackupService.cleanup_stale_restore_snapshots()
+        if _stale > 0:
+            logger.info("[startup] 已清理残留恢复快照 %d 个", _stale)
+    except Exception as e:
+        logger.warning("[startup] 启动清理过期备份失败: %s", e)
+
     # 启动播放进度写缓冲的周期 flush（P1 优化：进程内聚合 + 定时批量落库）
     from app.services.play_write_buffer import play_write_buffer
     await play_write_buffer.start()

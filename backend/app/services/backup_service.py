@@ -298,6 +298,54 @@ class BackupService:
         logger.info("数据库已从备份恢复 source=%s target=%s", backup_path, db_path)
         return True
 
+    @staticmethod
+    async def cleanup_stale_restore_snapshots(
+        keep_days: int = _DEFAULT_KEEP_PRE_BACKUP_DAYS,
+    ) -> int:
+        """清理 data/ 根目录下残留的恢复前快照（news_pre_restore_*.db）。
+
+        为什么需要单独的清理入口：这类快照由 restore_backup 写在**数据库同级
+        目录**（data/）而非 backup/，正常成功路径会自行删除；但以下两种情况
+        会留下 30MB 级别的永久残留，且 backup 目录的清理逻辑完全覆盖不到：
+        1. 恢复失败后**回滚也失败**（磁盘满/权限/进程被杀）
+        2. 进程在「复制快照」与「删除快照」之间被强杀
+
+        与 backup 目录保持同样的短窗口：快照只在恢复出错时用于人工救场。
+        """
+        try:
+            data_dir = resolve_data_dir()
+        except Exception:
+            return 0
+        if not data_dir.is_dir():
+            return 0
+
+        pattern = re.compile(r"^news_pre_restore_(\d{8})_(\d{6})\.db$")
+        cutoff = datetime.now() - timedelta(days=max(0, int(keep_days)))
+        deleted = 0
+        for entry in data_dir.iterdir():
+            if not entry.is_file() or entry.is_symlink():
+                continue
+            match = pattern.match(entry.name)
+            if not match:
+                continue
+            # 用时间对象比较而非日期字符串：字符串比较无法表达 keep_days=0
+            # （cutoff 退化为"今天 00:00"后，今日的文件仍会被 >= 排除）。
+            try:
+                taken_at = datetime.strptime(
+                    f"{match.group(1)}{match.group(2)}", "%Y%m%d%H%M%S"
+                )
+            except ValueError:
+                continue
+            if taken_at >= cutoff:
+                continue
+            try:
+                await asyncio.to_thread(_safe_unlink, entry)
+                deleted += 1
+                logger.warning("已清理残留的恢复快照 %s（恢复流程异常遗留）", entry.name)
+            except Exception as e:
+                logger.warning("清理恢复快照失败 %s: %s", entry.name, e)
+        return deleted
+
 
 # ===== 文件系统辅助函数（在线程池中执行） =====
 # 这些函数是同步的 blocking IO，必须通过 asyncio.to_thread 调用，避免阻塞事件循环

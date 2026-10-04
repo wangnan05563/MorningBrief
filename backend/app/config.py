@@ -447,8 +447,9 @@ class Settings(BaseSettings):
     MAINTENANCE_AI_USAGE_RETAIN_DAYS: int = 90
     # 旧播放日志保留天数（统计价值递减，按季清理）
     MAINTENANCE_PLAYLOG_RETAIN_DAYS: int = 90
-    # 大日志文件阈值（MB），超限可清理
-    MAINTENANCE_LARGE_LOG_MB: int = 10
+    # 注：原有的 MAINTENANCE_LARGE_LOG_MB（大日志阈值）已于 2026-10-04 删除——
+    # 它定义后零引用，语义被 LOG_FILE_MAX_MB（单文件滚动）+ LOG_DIR_MAX_MB
+    # （目录总量兜底）完整覆盖，留着只会让人误以为有两套日志阈值机制。
 
     # ---- 自动审批模块（V1.4 新增） ----
     # 自动审批统计查询默认时间范围（天），未指定 start_date 时回溯 N 天

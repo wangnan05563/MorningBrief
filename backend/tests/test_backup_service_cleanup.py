@@ -202,3 +202,70 @@ def _run(coro):
     """在事件循环中执行协程（服务方法均为 async）。"""
     import asyncio
     return asyncio.run(coro)
+
+
+# ---- 残留恢复快照（data/ 根目录，非 backup/） ----
+
+def test_cleanup_stale_restore_snapshots(tmp_path, monkeypatch):
+    """恢复流程异常遗留的 news_pre_restore_*.db 应被清理。"""
+    from app.services import backup_service as bs
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setattr(bs, "resolve_data_dir", lambda: data_dir)
+
+    old = _touch(data_dir, f"news_pre_restore_{_ts(days_ago=10)}.db")
+    fresh = _touch(data_dir, f"news_pre_restore_{_ts(days_ago=1)}.db")
+    db = _touch(data_dir, "news.db")
+    backup_dir = data_dir / "backup"
+    backup_dir.mkdir()
+    nested = _touch(backup_dir, f"news_backup_{_ts(days_ago=10)}.db")
+
+    deleted = _run(bs.BackupService.cleanup_stale_restore_snapshots(keep_days=3))
+
+    assert deleted == 1
+    assert not old.exists()
+    assert fresh.exists()   # 窗口内保留
+    assert db.exists()      # 主库绝不误删
+    assert nested.exists()  # backup/ 目录不归它管
+
+
+def test_cleanup_stale_snapshots_ignores_other_names(tmp_path, monkeypatch):
+    """只认 news_pre_restore_<时间戳>.db 格式。"""
+    from app.services import backup_service as bs
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setattr(bs, "resolve_data_dir", lambda: data_dir)
+
+    keep = [
+        _touch(data_dir, f"news_pre_seedpurge_{_ts(days_ago=9)}.db"),
+        _touch(data_dir, "news_backup_20260101_000000.db"),
+        _touch(data_dir, "manual.db"),
+    ]
+
+    assert _run(bs.BackupService.cleanup_stale_restore_snapshots()) == 0
+    assert all(p.exists() for p in keep)
+
+
+def test_cleanup_stale_snapshots_zero_keep_clears_all(tmp_path, monkeypatch):
+    """keep_days=0 时清掉所有恢复快照。"""
+    from app.services import backup_service as bs
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setattr(bs, "resolve_data_dir", lambda: data_dir)
+
+    p = _touch(data_dir, f"news_pre_restore_{_ts(days_ago=0)}.db")
+
+    assert _run(bs.BackupService.cleanup_stale_restore_snapshots(keep_days=0)) == 1
+    assert not p.exists()
+
+
+def test_cleanup_stale_snapshots_missing_dir(tmp_path, monkeypatch):
+    """data 目录不存在时安全返回 0。"""
+    from app.services import backup_service as bs
+    monkeypatch.setattr(bs, "resolve_data_dir", lambda: tmp_path / "nope")
+    assert _run(bs.BackupService.cleanup_stale_restore_snapshots()) == 0
+
+
+def _ts(days_ago: int) -> str:
+    """restore 快照用的紧凑时间戳（Ymd_HMS）。"""
+    return (datetime.now() - timedelta(days=days_ago)).strftime("%Y%m%d_%H%M%S")
