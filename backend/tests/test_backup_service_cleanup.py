@@ -269,3 +269,66 @@ def test_cleanup_stale_snapshots_missing_dir(tmp_path, monkeypatch):
 def _ts(days_ago: int) -> str:
     """restore 快照用的紧凑时间戳（Ymd_HMS）。"""
     return (datetime.now() - timedelta(days=days_ago)).strftime("%Y%m%d_%H%M%S")
+
+
+# ---- 恢复接口的路径边界（安全） ----
+
+def _valid_name() -> str:
+    return f"news_backup_{(datetime.now() - timedelta(days=1)).strftime('%Y%m%d')}_030000.db"
+
+
+def test_restore_rejects_path_outside_backup_dir(backup_dir, tmp_path):
+    """路径穿越必须被拒：backup/ 内的合法文件名 + 外部路径。"""
+    outside = tmp_path / _valid_name()
+    outside.write_bytes(b"not a real backup")
+
+    with pytest.raises(ValueError, match="必须位于"):
+        _run(BackupService.restore_backup(str(outside)))
+
+
+def test_restore_rejects_traversal(tmp_path, monkeypatch):
+    """相对路径穿越（../../）应被解析后判出边界外。"""
+    d = tmp_path / "backup"
+    d.mkdir()
+    monkeypatch.setattr(backup_service, "_resolve_backup_dir", lambda: d)
+    # 在 backup/ 外放一个同名文件
+    outside = tmp_path / _valid_name()
+    outside.write_bytes(b"x" * 32)
+    traversal = str(d / ".." / outside.name)
+
+    with pytest.raises(ValueError, match="必须位于"):
+        _run(BackupService.restore_backup(traversal))
+
+
+def test_restore_rejects_sibling_dir_with_same_prefix(tmp_path, monkeypatch):
+    """同前缀的兄弟目录（backup_evil/）不能绕过边界检查。"""
+    d = tmp_path / "backup"
+    d.mkdir()
+    evil = tmp_path / "backup_evil"
+    evil.mkdir()
+    fake = evil / _valid_name()
+    fake.write_bytes(b"x" * 32)
+    monkeypatch.setattr(backup_service, "_resolve_backup_dir", lambda: d)
+
+    with pytest.raises(ValueError, match="必须位于"):
+        _run(BackupService.restore_backup(str(fake)))
+
+
+def test_restore_rejects_bad_name_before_path_check(backup_dir):
+    """文件名非法时优先报文件名错误（保持原有错误语义）。"""
+    p = _touch(backup_dir, "manual.db")
+    with pytest.raises(ValueError, match="非法备份文件名"):
+        _run(BackupService.restore_backup(str(p)))
+
+
+def test_restore_accepts_valid_file_in_backup_dir(backup_dir, tmp_path, monkeypatch):
+    """backup/ 内的合法文件应通过路径校验（只 mock 拷贝，不真覆盖库）。"""
+    good = _touch(backup_dir, _valid_name())
+    # db_path 指向一个不存在的路径，避免真去覆盖主库
+    fake_db = tmp_path / "news.db"
+    monkeypatch.setattr("app.paths.resolve_db_path", lambda: fake_db)
+    monkeypatch.setattr(
+        backup_service, "_copy_file", lambda s, d: d.write_bytes(s.read_bytes())
+    )
+
+    assert _run(BackupService.restore_backup(str(good))) is True

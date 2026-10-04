@@ -248,6 +248,22 @@ class BackupService:
         if not _BACKUP_NAME_PATTERN.match(backup_file.name):
             raise ValueError(f"非法备份文件名: {backup_file.name}")
 
+        # 路径边界校验：只接受 backup/ 目录内的文件。
+        # 仅靠文件名格式不够——攻击者可传 `../../somewhere/news_backup_x.db`
+        # （或指向项目内任意同名文件）把非备份内容覆盖到数据库。
+        # 用 resolve() 后的 is_relative_to，而非字符串前缀比较，
+        # 避免 `backup_evil/` 这类同前缀兄弟目录绕过。
+        backup_root = _resolve_backup_dir().resolve()
+        try:
+            resolved = backup_file.resolve()
+        except OSError as e:
+            raise ValueError(f"备份路径无法解析: {backup_path}") from e
+        if not resolved.is_relative_to(backup_root):
+            raise ValueError(
+                f"备份文件必须位于 {backup_root} 内，收到: {backup_path}"
+            )
+        backup_file = resolved
+
         # 当前数据库路径
         from app.paths import resolve_db_path
         db_path = resolve_db_path()
