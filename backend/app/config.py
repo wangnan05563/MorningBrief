@@ -170,11 +170,24 @@ class Settings(BaseSettings):
     # ---- 水平扩展（只读场景） ----
     # uvicorn worker 数。默认 1：单进程事件循环 + 进程内写锁 + 进程内 TTLCache，
     # 三者强耦合，workers>1 会破坏"全局写锁串行化"与"缓存一致性"（各 worker 独立缓存/锁），
-    # 且 APScheduler / play_write_buffer / EventBus / 隧道线程会在每个进程各跑一份（重复调度）。
+    # 且 APScheduler / 隧道线程会在每个进程各跑一份（重复调度、重复外发通知）。
     # 因此 workers>1 仅在【纯读 / 几乎无写】或已切换到 MySQL+Redis 共享态（见架构决策）时安全。
     # T01659 起该值真正生效（此前 launcher.py 硬编码 workers=1，此配置是死值）；
-    # 调大前请先完成路线 A 的进程角色拆分（APP_ROLE，见 T01660）。
+    # workers>1 时的重复副作用由下面的 APP_ROLE 收敛（launcher 自动编排 1 sched + N api），
+    # 但「进程内写锁/缓存只在本进程生效」这一残留限制无法靠角色拆分消除，只能靠共享态解决。
     UVICORN_WORKERS: int = 1
+
+    # ---- 进程角色（路线 A，T01660）----
+    # all（默认）：单进程承担全部职责 —— 与角色拆分前的行为完全一致。
+    # sched：只承担「整个应用只需跑一次」的职责：建表/迁移/seed、APScheduler、
+    #        启动补跑清理、隧道 auto_start 及其启动通知。
+    # api ：只提供 HTTP 服务，不碰 DDL、不起调度器、不开隧道。
+    #       前提是靠 sched 进程先完成建表/迁移（launcher 已做就绪等待）；
+    #       手工以 api 角色启动单个进程时，必须自行保证 sched 先起，否则表不存在。
+    # ⚠ play_write_buffer 与 EventBus 是进程内 asyncio 状态（内存 list / asyncio.Queue），
+    # 缓冲的事件与队列都由本进程自己产生，所以所有角色都必须各自保留消费者；
+    # 若 api 进程不启动它们，本进程缓冲的进度写与发布的事件将无人消费（丢失或无限延迟）。
+    APP_ROLE: str = "all"
 
     # ---- 缓存（V1.2 替代 Redis，进程内 TTLCache 无需外部配置） ----
     CACHE_DEFAULT_TTL_SEC: int = 300     # 默认 TTL 5 分钟
@@ -432,6 +445,9 @@ class Settings(BaseSettings):
 
     # ---- API 限流（对标 17_xianyu anti_detect 滑动窗口） ----
     # 每分钟全局请求上限，防止恶意刷接口触发工作流
+    # ⚠ 计数存放在进程内 dict（app/middleware/rate_limit.py），workers=N 时每个 api
+    # 进程各记一份，实际放行 ≈ N × 本值（T01660 实测 workers=2：单分钟放行 240=2×120）。
+    # 需要严格全局上限时不要靠调小本值补偿，应改用共享态存储（见架构决策）。
     RATE_LIMIT_PER_MINUTE: int = 120
     # internal 路由鉴权 token（空字符串时仅校验 localhost，配置后双因素校验）
     INTERNAL_API_TOKEN: str = ""
@@ -520,5 +536,28 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """单例配置，避免重复读取 .env 文件。"""
     return Settings()
+
+
+APP_ROLES = ("all", "api", "sched")
+
+
+def app_role() -> str:
+    """当前进程角色（``all``|``api``|``sched``）。
+
+    非法值回退 ``all``：角色配错时宁可退回「单进程承担全部职责」的旧行为，
+    也不要静默地谁都不跑调度器/迁移。
+    """
+    role = (get_settings().APP_ROLE or "all").strip().lower()
+    return role if role in APP_ROLES else "all"
+
+
+def runs_singleton_tasks() -> bool:
+    """本进程是否承担「整个应用只需跑一次」的副作用。
+
+    范围：建表/迁移/seed、APScheduler、启动补跑清理、隧道 auto_start 与其通知。
+    ``api`` 返回 False，``all``（默认）与 ``sched`` 返回 True。
+    播放进度写缓冲与 EventBus 不在此列——它们是进程内队列，每个进程都要各自消费。
+    """
+    return app_role() in ("all", "sched")
 
 

@@ -84,8 +84,10 @@ cp backend/.env.example backend/.env
 # 2. 创建管理员账号
 cd backend && .venv\Scripts\python seed_admin.py
 
-# 3. 启动后端（单 worker，全局写序列化依赖它）
+# 3. 启动后端（默认单 worker；写锁/缓存为进程内状态，多 worker 需按角色拆分，见 backend/launcher.py）
 .venv\Scripts\python -m uvicorn app.main:app --workers 1
+# 需要多进程扛读量时改用 launcher（自动编排 1 个 sched + N 个 api，.env 设 UVICORN_WORKERS=2）
+.venv\Scripts\python launcher.py
 
 # 4. 打开管理后台
 cd apps/admin-web && npm run dev

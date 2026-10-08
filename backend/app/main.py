@@ -138,7 +138,7 @@ mimetypes.add_type("application/manifest+json", ".webmanifest")
 # 就会静默加载旧版本页面（改了的 bug 在页面上"看不到"）。带哈希的 chunk 可长缓存，入口不行。
 _NO_CACHE_HEADERS = {"Cache-Control": "no-cache, must-revalidate"}
 
-from app.config import get_settings
+from app.config import app_role, get_settings, runs_singleton_tasks
 from app.core.exceptions import register_exception_handlers
 from app.core.logging_setup import setup_logging
 from app.middleware.path_prefix import PathPrefixMiddleware
@@ -949,88 +949,95 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
     loop.set_exception_handler(_make_loop_exception_handler())
     logger.info("[startup] 事件循环异常处理器已注册（过滤 Windows Proactor 连接重置噪声）")
 
-    # 首次启动建表（SQLite 嵌入式，开发与生产共用此路径）
-    await _init_sqlite_schema()
+    # 进程角色（T01660 路线 A）：workers>1 时把「整个应用只需跑一次」的副作用
+    # （建表/迁移/seed、APScheduler、启动清理、隧道 auto_start 及其通知）收敛到 sched 进程，
+    # api 进程只提供 HTTP。默认 all 时 singleton 恒为 True，行为与拆分前完全一致。
+    role = app_role()
+    singleton = runs_singleton_tasks()
+    logger.info("[startup] 进程角色={}（一次性职责：{}）", role, "承担" if singleton else "不承担")
+    if singleton:
+        # 首次启动建表（SQLite 嵌入式，开发与生产共用此路径）
+        await _init_sqlite_schema()
 
-    # 自动 seed 默认 admin 用户（幂等，确保 dev/exe 模式均可登录）
-    try:
-        await _seed_default_admin()
-    except Exception as e:
-        logger.warning("[startup] 自动创建默认 admin 用户失败: %s", e)
+        # 自动 seed 默认 admin 用户（幂等，确保 dev/exe 模式均可登录）
+        try:
+            await _seed_default_admin()
+        except Exception as e:
+            logger.warning("[startup] 自动创建默认 admin 用户失败: %s", e)
 
-    # channel 表结构迁移（幂等追加 schedule_time / prompt / rss_sources / keywords 字段）
-    try:
-        await _migrate_channel_schema()
-    except Exception as e:
-        logger.warning("[startup] channel 表迁移失败: %s", e)
+        # channel 表结构迁移（幂等追加 schedule_time / prompt / rss_sources / keywords 字段）
+        try:
+            await _migrate_channel_schema()
+        except Exception as e:
+            logger.warning("[startup] channel 表迁移失败: %s", e)
 
-    # material 表结构迁移（幂等追加 channel_id 字段，用于频道级素材隔离）
-    try:
-        await _migrate_material_schema()
-    except Exception as e:
-        logger.warning(_LOG_MATERIAL_MIGRATE_FAIL, e)
+        # material 表结构迁移（幂等追加 channel_id 字段，用于频道级素材隔离）
+        try:
+            await _migrate_material_schema()
+        except Exception as e:
+            logger.warning(_LOG_MATERIAL_MIGRATE_FAIL, e)
 
-    # material table cover_url column migration (idempotent)
-    try:
-        await _migrate_cover_url_column()
-        await _migrate_material_dedup_column()
-        await _migrate_material_images_column()
-        await _migrate_material_source_type_constraint()
-        await _migrate_material_media_column()
-    except Exception as e:
-        logger.warning("[startup] material cover_url migration failed: %s", e)
+        # material table cover_url column migration (idempotent)
+        try:
+            await _migrate_cover_url_column()
+            await _migrate_material_dedup_column()
+            await _migrate_material_images_column()
+            await _migrate_material_source_type_constraint()
+            await _migrate_material_media_column()
+        except Exception as e:
+            logger.warning("[startup] material cover_url migration failed: %s", e)
 
 
-    # episode/review 表 hls_url 列迁移（幂等追加，用于 HLS 分片播放）
-    try:
-        await _migrate_hls_url_columns()
-    except Exception as e:
-        logger.warning("[startup] hls_url 列迁移失败: %s", e)
+        # episode/review 表 hls_url 列迁移（幂等追加，用于 HLS 分片播放）
+        try:
+            await _migrate_hls_url_columns()
+        except Exception as e:
+            logger.warning("[startup] hls_url 列迁移失败: %s", e)
 
-    # review 表 auto_approved / auto_trigger_reason 列迁移（幂等追加，用于自动审批标记）
-    try:
-        await _migrate_review_auto_approve_columns()
-    except Exception as e:
-        logger.warning("[startup] review 自动审批列迁移失败: %s", e)
+        # review 表 auto_approved / auto_trigger_reason 列迁移（幂等追加，用于自动审批标记）
+        try:
+            await _migrate_review_auto_approve_columns()
+        except Exception as e:
+            logger.warning("[startup] review 自动审批列迁移失败: %s", e)
 
-    # play_log 表索引迁移（幂等追加 idx_user_played_at 复合索引，优化 /recent 查询）
-    try:
-        await _migrate_playlog_indexes()
-    except Exception as e:
-        logger.warning("[startup] play_log 表索引迁移失败: %s", e)
+        # play_log 表索引迁移（幂等追加 idx_user_played_at 复合索引，优化 /recent 查询）
+        try:
+            await _migrate_playlog_indexes()
+        except Exception as e:
+            logger.warning("[startup] play_log 表索引迁移失败: %s", e)
 
-    # T01579：收藏/历史/类型过滤三条读路径的复合索引迁移（幂等）
-    try:
-        await _migrate_read_path_indexes()
-    except Exception as e:
-        logger.warning("[startup] 读路径索引迁移失败: %s", e)
+        # T01579：收藏/历史/类型过滤三条读路径的复合索引迁移（幂等）
+        try:
+            await _migrate_read_path_indexes()
+        except Exception as e:
+            logger.warning("[startup] 读路径索引迁移失败: %s", e)
 
-    # FTS5 全文索引迁移（幂等创建虚拟表 + 触发器 + 历史数据灌入）
-    try:
-        await _migrate_fts5_index()
-    except Exception as e:
-        logger.warning("[startup] FTS5 索引迁移失败: %s", e)
+        # FTS5 全文索引迁移（幂等创建虚拟表 + 触发器 + 历史数据灌入）
+        try:
+            await _migrate_fts5_index()
+        except Exception as e:
+            logger.warning("[startup] FTS5 索引迁移失败: %s", e)
 
-    # user 表 disabled 列迁移（M5 FR-M502 终端用户启停）
-    try:
-        await _migrate_user_disabled_column()
-    except Exception as e:
-        logger.warning("[startup] user disabled 列迁移失败: %s", e)
+        # user 表 disabled 列迁移（M5 FR-M502 终端用户启停）
+        try:
+            await _migrate_user_disabled_column()
+        except Exception as e:
+            logger.warning("[startup] user disabled 列迁移失败: %s", e)
 
-    # ad_placement 表 enabled 列迁移（M7 FR-M702 投放启停）
-    try:
-        await _migrate_adplacement_enabled_column()
-    except Exception as e:
-        logger.warning("[startup] ad_placement enabled 列迁移失败: %s", e)
+        # ad_placement 表 enabled 列迁移（M7 FR-M702 投放启停）
+        try:
+            await _migrate_adplacement_enabled_column()
+        except Exception as e:
+            logger.warning("[startup] ad_placement enabled 列迁移失败: %s", e)
 
-    # 自动 seed 默认频道（幂等，确保工作流监控页频道选项非空）
-    try:
-        await _seed_default_channels()
-    except Exception as e:
-        logger.warning("[startup] 自动 seed 默认频道失败: %s", e)
+        # 自动 seed 默认频道（幂等，确保工作流监控页频道选项非空）
+        try:
+            await _seed_default_channels()
+        except Exception as e:
+            logger.warning("[startup] 自动 seed 默认频道失败: %s", e)
 
-    # 频道预制封面/图标补齐（T00731，幂等，仅补缺失不覆盖）
-    await _seed_default_channel_assets()
+        # 频道预制封面/图标补齐（T00731，幂等，仅补缺失不覆盖）
+        await _seed_default_channel_assets()
 
     # 从 SQLite 加载 AI 配置覆盖到 Settings 单例（前端修改的配置热生效）
     from app.services.ai_config_service import AIConfigService
@@ -1051,39 +1058,44 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
     except Exception as e:
         logger.warning("[startup] 加载 COS 配置失败，使用 .env 默认值: %s", e)
 
-    # 初始化通知预设模板（幂等：已存在的 event_type 跳过）
-    # 与 AI 配置同一 session，避免重复创建连接
-    try:
-        from app.services.notification.template_service import TemplateService
-        async with AsyncSessionLocal() as session:
-            tpl_svc = TemplateService(session)
-            inserted = await tpl_svc.seed_preset_templates()
-            if inserted > 0:
-                logger.info("[startup] 通知预设模板已 seed，新增 %d 条", inserted)
-    except Exception as e:
-        logger.warning("[startup] 通知预设模板初始化失败: %s", e)
+    # 以下三步都属「整个应用只需跑一次」：模板 seed 写库、APScheduler 定时任务、
+    # 启动补跑清理（会真实删除文件）——api 进程跳过，避免重复执行与竞态
+    if singleton:
+        # 初始化通知预设模板（幂等：已存在的 event_type 跳过）
+        # 与 AI 配置同一 session，避免重复创建连接
+        try:
+            from app.services.notification.template_service import TemplateService
+            async with AsyncSessionLocal() as session:
+                tpl_svc = TemplateService(session)
+                inserted = await tpl_svc.seed_preset_templates()
+                if inserted > 0:
+                    logger.info("[startup] 通知预设模板已 seed，新增 %d 条", inserted)
+        except Exception as e:
+            logger.warning("[startup] 通知预设模板初始化失败: %s", e)
 
-    # 启动 APScheduler 定时任务（工作流调度 + 播放日志落库 + 黑名单清理）
-    from app.services.workflow_scheduler import workflow_scheduler
-    await workflow_scheduler.start()
+        # 启动 APScheduler 定时任务（工作流调度 + 播放日志落库 + 黑名单清理）
+        from app.services.workflow_scheduler import workflow_scheduler
+        await workflow_scheduler.start()
 
-    # 启动时补跑一次过期备份清理（2026-10-04）。
-    # 原因：清理只挂在每日 04:00 的进程内 cron 上，若应用长期不开机（桌面端
-    # 很常见），备份目录会一直累积无人回收——孤儿预备份快照就是这么攒下来的。
-    # 启动时补跑是幂等的，且这批文件已超出保留窗口，删掉无副作用。
-    try:
-        from app.services.backup_service import BackupService
-        _deleted = await BackupService.cleanup_old_backups()
-        if _deleted > 0:
-            logger.info("[startup] 已清理过期备份 %d 个", _deleted)
-        # data/ 根目录的恢复残留快照（恢复流程异常时可能漏删）也一并收掉
-        _stale = await BackupService.cleanup_stale_restore_snapshots()
-        if _stale > 0:
-            logger.info("[startup] 已清理残留恢复快照 %d 个", _stale)
-    except Exception as e:
-        logger.warning("[startup] 启动清理过期备份失败: %s", e)
+        # 启动时补跑一次过期备份清理（2026-10-04）。
+        # 原因：清理只挂在每日 04:00 的进程内 cron 上，若应用长期不开机（桌面端
+        # 很常见），备份目录会一直累积无人回收——孤儿预备份快照就是这么攒下来的。
+        # 启动时补跑是幂等的，且这批文件已超出保留窗口，删掉无副作用。
+        try:
+            from app.services.backup_service import BackupService
+            _deleted = await BackupService.cleanup_old_backups()
+            if _deleted > 0:
+                logger.info("[startup] 已清理过期备份 %d 个", _deleted)
+            # data/ 根目录的恢复残留快照（恢复流程异常时可能漏删）也一并收掉
+            _stale = await BackupService.cleanup_stale_restore_snapshots()
+            if _stale > 0:
+                logger.info("[startup] 已清理残留恢复快照 %d 个", _stale)
+        except Exception as e:
+            logger.warning("[startup] 启动清理过期备份失败: %s", e)
 
     # 启动播放进度写缓冲的周期 flush（P1 优化：进程内聚合 + 定时批量落库）
+    # 注意：缓冲与下面的 EventBus 都是进程内 asyncio 状态，队列内容由本进程自己产生，
+    # 因此所有角色（含 api）都必须各自启动消费者 —— 门掉它们会丢失本进程的进度写/事件
     from app.services.play_write_buffer import play_write_buffer
     await play_write_buffer.start()
 
@@ -1094,41 +1106,46 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
     app.state.event_bus_task = asyncio.create_task(event_bus.run_forever())
     logger.info("[startup] EventBus 已启动")
 
-    # 内网穿透：注入 on_started 回调，隧道启动成功后发送通知
-    # 用 daemon 线程而非 asyncio：cloudflared/cpolar 是阻塞子进程，线程不占用事件循环
-    from app.services.tunnel_service import get_tunnel_service, set_tunnel_service, TunnelService
-    from app.services.tunnel_notifications import notify_tunnel_started, notify_autostart_failed
-    try:
-        # 注入带通知回调的 TunnelService 实例
-        tunnel_svc = TunnelService(on_started=notify_tunnel_started)
-        set_tunnel_service(tunnel_svc)
-        cfg = tunnel_svc.get_config()
-        if cfg.get("auto_start"):
-            import threading
+    if singleton:
+        # 内网穿透：注入 on_started 回调，隧道启动成功后发送通知
+        # 用 daemon 线程而非 asyncio：cloudflared/cpolar 是阻塞子进程，线程不占用事件循环
+        from app.services.tunnel_service import get_tunnel_service, set_tunnel_service, TunnelService
+        from app.services.tunnel_notifications import notify_tunnel_started, notify_autostart_failed
+        try:
+            # 注入带通知回调的 TunnelService 实例
+            tunnel_svc = TunnelService(on_started=notify_tunnel_started)
+            set_tunnel_service(tunnel_svc)
+            cfg = tunnel_svc.get_config()
+            if cfg.get("auto_start"):
+                import threading
 
-            def _auto_start_tunnel():
-                try:
-                    url = tunnel_svc.start()
-                    logger.info("[startup] 内网穿透隧道已自动启动: %s", url)
-                except Exception as e:
-                    # 自动启动失败不影响主服务：日志 + 通知双保障
-                    logger.warning("[startup] 内网穿透自动启动失败: %s", e)
-                    notify_autostart_failed(str(e))
+                def _auto_start_tunnel():
+                    try:
+                        url = tunnel_svc.start()
+                        logger.info("[startup] 内网穿透隧道已自动启动: %s", url)
+                    except Exception as e:
+                        # 自动启动失败不影响主服务：日志 + 通知双保障
+                        logger.warning("[startup] 内网穿透自动启动失败: %s", e)
+                        notify_autostart_failed(str(e))
 
-            threading.Thread(target=_auto_start_tunnel, daemon=True).start()
-    except Exception as e:
-        logger.warning("[startup] 读取隧道配置失败，跳过自动启动: %s", e)
+                threading.Thread(target=_auto_start_tunnel, daemon=True).start()
+        except Exception as e:
+            logger.warning("[startup] 读取隧道配置失败，跳过自动启动: %s", e)
 
     yield
 
-    # 关闭阶段：先停隧道（避免隧道继续转发流量到已关闭的服务），再停调度器，再关数据库引擎
-    try:
-        from app.services.tunnel_service import get_tunnel_service
-        get_tunnel_service().stop()
-    except Exception as e:
-        logger.warning("[shutdown] 停止内网穿透隧道失败: %s", e)
+    # 关闭阶段与启动阶段严格对称：api 进程从未建立隧道、从未启动调度器，
+    # 不能去停它们（APScheduler 未启动时 shutdown() 会抛 SchedulerNotStartedError）
+    if singleton:
+        # 关闭阶段：先停隧道（避免隧道继续转发流量到已关闭的服务），再停调度器，再关数据库引擎
+        try:
+            from app.services.tunnel_service import get_tunnel_service
+            get_tunnel_service().stop()
+        except Exception as e:
+            logger.warning("[shutdown] 停止内网穿透隧道失败: %s", e)
 
-    await workflow_scheduler.stop()
+        from app.services.workflow_scheduler import workflow_scheduler
+        await workflow_scheduler.stop()
 
     # 停止播放进度写缓冲并执行最终 flush（先停，避免关闭后仍有事件入队）
     from app.services.play_write_buffer import play_write_buffer

@@ -1,0 +1,72 @@
+[
+ {
+  "label": "all_w1",
+  "port": 8300,
+  "reads": {
+   "label": "all_w1.reads",
+   "n": 300,
+   "secs": 21.97,
+   "tps": 13.7,
+   "ok": 300,
+   "codes": {
+    "200": 300
+   },
+   "p50_ms": 17.4,
+   "p95_ms": 7097.1,
+   "p99_ms": 10425.3,
+   "max_ms": 10901.2
+  },
+  "writes": {
+   "label": "all_w1.writes",
+   "n": 100,
+   "secs": 16.51,
+   "tps": 6.1,
+   "ok": 100,
+   "codes": {
+    "200": 100
+   },
+   "p50_ms": 2695.7,
+   "p95_ms": 3275.8,
+   "p99_ms": 3499.5,
+   "max_ms": 3608.8
+  },
+  "persisted": true,
+  "play_log_rows": 1,
+  "locked_delta": 0
+ },
+ {
+  "label": "split_w2",
+  "port": 8300,
+  "reads": {
+   "label": "split_w2.reads",
+   "n": 300,
+   "secs": 13.3,
+   "tps": 22.6,
+   "ok": 300,
+   "codes": {
+    "200": 300
+   },
+   "p50_ms": 14.9,
+   "p95_ms": 3735.7,
+   "p99_ms": 5827.5,
+   "max_ms": 5919.6
+  },
+  "writes": {
+   "label": "split_w2.writes",
+   "n": 100,
+   "secs": 5.94,
+   "tps": 16.8,
+   "ok": 100,
+   "codes": {
+    "200": 100
+   },
+   "p50_ms": 945.3,
+   "p95_ms": 1954.1,
+   "p99_ms": 1984.7,
+   "max_ms": 2009.6
+  },
+  "persisted": true,
+  "play_log_rows": 1,
+  "locked_delta": 0
+ }
+]
