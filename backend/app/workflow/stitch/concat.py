@@ -22,6 +22,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 
+from app.workflow.duration import duration_range_sec, resolve_channel_min_duration_sec
 from app.config import get_settings
 from app.core.audio_modes import DEFAULT_GAP_MODE, normalize_gap_mode
 from app.database import AsyncSessionLocal
@@ -140,11 +141,11 @@ async def _resolve_channel_bgm(channel_id: int | None) -> tuple[str, Path | None
                     # 频道级段间静音优先于全局配置
                     if ch.segment_gap_sec is not None:
                         gap_sec = float(ch.segment_gap_sec)
-                    # 频道级最短时长优先于全局配置
-                    if ch.min_duration_sec is not None:
-                        channel_min_duration = int(ch.min_duration_sec)
-                    else:
-                        channel_min_duration = None
+                    # 频道级最短时长优先于全局配置（听书频道未配置时按 30 分钟保底，
+                    # 口径与 rewriter 的字数反算共用 app.workflow.duration）
+                    channel_min_duration = resolve_channel_min_duration_sec(
+                        getattr(ch, "channel_type", None), ch.min_duration_sec
+                    )
                     # 频道级段间 BGM 模式优先于全局配置
                     if ch.bgm_gap_mode is not None:
                         gap_mode = normalize_gap_mode(ch.bgm_gap_mode)
@@ -174,32 +175,13 @@ async def _resolve_channel_bgm(channel_id: int | None) -> tuple[str, Path | None
 
 
 def _get_duration_range(min_duration_sec: int | None = None) -> tuple[int, int]:
-    """按目标时长动态计算允许的时长范围。
+    """按目标时长动态计算允许的成品时长范围，见 app.workflow.duration.duration_range_sec。
 
-    范围 = [max(180, target×0.80), target×1.20]
-    与 settings.TARGET_DURATION_SEC 联动，用户调整目标时长后范围自动更新。
-    ±20% 容差覆盖 LLM 字数波动 + TTS 语速波动 + 段间静音累加的综合误差。
-    
-    支持频道级 min_duration_sec 覆盖：配置后下限直接使用频道值，上限保持 target×1.20。
-    冷门/小众频道可设置较短时长（如 300s），避免素材稀缺时 padding 补足后仍不足下限。
+    保留本函数名与「未配置时 [target×0.80, target×1.20]」的既有语义；
+    频道级最短时长口径与 rewriter 的字数反算统一收敛到 duration 模块。
     """
-    target = getattr(settings, "TARGET_DURATION_SEC", 600) or 600
-    try:
-        target = int(target)
-    except (ValueError, TypeError):
-        target = 600
-    # 频道级最短时长优先
-    if min_duration_sec is not None:
-        low = max(ABSOLUTE_MIN_DURATION_SEC, int(min_duration_sec))
-        high = int(target * 1.20)
-        logger.info(
-            "使用自定义最短时长: min=%ds target=%ds",
-            low, target,
-        )
-        return low, high
-    low = max(ABSOLUTE_MIN_DURATION_SEC, int(target * 0.80))
-    high = int(target * 1.20)
-    return low, high
+    return duration_range_sec(getattr(settings, "TARGET_DURATION_SEC", 600) or 600,
+                              min_duration_sec)
 
 def _read_file(path: str) -> bytes:
     """同步读取文件(由 asyncio.to_thread 调用,避免阻塞事件循环)。"""

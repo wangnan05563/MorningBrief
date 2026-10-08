@@ -33,6 +33,7 @@ from app.database import AsyncSessionLocal
 from app.models import Material, Script
 from app.models.material import MaterialStatus
 from app.models.script import ScriptStatus
+from app.workflow.duration import resolve_channel_min_duration_sec
 from app.workflow.llm import sensitive_filter
 from app.workflow.llm.heat_score import heat_score
 settings = get_settings()
@@ -1841,7 +1842,9 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
     # 用户调整目标时长或 TTS 语速时，自动协同调整稿件字数
     # 频道级 min_duration_sec 优先：audiobook 等频道需更长篇幅驱动自动扩稿，
     # 无频道级配置时回退全局目标时长，二者都收敛到 180~1800s 安全区间
-    channel_min_sec = (channel_prompts or {}).get("min_duration_sec")
+    channel_min_sec = resolve_channel_min_duration_sec(
+        channel_type, (channel_prompts or {}).get("min_duration_sec")
+    )
     target_sec = channel_min_sec or _get_target_duration_sec()
     target_sec = max(_MIN_CHANNEL_DURATION, min(_MAX_CHANNEL_DURATION, int(target_sec)))
     rate_multiplier = _get_rate_multiplier()
@@ -1904,8 +1907,10 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         )
 
     # 2. 选题：按策略分支（heat=品类热度 / outline=文档章节顺序 / manual=指定 ID）
+    # 选题数跟随目标段数：目标时长抬高段数后若仍固定取 SELECT_TOP_N=10 条素材，
+    # 长节目（30 分钟档）会在素材侧被卡死，只能靠单段超字数硬凑
     selected = _select_top_materials(
-        materials, top_n=SELECT_TOP_N,
+        materials, top_n=max(SELECT_TOP_N, target_segments),
         strategy=selection_strategy,
         manual_ids=channel_prompts.get("manual_material_ids") if channel_prompts else None,
     )
