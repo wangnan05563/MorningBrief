@@ -1,0 +1,15 @@
+{
+ "fresh_session_per_query": {
+  "n": 80,
+  "p50_ms": 34.81,
+  "p95_ms": 50.63,
+  "mean_ms": 36.61
+ },
+ "reused_connection_per_query": {
+  "n": 80,
+  "p50_ms": 1.2,
+  "p95_ms": 1.5,
+  "mean_ms": 1.27
+ },
+ "connection_setup_overhead_ms": 35.35
+}

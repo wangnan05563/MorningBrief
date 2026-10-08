@@ -4,10 +4,11 @@ SQLAlchemy 异步引擎 + 会话工厂。
 会话通过 FastAPI 依赖注入，确保请求结束自动关闭。
 
 SQLite 适配要点：
-1. 无连接池（SQLite 为嵌入式数据库，单文件多连接即可）
-2. PRAGMA 配置通过 SQLAlchemy 事件监听器在每个连接建立时注入
+1. 连接池（T01662）：默认有界复用池 AsyncAdaptedQueuePool（pool_size/max_overflow 走 settings），
+   消除 NullPool 每请求 ≈41ms 的建连+PRAGMA 开销；SQLITE_POOL_ENABLED=False 回退 NullPool
+2. PRAGMA 配置通过 SQLAlchemy 事件监听器在每个连接建立时注入（池化后每条连接仅执行一次，正是收益来源）
 3. WAL 模式：读不阻塞写、写不阻塞读，仅写-写冲突触发 BUSY
-4. busy_timeout=5000：写冲突时自动等待 5 秒（替代 MySQL 死锁重试）
+4. busy_timeout：写冲突时自动等待（替代 MySQL 死锁重试）；全局写锁仍串行化应用层提交
 """
 from typing import AsyncGenerator
 
@@ -18,22 +19,38 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import AsyncAdaptedQueuePool, NullPool
 
 from app.config import get_settings
 
 settings = get_settings()
 
-# SQLite 无需连接池参数（pool_size/pool_recycle 是 MySQL 专用）
-# connect_args 仅传 SQLite 支持的参数
-engine = create_async_engine(
-    settings.sqlite_url,
-    echo=settings.APP_DEBUG,
+# 连接池策略（T01662）：
+# - 默认 AsyncAdaptedQueuePool（有界复用池）：SQLite 文件库引擎默认 NullPool，每个请求
+#   checkout 都要「新建连接 + 4 条 PRAGMA」，checkin 即关闭，实测固定开销 ≈40.84ms/请求
+#   （_validate/t01617_conn_cost.py → t01617_conn_cost.json）。池化后连接连同 PRAGMA 初始化
+#   在池内复用，该开销降为 ~1-2ms（pre_ping 一次 SELECT 1）。
+# - pool_pre_ping=True：checkout 前轻量探活，连接失效即重建，避免「失效连接缺 PRAGMA」的静默降级。
+# - reset_on_return 默认 rollback：checkin 时结束事务，WAL 下不会跨请求持有读快照（写后立读无脏读）。
+# - 不用 StaticPool：单连接共享会把并发读串行化，抵消 WAL 多连接并发读收益。
+# - SQLITE_POOL_ENABLED=False 回退 NullPool（改造前行为），供 A/B 对比与故障回退。
+_engine_kwargs: dict = {
+    "echo": settings.APP_DEBUG,
     # SQLite 在 WAL 模式下支持多连接并发读，check_same_thread=False 允许跨线程
-    # 注意：SQLite 异步引擎默认 NullPool（每次 checkout 新建连接、checkin 即释放），
-    # 不接收 pool_size/max_overflow 等 QueuePool 参数；WAL 下多独立连接可并发读，
-    # 写则经全局写锁串行化（单写者上限）。多连接并发是 SQLite 嵌入式设计的预期行为。
-    connect_args={"check_same_thread": False},
-)
+    # 写经全局写锁串行化（单写者上限），池化不改变该约束。
+    "connect_args": {"check_same_thread": False},
+}
+if settings.SQLITE_POOL_ENABLED:
+    _engine_kwargs.update(
+        poolclass=AsyncAdaptedQueuePool,
+        pool_size=settings.SQLITE_POOL_SIZE,
+        max_overflow=settings.SQLITE_MAX_OVERFLOW,
+        pool_pre_ping=True,
+    )
+else:
+    _engine_kwargs["poolclass"] = NullPool
+
+engine = create_async_engine(settings.sqlite_url, **_engine_kwargs)
 
 AsyncSessionLocal = async_sessionmaker(
     engine,

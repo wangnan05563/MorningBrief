@@ -146,6 +146,19 @@ async def add_favorite(
 
     new_fav = Favorite(user_id=openid, episode_id=req.episode_id)
     async with write_lock():
+        # T01662 门禁发现的既有竞态：上面的存在性检查在锁外，两个并发请求可能都通过
+        # 检查后先后进锁，后提交者触发 UNIQUE(user_id, episode_id) → 500。
+        # 幂等契约是"已收藏则直接返回成功"，故进锁后再查一次，命中即走幂等分支。
+        recheck = await db.execute(
+            select(Favorite).where(
+                Favorite.user_id == openid,
+                Favorite.episode_id == req.episode_id,
+            )
+        )
+        dup = recheck.scalar_one_or_none()
+        if dup:
+            await cache_manager.delete_pattern(f"fav:list:{openid}:*")
+            return success(data={"success": True, "favorite_id": dup.id, "already_favorited": True})
         db.add(new_fav)
         await db.commit()
         await db.refresh(new_fav)

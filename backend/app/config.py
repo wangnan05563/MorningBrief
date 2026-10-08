@@ -149,6 +149,24 @@ class Settings(BaseSettings):
     SQLITE_BUSY_TIMEOUT_MS: int = 10000  # 写冲突时自动等待 10 秒（原 5000）
     SQLITE_SYNCHRONOUS: str = "NORMAL"   # NORMAL：性能与持久性平衡（WAL 下安全）
 
+    # ---- SQLite 连接池（T01662：消除每请求 ≈41ms 的 NullPool 建连开销） ----
+    # SQLite 文件库默认 NullPool：每请求 checkout 新建连接 + 4 条 PRAGMA、checkin 即关闭，
+    # 实测（_validate/t01617_conn_cost.py）该建立成本 ≈40.84ms/请求，是已定位的最大单项固定开销。
+    # 改用有界复用池（AsyncAdaptedQueuePool）后，连接（含 PRAGMA 初始化）在池内复用。
+    # SQLITE_POOL_ENABLED=False 可一键回退 NullPool（旧行为），用于 A/B 对比与故障回退。
+    # 勿用 StaticPool：单连接共享会把并发读串行化，抵消 WAL 多连接并发读的收益。
+    SQLITE_POOL_ENABLED: bool = True
+    # ⚠ 上限必须 ≥ 「同时持有连接的请求数」峰值：写端点在等待全局写锁期间仍持有
+    # 请求 session 的连接（如先 get_user_openid 再进锁），NullPool 时代是无上限连接，
+    # 若池过小会在高并发写时打满 → "QueuePool limit reached, connection timed out" 500。
+    # 实测教训（quick 门禁 S2_write_50，50 并发写）：5+5 直接打爆（错误率 49%），
+    # 20+100（总 120）与 NullPool 行为等价且常驻 20 条热连接吃满复用收益。
+    # 结构性收口（把等锁移到首次 DB 访问前、让池可缩回 5+5）归 T01659 处理。
+    SQLITE_POOL_SIZE: int = 20       # 常驻热连接（复用收益来源）
+    SQLITE_MAX_OVERFLOW: int = 100   # 突发上限（对齐 NullPool 时代的高并发行为）
+    # 写路径不变：全局写锁（app/core/write_gate.py 的 asyncio.Lock）仍串行化提交，
+    # 池化只改变「连接的复用方式」，不放宽单写者上限，也不引入多连接并发写。
+
     # ---- 水平扩展（只读场景） ----
     # uvicorn worker 数。默认 1：单进程事件循环 + 进程内写锁 + 进程内 TTLCache，
     # 三者强耦合，workers>1 会破坏"全局写锁串行化"与"缓存一致性"（各 worker 独立缓存/锁）。
