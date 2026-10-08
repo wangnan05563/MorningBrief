@@ -59,3 +59,20 @@ cold 59.87ms → warm 0.249ms。
 功能面：健康检查通过；24 次 `/api/v1/favorites` 读全部 200；写路径 8 次 POST（7×200 + 1×404 空档）
 与 7 次 DELETE 全部 200，无 500。停服用 `taskkill /F /T` 进程树回收，端口即刻释放（workers>1 时
 terminate() 只杀父进程，残留 worker 会继续占端口污染下一轮门禁，故 perf_gate stop_backend 已加树杀 + 按端口清扫）。
+
+## 5. perf_gate --workers 2 集成路径（02:45 起，未拿到 gate_report）
+
+`--tier quick --only S0_baseline --workers 2`：
+- start_backend 以 `--workers 2` 拉起并通过健康检查（日志确认 2 个 worker 进程号）；
+- JMeter 侧 60s 档跑完：3870 样本全 200/OK、`elapsed>5s` 为 0、jmeter.log 显示 02:47:14 全部线程 finished；
+- **但 gate 主进程在 jmeter 步骤后停摆 >10 分钟未进入 analyze**（stdout 未捕获、无残留 cmd/java 子进程可查，
+  result.jtl 末行未 flush 完整），故 workers=2 的门禁指标结论缺失；手动回收进程树后 8100 端口干净、
+  `cleanup_seed.py` 复核 perf 夹具 0 条、`[INTEGRITY] ok`。
+- 定性：停摆发生在压测工具链侧（被测系统全程正常响应），但它是「路线 A 用 gate 直接压多 worker」这条路
+  的现实阻断项之一，与第 4 节的重复调度/重复通知同批交给 **T01660**。
+
+## 6. 附带发现（未在本单修）
+
+`loguru` 用 `%s`/`%d` 风格占位符不会格式化，直接把占位符写进日志（实测：
+`[startup] 内网穿透隧道已自动启动: %s`、`通知渠道已加载: %s`、`通知发送完成: total=%d success=%d failed=%d`），
+运维日志丢失关键值。属独立缺陷，另建单处理（见回传「本次回写」）。
