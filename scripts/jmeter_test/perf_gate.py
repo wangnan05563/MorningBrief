@@ -11,7 +11,8 @@
 退出码：0=全部达标；1=有档位破线（回归）；2=前置条件或执行失败（不视为回归结论）。
 
 设计约束（沿用 T01518 实测口径，勿随意改动）：
-- 后端固定 workers=1（单进程事件循环），压测结论只在单 worker 下可复现。
+- 后端默认 workers=1（单进程事件循环），压测结论只在单 worker 下可复现；
+  `--workers N` 可覆盖（T01659），实际值会写进 gate_report 头部便于横向比对。
 - 限流通过子进程环境变量 RATE_LIMIT_PER_MINUTE 临时解除，不改 backend/.env。
 - token 只经 -Jauth_token / -Jadmin_token 注入 jmeter，不写进 jmx 文件。
 - jtl 为 CSV（显式传 -Jjmeter.save.saveservice.output_format=csv）。
@@ -200,12 +201,14 @@ def admin_token() -> str:
 
 def start_backend(cfg: dict) -> subprocess.Popen:
     host, port = cfg["backend"]["host"], cfg["backend"]["port"]
+    workers = int(cfg["backend"].get("workers", 1))
     env = dict(os.environ)
     env["RATE_LIMIT_PER_MINUTE"] = str(cfg["backend"]["rate_limit_per_minute"])
     env["PYTHONIOENCODING"] = "utf-8"
     logf = (HERE / "gate_backend.log").open("w", encoding="utf-8", errors="replace")
     proc = subprocess.Popen(
-        [PY, "-m", "uvicorn", "app.main:app", "--host", host, "--port", str(port), "--workers", "1"],
+        [PY, "-m", "uvicorn", "app.main:app", "--host", host, "--port", str(port),
+         "--workers", str(workers)],
         cwd=str(BACKEND_DIR), env=env, stdout=logf, stderr=subprocess.STDOUT)
     url = f"http://{host}:{port}/api/health/live"
     deadline = time.monotonic() + cfg["backend"]["health_timeout_sec"]
@@ -215,7 +218,8 @@ def start_backend(cfg: dict) -> subprocess.Popen:
         try:
             with urllib.request.urlopen(url, timeout=3) as r:
                 if r.status == 200:
-                    log(f"[step] 后端就绪 {url}（pid {proc.pid}，workers=1，限流临时 {env['RATE_LIMIT_PER_MINUTE']}/min）")
+                    log(f"[step] 后端就绪 {url}（pid {proc.pid}，workers={workers}，"
+                        f"限流临时 {env['RATE_LIMIT_PER_MINUTE']}/min）")
                     return proc
         except Exception:
             time.sleep(1.0)
@@ -223,15 +227,56 @@ def start_backend(cfg: dict) -> subprocess.Popen:
     abort("[ABORT] 后端健康检查超时，见 gate_backend.log")
 
 
-def stop_backend(proc: subprocess.Popen) -> None:
-    if proc is None or proc.poll() is not None:
-        return
-    proc.terminate()
+def _port_listeners(port: int) -> list:
+    """返回监听该端口的 PID（Windows 用 netstat，其它平台回退 lsof）。"""
     try:
-        proc.wait(timeout=30)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-    log("[step] 后端已停止")
+        if os.name == "nt":
+            out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True,
+                                 text=True, timeout=20).stdout
+            pids = set()
+            for line in out.splitlines():
+                cols = line.split()
+                if len(cols) >= 5 and cols[3].upper() == "LISTENING" and cols[1].endswith(f":{port}"):
+                    pids.add(cols[4])
+            return sorted(pids, key=int)
+        out = subprocess.run(["lsof", "-ti", f":{port}", "-sTCP:LISTEN"],
+                             capture_output=True, text=True, timeout=20).stdout
+        return sorted({p for p in out.split() if p.isdigit()}, key=int)
+    except Exception as e:  # 端口清扫是兜底，失败不应把门禁结论改成 ABORT
+        log(f"[WARN] 端口监听者查询失败：{e}")
+        return []
+
+
+def stop_backend(proc: subprocess.Popen, cfg: dict | None = None) -> None:
+    """停后端。workers>1 时 uvicorn 的 worker 是独立子进程：
+    Windows 上 terminate() 只杀父进程，残留 worker 会继续监听压测端口，
+    让下一轮门禁「连到上一轮的后端」，指标失去意义 → 必须先杀进程树再按端口清扫。
+    """
+    port = int((cfg or {}).get("backend", {}).get("port", 0) or 0)
+    workers = int((cfg or {}).get("backend", {}).get("workers", 1))
+    if proc is not None and proc.poll() is None:
+        if workers > 1 and os.name == "nt":
+            # /T 需要在父进程仍存活时才能枚举子进程树，故先于 terminate 执行
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
+            try:
+                proc.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        else:
+            proc.terminate()
+            try:
+                proc.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+    if workers > 1 and port:
+        left = _port_listeners(port)
+        if left:
+            log(f"[step] 端口 {port} 仍有残留监听者 {left}，强制回收")
+            for pid in left:
+                subprocess.run(["taskkill", "/F", "/PID", pid] if os.name == "nt"
+                               else ["kill", "-9", pid], capture_output=True)
+    if proc is not None:
+        log("[step] 后端已停止")
 
 
 def clean_result_dirs(ids: list) -> None:
@@ -332,7 +377,7 @@ def write_report(report: dict) -> None:
     REPORT_JSON.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     L = ["# 压测回归门禁报告（perf_gate.py）\n",
          f"> 时间：{report['started_at']}  档位：{report['tier']}  引擎：JMeter\n",
-         f"> 后端：{'自管理 uvicorn workers=1' if report['backend_mode'] == 'auto' else '外部实例'} "
+         f"> 后端：{'自管理 uvicorn workers=%s' % report.get('workers', 1) if report['backend_mode'] == 'auto' else '外部实例'} "
          f"#{report['port']}  限流：临时 {report['rate_limit']}/min（未改 .env）\n",
          "\n| 档位 | 并发 | 样本 | TPS | P50 | P95 | 错误率 | 5xx | 判定 |\n|--|--|--|--|--|--|--|--|--|\n"]
     for r in report["results"]:
@@ -364,12 +409,17 @@ def main() -> int:
     ap.add_argument("--no-seed", action="store_true", help="跳过 seed/cleanup（库里已有夹具数据时）")
     ap.add_argument("--update-baseline", action="store_true", help="把本轮 P95/TPS 写为新的延迟基线")
     ap.add_argument("--dry-run", action="store_true", help="只打印执行计划")
+    ap.add_argument("--workers", type=int,
+                    help="自管理后端的 uvicorn worker 数（默认 1，保持门禁结论可复现；"
+                         ">1 仅供路线 A 实验，写锁/缓存/调度器是进程内状态）")
     a = ap.parse_args()
 
     cfg = load_config()
     gate = cfg["gate"]
     if a.port:
         cfg["backend"]["port"] = a.port
+    # T01659：workers 可选覆盖，默认 1 以保持历史门禁结论可复现
+    cfg["backend"]["workers"] = a.workers if a.workers else int(cfg["backend"].get("workers", 1))
     ids = [s.strip() for s in a.only.split(",")] if a.only else list(cfg["tiers"][a.tier])
     if not a.include_soak:
         ids = [i for i in ids if i != "S5_soak"]
@@ -449,7 +499,7 @@ def main() -> int:
             log(f"[gate] {sid} -> {row['status']}  TPS {row['tps']}  P95 {row['p95_ms']}ms  "
                 f"错误率 {row['error_rate']}%")
     finally:
-        stop_backend(backend_proc)
+        stop_backend(backend_proc, cfg)
         if not a.no_seed:
             try:
                 run_step("cleanup_seed.py(还原开发库)", [PY, HERE / "cleanup_seed.py"])
@@ -475,7 +525,8 @@ def main() -> int:
     if not results:
         verdict = "NO_DATA"
     report = {"started_at": started_at, "tier": a.tier, "backend_mode": a.backend,
-              "port": cfg["backend"]["port"], "rate_limit": cfg["backend"]["rate_limit_per_minute"],
+              "port": cfg["backend"]["port"], "workers": cfg["backend"]["workers"],
+              "rate_limit": cfg["backend"]["rate_limit_per_minute"],
               "ids": ids, "skipped": skipped, "results": results, "breaches": breaches,
               "verdict": verdict,
               "lock_errors": {"before": lock_before, "after": lock_errors()},

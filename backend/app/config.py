@@ -169,9 +169,11 @@ class Settings(BaseSettings):
 
     # ---- 水平扩展（只读场景） ----
     # uvicorn worker 数。默认 1：单进程事件循环 + 进程内写锁 + 进程内 TTLCache，
-    # 三者强耦合，workers>1 会破坏"全局写锁串行化"与"缓存一致性"（各 worker 独立缓存/锁）。
+    # 三者强耦合，workers>1 会破坏"全局写锁串行化"与"缓存一致性"（各 worker 独立缓存/锁），
+    # 且 APScheduler / play_write_buffer / EventBus / 隧道线程会在每个进程各跑一份（重复调度）。
     # 因此 workers>1 仅在【纯读 / 几乎无写】或已切换到 MySQL+Redis 共享态（见架构决策）时安全。
-    # 当前默认 1；如需读扩展，请同步将缓存/写锁改为 Redis/分布式锁后再调大。
+    # T01659 起该值真正生效（此前 launcher.py 硬编码 workers=1，此配置是死值）；
+    # 调大前请先完成路线 A 的进程角色拆分（APP_ROLE，见 T01660）。
     UVICORN_WORKERS: int = 1
 
     # ---- 缓存（V1.2 替代 Redis，进程内 TTLCache 无需外部配置） ----

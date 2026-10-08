@@ -88,24 +88,28 @@ def main():
     # 默认绑定 0.0.0.0:8000，可通过 .env 的 APP_HOST/APP_PORT 覆盖
     host = os.environ.get("APP_HOST", "0.0.0.0")
     port = int(os.environ.get("APP_PORT", "8000"))
+    # T01659：此前这里硬编码 workers=1，config.py 的 UVICORN_WORKERS 是从不被读取的死配置。
+    # 接成真实生效，默认值仍取 settings（=1），行为与改造前完全一致。
+    workers = int(settings.UVICORN_WORKERS or 1)
 
     print("=" * 50)
     print("  MorningBrief 语音新闻播报服务")
     print("=" * 50)
     print(f"  工作目录: {app_dir}")
     print(f"  监听地址: http://{host}:{port}")
+    print(f"  工作进程: {workers}")
     print(f"  API 文档: http://{host}:{port}/docs")
     print(f"  健康检查: http://{host}:{port}/api/health")
     print("=" * 50)
     print()
 
-    # workers=1：APScheduler 仅在主进程运行，多 worker 会导致重复调度
     # log_config=None：禁用 uvicorn 默认日志配置，日志已由 loguru InterceptHandler 接管
+    # workers>1 的前置约束见 config.py 的 UVICORN_WORKERS 注释（写锁/缓存/调度器均为进程内状态）
     uvicorn.run(
         "app.main:app",
         host=host,
         port=port,
-        workers=1,
+        workers=workers,
         log_level=settings.LOG_LEVEL.lower(),
         log_config=None,
     )

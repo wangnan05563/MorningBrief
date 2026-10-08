@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.cache.manager import cache as cache_manager
 from app.core.security import create_access_token
 from app.core.exceptions import BizError, AuthError, NotFoundError
 from app.models import User
@@ -13,17 +14,29 @@ from app.services.blacklist_service import add_to_blacklist
 
 settings = get_settings()
 
+# openid 对同一 user_id 稳定不变，但调用点在每个 C 端写/读请求上都会二次查库，
+# 因此这里加进程内 TTL 缓存；TTL 取配置默认值，足够覆盖「改资料后快速生效」窗口
+_OPENID_CACHE_PREFIX = "user:openid:"
+
 
 async def get_user_openid(db: AsyncSession, user_id: int) -> str:
     """根据 User.id 查询 openid，未找到抛 NotFoundError。
 
     作为公共辅助函数供 C 端路由（favorites/comments/feedbacks）复用，
     统一异常类型，避免每个路由各自定义导致行为不一致。
+
+    命中进程内缓存时不回源；未命中（含负缓存不生效）才查库，且只缓存 openid。
     """
+    cache_key = f"{_OPENID_CACHE_PREFIX}{user_id}"
+    cached = await cache_manager.get(cache_key)
+    if cached is not None:
+        return cached
+
     result = await db.execute(select(User.openid).where(User.id == user_id))
     openid = result.scalar_one_or_none()
     if openid is None:
         raise NotFoundError("用户不存在")
+    await cache_manager.set(cache_key, openid, ttl=settings.CACHE_DEFAULT_TTL_SEC)
     return openid
 
 
