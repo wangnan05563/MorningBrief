@@ -651,8 +651,11 @@
                   v-for="p in currentTtsPresets"
                   :key="p.name"
                   size="small"
+                  plain
                   :icon="ArrowRight"
                   :label="p.name"
+                  :inline-text="p.name"
+                  :btn-style="ttsPresetStyle(p.name)"
                   desc="应用该风格预设参数"
                   @click="applyTtsPreset(p)"
                 />
@@ -912,6 +915,19 @@ const ttsProviders = [
 
 // TTS 风格预设：按 provider 提供不同的参数组合
 // 每组预设覆盖该 provider 支持的音量/语速/基频参数
+// 预设名 → 配色（同名预设跨 provider 固定同色，配合内联名称便于一眼区分，T01625）
+// 不用 el-button 的 type 色系：本项目主题把 success/warning/info 定义成粉彩值
+// （variables.scss:18-21），plain 态下文字色即该浅色，实测对比度过低看不清，故显式给深色文字 + 浅底。
+const TTS_PRESET_COLORS = {
+  标准: { accent: '#2D6B5F', tint: '#E3F3EE' },
+  沉稳新闻: { accent: '#4A5568', tint: '#EEF1F6' },
+  活泼播报: { accent: '#B7791F', tint: '#FFF3DC' },
+  柔和轻语: { accent: '#6B46C1', tint: '#F1EAFC' },
+}
+function ttsPresetStyle(name) {
+  const c = TTS_PRESET_COLORS[name] || { accent: '#718096', tint: '#F2F4F7' }
+  return { color: c.accent, background: c.tint, borderColor: c.accent }
+}
 const ttsPresets = {
   edge: [
     { name: '标准', rate: 0, volume: 0, pitch: 0 },

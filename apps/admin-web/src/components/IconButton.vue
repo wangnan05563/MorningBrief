@@ -18,6 +18,7 @@
       :loading="loading"
       :disabled="disabled"
       :aria-label="label"
+      :style="btnStyle"
       @click="handleClick"
     >
       <el-icon v-if="icon && !loading" class="icon-btn__icon">
@@ -39,6 +40,7 @@
     :loading="loading"
     :disabled="disabled"
     :aria-label="label"
+    :style="btnStyle"
     @click="handleClick"
   >
     <el-icon v-if="icon && !loading" class="icon-btn__icon">
@@ -79,6 +81,8 @@ const props = defineProps({
   circle: { type: Boolean, default: false },
   loading: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },
+  // 透传给内部 el-button 的内联样式（需要按项自定义配色时用；style 属性无法经 el-tooltip 落到按钮上）
+  btnStyle: { type: Object, default: null },
   // 是否包 Tooltip；el-dropdown 触发按钮等已有悬浮语义的场景传 false
   tooltip: { type: Boolean, default: true },
 })
