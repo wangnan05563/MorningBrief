@@ -258,3 +258,7 @@ scripts/jmeter_test/results_S*/
 scripts/jmeter_test/gate_report.json
 scripts/jmeter_test/gate_report.md
 scripts/jmeter_test/gate_baseline.json
+# 压测凭据产物（setup.py 每轮重签的明文 JWT，不入库；见 T01624）
+scripts/jmeter_test/test_token.txt
+scripts/jmeter_test/test_user_info.json
+scripts/jmeter_test/admin_token.txt

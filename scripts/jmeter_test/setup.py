@@ -11,6 +11,9 @@
 - 测试用户 openid 用 'jmeter_test_' 前缀，便于识别和清理
 - token 有效期 1 天（足够测试），jti 不写入黑名单
 - JWT 用标准库实现 HS256，避免引入 PyJWT 依赖
+
+⚠️ 产物含明文 JWT：test_token.txt / test_user_info.json 已移出 git 跟踪（T01624），
+   不入库。如需轮换历史密钥使旧 jti 失效，请联系运维评估签名密钥轮换。
 """
 import base64
 import hashlib
