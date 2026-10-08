@@ -25,7 +25,8 @@ from pathlib import Path
 # 与后端 config.py 默认值保持一致（项目无 .env 文件，使用默认值）
 JWT_SECRET = "change-me-in-production"
 
-BACKEND_DIR = Path(__file__).resolve().parent.parent / "backend"
+# 脚本位于 <repo>/scripts/jmeter_test/，仓库根需上溯两级（T01518 修同类路径 bug 时遗漏本文件）
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent / "backend"
 DB_PATH = BACKEND_DIR / "data" / "news.db"
 ENV_PATH = BACKEND_DIR / ".env"
 TOKEN_OUTPUT = Path(__file__).resolve().parent / "test_token.txt"

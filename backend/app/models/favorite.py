@@ -9,7 +9,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Integer, String, DateTime, UniqueConstraint, Index
+from sqlalchemy import Integer, String, DateTime, UniqueConstraint, Index, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.timeutil import localnow_naive
@@ -23,6 +23,9 @@ class Favorite(Base):
         UniqueConstraint("user_id", "episode_id", name="uq_favorite_user_episode"),
         Index("idx_favorite_user", "user_id"),
         Index("idx_favorite_episode", "episode_id"),
+        # T01579：收藏列表为 WHERE user_id=? ORDER BY created_at DESC 分页，
+        # 单列 idx_favorite_user 命中过滤后仍需对结果排序；复合索引直接定位并倒序扫描
+        Index("idx_favorite_user_created", "user_id", text("created_at DESC")),
         {"comment": "用户收藏表（C 端走 COS 为主，此表为本地快照）"},
     )
 

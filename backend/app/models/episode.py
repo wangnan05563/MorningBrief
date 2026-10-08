@@ -22,6 +22,9 @@ class Episode(Base):
         Index("idx_date", "date"),
         Index("idx_status", "status"),
         Index("idx_episode_channel", "channel_id"),
+        # T01579：历史列表 WHERE status='published' ORDER BY date,id 单列索引需排序，
+        # 复合索引可顺序扫描（SQLite 亦支持反向扫描实现 DESC 排序）
+        Index("idx_episode_status_date", "status", "date"),
         CheckConstraint("status IN ('draft', 'published', 'offline')", name="ck_episode_status"),
         {"comment": "节目表"},
     )

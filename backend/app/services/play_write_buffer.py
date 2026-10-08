@@ -129,14 +129,19 @@ class PlayWriteBuffer:
                 self._flushing = False
 
         # 缓存失效必须在落库之后（与 report_progress 原语义一致）
-        if should_clear_cache:
-            try:
-                from app.cache.manager import cache as cache_manager
+        # T01579：/playlogs/recent 已接缓存——本批涉及用户的列表按用户精确失效，
+        # 与 should_clear_cache 解耦（首次播放计入列表但不一定触发节目列表统计刷新）
+        affected_uids = {ev.get("user_id") for ev in batch if ev.get("user_id")}
+        try:
+            from app.cache.manager import cache as cache_manager
+            if should_clear_cache:
                 await cache_manager.delete("episode:today:all")
                 await cache_manager.delete_pattern("episode:today:ch:*")
                 await cache_manager.delete_pattern("episode:list:page:*")
-            except Exception as e:
-                logger.debug("清除节目列表缓存失败（不阻断）: {}", e)
+            for uid in affected_uids:
+                await cache_manager.delete_pattern(f"playlog:recent:{uid}:*")
+        except Exception as e:
+            logger.debug("清除节目列表缓存失败（不阻断）: {}", e)
 
     @staticmethod
     async def _persist(session, batch: list[dict]) -> bool:  # NOSONAR

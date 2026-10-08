@@ -6,11 +6,14 @@
 - 收藏列表仅返回 episode_id 与时间，前端需另调 /episodes/{id} 拼详情，
   避免本接口做 N+1 联表查询
 """
+import os
+
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cache.manager import cache as cache_manager
 from app.core.auth import UserPayload, get_current_user, get_optional_user
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
@@ -20,6 +23,15 @@ from app.models import Favorite, Episode, EpisodeStatus, Channel
 from app.services.user_service import get_user_openid
 
 router = APIRouter(prefix="/api/v1/favorites", tags=["C端-收藏"])
+
+# T01579：收藏列表缓存 TTL（秒）。收藏变更频率低、列表读放大明显（count+分页+详情补拉
+# 三段查询），压测 200 并发下 P95 达 10s；短 TTL + 写路径主动失效即可吸收热点读。
+# 置 0 关闭缓存（回归对照/排障用）。
+TTL_FAV_LIST = int(os.getenv("FAVORITES_CACHE_TTL_SEC", "60"))
+
+
+def _fav_list_key(openid: str, page: int, size: int, channel_type: str | None) -> str:
+    return f"fav:list:{openid}:{page}:{size}:{channel_type or 'all'}"
 
 
 class FavoriteRequest(BaseModel):
@@ -39,6 +51,12 @@ async def list_favorites(
 ):
     """收藏列表分页：返回 episode_id 与收藏时间，前端按需拉详情。"""
     openid = await get_user_openid(db, user.user_id)
+
+    # T01579：cache-aside（纯 dict 载荷可安全跨请求缓存）
+    cache_key = _fav_list_key(openid, page, size, channel_type)
+    cached = await cache_manager.get(cache_key) if TTL_FAV_LIST > 0 else None
+    if cached is not None:
+        return success(data=cached)
 
     offset = (page - 1) * size
     # T00726：按频道类型过滤——先取该类型的频道 id，再限制收藏的 episode 归属
@@ -90,7 +108,10 @@ async def list_favorites(
         for f in favorites
     ]
 
-    return success(data={"total": total, "list": list_data})
+    data = {"total": total, "list": list_data}
+    if TTL_FAV_LIST > 0:
+        await cache_manager.set(cache_key, data, ttl=TTL_FAV_LIST)
+    return success(data=data)
 
 
 @router.post("")
@@ -119,6 +140,8 @@ async def add_favorite(
     )
     fav = existing.scalar_one_or_none()
     if fav:
+        # 兜底失效：缓存 TTL 窗口内的数据变更（如另一设备取消后重新收藏）保持一致
+        await cache_manager.delete_pattern(f"fav:list:{openid}:*")
         return success(data={"success": True, "favorite_id": fav.id, "already_favorited": True})
 
     new_fav = Favorite(user_id=openid, episode_id=req.episode_id)
@@ -126,6 +149,8 @@ async def add_favorite(
         db.add(new_fav)
         await db.commit()
         await db.refresh(new_fav)
+    # T01579：写后失效该用户全部列表页缓存
+    await cache_manager.delete_pattern(f"fav:list:{openid}:*")
     return success(data={"success": True, "favorite_id": new_fav.id, "already_favorited": False})
 
 
@@ -146,6 +171,8 @@ async def remove_favorite(
             )
         )
         await db.commit()
+    # T01579：写后失效该用户全部列表页缓存
+    await cache_manager.delete_pattern(f"fav:list:{openid}:*")
     return success(data={"success": True})
 
 

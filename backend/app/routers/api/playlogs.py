@@ -1,9 +1,12 @@
 """C 端播放进度路由。"""
+import os
+
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cache.manager import cache as cache_manager
 from app.core.auth import UserPayload, get_current_user
 from app.core.exceptions import NotFoundError
 from app.core.response import success
@@ -12,6 +15,15 @@ from app.services.play_service import PlayService
 from app.models import PlayLog, Episode, EpisodeStatus, Channel
 
 router = APIRouter(prefix="/api/v1/playlogs", tags=["C端-播放进度"])
+
+# T01579：最近播放列表缓存 TTL（秒）。/recent 是四表 JOIN + 子查询聚合 + count 双查询，
+# 压测 200 并发下 P95 达 9.7s；进度上报经 PlayWriteBuffer 秒级批量落库（本就是最终一致），
+# 故 30s 短 TTL + 落库后按用户失效，与既有语义一致。
+TTL_RECENT = int(os.getenv("PLAYLOGS_RECENT_CACHE_TTL_SEC", "30"))
+
+
+def _recent_key(user_id: int, page: int, size: int, channel_id: int | None, channel_type: str | None) -> str:
+    return f"playlog:recent:{user_id}:{page}:{size}:{channel_id or 'all'}:{channel_type or 'all'}"
 
 # 单条音频最长 24 小时（86400 秒），超过视为异常值
 _MAX_AUDIO_SECONDS = 24 * 3600
@@ -120,6 +132,12 @@ async def get_recent_playlogs(
     用于"我的"页面"最近播放"列表，点击可断点续播。
     channel_id 为可选参数，传入时仅返回该频道的播放记录。
     """
+    # T01579：cache-aside（纯 dict 载荷可安全跨请求缓存）
+    cache_key = _recent_key(user.user_id, page, size, channel_id, channel_type)
+    cached = await cache_manager.get(cache_key) if TTL_RECENT > 0 else None
+    if cached is not None:
+        return success(data=cached)
+
     offset = (page - 1) * size
 
     # 子查询：每个 episode 取最新一条播放记录（避免同一节目多次播放占满列表）
@@ -188,5 +206,8 @@ async def get_recent_playlogs(
     count_result = await db.execute(count_query)
     total = count_result.scalar() or 0
 
-    return success(data={"total": total, "list": list_data})
+    data = {"total": total, "list": list_data}
+    if TTL_RECENT > 0:
+        await cache_manager.set(cache_key, data, ttl=TTL_RECENT)
+    return success(data=data)
 

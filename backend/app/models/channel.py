@@ -18,6 +18,8 @@ class Channel(Base):
     __tablename__ = "channel"
     __table_args__ = (
         Index("idx_channel_active", "is_active"),
+        # T01579：收藏/最近播放按 channel_type 过滤时 JOIN channel，缺索引致全表扫描
+        Index("idx_channel_type", "channel_type"),
         {"comment": "新闻频道表"},
     )
 

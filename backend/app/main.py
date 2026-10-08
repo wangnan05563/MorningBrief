@@ -641,6 +641,43 @@ async def _migrate_playlog_indexes() -> None:  # NOSONAR
         conn.close()
 
 
+async def _migrate_read_path_indexes() -> None:  # NOSONAR
+    """T01579：三条热点读路径的复合索引迁移（幂等）。
+
+    create_all 不会为已存在的表新增索引，需显式 CREATE INDEX IF NOT EXISTS。
+    索引名遵循 database.normalize_metadata_for_sqlite 的 ix_<表名>_<原名> 约定，
+    与模型 __table_args__ 声明保持一致（新库由 create_all 建，老库由本函数补）。
+    """
+    import sqlite3
+    from app.paths import resolve_db_path
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        # 收藏列表：WHERE user_id=? ORDER BY created_at DESC 分页
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS ix_favorite_idx_favorite_user_created "
+            "ON favorite (user_id, created_at DESC)"
+        )
+        # 历史列表：WHERE status='published' ORDER BY date
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS ix_episode_idx_episode_status_date "
+            "ON episode (status, date)"
+        )
+        # 按频道类型过滤（收藏/最近播放 JOIN channel）
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS ix_channel_idx_channel_type "
+            "ON channel (channel_type)"
+        )
+        conn.commit()
+        logger.info("[startup] T01579 读路径索引迁移完成（favorite/episode/channel 复合索引）")
+    except Exception as e:
+        logger.warning("[startup] 读路径索引迁移失败: %s", e)
+    finally:
+        conn.close()
+
+
 async def _migrate_fts5_index() -> None:  # NOSONAR
     """创建 FTS5 全文索引虚拟表并同步现有数据（幂等）。
 
@@ -961,6 +998,12 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
         await _migrate_playlog_indexes()
     except Exception as e:
         logger.warning("[startup] play_log 表索引迁移失败: %s", e)
+
+    # T01579：收藏/历史/类型过滤三条读路径的复合索引迁移（幂等）
+    try:
+        await _migrate_read_path_indexes()
+    except Exception as e:
+        logger.warning("[startup] 读路径索引迁移失败: %s", e)
 
     # FTS5 全文索引迁移（幂等创建虚拟表 + 触发器 + 历史数据灌入）
     try:
