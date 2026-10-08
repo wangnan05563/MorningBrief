@@ -191,6 +191,7 @@
           :key="p.key"
           class="preset-btn"
           :label="p.label"
+          :inline-text="p.label"
           :desc="`${p.duration / 60}分钟 · ${p.rate}x · ${p.expectedWords}字`"
           :icon="p.icon"
           @click="applyPreset(p)"
