@@ -33,10 +33,10 @@ LOGS_DIR = _REPO / "backend" / "logs"
 PERF_USER_Q = "SELECT id FROM user WHERE openid LIKE 'jmeter_perf_%'"
 PERF_USER_STR_Q = "SELECT CAST(id AS TEXT) FROM user WHERE openid LIKE 'jmeter_perf_%'"
 
-# (表, 删除条件) —— 顺序即删除顺序
+# 删除顺序：先子表后父表；comment_like 必须在 comment 删除之前
 DELETE_SPEC = [
-    ("comment", f"user_id IN ({PERF_USER_STR_Q})"),
     ("comment_like", f"comment_id IN (SELECT id FROM comment WHERE user_id IN ({PERF_USER_STR_Q}))"),
+    ("comment", f"user_id IN ({PERF_USER_STR_Q})"),
     ("favorite", f"user_id IN ({PERF_USER_STR_Q})"),
     ("play_log", f"user_id IN ({PERF_USER_Q})"),
     ("play_progress", f"user_id IN ({PERF_USER_Q})"),
@@ -46,6 +46,40 @@ DELETE_SPEC = [
     ("channel", "name LIKE '性能测试频道%'"),
     ("user", "openid LIKE 'jmeter_perf_%'"),
 ]
+
+
+TEST_USER_OPENID_Q = r"SELECT id, openid FROM user WHERE openid LIKE 'jmeter\_test\_%' ESCAPE '\'"
+
+
+def test_user_specs(conn):
+    """压测写路径由 API 落库的请求行 —— setup.py 建的合成测试用户（jmeter_test_ 前缀）。
+
+    为什么必须单独清：API 侧 user_id 口径不统一，comment/favorite/feedback 存 openid，
+    play_log/play_progress/channel_subscription 存数字 id；而 DELETE_SPEC 只按
+    perf 用户的数字串匹配，实测每跑一轮门禁就在开发库上多一层残渣（T01581）。
+    这里两种口径一起匹配，并连测试用户本身一并删除，使库回到压测前状态
+    （下一轮 setup.py 会幂等重建）。
+    """
+    rows = conn.execute(TEST_USER_OPENID_Q).fetchall()
+    if not rows:
+        return []
+    ids = [r[0] for r in rows]
+    opens = [r[1] for r in rows]
+    ids_txt = ",".join(f"'{i}'" for i in ids)                      # 数字 id 的字符串写法
+    opens_txt = ",".join("'" + o.replace("'", "''") + "'" for o in opens)
+    both = f"user_id IN ({ids_txt},{opens_txt})"
+    ints = ",".join(str(i) for i in ids)
+    return [
+        ("comment_like", f"comment_id IN (SELECT id FROM comment WHERE {both})"),
+        ("comment", both),
+        ("favorite", both),
+        ("play_log", f"user_id IN ({ints})"),
+        ("play_progress", f"user_id IN ({ints})"),
+        ("channel_subscription", f"user_id IN ({ints})"),
+        ("feedback", both),
+        ("user", f"openid IN ({opens_txt})"),
+    ]
+
 
 COUNT_SPEC = [
     ("user(jmeter_perf_)", "user", "openid LIKE 'jmeter_perf_%'"),
@@ -71,10 +105,21 @@ def main():
     conn.execute("PRAGMA foreign_keys=OFF")
     cur = conn.cursor()
 
+    # 压测写路径由 API 落库的行按测试用户（jmeter_test_ 前缀）一并还原，与 seed 夹具同批清理
+    specs = DELETE_SPEC + test_user_specs(cur)
+
     print("=== 删除前计数 ===")
     before = {}
     for label, table, where in COUNT_SPEC:
         n = cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}").fetchone()[0]
+        before[label] = n
+        print(f"  {label:34s} -> {n}")
+    perf_tables = {(t, w) for t, w in DELETE_SPEC}
+    for table, where in specs:
+        if (table, where) in perf_tables:
+            continue
+        n = cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}").fetchone()[0]
+        label = f"{table}(by test user)"
         before[label] = n
         print(f"  {label:34s} -> {n}")
 
@@ -91,7 +136,7 @@ def main():
         print(f"\n[BACKUP] -> {bak} ({bak.stat().st_size/1024/1024:.2f} MB)")
 
     print("\n=== 删除 ===")
-    for table, where in DELETE_SPEC:
+    for table, where in specs:
         cur.execute(f"DELETE FROM {table} WHERE {where}")
         print(f"  DELETE {table:22s}: {cur.rowcount} 行")
     conn.commit()

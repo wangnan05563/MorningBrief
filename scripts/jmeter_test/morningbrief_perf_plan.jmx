@@ -30,6 +30,30 @@
             <stringProp name="Argument.name">ADMIN_TOKEN</stringProp>
             <stringProp name="Argument.value">${__P(admin_token,)}</stringProp>
           </elementProp>
+          <elementProp name="EP_MIN" elementType="Argument">
+            <stringProp name="Argument.name">EP_MIN</stringProp>
+            <stringProp name="Argument.value">${__P(ep_min,1)}</stringProp>
+          </elementProp>
+          <elementProp name="EP_MAX" elementType="Argument">
+            <stringProp name="Argument.name">EP_MAX</stringProp>
+            <stringProp name="Argument.value">${__P(ep_max,1000)}</stringProp>
+          </elementProp>
+          <elementProp name="CH_MIN" elementType="Argument">
+            <stringProp name="Argument.name">CH_MIN</stringProp>
+            <stringProp name="Argument.value">${__P(ch_min,1)}</stringProp>
+          </elementProp>
+          <elementProp name="CH_MAX" elementType="Argument">
+            <stringProp name="Argument.name">CH_MAX</stringProp>
+            <stringProp name="Argument.value">${__P(ch_max,30)}</stringProp>
+          </elementProp>
+          <elementProp name="SCRIPT_MIN" elementType="Argument">
+            <stringProp name="Argument.name">SCRIPT_MIN</stringProp>
+            <stringProp name="Argument.value">${__P(script_min,1)}</stringProp>
+          </elementProp>
+          <elementProp name="SCRIPT_MAX" elementType="Argument">
+            <stringProp name="Argument.name">SCRIPT_MAX</stringProp>
+            <stringProp name="Argument.value">${__P(script_max,84)}</stringProp>
+          </elementProp>
           <elementProp name="SCENARIO" elementType="Argument">
             <stringProp name="Argument.name">SCENARIO</stringProp>
             <stringProp name="Argument.value">${__P(scenario,read)}</stringProp>
@@ -144,19 +168,19 @@
             </HTTPSamplerProxy>
             <hashTree/>
             <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="04_历史列表_GET_episodes_history">
-              <stringProp name="HTTPSampler.path">${PATH_PREFIX}/api/v1/episodes/history?page=${__Random(1,50)}&amp;size=20&amp;channel_id=${__Random(1,30)}</stringProp>
+              <stringProp name="HTTPSampler.path">${PATH_PREFIX}/api/v1/episodes/history?page=${__Random(1,50)}&amp;size=20&amp;channel_id=${__Random(${CH_MIN},${CH_MAX})}</stringProp>
               <stringProp name="HTTPSampler.method">GET</stringProp>
               <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
             </HTTPSamplerProxy>
             <hashTree/>
             <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="05_节目详情_GET_episodes_id">
-              <stringProp name="HTTPSampler.path">${PATH_PREFIX}/api/v1/episodes/${__Random(1,1000)}</stringProp>
+              <stringProp name="HTTPSampler.path">${PATH_PREFIX}/api/v1/episodes/${__Random(${EP_MIN},${EP_MAX})}</stringProp>
               <stringProp name="HTTPSampler.method">GET</stringProp>
               <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
             </HTTPSamplerProxy>
             <hashTree/>
             <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="06_节目稿件_GET_episodes_script">
-              <stringProp name="HTTPSampler.path">${PATH_PREFIX}/api/v1/episodes/${__Random(1,1000)}/script</stringProp>
+              <stringProp name="HTTPSampler.path">${PATH_PREFIX}/api/v1/episodes/${__Random(${EP_MIN},${EP_MAX})}/script</stringProp>
               <stringProp name="HTTPSampler.method">GET</stringProp>
               <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
             </HTTPSamplerProxy>
@@ -208,7 +232,7 @@
                 <collectionProp name="Arguments.arguments">
                   <elementProp name="" elementType="HTTPArgument">
                     <boolProp name="HTTPArgument.always_encode">false</boolProp>
-                    <stringProp name="Argument.value">{&quot;episode_id&quot;: ${__Random(1,1000)}, &quot;position&quot;: ${__Random(0,600)}, &quot;duration&quot;: 600, &quot;completed&quot;: false}</stringProp>
+                    <stringProp name="Argument.value">{&quot;episode_id&quot;: ${__Random(${EP_MIN},${EP_MAX})}, &quot;position&quot;: ${__Random(0,600)}, &quot;duration&quot;: 600, &quot;completed&quot;: false}</stringProp>
                     <stringProp name="Argument.meta_data">application/json</stringProp>
                   </elementProp>
                 </collectionProp>
@@ -224,7 +248,7 @@
                 <collectionProp name="Arguments.arguments">
                   <elementProp name="" elementType="HTTPArgument">
                     <boolProp name="HTTPArgument.always_encode">false</boolProp>
-                    <stringProp name="Argument.value">{&quot;episode_id&quot;: ${__Random(1,1000)}, &quot;content&quot;: &quot;性能测试评论内容用于压测写入路径&quot;}</stringProp>
+                    <stringProp name="Argument.value">{&quot;episode_id&quot;: ${__Random(${EP_MIN},${EP_MAX})}, &quot;content&quot;: &quot;性能测试评论内容用于压测写入路径&quot;}</stringProp>
                     <stringProp name="Argument.meta_data">application/json</stringProp>
                   </elementProp>
                 </collectionProp>
@@ -240,7 +264,7 @@
                 <collectionProp name="Arguments.arguments">
                   <elementProp name="" elementType="HTTPArgument">
                     <boolProp name="HTTPArgument.always_encode">false</boolProp>
-                    <stringProp name="Argument.value">{&quot;episode_id&quot;: ${__Random(1,1000)}}</stringProp>
+                    <stringProp name="Argument.value">{&quot;episode_id&quot;: ${__Random(${EP_MIN},${EP_MAX})}}</stringProp>
                     <stringProp name="Argument.meta_data">application/json</stringProp>
                   </elementProp>
                 </collectionProp>
@@ -251,19 +275,19 @@
             </HTTPSamplerProxy>
             <hashTree/>
             <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="W4_取消收藏_DELETE_favorites">
-              <stringProp name="HTTPSampler.path">${PATH_PREFIX}/api/v1/favorites/${__Random(1,1000)}</stringProp>
+              <stringProp name="HTTPSampler.path">${PATH_PREFIX}/api/v1/favorites/${__Random(${EP_MIN},${EP_MAX})}</stringProp>
               <stringProp name="HTTPSampler.method">DELETE</stringProp>
               <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
             </HTTPSamplerProxy>
             <hashTree/>
             <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="W5_订阅频道_POST_subscriptions">
-              <stringProp name="HTTPSampler.path">${PATH_PREFIX}/api/v1/subscriptions/channels/${__Random(1,30)}</stringProp>
+              <stringProp name="HTTPSampler.path">${PATH_PREFIX}/api/v1/subscriptions/channels/${__Random(${CH_MIN},${CH_MAX})}</stringProp>
               <stringProp name="HTTPSampler.method">POST</stringProp>
               <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
             </HTTPSamplerProxy>
             <hashTree/>
             <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="W6_取消订阅_DELETE_subscriptions">
-              <stringProp name="HTTPSampler.path">${PATH_PREFIX}/api/v1/subscriptions/channels/${__Random(1,30)}</stringProp>
+              <stringProp name="HTTPSampler.path">${PATH_PREFIX}/api/v1/subscriptions/channels/${__Random(${CH_MIN},${CH_MAX})}</stringProp>
               <stringProp name="HTTPSampler.method">DELETE</stringProp>
               <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
             </HTTPSamplerProxy>
@@ -368,7 +392,7 @@
             </HTTPSamplerProxy>
             <hashTree/>
             <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="A5_稿件管理_GET_admin_scripts_id">
-              <stringProp name="HTTPSampler.path">${PATH_PREFIX}/admin/api/v1/scripts/${__Random(1,84)}</stringProp>
+              <stringProp name="HTTPSampler.path">${PATH_PREFIX}/admin/api/v1/scripts/${__Random(${SCRIPT_MIN},${SCRIPT_MAX})}</stringProp>
               <stringProp name="HTTPSampler.method">GET</stringProp>
               <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
             </HTTPSamplerProxy>

@@ -11,7 +11,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
-BACKEND_DIR = Path(__file__).resolve().parent.parent / "backend"
+# 脚本位于 <repo>/scripts/jmeter_test/，仓库根需上溯两级（同 seed_perf_data/setup.py 的路径 bug）
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent / "backend"
 DB_PATH = BACKEND_DIR / "data" / "news.db"
 USER_INFO = Path(__file__).resolve().parent / "test_user_info.json"
 TOKEN_FILE = Path(__file__).resolve().parent / "test_token.txt"

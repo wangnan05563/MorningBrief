@@ -142,6 +142,12 @@ cd apps/miniprogram && node --test "tests/*.test.js"
 
 # 性能压测（JMeter 5.6.3）
 scripts/jmeter_test/
+
+# 压测回归门禁：一条命令串起 清理→建用户/token→seed→固定档位压测→analyze→cleanup
+# 退出码 0=达标 / 1=有档位破线（回归）/ 2=前置条件或工具链失败
+cd scripts/jmeter_test && python perf_gate.py --tier quick      # ~4 分钟 3 档
+python perf_gate.py --tier standard                             # 默认档（含管理端，需 GATE_ADMIN_TOKEN）
+python perf_gate.py --tier full --update-baseline               # 全档位并重写延迟基线 gate_baseline.json
 ```
 
 ## 目录结构
