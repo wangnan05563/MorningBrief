@@ -1,0 +1,13 @@
+{
+  "A": {
+    "stale_in_ttl": 20,
+    "fresh_in_ttl": 0,
+    "visible_after_ttl": true,
+    "conclusion": "旧值窗口≈TTL（60s），跨进程无失效通知"
+  },
+  "B": {
+    "stale_in_ttl": 0,
+    "fresh_in_ttl": 40,
+    "conclusion": "未观察到旧值（LB 恰好同 worker）"
+  }
+}
