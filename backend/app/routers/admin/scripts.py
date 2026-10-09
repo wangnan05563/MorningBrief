@@ -1,7 +1,7 @@
 """B 端稿件查询与编辑路由。
 
 供运营后台工作流产物查看使用：按 script_id 查稿件详情，或按 workflow_id 查稿件。
-一个工作流只产出一份稿件，workflow_id 查询返回单条（非列表）。
+rewrite 重跑会追加新 script 行（旧行保留作历史），workflow_id 查询固定返回 id 最新的一条。
 支持稿件级手动编辑：编辑/增删 segment，重算 full_text/total_words/estimated_duration。
 """
 import json
@@ -42,6 +42,7 @@ def _script_to_dict(s: Script) -> dict:
         "referenced_materials": s.referenced_materials or [],
         "categories": s.categories or [],
         "status": s.status,
+        "quality_report": s.quality_report,
         "created_at": s.created_at.isoformat() if s.created_at else None,
     }
 
@@ -52,12 +53,15 @@ async def get_script_by_workflow(
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(get_current_admin),
 ):
-    """按 workflow_id 查询稿件（一个工作流只有一份稿件）。
+    """按 workflow_id 查询稿件。
 
     用 GET + query 参数而非路径参数，避免与 /{script_id} 路由冲突。
+    rewrite 重跑会插入新 script 行且旧行保留（追加式历史），必须取 id 最大的一条，
+    否则 LIMIT 1 无 ORDER BY 时按 rowid 升序返回最旧稿件，导致新稿与审核报告不可见。
     """
     result = await db.execute(
-        select(Script).where(Script.workflow_id == workflow_id).limit(1)
+        select(Script).where(Script.workflow_id == workflow_id)
+        .order_by(Script.id.desc()).limit(1)
     )
     s = result.scalar_one_or_none()
     if s is None:

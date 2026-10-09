@@ -71,6 +71,14 @@ async def test_retry_tts_deletes_failed_step_and_preserves_prior_success(
         db_session, "wf-original", WorkflowStepName.rewrite,
         WorkflowStepStatus.success, {"script_id": 42},
     )
+    # T01712 起 rewrite 与 tts 之间插入 quality_check，从 tts 重跑时它属于
+    # 保留步骤，须有成功记录
+    await _add_step(
+        db_session, "wf-original", WorkflowStepName.quality_check,
+        WorkflowStepStatus.success,
+        {"quality_check": {"passed": True, "issue_count": 0, "alert_count": 0,
+                            "skipped": False, "skipped_reason": None}},
+    )
     await _add_step(
         db_session, "wf-original", WorkflowStepName.tts,
         WorkflowStepStatus.failed,
@@ -91,13 +99,15 @@ async def test_retry_tts_deletes_failed_step_and_preserves_prior_success(
     assert wf.status == "queued"
     assert wf.error is None
     assert wf.finished_at is None
-    # 保留 crawl/rewrite 成功步骤，删除 failed 的 tts 步骤
+    # 保留 crawl/rewrite/quality_check 成功步骤，删除 failed 的 tts 步骤
     steps = (await db_session.execute(
         select(WorkflowStep).where(WorkflowStep.workflow_id == "wf-original")
         .order_by(WorkflowStep.id)
     )).scalars().all()
-    assert [step.step_name for step in steps] == ["crawl", "rewrite"]
-    assert [step.status for step in steps] == ["success", "success"]
+    assert [step.step_name for step in steps] == [
+        "crawl", "rewrite", "quality_check",
+    ]
+    assert [step.status for step in steps] == ["success", "success", "success"]
     assert steps[1].result == {"script_id": 42}
 
 
@@ -113,6 +123,13 @@ async def test_retry_tts_rejects_missing_rewrite_output(db_session, monkeypatch)
     await _add_step(
         db_session, "wf-original", WorkflowStepName.rewrite,
         WorkflowStepStatus.success,
+    )
+    # 补齐 quality_check 成功记录，让校验走到 rewrite 缺 result 的分支
+    await _add_step(
+        db_session, "wf-original", WorkflowStepName.quality_check,
+        WorkflowStepStatus.success,
+        {"quality_check": {"passed": True, "issue_count": 0, "alert_count": 0,
+                            "skipped": False, "skipped_reason": None}},
     )
 
     with pytest.raises(ParamError, match="rewrite"):

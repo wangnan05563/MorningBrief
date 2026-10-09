@@ -808,6 +808,88 @@ async def _migrate_adplacement_enabled_column() -> None:  # NOSONAR
         conn.close()
 
 
+async def _migrate_script_quality_report_column() -> None:
+    """script 表追加 quality_report 列（T01712 P1，幂等）。
+
+    LLM 语义级质量审核报告（{passed, issue_count, issues:[...]}）落库于此，
+    admin-web 从稿件接口读取展示。JSON 列无需长度约束，SQLite 宽松类型。
+    """
+    import sqlite3
+    from app.paths import resolve_db_path
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(script)")
+        existing = {row[1] for row in cur.fetchall()}
+        if "quality_report" not in existing:
+            cur.execute("ALTER TABLE script ADD COLUMN quality_report JSON")
+            conn.commit()
+            logger.info("[startup] script 表迁移完成，新增 quality_report 列")
+    except Exception as e:
+        logger.warning("[startup] script 表迁移失败: {}", e)
+    finally:
+        conn.close()
+
+
+async def _migrate_workflow_step_quality_check() -> None:
+    """workflow_step 表 CHECK 约束扩展：step_name 增加 quality_check（T01712 P1，幂等）。
+
+    SQLite 无法 ALTER CHECK 约束（约束是表定义的一部分），沿用
+    _migrate_material_source_type_constraint 的表重建法：
+    rename → 建新表（新约束）→ 拷数据 → 删旧表 → 改名 → 重建显式索引。
+    workflow_step 无被引用的子表，重建无级联风险；跳过条件用「建表 SQL
+    已含 quality_check」判断，对 create_all 新建的库天然幂等。
+    """
+    import sqlite3
+    from app.paths import resolve_db_path
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='workflow_step'")
+        row = cur.fetchone()
+        sql = (row[0] or "") if row else ""
+        if not sql or "quality_check" in sql:
+            return  # 表不存在（首次启动由 create_all 建）或已含新步骤名，幂等退出
+
+        new_sql = sql.replace(
+            "step_name IN ('crawl', 'rewrite', 'tts', 'stitch', 'review', 'publish')",
+            "step_name IN ('crawl', 'rewrite', 'quality_check', 'tts', 'stitch', 'review', 'publish')",
+        )
+        if new_sql == sql:
+            # 历史库约束文本与预期模板不一致（手工改过/更老版本）：不盲目重建，
+            # 告警留给人工处理，避免拷数据把错误结构固化
+            logger.warning("[startup] workflow_step CHECK 约束文本非预期，跳过迁移（请人工核查）")
+            return
+
+        # 捕获显式索引（跳过自动索引 sql IS NULL），重建后恢复
+        cur.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type='index' "
+            "AND tbl_name='workflow_step' AND sql IS NOT NULL"
+        )
+        indexes = cur.fetchall()
+        cur.execute("PRAGMA table_info(workflow_step)")
+        cols_str = ",".join(r[1] for r in cur.fetchall())
+
+        cur.execute("ALTER TABLE workflow_step RENAME TO workflow_step_old")
+        cur.execute(new_sql.replace("CREATE TABLE workflow_step", "CREATE TABLE workflow_step_new"))
+        cur.execute(f"INSERT INTO workflow_step_new ({cols_str}) SELECT {cols_str} FROM workflow_step_old")
+        cur.execute("DROP TABLE workflow_step_old")
+        cur.execute("ALTER TABLE workflow_step_new RENAME TO workflow_step")
+        for _name, idx_sql in indexes:
+            cur.execute(idx_sql)
+        conn.commit()
+        logger.info("[startup] workflow_step 表迁移完成，step_name 约束已含 quality_check")
+    except Exception as e:
+        conn.rollback()
+        logger.warning("[startup] workflow_step 表迁移失败: {}", e)
+    finally:
+        conn.close()
+
+
 async def _seed_default_channels() -> None:  # NOSONAR
     """首次启动自动 seed 默认频道（幂等）。
 
@@ -1029,6 +1111,18 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
             await _migrate_adplacement_enabled_column()
         except Exception as e:
             logger.warning("[startup] ad_placement enabled 列迁移失败: {}", e)
+
+        # T01712 P1：script.quality_report 列迁移（LLM 质量审核报告落库）
+        try:
+            await _migrate_script_quality_report_column()
+        except Exception as e:
+            logger.warning("[startup] script quality_report 列迁移失败: {}", e)
+
+        # T01712 P1：workflow_step 表 CHECK 约束扩展（新增 quality_check 步骤名）
+        try:
+            await _migrate_workflow_step_quality_check()
+        except Exception as e:
+            logger.warning("[startup] workflow_step quality_check 约束迁移失败: {}", e)
 
         # 自动 seed 默认频道（幂等，确保工作流监控页频道选项非空）
         try:

@@ -49,10 +49,11 @@ const props = defineProps({
   },
 })
 
-// 5 阶段固定顺序与中文标签：与详情页 STEP_LABEL_MAP 保持一致
+// 6 阶段固定顺序与中文标签：与详情页 STEP_LABEL_MAP 保持一致
 const STEP_LABELS = {
   crawl: '爬虫采集',
   rewrite: 'LLM改写',
+  quality_check: '质量审核',
   tts: '语音合成',
   stitch: '音频拼接',
   review: '创建审核',

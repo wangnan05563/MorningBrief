@@ -39,6 +39,12 @@ class Script(Base):
     status: Mapped[Optional[str]] = mapped_column(
         String(16), default=ScriptStatus.draft.value
     )
+    # LLM 语义级质量审核报告（T01712 P1）：{checked_at, passed, issue_count,
+    # alert_count, issues:[{seq,issue_type,severity,evidence,suggestion}]}。
+    # 审核与改写解耦落库：rewrite 步骤产物不被审核环节改写，审核失败也不回填
+    quality_report: Mapped[Optional[dict]] = mapped_column(
+        JSON, comment="LLM 质量审核报告 JSON（T01712 P1 只告警不回退）"
+    )
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, server_default=func.now())
 
     # 反向关系：被节目引用

@@ -1,4 +1,4 @@
-﻿"""应用配置管理（V1.2：SQLite + TTLCache 替代 MySQL + Redis）。
+"""应用配置管理（V1.2：SQLite + TTLCache 替代 MySQL + Redis）。
 
 使用 pydantic-settings 从环境变量加载配置，统一入口避免散落的 os.getenv 调用。
 按职责分组，便于维护时定位配置项。
@@ -219,6 +219,16 @@ class Settings(BaseSettings):
     # 「一本书一条完整音频」需要 15-20 段（20-30 分钟），可经 ai_config 键
     # llm_max_script_segments 运行时调整（上限同时受素材数与目标时长约束）
     LLM_MAX_SCRIPT_SEGMENTS: int = 10
+
+    # ---- LLM 语义级质量审核（T01712 P1：只告警不回退，tts 照常） ----
+    # 关闭后步骤直接跳过（返回 skipped），适合 LLM 预算紧张时省调用
+    QUALITY_CHECK_ENABLED: bool = True
+    # 单条素材原文注入 prompt 的截断长度：锚点只需支撑事实核对（人名/书名/年份），
+    # 全文注入会撑爆上下文且稀释审核注意力
+    QUALITY_CHECK_ANCHOR_MAX_CHARS: int = 400
+    # >= 该级别的 issue 触发 workflow.quality_check.issues 实时告警事件；
+    # 全量 issue 无论级别都落库 script.quality_report（P1 不做按级别回退）
+    QUALITY_CHECK_ALERT_SEVERITY: str = "medium"
 
     # ---- 阿里云 TTS API ----
     ALIYUN_TTS_API_KEY: str = ""

@@ -26,6 +26,7 @@ class WorkflowStatus(str, Enum):
 class WorkflowStepName(str, Enum):
     crawl = "crawl"
     rewrite = "rewrite"
+    quality_check = "quality_check"
     tts = "tts"
     stitch = "stitch"
     review = "review"
@@ -80,7 +81,7 @@ class WorkflowStep(Base):
     __tablename__ = "workflow_step"
     __table_args__ = (
         Index("idx_workflow_step", "workflow_id", "step_name"),
-        CheckConstraint("step_name IN ('crawl', 'rewrite', 'tts', 'stitch', 'review', 'publish')", name="ck_workflow_step_step_name"),
+        CheckConstraint("step_name IN ('crawl', 'rewrite', 'quality_check', 'tts', 'stitch', 'review', 'publish')", name="ck_workflow_step_step_name"),
         CheckConstraint("status IN ('pending', 'running', 'success', 'failed', 'retrying')", name="ck_workflow_step_status"),
         {"comment": "工作流步骤表"},
     )

@@ -149,6 +149,43 @@
                     <template #default="{ row }">{{ row.content?.length || 0 }}</template>
                   </el-table-column>
                 </el-table>
+
+                <!-- LLM 语义级质量审核报告（T01712 P1 只告警不回退，供人工审核参考）
+                     服务端仅在审核实际执行时才落库报告，无报告（老稿/未启用）不渲染区块 -->
+                <template v-if="qualityReport">
+                  <div class="qc-header">
+                    <span class="qc-title">质量审核报告</span>
+                    <el-tag size="small" :type="qualityReport.passed ? 'success' : 'warning'">
+                      {{ qualityReport.passed ? '通过' : `发现 ${qualityReport.issue_count} 个问题` }}
+                    </el-tag>
+                    <span class="qc-time">{{ formatTime(qualityReport.checked_at) }}</span>
+                    <el-tag v-if="qualityReport.alert_count" size="small" type="danger">
+                      高优告警 {{ qualityReport.alert_count }}
+                    </el-tag>
+                  </div>
+                  <el-table
+                    v-if="qualityReport.issues?.length"
+                    :data="qualityReport.issues"
+                    size="small" stripe
+                  >
+                    <el-table-column prop="seq" label="段" width="50" />
+                    <el-table-column label="类型" width="110">
+                      <template #default="{ row }">{{ issueTypeLabel(row.issue_type) }}</template>
+                    </el-table-column>
+                    <el-table-column label="级别" width="80">
+                      <template #default="{ row }">
+                        <el-tag size="small" :type="severityTagType(row.severity)">{{ severityLabel(row.severity) }}</el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column prop="evidence" label="问题片段" min-width="200" show-overflow-tooltip />
+                    <el-table-column prop="suggestion" label="修改建议" min-width="200" show-overflow-tooltip />
+                  </el-table>
+                  <el-empty
+                    v-else
+                    description="未发现语义级问题"
+                    :image-size="48"
+                  />
+                </template>
               </template>
               <el-empty v-else-if="!script.loading" description="该工作流暂无稿件" />
             </div>
@@ -415,10 +452,11 @@ const retrying = ref(false)
 const detail = ref({})
 const retryStep = ref('')
 
-const STEP_ORDER = ['crawl', 'rewrite', 'tts', 'stitch', 'review']
+const STEP_ORDER = ['crawl', 'rewrite', 'quality_check', 'tts', 'stitch', 'review']
 const STEP_LABEL_MAP = {
   crawl: '爬虫采集',
   rewrite: 'LLM改写',
+  quality_check: '质量审核',
   tts: '语音合成',
   stitch: '音频拼接',
   review: '创建审核',
@@ -459,6 +497,26 @@ const activeStep = computed(() => {
   const idx = orderedSteps.value.findIndex((s) => s.status !== 'success')
   return idx === -1 ? orderedSteps.value.length : idx
 })
+
+// ===== 质量审核报告（T01712 P1：只告警不回退，供人工审核参考） =====
+// 服务端仅在实际执行审核后才落库报告，无报告（老稿/功能关闭）不渲染
+const qualityReport = computed(() => script.value.data?.quality_report || null)
+
+const ISSUE_TYPE_LABELS = {
+  fact_anchor: '事实锚点',
+  semantic_drift: '语义漂移',
+  perspective: '视角混乱',
+  structure: '结构问题',
+  hook: '钩子问题',
+  readability: '可读性',
+}
+const SEVERITY_LABELS = { high: '高', medium: '中', low: '低' }
+const SEVERITY_TAG_TYPES = { high: 'danger', medium: 'warning', low: 'info' }
+
+function issueTypeLabel(t) { return ISSUE_TYPE_LABELS[t] || t }
+function severityLabel(s) { return SEVERITY_LABELS[s] || s }
+function severityTagType(s) { return SEVERITY_TAG_TYPES[s] || 'info' }
+
 
 function formatDuration(row) {
   if (!row?.started_at || !row?.finished_at) return '-'
@@ -975,6 +1033,24 @@ onUnmounted(() => {
 
   .panel-content {
     padding: 12px 0;
+  }
+
+  // 质量审核报告（T01712 P1）：标题行 + issue 明细表
+  .qc-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 14px 0 8px;
+
+    .qc-title {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .qc-time {
+      font-size: 12px;
+      color: $color-text-secondary;
+    }
   }
 
   .panel-toolbar {
