@@ -145,8 +145,15 @@ async def list_audio(  # NOSONAR
             logger.warning("读取 workflow_step tts 结果失败 workflow_id=%s: %s", workflow_id, e)
 
         # 2b) script.segments 兜底（兼容旧数据 / 本地模式）
+        # T01716：rewrite 重跑是追加式历史（同 workflow 多条 script 行，旧行保留），
+        # 必须 ORDER BY id DESC 取最新一条——与 scripts.py get_script_by_workflow /
+        # auto_review_service.py 同口径。无 ORDER BY 的 scalar_one_or_none() 在多行时
+        # 抛 MultipleResultsFound（本分支不在上方 try 内，直接 500）。
         if not tts_files:
-            scr_result = await db.execute(select(Script).where(Script.workflow_id == workflow_id))
+            scr_result = await db.execute(
+                select(Script).where(Script.workflow_id == workflow_id)
+                .order_by(Script.id.desc()).limit(1)
+            )
             script = scr_result.scalar_one_or_none()
             if script and script.segments:
                 for seg in script.segments:

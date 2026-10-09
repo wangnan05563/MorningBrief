@@ -116,3 +116,41 @@ async def test_list_audio_remote_fallback_no_null_path(
     assert data["episode_file"]["remote"] is True
     assert data["episode_file"]["path"] == "云端(COS)"
     assert data["episode_file"]["path"] is not None
+
+
+async def test_list_audio_script_fallback_takes_latest_row(
+    client, db_session, admin_token, patch_cos_settings
+):
+    """T01716 回归：同 workflow 多条 script 行（rewrite 重跑追加式历史）时，
+    script 兜底查询必须取 id 最大（最新）一条，且不得抛 MultipleResultsFound。
+
+    触发条件：本地 tts 目录为空 + workflow_step 无 tts 结果 → 走 2b script 兜底；
+    旧行为 scalar_one_or_none() 在 ≥2 行时抛异常（该分支无 try 包裹 → 接口 500）。
+    """
+    from app.models import Script
+
+    _old = Script(
+        workflow_id="wf-multi-script",
+        episode_date=date(2026, 10, 9),
+        full_text="旧稿",
+        segments=[{"seq": 1, "audio_url": "https://morbucket.example.com/tts/old/1.mp3"}],
+    )
+    _new = Script(
+        workflow_id="wf-multi-script",
+        episode_date=date(2026, 10, 9),
+        full_text="新稿（rewrite 重跑后）",
+        segments=[{"seq": 1, "audio_url": "https://morbucket.example.com/tts/new/1.mp3"}],
+    )
+    db_session.add_all([_old, _new])
+    await db_session.commit()
+
+    resp = client.get(
+        "/admin/api/v1/workflows/wf-multi-script/audio",
+        headers=_admin_headers(admin_token),
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+
+    # 兜底来源必须是最新稿的分段 audio_url（旧稿 url 不得出现）
+    urls = [t["url"] for t in data["tts_dir"]]
+    assert urls == ["https://morbucket.example.com/tts/new/1.mp3"]
