@@ -108,7 +108,7 @@ def _wikisource(src: dict) -> list[dict]:
                 text = p["extract"].strip()
                 break
         if not text:
-            logger.warning("[fulltext] 维基文库页面无正文，跳过: %s", page)
+            logger.warning("[fulltext] 维基文库页面无正文，跳过: {}", page)
             continue
         url = f"https://zh.wikisource.org/wiki/{requests.utils.quote(page.replace(' ', '_'))}"
         entries.extend(_entries_from_text(src["name"], page, url, text, src.get("category_hint")))
@@ -154,7 +154,7 @@ def _truncate_gutenberg_entries(entries: list[dict], max_chapters: int, book_id,
     """按 max_chapters 截断；截断后重排 url 去重键（避免截断尾巴上的重复键）。"""
     if len(entries) <= max_chapters:
         return entries
-    logger.warning("[fulltext] Gutendex《%s》切出 %d 条，截断为 %d 条",
+    logger.warning("[fulltext] Gutendex《{}》切出 {} 条，截断为 {} 条",
                    book_title, len(entries), max_chapters)
     entries = entries[:max_chapters]
     for i, e in enumerate(entries, 1):
@@ -193,5 +193,5 @@ async def crawl_fulltext_source(src: dict) -> list[dict]:
     if fn is None:
         raise ValueError(f"书源 {src.get('name')} 的 provider 未知: {provider or '(空)'}")
     entries = await asyncio.to_thread(fn, src)
-    logger.info("[fulltext] 源 %s（%s）产出 %d 条章节素材", src.get("name"), provider, len(entries))
+    logger.info("[fulltext] 源 {}（{}）产出 {} 条章节素材", src.get("name"), provider, len(entries))
     return entries

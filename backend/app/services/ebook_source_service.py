@@ -126,12 +126,12 @@ def search(keyword: str, category: str | None = None, limit: int = 20, force: bo
             text = _fetch(f"md/{c}.md", force=force)
         except Exception as e:  # 单分类失败隔离，不阻断整体
             failed.append(c)
-            logger.warning("[ebook_source] 分类 %s 拉取失败: %s", c, e)
+            logger.warning("[ebook_source] 分类 {} 拉取失败: {}", c, e)
             continue
         scanned.append(c)
         if _match_books_in_category(text, kw, c, hits, limit):
             return _search_result(keyword, scanned, failed, hits)
 
-    logger.info("[ebook_source] 检索「%s」命中 %d 条（扫描 %d 分类，失败 %d）",
+    logger.info("[ebook_source] 检索「{}」命中 {} 条（扫描 {} 分类，失败 {}）",
                 keyword, len(hits), len(scanned), len(failed))
     return _search_result(keyword, scanned, failed, hits)

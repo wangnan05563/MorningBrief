@@ -93,7 +93,7 @@ class RateLimitMiddleware:
             if len(bucket) >= limit:
                 # 超限：直接通过 ASGI send 返回 429 响应
                 # 不经过 Starlette JSONResponse，避免 BaseHTTPMiddleware 封装
-                logger.warning("限流触发 ip=%s path=%s limit=%d", client_ip, path, limit)
+                logger.warning("限流触发 ip={} path={} limit={}", client_ip, path, limit)
                 body = json.dumps({
                     "code": 429,
                     "message": "请求过于频繁，请稍后再试",

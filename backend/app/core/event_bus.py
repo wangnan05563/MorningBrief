@@ -67,7 +67,7 @@ class EventBus:
         同一事件类型可有多个 handler，按订阅顺序执行。
         """
         self._subscribers[event_type].append(handler)
-        logger.trace("订阅 %s → %s", event_type, handler.__name__)
+        logger.trace("订阅 {} → {}", event_type, handler.__name__)
 
     def unsubscribe(self, event_type: str, handler: EventHandler) -> None:
         """取消订阅。"""
@@ -120,7 +120,7 @@ class EventBus:
 
         handlers = self._subscribers.get(event.type, [])
         if not handlers:
-            logger.debug("事件 %s 无订阅者", event.type)
+            logger.debug("事件 {} 无订阅者", event.type)
             return
 
         # 并发执行所有 handler，单个失败不影响其他
@@ -136,7 +136,7 @@ class EventBus:
             await handler(event)
         except Exception:
             logger.exception(
-                "Handler %s 处理 %s 失败",
+                "Handler {} 处理 {} 失败",
                 handler.__name__, event.type,
             )
 

@@ -68,7 +68,7 @@ def _load_one(category: str) -> list[dict]:
         text = src_svc._fetch(f"md/{category}.md")
         books = src_svc.parse_category(text)
     except Exception as e:
-        logger.warning("[ebook_index] 分类 %s 抓取失败，跳过: %s", category, e)
+        logger.warning("[ebook_index] 分类 {} 抓取失败，跳过: {}", category, e)
         return []
     for b in books:
         b["category"] = category
@@ -90,7 +90,7 @@ def build_index(max_workers: int = _BUILD_WORKERS, fetch_categories: list[str] |
     categories = fetch_categories or src_svc.list_categories()
     total = len(categories)
     _set_state(total=total)
-    logger.info("[ebook_index] 开始构建索引：%d 个分类（并发 %d）", total, max_workers)
+    logger.info("[ebook_index] 开始构建索引：{} 个分类（并发 {}）", total, max_workers)
 
     books: list[dict] = []
     failed = 0
@@ -123,7 +123,7 @@ def build_index(max_workers: int = _BUILD_WORKERS, fetch_categories: list[str] |
     _set_state(running=False, done=done,
                finished_at=index["built_at"], error=None)
     logger.info(
-        "[ebook_index] 索引构建完成：%d 本书 / %d 分类（失败 %d），耗时 %.1fs → %s",
+        "[ebook_index] 索引构建完成：{} 本书 / {} 分类（失败 {}），耗时 {}s → {}",
         len(books), index["category_count"], failed, index["elapsed_sec"], path,
     )
     return index
@@ -137,7 +137,7 @@ def load_index() -> dict | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception as e:
-        logger.warning("[ebook_index] 索引文件损坏，需重建: %s", e)
+        logger.warning("[ebook_index] 索引文件损坏，需重建: {}", e)
         return None
 
 
@@ -203,7 +203,7 @@ def maybe_auto_rebuild() -> dict:
         reason = "stale"
     else:
         return {"triggered": False, "reason": "fresh"}
-    logger.info("[ebook_index] 索引%s（age=%s 天），自动触发后台重建", reason, st.get("age_days"))
+    logger.info("[ebook_index] 索引{}（age={} 天），自动触发后台重建", reason, st.get("age_days"))
     start_build_async()
     return {"triggered": True, "reason": reason}
 
@@ -269,7 +269,7 @@ def start_build_async() -> dict:
         try:
             build_index()
         except Exception as e:  # 构建失败要把状态复位，否则永远显示"构建中"
-            logger.error("[ebook_index] 索引构建失败: %s", e)
+            logger.error("[ebook_index] 索引构建失败: {}", e)
             _set_state(running=False, error=str(e)[:300],
                        finished_at=datetime.now(timezone.utc).isoformat())
 

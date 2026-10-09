@@ -68,9 +68,9 @@ def set_secret(key: str, value: str) -> None:
         return
     try:
         keyring.set_password(SERVICE_NAME, key, value)
-        logger.debug("已加密存储 %s", key)
+        logger.debug("已加密存储 {}", key)
     except Exception:
-        logger.exception("keyring 存储失败 %s，回退到 base64 文件", key)
+        logger.exception("keyring 存储失败 {}，回退到 base64 文件", key)
         _fallback_set(key, value)
 
 
@@ -84,7 +84,7 @@ def get_secret(key: str) -> str | None:
     try:
         return keyring.get_password(SERVICE_NAME, key)
     except Exception:
-        logger.exception("keyring 读取失败 %s", key)
+        logger.exception("keyring 读取失败 {}", key)
         return _fallback_get(key)
 
 
@@ -168,7 +168,7 @@ def _try_migrate_key(key: str, value: str) -> tuple[bool, str, bool]:
         if value == "__MIGRATED_TO_KEYRING__":
             return True, f"{key}=__MIGRATED_TO_KEYRING__", False
         set_secret(secret_key, value)
-        logger.info("已迁移 %s → keyring", key)
+        logger.info("已迁移 {} → keyring", key)
         return True, f"{key}=__MIGRATED_TO_KEYRING__", True
     return False, "", False
 

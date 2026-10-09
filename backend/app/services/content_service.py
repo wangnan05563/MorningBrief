@@ -372,7 +372,7 @@ class ContentService:
             # 降级到 LIKE 保证可用性。收窄为 SQLAlchemyError：避免吞掉编程错误
             # （如结果字段类型异常），真实 bug 应向上抛而非被静默成空结果。
             # exc_info=True 保留可观测性，便于发现 FTS5 持续不可用或查询缺陷。
-            logger.warning("search_episodes FTS5 查询异常，降级 LIKE: %s", e, exc_info=True)
+            logger.warning("search_episodes FTS5 查询异常，降级 LIKE: {}", e, exc_info=True)
 
         # B4 优化：仅在关键词含 CJK 时空结果降级 LIKE（减少纯 ASCII 合法无命中的多余查询）。
         # FTS5 unicode61 不索引 CJK → 中文/日文/韩文关键词 MATCH 恒为空，必须 LIKE 补查；
@@ -636,7 +636,7 @@ class ContentService:
                     self.db, episode.channel_id, book_title, review.episode_date,
                 )
         except Exception as e:  # noqa: BLE001 — 进度推进失败不应影响节目发布
-            logger.warning("讲书稿进度推进失败（不影响发布）: %s", e)
+            logger.warning("讲书稿进度推进失败（不影响发布）: {}", e)
 
     @staticmethod
     def _resolve_audio_base_url() -> str:

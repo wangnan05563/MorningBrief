@@ -433,7 +433,7 @@ def _persist_records(records: list[_UsageRecord]) -> None:
             encoding="utf-8",
         )
     except OSError as e:
-        logger.warning("AI 预算记录批量持久化失败（已回填缓冲区待重试）: %s", e)
+        logger.warning("AI 预算记录批量持久化失败（已回填缓冲区待重试）: {}", e)
         # 写盘失败：把批次回填到 pending，下次 record_call 或 atexit 时重试
         with _lock:
             _pending_records[:0] = records

@@ -115,7 +115,7 @@ def _clean_audiobook_segment_content(seg: dict, channel_type: str | None) -> dic
         return seg
     content, hits = _clean_audiobook_bridge_phrases(seg.get("content", ""))
     if hits:
-        logger.info("书外套话衔接短语清洗 %d 处 material_id=%s", hits, seg.get("material_id"))
+        logger.info("书外套话衔接短语清洗 {} 处 material_id={}", hits, seg.get("material_id"))
         return {**seg, "content": content}
     return seg
 
@@ -148,7 +148,7 @@ async def _build_audiobook_quality_rule(channel_id: int | None, book_title: str)
                     ).limit(1)
                 )).scalar_one_or_none()
         except Exception as e:
-            logger.warning("读取书籍作者失败，降级为仅书名约束: %s", e)
+            logger.warning("读取书籍作者失败，降级为仅书名约束: {}", e)
     if author:
         return rule + title_line + f" 6. 本书作者是“{author}”，凡需提及作者只能写“{author}”，严禁写成他人。"
     return rule + title_line + " 6. 若书籍素材未提供作者信息，则全文不要擅自编造作者姓名。"
@@ -181,7 +181,7 @@ def _safe_load_prompt_file(filename: str, default: str | None = None) -> str | N
     try:
         return _load_prompt_file(filename)
     except FileNotFoundError:
-        logger.warning("提示词文件缺失，降级默认: %s", filename)
+        logger.warning("提示词文件缺失，降级默认: {}", filename)
         return default
 
 
@@ -321,8 +321,7 @@ def _emit_word_count_retry_stats(workflow_id: str, stats_before: dict) -> None:
 
     # INFO 日志：本轮 + 累计快照，便于运维通过日志观察趋势
     logger.info(
-        "LLM 字数重试指标 workflow_id=%s 本轮 calls=%d triggered=%d improved=%d not_improved=%d"
-        " trigger_rate=%.2f%% improve_rate=%.2f%% | 累计 calls=%d triggered=%d improved=%d",
+        'LLM 字数重试指标 workflow_id={} 本轮 calls={} triggered={} improved={} not_improved={} trigger_rate={}% improve_rate={}% | 累计 calls={} triggered={} improved={}',
         workflow_id, round_calls, round_triggered, round_improved, round_not_improved,
         round_trigger_rate, round_improve_rate,
         after["total_calls"], after["triggered"], after["improved"],
@@ -332,8 +331,7 @@ def _emit_word_count_retry_stats(workflow_id: str, stats_before: dict) -> None:
     # 触发率告警：> 50% 说明 LLM 字数缩水严重
     if round_calls > 0 and round_trigger_rate > _TRIGGER_RATE_ALERT_THRESHOLD:
         logger.warning(
-            "LLM 字数重试触发率 %.2f%% 超过 %.0f%% 阈值 workflow_id=%s"
-            "（本轮 %d/%d 调用触发），LLM 字数缩水严重，建议优化 prompt 或更换模型",
+            'LLM 字数重试触发率 {}% 超过 {}% 阈值 workflow_id={}（本轮 {}/{} 调用触发），LLM 字数缩水严重，建议优化 prompt 或更换模型',
             round_trigger_rate, _TRIGGER_RATE_ALERT_THRESHOLD,
             workflow_id, round_triggered, round_calls,
         )
@@ -341,8 +339,7 @@ def _emit_word_count_retry_stats(workflow_id: str, stats_before: dict) -> None:
     # 改善率告警：< 30% 说明硬约束后缀效果不佳（仅在本轮有触发时检查）
     if round_triggered > 0 and round_improve_rate < _IMPROVE_RATE_ALERT_THRESHOLD:
         logger.warning(
-            "LLM 字数重试改善率 %.2f%% 低于 %.0f%% 阈值 workflow_id=%s"
-            "（本轮 %d/%d 触发后改善），硬约束后缀效果不佳，建议更换重试策略",
+            'LLM 字数重试改善率 {}% 低于 {}% 阈值 workflow_id={}（本轮 {}/{} 触发后改善），硬约束后缀效果不佳，建议更换重试策略',
             round_improve_rate, _IMPROVE_RATE_ALERT_THRESHOLD,
             workflow_id, round_improved, round_triggered,
         )
@@ -767,12 +764,12 @@ async def _call_llm(prompt: str) -> str:
             # 频率超限：等待 60s 滑动窗口滑过后重试，而非立即抛错
             # tenacity 短退避（1-2s）无法突破 60s 频率窗口，立即抛错会导致
             # 10 条并发全部失败（tenacity 3 次重试均在窗口内，全部被拦截）
-            logger.warning("频率超限，等待滑动窗口滑过后重试: %s", reason)
+            logger.warning("频率超限，等待滑动窗口滑过后重试: {}", reason)
             if not await _wait_for_rate_limit_slot(timeout=65):
                 raise LLMAuthError(f"AI 预算超限(不可重试): {reason}")
         else:
             # token/费用超限：不可恢复，立即失败
-            logger.warning("AI 预算超限(不可重试)，跳过 LLM 调用: %s", reason)
+            logger.warning("AI 预算超限(不可重试)，跳过 LLM 调用: {}", reason)
             raise LLMAuthError(f"AI 预算超限(不可重试): {reason}")
 
     try:
@@ -823,7 +820,7 @@ def _safe_format(template: str, **kwargs) -> str:
     try:
         return template.format(**kwargs)
     except (KeyError, IndexError, ValueError) as e:
-        logger.warning("改写模板占位符异常（%s），改用空值填充兜底", e)
+        logger.warning("改写模板占位符异常（{}），改用空值填充兜底", e)
         return template.format_map(_EmptyDict(**kwargs))
 
 
@@ -1011,7 +1008,7 @@ async def _rewrite_one(  # NOSONAR S3776: 双层过滤改写主逻辑，职责�
         cleaned = _strip_markdown_residue(original)
         if cleaned != original:
             logger.warning(
-                "LLM 输出 content 含 Markdown 残留，已清洗 material_id=%s",
+                "LLM 输出 content 含 Markdown 残留，已清洗 material_id={}",
                 material["id"],
             )
             data["content"] = cleaned
@@ -1023,7 +1020,7 @@ async def _rewrite_one(  # NOSONAR S3776: 双层过滤改写主逻辑，职责�
             # 二次仍命中，替换兜底（不完美但保证可用）
             data["content"] = sensitive_filter.replace(content)
             logger.warning(
-                "素材 %s 二次生成仍含敏感词，已替换",
+                "素材 {} 二次生成仍含敏感词，已替换",
                 material["id"],
             )
         else:
@@ -1047,7 +1044,7 @@ async def _rewrite_one(  # NOSONAR S3776: 双层过滤改写主逻辑，职责�
         # 触发硬约束重试计数：用于运维评估 LLM 字数缩水严重程度
         _WORD_COUNT_RETRY_STATS["triggered"] += 1
         logger.warning(
-            "字数严重不足 material_id=%s actual=%d target=%d（%.0f%%），追加硬约束重试",
+            "字数严重不足 material_id={} actual={} target={}（{}%），追加硬约束重试",
             material["id"], actual_words, words_per_segment,
             actual_words / words_per_segment * 100,
         )
@@ -1067,7 +1064,7 @@ async def _rewrite_one(  # NOSONAR S3776: 双层过滤改写主逻辑，职责�
             if retry_words > actual_words:
                 _WORD_COUNT_RETRY_STATS["improved"] += 1
                 logger.info(
-                    "字数硬约束重试改善 material_id=%s %d → %d 字",
+                    "字数硬约束重试改善 material_id={} {} → {} 字",
                     material["id"], actual_words, retry_words,
                 )
                 data = retry_data
@@ -1076,7 +1073,7 @@ async def _rewrite_one(  # NOSONAR S3776: 双层过滤改写主逻辑，职责�
                 # 两者都意味着硬约束 prompt 未生效，统一计入 not_improved
                 _WORD_COUNT_RETRY_STATS["not_improved"] += 1
                 logger.warning(
-                    "字数硬约束重试未改善 material_id=%s 重试=%d 首次=%d，保留首次结果",
+                    "字数硬约束重试未改善 material_id={} 重试={} 首次={}，保留首次结果",
                     material["id"], retry_words, actual_words,
                 )
         except Exception as e:
@@ -1084,7 +1081,7 @@ async def _rewrite_one(  # NOSONAR S3776: 双层过滤改写主逻辑，职责�
             # 计入 not_improved：硬约束重试未带来改善（与未改善语义一致）
             _WORD_COUNT_RETRY_STATS["not_improved"] += 1
             logger.warning(
-                "字数硬约束重试异常 material_id=%s: %s，使用首次结果",
+                "字数硬约束重试异常 material_id={}: {}，使用首次结果",
                 material["id"], e,
             )
 
@@ -1162,7 +1159,7 @@ def _parse_llm_response(raw: str, material_id: int) -> dict:  # NOSONAR S3776: L
         cleaned = _strip_markdown_residue(original)
         if cleaned != original:
             logger.warning(
-                "LLM 输出 content 含 Markdown 残留，已清洗 material_id=%s",
+                "LLM 输出 content 含 Markdown 残留，已清洗 material_id={}",
                 material_id,
             )
             parsed["content"] = cleaned
@@ -1500,7 +1497,7 @@ async def _fetch_materials(
             result = await session.execute(stmt)
             rows = list(result.scalars().all())
         logger.info(
-            "outline/manual 选题：取频道全部 pending 素材 %d 条（channel_id=%s, strategy=%s）",
+            "outline/manual 选题：取频道全部 pending 素材 {} 条（channel_id={}, strategy={}）",
             len(rows), channel_id, strategy,
         )
         return [_material_to_public_dict(r) for r in rows]
@@ -1552,8 +1549,7 @@ async def _fetch_materials(
             if fb_rows:
                 rows.extend(fb_rows)
                 logger.warning(
-                    "当日 %s pending 素材不足（%d < %d），回溯最近 %d 天补 %d 条，合计 %d 条"
-                    "（channel_id=%s）",
+                    '当日 {} pending 素材不足（{} < {}），回溯最近 {} 天补 {} 条，合计 {} 条（channel_id={}）',
                     date_str, len(existing_ids), SELECT_MIN_N,
                     fallback_days, len(fb_rows), len(rows),
                     channel_id,
@@ -1603,7 +1599,7 @@ async def _calc_dynamic_fallback_days(channel_id: int | None) -> int:
     except Exception as e:
         # 查询失败时回退到默认值，避免影响主流程
         logger.warning(
-            "动态 FALLBACK_DAYS 查询失败 channel_id=%s: %s，使用默认值 %d",
+            "动态 FALLBACK_DAYS 查询失败 channel_id={}: {}，使用默认值 {}",
             channel_id, e, FALLBACK_DAYS,
         )
         return FALLBACK_DAYS
@@ -1677,16 +1673,16 @@ def _filter_audiobook_sources(materials: list[dict], min_segments: int = 3) -> l
     # 锚：章节数最多的 source；并列时不可靠，直接降级保留
     top = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
     if len(top) > 1 and top[0][1] == top[1][1]:
-        logger.warning("[书源隔离] 书名锚不唯一 %s，降级不过滤", dict(top[:2]))
+        logger.warning("[书源隔离] 书名锚不唯一 {}，降级不过滤", dict(top[:2]))
         return materials
     anchor, _anchor_n = top[0]
     filtered = [m for m in materials if m.get("source") == anchor]
     if len(filtered) < min_segments:
-        logger.warning("[书源隔离] 锚定《%s》后仅剩 %d/<%d 段，降级保留原始素材池",
+        logger.warning("[书源隔离] 锚定《{}》后仅剩 {}/<{} 段，降级保留原始素材池",
                        anchor, len(filtered), min_segments)
         return materials
     dropped = [m.get("title") or m.get("source") for m in materials if m.get("source") != anchor]
-    logger.warning("[书源隔离] 剔除 %d 条书外素材（锚定书名《%s》，剩余 %d 条）: %s",
+    logger.warning("[书源隔离] 剔除 {} 条书外素材（锚定书名《{}》，剩余 {} 条）: {}",
                    len(materials) - len(filtered), anchor, len(filtered), dropped[:10])
     return filtered
 
@@ -1738,7 +1734,7 @@ async def _filter_materials_by_relevance(
         # 提取 JSON 数组（LLM 可能包裹在 markdown 中）
         match = re.search(r'\[[\d\s,]*\]', resp)
         if not match:
-            logger.warning("AI 相关性筛选返回格式异常，降级全部保留: %s", resp[:200])
+            logger.warning("AI 相关性筛选返回格式异常，降级全部保留: {}", resp[:200])
             return materials
 
         raw_indices = json.loads(match.group())
@@ -1755,7 +1751,7 @@ async def _filter_materials_by_relevance(
                 m["title"][:40] for i, m in enumerate(materials) if i not in seen
             ]
             logger.info(
-                "AI 相关性筛选：%d → %d 条（筛除 %d 条不相关：%s）",
+                "AI 相关性筛选：{} → {} 条（筛除 {} 条不相关：{}）",
                 len(materials), len(relevant), len(materials) - len(relevant),
                 skipped_titles,
             )
@@ -1763,7 +1759,7 @@ async def _filter_materials_by_relevance(
         # 筛选后不足 SELECT_MIN_N 时保留全部（降级策略，不阻断工作流）
         if len(relevant) < SELECT_MIN_N:
             logger.warning(
-                "AI 筛选后仅 %d 条 <%d，降级保留全部素材",
+                "AI 筛选后仅 {} 条 <{}，降级保留全部素材",
                 len(relevant), SELECT_MIN_N,
             )
             return materials
@@ -1771,7 +1767,7 @@ async def _filter_materials_by_relevance(
         return relevant
     except Exception as e:
         # AI 筛选失败时降级为全部保留，不阻断工作流
-        logger.warning("AI 相关性筛选异常，降级全部保留: %s", e)
+        logger.warning("AI 相关性筛选异常，降级全部保留: {}", e)
         return materials
 
 
@@ -1792,7 +1788,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
     Raises:
         LLMError: 有效改写段数 < 3，无法生成节目
     """
-    logger.info("改写启动 workflow_id=%s date=%s channel_id=%s", workflow_id, date_str, channel_id)
+    logger.info("改写启动 workflow_id={} date={} channel_id={}", workflow_id, date_str, channel_id)
 
     # 记录本轮改写开始前的字数重试计数器快照
     # 用于在 rewrite 结束时计算本轮触发率/改善率，单次工作流粒度的即时反馈
@@ -1827,7 +1823,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
             if not channel_prompts.get("outro_prompt"):
                 channel_prompts["outro_prompt"] = _safe_load_prompt_file(_COURSE_OUTRO_FILE)
         logger.info(
-            "频道提示词 channel_id=%s type=%s intro=%s outro=%s template=%s strategy=%s",
+            "频道提示词 channel_id={} type={} intro={} outro={} template={} strategy={}",
             channel_id, channel_type,
             bool(channel_prompts["intro_prompt"]),
             bool(channel_prompts["outro_prompt"]),
@@ -1851,7 +1847,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
     target_segments, words_per_segment = _calc_segment_words(target_sec, rate_multiplier)
     segment_duration = int(words_per_segment / (WORDS_PER_MINUTE * rate_multiplier) * 60)
     logger.info(
-        "时长/字数联动 target_sec=%d rate=%.2f 目标段数=%d 每段字数=%d 每段时长=%ds",
+        "时长/字数联动 target_sec={} rate={} 目标段数={} 每段字数={} 每段时长={}s",
         target_sec, rate_multiplier, target_segments, words_per_segment, segment_duration,
     )
 
@@ -1865,7 +1861,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         strategy=selection_strategy,
     )
     logger.info(
-        "当日 pending 素材 %d 条（channel_id=%s lookback=%s）",
+        "当日 pending 素材 {} 条（channel_id={} lookback={}）",
         len(materials), channel_id, material_lookback_days,
     )
 
@@ -1914,7 +1910,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         strategy=selection_strategy,
         manual_ids=channel_prompts.get("manual_material_ids") if channel_prompts else None,
     )
-    logger.info("选题 %d 条（策略=%s）", len(selected), selection_strategy)
+    logger.info("选题 {} 条（策略={}）", len(selected), selection_strategy)
 
     # 2.3 AI 相关性筛选：批量判断选题素材是否与频道主题相关
     # 作为关键词过滤的第二道防线，处理关键词无法覆盖的语义相关性
@@ -1926,7 +1922,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
             channel_prompts["name"],
             channel_prompts.get("description") or "",
         )
-        logger.info("AI 相关性筛选后剩余 %d 条", len(selected))
+        logger.info("AI 相关性筛选后剩余 {} 条", len(selected))
 
     # 2.4 动态段数下限：素材稀缺时降级允许生成短节目，而非直接失败（R23 自动调整 / R110 自动降级）
     # 场景：低频频道（如主机游戏/教育资讯）周末或 RSS 源稀疏日，回溯期内 pending 素材
@@ -1939,8 +1935,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         effective_min_segments = MIN_VALID_SEGMENTS
     if effective_min_segments < MIN_VALID_SEGMENTS:
         logger.warning(
-            "选题数 %d < MIN_VALID_SEGMENTS=%d，动态下调有效段数下限为 %d "
-            "(channel_id=%s, workflow_id=%s)，将生成较短节目",
+            '选题数 {} < MIN_VALID_SEGMENTS={}，动态下调有效段数下限为 {} (channel_id={}, workflow_id={})，将生成较短节目',
             len(selected), MIN_VALID_SEGMENTS, effective_min_segments,
             channel_id, workflow_id,
         )
@@ -1957,7 +1952,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                 .values(workflow_id=workflow_id, status=MaterialStatus.selected.value)
             )
             await session.commit()
-        logger.info("已关联 %d 条素材到 %s", len(selected_ids), workflow_id)
+        logger.info("已关联 {} 条素材到 {}", len(selected_ids), workflow_id)
 
     # 3. 并发改写（Semaphore 限流 + return_exceptions 隔离单条失败）
     # 限制并发数避免瞬间打爆 LLM API 频率限制（AI_BUDGET_RATE_LIMIT_PER_MIN=20）
@@ -1998,12 +1993,12 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
             _plan = plan_book_parts(selected, words_per_segment)
             book_ctx_map = _plan.get("assignments") or {}
             logger.info(
-                "[讲书编排] 《%s》估算 %d 字 → %d 篇，覆盖 %d 条章节素材",
+                "[讲书编排] 《{}》估算 {} 字 → {} 篇，覆盖 {} 条章节素材",
                 _plan.get("book_title") or "(未识别)", _plan.get("total_words_estimate"),
                 _plan.get("parts"), len(book_ctx_map),
             )
         except Exception as e:  # noqa: BLE001 — 编排仅影响提示词丰富度，不应阻断改写
-            logger.warning("讲书分集编排失败（降级为空占位符）: %s", e)
+            logger.warning("讲书分集编排失败（降级为空占位符）: {}", e)
 
     async def _rewrite_one_with_limit(m: dict, style_seq: int) -> dict:
         # 账号级错误（余额不足/鉴权失败）中止：后续素材不再发起调用，
@@ -2052,7 +2047,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                 r = _clean_audiobook_segment_content(r, channel_type)
                 segments.append({**r, "seq": len(segments) + 1})
             except Exception as e:
-                logger.warning("素材 %s 二次改写失败: %s", m["id"], e)
+                logger.warning("素材 {} 二次改写失败: {}", m["id"], e)
                 failure_details.append({
                     "material_id": m["id"],
                     "title": m["title"][:50],
@@ -2062,7 +2057,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                 })
         elif isinstance(r, Exception):
             # 其他异常（LLM 调用失败、JSON 解析失败等）跳过该条
-            logger.warning("素材 %s 改写失败: %s", m["id"], r)
+            logger.warning("素材 {} 改写失败: {}", m["id"], r)
             if is_account_level_error(r):
                 # 账号级错误（余额不足/鉴权失败）：记录指引并中止剩余素材改写
                 hint = account_error_hint(r)
@@ -2095,13 +2090,13 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                     )
                     await session.commit()
                 logger.warning(
-                    "段数不足，已回滚 %d 条素材状态为 pending workflow_id=%s",
+                    "段数不足，已回滚 {} 条素材状态为 pending workflow_id={}",
                     len(selected_ids), workflow_id,
                 )
             except Exception as rollback_err:
                 # 回滚失败不影响原错误抛出，仅记录日志便于运维定位
                 logger.error(
-                    "回滚素材状态失败 workflow_id=%s: %s",
+                    "回滚素材状态失败 workflow_id={}: {}",
                     workflow_id, rollback_err,
                 )
         raise _build_aggregated_error(
@@ -2113,7 +2108,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
     # 按 target_segments 截取，避免段数超出目标时长对应的需求
     if len(segments) > target_segments:
         logger.info(
-            "成功段数 %d 超过目标段数 %d，截取前 %d 段",
+            "成功段数 {} 超过目标段数 {}，截取前 {} 段",
             len(segments), target_segments, target_segments,
         )
         segments = segments[:target_segments]
@@ -2144,7 +2139,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         assembled["full_text"] = "\n\n".join(s["content"] for s in segs)
         assembled["segments_json"] = segs
         logger.warning(
-            "字数超限截断 target=%ds max=%ds 保留段数=%d estimated=%ds",
+            "字数超限截断 target={}s max={}s 保留段数={} estimated={}s",
             target_sec, max_allowed_duration, len(segs), assembled["estimated_duration"],
         )
 
@@ -2161,7 +2156,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
 
         if unused_materials:
             logger.warning(
-                "字数不足补足 target=%ds min=%ds estimated=%ds 待补素材 %d 条",
+                "字数不足补足 target={}s min={}s estimated={}s 待补素材 {} 条",
                 target_sec, min_allowed_duration, assembled["estimated_duration"],
                 len(unused_materials),
             )
@@ -2184,23 +2179,23 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                     channel_type=channel_type,
                 )
                     logger.info(
-                        "补充段 %d 完成 material_id=%s 重新估算 %ds",
+                        "补充段 {} 完成 material_id={} 重新估算 {}s",
                         i + 1, unused_materials[i]["id"], assembled["estimated_duration"],
                     )
                 except Exception as e:
                     logger.warning(
-                        "补充段 %d 改写失败 material_id=%s: %s",
+                        "补充段 {} 改写失败 material_id={}: {}",
                         i + 1, unused_materials[i]["id"], e,
                     )
                     break
 
             logger.info(
-                "字数补足结束 最终 estimated=%ds segments=%d",
+                "字数补足结束 最终 estimated={}s segments={}",
                 assembled["estimated_duration"], len(segments),
             )
         else:
             logger.warning(
-                "字数不足 %ds < %ds 但 selected 无未使用素材，跳过补足",
+                "字数不足 {}s < {}s 但 selected 无未使用素材，跳过补足",
                 assembled["estimated_duration"], min_allowed_duration,
             )
 
@@ -2215,15 +2210,13 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         achievement_rate = actual_total_words / target_total_words
         if achievement_rate < 0.80:
             logger.warning(
-                "LLM 字数达成率 %.0f%% 低于 80%% 阈值"
-                "（实际 %d 字 / 目标 %d 字，segments=%d estimated=%ds）"
-                "prompt ±10%% 约束未被遵守，建议检查 LLM 模型或 prompt",
+                'LLM 字数达成率 {}% 低于 80% 阈值（实际 {} 字 / 目标 {} 字，segments={} estimated={}s）prompt ±10% 约束未被遵守，建议检查 LLM 模型或 prompt',
                 achievement_rate * 100, actual_total_words, target_total_words,
                 len(segments), assembled["estimated_duration"],
             )
         else:
             logger.info(
-                "LLM 字数达成率 %.0f%%（%d / %d 字）",
+                "LLM 字数达成率 {}%（{} / {} 字）",
                 achievement_rate * 100, actual_total_words, target_total_words,
             )
 
@@ -2251,7 +2244,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
             script_id = script.id
 
     logger.info(
-        "改写完成 workflow_id=%s script_id=%s segments=%d total_words=%d",
+        "改写完成 workflow_id={} script_id={} segments={} total_words={}",
         workflow_id,
         script_id,
         len(segments),

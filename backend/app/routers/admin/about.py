@@ -161,11 +161,11 @@ async def _fetch_latest_release() -> dict[str, Any] | None:
         if resp.status_code == 403:
             remaining = resp.headers.get("X-RateLimit-Remaining", "?")
             logger.warning(
-                "[about] GitHub API 限速或拒绝访问 (403)，剩余配额=%s", remaining
+                "[about] GitHub API 限速或拒绝访问 (403)，剩余配额={}", remaining
             )
             return None
         if resp.status_code != 200:
-            logger.warning("[about] GitHub API 非预期状态码: %s", resp.status_code)
+            logger.warning("[about] GitHub API 非预期状态码: {}", resp.status_code)
             return None
         data = resp.json()
         # 必要字段缺失视为无效响应
@@ -184,11 +184,11 @@ async def _fetch_latest_release() -> dict[str, Any] | None:
         logger.warning("[about] GitHub API 请求超时，降级返回本地版本")
         return None
     except httpx.HTTPError as e:
-        logger.warning("[about] GitHub API 网络错误: %s", e)
+        logger.warning("[about] GitHub API 网络错误: {}", e)
         return None
     except Exception as e:
         # JSON 解析、未知异常等：吞掉防止 check-update 端点 500
-        logger.warning("[about] GitHub API 未知异常: %s", e)
+        logger.warning("[about] GitHub API 未知异常: {}", e)
         return None
 
 

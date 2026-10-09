@@ -118,7 +118,7 @@ async def _run_upgrade(tag: str, asset: dict) -> None:
             message="安装器已启动，请按向导完成更新（如需管理员权限请确认）",
         )
     except Exception as e:
-        logger.error("[upgrade] 升级流程失败, tag=%s: %s", tag, e, exc_info=True)
+        logger.error("[upgrade] 升级流程失败, tag={}: {}", tag, e, exc_info=True)
         _UPGRADE.update(state="error", message="升级失败，请重试", error=str(e))
 
 

@@ -56,11 +56,11 @@ class NotifierHub:
                 instance = registry.create(name, settings=settings)
                 if instance.is_configured():
                     self._channels.append(instance)
-                    logger.info("通知渠道已加载: %s", name)
+                    logger.info("通知渠道已加载: {}", name)
                 else:
-                    logger.debug("通知渠道未配置凭证，跳过: %s", name)
+                    logger.debug("通知渠道未配置凭证，跳过: {}", name)
             except Exception:
-                logger.exception("加载通知渠道 %s 失败", name)
+                logger.exception("加载通知渠道 {} 失败", name)
 
         if not self._channels:
             logger.warning("无已配置的通知渠道，告警将无法发送")
@@ -91,13 +91,13 @@ class NotifierHub:
         }
 
         if not self._channels:
-            logger.warning("无可用通知渠道，事件未发送: %s", event.title)
+            logger.warning("无可用通知渠道，事件未发送: {}", event.title)
             return result
 
         # 免打扰判定：critical 穿透，其他在 quiet_hours 内静默
         if event.severity != "critical" and self._is_quiet_hours():
             logger.info(
-                "免打扰时段，事件已静默: %s (severity=%s)",
+                "免打扰时段，事件已静默: {} (severity={})",
                 event.title, event.severity,
             )
             result["suppressed"] = len(self._channels)
@@ -110,7 +110,7 @@ class NotifierHub:
         for ch, res in zip(self._channels, results):
             if isinstance(res, Exception):
                 logger.error(
-                    "通知渠道 %s 发送异常: %s", ch.name, res,
+                    "通知渠道 {} 发送异常: {}", ch.name, res,
                     exc_info=res,
                 )
                 result["failed"] += 1
@@ -125,7 +125,7 @@ class NotifierHub:
                 result["results"].append(res)
 
         logger.info(
-            "通知发送完成: total=%d success=%d failed=%d",
+            "通知发送完成: total={} success={} failed={}",
             result["total"], result["success"], result["failed"],
         )
         return result

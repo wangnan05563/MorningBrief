@@ -267,7 +267,7 @@ def _extract_epub_spine_lines(zf, manifest: dict, spine_ids: list, opf_dir: str)
         try:
             doc_raw = zf.read(path)
         except KeyError:
-            logger.warning("[document_ingest] EPUB spine 条目缺失，跳过: %s", path)
+            logger.warning("[document_ingest] EPUB spine 条目缺失，跳过: {}", path)
             continue
         text, doc_title = _html_to_text(doc_raw)
         if not text:
@@ -322,7 +322,7 @@ def _parse_epub(raw: bytes, filename: str) -> list[Chapter]:
         raise DocumentIngestError(f"EPUB 未提取到任何正文内容: {filename}")
 
     chapters = _split_text_to_chapters("\n".join(lines), default_title="正文")
-    logger.info("[document_ingest] 解析 EPUB %s（spine %d 篇）→ %d 章节",
+    logger.info("[document_ingest] 解析 EPUB {}（spine {} 篇）→ {} 章节",
                 filename, len(spine_ids), len(chapters))
     return chapters
 
@@ -355,7 +355,7 @@ def _parse_docx(raw: bytes, filename: str) -> list[Chapter]:
         raise DocumentIngestError(f"DOCX 未提取到任何正文内容: {filename}")
 
     chapters = _split_text_to_chapters("\n".join(lines), default_title="正文")
-    logger.info("[document_ingest] 解析 DOCX %s → %d 章节", filename, len(chapters))
+    logger.info("[document_ingest] 解析 DOCX {} → {} 章节", filename, len(chapters))
     return chapters
 
 
@@ -403,7 +403,7 @@ def _parse_pdf(raw: bytes, filename: str) -> list[Chapter]:
         )
 
     chapters = _split_text_to_chapters(text, default_title=filename.rsplit(".", 1)[0] or "正文")
-    logger.info("[document_ingest] 解析 PDF %s（%d 页）→ %d 章节", filename, len(page_texts), len(chapters))
+    logger.info("[document_ingest] 解析 PDF {}（{} 页）→ {} 章节", filename, len(page_texts), len(chapters))
     return chapters
 
 
@@ -431,7 +431,7 @@ def parse_document(filename: str, raw: bytes) -> list[Chapter]:
 
     if ext in _MD_EXT or ext in _TEXT_EXT:
         chapters = _split_text_to_chapters(_decode(raw))
-        logger.info("[document_ingest] 解析 %s → %d 章节", filename, len(chapters))
+        logger.info("[document_ingest] 解析 {} → {} 章节", filename, len(chapters))
         return chapters
 
     if ext == ".epub":
@@ -446,7 +446,7 @@ def parse_document(filename: str, raw: bytes) -> list[Chapter]:
     if ext in _HTML_EXT:
         text, _ = _html_to_text(raw)
         chapters = _split_text_to_chapters(text)
-        logger.info("[document_ingest] 解析 HTML %s → %d 章节", filename, len(chapters))
+        logger.info("[document_ingest] 解析 HTML {} → {} 章节", filename, len(chapters))
         return chapters
 
     if ext in _UNSUPPORTED_EXT:
