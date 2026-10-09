@@ -1,0 +1,62 @@
+{
+ "channel": {
+  "name": "有声读物·豆瓣书评(自动生成)",
+  "channel_type": "audiobook",
+  "min_duration_sec": null,
+  "materials": 105
+ },
+ "workflow_id": "wf-20260727-0009",
+ "episode_id": 100,
+ "duration": 586,
+ "measured_sec": null,
+ "n_seg": 11,
+ "total_words": 3226,
+ "estimated": 586,
+ "seg_words": [
+  113,
+  431,
+  309,
+  275,
+  323,
+  347,
+  340,
+  319,
+  369,
+  335,
+  61
+ ],
+ "steps": [
+  [
+   "crawl",
+   "success"
+  ],
+  [
+   "rewrite",
+   "success"
+  ],
+  [
+   "tts",
+   "success"
+  ],
+  [
+   "stitch",
+   "success"
+  ],
+  [
+   "review",
+   "success"
+  ]
+ ],
+ "steps_failed": false,
+ "episode_status": "published",
+ "log_grep": {
+  "files": [
+   "D:\\code\\otherProjects\\20_News\\backend\\logs\\MorningBrief_2026-10-09.2026-10-09_02-35-18_362135.log",
+   "D:\\code\\otherProjects\\20_News\\backend\\logs\\MorningBrief_2026-10-09.2026-10-09_02-36-39_777552.log",
+   "D:\\code\\otherProjects\\20_News\\backend\\logs\\MorningBrief_2026-10-09.log"
+  ],
+  "fallback": [],
+  "overrange": [],
+  "linkage": []
+ }
+}
