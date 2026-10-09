@@ -17,7 +17,7 @@
     "require_min_episodes": 1000
   },
   "tiers": {
-    "quick": ["S0_baseline", "S1_read_50", "S2_write_50"],
+    "quick": ["S0_baseline", "S1_read_50", "S2_write_50", "S1_read_200_w2"],
     "standard": ["S0_baseline", "S1_read_50", "S1_read_200", "S2_write_50", "S3_admin_50"],
     "full": [
       "S0_baseline",
@@ -33,6 +33,9 @@
     "S1_read_50":    {"scenario": "read",     "threads": 50,   "ramp": 10, "duration": 60,   "max_p95_ms": 3000,  "min_tps": 50,  "baseline_p95_ms": 2223,  "baseline_tps": 71.1},
     "S1_read_100":   {"scenario": "read",     "threads": 100,  "ramp": 20, "duration": 120,  "max_p95_ms": 6000,  "min_tps": 50,  "baseline_p95_ms": null,   "baseline_tps": null},
     "S1_read_200":   {"scenario": "read",     "threads": 200,  "ramp": 30, "duration": 120,  "max_p95_ms": 14000, "min_tps": 50,  "baseline_p95_ms": 10833,  "baseline_tps": 69.9},
+    "S1_read_200_w2":{"scenario": "read",     "threads": 200,  "ramp": 30, "duration": 120,  "max_p95_ms": 14000, "min_tps": 50,  "baseline_p95_ms": null,   "baseline_tps": null,
+                      "workers": 2, "compare_only": true,
+                      "note": "workers=2 角色编排对照（1 sched + 2 api，T01692）。多进程结果不可与单进程基线/阈值混比，仅供路线 A 观察，不计入门禁判定"},
     "S1_read_500":   {"scenario": "read",     "threads": 500,  "ramp": 60, "duration": 120,  "max_p95_ms": 30000, "min_tps": 40,  "baseline_p95_ms": null,   "baseline_tps": null},
     "S2_write_50":   {"scenario": "write",    "threads": 50,   "ramp": 10, "duration": 60,   "max_p95_ms": 6000,  "min_tps": 15,  "baseline_p95_ms": 4337,   "baseline_tps": 18.5},
     "S2_write_100":  {"scenario": "write",    "threads": 100,  "ramp": 20, "duration": 120,  "max_p95_ms": 12000, "min_tps": 12,  "baseline_p95_ms": null,   "baseline_tps": null},

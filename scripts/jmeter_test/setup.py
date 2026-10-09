@@ -19,6 +19,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import sqlite3
 import sys
 import uuid
@@ -29,7 +30,9 @@ from pathlib import Path
 JWT_SECRET = "change-me-in-production"
 
 # 脚本位于 <repo>/scripts/jmeter_test/，仓库根需上溯两级（T01518 修同类路径 bug 时遗漏本文件）
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent / "backend"
+# T01692：PERF_BACKEND_DIR 指向隔离副本根（perf_gate --iso-root），缺省走真实 backend
+BACKEND_DIR = Path(os.environ["PERF_BACKEND_DIR"]) if os.environ.get("PERF_BACKEND_DIR") \
+    else Path(__file__).resolve().parent.parent.parent / "backend"
 DB_PATH = BACKEND_DIR / "data" / "news.db"
 ENV_PATH = BACKEND_DIR / ".env"
 TOKEN_OUTPUT = Path(__file__).resolve().parent / "test_token.txt"

@@ -15,6 +15,7 @@
 - 幂等：检测到已存在 jmeter_perf_ 前缀用户则跳过，避免重复灌入。
 """
 import json
+import os
 import random
 import sqlite3
 from datetime import date, datetime, timedelta
@@ -27,7 +28,9 @@ HERE = Path(__file__).resolve().parent
 # 脚本位于 <repo>/scripts/jmeter_test/，DB 在 <repo>/backend/data/news.db；
 # 兼容两种情况：jmeter_test/ 直接在 repo 根下也能定位。
 _repo = HERE.parent if (HERE.parent / "backend").exists() else HERE.parent.parent
-DB_PATH = _repo / "backend" / "data" / "news.db"
+# T01692：PERF_BACKEND_DIR 指向隔离副本根（perf_gate --iso-root），缺省走真实 backend
+DB_PATH = (Path(os.environ["PERF_BACKEND_DIR"]) / "data" / "news.db") \
+    if os.environ.get("PERF_BACKEND_DIR") else _repo / "backend" / "data" / "news.db"
 USER_INFO = HERE / "test_user_info.json"
 
 KEYWORDS = ["科技", "财经", "体育", "国际", "健康", "文化", "教育", "汽车", "房产", "游戏", "AI", "新能源"]

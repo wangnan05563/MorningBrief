@@ -18,6 +18,7 @@ feedback -> episode -> channel -> user），并用 PRAGMA foreign_keys=OFF 防�
 可选先 dry-run 看计数：
     python cleanup_seed.py --dry
 """
+import os
 import shutil
 import sqlite3
 import sys
@@ -26,9 +27,12 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 _REPO = HERE.parent if (HERE.parent / "backend").exists() else HERE.parent.parent
-DB = _REPO / "backend" / "data" / "news.db"
-BACKUP_DIR = _REPO / "backend" / "data" / "backup"
-LOGS_DIR = _REPO / "backend" / "logs"
+# T01692：PERF_BACKEND_DIR 指向隔离副本根（perf_gate --iso-root），缺省走真实 backend
+_BACKEND_ROOT = Path(os.environ["PERF_BACKEND_DIR"]) if os.environ.get("PERF_BACKEND_DIR") \
+    else _REPO / "backend"
+DB = _BACKEND_ROOT / "data" / "news.db"
+BACKUP_DIR = _BACKEND_ROOT / "data" / "backup"
+LOGS_DIR = _BACKEND_ROOT / "logs"
 
 PERF_USER_Q = "SELECT id FROM user WHERE openid LIKE 'jmeter_perf_%'"
 PERF_USER_STR_Q = "SELECT CAST(id AS TEXT) FROM user WHERE openid LIKE 'jmeter_perf_%'"
