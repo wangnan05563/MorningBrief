@@ -431,6 +431,13 @@ class Settings(BaseSettings):
     # 压测/批量导入等高频场景可在数小时内刷出数十个当日分片（年龄全在窗口内）
     LOG_DIR_MAX_MB: int = 200
 
+    # ---- 停摆告警护栏（T01696） ----
+    # 连续 N 天无 success 工作流即判定停摆并告警（2 天：容忍单日失败，第 2 天必报）
+    STALL_ALERT_DAYS: int = 2
+    # 每日停摆检查时刻（本地时间）；调度器启动时还会立即检查一次（幂等，当日去重兜底）
+    STALL_ALERT_CHECK_HOUR: int = 7
+    STALL_ALERT_CHECK_MINUTE: int = 30
+
     # ---- FFmpeg 依赖 ----
     # BtbN/FFmpeg-Builds 共享构建下载源（gpl-shared，含 ffmpeg.exe/ffprobe.exe + DLL）
     # 大陆访问 GitHub 较慢时可切换镜像源

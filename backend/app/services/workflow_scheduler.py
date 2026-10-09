@@ -496,6 +496,19 @@ class WorkflowScheduler:
             max_instances=1,
             replace_existing=True,
         )
+        # 每日停摆检查（T01696）：连续 N 天无 success / 24h 内 402/401 → 通知渠道告警
+        # 背景：2026-09 流水线停摆 34 天无人知晓，失败只写在 workflow.error 里
+        self.scheduler.add_job(
+            self._stall_alert_check,
+            trigger="cron",
+            hour=settings.STALL_ALERT_CHECK_HOUR,
+            minute=settings.STALL_ALERT_CHECK_MINUTE,
+            id="stall_alert",
+            misfire_grace_time=600,
+            coalesce=True,
+            max_instances=1,
+            replace_existing=True,
+        )
         # 加载队列配置（首次启动从 DB 读取，DB 无记录则用默认值）
         await self._load_queue_config()
         # 订阅频道启停事件：频道禁用时取消其 queued 工作流
@@ -510,7 +523,12 @@ class WorkflowScheduler:
         self._running_tasks.add(worker_task)
         worker_task.add_done_callback(self._running_tasks.discard)
         self.scheduler.start()
-        logger.info("WorkflowScheduler 已启动，注册 8 个定时任务 + 频道级 cron")
+        # 启动时立即停摆检查一次（幂等，当日去重兜底）——
+        # 防止桌面端几天不开机导致每日 cron 长期错过（教训：清理逻辑触发时机缺口）
+        startup_check = asyncio.create_task(self._stall_alert_check())
+        self._running_tasks.add(startup_check)
+        startup_check.add_done_callback(self._running_tasks.discard)
+        logger.info("WorkflowScheduler 已启动，注册 9 个定时任务 + 频道级 cron")
 
     async def stop(self) -> None:  # NOSONAR
         """应用关闭时关闭调度器，等待运行中任务完成。"""
@@ -1739,6 +1757,18 @@ class WorkflowScheduler:
                 )
         except Exception as e:
             logger.exception("RSS 源巡检失败: %s", e)
+
+    async def _stall_alert_check(self) -> None:
+        """停摆/余额告警检查（T01696）。
+
+        委托 stall_alert.check_and_alert：检测 + 当日去重 + NotifierHub 发送，
+        任何异常不中断调度器（告警系统自身故障不应影响主流程）。
+        """
+        try:
+            from app.services.stall_alert import check_and_alert
+            await check_and_alert()
+        except Exception as e:
+            logger.exception("停摆告警检查失败: %s", e)
 
     # ===== 通知 =====
 
