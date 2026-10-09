@@ -1,0 +1,693 @@
+{
+ "cpu_busy_note": "采样见 runbook，非空闲机绝对值不可引用",
+ "seq_client_ms": [
+  326.5745000098832,
+  289.79599999729544,
+  227.92460001073778,
+  218.9957999798935,
+  252.63379997340962,
+  259.52150000375696,
+  231.00780000095256,
+  44.47319998871535,
+  52.4046000209637,
+  193.44479998108,
+  271.4706000115257,
+  268.74600001610816,
+  42.170100001385435,
+  47.13449999690056
+ ],
+ "burst_client_ms": [
+  864.8019999964163,
+  966.915600001812,
+  926.5213000180665,
+  1017.8947999957018,
+  1053.9989000244532,
+  1088.7425999972038,
+  1177.0000999968033,
+  1136.948700004723,
+  368.70550000458024,
+  340.7465000054799,
+  335.5027999787126,
+  316.89270000788383,
+  319.8166999791283,
+  336.2141000106931,
+  320.0543999846559,
+  317.69850000273436,
+  396.80180000141263,
+  478.3934000006411,
+  568.580799998017,
+  680.0747999805026,
+  816.5879000152927,
+  911.2132000154816,
+  1000.4961999948137,
+  1073.490699985996
+ ],
+ "rows": [
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 66.5,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 13.0,
+    "profile_query": 20.2,
+    "episode_check": 11.6,
+    "lock_wait": 0.1,
+    "commit": 7.5,
+    "lock_hold": 14.0
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 3.56
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 256.1,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 69.8,
+    "episode_check": 34.5,
+    "lock_wait": 0.1,
+    "commit": 54.3,
+    "lock_hold": 97.2
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.49
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 204.0,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.2,
+    "blacklist": 0.0,
+    "profile_query": 62.2,
+    "episode_check": 32.2,
+    "lock_wait": 0.1,
+    "commit": 38.8,
+    "lock_hold": 70.4
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 3.56
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 200.4,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 69.0,
+    "episode_check": 32.0,
+    "lock_wait": 0.1,
+    "commit": 37.4,
+    "lock_hold": 61.6
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 3.41
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 226.8,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 72.1,
+    "episode_check": 39.9,
+    "lock_wait": 0.1,
+    "commit": 40.1,
+    "lock_hold": 74.3
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.79
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 227.8,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 64.7,
+    "episode_check": 37.5,
+    "lock_wait": 0.1,
+    "commit": 45.6,
+    "lock_hold": 79.7
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 3.01
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 202.3,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.2,
+    "blacklist": 0.0,
+    "profile_query": 62.1,
+    "episode_check": 37.1,
+    "lock_wait": 0.1,
+    "commit": 38.1,
+    "lock_hold": 64.8
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 4.05
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 37.8,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 9.9,
+    "episode_check": 6.3,
+    "lock_wait": 0.1,
+    "commit": 6.6,
+    "lock_hold": 14.7
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 3.1
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 44.7,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 10.8,
+    "episode_check": 9.3,
+    "lock_wait": 0.2,
+    "commit": 13.8,
+    "lock_hold": 10.4
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.58
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 166.3,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 25.4,
+    "episode_check": 33.5,
+    "lock_wait": 0.1,
+    "commit": 38.0,
+    "lock_hold": 69.3
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.55
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 245.0,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 86.8,
+    "episode_check": 40.8,
+    "lock_wait": 0.1,
+    "commit": 54.7,
+    "lock_hold": 62.5
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 2.93
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 237.6,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 80.0,
+    "episode_check": 32.5,
+    "lock_wait": 0.1,
+    "commit": 38.1,
+    "lock_hold": 86.7
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 3.04
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 36.0,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.4,
+    "blacklist": 0.0,
+    "profile_query": 12.2,
+    "episode_check": 4.3,
+    "lock_wait": 0.1,
+    "commit": 6.3,
+    "lock_hold": 12.6
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 3.53
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 35.6,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 9.2,
+    "episode_check": 4.4,
+    "lock_wait": 0.1,
+    "commit": 6.7,
+    "lock_hold": 15.2
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.42
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 850.5,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 469.0,
+    "episode_check": 244.0,
+    "lock_wait": 0.1,
+    "commit": 72.9,
+    "lock_hold": 64.3
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.49
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 914.3,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 476.1,
+    "episode_check": 238.6,
+    "lock_wait": 135.7,
+    "commit": 29.5,
+    "lock_hold": 34.3
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.86
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 951.8,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 479.5,
+    "episode_check": 237.3,
+    "lock_wait": 197.6,
+    "commit": 14.8,
+    "lock_hold": 22.5
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.69
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 990.9,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.2,
+    "blacklist": 0.0,
+    "profile_query": 478.0,
+    "episode_check": 237.3,
+    "lock_wait": 233.2,
+    "commit": 21.1,
+    "lock_hold": 21.1
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.69
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 1033.3,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 478.3,
+    "episode_check": 237.4,
+    "lock_wait": 276.2,
+    "commit": 21.1,
+    "lock_hold": 20.2
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 3.2
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 1073.4,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 479.3,
+    "episode_check": 237.7,
+    "lock_wait": 317.3,
+    "commit": 16.2,
+    "lock_hold": 22.7
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 1.7
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 1109.6,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.2,
+    "blacklist": 0.0,
+    "profile_query": 494.2,
+    "episode_check": 222.2,
+    "lock_wait": 338.9,
+    "commit": 19.4,
+    "lock_hold": 34.7
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.68
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 1143.6,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 496.0,
+    "episode_check": 221.7,
+    "lock_wait": 391.5,
+    "commit": 13.9,
+    "lock_hold": 20.4
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.64
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 354.7,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 47.2,
+    "episode_check": 14.8,
+    "lock_wait": 251.9,
+    "commit": 17.9,
+    "lock_hold": 22.6
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.8
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 329.6,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 23.0,
+    "episode_check": 14.5,
+    "lock_wait": 253.8,
+    "commit": 18.3,
+    "lock_hold": 19.8
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.93
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 325.5,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 24.2,
+    "episode_check": 23.6,
+    "lock_wait": 244.4,
+    "commit": 14.0,
+    "lock_hold": 19.2
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 1.15
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 307.3,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 19.0,
+    "episode_check": 17.2,
+    "lock_wait": 236.7,
+    "commit": 14.1,
+    "lock_hold": 20.1
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.61
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 309.1,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 22.7,
+    "episode_check": 13.1,
+    "lock_wait": 234.3,
+    "commit": 16.2,
+    "lock_hold": 22.6
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.65
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 323.3,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.2,
+    "blacklist": 0.0,
+    "profile_query": 23.2,
+    "episode_check": 26.7,
+    "lock_wait": 223.7,
+    "commit": 30.4,
+    "lock_hold": 19.2
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 1.09
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 308.1,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 21.3,
+    "episode_check": 10.1,
+    "lock_wait": 238.3,
+    "commit": 15.9,
+    "lock_hold": 22.4
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.67
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 306.8,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 20.5,
+    "episode_check": 10.8,
+    "lock_wait": 238.2,
+    "commit": 15.8,
+    "lock_hold": 21.4
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.75
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 329.9,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 18.5,
+    "episode_check": 15.7,
+    "lock_wait": 231.0,
+    "commit": 12.4,
+    "lock_hold": 52.2
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 0.59
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 435.8,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 21.2,
+    "episode_check": 10.4,
+    "lock_wait": 266.7,
+    "commit": 75.7,
+    "lock_hold": 61.5
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 4.07
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 530.0,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 21.7,
+    "episode_check": 12.1,
+    "lock_wait": 376.0,
+    "commit": 56.6,
+    "lock_hold": 63.4
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 7.46
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 628.7,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 22.2,
+    "episode_check": 20.9,
+    "lock_wait": 453.5,
+    "commit": 60.9,
+    "lock_hold": 71.0
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 2.68
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 757.0,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 34.8,
+    "episode_check": 11.4,
+    "lock_wait": 552.1,
+    "commit": 71.0,
+    "lock_hold": 87.5
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 9.05
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 873.8,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 17.3,
+    "episode_check": 19.6,
+    "lock_wait": 670.5,
+    "commit": 91.3,
+    "lock_hold": 75.0
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 4.61
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 959.8,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 20.1,
+    "episode_check": 13.1,
+    "lock_wait": 809.9,
+    "commit": 52.3,
+    "lock_hold": 64.2
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 7.69
+  },
+  {
+   "endpoint": "POST /api/v1/comments",
+   "total": 1047.4,
+   "segs": {
+    "token_extract": 0.0,
+    "jwt_decode": 0.1,
+    "blacklist": 0.0,
+    "profile_query": 28.7,
+    "episode_check": 76.8,
+    "lock_wait": 825.4,
+    "commit": 57.1,
+    "lock_hold": 59.4
+   },
+   "conn_new": 0,
+   "conn_pragma": 0.0,
+   "sink_prev": 5.95
+  }
+ ]
+}

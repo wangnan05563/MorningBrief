@@ -1,0 +1,192 @@
+diff --git a/backend/app/core/auth.py b/backend/app/core/auth.py
+--- a/backend/app/core/auth.py
++++ b/backend/app/core/auth.py
+@@ -88,7 +88,10 @@ async def get_optional_user(authorization: Optional[str] = Header(None)) -> Opti
+ 
+ async def get_current_user(authorization: Optional[str] = Header(None)) -> UserPayload:
+     """C 端鉴权依赖。"""
++    from app.core import _t01661_probe as _pb  # T01661 临时探针
++    _pb.begin()
+     token = _extract_token_strict(authorization)
++    _pb.mark("token_extract")
+     try:
+         payload = decode_token(token)
+     except jwt.ExpiredSignatureError:
+@@ -96,12 +99,14 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> UserP
+     except jwt.PyJWTError:
+         raise AuthError("无效的认证信息")
+ 
++    _pb.mark("jwt_decode")
+     if payload.get("type") != "user":
+         raise AuthError("认证类型错误")
+ 
+     jti = payload.get("jti", "")
+     if await is_in_blacklist(jti):
+         raise AuthError("登录已失效，请重新登录")
++    _pb.mark("blacklist")
+ 
+     return UserPayload(
+         user_id=int(payload["sub"]),
+diff --git a/backend/app/core/write_gate.py b/backend/app/core/write_gate.py
+--- a/backend/app/core/write_gate.py
++++ b/backend/app/core/write_gate.py
+@@ -26,7 +26,9 @@
+            db.add(obj); await db.commit()
+ """
+ import asyncio
+-from typing import Awaitable, Callable
++import time as _time
++from contextlib import asynccontextmanager
++from typing import AsyncIterator, Awaitable, Callable
+ 
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+@@ -69,6 +71,18 @@ async def serialized_write[T](
+                 await s.close()
+ 
+ 
++@asynccontextmanager
++async def write_lock_probed() -> AsyncIterator[None]:
++    """T01661 临时探针：拆出「等锁」与「持锁提交」两段耗时。"""
++    from app.core import _t01661_probe as _pb
++    s = _time.perf_counter()
++    async with _write_lock:
++        _pb.mark("lock_wait")
++        _pb.mark._lock_start = s
++        yield
++        _pb.mark("lock_hold")
++
++
+ def write_lock() -> asyncio.Lock:
+     """返回全局写锁，供需要在现有请求 session 上串行化提交的场景使用。
+ 
+diff --git a/backend/app/database.py b/backend/app/database.py
+--- a/backend/app/database.py
++++ b/backend/app/database.py
+@@ -79,6 +79,9 @@ def _set_sqlite_pragma(dbapi_conn, connection_record):
+     - synchronous=NORMAL：WAL 模式下安全，性能优于 FULL
+     - foreign_keys=ON：启用外键约束（SQLite 默认关闭）
+     """
++    import time as _t
++    from app.core._t01661_probe import conn_event as _conn_event
++    _s = _t.perf_counter()
+     cursor = dbapi_conn.cursor()
+     try:
+         cursor.execute(f"PRAGMA journal_mode={settings.SQLITE_JOURNAL_MODE}")
+@@ -87,6 +90,7 @@ def _set_sqlite_pragma(dbapi_conn, connection_record):
+         cursor.execute("PRAGMA foreign_keys=ON")
+     finally:
+         cursor.close()
++    _conn_event((_t.perf_counter() - _s) * 1000)
+ 
+ 
+ async def get_db() -> AsyncGenerator[AsyncSession, None]:
+diff --git a/backend/app/routers/api/comments.py b/backend/app/routers/api/comments.py
+--- a/backend/app/routers/api/comments.py
++++ b/backend/app/routers/api/comments.py
+@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
+ from app.core.auth import UserPayload, get_current_user, get_optional_user
+ from app.core.exceptions import BizError, NotFoundError
+ from app.core.response import success
+-from app.core.write_gate import write_lock
++from app.core.write_gate import write_lock, write_lock_probed  # T01661: probed 版仅用于分段计时
+ from app.database import get_db
+ from app.models import Comment, CommentLike, Episode, EpisodeStatus, User
+ from app.services.user_service import get_user_openid
+@@ -133,7 +133,9 @@ async def create_comment(
+     前端附带是双保险：解决"用户从 onLaunch 静默登录后直接进 detail 页发评论"，
+     此时 User 表还没被 silentEnrichProfile 写回，user_name/user_avatar 是空。
+     """
++    from app.core import _t01661_probe as _pb  # T01661 临时探针
+     openid, db_nickname, db_avatar = await _get_user_profile(db, user.user_id)
++    _pb.mark("profile_query")
+ 
+     # 校验节目存在
+     ep_result = await db.execute(
+@@ -143,7 +145,9 @@ async def create_comment(
+         )
+     )
+     if ep_result.scalar_one_or_none() is None:
++        _pb.flush("POST /api/v1/comments(404)")
+         raise NotFoundError("节目不存在或未发布")
++    _pb.mark("episode_check")
+ 
+     # 头像昵称优先级：前端附带 > User 表 > 默认
+     final_name = (req.user_name or "").strip() or db_nickname or "匿名听众"
+@@ -157,10 +161,12 @@ async def create_comment(
+         content=req.content,
+         like_count=0,
+     )
+-    async with write_lock():
++    async with write_lock_probed():
+         db.add(new_comment)
+         await db.commit()
++        _pb.mark("commit")
+         await db.refresh(new_comment)
++    _pb.flush("POST /api/v1/comments")
+     return success(data={
+         "id": new_comment.id,
+         "episode_id": new_comment.episode_id,
+diff --git a/backend/app/core/_t01661_probe.py b/backend/app/core/_t01661_probe.py
+new file mode 100644
+--- /dev/null
++++ b/backend/app/core/_t01661_probe.py
+@@ -0,0 +1,58 @@
++"""T01661 临时分段计时探针（禁止合入 main，测完随副本销毁）。
++
++口径：
++- begin() 在请求入口建上下文；mark(name) 记录时间点；flush(endpoint) 打印相邻标记差值。
++- conn_pragma_* 来自 database._set_sqlite_pragma 的全局累加，按请求做差 → 归因
++  「本请求新建了几条连接、PRAGMA 花了多久」。
++- sink_ms 是**上一次** logger.info 调用自身耗时（本次无法自测，滞后一条，够定位量级）。
++"""
++import time
++from contextvars import ContextVar
++
++from loguru import logger
++
++_t0: ContextVar[float | None] = ContextVar("p_t0", default=None)
++_marks: ContextVar[list | None] = ContextVar("p_marks", default=None)
++_snap: ContextVar[tuple | None] = ContextVar("p_snap", default=None)
++
++CONN = {"n": 0, "ms": 0.0}
++_last_sink_ms = 0.0
++
++
++def begin() -> None:
++    _t0.set(time.perf_counter())
++    _marks.set([])
++    _snap.set((CONN["n"], CONN["ms"]))
++
++
++def mark(name: str) -> None:
++    m = _marks.get()
++    if m is None:
++        return
++    m.append((name, time.perf_counter()))
++
++
++def conn_event(ms: float) -> None:
++    CONN["n"] += 1
++    CONN["ms"] += ms
++
++
++def flush(endpoint: str) -> None:
++    global _last_sink_ms
++    t0, marks, snap = _t0.get(), _marks.get(), _snap.get()
++    if t0 is None or marks is None or snap is None:
++        return
++    parts, prev = [], t0
++    for name, ts in marks:
++        parts.append(f"{name}={(ts - prev) * 1000:.1f}ms")
++        prev = ts
++    total = (time.perf_counter() - t0) * 1000
++    d_n, d_ms = CONN["n"] - snap[0], CONN["ms"] - snap[1]
++    line = (
++        f"[T01661PROBE] endpoint={endpoint} total={total:.1f}ms "
++        + " ".join(parts)
++        + f" conn_new={d_n} conn_pragma={d_ms:.1f}ms sink_prev={_last_sink_ms:.2f}ms"
++    )
++    s = time.perf_counter()
++    logger.info(line)
++    _last_sink_ms = (time.perf_counter() - s) * 1000
