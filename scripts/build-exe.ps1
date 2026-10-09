@@ -221,8 +221,12 @@ if ($SkipSPA -and (Test-Path $spaIndex)) {
     # 调用独立的前端构建脚本
     $buildFrontendScript = "$PSScriptRoot\build-frontend.ps1"
     if (Test-Path $buildFrontendScript) {
-        $frontendArgs = @()
-        if ($SkipDeps) { $frontendArgs += "-SkipInstall" }
+        # T01715：改用 hashtable splatting。数组 splatting 会把元素当 positional value
+        # 传递（'-SkipInstall' 不会按参数名解析），而 build-frontend.ps1 带
+        # [CmdletBinding()] 且无位置参数 → 「A positional parameter cannot be found
+        # that accepts argument '-SkipInstall'」。hashtable 的键才会绑定到具名参数。
+        $frontendArgs = @{}
+        if ($SkipDeps) { $frontendArgs.SkipInstall = $true }
         & $buildFrontendScript @frontendArgs
         if ($LASTEXITCODE -ne 0) { throw "前端构建失败" }
     } else {
