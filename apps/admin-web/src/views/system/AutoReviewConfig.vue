@@ -257,6 +257,7 @@
             />
           </template>
         </el-table-column>
+        <template #empty><el-empty description="暂无审批记录" :image-size="90" /></template>
       </el-table>
 
       <el-pagination

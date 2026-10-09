@@ -75,6 +75,7 @@
             <IconButton size="small" type="danger" :loading="deletingIds.has(row.id)" :icon="Delete" label="删除" desc="删除该频道" @click="handleDelete(row)" />
           </template>
         </el-table-column>
+        <template #empty><el-empty description="暂无频道，点击右上角「新增频道」创建" :image-size="90" /></template>
       </el-table>
     </el-card>
 
@@ -1297,7 +1298,8 @@ onMounted(() => {
     padding: 6px 10px;
     font-size: 12px;
     color: $color-text-secondary;
-    background: rgba(64, 158, 255, 0.08);
+    /* 品牌浅色 tint：原硬编码 EP 蓝 rgba(64,158,255,.08) 不随主题 */
+    background: var(--color-primary-light);
     border-radius: 4px;
   }
 }
@@ -1319,16 +1321,16 @@ onMounted(() => {
   width: 72px;
   height: 72px;
   border-radius: 12px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   flex-shrink: 0;
 }
 .icon-preview-empty {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 12px;
-  background: #f5f7fa;
+  background: var(--el-fill-color-light);
 }
 .icon-actions {
   display: flex;
@@ -1351,16 +1353,16 @@ onMounted(() => {
   width: 108px;
   height: 144px;
   border-radius: 8px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   flex-shrink: 0;
 }
 .cover-preview-empty {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 12px;
-  background: #f5f7fa;
+  background: var(--el-fill-color-light);
 }
 .cover-fields {
   display: flex;
@@ -1383,19 +1385,20 @@ onMounted(() => {
 }
 .cover-picker-item {
   padding: 6px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
   text-align: center;
 }
 .cover-picker-item:hover {
-  border-color: #409eff;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.18);
+  /* 原 EP 蓝 #409eff 不随主题：统一为品牌主色 + 主题阴影 */
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-md);
 }
 .cover-picker-item.active {
-  border-color: #409eff;
-  background: rgba(64, 158, 255, 0.06);
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
 }
 .cover-picker-thumb {
   width: 100%;
@@ -1403,25 +1406,25 @@ onMounted(() => {
   object-fit: cover;
   border-radius: 4px;
   display: block;
-  background: #f5f7fa;
+  background: var(--el-fill-color-light);
 }
 .cover-picker-name {
   margin-top: 6px;
   font-size: 12px;
-  color: #303133;
+  color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .cover-picker-meta {
   font-size: 11px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 .cover-picker-empty {
   grid-column: 1 / -1;
   padding: 24px 0;
   text-align: center;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 13px;
 }
 </style>

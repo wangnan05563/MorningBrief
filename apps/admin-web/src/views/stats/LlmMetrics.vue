@@ -304,7 +304,8 @@ onMounted(loadData)
         justify-content: space-between;
         padding: 12px 16px;
         border-radius: $radius-sm;
-        color: #fff;
+        /* 主色实底上的文字：改用主题变量 --on-primary（白字压浅薄荷底对比度仅 ~1.5:1，不达标） */
+        color: var(--on-primary);
         font-weight: 600;
         min-height: 44px;
 

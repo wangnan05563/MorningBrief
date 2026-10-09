@@ -70,9 +70,14 @@ test.describe('登录流程', () => {
     // 不使用 waitForURL，避免 vite 首次编译期间 socket 连接问题
     await expect(page.getByRole('tab', { name: '待审核' })).toBeVisible({ timeout: 30000 })
     await expect(page).toHaveURL(/\/review$/)
-    // localStorage 应有 token
-    const token = await page.evaluate(() => window.localStorage.getItem('admin_token'))
-    expect(token).toBe('test-token-admin')
+    // 登录态断言：NFR-M103 起 token 存 HttpOnly Cookie（JS 不可读），localStorage 仅存
+    // role/username 作为已登录代理态（路由守卫即按此判定），不再断言 admin_token
+    const loginState = await page.evaluate(() => ({
+      role: window.localStorage.getItem('admin_role'),
+      username: window.localStorage.getItem('admin_username'),
+    }))
+    expect(loginState.role).toBe('admin')
+    expect(loginState.username).toBe('admin')
   })
 
   test('错误凭据显示错误提示', async ({ page }) => {

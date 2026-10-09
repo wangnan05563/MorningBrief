@@ -144,7 +144,8 @@ test.describe('审核流程', () => {
     await page.goto('/review/1')
 
     await expect(page.getByText('采集图片')).toBeVisible({ timeout: 30000 })
-    await expect(page.getByText('共 11 张（展示前 2 张）')).toBeVisible({ timeout: 30000 })
+    // 45bc938 后计数提示简化为「共 M 张」（查看全部入口移至卡片头部按钮），不再带「展示前 N 张」后缀
+    await expect(page.getByText('共 11 张')).toBeVisible({ timeout: 30000 })
 
     // 缩略图按 images 数量渲染（同源真实图片，el-image 加载成功）
     const items = page.locator('.image-grid .el-image')

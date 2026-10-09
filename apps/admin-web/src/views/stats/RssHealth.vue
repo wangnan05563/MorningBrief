@@ -128,6 +128,7 @@
             <span v-else class="muted">-</span>
           </template>
         </el-table-column>
+        <template #empty><el-empty description="暂无 RSS 源" :image-size="90" /></template>
       </el-table>
     </el-card>
   </div>

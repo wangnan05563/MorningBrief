@@ -8,6 +8,8 @@
  */
 :root {
   /* === 品牌色 === */
+  /* --on-primary：压在主色实底上的文字色（默认浅薄荷底配深字，各主题在 themes.scss 覆盖） */
+  --on-primary: #2D6B5F;
   --color-primary: #7ECEC1;
   --color-primary-light: #B5EAD7;
   --color-primary-dark: #5BA89B;

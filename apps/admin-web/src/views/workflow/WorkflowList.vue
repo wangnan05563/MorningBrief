@@ -163,6 +163,7 @@
         <el-table-column label="结束时间" min-width="170">
           <template #default="{ row }">{{ formatTime(row.finished_at) }}</template>
         </el-table-column>
+        <template #empty><el-empty description="暂无工作流" :image-size="90" /></template>
       </el-table>
 
       <!-- 分页 -->

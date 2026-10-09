@@ -114,6 +114,7 @@
 
           <!-- 数据表格 -->
           <el-table
+            v-loading="rowsLoading"
             :data="rows"
             border
             stripe
@@ -397,6 +398,7 @@ const searchKeyword = ref('')
 const orderBy = ref('')
 const orderDir = ref('ASC')
 const selectedRows = ref([])
+const rowsLoading = ref(false)
 
 // ---- 弹窗状态 ----
 const formDialogVisible = ref(false)
@@ -464,6 +466,7 @@ async function loadSchema() {
 
 async function loadRows() {
   if (!selectedTable.value) return
+  rowsLoading.value = true
   try {
     const data = await listRows(selectedTable.value, {
       limit: pageSize.value,
@@ -478,6 +481,8 @@ async function loadRows() {
     console.warn('loadRows failed:', e)
     rows.value = []
     total.value = 0
+  } finally {
+    rowsLoading.value = false
   }
 }
 

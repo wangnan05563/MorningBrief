@@ -81,6 +81,7 @@
           <IconButton type="primary" size="small" :icon="View" label="审核" desc="进入该稿件的审核详情" @click="goReview(row.id)" />
         </template>
       </el-table-column>
+      <template #empty><el-empty description="暂无待审核稿件" :image-size="90" /></template>
     </el-table>
 
     <div class="pagination-wrap">

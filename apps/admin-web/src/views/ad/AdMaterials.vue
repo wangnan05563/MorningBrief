@@ -49,6 +49,7 @@
             />
           </template>
         </el-table-column>
+        <template #empty><el-empty description="暂无广告素材，点击右上角「新增素材」上传" :image-size="90" /></template>
       </el-table>
 
       <!-- 分页：素材量可能较大，必须支持分页 -->

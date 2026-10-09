@@ -171,6 +171,7 @@
             <IconButton size="small" :icon="View" label="详情" desc="查看任务详情" @click="openDetail(row)" />
           </template>
         </el-table-column>
+        <template #empty><el-empty description="暂无队列任务" :image-size="90" /></template>
       </el-table>
 
       <div class="pagination">

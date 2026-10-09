@@ -557,7 +557,7 @@ onUnmounted(() => {
   margin-right: 10px;
 }
 .as-title-sub {
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 12px;
 }
 .as-model-bar {
@@ -591,8 +591,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #f7f8fa;
-  border: 1px solid #ebeef5;
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -603,7 +603,7 @@ onUnmounted(() => {
 }
 .as-empty {
   text-align: center;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   margin-top: 40px;
 }
 .as-empty-icon {
@@ -613,13 +613,13 @@ onUnmounted(() => {
 .as-examples {
   display: inline-block;
   text-align: left;
-  color: #606266;
+  color: var(--el-text-color-regular);
   margin: 8px 0;
   line-height: 1.8;
 }
 .as-empty-tip {
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--el-text-color-placeholder);
 }
 .as-msg {
   display: flex;
@@ -650,8 +650,8 @@ onUnmounted(() => {
   background: #67c23a;
 }
 .as-msg-content {
-  background: #fff;
-  border: 1px solid #ebeef5;
+  background: var(--el-bg-color);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 10px 14px;
   white-space: pre-wrap;
@@ -660,16 +660,17 @@ onUnmounted(() => {
   min-width: 0;
 }
 .as-msg-user .as-msg-content {
-  background: #ecf5ff;
+  /* 用户气泡：用主题 primary-light-9（本主题体系下为品牌浅色/暗色透明 tint），随 6 套主题切换 */
+  background: var(--el-color-primary-light-9);
 }
 .as-typing {
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 /* 动作草稿卡片 */
 .as-action-card {
   flex: 1;
-  background: #fff;
-  border: 1px solid #ebeef5;
+  background: var(--el-bg-color);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 14px;
 }
@@ -688,7 +689,7 @@ onUnmounted(() => {
   margin-right: auto;
 }
 .as-action-reason {
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 12px;
   margin-bottom: 10px;
 }
@@ -698,7 +699,7 @@ onUnmounted(() => {
 }
 .as-field-tip {
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--el-text-color-placeholder);
   line-height: 1.4;
 }
 .as-action-actions {
@@ -710,8 +711,8 @@ onUnmounted(() => {
   display: flex;
   gap: 10px;
   padding: 12px;
-  background: #fff;
-  border-top: 1px solid #ebeef5;
+  background: var(--el-bg-color);
+  border-top: 1px solid var(--color-border);
   align-items: flex-end;
 }
 .as-input-bar .el-textarea {
@@ -719,7 +720,7 @@ onUnmounted(() => {
 }
 .as-input-hint {
   padding: 0 12px 10px;
-  background: #fff;
+  background: var(--el-bg-color);
   color: #e6a23c;
   font-size: 12px;
 }

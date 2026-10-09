@@ -896,7 +896,8 @@ onUnmounted(() => {
 .named-tunnel-wizard {
   margin: 12px 0 20px 140px;
   padding: 20px;
-  background: rgba(255, 255, 255, 0.6);
+  /* 原硬编码 rgba(255,255,255,.6) 在 showcase 暗黑主题下浮层刺眼：改用主题玻璃/卡片底色变量 */
+  background: var(--glass-bg);
   border: 1px solid $color-border;
   border-radius: $radius-lg;
 

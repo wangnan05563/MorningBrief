@@ -105,6 +105,7 @@
                   <IconButton size="small" link type="danger" :icon="Delete" label="删除" desc="删除该素材" @click="handleDeleteMaterial(row)" />
                 </template>
               </el-table-column>
+              <template #empty><el-empty description="本工作流尚未关联素材" :image-size="80" /></template>
             </el-table>
             <el-pagination
               v-if="materials.total > 20"

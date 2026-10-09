@@ -85,7 +85,7 @@
             </el-image>
           </div>
           <template #footer>
-            <el-button type="primary" @click="galleryVisible = false">关闭</el-button>
+            <IconButton type="primary" :icon="Close" label="关闭" desc="关闭图片列表" @click="galleryVisible = false" />
           </template>
         </el-dialog>
       </el-col>
@@ -147,7 +147,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
-import { ArrowLeft, Check, ZoomIn } from '@element-plus/icons-vue'
+import { ArrowLeft, Check, Close, ZoomIn } from '@element-plus/icons-vue'
 import api from '../../api'
 
 const route = useRoute()

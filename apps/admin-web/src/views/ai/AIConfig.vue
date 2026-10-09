@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container ai-config">
+  <div class="page-container ai-config" v-loading="loading">
     <div class="top-bar">
       <IconButton type="primary" :icon="Check" :loading="saving" label="保存配置" desc="保存当前配置" @click="handleSave" />
     </div>
@@ -795,6 +795,7 @@
                 ${{ row.cost_usd.toFixed(4) }}
               </template>
             </el-table-column>
+            <template #empty><el-empty description="暂无用量数据" :image-size="80" /></template>
           </el-table>
         </el-card>
       </el-tab-pane>

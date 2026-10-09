@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container stats-page">
+  <div class="page-container stats-page" v-loading="loading">
     <!-- 顶部操作区：日期选择（T00811：移除与导航栏重复的页面标题） -->
     <div class="top-bar">
       <el-date-picker
@@ -142,8 +142,15 @@ function formatRate(v) {
   return (Number(v) * 100).toFixed(1)
 }
 
+const loading = ref(false)
+
 async function loadOverview() {
-  overview.value = await api.get('/stats/overview', { params: { date: selectedDate.value } })
+  loading.value = true
+  try {
+    overview.value = await api.get('/stats/overview', { params: { date: selectedDate.value } })
+  } finally {
+    loading.value = false
+  }
 }
 
 async function loadTrend() {

@@ -35,6 +35,7 @@
             />
           </template>
         </el-table-column>
+        <template #empty><el-empty description="暂无投放规则，点击右上角「新增规则」创建" :image-size="90" /></template>
       </el-table>
 
       <div class="pagination-wrap">

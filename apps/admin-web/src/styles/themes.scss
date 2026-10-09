@@ -11,9 +11,11 @@
 /* ============================================
  * 1. 马卡龙（默认）：薄荷青 + 暖灰，柔和治愈
  * primary-dark 加深至 #2D6B5F 确保 logo/active 文字对比度 ≥ 4.5
+ * --on-primary：压在主色实底上的文字色（跟随各主题按钮文字用色惯例）
  * ============================================ */
 :root,
 [data-theme='macaron'] {
+  --on-primary: #2D6B5F;
   --color-primary: #7ECEC1;
   --color-primary-light: #B5EAD7;
   --color-primary-dark: #2D6B5F;
@@ -49,6 +51,7 @@
  * 对比度：#1A202C on #F7FAFC = 16.1:1
  * ============================================ */
 [data-theme='enterprise'] {
+  --on-primary: #FFFFFF;
   --color-primary: #2B6CB0;
   --color-primary-light: #BEE3F8;
   --color-primary-dark: #1E4E8C;
@@ -85,6 +88,7 @@
  * 对比度：#2D3748 on #FFF8F0 = 14.5:1
  * ============================================ */
 [data-theme='creative'] {
+  --on-primary: #FFFFFF;
   --color-primary: #C53030;
   --color-primary-light: #FED7D7;
   --color-primary-dark: #9B2C2C;
@@ -121,6 +125,7 @@
  * 对比度：#E2E8F0 on #0A0A0F = 13.5:1
  * ============================================ */
 [data-theme='showcase'] {
+  --on-primary: #0A0A0F;
   --color-primary: #00E5FF;
   --color-primary-light: rgba(0, 229, 255, 0.15);
   --color-primary-dark: #7DD3FC;
@@ -157,6 +162,7 @@
  * 对比度：#1A202C on #FFFFFF = 16.1:1
  * ============================================ */
 [data-theme='commerce'] {
+  --on-primary: #FFFFFF;
   --color-primary: #BC2A38;
   --color-primary-light: #FFD6D6;
   --color-primary-dark: #8E1E2A;
@@ -193,6 +199,7 @@
  * 对比度：#1A202C on #FAFAFA = 16.5:1
  * ============================================ */
 [data-theme='portfolio'] {
+  --on-primary: #FFFFFF;
   --color-primary: #8B6F3C;
   --color-primary-light: #F0E5D0;
   --color-primary-dark: #5C4A2E;

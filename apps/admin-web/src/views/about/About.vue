@@ -8,9 +8,7 @@
         <div class="brand-info">
           <div class="version-row">
             <span class="version-label">版本：{{ info.version }}</span>
-            <el-tooltip content="复制完整版本号" placement="top" :fallback-placements="['bottom', 'left', 'right']">
-              <el-icon class="copy-btn" @click="copyVersion"><CopyDocument /></el-icon>
-            </el-tooltip>
+            <IconButton :icon="CopyDocument" label="复制版本号" desc="复制完整版本号到剪贴板" @click="copyVersion" />
           </div>
           <div class="meta-row">
             <span>发布于 {{ info.build_date }}</span>
@@ -21,9 +19,7 @@
           <!-- 一键升级进度（T00879）：下载中展示进度条，终态提示重启/错误重试 -->
           <div v-if="upgradeState.active" class="upgrade-panel">
             <div v-if="upgradeState.state === 'error'" class="upgrade-error-row">
-              <el-button type="danger" plain :icon="Refresh" @click="runUpgrade">
-                升级失败，重试
-              </el-button>
+              <IconButton type="danger" plain :icon="Refresh" label="升级失败，重试" desc="重新执行一键升级" @click="runUpgrade" />
               <span class="upgrade-msg">{{ upgradeState.error }}</span>
             </div>
             <template v-else>
@@ -50,20 +46,24 @@
               desc="检查 GitHub 是否有新版本"
               @click="runCheckUpdate"
             />
-            <el-button v-else-if="updateState.kind === 'loading'" loading>检查中…</el-button>
-            <el-button
+            <IconButton
+              v-else-if="updateState.kind === 'loading'"
+              loading
+              :icon="Refresh"
+              label="检查中…"
+              desc="正在检查 GitHub 新版本"
+            />
+            <IconButton
               v-else-if="updateState.kind === 'latest'"
               type="success"
               :icon="CircleCheckFilled"
               plain
-            >
-              已是最新
-            </el-button>
+              label="已是最新"
+              desc="当前已是最新版本"
+            />
             <div v-else-if="updateState.kind === 'newer'" class="newer-btns">
-              <el-button type="primary" :icon="Download" @click="runUpgrade">
-                立即更新 ({{ updateState.latest }})
-              </el-button>
-              <el-button plain :icon="Top" @click="openRelease">查看详情</el-button>
+              <IconButton type="primary" :icon="Download" :label="`立即更新 (${updateState.latest})`" desc="下载并安装新版本" @click="runUpgrade" />
+              <IconButton plain :icon="Top" label="查看详情" desc="打开版本发布页" @click="openRelease" />
             </div>
             <IconButton
               v-else

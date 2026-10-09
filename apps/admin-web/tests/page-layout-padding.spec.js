@@ -6,16 +6,17 @@ import { setLoginState, channelsListResponse } from './helpers/mock'
  *
  * 背景：`Layout.vue` 的 `.main-content` 是 `padding: 0`，页面内边距由各页面根容器的
  * `.page-container`（padding: 24px）提供。实测「讲书稿素材池」曾漏加该类 ⇒ 卡片与卡片内的
- * 「书单（顺序即取书顺序）」标题、「从素材库加入」按钮 0px 紧贴侧栏与窗口右缘（用户反馈）。
- * 「素材库管理」同源，一并纳入本用例。
+ * 「书单（顺序即取书顺序）」标题、「从素材库导入」按钮 0px 紧贴侧栏与窗口右缘（用户反馈）。
+ * 「素材库管理」同源，「素材录入」（/materials）随后合入，一并纳入本用例。
  *
- * 注：「素材录入」（/materials）同缺该类，但该页面属另一并发未提交功能，其修复随该功能
- * 一起入库；待其合入后可在下方 PAGES 中补上（断言逻辑已通用）。
+ * 注：「数据库维护」（/db-admin）是有意的全屏分栏布局（侧栏+数据区自带 16px 内边距），
+ * 属 .page-container 约定的白名单例外，不纳入本用例。
  */
 
 const PAGES = [
   { name: '讲书稿素材池', path: '/channels/book-pool?channelId=1' },
   { name: '素材库管理', path: '/channels/material-library?channelId=1' },
+  { name: '素材录入', path: '/materials' },
 ]
 
 /** 期望的最小页面内边距（与 .page-container 的 24px 对齐，留 2px 容差） */
@@ -61,22 +62,24 @@ test.describe('桌面页面内边距', () => {
     })
   }
 
-  test('讲书稿素材池：标题卡片不得出现空 body 占位（多出一条空白带）', async ({ page }) => {
-    await setLoginState(page, 'admin')
-    await page.goto('/channels/book-pool?channelId=1')
+  for (const p of PAGES) {
+    test(`${p.name}：不得出现空卡片 body 占位（多出一条空白带）`, async ({ page }) => {
+      await setLoginState(page, 'admin')
+      await page.goto(p.path)
 
-    // 先确认页面真的渲染出来了，否则「没有空 body」会是假通过
-    await expect(page.locator('.pool-title')).toBeVisible()
+      // 先确认页面真的渲染出来了（存在卡片），否则「没有空 body」会是假通过
+      await expect(page.locator('.el-card').first()).toBeVisible()
 
-    // 该卡片内容全在 #header，默认插槽为空；EP 空 body 仍占 20px 上下内边距 = 40px 空白带
-    const empty = await page.evaluate(() =>
-      Array.from(document.querySelectorAll('.el-card__body'))
-        .filter((b) => {
-          const r = b.getBoundingClientRect()
-          return r.height > 4 && !(b.textContent || '').trim() && b.children.length === 0
-        })
-        .map((b) => Math.round(b.getBoundingClientRect().height)),
-    )
-    expect(empty, `存在空的卡片 body 占位：${JSON.stringify(empty)}px`).toEqual([])
-  })
+      // EP 空 body 仍占 20px 上下内边距 = 40px 空白带（如只剩 #header 的标题卡片）
+      const empty = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('.el-card__body'))
+          .filter((b) => {
+            const r = b.getBoundingClientRect()
+            return r.height > 4 && !(b.textContent || '').trim() && b.children.length === 0
+          })
+          .map((b) => Math.round(b.getBoundingClientRect().height)),
+      )
+      expect(empty, `存在空的卡片 body 占位：${JSON.stringify(empty)}px`).toEqual([])
+    })
+  }
 })
