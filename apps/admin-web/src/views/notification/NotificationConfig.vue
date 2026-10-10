@@ -499,8 +499,11 @@ const configForm = reactive({
   admin_base_url: '',
 })
 // T00828：断点续录——表单变化自动持久化，重新进入页面恢复未提交输入（密钥字段不落盘）
+// T01834：钉钉/企微 webhook URL 含 access_token 等密钥参数，一并排除不落盘
 const { apply: applyDraft, track: trackDraft, commit: commitDraft } = useDraft('notification-config')
-const enableDraft = trackDraft(configForm, { excludePaths: ['dingtalk_secret', 'email_smtp_password'] })
+const enableDraft = trackDraft(configForm, {
+  excludePaths: ['dingtalk_webhook', 'dingtalk_secret', 'wecom_webhook', 'email_smtp_password'],
+})
 
 async function loadConfig() {
   configLoading.value = true

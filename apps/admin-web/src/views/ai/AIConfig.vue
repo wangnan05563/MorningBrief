@@ -914,6 +914,14 @@ const testingTts = ref(false)
 const ttsTestResult = ref(null)
 const voices = ref([])
 
+// T01834：TTS / 图片生成表单同样断点续录（凭证字段一律不落盘 localStorage）
+const draftTts = useDraft('ai-config-tts')
+const enableDraftTts = draftTts.track(ttsForm, {
+  excludePaths: ['api_key', 'appkey', 'tencent_secret_id', 'tencent_secret_key'],
+})
+const draftImage = useDraft('ai-config-image')
+const enableDraftImage = draftImage.track(imageForm, { excludePaths: ['api_key'] })
+
 // TTS Provider 选项
 const ttsProviders = [
   { key: 'aliyun', label: '阿里云 NLS（付费，需 API Key）' },
@@ -1238,6 +1246,8 @@ async function handleSave() {
     })
     ElMessage.success('配置已保存并热更新')
     commitDraft()
+    draftTts.commit()
+    draftImage.commit()
     // 保存后重新加载配置，刷新 presetConfigs 中的脱敏值
     await loadConfig()
     saving.value = false
@@ -1539,6 +1549,11 @@ onMounted(async () => {
   // T00828：加载完成后恢复草稿再启用持久化
   applyDraft(llmForm)
   enableDraft()
+  // T01834：TTS / 图片生成表单同套断点续录
+  draftTts.apply(ttsForm)
+  enableDraftTts()
+  draftImage.apply(imageForm)
+  enableDraftImage()
   applyCalculatorParams()
 })
 
