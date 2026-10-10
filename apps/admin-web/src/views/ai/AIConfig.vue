@@ -66,6 +66,14 @@
               />
               <span class="field-tip">TTS 段间留白（秒），默认 0.5s，BGM 在此时段自然浮现</span>
             </el-form-item>
+            <el-form-item label="最大段数">
+              <el-input-number
+                v-model="llmForm.llm_max_script_segments"
+                :min="3" :max="40" :step="1"
+                style="width: 160px"
+              />
+              <span class="field-tip">单期节目最大段数上限，默认 10；听书 30 分钟档建议 18~20（T00584）</span>
+            </el-form-item>
             <el-form-item label="预期字数">
               <el-tag type="info">
                 当前配置下需约 {{ calculatedWords }} 字
@@ -830,6 +838,7 @@ const llmForm = ref({
   retry_attempts: 3,
   target_duration_sec: 600,
   segment_gap_sec: 0.5,
+  llm_max_script_segments: 10,
 })
 // T00828：断点续录——LLM 主配置表单（api_key 敏感字段不落盘）
 const { apply: applyDraft, track: trackDraft, commit: commitDraft } = useDraft('ai-config-llm')

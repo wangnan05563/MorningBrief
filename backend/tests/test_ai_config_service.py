@@ -101,3 +101,54 @@ async def test_record_usage_persists_and_summary_reflects(db_session):
     assert result["today"]["llm_calls"] == 1
     assert result["today"]["llm_tokens"] == 30
 
+
+
+# ---------------------------------------------------------------------------
+# T01729：ai_config 写路径补齐 llm_max_script_segments
+# 根因：LLMConfigBody 与 _normalize_llm 均无该键 → PUT 被静默丢弃，
+# T00584「管理端热调段数（30 分钟听书档 18~20）」实际不可用。
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_llm_persists_max_script_segments():
+    """写路径应把 llm_max_script_segments 转为 config_key -> 字符串值。"""
+    service = AIConfigService.__new__(AIConfigService)
+
+    result = service._normalize_llm({"llm_max_script_segments": 18})
+
+    assert result["llm_max_script_segments"] == "18"
+
+
+def test_int_keys_cover_max_script_segments_for_hot_apply():
+    """热更链 _apply_to_settings 依赖 INT_KEYS 做 int 转换，漏掉会存成字符串。"""
+    from app.services.ai_config_service import INT_KEYS
+
+    assert "llm_max_script_segments" in INT_KEYS
+
+
+async def test_put_then_get_roundtrip_max_script_segments(client, admin_token):
+    """API 级闭环：PUT 落库 + Settings 热更 + GET 回读。"""
+    headers = {"Authorization": f"Bearer {admin_token['token']}"}
+
+    # 先 GET 组装完整 body 再改段数，避免 PUT 清空其他 llm 字段（与前端保存行为一致）
+    current = client.get("/admin/api/v1/ai/config", headers=headers).json()["data"]
+    body = {
+        "llm": {**current["llm"], "llm_max_script_segments": 18},
+        "tts": current["tts"],
+        "selected_preset": current["llm"].get("selected_preset", ""),
+    }
+
+    resp = client.put("/admin/api/v1/ai/config", json=body, headers=headers)
+    assert resp.status_code == 200, resp.text
+
+    from app.config import get_settings
+
+    assert get_settings().LLM_MAX_SCRIPT_SEGMENTS == 18
+
+    back = client.get("/admin/api/v1/ai/config", headers=headers).json()["data"]
+    assert back["llm"]["llm_max_script_segments"] == 18
+
+    # 恢复默认：settings 为进程级单例，防止污染同进程后续测试
+    body["llm"]["llm_max_script_segments"] = 10
+    client.put("/admin/api/v1/ai/config", json=body, headers=headers)
+    assert get_settings().LLM_MAX_SCRIPT_SEGMENTS == 10

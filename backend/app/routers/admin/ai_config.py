@@ -47,6 +47,8 @@ class LLMConfigBody(BaseModel):
     retry_attempts: int = 3
     target_duration_sec: int = 600
     segment_gap_sec: float = 0.5
+    # 单期节目最大段数上限（T01729：30 分钟听书档热调 18~20，默认 10）
+    llm_max_script_segments: int = 10
 
 
 class TTSConfigBody(BaseModel):

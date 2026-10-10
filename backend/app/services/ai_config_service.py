@@ -167,6 +167,8 @@ LLM_RESET_KEYS = ["llm_api_key", "llm_base_url", "llm_model", PRESET_CONFIGS_KEY
 # 需要转为 int 类型的配置项
 INT_KEYS = {
     "llm_timeout_sec", "llm_retry_attempts",
+    # 单期节目最大段数上限（T01729：补齐写路径，管理端热调听书 30 分钟档段数）
+    "llm_max_script_segments",
     "tts_sample_rate", "tts_timeout_sec", "tts_retry_attempts",
     "aliyun_tts_volume", "aliyun_tts_speech_rate", "aliyun_tts_pitch_rate",
     "tencent_tts_voice_type", "tencent_tts_volume", "tencent_tts_speed",
@@ -504,6 +506,10 @@ class AIConfigService:
             # 目标节目时长（秒）：控制 rewriter 字数与 stitch 范围
             # 默认 600s = 10 分钟，与稿件字数反向关联
             "target_duration_sec": _get_int("target_duration_sec", "TARGET_DURATION_SEC", 600),
+            # 单期节目最大段数上限（T01729：读路径补返显，30 分钟听书档调 18~20）
+            "llm_max_script_segments": _get_int(
+                "llm_max_script_segments", "LLM_MAX_SCRIPT_SEGMENTS", 10
+            ),
             # TTS 段间静音时长（秒）：拼接时每段新闻之间的留白
             # 默认 0.5s，过大影响节奏紧凑度，过小衔接生硬且 BGM 无浮现空间
             "segment_gap_sec": _get_float("segment_gap_sec", "SEGMENT_GAP_SEC", 0.5),
@@ -673,6 +679,10 @@ class AIConfigService:
         # 目标节目时长（秒）：与稿件字数反向关联
         if "target_duration_sec" in config:
             result["target_duration_sec"] = str(config["target_duration_sec"])
+        # 单期节目最大段数上限（T01729：补齐写路径，此前 LLMConfigBody 与本函数
+        # 均无该键 → PUT 静默丢弃，T00584「热调 18~20 段」在管理端不可用）
+        if "llm_max_script_segments" in config:
+            result["llm_max_script_segments"] = str(config["llm_max_script_segments"])
         # TTS 段间静音时长（秒）：拼接时每段新闻之间的留白
         if "segment_gap_sec" in config:
             result["segment_gap_sec"] = str(config["segment_gap_sec"])
