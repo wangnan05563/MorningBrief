@@ -136,7 +136,7 @@ scripts/build-exe.ps1        # PyInstaller 打包 + Inno Setup 安装包
 ## 测试
 
 ```bash
-# 后端全量回归（620+ 用例）
+# 后端全量回归（940+ 用例）
 cd backend && .venv\Scripts\python -m pytest tests/ -q
 
 # 小程序工具层单测
@@ -170,3 +170,16 @@ python perf_gate.py --tier full --update-baseline               # 全档位并�
 - [edge-tts](https://github.com/rany2/edge-tts) —— 免费 Edge/Azure 神经网络语音
 - [Tabler Icons](https://tabler.io/icons)（MIT）—— 全站图标
 - [Element Plus](https://element-plus.org/)、[resvg-js](https://github.com/thx/resvg-js)
+
+## 风险免责
+
+本项目仅供**个人研究与学习**使用，部署与使用时请知悉：
+
+- **内容版权**：抓取的内容来自公开 RSS 与第三方来源，版权归原作者所有；请遵守来源站点
+  的服务条款与抓取约定，勿将抓取内容用于商业再分发。
+- **AI 生成内容**：LLM 改写与 TTS 合成的稿件可能存在事实性错误或幻觉，**发布前必须经过
+  人工审核**（工作流已内置审核环节）；本项目不对自动生成内容的准确性、完整性作任何担保。
+- **第三方服务**：LLM / TTS / 对象存储等外部服务的使用请遵守对应服务商的条款与计费规则；
+  请妥善保管 API Key，勿将 `.env` 与真实凭证提交到仓库。
+- **合规使用**：请遵守所在地区关于内容传播、数据抓取与个人信息保护的法律法规。
+
