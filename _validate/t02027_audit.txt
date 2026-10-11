@@ -1,0 +1,14 @@
+event_type=system.stall_alert 记录数=7
+按 status: {'failed': 7}
+按本地日 success 计数:
+
+结论：同一本地日出现多条 success 的天数=0 
+
+最近 12 条明细（UTC / 本地 / status）:
+  id=335 utc=2026-10-09 04:03:17 local=2026-10-09T12:03:17+08:00 status=failed offset=+0800 title=【MorningBrief】流水线停摆告警
+  id=336 utc=2026-10-09 07:11:18 local=2026-10-09T15:11:18+08:00 status=failed offset=+0800 title=【MorningBrief】流水线停摆告警
+  id=337 utc=2026-10-09 15:06:40 local=2026-10-09T23:06:40+08:00 status=failed offset=+0800 title=【MorningBrief】流水线停摆告警
+  id=338 utc=2026-10-09 15:09:24 local=2026-10-09T23:09:24+08:00 status=failed offset=+0800 title=【MorningBrief】流水线停摆告警
+  id=339 utc=2026-10-09 15:12:34 local=2026-10-09T23:12:34+08:00 status=failed offset=+0800 title=【MorningBrief】流水线停摆告警
+  id=340 utc=2026-10-11 07:18:39 local=2026-10-11T15:18:39+08:00 status=failed offset=+0800 title=【MorningBrief】流水线停摆告警
+  id=341 utc=2026-10-11 07:24:34 local=2026-10-11T15:24:34+08:00 status=failed offset=+0800 title=【MorningBrief】流水线停摆告警
