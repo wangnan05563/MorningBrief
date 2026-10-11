@@ -14,6 +14,7 @@ import pytest
 from app.core.timeutil import localnow_naive
 from app.models.notification_log import NotificationLog
 from app.models.workflow import Workflow, WorkflowStep
+from app.services.notification.log_service import LogService
 from app.services.stall_alert import (
     ALERT_EVENT_TYPE,
     check_and_alert,
@@ -24,9 +25,17 @@ from app.services.stall_alert import (
 # ---------- 测试基建 ----------
 
 def _utc_naive_of(local_dt: datetime) -> datetime:
-    """把本地 naive 时间换算成对应的 UTC naive 时间（模拟 SQLite CURRENT_TIMESTAMP）。"""
+    """把本地 naive 时间换算成对应的 UTC naive 时间（模拟 SQLite CURRENT_TIMESTAMP）。
+
+    必须真正做时区换算：SQLite 的 CURRENT_TIMESTAMP 是 UTC，本地 18:00 落库是 10:00。
+    历史缺陷（T02027）：此处曾用 `replace(tzinfo=utc).astimezone(utc)`，是恒等变换——
+    把本地钟点当成 UTC 存进库，造出生产写不出来的记录；`_already_alerted_today`
+    按 UTC 解回本地后会整体偏移一个时区差，本地钟点 ≥17:00 时跨到次日，
+    防抖判 False 从而重复发送，用例只在白天通过（时间依赖性假失败）。
+    """
+    local_tz = datetime.now().astimezone().tzinfo
     return (
-        local_dt.replace(tzinfo=timezone.utc)
+        local_dt.replace(tzinfo=local_tz)
         .astimezone(timezone.utc)
         .replace(tzinfo=None)
     )
@@ -200,14 +209,33 @@ async def test_all_ok_no_alert(db_session, fake_hub):
 
 @pytest.mark.asyncio
 async def test_dedup_same_day_local(db_session, fake_hub):
-    """当日已成功告警 → skipped。"""
-    now = localnow_naive()
+    """当日已成功告警 → skipped（用例内钉住正午本地钟点，不依赖跑测试的时机）。"""
+    now = datetime(2026, 10, 11, 12, 0, 0)
     db_session.add(_wf("wf-old", "success", now - timedelta(days=10)))
     db_session.add(NotificationLog(
         event_type=ALERT_EVENT_TYPE, channel="multi", title="t",
         status="success", created_at=_utc_naive_of(now - timedelta(hours=1)),
     ))
     await db_session.commit()
+    result = await check_and_alert(db_session, now=now)
+    assert result["status"] == "skipped"
+    assert fake_hub.calls == []
+
+
+@pytest.mark.asyncio
+async def test_dedup_against_real_write_path(db_session, fake_hub):
+    """防抖口径必须与真实写入口径一致：日志由 LogService 落库（created_at 走
+    server_default=func.now()，SQLite 为 UTC naive），不手造时间戳。
+
+    这是 T02027 的回归锚点：上一版用例自己造了一个生产写不出来的 created_at，
+    既掩盖了口径、又让结果随本地钟点漂移。真实写入 + 当前本地时刻必然同日。
+    """
+    now = localnow_naive()
+    db_session.add(_wf("wf-old", "success", now - timedelta(days=10)))
+    await db_session.commit()
+    await LogService(db_session).create_log(
+        event_type=ALERT_EVENT_TYPE, channel="multi", title="t", status="success",
+    )
     result = await check_and_alert(db_session, now=now)
     assert result["status"] == "skipped"
     assert fake_hub.calls == []
