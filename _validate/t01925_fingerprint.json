@@ -1,0 +1,64 @@
+{
+  "fingerprint": {
+    "15": "044754aaf8da91b72c29714654e1d7cd",
+    "16": "bf669f078517423ada23b3a6af17fc2d",
+    "18": "cc95d544c45e33991770230537e0162c",
+    "22": "239a2daa68a39a74f2439c70c0a0bc69",
+    "23": "0e11e4b13fef0ebefc010081c13b96e9",
+    "24": "a358126e12d97c3c83c9d73f550a02d2",
+    "25": "688da44aa03abf571e10c4b0b0acb955",
+    "43": "ef9dfd6d9121c80c8f8118598880c3ff",
+    "48": "9e023640cf5ae2f1889b43117c3e3c3a",
+    "50": "1e38eb73d46a5cf7e55fc1ab1e0ab64f",
+    "52": "b477bab02d48aaa6c6c8c04659af1b2d",
+    "53": "54a906cf9b0676317b92db03e40428c9",
+    "58": "7cfabc88db4b30d70173f5be202ac179",
+    "60": "29815c39c78b3a764153578ec7b8fe5f",
+    "26": "e970ca74e17b9a8b2271589252c7f552",
+    "32": "9409ec19b678e6dfe061d11649de03bf",
+    "44": "c5ce6af4ac41655900c666aeafae1936",
+    "46": "9cd2e43e868ec17ebb1d15679e3d1d2c",
+    "3": "22c15fd809a24f43a6ae61795ce16796",
+    "19": "60c199c0b0f6ff62da934c5a304bb351",
+    "21": "346878f9d956c8c2346dbb952d62d3d0",
+    "87": "8e905ffe9d9799f35a7ba29d3f49fb64",
+    "100": "dada459f2eb7941f8294f1f9069e580a"
+  },
+  "decode": {
+    "3": {
+      "ffprobe": 663.0,
+      "decoded": "FAIL:RuntimeError:",
+      "db": 664
+    },
+    "19": {
+      "ffprobe": 673.0,
+      "decoded": "FAIL:RuntimeError:",
+      "db": 670
+    },
+    "21": {
+      "ffprobe": 719.0,
+      "decoded": "FAIL:RuntimeError:",
+      "db": 700
+    },
+    "87": {
+      "ffprobe": 504.0,
+      "decoded": "FAIL:RuntimeError:",
+      "db": 459
+    },
+    "100": {
+      "ffprobe": 597.0,
+      "decoded": "FAIL:RuntimeError:",
+      "db": 586
+    },
+    "15": {
+      "ffprobe": 482.0,
+      "decoded": "FAIL:RuntimeError:",
+      "db": 382
+    },
+    "58": {
+      "ffprobe": 482.0,
+      "decoded": "FAIL:RuntimeError:",
+      "db": 86
+    }
+  }
+}

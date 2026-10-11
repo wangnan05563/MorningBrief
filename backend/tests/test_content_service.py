@@ -175,6 +175,61 @@ async def test_publish_episode_review_not_found_raises(db_session):
 
 
 @pytest.mark.asyncio
+async def test_publish_episode_duration_uses_measured_audio(db_session, monkeypatch):
+    """T01925：episode.duration 取成品实测时长，而非稿件估算时长。
+
+    拼接阶段会把不足下限的节目补足、超上限的 atempo 压缩，实测与估算可差数百秒。
+    """
+    script = Script(
+        workflow_id="wf-test-dur", episode_date=date.today(), full_text="全文",
+        segments=[], estimated_duration=86, categories=None, status="approved",
+    )
+    db_session.add(script)
+    await db_session.flush()
+    review = Review(
+        workflow_id="wf-test-dur", episode_date=date.today(), script_id=script.id,
+        audio_url="https://cos.example/ep.mp3", status=ReviewStatus.pending,
+    )
+    db_session.add(review)
+    await db_session.commit()
+    await db_session.refresh(review)
+
+    import app.workflow.stitch.ffmpeg_wrapper as fw
+
+    async def _fake_probe(path: str) -> float:
+        assert path == review.audio_url
+        return 482.064
+
+    monkeypatch.setattr(fw, "get_audio_duration_f", _fake_probe)
+
+    svc = ContentService(db_session)
+    episode_id = await svc.publish_episode("wf-test-dur", review.id)
+    from sqlalchemy import select
+    ep = (await db_session.execute(select(Episode).where(Episode.id == episode_id))).scalar_one()
+    assert ep.duration == 482
+
+
+@pytest.mark.asyncio
+async def test_measure_audio_duration_falls_back(db_session):
+    """本地相对路径不探测；探测抛错返回 None（发布不被阻塞）。"""
+    import app.workflow.stitch.ffmpeg_wrapper as fw
+
+    svc = ContentService(db_session)
+    assert await svc._measure_audio_duration("/audio/episodes/20260717/x.mp3") is None
+    assert await svc._measure_audio_duration(None) is None
+
+    async def _boom(path: str) -> float:
+        raise RuntimeError("ffprobe timeout")
+
+    monkeypatched = fw.get_audio_duration_f
+    fw.get_audio_duration_f = _boom
+    try:
+        assert await svc._measure_audio_duration("https://cos.example/ep.mp3") is None
+    finally:
+        fw.get_audio_duration_f = monkeypatched
+
+
+@pytest.mark.asyncio
 async def test_cache_miss_and_hit(db_session):
     """cache-aside 模式：首次 miss 查 DB 回写，二次 hit 直接返回缓存。
 

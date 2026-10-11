@@ -563,10 +563,13 @@ class ContentService:
             title = f"{date_part} · 今日要闻"
 
         # 4. 创建 episode
+        # 时长以成品实测为准：estimated_duration 是按字数反算的稿件估算值，不含拼接阶段的
+        # BGM/静音补足与 atempo 压缩，两者可差数百秒，落估算值会让进度条与完播口径偏移
+        measured_duration = await self._measure_audio_duration(review.audio_url)
         episode = Episode(
             date=review.episode_date,
             title=title,
-            duration=script.estimated_duration if script else 600,
+            duration=measured_duration or (script.estimated_duration if script else 600),
             audio_url=review.audio_url,
             # HLS URL 从 review 拷贝：拼接阶段生成，发布时落入 episode 表
             hls_url=review.hls_url,
@@ -596,6 +599,26 @@ class ContentService:
             await self._advance_book_pool_after_publish(date_part, episode, review)
 
         return episode.id
+
+    async def _measure_audio_duration(self, audio_url: str | None) -> int | None:
+        """探测成品音频实际时长（秒）；不可探测时返回 None，由调用方回退估算值。
+
+        只对外链（http/https）探测：COS 未配置时 audio_url 是 `/audio/...` 本地相对路径，
+        ffprobe 读不了，回退估算值即可，不该为此阻塞发布。探测是同步子进程，
+        ffmpeg_wrapper 内部已用 to_thread 包装。
+        """
+        if not audio_url or not audio_url.startswith(("http://", "https://")):
+            return None
+        try:
+            from app.workflow.stitch.ffmpeg_wrapper import get_audio_duration_f
+
+            return int(round(await get_audio_duration_f(audio_url)))
+        except Exception as e:  # 发布是运营动作，探测失败（网络/超时/文件缺失）不阻塞
+            logger.warning(
+                "成品时长探测失败，回退稿件估算时长 audio_url=%s err=%s",
+                audio_url, str(e)[:200],
+            )
+            return None
 
     async def _resolve_publish_channel(self, workflow_id: int | None) -> tuple[int | None, str | None]:
         """读 workflow 获取 channel_id 与频道名（多频道架构）。
