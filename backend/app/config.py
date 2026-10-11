@@ -375,11 +375,15 @@ class Settings(BaseSettings):
     IMAGE_API_BASE_URL: str = "https://apihub.agnes-ai.com/v1"
     IMAGE_API_MODEL: str = "agnes-image-2.5-flash" 
 
-    # ---- 音频码率配置 ----
-    # 语音播报场景 64kbps 已足够（MP3 单声道 44100Hz），128kbps 是音乐标准过度
-    # 64k 相比 128k 文件体积减半，下载时间减半，对 Tailscale Funnel 链路收益显著
-    # 如需提升音质可调高至 96k 或 128k
-    AUDIO_BITRATE: str = "64k"
+    # ---- 音频档位（码率 + 采样率套餐，T01871）----
+    # 档位取值与依据见 app/core/audio_profile.py（standard=64k@32k 为默认）。
+    # 单独把码率调高而采样率留在 44.1k 是无效投入：TTS 源 24kHz，10kHz 以上无内容，
+    # 编码器只是把预算花在噪声底上，所以两者必须成组配置，用 AUDIO_PROFILE 一选既定。
+    AUDIO_PROFILE: str = "standard"
+    # 逃生阀：仅在需要临时试新参数时使用，留空/0 表示跟随档位。
+    # 一旦显式设置，管理端会把当前档位标成「自定义」，避免档位名与实际参数错位。
+    AUDIO_BITRATE: str = ""
+    AUDIO_SAMPLE_RATE: int = 0
 
     # ---- HLS 分片配置（V1.3 新增） ----
     # 开启后拼接阶段会同步生成 m3u8 + ts 分片，小程序设置 protocol='hls' 可分片流式播放，

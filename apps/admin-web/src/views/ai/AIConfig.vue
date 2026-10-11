@@ -158,6 +158,25 @@
       <!-- TTS 配置 -->
       <el-tab-pane label="TTS 语音合成" name="tts">
         <el-card shadow="never">
+          <!-- 输出档位只读展示（T01871）：码率与采样率成组生效，刻意不给写入口 -->
+          <el-alert v-if="audioProfile" type="info" :closable="false" class="profile-alert">
+            <template #title>
+              成品输出档位：{{ audioProfile.label }}（{{ audioProfile.bitrate }} @ {{ audioProfile.sample_rate }}Hz）
+              <el-tag v-if="audioProfile.overridden" type="warning" size="small" style="margin-left: 8px">
+                已被 .env 单独覆盖
+              </el-tag>
+            </template>
+            <div class="profile-detail">
+              <span v-for="p in audioProfile.profiles" :key="p.profile" class="profile-chip">
+                {{ p.label }} {{ p.bitrate }}@{{ p.sample_rate }}
+              </span>
+              <span class="profile-tip">
+                拼接中间态 PCM 约 {{ audioProfile.pcm_kb_per_sec }} KB/s。档位调整改 backend/.env 的
+                AUDIO_PROFILE，需真机兼容与人工试听收口后才建议设为默认。
+              </span>
+            </div>
+          </el-alert>
+
           <!-- Provider 选择 -->
           <div class="preset-section">
             <span class="section-label">TTS 引擎：</span>
@@ -914,6 +933,9 @@ const testingTts = ref(false)
 const ttsTestResult = ref(null)
 const voices = ref([])
 
+// 成品输出档位（码率+采样率套餐，T01871）：后端只读接口返回，本页不写回
+const audioProfile = ref(null)
+
 // T01834：TTS / 图片生成表单同样断点续录（凭证字段一律不落盘 localStorage）
 const draftTts = useDraft('ai-config-tts')
 const enableDraftTts = draftTts.track(ttsForm, {
@@ -1145,6 +1167,12 @@ async function loadConfig() {
       api.get('/ai/config'),
       api.get('/ai/presets'),
     ])
+    // 档位是只读展示，取不到不该影响配置页主流程
+    try {
+      audioProfile.value = await api.get('/ai/audio-profile')
+    } catch (e) {
+      audioProfile.value = null
+    }
     // 填充 LLM 配置
     if (configData.llm) {
       Object.assign(llmForm.value, configData.llm)
@@ -1661,6 +1689,27 @@ onUnmounted(() => {
       font-size: 13px;
       color: $color-text-secondary;
     }
+  }
+}
+.profile-alert {
+  margin-bottom: 16px;
+
+  .profile-detail {
+    margin-top: 6px;
+    font-size: 13px;
+    color: $color-text-secondary;
+  }
+
+  .profile-chip {
+    margin-right: 10px;
+    padding: 1px 8px;
+    border: 1px solid $color-border;
+    border-radius: 10px;
+  }
+
+  .profile-tip {
+    display: block;
+    margin-top: 6px;
   }
 }
 </style>

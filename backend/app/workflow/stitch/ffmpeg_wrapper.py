@@ -5,12 +5,12 @@
 同一段语音最多被有损编码 4~5 代；T01845 实测同码率下 1 代→4 代 segSNR 掉 4.6dB
 （9-12kHz 频带丢 2.23dB），而体积一个字节没省。改成中间态无损后，整期只编一次。
 
-- 中间态参数：`pcm_s16le` + 统一采样率 + 单声道（`_pcm_args()`）；
-- 成品编码：`libmp3lame` + 配置码率（`_encode_args()`），只在 concat.py 的最终输出调用一次；
+- 中间态参数：`pcm_s16le` + 档位采样率 + 单声道（`_pcm_args()`）；
+- 成品编码：`libmp3lame` + 档位码率（`_encode_args()`），只在 concat.py 的最终输出调用一次；
 - HLS：从中间态 PCM 直接编 AAC，避免「MP3→AAC」二次有损转换。
 
-统一采样率的目的是让 concat demuxer 混合多段时参数一致，避免播放器侧
-重采样卡顿；改 PCM 后该口径同样由这两个 helper 单点定义。
+采样率与码率都取自档位套餐 `app/core/audio_profile.py`（T01871），本文件不再写死数值。
+统一采样率的目的是让 concat demuxer 混合多段时参数一致，避免播放器侧重采样卡顿。
 """
 import asyncio
 import logging
@@ -20,6 +20,7 @@ from pathlib import Path
 import httpx
 
 from app.config import get_settings
+from app.core.audio_profile import resolve_encoding
 from app.paths import resolve_ffmpeg_path, resolve_ffprobe_path
 
 logger = logging.getLogger(__name__)
@@ -32,12 +33,17 @@ _FFMPEG_OUT_LABEL = "[out]"
 
 
 def _audio_bitrate() -> str:
-    """从配置读取音频码率，便于运营在 .env 调整而无需改代码。"""
-    return get_settings().AUDIO_BITRATE
+    """当前档位生效的成品码率。"""
+    return resolve_encoding(get_settings()).bitrate
 
 
-# 拼接链路统一采样率：44100 是历史口径（T01870 只改「代际」不改参数，便于单变量复验）
-_STITCH_SAMPLE_RATE = "44100"
+def _stitch_sample_rate() -> str:
+    """拼接链路统一采样率（字符串形态，直接进 ffmpeg 参数）。
+
+    必须走档位套餐而不是写死 44100：中间态 PCM 的落盘体积与「编码器把预算花在哪」
+    都由它决定，32k 档比 44.1k 省 26% 临时盘，且同码率下 segSNR 更高（T01845）。
+    """
+    return str(resolve_encoding(get_settings()).sample_rate)
 
 
 def _pcm_args() -> list[str]:
@@ -46,13 +52,13 @@ def _pcm_args() -> list[str]:
     中间步骤（拼接/混音/插广告/变速/补足）不做任何有损编码，避免代际累积损失；
     PCM 也顺带消除了「ffmpeg 对 mp3 输出默认 128k」这类隐式参数问题。
     """
-    return ["-c:a", "pcm_s16le", "-ar", _STITCH_SAMPLE_RATE, "-ac", "1"]
+    return ["-c:a", "pcm_s16le", "-ar", _stitch_sample_rate(), "-ac", "1"]
 
 
 def _encode_args() -> list[str]:
     """成品编码参数：仅在最终交付物上调用一次。"""
     return ["-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-            "-ar", _STITCH_SAMPLE_RATE, "-ac", "1"]
+            "-ar", _stitch_sample_rate(), "-ac", "1"]
 
 
 async def to_pcm(input_path: str, output_path: str) -> None:
@@ -314,7 +320,7 @@ async def generate_silence(duration_sec: float, output_path: str) -> None:
     cmd = [
         resolve_ffmpeg_path(), "-y",
         "-f", "lavfi",
-        "-i", f"anullsrc=r={_STITCH_SAMPLE_RATE}:cl=mono",
+        "-i", f"anullsrc=r={_stitch_sample_rate()}:cl=mono",
         "-t", str(duration_sec),
         *_pcm_args(),
         output_path,
@@ -577,7 +583,7 @@ def build_hls_cmd(input_path: str, output_dir: str) -> tuple[list[str], str]:
         "-i", input_path,
         # AAC 编码，码率与 mp3 保持一致避免体积膨胀
         "-c:a", "aac", "-b:a", _audio_bitrate(),
-        "-ar", _STITCH_SAMPLE_RATE, "-ac", "1",
+        "-ar", _stitch_sample_rate(), "-ac", "1",
         # HLS 封装参数
         "-f", "hls",
         "-hls_time", str(settings.HLS_SEGMENT_SEC),

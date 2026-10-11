@@ -1,0 +1,31 @@
+{
+  "profile": "standard",
+  "label": "标准",
+  "bitrate": "64k",
+  "sample_rate": 32000,
+  "overridden": false,
+  "pcm_kb_per_sec": 64,
+  "profiles": [
+    {
+      "profile": "quality",
+      "label": "高音质",
+      "bitrate": "96k",
+      "sample_rate": 44100,
+      "pcm_kb_per_sec": 88
+    },
+    {
+      "profile": "standard",
+      "label": "标准",
+      "bitrate": "64k",
+      "sample_rate": 32000,
+      "pcm_kb_per_sec": 64
+    },
+    {
+      "profile": "lean",
+      "label": "省流",
+      "bitrate": "48k",
+      "sample_rate": 32000,
+      "pcm_kb_per_sec": 64
+    }
+  ]
+}

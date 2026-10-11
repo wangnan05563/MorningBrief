@@ -39,7 +39,7 @@ def test_intermediate_builders_emit_pcm_only(name, builder):
     cmd = builder()
     assert "pcm_s16le" in cmd, f"{name} 中间态应为无损 PCM"
     assert "libmp3lame" not in cmd, f"{name} 中间态不应再做有损编码"
-    assert cmd[cmd.index("-ar") + 1] == "44100"
+    assert cmd[cmd.index("-ar") + 1] == "32000"  # standard 档位，非硬编码 44100
     assert cmd[cmd.index("-ac") + 1] == "1"
 
 

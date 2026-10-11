@@ -3,6 +3,7 @@
 端点：
 - GET  /admin/api/v1/ai/config     获取配置（API Key 脱敏）
 - PUT  /admin/api/v1/ai/config     保存配置（热更新，含预设配置同步）
+- GET  /admin/api/v1/ai/audio-profile 只读展示当前生效音频档位（码率+采样率套餐）
 - POST /admin/api/v1/ai/test-llm   测试 LLM 连接
 - POST /admin/api/v1/ai/test-tts   测试 TTS 连接
 - POST /admin/api/v1/ai/preview-tts  TTS 试音（用当前表单参数合成测试音频）
@@ -30,8 +31,10 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.ai_budget import get_today_summary, reset_budget
+from app.core.audio_profile import AUDIO_PROFILES, resolve_encoding
 from app.core.auth import require_admin, AdminPayload
 from app.core.response import error, success
+from app.config import get_settings
 from app.database import get_db
 from app.services.ai_config_service import AIConfigService
 from app.services.tts_model_manager import get_download_status, run_download
@@ -260,6 +263,41 @@ async def save_config(
         image_config=body.image.model_dump() if body.image is not None else None,
     )
     return success(message="配置已保存")
+
+
+@router.get("/audio-profile")
+async def get_audio_profile(
+    admin: AdminPayload = Depends(require_admin),
+):
+    """只读展示当前生效的音频档位（码率 + 采样率套餐，T01871）。
+
+    故意不提供写接口：档位决定「已发布成品能不能播、听起来如何」，而 24kHz/AAC
+    这类候选档位的真机兼容与人工试听尚未收口，管理端能改就等于让人误配置成
+    不可播的成品；这里只回答「现在整条链路到底在用哪一组参数」。
+    """
+    enc = resolve_encoding(get_settings())
+    return success(
+        data={
+            "profile": enc.profile,
+            "label": enc.label,
+            "bitrate": enc.bitrate,
+            "sample_rate": enc.sample_rate,
+            # 运营用 AUDIO_BITRATE / AUDIO_SAMPLE_RATE 显式覆盖时为 true，
+            # 此时 profile/label 只是「基于哪个档位」，实际参数看上面两个字段
+            "overridden": enc.overridden,
+            "pcm_kb_per_sec": enc.pcm_kb_per_sec,
+            "profiles": [
+                {
+                    "profile": key,
+                    "label": val["label"],
+                    "bitrate": val["bitrate"],
+                    "sample_rate": val["sample_rate"],
+                    "pcm_kb_per_sec": val["sample_rate"] * 2 // 1000,
+                }
+                for key, val in AUDIO_PROFILES.items()
+            ],
+        }
+    )
 
 
 @router.post("/test-llm")

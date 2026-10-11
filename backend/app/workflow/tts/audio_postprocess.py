@@ -11,10 +11,10 @@ import subprocess
 import tempfile
 
 from app.config import get_settings
+from app.core.audio_profile import resolve_encoding
 from app.paths import resolve_ffmpeg_path, resolve_ffprobe_path
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
 def _run_cmd(cmd: list[str]) -> tuple[int, str, str]:
@@ -80,7 +80,12 @@ async def postprocess_segment(
 
     threshold_db 为负数 dB，去除低于该阈值的静音段，避免拼接处出现明显停顿。
     start_periods=1 去除首部静音；stop_periods=-1 去除尾部所有静音。
+
+    采样率取档位而不是 provider 的 ALIYUN_TTS_SAMPLE_RATE：T01845 实测成品内容上限
+    约 10kHz，把 24kHz 的 TTS 源上采样到 44.1k 只是把体积花在空频带上，还会让
+    stitch 侧的 PCM 中间态按 88KB/s 涨；这里一次降到档位采样率即可。
     """
+    enc = resolve_encoding(get_settings())
     in_path = _write_temp(audio_bytes, ".mp3")
     out_path = in_path.replace(".mp3", "_pp.mp3")
     cmd = [
@@ -89,9 +94,9 @@ async def postprocess_segment(
         f"loudnorm=I={target_lufs}:TP=-1.5:LRA=11,"
         f"silenceremove=start_periods=1:start_threshold={threshold_db}dB:"
         f"stop_periods=-1:stop_threshold={threshold_db}dB:stop_duration=0.3",
-        "-ar", str(settings.ALIYUN_TTS_SAMPLE_RATE),
+        "-ar", str(enc.sample_rate),
         "-ac", "1",
-        "-b:a", settings.AUDIO_BITRATE,
+        "-b:a", enc.bitrate,
         out_path,
     ]
     try:
