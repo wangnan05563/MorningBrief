@@ -131,6 +131,34 @@ def test_wecom_not_configured_empty():
     assert notifier.is_configured() is False
 
 
+# T02030：占位模板文本曾被判「已配置」，渠道被 Hub 加载后每次发送都死在
+# httpx（缺 scheme），日志里伪装成网络错误。形态校验必须把它挡在加载之前。
+@pytest.mark.parametrize("bad_value,expect_hint", [
+    ("<在此填入你的企微机器人地址>", "占位符"),
+    ("qyapi.weixin.qq.com/cgi-bin/webhook/send/key=abc", "scheme"),
+    ("ftp://qyapi.weixin.qq.com/webhook", "scheme"),
+    ("https://", "主机名"),
+    ("https://example.com/webhook", "example.com"),
+    ("https://sub.example.com/webhook", "example.com"),
+])
+def test_wecom_is_configured_shape_checks(bad_value, expect_hint):
+    """非法形态 webhook → is_configured=False，且 configuration_error 指出原因。"""
+    from app.services.notifier.channels.wecom import WeComNotifier
+    notifier = WeComNotifier(settings=_make_settings(ALERT_WECOM_WEBHOOK=bad_value))
+    assert notifier.is_configured() is False
+    assert expect_hint in notifier.configuration_error()
+
+
+def test_wecom_valid_https_has_no_configuration_error():
+    """合法 https webhook → configuration_error 为空串。"""
+    from app.services.notifier.channels.wecom import WeComNotifier
+    notifier = WeComNotifier(settings=_make_settings(
+        ALERT_WECOM_WEBHOOK="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=abc"
+    ))
+    assert notifier.is_configured() is True
+    assert notifier.configuration_error() == ""
+
+
 @pytest.mark.asyncio
 async def test_wecom_send_success():
     """企微 webhook 成功响应返回 success=True。"""
@@ -190,6 +218,16 @@ def test_dingtalk_is_configured():
     assert notifier.is_configured() is True
 
 
+def test_dingtalk_placeholder_is_not_configured():
+    """钉钉与企微共用形态校验：占位文本/缺 scheme 判未配置（T02030）。"""
+    from app.services.notifier.channels.dingtalk import DingTalkNotifier
+    for bad in ("", "<钉钉机器人 webhook>", "oapi.dingtalk.com/robot/send",
+                "https://example.com/robot/send"):
+        notifier = DingTalkNotifier(settings=_make_settings(ALERT_DINGTALK_WEBHOOK=bad))
+        assert notifier.is_configured() is False, bad
+        assert "不可用" in notifier.configuration_error()
+
+
 def test_dingtalk_sign_url_with_secret():
     """配置 secret 时 _sign_url 附加 timestamp 和 sign 参数。"""
     from app.services.notifier.channels.dingtalk import DingTalkNotifier
@@ -238,6 +276,23 @@ def test_email_not_configured_missing_fields():
     )
     notifier = EmailNotifier(settings=settings)
     assert notifier.is_configured() is False
+
+
+def test_email_placeholder_and_malformed_fields_not_configured():
+    """SMTP 字段模板占位/形态非法 → 判未配置并逐字段给出原因（T02030）。"""
+    from app.services.notifier.channels.email import EmailNotifier
+    notifier = EmailNotifier(settings=_make_settings(
+        ALERT_EMAIL_SMTP_HOST="smtp.your-company.com",
+        ALERT_EMAIL_SMTP_USER="请填写发件人",
+        ALERT_EMAIL_SMTP_PASSWORD="changeme",
+        ALERT_EMAIL_TO="ops#localhost",
+    ))
+    assert notifier.is_configured() is False
+    reason = notifier.configuration_error()
+    assert "ALERT_EMAIL_SMTP_HOST" in reason
+    assert "ALERT_EMAIL_SMTP_USER" in reason
+    assert "ALERT_EMAIL_SMTP_PASSWORD" in reason
+    assert "ALERT_EMAIL_TO" in reason
 
 
 @pytest.mark.asyncio
@@ -325,6 +380,39 @@ def test_hub_no_channels_returns_zero(fresh_hub):
     result = asyncio.run(_run())
     assert result["total"] == 0
     assert result["success"] == 0
+
+
+def test_hub_skips_malformed_webhook_channel():
+    """占位符 webhook 不被加载：send 走 total==0 分支（T02030 验收口径）。"""
+    import asyncio
+    placeholder_settings = _make_settings(
+        ALERT_WECOM_WEBHOOK="<在此填入你的企微机器人地址>",
+        ALERT_DINGTALK_WEBHOOK="oapi.dingtalk.com/robot/send",
+    )
+    hub = NotifierHub()
+    with patch("app.services.notifier.hub.get_settings", return_value=placeholder_settings):
+        hub._init_channels()
+        assert hub._channels == []
+
+        async def _run():
+            return await hub.send(NotificationEvent(title="t", message="m"))
+
+        result = asyncio.run(_run())
+    assert result["total"] == 0
+    assert result["success"] == 0
+    assert result["failed"] == 0
+
+
+def test_hub_loads_valid_webhook_only():
+    """合法 webhook 加载、占位符渠道跳过——混合配置下只保留可用渠道。"""
+    valid_settings = _make_settings(
+        ALERT_WECOM_WEBHOOK="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=abc",
+        ALERT_DINGTALK_WEBHOOK="请填写钉钉机器人地址",
+    )
+    hub = NotifierHub()
+    with patch("app.services.notifier.hub.get_settings", return_value=valid_settings):
+        hub._init_channels()
+    assert [ch.name for ch in hub._channels] == ["wecom"]
 
 
 def test_hub_quiet_hours_suppresses_non_critical(fresh_hub):

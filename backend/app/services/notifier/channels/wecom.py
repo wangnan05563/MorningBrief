@@ -9,7 +9,12 @@ from typing import Any
 import httpx
 from loguru import logger
 
-from app.services.notifier.base import INotifier, NotificationEvent, NotifyResult
+from app.services.notifier.base import (
+    INotifier,
+    NotificationEvent,
+    NotifyResult,
+    webhook_error,
+)
 from app.services.notifier.registry import registry
 
 
@@ -31,15 +36,20 @@ class WeComNotifier(INotifier):
         return "wecom"
 
     def is_configured(self) -> bool:
-        # 占位符值视为未配置（避免误判空字符串为已配置）
-        return bool(self._webhook) and "example.com" not in self._webhook
+        # 形态校验：占位文本 / 缺 scheme / 示例域名一律视为未配置（T02030）
+        return not webhook_error(self._webhook)
+
+    def configuration_error(self) -> str:
+        if self.is_configured():
+            return ""
+        return f"ALERT_WECOM_WEBHOOK 不可用: {webhook_error(self._webhook)}"
 
     async def send(self, event: NotificationEvent) -> NotifyResult:
         if not self.is_configured():
             return NotifyResult(
                 channel=self.name,
                 success=False,
-                error="Webhook 未配置",
+                error=f"Webhook 未配置（{self.configuration_error()}）",
             )
 
         # 企微 Markdown 格式：severity 用颜色标识

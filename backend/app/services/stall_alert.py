@@ -9,6 +9,12 @@
 
 防抖：同一告警当日已成功发送过则跳过（查 notification_log），
 避免停摆期每日 cron 重复轰炸。
+持续失败收敛（T02030）：同一本地日 failed 达到 STALL_ALERT_FAIL_CAP_PER_DAY
+（默认 3）后不再重试，只落一条 failed_capped 记录——此前渠道配置坏了会每天
+每次检查都刷一条 failed（实测 2026-10-09 一天 5 条）。
+
+落库 payload 除报告摘要外，还带 hub.send() 的 per-channel 结果（含真因 error），
+管理端「通知记录」不必翻日志即可定位是哪个渠道、什么原因。
 
 触发时机（双保险，防"桌面端几天不开机永远不检查"）：
 - 调度器每日 STALL_ALERT_CHECK_HOUR:STALL_ALERT_CHECK_MINUTE 定时检查
@@ -131,6 +137,14 @@ async def detect_stall(
     )
 
 
+def _as_local_dt(value) -> datetime:
+    """把 notification_log.created_at（SQLite CURRENT_TIMESTAMP = UTC naive）转本地 tz-aware。"""
+    dt = value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone()
+
+
 async def _already_alerted_today(session: AsyncSession, now: datetime) -> bool:
     """当日防抖：今天（本地日期）已有本告警的成功记录则跳过。
 
@@ -149,9 +163,64 @@ async def _already_alerted_today(session: AsyncSession, now: datetime) -> bool:
     )).scalar()
     if not row:
         return False
-    last_dt = row if isinstance(row, datetime) else datetime.fromisoformat(str(row))
-    last_local = last_dt.replace(tzinfo=timezone.utc).astimezone()
-    return last_local.date() == now.date()
+    return _as_local_dt(row).date() == now.date()
+
+
+async def _same_day_send_failures(
+    session: AsyncSession, now: datetime
+) -> tuple[int, bool]:
+    """本地今日的发送失败统计：返回 (failed 条数, 是否已有 failed_capped 记录)。
+
+    时间口径同 `_already_alerted_today`——库里 created_at 是 UTC naive，
+    先按 UTC 取近 72h（覆盖任意时区偏移与跨日边界）的候选行，再逐行转本地
+    日期比对，避免把 UTC 日期当本地日期用。
+    """
+    cutoff = (now - timedelta(hours=72)).strftime("%Y-%m-%d %H:%M:%S")
+    rows = (await session.execute(
+        text(
+            "SELECT created_at, status FROM notification_log "
+            "WHERE event_type = :et AND created_at >= :c"
+        ),
+        {"et": ALERT_EVENT_TYPE, "c": cutoff},
+    )).all()
+    failed = 0
+    capped = False
+    for created_at, status in rows:
+        if _as_local_dt(created_at).date() != now.date():
+            continue
+        if status == "failed":
+            failed += 1
+        elif status == "failed_capped":
+            capped = True
+    return failed, capped
+
+
+def _build_payload(
+    report: StallReport,
+    *,
+    channel_results: Optional[list[dict[str, Any]]] = None,
+    hub_totals: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """落库 payload：报告摘要 + per-channel 发送结果（T02030）。
+
+    管理端「通知记录」只存聚合 status/error（如「所有渠道发送失败」），
+    看不到真因；把 hub.send() 返回的逐渠道 error 一并写进 payload，
+    排查时不必再翻 loguru 日志。
+    """
+    payload: dict[str, Any] = {
+        "stalled": report.stalled,
+        "stall_days": report.stall_days,
+        "last_success_at": report.last_success_at,
+        "auth_errors_24h": report.auth_errors_24h,
+        "summary": report.summary(),
+    }
+    if channel_results is not None:
+        payload["channels"] = channel_results
+    if hub_totals is not None:
+        payload["hub"] = {
+            k: hub_totals.get(k) for k in ("total", "success", "failed", "suppressed")
+        }
+    return payload
 
 
 async def check_and_alert(
@@ -180,6 +249,36 @@ async def check_and_alert(
                         report.stalled, report.has_auth_error)
             return {"status": "skipped", "reason": "今日已告警", "report": report}
 
+        # 同日本地失败上限：持续失败时不再每轮刷一条 failed（T02030）
+        failed_today, already_capped = await _same_day_send_failures(session, now)
+        cap = get_settings().STALL_ALERT_FAIL_CAP_PER_DAY
+        if already_capped:
+            logger.info(
+                "[stall_alert] 本地当日发送失败已达上限（{}），暂停重试", failed_today)
+            return {
+                "status": "skipped", "reason": "今日发送失败已达上限",
+                "report": report, "failed_today": failed_today,
+            }
+        if cap > 0 and failed_today >= cap:
+            await LogService(session).create_log(
+                event_type=ALERT_EVENT_TYPE,
+                channel="multi",
+                title="【MorningBrief】停摆告警暂停重试",
+                status="failed_capped",
+                error=(
+                    f"本地当日已连续 {failed_today} 次发送失败（上限 {cap} 次/日），"
+                    "今日不再重试——请检查通知渠道配置"
+                ),
+                payload=_build_payload(report, channel_results=[]),
+            )
+            logger.warning(
+                "[stall_alert] 本地当日发送失败 {} 次达上限，落 failed_capped 并停止重试",
+                failed_today)
+            return {
+                "status": "failed_capped", "report": report,
+                "failed_today": failed_today,
+            }
+
         title = "【MorningBrief】流水线停摆/余额告警"
         if report.stalled and report.has_auth_error:
             title = "【MorningBrief】流水线停摆 + LLM 余额异常"
@@ -203,7 +302,10 @@ async def check_and_alert(
         success = result.get("success", 0) > 0
         suppressed = result.get("suppressed", 0) > 0
         if result.get("total", 0) == 0:
-            status, err = "failed", "未配置任何通知渠道"
+            status, err = "failed", (
+                "未配置任何通知渠道（全部渠道凭证缺失或形态非法，"
+                "请在管理端通知设置填写真实 webhook）"
+            )
         elif suppressed:
             status, err = "suppressed", "免打扰时段静默（critical 不应被静默，疑似异常）"
         elif success:
@@ -211,19 +313,27 @@ async def check_and_alert(
         else:
             status, err = "failed", "所有渠道发送失败"
 
+        channel_results = [
+            {
+                "channel": getattr(r, "channel", ""),
+                "success": bool(getattr(r, "success", False)),
+                "error": getattr(r, "error", "") or "",
+            }
+            for r in (result.get("results") or [])
+        ]
+        if not channel_results and status != "success":
+            # total==0 时 hub 不会返回任何渠道结果，补一条说明便于管理端直接读懂
+            channel_results = [{"channel": "-", "success": False, "error": err}]
+
         await LogService(session).create_log(
             event_type=ALERT_EVENT_TYPE,
             channel="multi",
             title=title,
             status=status,
             error=err,
-            payload={
-                "stalled": report.stalled,
-                "stall_days": report.stall_days,
-                "last_success_at": report.last_success_at,
-                "auth_errors_24h": report.auth_errors_24h,
-                "summary": report.summary(),
-            },
+            payload=_build_payload(
+                report, channel_results=channel_results, hub_totals=result
+            ),
         )
         logger.warning("[stall_alert] {} status={} result={}", title, status, result)
         return {"status": status, "report": report, "send": result}

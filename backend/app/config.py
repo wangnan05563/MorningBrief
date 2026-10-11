@@ -451,6 +451,8 @@ class Settings(BaseSettings):
     # 每日停摆检查时刻（本地时间）；调度器启动时还会立即检查一次（幂等，当日去重兜底）
     STALL_ALERT_CHECK_HOUR: int = 7
     STALL_ALERT_CHECK_MINUTE: int = 30
+    # 同一本地日连续发送失败达到该次数后暂停重试，只落一条 failed_capped（0=不限，T02030）
+    STALL_ALERT_FAIL_CAP_PER_DAY: int = 3
 
     # ---- FFmpeg 依赖 ----
     # BtbN/FFmpeg-Builds 共享构建下载源（gpl-shared，含 ffmpeg.exe/ffprobe.exe + DLL）

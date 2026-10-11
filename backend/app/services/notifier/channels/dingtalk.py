@@ -18,7 +18,12 @@ from typing import Any
 import httpx
 from loguru import logger
 
-from app.services.notifier.base import INotifier, NotificationEvent, NotifyResult
+from app.services.notifier.base import (
+    INotifier,
+    NotificationEvent,
+    NotifyResult,
+    webhook_error,
+)
 from app.services.notifier.registry import registry
 
 
@@ -41,7 +46,13 @@ class DingTalkNotifier(INotifier):
         return "dingtalk"
 
     def is_configured(self) -> bool:
-        return bool(self._webhook) and "example.com" not in self._webhook
+        # 形态校验：占位文本 / 缺 scheme / 示例域名一律视为未配置（T02030）
+        return not webhook_error(self._webhook)
+
+    def configuration_error(self) -> str:
+        if self.is_configured():
+            return ""
+        return f"ALERT_DINGTALK_WEBHOOK 不可用: {webhook_error(self._webhook)}"
 
     def _sign_url(self) -> str:
         """计算加签 URL（配置了 SECRET 时）。
@@ -109,7 +120,7 @@ class DingTalkNotifier(INotifier):
             return NotifyResult(
                 channel=self.name,
                 success=False,
-                error="Webhook 未配置",
+                error=f"Webhook 未配置（{self.configuration_error()}）",
             )
 
         payload = self._build_payload(event)

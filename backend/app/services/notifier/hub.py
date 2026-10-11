@@ -58,7 +58,14 @@ class NotifierHub:
                     self._channels.append(instance)
                     logger.info("通知渠道已加载: {}", name)
                 else:
-                    logger.debug("通知渠道未配置凭证，跳过: {}", name)
+                    # 显式区分「没填」与「填了但形态不对」，避免占位符被当成可用渠道
+                    reason = instance.configuration_error()
+                    if reason:
+                        logger.warning(
+                            "通知渠道未配置凭证，跳过: {}（{}）", name, reason
+                        )
+                    else:
+                        logger.info("通知渠道未配置凭证，跳过: {}", name)
             except Exception:
                 logger.exception("加载通知渠道 {} 失败", name)
 
@@ -91,7 +98,7 @@ class NotifierHub:
         }
 
         if not self._channels:
-            logger.warning("无可用通知渠道，事件未发送: {}", event.title)
+            logger.warning("未配置任何通知渠道，事件未发送: {}", event.title)
             return result
 
         # 免打扰判定：critical 穿透，其他在 quiet_hours 内静默

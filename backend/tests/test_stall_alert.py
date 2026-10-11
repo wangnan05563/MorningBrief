@@ -10,11 +10,13 @@
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import select
 
 from app.core.timeutil import localnow_naive
 from app.models.notification_log import NotificationLog
 from app.models.workflow import Workflow, WorkflowStep
 from app.services.notification.log_service import LogService
+from app.services.notifier.base import NotifyResult
 from app.services.stall_alert import (
     ALERT_EVENT_TYPE,
     check_and_alert,
@@ -293,3 +295,122 @@ async def test_auth_only_alert_title(db_session, fake_hub):
     event = fake_hub.calls[0]
     assert "余额" in event.title
     assert "停摆" not in event.title
+
+
+# ---------- T02030：per-channel 真因落库 + 同日失败上限 ----------
+
+async def _logs(db_session, status: str | None = None) -> list[NotificationLog]:
+    stmt = select(NotificationLog).where(NotificationLog.event_type == ALERT_EVENT_TYPE)
+    if status:
+        stmt = stmt.where(NotificationLog.status == status)
+    rows = (await db_session.execute(stmt.order_by(NotificationLog.id))).scalars().all()
+    return list(rows)
+
+
+@pytest.mark.asyncio
+async def test_per_channel_errors_land_in_payload(db_session, monkeypatch):
+    """渠道全部失败时，hub 的逐渠道 error 必须写进 payload（管理端看详情即知真因）。"""
+    hub = FakeHub(result={
+        "total": 1, "success": 0, "failed": 1, "suppressed": 0,
+        "results": [NotifyResult(
+            channel="wecom", success=False,
+            error="网络错误: Request URL is missing an 'http://' or 'https://' protocol.",
+        )],
+    })
+    monkeypatch.setattr("app.services.notifier.hub.get_notifier_hub", lambda: hub)
+
+    now = localnow_naive()
+    db_session.add(_wf("wf-old", "success", now - timedelta(days=10)))
+    await db_session.commit()
+
+    assert (await check_and_alert(db_session, now=now))["status"] == "failed"
+    import json
+    log = (await _logs(db_session))[-1]
+    payload = json.loads(log.payload)
+    assert payload["channels"] == [{
+        "channel": "wecom", "success": False,
+        "error": "网络错误: Request URL is missing an 'http://' or 'https://' protocol.",
+    }]
+    assert payload["hub"] == {"total": 1, "success": 0, "failed": 1, "suppressed": 0}
+    # 聚合 error 仍是旧口径（不破坏既有前端展示），真因在 channels 里
+    assert log.error == "所有渠道发送失败"
+
+
+@pytest.mark.asyncio
+async def test_no_channel_failure_is_recorded_explicitly(db_session, monkeypatch):
+    """一个渠道都没加载（total==0）→ 记录里显式写「未配置任何通知渠道」而不是网络错误。"""
+    hub = FakeHub(result={"total": 0, "success": 0, "failed": 0,
+                          "suppressed": 0, "results": []})
+    monkeypatch.setattr("app.services.notifier.hub.get_notifier_hub", lambda: hub)
+
+    now = localnow_naive()
+    db_session.add(_wf("wf-old", "success", now - timedelta(days=10)))
+    await db_session.commit()
+
+    await check_and_alert(db_session, now=now)
+    import json
+    log = (await _logs(db_session))[-1]
+    assert log.status == "failed"
+    assert "未配置任何通知渠道" in log.error
+    assert json.loads(log.payload)["channels"][0]["channel"] == "-"
+
+
+@pytest.mark.asyncio
+async def test_same_day_failure_cap_stops_retrying(db_session, monkeypatch):
+    """同日连续失败达上限（默认 3）→ 落一条 failed_capped 并停止重试；再次检查不再刷记录。
+
+    与 test_failed_send_logged_but_not_deduped 的既有语义相容：failed 不参与成功防抖，
+    上限之内（<3 次）仍会重试，超过上限才收敛——不是把失败当成功吞掉。
+    """
+    hub = FakeHub(result={
+        "total": 1, "success": 0, "failed": 1, "suppressed": 0,
+        "results": [NotifyResult(channel="wecom", success=False, error="网络错误: boom")],
+    })
+    monkeypatch.setattr("app.services.notifier.hub.get_notifier_hub", lambda: hub)
+
+    now = localnow_naive()
+    db_session.add(_wf("wf-old", "success", now - timedelta(days=10)))
+    await db_session.commit()
+
+    for _ in range(3):
+        assert (await check_and_alert(db_session, now=now))["status"] == "failed"
+    assert len(hub.calls) == 3
+
+    capped = await check_and_alert(db_session, now=now)
+    assert capped["status"] == "failed_capped"
+    assert capped["failed_today"] == 3
+    assert len(hub.calls) == 3  # 达上限后不再调用渠道
+
+    assert len(await _logs(db_session, "failed")) == 3
+    capped_logs = await _logs(db_session, "failed_capped")
+    assert len(capped_logs) == 1
+    assert "上限" in capped_logs[0].error
+
+    # 同日再检查：已有 failed_capped → 直接跳过，不再刷库
+    again = await check_and_alert(db_session, now=now)
+    assert again["status"] == "skipped"
+    assert again["reason"] == "今日发送失败已达上限"
+    assert len(hub.calls) == 3
+    assert len(await _logs(db_session)) == 4
+
+
+@pytest.mark.asyncio
+async def test_failure_cap_is_per_local_day(db_session, monkeypatch):
+    """失败计数按本地日归零：前一日的 failed 不吃掉今天的重试额度。"""
+    hub = FakeHub(result={
+        "total": 1, "success": 0, "failed": 1, "suppressed": 0,
+        "results": [NotifyResult(channel="wecom", success=False, error="网络错误: boom")],
+    })
+    monkeypatch.setattr("app.services.notifier.hub.get_notifier_hub", lambda: hub)
+
+    now = localnow_naive()
+    db_session.add(_wf("wf-old", "success", now - timedelta(days=10)))
+    for _ in range(5):
+        db_session.add(NotificationLog(
+            event_type=ALERT_EVENT_TYPE, channel="multi", title="t", status="failed",
+            created_at=_utc_naive_of(now - timedelta(days=1)),
+        ))
+    await db_session.commit()
+
+    assert (await check_and_alert(db_session, now=now))["status"] == "failed"
+    assert len(hub.calls) == 1

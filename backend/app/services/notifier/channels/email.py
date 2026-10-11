@@ -12,7 +12,14 @@ from typing import Any
 
 from loguru import logger
 
-from app.services.notifier.base import INotifier, NotificationEvent, NotifyResult
+from app.services.notifier.base import (
+    INotifier,
+    NotificationEvent,
+    NotifyResult,
+    email_field_error,
+    host_field_error,
+    placeholder_error,
+)
 from app.services.notifier.registry import registry
 
 
@@ -43,20 +50,32 @@ class EmailNotifier(INotifier):
     def name(self) -> str:
         return "email"
 
+    def _field_errors(self) -> dict[str, str]:
+        """逐字段形态校验，返回 {字段: 不通过原因}（全通过则为空）。"""
+        checks = {
+            "ALERT_EMAIL_SMTP_HOST": host_field_error(self._smtp_host),
+            "ALERT_EMAIL_SMTP_USER": email_field_error(self._smtp_user),
+            "ALERT_EMAIL_SMTP_PASSWORD": placeholder_error(self._smtp_password),
+            "ALERT_EMAIL_TO": email_field_error(self._to_addrs),
+        }
+        return {k: v for k, v in checks.items() if v}
+
     def is_configured(self) -> bool:
-        return all([
-            self._smtp_host,
-            self._smtp_user,
-            self._smtp_password,
-            self._to_addrs,
-        ])
+        # 形态校验：缺字段 / 占位文本 / 主机名带协议 / 收件人非邮箱，均判未配置（T02030）
+        return not self._field_errors()
+
+    def configuration_error(self) -> str:
+        errors = self._field_errors()
+        if not errors:
+            return ""
+        return "; ".join(f"{k}: {v}" for k, v in errors.items())
 
     async def send(self, event: NotificationEvent) -> NotifyResult:
         if not self.is_configured():
             return NotifyResult(
                 channel=self.name,
                 success=False,
-                error="SMTP 配置不完整",
+                error=f"SMTP 配置不完整（{self.configuration_error()}）",
             )
 
         # 构建邮件
