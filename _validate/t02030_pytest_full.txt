@@ -1,0 +1,55 @@
+........................................................................ [  6%]
+........................................................................ [ 13%]
+........................................................................ [ 20%]
+........................................................................ [ 27%]
+........................................................................ [ 33%]
+........................................................................ [ 40%]
+........................................................................ [ 47%]
+........................................................................ [ 54%]
+........................................................................ [ 61%]
+........................................................................ [ 67%]
+........................................................................ [ 74%]
+........................................................................ [ 81%]
+........................................................................ [ 88%]
+........................................................................ [ 94%]
+......................................................                   [100%]
+============================== warnings summary ===============================
+tests/test_about.py: 14 warnings
+tests/test_ai_config_service.py: 1 warning
+tests/test_api_channels_ordering.py: 2 warnings
+tests/test_audio_profile.py: 3 warnings
+tests/test_audio_router.py: 5 warnings
+tests/test_audiobook_channel_schedule.py: 1 warning
+tests/test_book_pool_service.py: 1 warning
+tests/test_channel_icon.py: 4 warnings
+tests/test_channel_material_lookback.py: 2 warnings
+tests/test_client_report.py: 8 warnings
+tests/test_cos_c_presign.py: 9 warnings
+tests/test_cos_router.py: 14 warnings
+tests/test_cover_presets_api.py: 7 warnings
+tests/test_document_ingest_formats.py: 2 warnings
+tests/test_download_tts_models_route.py: 3 warnings
+tests/test_ebook_audiobook_guard.py: 3 warnings
+tests/test_ebook_index_service.py: 8 warnings
+tests/test_ebook_source_service.py: 5 warnings
+tests/test_fix_integration.py: 16 warnings
+tests/test_health.py: 1 warning
+tests/test_health_endpoints.py: 4 warnings
+tests/test_llm_metrics_smoke.py: 1 warning
+tests/test_material_library_contract.py: 13 warnings
+tests/test_material_source_types.py: 1 warning
+tests/test_materials_channel_filter.py: 3 warnings
+tests/test_notification_api.py: 14 warnings
+tests/test_play_count_e2e.py: 4 warnings
+tests/test_profile_second_layer.py: 2 warnings
+tests/test_queue_batch_delete_api.py: 4 warnings
+tests/test_queue_batch_delete_autoreviewstat.py: 5 warnings
+tests/test_read_path_cache_t01579.py: 2 warnings
+tests/test_scripts_router.py: 2 warnings
+tests/test_spa_index_cache.py: 3 warnings
+tests/test_workflow_service.py: 6 warnings
+  D:\code\otherProjects\20_News\backend\.venv\Lib\site-packages\httpx\_client.py:680: DeprecationWarning: The 'app' shortcut is now deprecated. Use the explicit style 'transport=WSGITransport(app=...)' instead.
+    warnings.warn(message, DeprecationWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1062 passed, 173 warnings in 132.14s (0:02:12)
