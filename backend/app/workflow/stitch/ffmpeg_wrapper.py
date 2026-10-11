@@ -1,7 +1,16 @@
 """FFmpeg 命令封装:音频拼接所需的底层命令构造与执行。
 
-统一输出格式:libmp3lame 44100Hz 单声道,码率由配置决定(默认 64k 语音已足够),
-保证整期节目音频参数一致,避免拼接后参数不一致导致的播放器重采样卡顿。
+编码口径（T01870）：**拼接链路中间态一律 16bit PCM WAV，只有最终交付物做有损编码。**
+此前 loudnorm→silenceremove→concat→amix→广告插入→final 每步都重编一次 MP3，
+同一段语音最多被有损编码 4~5 代；T01845 实测同码率下 1 代→4 代 segSNR 掉 4.6dB
+（9-12kHz 频带丢 2.23dB），而体积一个字节没省。改成中间态无损后，整期只编一次。
+
+- 中间态参数：`pcm_s16le` + 统一采样率 + 单声道（`_pcm_args()`）；
+- 成品编码：`libmp3lame` + 配置码率（`_encode_args()`），只在 concat.py 的最终输出调用一次；
+- HLS：从中间态 PCM 直接编 AAC，避免「MP3→AAC」二次有损转换。
+
+统一采样率的目的是让 concat demuxer 混合多段时参数一致，避免播放器侧
+重采样卡顿；改 PCM 后该口径同样由这两个 helper 单点定义。
 """
 import asyncio
 import logging
@@ -25,6 +34,36 @@ _FFMPEG_OUT_LABEL = "[out]"
 def _audio_bitrate() -> str:
     """从配置读取音频码率，便于运营在 .env 调整而无需改代码。"""
     return get_settings().AUDIO_BITRATE
+
+
+# 拼接链路统一采样率：44100 是历史口径（T01870 只改「代际」不改参数，便于单变量复验）
+_STITCH_SAMPLE_RATE = "44100"
+
+
+def _pcm_args() -> list[str]:
+    """中间态输出参数：无损 PCM。
+
+    中间步骤（拼接/混音/插广告/变速/补足）不做任何有损编码，避免代际累积损失；
+    PCM 也顺带消除了「ffmpeg 对 mp3 输出默认 128k」这类隐式参数问题。
+    """
+    return ["-c:a", "pcm_s16le", "-ar", _STITCH_SAMPLE_RATE, "-ac", "1"]
+
+
+def _encode_args() -> list[str]:
+    """成品编码参数：仅在最终交付物上调用一次。"""
+    return ["-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
+            "-ar", _STITCH_SAMPLE_RATE, "-ac", "1"]
+
+
+async def to_pcm(input_path: str, output_path: str) -> None:
+    """把任意输入（MP3 分段/广告素材/BGM）解到统一 PCM 参数，供后续无损中间态使用。
+
+    「解码不是又一次有损」：MP3→PCM 只丢编码噪声底，不再引入量化损失，
+    因此入口处统一转一次，比每一步各自带着不同采样率/声道重编更稳。
+    """
+    await run_ffmpeg(
+        [resolve_ffmpeg_path(), "-y", "-i", input_path, *_pcm_args(), output_path]
+    )
 
 
 class StitchError(Exception):
@@ -153,8 +192,7 @@ def build_concat_cmd(input_paths: list[str], output_path: str) -> list[str]:
         resolve_ffmpeg_path(), "-y",
         "-f", "concat", "-safe", "0",
         "-i", list_path,
-        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-        "-ar", "44100", "-ac", "1",
+        *_pcm_args(),
         output_path,
     ]
 
@@ -176,8 +214,7 @@ def build_mid_ad_cmd(
         f"[0:a]atrim={insert_at},asetpts=N/SR/TB[a2];"
         "[a1][1:a][a2]concat=n=3:v=0:a=1[out]",
         "-map", _FFMPEG_OUT_LABEL,
-        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-        "-ar", "44100", "-ac", "1",
+        *_pcm_args(),
         output_path,
     ]
 
@@ -200,8 +237,7 @@ def build_full_concat_cmd(inputs: list[str], output_path: str) -> list[str]:
         "-filter_complex",
         f"{labels}concat=n={n}:v=0:a=1[out]",
         "-map", _FFMPEG_OUT_LABEL,
-        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-        "-ar", "44100", "-ac", "1",
+        *_pcm_args(),
         output_path,
     ]
 
@@ -240,8 +276,7 @@ def build_crossfade_cmd(
     if n == 1:
         return [
             resolve_ffmpeg_path(), "-y", "-i", input_paths[0],
-            "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-            "-ar", "44100", "-ac", "1",
+            *_pcm_args(),
             output_path,
         ]
 
@@ -265,25 +300,23 @@ def build_crossfade_cmd(
         *input_args,
         "-filter_complex", ";".join(chain),
         "-map", _FFMPEG_OUT_LABEL,
-        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-        "-ar", "44100", "-ac", "1",
+        *_pcm_args(),
         output_path,
     ]
 
 
 async def generate_silence(duration_sec: float, output_path: str) -> None:
-    """生成指定时长的静音 mp3 文件。
+    """生成指定时长的静音 PCM(wav) 文件。
 
-    用 lavfi anullsrc 生成静音 PCM 再编码为 mp3,
+    用 lavfi anullsrc 生成静音信号（T01870 后为无损中间态，随主音频一次编码）。
     作为广告与主音频之间的过渡,避免突兀切换影响收听体验。
     """
     cmd = [
         resolve_ffmpeg_path(), "-y",
         "-f", "lavfi",
-        "-i", "anullsrc=r=44100:cl=mono",
+        "-i", f"anullsrc=r={_STITCH_SAMPLE_RATE}:cl=mono",
         "-t", str(duration_sec),
-        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-        "-ar", "44100", "-ac", "1",
+        *_pcm_args(),
         output_path,
     ]
     await run_ffmpeg(cmd)
@@ -336,18 +369,17 @@ async def build_bgm_overlay(
     # 预循环：生成一条长度足够的 BGM 源，后续所有切片都在它上面做输入侧 seek
     max_dur = max(durs) if durs else 0.0
     needed = (bgm_len if bgm_len > 0 else max_dur) + max_dur + 1.0
-    looped_src = str(Path(tmp_dir) / "bgm_looped_src.mp3")
+    looped_src = str(Path(tmp_dir) / "bgm_looped_src.wav")
     await run_ffmpeg([
         resolve_ffmpeg_path(), "-y",
         "-stream_loop", "-1", "-i", bgm_path,
         "-t", f"{needed:.3f}",
-        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-        "-ar", "44100", "-ac", "1",
+        *_pcm_args(),
         looped_src,
     ])
 
     for i, dur in enumerate(durs):
-        slice_path = str(Path(tmp_dir) / f"bgm_slice_{i}.mp3")
+        slice_path = str(Path(tmp_dir) / f"bgm_slice_{i}.wav")
         # 连续偏移取模 BGM 长度，保证 BGM 在整期节目里连续推进、循环处不跳变
         start = offset % bgm_len if bgm_len > 0 else 0.0
         # 每个切片加淡入/淡出，避免段边界处 BGM 被硬切产生"啪"的断裂感：
@@ -367,8 +399,7 @@ async def build_bgm_overlay(
             "-i", looped_src,
             "-t", f"{dur:.3f}",
             "-af", filter_chain,
-            "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-            "-ar", "44100", "-ac", "1",
+            *_pcm_args(),
             slice_path,
         ]
         await run_ffmpeg(cmd)
@@ -390,13 +421,12 @@ async def build_bgm_bridge(
     段间静音处表现为 BGM 桥接而非停顿，复现"段间静音"被 BGM 掩盖的旧听感。
     """
     main_dur = await get_audio_duration(main_path)
-    bgm_looped = str(Path(tmp_dir) / "bgm_looped.mp3")
+    bgm_looped = str(Path(tmp_dir) / "bgm_looped.wav")
     # 循环 BGM 到主音频长度（多循环覆盖，amix duration=first 截断到主音频）
     await run_ffmpeg([
         resolve_ffmpeg_path(), "-y", "-stream_loop", "-1", "-i", bgm_path,
         "-t", f"{main_dur:.3f}", "-af", f"volume={volume}",
-        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-        "-ar", "44100", "-ac", "1", bgm_looped,
+        *_pcm_args(), bgm_looped,
     ])
     await run_ffmpeg(build_amix_cmd(main_path, bgm_looped, output_path))
 
@@ -414,8 +444,7 @@ def build_amix_cmd(
         resolve_ffmpeg_path(), "-y",
         "-i", main_path, "-i", overlay_path,
         "-filter_complex", "amix=inputs=2:duration=first",
-        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-        "-ar", "44100", "-ac", "1",
+        *_pcm_args(),
         output_path,
     ]
 
@@ -445,8 +474,7 @@ async def build_bgm_continuous(
         "-i", bgm_path,
         "-t", f"{float(total_dur):.3f}",
         "-af", f"volume={volume}",
-        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-        "-ar", "44100", "-ac", "1",
+        *_pcm_args(),
         output_path,
     ])
 
@@ -465,8 +493,7 @@ async def adjust_tempo(input_path: str, output_path: str, tempo: float) -> None:
     cmd = [
         resolve_ffmpeg_path(), "-y", "-i", input_path,
         "-filter:a", f"atempo={tempo}",
-        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-        "-ar", "44100", "-ac", "1",
+        *_pcm_args(),
         output_path,
     ]
     await run_ffmpeg(cmd)
@@ -511,19 +538,21 @@ async def generate_bgm_tail(
         "-filter_complex",
         f"[0:a]volume={volume},afade=t=out:st={fade_start}:d=2.0[out]",
         "-map", _FFMPEG_OUT_LABEL,
-        "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-        "-ar", "44100", "-ac", "1",
+        *_pcm_args(),
         output_path,
     ])
     await run_ffmpeg(cmd)
 
 
 def build_hls_cmd(input_path: str, output_dir: str) -> tuple[list[str], str]:
-    """构造 HLS 分片生成命令（mp3 → m3u8 + ts 分片）。
+    """构造 HLS 分片生成命令（PCM 中间态 → m3u8 + ts 分片）。
 
     为什么 HLS 用 AAC 而非 MP3：HLS 规范（RFC 8216）要求 ADTS-AAC，
     ffmpeg -f hls 对 mp3 输出兼容性差，部分播放器无法解码。
     AAC 64kbps 与 MP3 64kbps 听感相当，且 HLS 原生支持。
+
+    为什么从 PCM 中间态编而不是从成品 mp3 编（T01870）：mp3→AAC 是第二次有损编码，
+    直接从拼接时间线的 PCM 编 AAC，HLS 与 MP3 各只有一次有损编码、互不叠加。
 
     输出结构：
         output_dir/
@@ -531,7 +560,7 @@ def build_hls_cmd(input_path: str, output_dir: str) -> tuple[list[str], str]:
         └── seg_00000.ts       # 分片文件（按 HLS_SEGMENT_SEC 切分）
 
     Args:
-        input_path: 输入 mp3 文件路径
+        input_path: 输入音频路径（T01870 后传拼接时间线的 PCM 中间态）
         output_dir: 输出目录（函数内自动创建）
 
     Returns:
@@ -548,7 +577,7 @@ def build_hls_cmd(input_path: str, output_dir: str) -> tuple[list[str], str]:
         "-i", input_path,
         # AAC 编码，码率与 mp3 保持一致避免体积膨胀
         "-c:a", "aac", "-b:a", _audio_bitrate(),
-        "-ar", "44100", "-ac", "1",
+        "-ar", _STITCH_SAMPLE_RATE, "-ac", "1",
         # HLS 封装参数
         "-f", "hls",
         "-hls_time", str(settings.HLS_SEGMENT_SEC),

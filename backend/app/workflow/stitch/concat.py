@@ -11,9 +11,15 @@
 3. 查询当日广告投放,中间位置插入广告
 4. 开头/结尾广告与主音频最终拼接,加静音过渡
 5. 时长校验(目标时长 ±20%)后上传 COS,key 含频道名+workflow_id 防覆盖
+
+编码代际（T01870）：下载的分段/广告素材在入口处统一解码为 16bit PCM，
+其后所有拼接/混音/插广告/变速/补足都在 PCM 上进行，**整期只在最终输出编一次 MP3**；
+HLS 也从同一份 PCM 编 AAC。此前每步都重编 MP3，同一段语音最多有损 4~5 代
+（T01845 实测 1 代→4 代 segSNR 掉 4.6dB 且零体积收益）。
 """
 import asyncio
 import logging
+import os
 import re
 import shutil
 import tempfile
@@ -31,7 +37,7 @@ from app.paths import resolve_ffmpeg_path
 from app.services.ad_service import AdService
 from app.workflow.stitch.ffmpeg_wrapper import (
     StitchError,
-    _audio_bitrate,
+    _encode_args,
     adjust_tempo,
     build_amix_cmd,
     build_concat_cmd,
@@ -48,6 +54,7 @@ from app.workflow.stitch.ffmpeg_wrapper import (
     build_bgm_bridge,
     build_bgm_continuous,
     run_ffmpeg,
+    to_pcm,
 )
 from app.workflow.tts.uploader import upload_to_cos, upload_hls_directory
 
@@ -55,7 +62,8 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # 混音后主音频临时文件名（BGM 三种铺法共用，S1192：避免重复字面量）
-_MAIN_BGM_FILENAME = "main_bgm.mp3"
+# 扩展名必须是 .wav：ffmpeg 按输出扩展名选 muxer，PCM 写进 .mp3 会直接失败
+_MAIN_BGM_FILENAME = "main_bgm.wav"
 
 # 时长校验区间按 settings.TARGET_DURATION_SEC 动态计算:
 #   允许范围 = [target × 0.80, target × 1.20]
@@ -189,6 +197,45 @@ def _read_file(path: str) -> bytes:
         return f.read()
 
 
+def _drop(*paths: str) -> None:
+    """删除已被后续步骤取代的中间 PCM 文件，容忍不存在。
+
+    为什么必须逐步清理：PCM 无损中间体的体积是同内容 MP3 的 10 倍以上
+    （44100Hz 单声道 16bit ≈ 88KB/s），一期 30 分钟听书单个中间文件就 ~160MB，
+    拼接链上先后有分段、主音频、BGM 叠加轨、混音、插广告、时间线等多份，
+    只靠流程结束时的 rmtree 会让峰值磁盘占用翻若干倍。
+    """
+    for p in paths:
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
+
+
+async def _to_pcm_asset(file_url: str, tmp_dir: Path, name: str) -> str:
+    """下载音频素材并统一解码为 16bit PCM，返回 wav 路径。
+
+    拼接链路上所有素材（TTS 分段、头/中/尾广告）都走这个入口，
+    之后各步只在 PCM 上操作，避免每步重编 MP3 累积代际损失。
+    解码本身不引入新的有损代际（源文件的那一代编码已经发生）。
+    原编码文件转 PCM 后立即删除，控制临时磁盘占用。
+    """
+    raw_path = str(tmp_dir / f"{name}.src.mp3")
+    await download_file(file_url, raw_path)
+    pcm_path = str(tmp_dir / f"{name}.wav")
+    await to_pcm(raw_path, pcm_path)
+    _drop(raw_path)  # 原编码文件已并入 PCM，尽早回收临时磁盘
+    return pcm_path
+
+
+async def _encode_timeline(timeline_path: str, output_path: str) -> None:
+    """把 PCM 时间线编码为成品 mp3——整期节目唯一一次有损编码。"""
+    await run_ffmpeg([
+        resolve_ffmpeg_path(), "-y", "-i", timeline_path,
+        *_encode_args(), output_path,
+    ])
+
+
 async def concat(  # NOSONAR
     workflow_id: str,
     episode_date,
@@ -224,12 +271,12 @@ async def concat(  # NOSONAR
         # 1. 按 seg_seq 排序,确保分段顺序与稿件一致
         segments = sorted(audio_segments, key=lambda s: s["seg_seq"])
 
-        # 2. 下载所有分段音频到本地
+        # 2. 下载所有分段音频到本地并统一解码为 PCM
         seg_paths: list[str] = []
         for seg in segments:
-            seg_path = str(tmp_dir / f"seg_{seg['seg_seq']}.mp3")
-            await download_file(seg["audio_url"], seg_path)
-            seg_paths.append(seg_path)
+            seg_paths.append(
+                await _to_pcm_asset(seg["audio_url"], tmp_dir, f"seg_{seg['seg_seq']}")
+            )
 
         # 2.5 探测各分段实际时长（浮点秒）+ 预估拼接总时长
         # 关键：BGM 叠加轨切片必须用主音频实际分段时长（ffprobe 实测浮点值），
@@ -259,8 +306,8 @@ async def concat(  # NOSONAR
         # 两种段间策略：
         # - continuous（默认）：acrossfade 交叉淡化直连，段间无静音空档 → 双人播报切换丝滑
         # - silence / bridge：交替插入静音 gap（段间停顿可被听觉感知）
-        gap_path = str(tmp_dir / "gap.mp3")
-        main_path = str(tmp_dir / "main.mp3")
+        gap_path = str(tmp_dir / "gap.wav")
+        main_path = str(tmp_dir / "main.wav")
         if bgm_gap_mode == "continuous":
             await run_ffmpeg(
                 build_crossfade_cmd(seg_paths, crossfade_sec, main_path)
@@ -278,6 +325,9 @@ async def concat(  # NOSONAR
                     interleaved.append(gap_path)
                 interleaved.append(p)
             await run_ffmpeg(build_concat_cmd(interleaved, main_path))
+        # 分段 PCM 已并入主音频，立即回收（PCM 体积是同内容 MP3 的 10 倍以上，
+        # 一期 30 分钟听书仅分段 PCM 就 ~160MB，不清理会把临时盘挤爆）
+        _drop(*seg_paths)
 
         # 3.5 (可选)叠加低音量 BGM 垫底
         # 频道级 BGM 优先（channel.bgm_path + channel.bgm_volume），回退到全局配置
@@ -286,14 +336,15 @@ async def concat(  # NOSONAR
         #   "silence"           = 按 TTS 分段切片 BGM，段间复用 gap_path 纯静音 → 真实停顿
         #   "bridge"            = 旧版：循环 BGM 均匀铺满整段（含段间静音）→ BGM 桥接
         if bgm_path and bgm_gap_mode == "continuous":
-            # 连续模式：BGM 只编码一条流，铺满主音频实际时长，全程不断
-            bgm_overlay_path = str(tmp_dir / "bgm_overlay.mp3")
+            # 连续模式：BGM 只生成一条流，铺满主音频实际时长，全程不断
+            bgm_overlay_path = str(tmp_dir / "bgm_overlay.wav")
             main_dur = await get_audio_duration_f(main_path)
             await build_bgm_continuous(
                 str(bgm_path), main_dur, bgm_volume, bgm_overlay_path,
             )
             bgm_mix_path = str(tmp_dir / _MAIN_BGM_FILENAME)
             await run_ffmpeg(build_amix_cmd(main_path, bgm_overlay_path, bgm_mix_path))
+            _drop(main_path, bgm_overlay_path)
             main_path = bgm_mix_path
             logger.info(
                 "BGM 连续模式 workflow_id=%s volume=%.2f 时长=%.2fs（段间 BGM 不中断）",
@@ -302,9 +353,11 @@ async def concat(  # NOSONAR
         elif bgm_path and bgm_gap_mode == "bridge":
             # 旧版 BGM 桥接：整段循环 BGM 均匀叠加，段间静音处表现为 BGM 桥接
             bgm_mix_path = str(tmp_dir / _MAIN_BGM_FILENAME)
+            prev_main = main_path
             await build_bgm_bridge(
                 main_path, str(bgm_path), bgm_volume, bgm_mix_path, str(tmp_dir),
             )
+            _drop(prev_main)
             main_path = bgm_mix_path
             logger.info(
                 "BGM 桥接模式 workflow_id=%s volume=%.2f（段间为 BGM 桥接）",
@@ -312,13 +365,14 @@ async def concat(  # NOSONAR
             )
         elif bgm_path:
             # silence：段间真实静音（BGM 按段切片，段间复用纯静音）
-            bgm_overlay_path = str(tmp_dir / "bgm_overlay.mp3")
+            bgm_overlay_path = str(tmp_dir / "bgm_overlay.wav")
             await build_bgm_overlay(
                 str(bgm_path), seg_durations, gap_path,
                 bgm_volume, bgm_overlay_path, str(tmp_dir),
             )
             bgm_mix_path = str(tmp_dir / _MAIN_BGM_FILENAME)
             await run_ffmpeg(build_amix_cmd(main_path, bgm_overlay_path, bgm_mix_path))
+            _drop(main_path, bgm_overlay_path)
             main_path = bgm_mix_path
             logger.info(
                 "BGM 段间静音模式 workflow_id=%s volume=%.2f（段间静音处为纯静音）",
@@ -350,19 +404,20 @@ async def concat(  # NOSONAR
         # 5. 中间广告插入(insert_at=300s),缺位则跳过
         mid_ad = placements.get("mid")
         if mid_ad:
-            mid_ad_path = str(tmp_dir / "mid_ad.mp3")
-            await download_file(mid_ad["file_url"], mid_ad_path)
-            mid_inserted_path = str(tmp_dir / "main_with_mid.mp3")
+            mid_ad_path = await _to_pcm_asset(mid_ad["file_url"], tmp_dir, "mid_ad")
+            mid_inserted_path = str(tmp_dir / "main_with_mid.wav")
+            prev_main = main_path
             await run_ffmpeg(
                 build_mid_ad_cmd(main_path, mid_ad_path, mid_inserted_path)
             )
+            _drop(prev_main, mid_ad_path)
             main_path = mid_inserted_path
             logger.info("中间广告已插入 workflow_id=%s", workflow_id)
         else:
             logger.info("无中间广告,跳过插入 workflow_id=%s", workflow_id)
 
         # 6. 生成 0.5s 静音过渡文件（广告与主音频之间的过渡,与段间 gap 区分）
-        silence_path = str(tmp_dir / "silence.mp3")
+        silence_path = str(tmp_dir / "silence.wav")
         await generate_silence(SILENCE_DURATION, silence_path)
 
         # 7. 开头/结尾广告与主音频最终拼接,广告缺位则跳过该广告位
@@ -370,27 +425,26 @@ async def concat(  # NOSONAR
         tail_ad = placements.get("tail")
         final_inputs: list[str] = []
         if head_ad:
-            head_ad_path = str(tmp_dir / "head_ad.mp3")
-            await download_file(head_ad["file_url"], head_ad_path)
+            head_ad_path = await _to_pcm_asset(head_ad["file_url"], tmp_dir, "head_ad")
             final_inputs.append(head_ad_path)
             final_inputs.append(silence_path)
         final_inputs.append(main_path)
         if tail_ad:
             final_inputs.append(silence_path)
-            tail_ad_path = str(tmp_dir / "tail_ad.mp3")
-            await download_file(tail_ad["file_url"], tail_ad_path)
+            tail_ad_path = await _to_pcm_asset(tail_ad["file_url"], tmp_dir, "tail_ad")
             final_inputs.append(tail_ad_path)
 
-        final_path = str(tmp_dir / "final.mp3")
+        # 广告与主音频先在 PCM 时间线上汇合，随后整期只做一次有损编码出成品 mp3
+        timeline_path = str(tmp_dir / "timeline.wav")
         if len(final_inputs) == 1:
-            # 无任何广告:主音频直接重编码统一格式输出
-            await run_ffmpeg([
-                resolve_ffmpeg_path(), "-y", "-i", main_path,
-                "-c:a", "libmp3lame", "-b:a", _audio_bitrate(),
-                "-ar", "44100", "-ac", "1", final_path,
-            ])
+            # 无任何广告:主音频时间线即成品时间线，省去一次无谓的 PCM 拷贝
+            timeline_path = main_path
         else:
-            await run_ffmpeg(build_full_concat_cmd(final_inputs, final_path))
+            await run_ffmpeg(build_full_concat_cmd(final_inputs, timeline_path))
+            _drop(*final_inputs)
+
+        final_path = str(tmp_dir / "final.mp3")
+        await _encode_timeline(timeline_path, final_path)
 
         # 8. 时长校验 + 双向兜底（超长 atempo 加速 / 不足 BGM 补足）
         # 正常范围 [target×0.80, target×1.20]：
@@ -406,9 +460,13 @@ async def concat(  # NOSONAR
         if duration > max_allowed:
             tempo_needed = duration / max_allowed
             if tempo_needed <= 1.15:
-                adjusted_path = str(tmp_dir / "final_adjusted.mp3")
-                await adjust_tempo(final_path, adjusted_path, tempo_needed)
-                final_path = adjusted_path
+                # 变速在 PCM 时间线上做，成品仍从时间线重新编码一次
+                # （不是对已编码 mp3 二次有损——旧实现此处是第 3~4 代）
+                adjusted_path = str(tmp_dir / "timeline_adjusted.wav")
+                await adjust_tempo(timeline_path, adjusted_path, tempo_needed)
+                _drop(timeline_path)
+                timeline_path = adjusted_path
+                await _encode_timeline(timeline_path, final_path)
                 original_duration = duration
                 duration = await get_audio_duration(final_path)
                 logger.info(
@@ -447,7 +505,7 @@ async def concat(  # NOSONAR
                 "有" if bgm_path else "无（降级静音）",
             )
 
-            tail_path = str(tmp_dir / "tail_filler.mp3")
+            tail_path = str(tmp_dir / "tail_filler.wav")
             if bgm_path:
                 await generate_bgm_tail(
                     str(bgm_path), supplement_sec, tail_path, volume=bgm_volume,
@@ -455,10 +513,12 @@ async def concat(  # NOSONAR
             else:
                 await generate_silence(supplement_sec, tail_path)
 
-            # 主音频 + 尾段拼接
-            padded_path = str(tmp_dir / "final_padded.mp3")
-            await run_ffmpeg(build_full_concat_cmd([final_path, tail_path], padded_path))
-            final_path = padded_path
+            # 时间线 + 尾段拼接（仍在 PCM 上），随后重新编码成品
+            padded_path = str(tmp_dir / "timeline_padded.wav")
+            await run_ffmpeg(build_full_concat_cmd([timeline_path, tail_path], padded_path))
+            _drop(timeline_path, tail_path)
+            timeline_path = padded_path
+            await _encode_timeline(timeline_path, final_path)
             original_duration = duration
             duration = await get_audio_duration(final_path)
 
@@ -490,7 +550,9 @@ async def concat(  # NOSONAR
         if settings.HLS_ENABLE:
             try:
                 hls_dir = str(tmp_dir / "hls")
-                hls_cmd, _ = build_hls_cmd(final_path, hls_dir)
+                # 从 PCM 时间线编 AAC，而不是从成品 mp3 转码
+                # （mp3→AAC 是两次有损，同一节目会在 HLS 播放路径上多一代失真）
+                hls_cmd, _ = build_hls_cmd(timeline_path, hls_dir)
                 await run_ffmpeg(hls_cmd)
                 hls_key_prefix = (
                     f"episodes/{episode_date.strftime('%Y%m%d')}/"

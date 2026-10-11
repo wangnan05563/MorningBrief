@@ -37,9 +37,8 @@ from app.workflow.tts.base_provider import (
 from app.workflow.text_clean import strip_markdown_residue
 from app.workflow.tts.tts_factory import get_tts_provider
 from app.workflow.tts.audio_postprocess import (
-    normalize_loudness,
-    trim_silence,
     get_audio_duration,
+    postprocess_segment,
 )
 from app.workflow.tts.uploader import upload_to_cos
 
@@ -387,9 +386,8 @@ async def synthesize(workflow_id: str, script_id: int) -> dict:
             failures.append((seq, "合成", res))
             continue
         try:
-            # 顺序：归一化 → 去静音 → 探测时长 → 上传
-            audio = await normalize_loudness(res)
-            audio = await trim_silence(audio)
+            # 后处理（归一化 + 去静音，单次编码）→ 探测时长 → 上传
+            audio = await postprocess_segment(res)
             duration = await get_audio_duration(audio)
             # key 含 workflow_id + uuid，防止不同期/同段覆盖
             key = f"tts/{workflow_id}/{seq}_{uuid.uuid4().hex[:8]}.mp3"

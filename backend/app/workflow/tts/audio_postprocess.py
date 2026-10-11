@@ -65,21 +65,30 @@ def _read_file(path: str) -> bytes:
         return f.read()
 
 
-async def normalize_loudness(audio_bytes: bytes, target_lufs: int = -16) -> bytes:
-    """响度归一化（FFmpeg loudnorm 滤镜）。
+async def postprocess_segment(
+    audio_bytes: bytes, target_lufs: int = -16, threshold_db: int = -50
+) -> bytes:
+    """分段后处理：响度归一化 + 去首尾静音，**整段只做一次有损编码**。
 
-    统一各段响度到 target_lufs，避免拼接后段间音量跳变。
-    同时统一采样率/声道/码率，为后续拼接做准备。
+    原来 normalize_loudness / trim_silence 分两次 FFmpeg 调用，每次都解码再
+    重编 mp3——同一个分段在 TTS 阶段就落下 2 代有损编码（叠加 provider 自身的
+    1 代与 stitch 的若干代）。T01845 实测每多一代 64k 重编 segSNR 掉约 1.5dB，
+    而体积毫无收益。两个滤镜本身可以串在同一条 -af 链上，因此合并为一次调用。
 
-    为什么读 settings.AUDIO_BITRATE：原本硬编码 128k，导致 TTS 段以 128kbps 落盘，
-    拼接时再重编码到 64kbps——既浪费存储/带宽，又造成二次有损压缩。
-    统一码率后 TTS 段与拼接产物码率一致，拼接环节无需二次重编码。
+    滤镜顺序保持「先 loudnorm 后 silenceremove」，与拆分实现一致：
+    先去静音会让 loudnorm 的响度统计漏掉被切掉的段落，导致整体音量偏高。
+
+    threshold_db 为负数 dB，去除低于该阈值的静音段，避免拼接处出现明显停顿。
+    start_periods=1 去除首部静音；stop_periods=-1 去除尾部所有静音。
     """
     in_path = _write_temp(audio_bytes, ".mp3")
-    out_path = in_path.replace(".mp3", "_norm.mp3")
+    out_path = in_path.replace(".mp3", "_pp.mp3")
     cmd = [
         resolve_ffmpeg_path(), "-y", "-i", in_path,
-        "-af", f"loudnorm=I={target_lufs}:TP=-1.5:LRA=11",
+        "-af",
+        f"loudnorm=I={target_lufs}:TP=-1.5:LRA=11,"
+        f"silenceremove=start_periods=1:start_threshold={threshold_db}dB:"
+        f"stop_periods=-1:stop_threshold={threshold_db}dB:stop_duration=0.3",
         "-ar", str(settings.ALIYUN_TTS_SAMPLE_RATE),
         "-ac", "1",
         "-b:a", settings.AUDIO_BITRATE,
@@ -88,37 +97,7 @@ async def normalize_loudness(audio_bytes: bytes, target_lufs: int = -16) -> byte
     try:
         code, _, err = await asyncio.to_thread(_run_cmd, cmd)
         if code != 0:
-            raise RuntimeError(f"loudnorm 失败: {err[:300]}")
-        return await asyncio.to_thread(_read_file, out_path)
-    finally:
-        _cleanup(in_path, out_path)
-
-
-async def trim_silence(audio_bytes: bytes, threshold_db: int = -50) -> bytes:
-    """去首尾静音（FFmpeg silenceremove 滤镜）。
-
-    threshold_db 为负数 dB，去除低于该阈值的静音段，
-    避免拼接处出现明显停顿。
-
-    为什么显式指定 -b:a：ffmpeg 在仅做剪切（无重编码滤镜）时，
-    对 mp3 输出默认使用 128kbps，会破坏与 normalize_loudness 设定的 64kbps 一致性。
-    此处与 normalize_loudness 使用同一码率，保证整条链路码率统一。
-    """
-    in_path = _write_temp(audio_bytes, ".mp3")
-    out_path = in_path.replace(".mp3", "_trim.mp3")
-    # start_periods=1 去除首部静音；stop_periods=-1 去除尾部所有静音
-    cmd = [
-        resolve_ffmpeg_path(), "-y", "-i", in_path,
-        "-af",
-        f"silenceremove=start_periods=1:start_threshold={threshold_db}dB:"
-        f"stop_periods=-1:stop_threshold={threshold_db}dB:stop_duration=0.3",
-        "-b:a", settings.AUDIO_BITRATE,
-        out_path,
-    ]
-    try:
-        code, _, err = await asyncio.to_thread(_run_cmd, cmd)
-        if code != 0:
-            raise RuntimeError(f"silenceremove 失败: {err[:300]}")
+            raise RuntimeError(f"分段后处理失败: {err[:300]}")
         return await asyncio.to_thread(_read_file, out_path)
     finally:
         _cleanup(in_path, out_path)
