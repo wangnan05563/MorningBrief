@@ -35,6 +35,20 @@ class Review(Base):
     audio_url: Mapped[str] = mapped_column(String(512), nullable=False)
     # HLS 清单 URL：拼接阶段生成，发布时拷贝到 episode.hls_url；为空表示未生成 HLS
     hls_url: Mapped[Optional[str]] = mapped_column(String(512))
+    # ===== 时长改造留痕（T02028）=====
+    # 拼接阶段对成品时长做过两类改造：不足下限用 BGM/静音补足（concat.py:484+）、
+    # 超上限用 atempo 压缩（concat.py:461+）。改造后的成品时长不能反映内容真实长度，
+    # 而 episode.duration 又要落成品值（小程序按它算进度），所以这里把三个口径都存下来：
+    # measured=成品实测，original=改造前实测，supplement=补入秒数（0/NULL 表示未补足）。
+    measured_duration_sec: Mapped[Optional[int]] = mapped_column(
+        Integer, comment="拼接成品实测时长（秒），发布时优先取此值"
+    )
+    original_duration_sec: Mapped[Optional[int]] = mapped_column(
+        Integer, comment="时长改造前的实测时长（秒），未改造时与 measured 相同"
+    )
+    supplement_sec: Mapped[Optional[int]] = mapped_column(
+        Integer, comment="为达时长下限补入的 BGM/静音秒数，>0 表示成品时长含凑时"
+    )
     status: Mapped[Optional[str]] = mapped_column(
         String(16), default=ReviewStatus.pending.value
     )

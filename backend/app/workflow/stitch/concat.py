@@ -458,6 +458,10 @@ async def concat(  # NOSONAR
         # 原实现误把 channel_id（小整数）当作 min_duration_sec 传入，导致
         # 频道级最短时长配置完全失效（且 channel_id 大小被当成秒数下限）。
         min_allowed, max_allowed = _get_duration_range(_min_dur)
+        # 时长改造留痕（T02028）：成品时长可能是改造后的值，原始实测与补足秒数一并带出，
+        # 由 _create_review 落库，供运营区分「内容真有这么长」与「被 BGM 凑到下限」
+        original_duration = duration
+        supplement_sec = 0
         if duration > max_allowed:
             tempo_needed = duration / max_allowed
             if tempo_needed <= 1.15:
@@ -468,7 +472,6 @@ async def concat(  # NOSONAR
                 _drop(timeline_path)
                 timeline_path = adjusted_path
                 await _encode_timeline(timeline_path, final_path)
-                original_duration = duration
                 duration = await get_audio_duration(final_path)
                 logger.info(
                     "atempo 加速兜底 workflow_id=%s tempo=%.3f 原时长=%ds 调整后=%ds",
@@ -580,6 +583,9 @@ async def concat(  # NOSONAR
             "final_audio_url": final_url,
             "hls_url": hls_url,
             "duration": duration,
+            # T02028：改造前实测与补入秒数，_create_review 落 review 表
+            "original_duration": original_duration,
+            "supplement_sec": supplement_sec,
         }
     finally:
         # 10. 清理临时目录:无论成功失败都回收磁盘空间

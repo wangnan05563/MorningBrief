@@ -563,9 +563,13 @@ class ContentService:
             title = f"{date_part} · 今日要闻"
 
         # 4. 创建 episode
-        # 时长以成品实测为准：estimated_duration 是按字数反算的稿件估算值，不含拼接阶段的
-        # BGM/静音补足与 atempo 压缩，两者可差数百秒，落估算值会让进度条与完播口径偏移
-        measured_duration = await self._measure_audio_duration(review.audio_url)
+        # 时长口径（T01925→T02028）：优先用拼接阶段落库的成品实测值，其次才是发布期探测，
+        # 最后回退稿件估算。estimated_duration 是按字数反算的，不含拼接阶段的 BGM/静音补足与
+        # atempo 压缩，两者可差数百秒，落估算值会让进度条与完播口径偏移。
+        # supplement_sec>0 说明成品时长含「凑出来的秒数」，快照到 episode 供运营按内容核验。
+        measured_duration = review.measured_duration_sec or await self._measure_audio_duration(
+            review.audio_url
+        )
         episode = Episode(
             date=review.episode_date,
             title=title,
@@ -573,6 +577,8 @@ class ContentService:
             audio_url=review.audio_url,
             # HLS URL 从 review 拷贝：拼接阶段生成，发布时落入 episode 表
             hls_url=review.hls_url,
+            supplement_sec=review.supplement_sec,
+            original_duration_sec=review.original_duration_sec,
             script_id=review.script_id,
             review_id=review.id,
             categories=script.categories if script else None,
@@ -602,6 +608,9 @@ class ContentService:
 
     async def _measure_audio_duration(self, audio_url: str | None) -> int | None:
         """探测成品音频实际时长（秒）；不可探测时返回 None，由调用方回退估算值。
+
+        T02028 起这是**兜底路径**：拼接阶段已把实测时长落到 `review.measured_duration_sec`，
+        发布优先取该值，只有老 review（列为 NULL）才会走到这里探测。
 
         只对外链（http/https）探测：COS 未配置时 audio_url 是 `/audio/...` 本地相对路径，
         ffprobe 读不了，回退估算值即可，不该为此阻塞发布。探测是同步子进程，

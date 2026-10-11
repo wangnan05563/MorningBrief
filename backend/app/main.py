@@ -603,6 +603,51 @@ async def _migrate_review_auto_approve_columns() -> None:  # NOSONAR
         conn.close()
 
 
+async def _migrate_duration_trace_columns() -> None:  # NOSONAR
+    """为 review / episode 表追加时长改造留痕列（幂等）。
+
+    为什么单独迁移：SQLite create_all 不修改已存在表结构。
+    背景（T01925→T02028）：拼接阶段会把成品时长强制改造到允许区间（不足用 BGM/静音补足、
+    超长用 atempo 压缩），而发布此前一直只落稿件字数估算值。这三列把实测口径正规带出来：
+    - measured_duration_sec：成品实测时长，发布时优先取它（替代发布期网络探测）
+    - original_duration_sec：改造前实测时长（内容真实长度，按内容核验用）
+    - supplement_sec：补入秒数，>0 即「时长是凑出来的」，管理端据此标记
+    列均可空、默认 NULL，历史行不回填（历史 90 条 episode.duration 已由
+    _validate/t01925_backfill_duration.py 单独校正）。
+    """
+    import sqlite3
+    from app.paths import resolve_db_path
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    plan = {
+        "review": [
+            ("measured_duration_sec", "INTEGER"),
+            ("original_duration_sec", "INTEGER"),
+            ("supplement_sec", "INTEGER"),
+        ],
+        "episode": [
+            ("supplement_sec", "INTEGER"),
+            ("original_duration_sec", "INTEGER"),
+        ],
+    }
+    try:
+        cur = conn.cursor()
+        for table, columns in plan.items():
+            cur.execute(f"PRAGMA table_info({table})")
+            existing_cols = {row[1] for row in cur.fetchall()}
+            for col_name, col_type in columns:
+                if col_name not in existing_cols:
+                    cur.execute(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_type}")
+                    logger.info(
+                        "[startup] {} 表迁移完成，新增 {} 列", table, col_name)
+        conn.commit()
+    except Exception as e:
+        logger.warning("[startup] 时长改造留痕列迁移失败: {}", e)
+    finally:
+        conn.close()
+
+
 async def _migrate_playlog_indexes() -> None:  # NOSONAR
     """播放日志表索引迁移：为已存在的 play_log 表追加复合索引（幂等）。
 
@@ -1081,6 +1126,12 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
             await _migrate_review_auto_approve_columns()
         except Exception as e:
             logger.warning("[startup] review 自动审批列迁移失败: {}", e)
+
+        # review/episode 时长改造留痕列迁移（T02028：实测时长与补足秒数正规落库）
+        try:
+            await _migrate_duration_trace_columns()
+        except Exception as e:
+            logger.warning("[startup] 时长改造留痕列迁移失败: {}", e)
 
         # play_log 表索引迁移（幂等追加 idx_user_played_at 复合索引，优化 /recent 查询）
         try:

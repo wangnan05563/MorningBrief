@@ -42,6 +42,16 @@ class Episode(Base):
     # 为什么单独存而非动态推导：HLS 是否生成由配置决定，且文件位于子目录，
     # 持久化避免每次请求探测文件系统；为空时客户端回退到 audio_url
     hls_url: Mapped[Optional[str]] = mapped_column(String(512))
+    # ===== 时长改造留痕（T02028，发布时从 review 快照）=====
+    # duration 是成品时长（小程序据此算进度），但它可能含拼接阶段为达下限补入的 BGM/静音，
+    # 或被 atempo 压缩过。列表要能标出「这个时长是凑出来的」，故同时留：
+    # supplement_sec=补入秒数（>0 即被凑时长），original_duration_sec=改造前实测（内容真实长度）
+    supplement_sec: Mapped[Optional[int]] = mapped_column(
+        Integer, comment="为达时长下限补入的 BGM/静音秒数，>0 表示成品时长含凑时"
+    )
+    original_duration_sec: Mapped[Optional[int]] = mapped_column(
+        Integer, comment="时长改造前的实测时长（秒），按内容核验用"
+    )
     cover_url: Mapped[Optional[str]] = mapped_column(String(512))
     script_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("script.id")

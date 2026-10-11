@@ -68,6 +68,24 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="时长" width="170">
+        <template #default="{ row }">
+          <span v-if="row.measured_duration_sec != null">
+            {{ formatDuration(row.measured_duration_sec) }}
+          </span>
+          <span v-else class="text-muted">—</span>
+          <!-- T02028：拼接阶段为达时长下限用 BGM/静音凑过时，成品时长不代表内容真实长度，
+               运营按「凑时」标记改用内容实测时长核验（如 30 分钟保底） -->
+          <el-tooltip
+            v-if="row.supplement_sec > 0"
+            :content="`成品含 ${row.supplement_sec}s BGM/静音凑时，内容实测 ${formatDuration(row.original_duration_sec)}`"
+          >
+            <el-tag type="warning" effect="plain" size="small" style="margin-left: 4px">
+              凑时 {{ row.supplement_sec }}s
+            </el-tag>
+          </el-tooltip>
+        </template>
+      </el-table-column>
       <el-table-column label="审核人" width="140">
         <template #default="{ row }">
           {{ row.reviewer_name || '-' }}
@@ -165,6 +183,13 @@ function statusTagType(status) {
 
 function statusText(status) {
   return { pending: '待审核', approved: '已通过', rejected: '已打回' }[status] || status
+}
+
+function formatDuration(sec) {
+  if (sec == null) return '-'
+  if (sec < 60) return `${sec} 秒`
+  if (sec < 3600) return `${Math.floor(sec / 60)} 分 ${sec % 60} 秒`
+  return `${Math.floor(sec / 3600)} 时 ${Math.floor((sec % 3600) / 60)} 分`
 }
 
 function handleSelectionChange(rows) {

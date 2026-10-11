@@ -1423,6 +1423,11 @@ class WorkflowScheduler:
         audio_url = context["final_audio_url"]
         # HLS 清单 URL：拼接阶段生成的 m3u8，为空表示未生成（HLS_ENABLE=false 或生成失败）
         hls_url = context.get("hls_url")
+        # 时长改造留痕（T02028）：拼接阶段实测的成品时长与改造前后差值。
+        # 旧实现只透传 URL，context 里的 duration 到此被丢弃，发布时只能落稿件估算值。
+        measured_duration_sec = context.get("duration")
+        original_duration_sec = context.get("original_duration")
+        supplement_sec = context.get("supplement_sec")
 
         async with AsyncSessionLocal() as session:
             review = Review(
@@ -1431,6 +1436,9 @@ class WorkflowScheduler:
                 script_id=script_id,
                 audio_url=audio_url,
                 hls_url=hls_url,
+                measured_duration_sec=measured_duration_sec,
+                original_duration_sec=original_duration_sec,
+                supplement_sec=supplement_sec,
                 status=ReviewStatus.pending,
             )
             session.add(review)
@@ -1443,8 +1451,10 @@ class WorkflowScheduler:
         context["review_created_at"] = review_created_at
 
         logger.info(
-            "审核记录已创建 workflow_id=%s review_id=%s",
+            "审核记录已创建 workflow_id=%s review_id=%s "
+            "成品时长=%ss 改造前=%ss 补足=%ss",
             workflow_id, review_id,
+            measured_duration_sec, original_duration_sec, supplement_sec,
         )
         return {"review_id": review_id}
 

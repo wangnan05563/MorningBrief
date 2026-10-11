@@ -113,6 +113,10 @@ class ReviewService:
                 "status": review.status if review.status else None,
                 # 自动审批标记：前端据此显示"系统自动"标签
                 "auto_approved": bool(review.auto_approved),
+                # 时长改造留痕（T02028）：前端据此标出"成品时长含 BGM 凑时"的节目
+                "measured_duration_sec": review.measured_duration_sec,
+                "original_duration_sec": review.original_duration_sec,
+                "supplement_sec": review.supplement_sec,
                 "reviewer_name": review.reviewer_name,
                 "created_at": review.created_at.isoformat() if review.created_at else None,
                 "title": title,
