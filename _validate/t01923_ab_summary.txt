@@ -1,0 +1,20 @@
+clip01 衔接点 win=[566.36, 574.36] anchor={"t": 570.36, "dip_db": -120.0, "span_sec": 0.38}
+   published   sr=44100 br=128457 size=129192 segSNR=None p10=None lsd=None band=null cut_ref=None cut_cand=None cmp=None
+   64k44100    sr=44100 br=64617 size=64617 segSNR=22.61 p10=11.99 lsd=5.79 band={"0-0k": 0.07, "0-1k": 0.05, "1-3k": 0.03, "3-6k": -0.05, "6-9k": -0.37, "9-12k": -0.46, "12-16k": 0.14, "16-20k": 0.11} cut_ref=11175 cut_cand=11046 cmp=0.0
+   64k32000    sr=32000 br=64844 size=64844 segSNR=24.5 p10=13.66 lsd=5.804 band={"0-0k": 0.06, "0-1k": 0.06, "1-3k": 0.0, "3-6k": -0.03, "6-9k": -0.35, "9-12k": -0.38, "12-16k": -0.04, "16-20k": 12.16} cut_ref=11175 cut_cand=10981 cmp=0.0
+clip02 衔接点 win=[335.87, 343.87] anchor={"t": 339.87, "dip_db": -83.5, "span_sec": 1.91}
+   published   sr=44100 br=128459 size=128774 segSNR=None p10=None lsd=None band=null cut_ref=None cut_cand=None cmp=None
+   64k44100    sr=44100 br=64617 size=64617 segSNR=24.51 p10=13.02 lsd=6.99 band={"0-0k": 0.05, "0-1k": 0.05, "1-3k": 0.02, "3-6k": -0.07, "6-9k": -0.43, "9-12k": -0.5, "12-16k": 0.05, "16-20k": 0.02} cut_ref=10142 cut_cand=10185 cmp=0.0
+   64k32000    sr=32000 br=64844 size=64844 segSNR=26.12 p10=15.13 lsd=6.926 band={"0-0k": 0.02, "0-1k": 0.02, "1-3k": -0.0, "3-6k": -0.06, "6-9k": -0.42, "9-12k": -0.57, "12-16k": -0.76, "16-20k": 9.17} cut_ref=10142 cut_cand=10443 cmp=0.0
+clip03 衔接点 win=[453.05, 461.05] anchor={"t": 457.05, "dip_db": -78.0, "span_sec": 0.21}
+   published   sr=44100 br=128459 size=128774 segSNR=None p10=None lsd=None band=null cut_ref=None cut_cand=None cmp=None
+   64k44100    sr=44100 br=64617 size=64617 segSNR=22.41 p10=12.18 lsd=5.702 band={"0-0k": 0.08, "0-1k": 0.07, "1-3k": 0.03, "3-6k": -0.02, "6-9k": -0.33, "9-12k": -0.38, "12-16k": 0.1, "16-20k": 0.18} cut_ref=10981 cut_cand=10766 cmp=0.0
+   64k32000    sr=32000 br=64844 size=64844 segSNR=24.51 p10=14.49 lsd=5.817 band={"0-0k": 0.03, "0-1k": 0.04, "1-3k": -0.0, "3-6k": -0.05, "6-9k": -0.28, "9-12k": -0.48, "12-16k": -0.09, "16-20k": 13.53} cut_ref=10981 cut_cand=10938 cmp=0.0
+clip04 片头BGM垫乐 win=[0.0, 8.0] anchor={"t": 1.0, "high_band_ratio": 0.2458}
+   published   sr=44100 br=128666 size=129192 segSNR=None p10=None lsd=None band=null cut_ref=None cut_cand=None cmp=None
+   64k44100    sr=44100 br=64617 size=64617 segSNR=23.12 p10=13.48 lsd=4.667 band={"0-0k": 0.03, "0-1k": 0.03, "1-3k": -0.02, "3-6k": -0.06, "6-9k": -0.38, "9-12k": -0.5, "12-16k": 1.88, "16-20k": 27.73} cut_ref=11218 cut_cand=11132 cmp=0.0
+   64k32000    sr=32000 br=64844 size=64844 segSNR=24.16 p10=13.25 lsd=5.48 band={"0-0k": 0.05, "0-1k": 0.05, "1-3k": -0.0, "3-6k": -0.05, "6-9k": -0.38, "9-12k": -0.44, "12-16k": 1.36, "16-20k": 18.39} cut_ref=11218 cut_cand=11154 cmp=0.0
+clip05 齿音段 win=[415.21, 423.21] anchor={"t": 419.21, "sibilance_ratio": 0.0885}
+   published   sr=44100 br=128459 size=128774 segSNR=None p10=None lsd=None band=null cut_ref=None cut_cand=None cmp=None
+   64k44100    sr=44100 br=64617 size=64617 segSNR=20.9 p10=11.62 lsd=5.445 band={"0-0k": 0.15, "0-1k": 0.16, "1-3k": 0.1, "3-6k": -0.05, "6-9k": -0.35, "9-12k": -0.34, "12-16k": 3.26, "16-20k": 24.2} cut_ref=10874 cut_cand=10357 cmp=0.0
+   64k32000    sr=32000 br=64844 size=64844 segSNR=21.93 p10=14.12 lsd=5.167 band={"0-0k": 0.11, "0-1k": 0.1, "1-3k": 0.06, "3-6k": -0.03, "6-9k": -0.3, "9-12k": -0.47, "12-16k": 1.63, "16-20k": 14.9} cut_ref=10874 cut_cand=10895 cmp=0.0

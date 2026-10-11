@@ -1,0 +1,149 @@
+{
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+  "results": [
+    {
+      "file": "A0_published_copy.mp3",
+      "http": {
+        "status": 206,
+        "content_type": "audio/mpeg",
+        "accept_ranges": null,
+        "content_range": "bytes 0-1/960931"
+      },
+      "play": {
+        "started": true,
+        "duration": 60.029388,
+        "error_code": null,
+        "error_msg": null,
+        "seek_ok": true,
+        "advanced_ms": 1035,
+        "can_play_type": ""
+      }
+    },
+    {
+      "file": "A_baseline_128k_44100.mp3",
+      "http": {
+        "status": 200,
+        "content_type": "audio/mpeg",
+        "accept_ranges": null,
+        "content_range": null
+      },
+      "play": {
+        "started": true,
+        "duration": 60,
+        "error_code": null,
+        "error_msg": null,
+        "seek_ok": true,
+        "advanced_ms": 1445,
+        "can_play_type": ""
+      }
+    },
+    {
+      "file": "B_standard_64k_32000.mp3",
+      "http": {
+        "status": 200,
+        "content_type": "audio/mpeg",
+        "accept_ranges": null,
+        "content_range": null
+      },
+      "play": {
+        "started": true,
+        "duration": 60,
+        "error_code": null,
+        "error_msg": null,
+        "seek_ok": true,
+        "advanced_ms": 1445,
+        "can_play_type": ""
+      }
+    },
+    {
+      "file": "C_quality_96k_44100.mp3",
+      "http": {
+        "status": 200,
+        "content_type": "audio/mpeg",
+        "accept_ranges": null,
+        "content_range": null
+      },
+      "play": {
+        "started": true,
+        "duration": 60,
+        "error_code": null,
+        "error_msg": null,
+        "seek_ok": true,
+        "advanced_ms": 1443,
+        "can_play_type": ""
+      }
+    },
+    {
+      "file": "D_lean_48k_32000.mp3",
+      "http": {
+        "status": 200,
+        "content_type": "audio/mpeg",
+        "accept_ranges": null,
+        "content_range": null
+      },
+      "play": {
+        "started": true,
+        "duration": 60,
+        "error_code": null,
+        "error_msg": null,
+        "seek_ok": true,
+        "advanced_ms": 1469,
+        "can_play_type": ""
+      }
+    },
+    {
+      "file": "E_lsf_64k_24000.mp3",
+      "http": {
+        "status": 200,
+        "content_type": "audio/mpeg",
+        "accept_ranges": null,
+        "content_range": null
+      },
+      "play": {
+        "started": true,
+        "duration": 60,
+        "error_code": null,
+        "error_msg": null,
+        "seek_ok": true,
+        "advanced_ms": 1458,
+        "can_play_type": ""
+      }
+    },
+    {
+      "file": "F_aac_64k_32000.m4a",
+      "http": {
+        "status": 200,
+        "content_type": "audio/mp4",
+        "accept_ranges": null,
+        "content_range": null
+      },
+      "play": {
+        "started": true,
+        "duration": 60,
+        "error_code": null,
+        "error_msg": null,
+        "seek_ok": true,
+        "advanced_ms": 1445,
+        "can_play_type": ""
+      }
+    },
+    {
+      "file": "G_hls_aac_64k_32000/playlist.m3u8",
+      "http": {
+        "status": 200,
+        "content_type": "application/vnd.apple.mpegurl",
+        "accept_ranges": null,
+        "content_range": null
+      },
+      "play": {
+        "started": true,
+        "duration": 60.032,
+        "error_code": null,
+        "error_msg": null,
+        "seek_ok": true,
+        "advanced_ms": 1437,
+        "can_play_type": "maybe"
+      }
+    }
+  ]
+}

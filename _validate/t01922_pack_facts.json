@@ -1,0 +1,253 @@
+{
+  "source": "D:\\code\\otherProjects\\20_News\\_validate\\t01845_samples\\ep100.mp3",
+  "slice": {
+    "start": 30.0,
+    "sec": 60.0
+  },
+  "files": [
+    {
+      "file": "A0_published_copy.mp3",
+      "note": "线上已发布成品原码流逐帧拷贝（-c copy，零重编）",
+      "requested": "copy from published ep100.mp3",
+      "ffprobe": {
+        "codec": "mp3",
+        "profile": null,
+        "sample_rate": "44100",
+        "channels": 1,
+        "bit_rate_fmt": "128061",
+        "duration_fmt": "60.029388",
+        "format_name": "mp3",
+        "size_bytes": 960931,
+        "tags": {
+          "encoder": "Lavf63.3.100"
+        }
+      },
+      "mp3_frames": {
+        "id3v2_bytes": 44,
+        "frame_count": 2299,
+        "frame_header": {
+          "mpeg_version": "mpeg1",
+          "layer": "III",
+          "lsf": false,
+          "bitrate_index": 9,
+          "sample_rate_index": 0,
+          "sample_rate": 44100,
+          "channel_mode": "mono"
+        },
+        "xing_or_info_tag": false,
+        "duration_by_frames_sec": 60.056
+      }
+    },
+    {
+      "file": "A_baseline_128k_44100.mp3",
+      "note": "线上已发布口径（基线）",
+      "requested": "libmp3lame 128k @44100",
+      "ffprobe": {
+        "codec": "mp3",
+        "profile": null,
+        "sample_rate": "44100",
+        "channels": 1,
+        "bit_rate_fmt": "128124",
+        "duration_fmt": "60.000000",
+        "format_name": "mp3",
+        "size_bytes": 960931,
+        "tags": {
+          "encoder": "Lavf63.3.100"
+        }
+      },
+      "mp3_frames": {
+        "id3v2_bytes": 44,
+        "frame_count": 2299,
+        "frame_header": {
+          "mpeg_version": "mpeg1",
+          "layer": "III",
+          "lsf": false,
+          "bitrate_index": 9,
+          "sample_rate_index": 0,
+          "sample_rate": 44100,
+          "channel_mode": "mono"
+        },
+        "xing_or_info_tag": false,
+        "duration_by_frames_sec": 60.056
+      }
+    },
+    {
+      "file": "B_standard_64k_32000.mp3",
+      "note": "当前默认档 standard",
+      "requested": "libmp3lame 64k @32000",
+      "ffprobe": {
+        "codec": "mp3",
+        "profile": null,
+        "sample_rate": "32000",
+        "channels": 1,
+        "bit_rate_fmt": "64095",
+        "duration_fmt": "60.000000",
+        "format_name": "mp3",
+        "size_bytes": 480716,
+        "tags": {
+          "encoder": "Lavf63.3.100"
+        }
+      },
+      "mp3_frames": {
+        "id3v2_bytes": 44,
+        "frame_count": 1669,
+        "frame_header": {
+          "mpeg_version": "mpeg1",
+          "layer": "III",
+          "lsf": false,
+          "bitrate_index": 5,
+          "sample_rate_index": 2,
+          "sample_rate": 32000,
+          "channel_mode": "mono"
+        },
+        "xing_or_info_tag": false,
+        "duration_by_frames_sec": 60.084
+      }
+    },
+    {
+      "file": "C_quality_96k_44100.mp3",
+      "note": "高音质档 quality",
+      "requested": "libmp3lame 96k @44100",
+      "ffprobe": {
+        "codec": "mp3",
+        "profile": null,
+        "sample_rate": "44100",
+        "channels": 1,
+        "bit_rate_fmt": "96094",
+        "duration_fmt": "60.000000",
+        "format_name": "mp3",
+        "size_bytes": 720710,
+        "tags": {
+          "encoder": "Lavf63.3.100"
+        }
+      },
+      "mp3_frames": {
+        "id3v2_bytes": 44,
+        "frame_count": 2299,
+        "frame_header": {
+          "mpeg_version": "mpeg1",
+          "layer": "III",
+          "lsf": false,
+          "bitrate_index": 7,
+          "sample_rate_index": 0,
+          "sample_rate": 44100,
+          "channel_mode": "mono"
+        },
+        "xing_or_info_tag": false,
+        "duration_by_frames_sec": 60.056
+      }
+    },
+    {
+      "file": "D_lean_48k_32000.mp3",
+      "note": "省流档 lean（音质存疑，见 T01871 A 段）",
+      "requested": "libmp3lame 48k @32000",
+      "ffprobe": {
+        "codec": "mp3",
+        "profile": null,
+        "sample_rate": "32000",
+        "channels": 1,
+        "bit_rate_fmt": "48073",
+        "duration_fmt": "60.000000",
+        "format_name": "mp3",
+        "size_bytes": 360548,
+        "tags": {
+          "encoder": "Lavf63.3.100"
+        }
+      },
+      "mp3_frames": {
+        "id3v2_bytes": 44,
+        "frame_count": 1669,
+        "frame_header": {
+          "mpeg_version": "mpeg1",
+          "layer": "III",
+          "lsf": false,
+          "bitrate_index": 3,
+          "sample_rate_index": 2,
+          "sample_rate": 32000,
+          "channel_mode": "mono"
+        },
+        "xing_or_info_tag": false,
+        "duration_by_frames_sec": 60.084
+      }
+    },
+    {
+      "file": "E_lsf_64k_24000.mp3",
+      "note": "24kHz 候选：预期为 MPEG-2 Layer III(LSF)",
+      "requested": "libmp3lame 64k @24000",
+      "ffprobe": {
+        "codec": "mp3",
+        "profile": null,
+        "sample_rate": "24000",
+        "channels": 1,
+        "bit_rate_fmt": "64082",
+        "duration_fmt": "60.000000",
+        "format_name": "mp3",
+        "size_bytes": 480620,
+        "tags": {
+          "encoder": "Lavf63.3.100"
+        }
+      },
+      "mp3_frames": {
+        "id3v2_bytes": 44,
+        "frame_count": 2503,
+        "frame_header": {
+          "mpeg_version": "mpeg2",
+          "layer": "III",
+          "lsf": true,
+          "bitrate_index": 8,
+          "sample_rate_index": 1,
+          "sample_rate": 24000,
+          "channel_mode": "mono"
+        },
+        "xing_or_info_tag": true,
+        "duration_by_frames_sec": 60.072
+      }
+    },
+    {
+      "file": "F_aac_64k_32000.m4a",
+      "note": "AAC 档（HLS 同编码器，容器 m4a）",
+      "requested": "aac 64k @32000",
+      "ffprobe": {
+        "codec": "aac",
+        "profile": "LC",
+        "sample_rate": "32000",
+        "channels": 1,
+        "bit_rate_fmt": "65209",
+        "duration_fmt": "60.000000",
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "size_bytes": 489073,
+        "tags": {
+          "major_brand": "M4A ",
+          "minor_version": "512",
+          "compatible_brands": "M4A isomiso2",
+          "encoder": "Lavf63.3.100"
+        }
+      }
+    }
+  ],
+  "hls": {
+    "dir": "t01922_pack/G_hls_aac_64k_32000",
+    "segments": 7,
+    "playlist_head": [
+      "#EXTM3U",
+      "#EXT-X-VERSION:3",
+      "#EXT-X-TARGETDURATION:10",
+      "#EXT-X-MEDIA-SEQUENCE:0",
+      "#EXTINF:10.016000,",
+      "playlist0.ts"
+    ],
+    "targetduration_line": "#EXT-X-TARGETDURATION:10",
+    "first_ts_probe": {
+      "codec": "aac",
+      "profile": "LC",
+      "sample_rate": "32000",
+      "channels": 1,
+      "bit_rate_fmt": "70196",
+      "duration_fmt": "9.920000",
+      "format_name": "mpegts",
+      "size_bytes": 87044,
+      "tags": {}
+    },
+    "note": "生产口径：build_hls_cmd 由 PCM 时间线直接编 AAC（T01870），本包按同参数复现"
+  }
+}
