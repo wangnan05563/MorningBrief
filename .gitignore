@@ -102,8 +102,10 @@ release/MorningBrief-Setup-*.exe
 # ═══════════════════════════════════════════
 # 测试报告与结果
 # ═══════════════════════════════════════════
-admin-web/playwright-report/
-admin-web/test-results/
+# 基名规则（无斜杠）对任意层级生效；旧的 `admin-web/playwright-report/` 含斜杠
+# 被锚定到仓库根，实际从未命中 apps/admin-web 层级，故改用基名形式。
+playwright-report/
+test-results/
 *.test.log
 coverage/
 .nyc_output/
@@ -155,18 +157,15 @@ backend/ffmpeg/
 # 特定项目忽略
 # ═══════════════════════════════════════════
 backend/data/audio_cache/*
-backend/data/*.db
 # 找书工具的书源索引（T00612：可重建的缓存，体量 ~20MB）
 backend/data/ebook_index.json
-backend/data/*.db-shm
-backend/data/*.db-wal
-backend/data/*.malformed.bak
+# 注：*.db / *.db-shm / *.db-wal / *.bak 上方已有全局规则，此处不再重复
 
 # ═══════════════════════════════════════════
 # 清理技能自动生成规则（防止调试产物复发）
 # ═══════════════════════════════════════════
-# Vite 临时配置缓存
-admin-web/vite.config.js.timestamp-*.mjs
+# Vite 临时配置缓存：规则见下方「workspace-cleanup 2026-09-10」的基名形式
+# （旧写法 `admin-web/vite.config.js.timestamp-*.mjs` 含斜杠被锚定到仓库根，从未生效）
 
 # 构建输出散落根目录
 /build_output.txt
@@ -205,14 +204,16 @@ admin-web/vite.config.js.timestamp-*.mjs
 /vite-dev.log
 
 # 2026-08-08 清理补充：admin-web 多次验证构建产物目录
-admin-web/dist_*/
+# 基名规则（原 `admin-web/dist_*/` 含斜杠被锚定到仓库根，从未命中 apps/admin-web）
+dist_*/
 
 # 2026-08-08 清理补充：_gaptest 音频临时测试目录
 /_gaptest/
 
-# 2026-08-08 清理补充：数据库备份模式（backup_service 自动生成）
-backend/data/*.db.bak_*
-backend/data/morningbrief.db
+# 2026-08-08 清理补充：数据库备份模式（backup_service 自动生成 + 手工备份后缀）
+# 由 *.db.bak_* 放宽为 *.db.bak*，覆盖 -t01925 这类手工命名；
+# morningbrief.db 无需单列（全局 *.db 已覆盖）
+backend/data/*.db.bak*
 
 # 2026-08-08 清理补充：后端根目录调试/验证/迁移一次性脚本
 backend/diag_*.py
@@ -223,16 +224,11 @@ backend/_*.py
 backend/pytest*.log
 temp
 # ---------- 清理技能自动生成规则 (workspace-cleanup) ----------
-__pycache__/
-*.py[cod]
-.pytest_cache/
+# 去重后仅保留本块独有的规则：__pycache__/ *.py[cod] .pytest_cache/ .scannerwork/
+# *.log *.tmp *.bak 在上方各分区已有，重复声明只会掩盖真实生效来源。
 .ruff_cache/
 .mypy_cache/
-.scannerwork/
 sonar-results/
-*.log
-*.tmp
-*.bak
 *.orig
 
 # ---------- 清理技能自动生成规则 (workspace-cleanup 2026-09-10) ----------
@@ -262,3 +258,30 @@ scripts/jmeter_test/gate_baseline.json
 scripts/jmeter_test/test_token.txt
 scripts/jmeter_test/test_user_info.json
 scripts/jmeter_test/admin_token.txt
+
+# ═══════════════════════════════════════════
+# 2026-10-13 全库扫描补充：第三方可执行体、运行时产物、取证媒体
+# ═══════════════════════════════════════════
+# 隧道工具二进制（cloudflared/cpolar 由运行时按需下载，71MB 不该入库）
+# backend/ffmpeg/ 上方已有规则，此处补 runtime 侧
+/runtime/data/
+
+# 生成图片与可重建缓存（AI 出图、找书书源缓存均可重新生成）
+/runtime/ai_images/
+/runtime/cache/
+
+# Playwright 临时实例目录（含误生成的字面量 `*.spec.js` 文件名）
+/tests/_instance/
+
+# ffmpeg concat 清单临时文件（如 backend/main.wav.list.txt）
+*.list.txt
+
+# _validate：文本证据与截图继续入库；音频与可重建大转储不入库
+_validate/*.mp3
+_validate/*.m4a
+_validate/*.wav
+_validate/*.aac
+_validate/*.mp4
+_validate/perf_results_*/
+_validate/*_samples/
+_validate/*_pack/
