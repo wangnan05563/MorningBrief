@@ -160,3 +160,20 @@ jmeter_test/test_user_info.json            backend/.token.tmp
 遗留观察（不建单）：本轮 `github.com`（Git 传输与网页域）间歇 21 s 连接超时，
 `api.github.com` 正常，故 ref/资产核验走 API，`git ls-remote` 需重试；
 下一次推送若失败先按网络原因重试而非改配置。
+
+### 7.1 顺带发现（与本轮改动无关，未修）
+
+切换后实测管理端「检查更新」的远程分支：直接调用真实代码路径
+`app.routers.admin.about._fetch_latest_release()`（不 patch，读真实 `.env`）返回 `None`，
+日志 `GitHub API 非预期状态码: 302`。
+
+- 原因：`.env` 的 `REPO_URL=https://github.com/wangnan05563/MorningBrief`（HTML 域），
+  拼出来的 `{REPO_URL}/releases/latest` 是网页地址，GitHub 固定 302 跳到
+  `.../releases/tag/MorningBrief-Setup`；而 about.py:154 的 `httpx.AsyncClient` 未开
+  `follow_redirects`，非 200 即判失败。
+- 与删库重建无关：重建前后 `REPO_URL` 与代码都没变，旧仓同样取不到远程版本，
+  端点一直在走 `source='local'` 降级（表现为「已是最新版本」）。
+- 若要真正打通，两种改法各有代价：把 `REPO_URL` 换成 `api.github.com/repos/...`
+  会让 UI 里 `release_url`（同一常量拼 `/releases`）变成 API 地址不可点；
+  更小的改动是给该客户端加 `follow_redirects=True`。本轮按「不擅自改配置与代码」的
+  既定约束只做取证，未动 `.env` 与 `about.py`（仅观察，不建单）。
