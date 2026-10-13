@@ -277,11 +277,16 @@ scripts/jmeter_test/admin_token.txt
 *.list.txt
 
 # _validate：文本证据与截图继续入库；音频与可重建大转储不入库
-_validate/*.mp3
-_validate/*.m4a
-_validate/*.wav
-_validate/*.aac
-_validate/*.mp4
-_validate/perf_results_*/
-_validate/*_samples/
-_validate/*_pack/
+# 用 ** 形式覆盖任意层级（t01922_pack 这类子目录里的试听样本同样不入库）
+_validate/**/*.mp3
+_validate/**/*.m4a
+_validate/**/*.wav
+_validate/**/*.aac
+_validate/**/*.mp4
+# 转储目录只忽略内容与生成产物，保留目录内手写说明（*.md）入库
+_validate/perf_results_*/*
+_validate/*_samples/*
+_validate/*_pack/*
+!_validate/perf_results_*/*.md
+!_validate/*_samples/*.md
+!_validate/*_pack/*.md
