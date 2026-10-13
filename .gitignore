@@ -49,14 +49,14 @@ ENV/
 logs/
 *.pid
 *.seed
-debug.log
 
 # ═══════════════════════════════════════════
 # 数据库临时文件
 # ═══════════════════════════════════════════
+# 说明：*.db 覆盖所有库文件本体，-shm/-wal 是 WAL 模式的伴生文件（后缀不含 .db，
+# 需单列）；各类 .bak 备份由下方「备份与临时文件」的 *.bak 统一覆盖。
 *.db-shm
 *.db-wal
-*.db.malformed.bak
 *.db
 *.sqlite
 *.rdb
@@ -84,20 +84,16 @@ Desktop.ini
 # ═══════════════════════════════════════════
 # Python 构建产物
 # ═══════════════════════════════════════════
-*.egg-info/
+# *.egg-info/ 已在上方「Python 缓存与字节码」声明，此处不重复
 *.egg
 MANIFEST
 
 # ═══════════════════════════════════════════
 # PyInstaller / Inno Setup 构建产物
 # ═══════════════════════════════════════════
-*.spec.bak
+# *.spec.bak 由下方「备份与临时文件」的 *.bak 覆盖
 # installer.iss 是构建脚本定义（非产物）且无敏感信息，纳入版本管理以固化打包链；
-# 产物在 release/ 下已被下方规则忽略
-# 打包输出根（V2 起从 release/dist/ 迁至 release/ 根）
-# 通配 dist/ 已无法覆盖 release 下的目录，需精确路径
-release/MorningBrief/
-release/MorningBrief-Setup-*.exe
+# 打包输出（release/ 根与 MorningBrief-Setup-*.exe）统一由下方 release/ 规则忽略
 
 # ═══════════════════════════════════════════
 # 测试报告与结果
@@ -106,7 +102,6 @@ release/MorningBrief-Setup-*.exe
 # 被锚定到仓库根，实际从未命中 apps/admin-web 层级，故改用基名形式。
 playwright-report/
 test-results/
-*.test.log
 coverage/
 .nyc_output/
 
@@ -115,13 +110,11 @@ coverage/
 # ═══════════════════════════════════════════
 .scannerwork/
 .sonar/
-sonar-project.properties.bak
 
 # ═══════════════════════════════════════════
 # Serverless Framework (SCF)
 # ═══════════════════════════════════════════
-scf/__pycache__/
-serverless.yml.bak
+# scf/__pycache__/ 由上方 __pycache__/ 覆盖；*.bak 由「备份与临时文件」覆盖
 serverless.config.json
 
 # ═══════════════════════════════════════════
@@ -167,9 +160,8 @@ backend/data/ebook_index.json
 # Vite 临时配置缓存：规则见下方「workspace-cleanup 2026-09-10」的基名形式
 # （旧写法 `admin-web/vite.config.js.timestamp-*.mjs` 含斜杠被锚定到仓库根，从未生效）
 
-# 构建输出散落根目录
+# 构建输出散落根目录（.log 变体由全局 *.log 覆盖）
 /build_output.txt
-/build_output.log
 
 # 测试产物散落根目录（图片/音频/脚本）
 /test_tts.mp3
@@ -180,10 +172,8 @@ backend/data/ebook_index.json
 # 异常命名文件（PowerShell 误重定向产物）
 /-w
 
-# SonarQube 调试输出（补充 *.log 未覆盖的 .txt 变体）
-/sonar-*.log
+# SonarQube 调试输出（补充 *.log 未覆盖的 .txt 变体；*.log 变体已由全局规则覆盖）
 /sonar-*.txt
-/pytest-output.log
 .workbuddy
 .trae
 
@@ -193,15 +183,8 @@ backend/data/ebook_index.json
 /patch_*.py
 /patch_*.ps1
 
-# 2026-08-08 清理补充：回归测试日志
-/backend-regression.log
-/backend_test_output.log
-/frontend-final.log
-/frontend-regression*.log
-/jmeter.log
-/sonar-rescan.log
-/sonar_scan.log
-/vite-dev.log
+# 2026-08-08 清理补充：回归/构建日志（backend-regression.log、jmeter.log、
+# vite-dev.log、sonar-*.log 等）均由上方全局 *.log 覆盖，不再逐条列举
 
 # 2026-08-08 清理补充：admin-web 多次验证构建产物目录
 # 基名规则（原 `admin-web/dist_*/` 含斜杠被锚定到仓库根，从未命中 apps/admin-web）
@@ -221,7 +204,6 @@ backend/verify_*.py
 backend/backfill_*.py
 backend/migrate_*.py
 backend/_*.py
-backend/pytest*.log
 temp
 # ---------- 清理技能自动生成规则 (workspace-cleanup) ----------
 # 去重后仅保留本块独有的规则：__pycache__/ *.py[cod] .pytest_cache/ .scannerwork/
