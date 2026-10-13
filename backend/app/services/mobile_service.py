@@ -106,36 +106,20 @@ async def push_admin_message(
 async def _dispatch_admin_alert(db, title: str, body: str, level: str) -> dict:
     """最佳努力经已配置 IM 渠道（钉钉/企微）下发运营告警。
 
-    直接复用现有 notifier 类与 ai_config 凭证（与 NotificationSender._collect_configured_channels 一致），
+    渠道凭证与判定口径统一走 `notifier.factory.build_configured_channels`（与 Hub/管理端一致），
     无渠道配置时返回 no-op；任何异常不向上抛出。
     """
-    from types import SimpleNamespace
-
     from app.services.notifier import NotificationEvent
-    from app.services.notifier.channels.dingtalk import DingTalkNotifier
-    from app.services.notifier.channels.wecom import WeComNotifier
+    from app.services.notifier.factory import build_configured_channels
     from app.services.notification.config_service import NotificationConfigService
 
     log_entries: list[tuple[str, str, str]] = []
     try:
         config_svc = NotificationConfigService(db)
-        channels: list = []
-        dt_webhook = await config_svc.get_raw_value("notify_dingtalk_webhook")
-        dt_secret = await config_svc.get_raw_value("notify_dingtalk_secret")
-        if dt_webhook:
-            channels.append((
-                "dingtalk",
-                DingTalkNotifier(settings=SimpleNamespace(
-                    ALERT_DINGTALK_WEBHOOK=dt_webhook,
-                    ALERT_DINGTALK_SECRET=dt_secret,
-                )),
-            ))
-        wecom_webhook = await config_svc.get_raw_value("notify_wecom_webhook")
-        if wecom_webhook:
-            channels.append((
-                "wecom",
-                WeComNotifier(settings=SimpleNamespace(ALERT_WECOM_WEBHOOK=wecom_webhook)),
-            ))
+        # 口径与 Hub/管理端一致：走 is_configured() 形态校验，占位符凭证不算已配置（T02138）
+        channels, _skipped = await build_configured_channels(
+            config_svc, names=("dingtalk", "wecom")
+        )
         if not channels:
             return {"dispatched": 0, "note": "no_im_channel_configured"}
 

@@ -1,7 +1,8 @@
 """通知发送日志模型。
 
-记录每条通知的实际发送结果（success/failed/suppressed），
-含渲染时使用的 payload（JSON 字符串），便于审计与失败重发。
+记录每条通知的实际发送结果（success/failed/failed_capped/suppressed），
+含渲染时使用的 payload（JSON 字符串，多渠道发送时带 channels 逐渠道结果），
+便于审计与失败重发。
 """
 from datetime import datetime
 
@@ -15,9 +16,10 @@ from app.database import Base
 class NotificationLog(Base):
     """通知发送日志表。
 
-    status 三态：
+    status 四态：
     - success：实际发送且钉钉返回 errcode=0
     - failed：发送失败或钉钉返回错误
+    - failed_capped：同日发送失败达上限后停写重试标记（停摆告警收敛，T02030）
     - suppressed：因开关关闭/频次去重/未配置渠道而跳过
     """
 
@@ -33,7 +35,8 @@ class NotificationLog(Base):
     channel: Mapped[str] = mapped_column(String(16), nullable=False, comment="渠道名")
     title: Mapped[str] = mapped_column(String(128), nullable=False, comment="实际发送标题")
     status: Mapped[str] = mapped_column(
-        String(16), nullable=False, comment="success | failed | suppressed",
+        String(16), nullable=False,
+        comment="success | failed | failed_capped | suppressed",
     )
     error: Mapped[str] = mapped_column(Text, default="", comment="失败原因")
     payload: Mapped[str] = mapped_column(

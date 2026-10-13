@@ -1,0 +1,140 @@
+npm warn Unknown user config "email". This will stop working in the next major version of npm.
+npm warn Unknown user config "always-auth". This will stop working in the next major version of npm.
+npm warn Unknown user config "sass_binary_site". This will stop working in the next major version of npm.
+npm warn Unknown user config "electron_mirror". This will stop working in the next major version of npm.
+npm warn Unknown user config "electron_builder_binaries_mirror". This will stop working in the next major version of npm.
+npm warn Unknown user config "nodejieba_binary_host_mirror". This will stop working in the next major version of npm.
+npm warn Unknown user config "chromedriver_cdnurl". This will stop working in the next major version of npm.
+npm warn Unknown user config "store-dir". This will stop working in the next major version of npm.
+
+> MorningBrief-admin-web@1.0.0 build
+> vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+node_modules/@vueuse/core/dist/index.js (3362:0): A comment
+
+"/* #__PURE__ */"
+
+in "node_modules/@vueuse/core/dist/index.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+node_modules/@vueuse/core/dist/index.js (5780:22): A comment
+
+"/* #__PURE__ */"
+
+in "node_modules/@vueuse/core/dist/index.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+[32m✓[39m 1933 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mindex.html                                    [39m[1m[2m    3.24 kB[22m[1m[22m[2m │ gzip:   1.62 kB[22m
+[2mdist/[22m[35massets/BookPool-uq_5-_TC.css                  [39m[1m[2m    0.14 kB[22m[1m[22m[2m │ gzip:   0.13 kB[22m
+[2mdist/[22m[35massets/IconButton-DfbGwpM0.css                [39m[1m[2m    0.25 kB[22m[1m[22m[2m │ gzip:   0.16 kB[22m
+[2mdist/[22m[35massets/MaterialLibrary-N45FfWNo.css           [39m[1m[2m    0.34 kB[22m[1m[22m[2m │ gzip:   0.21 kB[22m
+[2mdist/[22m[35massets/CourseMaterials-CvG9AVR9.css           [39m[1m[2m    0.43 kB[22m[1m[22m[2m │ gzip:   0.27 kB[22m
+[2mdist/[22m[35massets/BookPoolPanel-BEwJVN92.css             [39m[1m[2m    0.52 kB[22m[1m[22m[2m │ gzip:   0.25 kB[22m
+[2mdist/[22m[35massets/BookFinder-l4Xc6K4I.css                [39m[1m[2m    0.60 kB[22m[1m[22m[2m │ gzip:   0.27 kB[22m
+[2mdist/[22m[35massets/ManageHome-D2s-DRm3.css                [39m[1m[2m    0.67 kB[22m[1m[22m[2m │ gzip:   0.33 kB[22m
+[2mdist/[22m[35massets/Home-DBFY52lT.css                      [39m[1m[2m    1.00 kB[22m[1m[22m[2m │ gzip:   0.44 kB[22m
+[2mdist/[22m[35massets/Login-C8i1gaeH.css                     [39m[1m[2m    1.01 kB[22m[1m[22m[2m │ gzip:   0.43 kB[22m
+[2mdist/[22m[35massets/Mine-2oQfsgH4.css                      [39m[1m[2m    1.03 kB[22m[1m[22m[2m │ gzip:   0.42 kB[22m
+[2mdist/[22m[35massets/MobileLayout-B_TuMH7D.css              [39m[1m[2m    1.04 kB[22m[1m[22m[2m │ gzip:   0.45 kB[22m
+[2mdist/[22m[35massets/ManageAlert-acJN0mWi.css               [39m[1m[2m    1.07 kB[22m[1m[22m[2m │ gzip:   0.41 kB[22m
+[2mdist/[22m[35massets/ManageAds-DRooBqvM.css                 [39m[1m[2m    1.14 kB[22m[1m[22m[2m │ gzip:   0.47 kB[22m
+[2mdist/[22m[35massets/ManageChannels-Dv9YpHUf.css            [39m[1m[2m    1.26 kB[22m[1m[22m[2m │ gzip:   0.51 kB[22m
+[2mdist/[22m[35massets/ManageUsers-CJCh6ofA.css               [39m[1m[2m    1.36 kB[22m[1m[22m[2m │ gzip:   0.51 kB[22m
+[2mdist/[22m[35massets/Message-6O9CIYyu.css                   [39m[1m[2m    1.46 kB[22m[1m[22m[2m │ gzip:   0.54 kB[22m
+[2mdist/[22m[35massets/ManageFeedback-CG4L2_69.css            [39m[1m[2m    1.60 kB[22m[1m[22m[2m │ gzip:   0.56 kB[22m
+[2mdist/[22m[35massets/CosConfig-B9EBYBPy.css                 [39m[1m[2m    1.87 kB[22m[1m[22m[2m │ gzip:   0.64 kB[22m
+[2mdist/[22m[35massets/AdPlacements-PmUhv-qY.css              [39m[1m[2m    1.97 kB[22m[1m[22m[2m │ gzip:   0.66 kB[22m
+[2mdist/[22m[35massets/AdMaterials-CVRsSdQv.css               [39m[1m[2m    2.04 kB[22m[1m[22m[2m │ gzip:   0.67 kB[22m
+[2mdist/[22m[35massets/ReviewList-BJUYctex.css                [39m[1m[2m    2.10 kB[22m[1m[22m[2m │ gzip:   0.70 kB[22m
+[2mdist/[22m[35massets/ManageQueue-Ee4GOBMv.css               [39m[1m[2m    2.26 kB[22m[1m[22m[2m │ gzip:   0.77 kB[22m
+[2mdist/[22m[35massets/CosFiles-DcA2qFFE.css                  [39m[1m[2m    2.34 kB[22m[1m[22m[2m │ gzip:   0.74 kB[22m
+[2mdist/[22m[35massets/StatsOverview-BtaxU4i3.css             [39m[1m[2m    2.39 kB[22m[1m[22m[2m │ gzip:   0.71 kB[22m
+[2mdist/[22m[35massets/AutoReviewConfig-CbUldiRC.css          [39m[1m[2m    2.43 kB[22m[1m[22m[2m │ gzip:   0.65 kB[22m
+[2mdist/[22m[35massets/KnowledgeQA-BVgt6yM-.css               [39m[1m[2m    3.31 kB[22m[1m[22m[2m │ gzip:   0.89 kB[22m
+[2mdist/[22m[35massets/QueueManagement-BvudsKvs.css           [39m[1m[2m    3.39 kB[22m[1m[22m[2m │ gzip:   0.94 kB[22m
+[2mdist/[22m[35massets/ParamCalculator-Dv6s3Id0.css           [39m[1m[2m    3.48 kB[22m[1m[22m[2m │ gzip:   0.97 kB[22m
+[2mdist/[22m[35massets/ReviewDetail-vZoE3Lld.css              [39m[1m[2m    3.50 kB[22m[1m[22m[2m │ gzip:   1.05 kB[22m
+[2mdist/[22m[35massets/NotificationConfig-Sh4V0y8w.css        [39m[1m[2m    3.83 kB[22m[1m[22m[2m │ gzip:   0.99 kB[22m
+[2mdist/[22m[35massets/RssHealth-DrKEwYMa.css                 [39m[1m[2m    3.87 kB[22m[1m[22m[2m │ gzip:   0.96 kB[22m
+[2mdist/[22m[35massets/WorkflowDetail-BTFQ4BHC.css            [39m[1m[2m    3.88 kB[22m[1m[22m[2m │ gzip:   1.00 kB[22m
+[2mdist/[22m[35massets/AIConfig-B5jNZehm.css                  [39m[1m[2m    4.16 kB[22m[1m[22m[2m │ gzip:   1.21 kB[22m
+[2mdist/[22m[35massets/ChannelHealth-Cx9j-vi1.css             [39m[1m[2m    4.23 kB[22m[1m[22m[2m │ gzip:   1.02 kB[22m
+[2mdist/[22m[35massets/LlmMetrics-CAqsfOnZ.css                [39m[1m[2m    4.31 kB[22m[1m[22m[2m │ gzip:   1.00 kB[22m
+[2mdist/[22m[35massets/AdSchedule-DASxH_Yp.css                [39m[1m[2m    4.49 kB[22m[1m[22m[2m │ gzip:   1.13 kB[22m
+[2mdist/[22m[35massets/Login-BeEl0WO1.css                     [39m[1m[2m    4.67 kB[22m[1m[22m[2m │ gzip:   1.41 kB[22m
+[2mdist/[22m[35massets/ChannelManagement-CyVAE7qj.css         [39m[1m[2m    4.67 kB[22m[1m[22m[2m │ gzip:   1.25 kB[22m
+[2mdist/[22m[35massets/Maintenance-KgX4b7S_.css               [39m[1m[2m    4.68 kB[22m[1m[22m[2m │ gzip:   1.10 kB[22m
+[2mdist/[22m[35massets/DatabaseAdmin-D1UQ4S6e.css             [39m[1m[2m    4.95 kB[22m[1m[22m[2m │ gzip:   1.23 kB[22m
+[2mdist/[22m[35massets/ReviewList-BwdrSOTO.css                [39m[1m[2m    5.12 kB[22m[1m[22m[2m │ gzip:   1.29 kB[22m
+[2mdist/[22m[35massets/Tunnel-CAeQnsV3.css                    [39m[1m[2m    5.35 kB[22m[1m[22m[2m │ gzip:   1.30 kB[22m
+[2mdist/[22m[35massets/Help-BEjpIPEA.css                      [39m[1m[2m    5.45 kB[22m[1m[22m[2m │ gzip:   1.33 kB[22m
+[2mdist/[22m[35massets/About-Bj1sapi1.css                     [39m[1m[2m    5.87 kB[22m[1m[22m[2m │ gzip:   1.47 kB[22m
+[2mdist/[22m[35massets/WorkflowList-CCQqyMMy.css              [39m[1m[2m    7.43 kB[22m[1m[22m[2m │ gzip:   1.49 kB[22m
+[2mdist/[22m[35massets/Layout-CgHgiEdk.css                    [39m[1m[2m    9.22 kB[22m[1m[22m[2m │ gzip:   1.96 kB[22m
+[2mdist/[22m[35massets/index-DlAF3_At.css                     [39m[1m[2m   15.32 kB[22m[1m[22m[2m │ gzip:   2.85 kB[22m
+[2mdist/[22m[35massets/element-plus-DxnkkM8A.css              [39m[1m[2m  360.15 kB[22m[1m[22m[2m │ gzip:  48.64 kB[22m
+[2mdist/[22m[36massets/format-B4yQ48Ur.js                     [39m[1m[2m    0.09 kB[22m[1m[22m[2m │ gzip:   0.10 kB[22m
+[2mdist/[22m[36massets/_plugin-vue_export-helper-DlAUqK2U.js  [39m[1m[2m    0.09 kB[22m[1m[22m[2m │ gzip:   0.10 kB[22m
+[2mdist/[22m[36massets/about-Cp5AwZKB.js                      [39m[1m[2m    0.26 kB[22m[1m[22m[2m │ gzip:   0.16 kB[22m
+[2mdist/[22m[36massets/mobile-CZ8WFO1P.js                     [39m[1m[2m    0.31 kB[22m[1m[22m[2m │ gzip:   0.21 kB[22m
+[2mdist/[22m[36massets/reviews-oY4oquXJ.js                    [39m[1m[2m    0.32 kB[22m[1m[22m[2m │ gzip:   0.22 kB[22m
+[2mdist/[22m[36massets/queue-BwhIue2O.js                      [39m[1m[2m    0.44 kB[22m[1m[22m[2m │ gzip:   0.26 kB[22m
+[2mdist/[22m[36massets/materials-Tcje1nMQ.js                  [39m[1m[2m    0.68 kB[22m[1m[22m[2m │ gzip:   0.37 kB[22m
+[2mdist/[22m[36massets/cos-Xg7dZBtf.js                        [39m[1m[2m    0.68 kB[22m[1m[22m[2m │ gzip:   0.36 kB[22m
+[2mdist/[22m[36massets/user-BcF0lJCo.js                       [39m[1m[2m    0.72 kB[22m[1m[22m[2m │ gzip:   0.37 kB[22m
+[2mdist/[22m[36massets/Mine-Bg_44XQ2.js                       [39m[1m[2m    1.03 kB[22m[1m[22m[2m │ gzip:   0.68 kB[22m
+[2mdist/[22m[36massets/channels-iEwIxLBN.js                   [39m[1m[2m    1.08 kB[22m[1m[22m[2m │ gzip:   0.49 kB[22m
+[2mdist/[22m[36massets/ManageHome-B6EwIFq8.js                 [39m[1m[2m    1.27 kB[22m[1m[22m[2m │ gzip:   0.90 kB[22m
+[2mdist/[22m[36massets/Login-ByoS_1sD.js                      [39m[1m[2m    1.35 kB[22m[1m[22m[2m │ gzip:   0.90 kB[22m
+[2mdist/[22m[36massets/useDraft-BluxfODq.js                   [39m[1m[2m    1.37 kB[22m[1m[22m[2m │ gzip:   0.70 kB[22m
+[2mdist/[22m[36massets/MobileLayout-DQR734RF.js               [39m[1m[2m    1.47 kB[22m[1m[22m[2m │ gzip:   0.88 kB[22m
+[2mdist/[22m[36massets/ManageChannels-Bfnt66zE.js             [39m[1m[2m    1.48 kB[22m[1m[22m[2m │ gzip:   0.89 kB[22m
+[2mdist/[22m[36massets/ManageAds-0EHZn_dr.js                  [39m[1m[2m    1.57 kB[22m[1m[22m[2m │ gzip:   0.96 kB[22m
+[2mdist/[22m[36massets/BookPool-Btn50uEr.js                   [39m[1m[2m    1.58 kB[22m[1m[22m[2m │ gzip:   1.10 kB[22m
+[2mdist/[22m[36massets/Home-yNNt0um1.js                       [39m[1m[2m    1.89 kB[22m[1m[22m[2m │ gzip:   1.12 kB[22m
+[2mdist/[22m[36massets/Message-oLfDqd-h.js                    [39m[1m[2m    1.92 kB[22m[1m[22m[2m │ gzip:   1.13 kB[22m
+[2mdist/[22m[36massets/ManageAlert-Bj_9R1uW.js                [39m[1m[2m    2.01 kB[22m[1m[22m[2m │ gzip:   1.29 kB[22m
+[2mdist/[22m[36massets/sse-C4pcPUM_.js                        [39m[1m[2m    2.17 kB[22m[1m[22m[2m │ gzip:   1.16 kB[22m
+[2mdist/[22m[36massets/IconButton-CGkmr2n8.js                 [39m[1m[2m    2.18 kB[22m[1m[22m[2m │ gzip:   0.85 kB[22m
+[2mdist/[22m[36massets/ManageFeedback-DzDXLBa3.js             [39m[1m[2m    2.24 kB[22m[1m[22m[2m │ gzip:   1.26 kB[22m
+[2mdist/[22m[36massets/ManageUsers-BCvCPfGS.js                [39m[1m[2m    2.27 kB[22m[1m[22m[2m │ gzip:   1.37 kB[22m
+[2mdist/[22m[36massets/AdSchedule-BC1A8RYk.js                 [39m[1m[2m    2.62 kB[22m[1m[22m[2m │ gzip:   1.36 kB[22m
+[2mdist/[22m[36massets/Login-9sTa5Uxb.js                      [39m[1m[2m    3.18 kB[22m[1m[22m[2m │ gzip:   1.63 kB[22m
+[2mdist/[22m[36massets/ManageQueue-jonI2ndf.js                [39m[1m[2m    3.60 kB[22m[1m[22m[2m │ gzip:   1.74 kB[22m
+[2mdist/[22m[36massets/StatsOverview-CovAh4ka.js              [39m[1m[2m    3.64 kB[22m[1m[22m[2m │ gzip:   1.80 kB[22m
+[2mdist/[22m[36massets/LlmMetrics-Ca8LBebs.js                 [39m[1m[2m    3.96 kB[22m[1m[22m[2m │ gzip:   1.85 kB[22m
+[2mdist/[22m[36massets/ChannelHealth-DbHvQ9TL.js              [39m[1m[2m    4.35 kB[22m[1m[22m[2m │ gzip:   2.03 kB[22m
+[2mdist/[22m[36massets/AdMaterials-BK98PPin.js                [39m[1m[2m    4.49 kB[22m[1m[22m[2m │ gzip:   2.24 kB[22m
+[2mdist/[22m[36massets/AdPlacements-CNwq_h9z.js               [39m[1m[2m    4.65 kB[22m[1m[22m[2m │ gzip:   2.22 kB[22m
+[2mdist/[22m[36massets/ParamCalculator-BdWTpVM1.js            [39m[1m[2m    5.57 kB[22m[1m[22m[2m │ gzip:   2.25 kB[22m
+[2mdist/[22m[36massets/ReviewList-Ch5m5hGb.js                 [39m[1m[2m    5.68 kB[22m[1m[22m[2m │ gzip:   2.77 kB[22m
+[2mdist/[22m[36massets/RssHealth-DuIIkfKv.js                  [39m[1m[2m    5.84 kB[22m[1m[22m[2m │ gzip:   2.48 kB[22m
+[2mdist/[22m[36massets/CosConfig-v0zNRe9f.js                  [39m[1m[2m    6.20 kB[22m[1m[22m[2m │ gzip:   3.01 kB[22m
+[2mdist/[22m[36massets/ReviewDetail-CZVPPara.js               [39m[1m[2m    6.45 kB[22m[1m[22m[2m │ gzip:   2.79 kB[22m
+[2mdist/[22m[36massets/CosFiles-DRIMwEH6.js                   [39m[1m[2m    7.28 kB[22m[1m[22m[2m │ gzip:   3.30 kB[22m
+[2mdist/[22m[36massets/BookFinder-CmbUtUKN.js                 [39m[1m[2m    7.47 kB[22m[1m[22m[2m │ gzip:   3.97 kB[22m
+[2mdist/[22m[36massets/ReviewList-Cfs_gVY2.js                 [39m[1m[2m    7.89 kB[22m[1m[22m[2m │ gzip:   3.49 kB[22m
+[2mdist/[22m[36massets/BookPoolPanel-CYaHsTR0.js              [39m[1m[2m    9.09 kB[22m[1m[22m[2m │ gzip:   4.44 kB[22m
+[2mdist/[22m[36massets/Maintenance-Dhwy2RBU.js                [39m[1m[2m   10.35 kB[22m[1m[22m[2m │ gzip:   3.72 kB[22m
+[2mdist/[22m[36massets/CourseMaterials-Bk5hhrXX.js            [39m[1m[2m   10.41 kB[22m[1m[22m[2m │ gzip:   4.40 kB[22m
+[2mdist/[22m[36massets/AutoReviewConfig-CkpYIs9_.js           [39m[1m[2m   11.25 kB[22m[1m[22m[2m │ gzip:   4.65 kB[22m
+[2mdist/[22m[36massets/KnowledgeQA-BFIOTuJM.js                [39m[1m[2m   11.42 kB[22m[1m[22m[2m │ gzip:   4.81 kB[22m
+[2mdist/[22m[36massets/About-CCY35vWR.js                      [39m[1m[2m   12.22 kB[22m[1m[22m[2m │ gzip:   4.77 kB[22m
+[2mdist/[22m[36massets/Help-DMp-yg7b.js                       [39m[1m[2m   12.25 kB[22m[1m[22m[2m │ gzip:   8.48 kB[22m
+[2mdist/[22m[36massets/QueueManagement-Ds8t5Avm.js            [39m[1m[2m   12.87 kB[22m[1m[22m[2m │ gzip:   5.00 kB[22m
+[2mdist/[22m[36massets/WorkflowList-wofw2omg.js               [39m[1m[2m   13.29 kB[22m[1m[22m[2m │ gzip:   5.88 kB[22m
+[2mdist/[22m[36massets/DatabaseAdmin-DJfUeE0X.js              [39m[1m[2m   15.21 kB[22m[1m[22m[2m │ gzip:   5.86 kB[22m
+[2mdist/[22m[36massets/Tunnel-WDyLJsVo.js                     [39m[1m[2m   15.72 kB[22m[1m[22m[2m │ gzip:   6.22 kB[22m
+[2mdist/[22m[36massets/MaterialLibrary-C7V2s6ZO.js            [39m[1m[2m   15.73 kB[22m[1m[22m[2m │ gzip:   5.33 kB[22m
+[2mdist/[22m[36massets/Layout-BVYOle_u.js                     [39m[1m[2m   15.94 kB[22m[1m[22m[2m │ gzip:   8.61 kB[22m
+[2mdist/[22m[36massets/NotificationConfig-zG7YpV65.js         [39m[1m[2m   18.28 kB[22m[1m[22m[2m │ gzip:   6.63 kB[22m
+[2mdist/[22m[36massets/index-BP3oRMs6.js                      [39m[1m[2m   21.28 kB[22m[1m[22m[2m │ gzip:   7.41 kB[22m
+[2mdist/[22m[36massets/WorkflowDetail-Bsib0hxv.js             [39m[1m[2m   24.52 kB[22m[1m[22m[2m │ gzip:   8.48 kB[22m
+[2mdist/[22m[36massets/ChannelManagement-C4yKpkT_.js          [39m[1m[2m   28.77 kB[22m[1m[22m[2m │ gzip:  10.21 kB[22m
+[2mdist/[22m[36massets/AIConfig-BKl7Wk8e.js                   [39m[1m[2m   39.84 kB[22m[1m[22m[2m │ gzip:  13.39 kB[22m
+[2mdist/[22m[36massets/index-DlqjM3Re.js                      [39m[1m[2m   47.07 kB[22m[1m[22m[2m │ gzip:  18.20 kB[22m
+[2mdist/[22m[36massets/vue-vendor-WLVLR457.js                 [39m[1m[2m  110.41 kB[22m[1m[22m[2m │ gzip:  43.08 kB[22m
+[2mdist/[22m[36massets/chart-FXhzBFhw.js                      [39m[1m[2m  165.85 kB[22m[1m[22m[2m │ gzip:  58.20 kB[22m
+[2mdist/[22m[36massets/element-plus-51wKSM3H.js               [39m[1m[2m1,073.46 kB[22m[1m[22m[2m │ gzip: 338.74 kB[22m
+[32m✓ built in 1m 16s[39m

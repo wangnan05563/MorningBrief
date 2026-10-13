@@ -317,6 +317,7 @@
               <el-option label="待审核" value="workflow.pending_review" />
               <el-option label="工作流失败" value="workflow.failed" />
               <el-option label="发布成功" value="workflow.published" />
+              <el-option label="停摆告警" value="system.stall_alert" />
               <el-option label="测试通知" value="test" />
             </el-select>
             <el-select
@@ -328,6 +329,7 @@
             >
               <el-option label="成功" value="success" />
               <el-option label="失败" value="failed" />
+              <el-option label="失败达上限" value="failed_capped" />
               <el-option label="已抑制" value="suppressed" />
             </el-select>
             <IconButton
@@ -345,6 +347,44 @@
             stripe
             style="margin-top: 16px"
           >
+            <el-table-column type="expand">
+              <template #default="{ row }">
+                <div class="log-detail">
+                  <p v-if="row._detailError" class="log-detail-note">{{ row._detailError }}</p>
+                  <template v-else>
+                    <p v-if="row._hub" class="log-detail-note">
+                      渠道统计：共 {{ row._hub.total ?? '-' }} · 成功 {{ row._hub.success ?? '-' }} ·
+                      失败 {{ row._hub.failed ?? '-' }} · 静默 {{ row._hub.suppressed ?? '-' }}
+                    </p>
+                    <el-table
+                      v-if="row._channels.length"
+                      :data="row._channels"
+                      size="small"
+                      max-height="220"
+                    >
+                      <el-table-column prop="channel" label="渠道" width="120" />
+                      <el-table-column label="结果" width="90">
+                        <template #default="scope">
+                          <el-tag :type="scope.row.success ? 'success' : 'danger'" size="small">
+                            {{ scope.row.success ? '成功' : '失败' }}
+                          </el-tag>
+                        </template>
+                      </el-table-column>
+                      <el-table-column
+                        prop="error"
+                        label="详情"
+                        min-width="320"
+                        show-overflow-tooltip
+                      />
+                    </el-table>
+                    <p v-else class="log-detail-note">
+                      该记录没有逐渠道明细（旧记录或聚合写入），失败原因见列表「错误信息」列。
+                    </p>
+                    <pre v-if="row._summary" class="log-detail-summary">{{ row._summary }}</pre>
+                  </template>
+                </div>
+              </template>
+            </el-table-column>
             <el-table-column prop="id" label="ID" width="70" />
             <el-table-column prop="event_type" label="事件" width="180">
               <template #default="{ row }">
@@ -665,7 +705,7 @@ async function loadLogs() {
     if (logFilter.event_type) params.event_type = logFilter.event_type
     if (logFilter.status) params.status = logFilter.status
     const data = await listNotificationLogs(params)
-    logs.value = (data.items || []).map((l) => ({ ...l, _resending: false }))
+    logs.value = (data.items || []).map((l) => ({ ...l, ...parseLogDetail(l.payload) }))
     logTotal.value = data.total || 0
   } catch (e) {
     // 拦截器已统一提示
@@ -677,6 +717,30 @@ async function loadLogs() {
 function handleLogFilterChange() {
   logFilter.page = 1
   loadLogs()
+}
+
+function parseLogDetail(payload) {
+  const empty = {
+    _resending: false,
+    _channels: [],
+    _hub: null,
+    _summary: '',
+    _detailError: '',
+  }
+  if (!payload) return empty
+  let parsed
+  try {
+    parsed = typeof payload === 'string' ? JSON.parse(payload) : payload
+  } catch {
+    return { ...empty, _detailError: 'payload 不是合法 JSON，无法展示逐渠道明细' }
+  }
+  if (!parsed || typeof parsed !== 'object') return empty
+  return {
+    ...empty,
+    _channels: Array.isArray(parsed.channels) ? parsed.channels : [],
+    _hub: parsed.hub && typeof parsed.hub === 'object' ? parsed.hub : null,
+    _summary: parsed.summary || '',
+  }
 }
 
 async function handleResend(row) {
@@ -708,12 +772,14 @@ function getEventTagType(eventType) {
   if (eventType === 'workflow.pending_review') return 'warning'
   if (eventType === 'workflow.failed') return 'danger'
   if (eventType === 'workflow.published') return 'success'
+  if (eventType === 'system.stall_alert') return 'danger'
   return 'info'
 }
 
 function getStatusTagType(status) {
   if (status === 'success') return 'success'
   if (status === 'failed') return 'danger'
+  if (status === 'failed_capped') return 'warning'
   if (status === 'suppressed') return 'info'
   return ''
 }
@@ -722,6 +788,7 @@ function getStatusLabel(status) {
   const map = {
     success: '成功',
     failed: '失败',
+    failed_capped: '失败达上限',
     suppressed: '已抑制',
   }
   return map[status] || status
@@ -818,6 +885,27 @@ onMounted(async () => {
     margin-top: 16px;
     display: flex;
     justify-content: flex-end;
+  }
+
+  .log-detail {
+    padding: 8px 16px 12px 48px;
+
+    .log-detail-note {
+      margin: 0 0 8px;
+      font-size: 13px;
+      color: $color-text-secondary;
+    }
+
+    .log-detail-summary {
+      margin: 8px 0 0;
+      padding: 8px 12px;
+      background: var(--el-fill-color-light);
+      border-radius: $radius-sm;
+      font-family: monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
   }
 
   .preview-result {

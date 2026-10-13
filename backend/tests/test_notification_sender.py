@@ -13,6 +13,7 @@
 - mock DingTalkNotifier.send 控制成功/失败
 """
 from contextlib import asynccontextmanager
+import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -278,6 +279,85 @@ async def test_send_test_no_webhook_returns_failed(db_session):
     assert "未配置" in result["message"]
 
 
+# ====================== T02138：渠道判定口径统一（走 is_configured 形态校验） ======================
+
+@pytest.mark.asyncio
+async def test_collect_channels_uses_is_configured(db_session):
+    """ai_config 里的占位符凭证不再被收进渠道，跳过项带可读原因；合法 URL 正常收集。"""
+    from app.services.notification.config_service import NotificationConfigService
+    from app.services.notifier.factory import build_configured_channels
+
+    await NotificationConfigService(db_session).save_config({
+        "global_enabled": True,
+        "wecom_webhook": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=abc",
+        "dingtalk_webhook": "<请填写钉钉机器人地址>",
+    })
+
+    channels, skipped = await build_configured_channels(
+        NotificationConfigService(db_session)
+    )
+    assert [name for name, _ in channels] == ["wecom"]
+    reasons = {s["channel"]: s["reason"] for s in skipped}
+    assert "dingtalk" in reasons and "占位符" in reasons["dingtalk"]
+    assert "email" in reasons
+
+
+@pytest.mark.asyncio
+async def test_send_test_placeholder_webhook_not_sent_and_logged(db_session):
+    """只有占位符 webhook 时：不发网络请求、message 直接说明是没填对，且落库带逐渠道原因。"""
+    from sqlalchemy import select
+
+    from app.models.notification_log import NotificationLog
+    from app.services.notification.config_service import NotificationConfigService
+
+    await NotificationConfigService(db_session).save_config({
+        "global_enabled": True,
+        "dingtalk_webhook": "<请填写钉钉机器人地址>",
+    })
+
+    mock_send = AsyncMock(return_value=None)
+    sender = NotificationSender()
+    with _patch_session(db_session), patch(
+        "app.services.notifier.channels.dingtalk.DingTalkNotifier.send", new=mock_send
+    ):
+        result = await sender.send_test()
+
+    assert result["success"] is False
+    mock_send.assert_not_called()
+    assert "占位符" in result["message"]
+    assert result["skipped"][0]["channel"] == "dingtalk"
+
+    log = (await db_session.execute(
+        select(NotificationLog).where(NotificationLog.event_type == "test")
+        .order_by(NotificationLog.id.desc()).limit(1)
+    )).scalar_one()
+    payload = json.loads(log.payload)
+    assert payload["channels"][0]["channel"] == "dingtalk"
+    assert "占位符" in payload["channels"][0]["error"]
+    assert payload["hub"] == {"total": 0, "success": 0, "failed": 0, "suppressed": 0}
+
+
+@pytest.mark.asyncio
+async def test_mobile_admin_alert_shares_channel_criteria(db_session):
+    """移动端运营告警与 Hub/管理端同一口径：占位符钉钉不算已配置渠道，也不发起发送。"""
+    from app.services.mobile_service import _dispatch_admin_alert
+    from app.services.notification.config_service import NotificationConfigService
+
+    await NotificationConfigService(db_session).save_config({
+        "global_enabled": True,
+        "dingtalk_webhook": "<请填写钉钉机器人地址>",
+    })
+
+    mock_send = AsyncMock(return_value=None)
+    with patch(
+        "app.services.notifier.channels.dingtalk.DingTalkNotifier.send", new=mock_send
+    ):
+        result = await _dispatch_admin_alert(db_session, "运营告警", "正文", "critical")
+
+    assert result == {"dispatched": 0, "note": "no_im_channel_configured"}
+    mock_send.assert_not_called()
+
+
 # ====================== resend_log 测试 ======================
 
 @pytest.mark.asyncio
@@ -320,3 +400,46 @@ async def test_resend_log_not_found(db_session):
 
     assert result["status"] == "failed"
     assert "不存在" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_resend_log_no_channel_reports_reason_and_fresh_detail(db_session):
+    """无可用渠道时重发：不能显示「重发成功」，且新日志的 channels/hub 反映本次尝试而非旧记录。"""
+    from types import SimpleNamespace
+
+    from sqlalchemy import select
+
+    from app.models.notification_log import NotificationLog
+    from app.services.notification.log_service import LogService
+    from app.services.notification.template_service import TemplateService
+
+    await TemplateService(db_session).seed_preset_templates()
+    old_error = "钉钉 webhook 仍是配置占位符"
+    log = await LogService(db_session).create_log(
+        event_type="workflow.failed", channel="multi",
+        title="原始标题", status="failed", error=old_error,
+        payload={
+            "workflow_id": "wf-1", "error_message": "原始错误",
+            "channels": [{"channel": "dingtalk", "success": False, "error": old_error}],
+            "hub": {"total": 1, "success": 0, "failed": 1, "suppressed": 0},
+        },
+        workflow_id="wf-1",
+    )
+
+    zero_result = {"total": 0, "success": 0, "failed": 0, "suppressed": 0, "results": []}
+    hub = SimpleNamespace(send=AsyncMock(return_value=zero_result))
+    sender = NotificationSender()
+    with _patch_session(db_session), patch(
+        "app.services.notification.sender.get_notifier_hub", return_value=hub
+    ):
+        result = await sender.resend_log(log.id)
+
+    assert result["status"] == "failed"
+    assert "未配置任何通知渠道" in result["message"]
+
+    new_log = (await db_session.execute(
+        select(NotificationLog).order_by(NotificationLog.id.desc()).limit(1)
+    )).scalar_one()
+    payload = json.loads(new_log.payload)
+    assert payload["channels"] == []
+    assert payload["hub"] == {"total": 0, "success": 0, "failed": 0, "suppressed": 0}

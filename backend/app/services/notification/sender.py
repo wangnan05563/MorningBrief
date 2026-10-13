@@ -23,6 +23,7 @@ from app.services.notification.log_service import LogService
 from app.services.notification.renderer import TemplateRenderer
 from app.services.notification.template_service import TemplateService, render_template
 from app.services.notifier import get_notifier_hub, NotificationEvent
+from app.services.notifier.factory import build_configured_channels, format_skipped
 
 logger = logging.getLogger(__name__)
 
@@ -167,18 +168,28 @@ class NotificationSender:
 
             # 7. 收集所有已配置渠道（直接从 ai_config 表读最新凭证，
             #    绕过 hub 单例热更新链路，避免长时间运行状态不一致）
-            channels = await self._collect_configured_channels(config_svc)
+            channels, skipped = await build_configured_channels(config_svc)
             if not channels:
+                err = "未配置任何通知渠道，请在通知管理页配置"
+                if skipped:
+                    err = f"未配置任何通知渠道（{format_skipped(skipped)}）"
                 await log_svc.create_log(
                     event_type=event_type,
                     channel="multi",
                     title=title,
                     status="failed",
-                    error="未配置任何通知渠道，请在通知管理页配置",
-                    payload={"workflow_id": workflow_id, **(extra_vars or {})},
+                    error=err,
+                    payload={
+                        "workflow_id": workflow_id,
+                        **(extra_vars or {}),
+                        "channels": [
+                            {"channel": s["channel"], "success": False, "error": s["reason"]}
+                            for s in skipped
+                        ],
+                    },
                     workflow_id=workflow_id,
                 )
-                return {"status": "failed", "message": "未配置任何通知渠道"}
+                return {"status": "failed", "message": err, "skipped": skipped}
 
             # 8. fan-out 并发发送到所有已配置渠道
             tasks = [notifier.send(event) for _, notifier in channels]
@@ -236,13 +247,29 @@ class NotificationSender:
             log_svc = LogService(session)
             config_svc = NotificationConfigService(session)
 
-            channels = await self._collect_configured_channels(config_svc)
+            channels, skipped = await build_configured_channels(config_svc)
             if not channels:
-                return {
-                    "success": False,
-                    "message": "发送失败: 未配置任何通知渠道，请先填写并保存配置",
-                    "results": [],
-                }
+                reason = format_skipped(skipped)
+                msg = "发送失败: 未配置任何通知渠道，请先填写并保存配置"
+                if reason:
+                    msg = f"发送失败: 未配置任何通知渠道（{reason}）"
+                await log_svc.create_log(
+                    event_type="test",
+                    channel="multi",
+                    title="🔔 通知测试",
+                    status="failed",
+                    error=msg,
+                    payload={
+                        "type": "test",
+                        "channels": [
+                            {"channel": s["channel"], "success": False, "error": s["reason"]}
+                            for s in skipped
+                        ],
+                        "hub": {"total": 0, "success": 0, "failed": 0, "suppressed": 0},
+                    },
+                    workflow_id="",
+                )
+                return {"success": False, "message": msg, "results": [], "skipped": skipped}
 
             event = NotificationEvent(
                 title="🔔 通知测试",
@@ -289,7 +316,16 @@ class NotificationSender:
                 title="🔔 通知测试",
                 status=status,
                 error=error_msg,
-                payload={"type": "test"},
+                payload={
+                    "type": "test",
+                    "channels": result_list,
+                    "hub": {
+                        "total": len(channels),
+                        "success": success_count,
+                        "failed": len(channels) - success_count,
+                        "suppressed": 0,
+                    },
+                },
                 workflow_id="",
             )
 
@@ -297,67 +333,8 @@ class NotificationSender:
                 "success": overall_success,
                 "message": "测试通知已发送" if overall_success else f"发送失败: {error_msg}",
                 "results": result_list,
+                "skipped": skipped,
             }
-
-    async def _collect_configured_channels(self, config_svc: NotificationConfigService) -> list:
-        """从 ai_config 表读取所有已配置凭证的渠道 notifier 实例。
-
-        返回 [(channel_name, notifier), ...]，跳过未配置凭证的渠道。
-        直接从 ai_config 表读取最新凭证，绕过 hub 单例热更新链路，
-        确保读到用户最新配置（避免服务启动时 webhook 为空导致渠道未加载）。
-        """
-        from types import SimpleNamespace
-        from app.services.notifier.channels.dingtalk import DingTalkNotifier
-        from app.services.notifier.channels.wecom import WeComNotifier
-        from app.services.notifier.channels.email import EmailNotifier
-
-        channels: list = []
-
-        # 钉钉：webhook 必填，secret 可选
-        dt_webhook = await config_svc.get_raw_value("notify_dingtalk_webhook")
-        dt_secret = await config_svc.get_raw_value("notify_dingtalk_secret")
-        if dt_webhook:
-            channels.append((
-                "dingtalk",
-                DingTalkNotifier(settings=SimpleNamespace(
-                    ALERT_DINGTALK_WEBHOOK=dt_webhook,
-                    ALERT_DINGTALK_SECRET=dt_secret,
-                )),
-            ))
-
-        # 企业微信：webhook 必填
-        wecom_webhook = await config_svc.get_raw_value("notify_wecom_webhook")
-        if wecom_webhook:
-            channels.append((
-                "wecom",
-                WeComNotifier(settings=SimpleNamespace(
-                    ALERT_WECOM_WEBHOOK=wecom_webhook,
-                )),
-            ))
-
-        # 邮件：host/user/password/to 均必填，port 缺省 587
-        email_host = await config_svc.get_raw_value("notify_email_smtp_host")
-        email_user = await config_svc.get_raw_value("notify_email_smtp_user")
-        email_pwd = await config_svc.get_raw_value("notify_email_smtp_password")
-        email_to = await config_svc.get_raw_value("notify_email_to")
-        email_port_str = await config_svc.get_raw_value("notify_email_smtp_port")
-        try:
-            email_port = int(email_port_str) if email_port_str else 587
-        except ValueError:
-            email_port = 587
-        if email_host and email_user and email_pwd and email_to:
-            channels.append((
-                "email",
-                EmailNotifier(settings=SimpleNamespace(
-                    ALERT_EMAIL_SMTP_HOST=email_host,
-                    ALERT_EMAIL_SMTP_PORT=email_port,
-                    ALERT_EMAIL_SMTP_USER=email_user,
-                    ALERT_EMAIL_SMTP_PASSWORD=email_pwd,
-                    ALERT_EMAIL_TO=email_to,
-                )),
-            ))
-
-        return channels
 
     async def resend_log(self, log_id: int) -> dict[str, Any]:
         """重发某条日志（用日志中记录的 payload 重新渲染并发送）。
@@ -408,8 +385,34 @@ class NotificationSender:
 
             success_count = result.get("success", 0)
             status = "success" if success_count > 0 else "failed"
-            errors = [r.error for r in result.get("results", []) if not r.success]
-            error_msg = "; ".join(errors) if errors else ""
+            channel_results = [
+                {
+                    "channel": getattr(r, "channel", ""),
+                    "success": bool(getattr(r, "success", False)),
+                    "error": getattr(r, "error", "") or "",
+                }
+                for r in (result.get("results") or [])
+            ]
+            errors = [c["error"] for c in channel_results if not c["success"]]
+            error_msg = "; ".join(errors)
+            if status == "failed" and not error_msg:
+                # hub 无可用渠道或免打扰静默时不返回逐渠道结果，补明原因
+                # 否则前端会拿着空 error 显示「重发成功」
+                error_msg = (
+                    "未配置任何通知渠道（凭证缺失或形态非法）"
+                    if result.get("total", 0) == 0
+                    else "渠道在免打扰时段被静默"
+                )
+
+            # 新日志的 payload 用本次重发的逐渠道结果覆盖，避免沿用旧记录里的
+            # channels/hub 让管理端展开行显示上一次尝试的原因（T02138）
+            detail_payload = {
+                k: v for k, v in payload.items() if k not in ("channels", "hub")
+            }
+            detail_payload["channels"] = channel_results
+            detail_payload["hub"] = {
+                k: result.get(k) for k in ("total", "success", "failed", "suppressed")
+            }
 
             await log_svc.create_log(
                 event_type=log.event_type,
@@ -417,7 +420,7 @@ class NotificationSender:
                 title=title,
                 status=status,
                 error=error_msg,
-                payload=payload,
+                payload=detail_payload,
                 workflow_id=log.workflow_id,
             )
 
