@@ -102,18 +102,23 @@ jmeter_test/test_user_info.json            backend/.token.tmp
   （压测脚本每轮自动重签，删除无损失）。
 - **保留** `backend/data/news.db-shm`(32K) / `news.db-wal`(0K)：正在使用的库伴生文件，
   后端进程持有时误删有 WAL 损坏风险；两者已被 `*.db-shm` / `*.db-wal` 忽略。
-- **保留** 备份包 `D:\code\otherProjects\20_News_history_backup_20261013.bundle`（272MB，
-  `git bundle verify` = complete history / okay）。它含清理前的旧历史（即敏感内容本身），
-  是当前唯一仍持有这些对象的本地载体——确认远端与凭据处置妥当后应删除。
+- **备份包已删除**（用户指示，2026-10-13）：`20_News_history_backup_20261013.bundle`（272,381,207 B ≈ 260 MiB，
+  heads = `refs/heads/main 3b99f015` / `refs/remotes/origin/main 8fac0c0` / `tag 1f13903`）。
+  删除前复核仓库自洽：213 个提交、`git fsck --full` 无告警、main == origin/main == `502f133`，
+  即删除不影响任何现存 ref 的可达性。删除后本机不再持有被清除对象的任何副本，
+  旧库备份内容**不可回溯**。
+- 用户判定：项目单人使用，钉钉 webhook / SMTP 等凭据不做轮换；
+  仅保留一条与协作无关的提醒——该 PAT 对本仓有写权限且曾明文躺在公开历史里，
+  值得确认它的 scope 与 Expiration（仓库产出分发给终端用户的桌面安装包，属供应链面）。
 
 仍需人工动作：
 
-1. **轮换凭据**：原 GitHub PAT 曾以明文存在于 `.git/config`（并已在本会话输出中出现），
-   请到 GitHub → Settings → Developer settings 吊销重建；Windows 凭据管理器
-   （`credential.helper manager` / `store`）里的旧条目一并清除。
-2. **GitHub 侧旧对象**：强推只让旧提交失去 ref 引用，服务端那份历史（含库备份与明文 JWT）
-   在 GitHub 完成 GC 前仍可能按 SHA 直接访问；若需彻底清除，按官方
-   「removing sensitive data」流程提 Support 请求（或删库重建）。任何既有 fork/他人克隆不受影响。
+1. **GitHub 侧旧对象**：强推只让旧提交失去 ref 引用，服务端那份历史（含库备份与明文 JWT）
+   在 GitHub 完成 GC 前仍可能按 SHA 直接访问（实测按旧 SHA fetch，服务器持续回传 pack）；
+   若需彻底清除，按官方「removing sensitive data」流程提 Support 请求（或删库重建）。
+   仓库实测为 **public**（API `private: false`），建议先改私有再决定是否提请求。
+2. **fork 自查**：若存在 fork，旧历史在别人仓库里永久留存，Support 与删库均不可达，
+   此时应按「数据已泄露」处置（本环境抓取 forks 页失败，需人工打开确认）。
 3. 推送时 GitHub 提示两个 >50MB 大文件（`backend/ffmpeg/bin/avcodec-63.dll` 94MB、
    `runtime/data/cloudflared.exe` 52MB）仍在历史中——本轮按既定口径保留，
    如后续要瘦身可改走 Git LFS 或一并做历史清除。
