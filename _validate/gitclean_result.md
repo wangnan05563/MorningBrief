@@ -114,13 +114,49 @@ jmeter_test/test_user_info.json            backend/.token.tmp
 仍需人工动作：
 
 1. **GitHub 侧旧对象**：强推只让旧提交失去 ref 引用，服务端那份历史（含库备份与明文 JWT）
-   在 GitHub 完成 GC 前仍可能按 SHA 直接访问（实测按旧 SHA fetch，服务器持续回传 pack）；
-   若需彻底清除，按官方「removing sensitive data」流程提 Support 请求（或删库重建）。
-   仓库实测为 **public**（API `private: false`），建议先改私有再决定是否提请求。
-2. **fork 自查**：若存在 fork，旧历史在别人仓库里永久留存，Support 与删库均不可达，
-   此时应按「数据已泄露」处置（本环境抓取 forks 页失败，需人工打开确认）。
+   在 GitHub 完成 GC 前仍可能按 SHA 直接访问（实测按旧 SHA fetch，服务器持续回传 pack）
+   ——本项已由第 7 节的删库重建处置，无需再提 Support 请求。
+2. **fork 自查**：用户确认无 fork；重建后 API 复核新旧两仓 `forks_count` 均为 0。
 3. 推送时 GitHub 提示两个 >50MB 大文件（`backend/ffmpeg/bin/avcodec-63.dll` 94MB、
    `runtime/data/cloudflared.exe` 52MB）仍在历史中——本轮按既定口径保留，
    如后续要瘦身可改走 Git LFS 或一并做历史清除。
 4. `backend/app/_build_info.py` 为构建期生成文件但**有意入库**（开发态缺省值 + About 页兜底，
    见 `backend/app/routers/admin/about.py:65`），故保留跟踪、不加忽略规则。
+
+## 7. 删库重建（2026-10-13，处置第 1 项遗留）
+
+强推后服务端旧对象仍按 SHA 可达，Support 流程要等人工工单，故按用户指示直接删库重建，
+顺序为 **先建新、后删旧**（build-then-retire），保证任何时刻都存在可用仓库。
+
+1. **新建私有暂存仓** `wangnan05563/MorningBrief-rebuild`，以本地改写后的历史推送
+   `main = 8e7d44b` + `tag MorningBrief-Setup = a800b3a`（弱网友好：分块建临时分支逐段推送，
+   临时分支 `_pushc1/_pushc2/_pushc3` 用毕已删，`rebuild` remote 已移除）。
+2. **安装包资产迁移**：旧仓 Release 唯一资产
+   `MorningBrief-Setup-v1.0.20260921.003.exe`（147,680,236 B）不在 Git 历史内，
+   必须先取回再重传。下载链路仅 30–40 KB/s 且频繁 `Connection was reset`，
+   改为定长区间分块续传（6 MiB/块，逐块校验长度后追加）方才取全；
+   本地 `sha256 = 576ef285958d95819943b2ccf11d625d5035d54a3db7c71b6d287bd482ec6b18`。
+   取回件与旧仓原资产做区间抽样（head / mid / tail 及两个续传拼接边界
+   `98,954,304`、`102,673,472`，各 1 MiB）——5/5 全等，证明分块拼接无损。
+3. **新仓发布 Release**：draft id `411871823`，显式 `tag_name=MorningBrief-Setup`、
+   `target_commitish=main` 发布（草稿在只 PATCH 正文时 tag 会被重置为 `untagged-…`，
+   发布必须带上 tag）；上传吞吐约 8.8 MB/s，一次成功。资产含 exe 与
+   `github-social-preview.png`（旧正文用的是 `user-attachments` 链接，删库即失效，
+   故把图片改为 Release 资产、正文换成稳定 URL）。
+   发布后再对新资产做区间抽样：head/mid/tail 与本地全等。
+4. **切换**：旧仓改名 `MorningBrief-retire-20261013`（改名即刻释放同名，新仓随即改回
+   `MorningBrief` 并 `private=false` 转公开）→ API 复核 → 删除改名后的旧仓
+   （`DELETE` 返回 204，复查 404）。删除前取证：待删仓 refs 与新仓完全一致
+   （main `8e7d44b` / tag `a800b3a`），删掉的只是失去引用的旧对象副本。
+5. **重建结果**：`wangnan05563/MorningBrief` public，refs 仅
+   `refs/heads/main 8e7d44b` + `refs/tags/MorningBrief-Setup a800b3a`；
+   `releases/latest` 匿名可达，资产 2 个、exe `size=147680236`；
+   本地 `origin` URL 与 `remote.origin.fetch` 未变，无需重新 clone。
+   服务端旧历史随仓库整体删除而清除，**不再需要 GitHub Support 工单**。
+6. **回滚资产**：`D:/code/otherProjects/20_News_clean_20261013.bundle`（252 MB，
+   `bundle verify` 通过，heads main `8e7d44b` / tag `a800b3a`）保留在仓外，
+   是重建后历史的离线副本；含敏感对象的旧历史副本已按用户指示删除、不可回溯。
+
+遗留观察（不建单）：本轮 `github.com`（Git 传输与网页域）间歇 21 s 连接超时，
+`api.github.com` 正常，故 ref/资产核验走 API，`git ls-remote` 需重试；
+下一次推送若失败先按网络原因重试而非改配置。
