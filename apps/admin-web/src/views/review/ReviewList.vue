@@ -177,12 +177,14 @@ function goReview(id) {
   router.push(`/review/${id}`)
 }
 
+// 后端 review 有 4 态（见 backend/app/models/review.py ReviewStatus），
+// 文案与标签色与 WorkflowDetail.vue 的 REVIEW_STATUS_MAP 保持一致（T02501）
 function statusTagType(status) {
-  return { pending: 'warning', approved: 'success', rejected: 'danger' }[status] || 'info'
+  return { pending: 'warning', approved: 'success', rejected: 'danger', replaced: 'info' }[status] || 'info'
 }
 
 function statusText(status) {
-  return { pending: '待审核', approved: '已通过', rejected: '已打回' }[status] || status
+  return { pending: '待审核', approved: '已通过', rejected: '已打回', replaced: '已替换' }[status] || status
 }
 
 function formatDuration(sec) {

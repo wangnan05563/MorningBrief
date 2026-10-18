@@ -213,12 +213,13 @@ function actionText(a) {
   return { approve: '通过', reject: '打回', replace: '替换段落' }[a]
 }
 
+// 与 ReviewList.vue / WorkflowDetail.vue 同一套 4 态口径（T02501）
 function statusTagType(status) {
-  return { pending: 'warning', approved: 'success', rejected: 'danger' }[status] || 'info'
+  return { pending: 'warning', approved: 'success', rejected: 'danger', replaced: 'info' }[status] || 'info'
 }
 
 function statusText(status) {
-  return { pending: '待审核', approved: '已通过', rejected: '已打回' }[status] || status
+  return { pending: '待审核', approved: '已通过', rejected: '已打回', replaced: '已替换' }[status] || status
 }
 
 function goBack() {

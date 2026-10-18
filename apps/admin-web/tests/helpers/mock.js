@@ -103,6 +103,42 @@ export const reviewRejectedListResponse = {
   },
 }
 
+// 第 4 态 replaced 的列表数据：后端 replace 动作产出，前端必须有可见去向（T02501）
+export const reviewReplacedListResponse = {
+  code: 0,
+  message: 'success',
+  data: {
+    total: 1,
+    list: [
+      {
+        id: 5,
+        episode_date: '2026-07-04',
+        workflow_id: 'wf-005',
+        status: 'replaced',
+        created_at: '2026-07-04T05:00:00',
+      },
+    ],
+  },
+}
+
+export const reviewReplacedDetailResponse = {
+  code: 0,
+  message: 'success',
+  data: {
+    id: 5,
+    episode_date: '2026-07-04',
+    workflow_id: 'wf-005',
+    status: 'replaced',
+    audio_url: 'https://example.com/audio/005.mp3',
+    reason: '第 2 条新闻来源有误，已替换段落',
+    script: {
+      full_text: '<p>替换后的稿件内容。</p>',
+      referenced_materials: ['https://source1.com'],
+      segments: [{ seq: 1, title: '头条新闻' }],
+    },
+  },
+}
+
 export const reviewDetailResponse = {
   code: 0,
   message: 'success',
