@@ -23,6 +23,16 @@
         </el-table-column>
         <el-table-column prop="start_date" label="开始日期" width="140" align="center" />
         <el-table-column prop="end_date" label="结束日期" width="140" align="center" />
+        <!-- D14：停用此前只在移动端可用，PC 端唯一的可逆干预路径缺失，只能删除 -->
+        <el-table-column label="状态" width="110" align="center">
+          <template #default="{ row }">
+            <el-switch
+              :model-value="row.enabled === 1"
+              :loading="togglingIds.includes(row.id)"
+              @update:model-value="(v) => handleToggle(row, v)"
+            />
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="120" align="center" fixed="right">
           <template #default="{ row }">
             <IconButton
@@ -115,6 +125,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 import { Plus, Delete, Close, Check } from '@element-plus/icons-vue'
 
 import api from '../../api'
@@ -126,6 +137,7 @@ const size = ref(20)
 const total = ref(0)
 
 const materialOptions = ref([])
+const togglingIds = ref([])
 const dialogVisible = ref(false)
 const submitting = ref(false)
 const formRef = ref()
@@ -173,6 +185,34 @@ async function fetchMaterials() {
     params: { page: 1, size: 100 },
   })
   materialOptions.value = data.list || []
+}
+
+// 启停切换：先确认再发请求，失败回滚开关（后端提交后会清「生效投放」缓存，停用即时生效）
+async function handleToggle(row, next) {
+  const enabled = next ? 1 : 0
+  const ok = await dangerConfirm({
+    action: enabled === 0 ? '停用投放' : '启用投放',
+    target: `${positionLabel(row.position)}位 · ${row.material_name || `投放 #${row.id}`}`,
+    scope: `生效区间 ${row.start_date} ~ ${row.end_date}`,
+    lines: [
+      enabled === 0
+        ? '停用后 C 端当期立即不再播放该广告（生效投放缓存同步失效）。'
+        : '启用后在排期区间内恢复播放。',
+    ],
+    irreversible: '启停可随时回退，不影响已生成的节目数据。',
+    confirmLabel: enabled === 0 ? '确认停用' : '确认启用',
+  })
+  if (!ok) return
+  togglingIds.value = [...togglingIds.value, row.id]
+  try {
+    await api.put(`/ads/placements/${row.id}`, { enabled })
+    row.enabled = enabled
+    ElMessage.success(enabled === 0 ? '已停用' : '已启用')
+  } catch {
+    // 请求失败保持原状态：开关由 :model-value 驱动，不写 row.enabled 即自动回弹
+  } finally {
+    togglingIds.value = togglingIds.value.filter((id) => id !== row.id)
+  }
 }
 
 async function openCreateDialog() {

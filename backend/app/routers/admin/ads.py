@@ -7,7 +7,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AdminPayload, get_current_admin
-from app.core.response import success
+from app.core.response import error, success
 from app.database import get_db
 from app.models import AuditLog
 from app.services.ad_service import AdService
@@ -124,6 +124,8 @@ async def update_placement(
         detail=json.dumps({"enabled": req.enabled}, ensure_ascii=False),
     ))
     await db.commit()
+    # 提交后再失效缓存：否则并发读可能把旧投放结果重新写回，停用要等 25h 才生效
+    await svc.invalidate_active_cache()
     return success(data=data)
 
 

@@ -38,13 +38,14 @@
                 v-for="pos in ['head', 'mid', 'tail']"
                 :key="pos"
                 class="slot"
-                :class="`slot-${pos}`"
+                :class="[`slot-${pos}`, { 'slot-off': isSlotDisabled(data.day, pos) }]"
               >
                 <span class="slot-label">{{ POSITION_LABEL[pos] }}</span>
                 <span v-if="getSlotMaterial(data.day, pos)" class="slot-name">
                   {{ getSlotMaterial(data.day, pos).material_name }}
                 </span>
                 <span v-else class="slot-empty">—</span>
+                <span v-if="isSlotDisabled(data.day, pos)" class="slot-off-tag">已停用</span>
               </div>
             </div>
           </div>
@@ -74,14 +75,19 @@ function getSlotMaterial(dayStr, pos) {
   return scheduleMap.value[dayStr]?.[pos] || null
 }
 
+// 停用状态在排期上必须可见：否则日历与投放规则页两处口径不一致（T02491 / D14）
+function isSlotDisabled(dayStr, pos) {
+  return getSlotMaterial(dayStr, pos)?.enabled === 0
+}
+
 async function fetchSchedule(monthStr) {
   loading.value = true
   try {
     const data = await api.get('/ads/schedule', {
       params: { month: monthStr },
     })
-    // 后端返回 { placements: [{material_name, position, start_date, end_date}] }
-    // 转换为前端所需 { "YYYY-MM-DD": { head: {material_name}, mid:..., tail:... } }
+    // 后端返回 { placements: [{material_name, position, start_date, end_date, enabled}] }
+    // 转换为前端所需 { "YYYY-MM-DD": { head: {material_name, enabled}, mid:..., tail:... } }
     const map = {}
     if (data.placements) {
       for (const p of data.placements) {
@@ -93,7 +99,7 @@ async function fetchSchedule(monthStr) {
         for (let d = new Date(start); d <= end; d = new Date(d.getTime() + ONE_DAY_MS)) {
           const dateKey = d.toISOString().slice(0, 10)
           if (!map[dateKey]) map[dateKey] = {}
-          map[dateKey][p.position] = { material_name: p.material_name }
+          map[dateKey][p.position] = { material_name: p.material_name, enabled: p.enabled }
         }
       }
     }
@@ -226,6 +232,26 @@ watch(
 
       .slot-empty {
         color: $color-text-secondary;
+      }
+
+      // 已停用：整格灰化 + 显式标签，避免「日历上看着在排、实际不播」
+      &.slot-off {
+        .slot-name,
+        .slot-label {
+          opacity: 0.45;
+        }
+
+        .slot-name {
+          text-decoration: line-through;
+        }
+      }
+
+      .slot-off-tag {
+        flex-shrink: 0;
+        margin-left: auto;
+        font-size: 10px;
+        line-height: 1.2;
+        color: $color-danger;
       }
 
       // 三个广告位用马卡龙色系小标签区分，与图例颜色对应

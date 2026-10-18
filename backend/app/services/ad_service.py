@@ -23,6 +23,15 @@ class AdService:
         # 进程内 TTLCache，替代原 Redis cache-aside（直接存 dict，无需 json 序列化）
         self.cache = cache
 
+    async def invalidate_active_cache(self) -> None:
+        """清空「生效投放」缓存（T02491 / FR-UX-203 D14）。
+
+        生效投放按日期缓存 25 小时，任何投放/素材变更都必须主动失效，
+        否则「停用」要等到次日才生效——开关不可信。
+        必须在数据库提交之后调用，否则并发读会把旧数据重新写回缓存。
+        """
+        await self.cache.delete_pattern("ad:placement:*")
+
     # ---- 素材管理 ----
 
     async def list_materials(self, page: int, size: int) -> dict:
@@ -170,6 +179,7 @@ class AdService:
         self.db.add(placement)
         await self.db.flush()
         await self.db.commit()
+        await self.invalidate_active_cache()
         return placement.id
 
     async def delete_placement(self, placement_id: int) -> None:
@@ -183,6 +193,7 @@ class AdService:
 
         await self.db.delete(placement)
         await self.db.commit()
+        await self.invalidate_active_cache()
 
     # ---- 排期与生效投放 ----
 
@@ -213,6 +224,8 @@ class AdService:
                 "position": p.position if p.position else None,
                 "start_date": p.start_date.isoformat() if p.start_date else None,
                 "end_date": p.end_date.isoformat() if p.end_date else None,
+                # 排期视图要能看出「已停用」，否则停用的投放看着照播（T02491 / D14）
+                "enabled": p.enabled,
             }
             for p, m_name in rows
         ]
@@ -230,12 +243,15 @@ class AdService:
             return cached
 
         # join 素材取 file_url 与 duration，C 端拼接音频时直接可用
+        # enabled 过滤（T02491 / D14）：此前只按日期区间查，停用后 C 端照样播出，
+        # 「停用」这条唯一的可逆干预路径等于没有。
         result = await self.db.execute(
             select(AdPlacement, AdMaterial.file_url, AdMaterial.duration)
             .join(AdMaterial, AdPlacement.material_id == AdMaterial.id)
             .where(
                 AdPlacement.start_date <= target_date,
                 AdPlacement.end_date >= target_date,
+                AdPlacement.enabled == 1,
             )
         )
         rows = result.all()
