@@ -53,9 +53,19 @@ class CascadePreviewRequest(BaseModel):
 
 class ImportRequest(BaseModel):
     """导入请求体。"""
-    rows: list[dict]
+    rows: list[dict] = []
     mode: str = "insert"  # insert | replace
     confirm_token: str
+    content: str | None = None  # 原始 CSV/JSON 文本，由后端统一解析
+    format: str = "csv"
+
+
+class ImportPreviewRequest(BaseModel):
+    """dry-run 预览请求体（只读，不落库）。"""
+    rows: list[dict] = []
+    mode: str = "insert"
+    content: str | None = None
+    format: str = "csv"
 
 
 def _validate_confirm_token(token: str) -> None:
@@ -246,6 +256,23 @@ async def export_rows(
 
 # ---- 导入 ----
 
+@router.post("/tables/{table}/import/preview")
+async def preview_import(
+    table: str,
+    body: ImportPreviewRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """导入前 dry-run 预览：返回预计新增/更新/冲突行数与错误明细，不写库。"""
+    svc = DbAdminService(db)
+    rows = (
+        svc.parse_import_payload(body.content, body.format)
+        if body.content is not None
+        else body.rows
+    )
+    return success(data=await svc.preview_import(table, rows, body.mode))
+
+
 @router.post("/tables/{table}/import")
 async def import_rows(
     table: str,
@@ -256,10 +283,15 @@ async def import_rows(
     """导入数据（insert 或 replace 模式）。"""
     _validate_confirm_token(body.confirm_token)
     svc = DbAdminService(db)
-    result = await svc.import_rows(table, body.rows, body.mode)
+    rows = (
+        svc.parse_import_payload(body.content, body.format)
+        if body.content is not None
+        else body.rows
+    )
+    result = await svc.import_rows(table, rows, body.mode)
     await svc.write_audit(
         action="import", target=table, operator=admin.username,
-        detail={"mode": body.mode, "total": len(body.rows), "result": result},
+        detail={"mode": body.mode, "total": len(rows), "result": result},
     )
     await db.commit()
     return success(data=result)

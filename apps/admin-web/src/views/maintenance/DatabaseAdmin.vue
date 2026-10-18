@@ -274,13 +274,14 @@
       <el-alert type="warning" :closable="false" class="import-alert">
         导入将直接写入数据库，敏感字段会被忽略。单次最多导入 5000 行。
       </el-alert>
-      <el-tabs v-model="importFormat" class="import-tabs">
+      <el-tabs v-model="importFormat" class="import-tabs" @tab-change="importPreview = null">
         <el-tab-pane label="CSV 粘贴" name="csv">
           <el-input
             v-model="importContent"
             type="textarea"
             :rows="8"
-            placeholder="粘贴 CSV 内容（首行为列名）"
+            placeholder="粘贴 CSV 内容（首行为列名，支持引号内逗号与换行）"
+            @input="importPreview = null"
           />
         </el-tab-pane>
         <el-tab-pane label="JSON 粘贴" name="json">
@@ -289,15 +290,28 @@
             type="textarea"
             :rows="8"
             placeholder='粘贴 JSON 数组，如 [{"id":1,"name":"test"}]'
+            @input="importPreview = null"
           />
         </el-tab-pane>
       </el-tabs>
       <div class="import-mode">
         <span>导入模式：</span>
-        <el-radio-group v-model="importMode">
+        <el-radio-group v-model="importMode" @change="importPreview = null">
           <el-radio value="insert">新增（主键冲突跳过）</el-radio>
-          <el-radio value="replace">替换（主键冲突覆盖）</el-radio>
+          <el-radio value="replace">替换（仅更新本次提供的列，其余保持原值）</el-radio>
         </el-radio-group>
+      </div>
+      <div v-if="importPreview" class="import-preview">
+        <div>
+          共 {{ importPreview.total }} 行：预计新增 {{ importPreview.to_insert }}、更新
+          {{ importPreview.to_update }}、冲突 {{ importPreview.conflicts }}、错误
+          {{ importPreview.error_rows }}（预览不写库）
+        </div>
+        <ul v-if="importPreview.errors.length" class="import-preview-errors">
+          <li v-for="err in importPreview.errors.slice(0, 10)" :key="err.row">
+            第 {{ err.row }} 行：{{ err.error }}
+          </li>
+        </ul>
       </div>
       <template #footer>
         <IconButton
@@ -305,6 +319,13 @@
           desc="关闭对话框"
           :icon="Close"
           @click="importDialogVisible = false"
+        />
+        <IconButton
+          label="预览"
+          desc=" dry-run 预计写入行数，不写数据库"
+          :icon="View"
+          :loading="importPreviewing"
+          @click="handlePreviewImport"
         />
         <IconButton
           type="warning"
@@ -368,7 +389,7 @@ import {
 import {
   listTables, getTableSchema, listRows,
   createRow, updateRow, deleteRow, batchDelete,
-  cascadePreview, exportRows, importRows, listAuditLogs,
+  cascadePreview, exportRows, importRows, listAuditLogs, previewImport,
 } from '../../api/dbAdmin'
 import { formatTime } from '../../utils/format'
 
@@ -622,40 +643,53 @@ async function handleExport(format) {
 }
 
 // ---- 导入 ----
+// CSV/JSON 解析统一交给后端标准库（引号内逗号、CRLF、BOM 前端手拆会出错）
+const importPreview = ref(null)
+const importPreviewing = ref(false)
+
+async function handlePreviewImport() {
+  if (!importContent.value.trim()) {
+    ElMessage.warning('请粘贴导入内容')
+    return
+  }
+  importPreviewing.value = true
+  try {
+    importPreview.value = await previewImport(
+      selectedTable.value,
+      importContent.value,
+      importFormat.value,
+      importMode.value,
+    )
+  } catch (e) {
+    importPreview.value = null
+    console.warn('previewImport failed:', e)
+  } finally {
+    importPreviewing.value = false
+  }
+}
+
 async function handleImport() {
   if (!importContent.value.trim()) {
     ElMessage.warning('请粘贴导入内容')
     return
   }
-  let rowsData = []
-  try {
-    if (importFormat.value === 'json') {
-      rowsData = JSON.parse(importContent.value)
-      if (!Array.isArray(rowsData)) {
-        ElMessage.error('JSON 必须是数组格式')
-        return
-      }
-    } else {
-      // CSV 解析：首行为列名
-      const lines = importContent.value.trim().split('\n')
-      const headers = lines[0].split(',').map((h) => h.trim())
-      rowsData = lines.slice(1).map((line) => {
-        const vals = line.split(',')
-        const obj = {}
-        headers.forEach((h, i) => { obj[h] = vals[i]?.trim() || null })
-        return obj
-      })
-    }
-  } catch (e) {
-    ElMessage.error('解析失败: ' + e.message)
+  if (!importPreview.value) {
+    ElMessage.warning('请先预览，确认预计写入行数后再导入')
     return
   }
-
   try {
-    const result = await importRows(selectedTable.value, rowsData, importMode.value)
-    ElMessage.success(`导入完成：成功 ${result.inserted}，跳过 ${result.skipped}`)
+    const result = await importRows(
+      selectedTable.value,
+      importContent.value,
+      importFormat.value,
+      importMode.value,
+    )
+    ElMessage.success(
+      `导入完成：新增 ${result.inserted}，更新 ${result.updated ?? 0}，跳过 ${result.skipped}`,
+    )
     importDialogVisible.value = false
     importContent.value = ''
+    importPreview.value = null
     await loadRows()
   } catch (e) {
     console.warn('handleImport failed:', e)

@@ -500,8 +500,10 @@ class DbAdminService:
 
         schema = await self.get_table_schema(table)
         valid_cols = {c["name"] for c in schema["columns"]}
+        pk_col = self._get_single_pk_column(schema)
 
         inserted = 0
+        updated = 0
         skipped = 0
         errors = []
 
@@ -512,13 +514,49 @@ class DbAdminService:
                     skipped += 1
                     continue
 
+                blocked = sorted(
+                    col
+                    for col in filtered
+                    if col in _row_sensitive_columns(table, filtered)
+                    and _is_mask_sentinel(filtered[col])
+                )
+                if blocked:
+                    errors.append({"row": i + 1, "error": _mask_writeback_message(blocked)})
+                    skipped += 1
+                    continue
+
                 cols = ", ".join(filtered.keys())
                 placeholders = ", ".join(f":{k}" for k in filtered.keys())
-                # replace 模式：INSERT OR REPLACE（SQLite 原生支持，主键冲突时替换）
-                verb = "INSERT OR REPLACE INTO" if mode == "replace" else "INSERT INTO"
-                sql = f"{verb} {table} ({cols}) VALUES ({placeholders})"
-                await self.db.execute(text(sql), filtered)
-                inserted += 1
+                if mode == "replace":
+                    # INSERT OR REPLACE 是整行删插，只带部分列会把未提交的列（含凭据）清空；
+                    # 而 INSERT ... ON CONFLICT DO UPDATE 仍要按插入行校验 NOT NULL，
+                    # 部分列导入同样会被拒。故冲突时走纯 UPDATE，只改显式提供的列。
+                    if pk_col not in filtered:
+                        errors.append({"row": i + 1, "error": f"replace 模式缺少主键列 {pk_col}"})
+                        skipped += 1
+                        continue
+                    if await self._pk_exists(table, pk_col, filtered[pk_col]):
+                        update_cols = [c for c in filtered if c != pk_col]
+                        if not update_cols:
+                            errors.append({"row": i + 1, "error": f"仅含主键列 {pk_col}，无可更新字段"})
+                            skipped += 1
+                            continue
+                        set_clause = ", ".join(f"{c} = :{c}" for c in update_cols)
+                        params = {c: filtered[c] for c in update_cols}
+                        params["pk"] = filtered[pk_col]
+                        await self.db.execute(
+                            text(f"UPDATE {table} SET {set_clause} WHERE {pk_col} = :pk"), params
+                        )
+                        updated += 1
+                    else:
+                        await self.db.execute(
+                            text(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"), filtered
+                        )
+                        inserted += 1
+                else:
+                    sql = f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"
+                    await self.db.execute(text(sql), filtered)
+                    inserted += 1
             except Exception as e:
                 errors.append({"row": i + 1, "error": str(e)})
                 skipped += 1
@@ -528,8 +566,124 @@ class DbAdminService:
             "ok": True,
             "total": len(rows),
             "inserted": inserted,
+            "updated": updated,
             "skipped": skipped,
             "errors": errors,
+        }
+
+    async def _pk_exists(self, table: str, pk_col: str, pk_value: Any) -> bool:
+        result = await self.db.execute(
+            text(f"SELECT 1 FROM {table} WHERE {pk_col} = :pk"), {"pk": pk_value}
+        )
+        return result.first() is not None
+
+    @staticmethod
+    def parse_import_payload(content: str, fmt: str = "csv") -> list[dict]:
+        """用标准 csv/json 解析导入文本，正确处理引号内逗号、CRLF、BOM。"""
+        text_content = (content or "").strip()
+        if not text_content:
+            raise ParamError("导入内容不能为空")
+        # 去掉 UTF-8 BOM（Excel 导出的 CSV 常带），否则首列名会变成 `\ufeffid`
+        if text_content.startswith("\ufeff"):
+            text_content = text_content[1:]
+        if fmt == "json":
+            try:
+                parsed = json.loads(text_content)
+            except json.JSONDecodeError as e:
+                raise ParamError(f"JSON 解析失败: {e}")
+            if not isinstance(parsed, list):
+                raise ParamError("JSON 必须是数组格式")
+            return [dict(item) for item in parsed if isinstance(item, dict)]
+        if fmt != "csv":
+            raise ParamError("导入格式仅支持 csv 或 json")
+        # newline="" 让 csv 自己处理引号内的 \r\n，避免按行 split 把多行字段切成垃圾行
+        reader = csv.DictReader(io.StringIO(text_content, newline=""))
+        if not reader.fieldnames:
+            raise ParamError("CSV 缺少表头行")
+        rows = []
+        for raw in reader:
+            if not any((v or "").strip() for v in raw.values()):
+                continue
+            rows.append(
+                {
+                    (key or "").strip(): (
+                        value.strip() if isinstance(value, str) else value
+                    )
+                    for key, value in raw.items()
+                    if key is not None
+                }
+            )
+        return rows
+
+    async def preview_import(
+        self, table: str, rows: list[dict], mode: str = "insert"
+    ) -> dict:
+        """dry-run 预览：只读地算出预计新增/更新/冲突跳过/错误行，不落库。"""
+        table = _validate_table(table)
+        if not rows:
+            raise ParamError("导入数据不能为空")
+        if len(rows) > settings.DB_ADMIN_MAX_IMPORT_ROWS:
+            raise ParamError(f"单次最多导入 {settings.DB_ADMIN_MAX_IMPORT_ROWS} 行")
+        if mode not in ("insert", "replace"):
+            raise ParamError("导入模式仅支持 insert 或 replace")
+
+        schema = await self.get_table_schema(table)
+        valid_cols = {c["name"] for c in schema["columns"]}
+        pk_col = self._get_single_pk_column(schema)
+
+        to_insert = 0
+        to_update = 0
+        conflicts = 0
+        errors = []
+
+        for i, row in enumerate(rows):
+            filtered = {k: v for k, v in row.items() if k in valid_cols}
+            if not filtered:
+                errors.append({"row": i + 1, "error": "该行没有匹配当前表的列"})
+                continue
+
+            blocked = sorted(
+                col
+                for col in filtered
+                if col in _row_sensitive_columns(table, filtered)
+                and _is_mask_sentinel(filtered[col])
+            )
+            if blocked:
+                errors.append({"row": i + 1, "error": _mask_writeback_message(blocked)})
+                continue
+
+            unknown = sorted(set(row) - valid_cols)
+            if unknown:
+                errors.append({"row": i + 1, "error": f"列不在表结构内，将被忽略: {', '.join(unknown)}"})
+            if mode == "replace":
+                if pk_col not in filtered:
+                    errors.append({"row": i + 1, "error": f"replace 模式缺少主键列 {pk_col}"})
+                    continue
+                if await self._pk_exists(table, pk_col, filtered[pk_col]):
+                    to_update += 1
+                    conflicts += 1
+                else:
+                    to_insert += 1
+            else:
+                if pk_col in filtered and await self._pk_exists(table, pk_col, filtered[pk_col]):
+                    conflicts += 1
+                    errors.append(
+                        {"row": i + 1, "error": f"主键 {filtered[pk_col]} 已存在，insert 模式将跳过"}
+                    )
+                else:
+                    to_insert += 1
+
+        return {
+            "table": table,
+            "mode": mode,
+            "primary_key": pk_col,
+            "total": len(rows),
+            "to_insert": to_insert,
+            "to_update": to_update,
+            "conflicts": conflicts,
+            "error_rows": len(errors),
+            "errors": errors[:50],
+            "columns": sorted(valid_cols),
         }
 
     # ---- 审计日志 ----

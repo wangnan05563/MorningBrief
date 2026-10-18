@@ -83,10 +83,20 @@ export async function exportRows(table, format = 'csv') {
 
 // ---- 导入 ----
 
-/** 导入数据（需 confirm_token） */
-export function importRows(table, rows, mode = 'insert') {
+/** 导入前 dry-run 预览：只读，返回预计新增/更新/冲突行数与错误明细 */
+export function previewImport(table, content, format = 'csv', mode = 'insert') {
+  return api.post(`/db-admin/tables/${table}/import/preview`, {
+    content,
+    format,
+    mode,
+  })
+}
+
+/** 导入数据（需 confirm_token）；原始文本交后端用标准 csv/json 解析 */
+export function importRows(table, content, format = 'csv', mode = 'insert') {
   return api.post(`/db-admin/tables/${table}/import`, {
-    rows,
+    content,
+    format,
     mode,
     confirm_token: CONFIRM_TOKEN,
   })
