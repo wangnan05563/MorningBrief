@@ -283,6 +283,33 @@ async def test_auto_approve_records_matched_and_skipped(db_session, monkeypatch)
     ]
 
 
+@pytest.mark.asyncio
+async def test_failed_attempt_also_records_skipped_rules(db_session, monkeypatch):
+    """未通过时同样要能看出这次少查了什么，否则失败历史只剩半截信息。"""
+    await _legacy_config(
+        db_session, enabled=True, require_content_safe=True,
+        require_steps_first_success=False, keyword_whitelist=[],
+    )
+    rv = await _seed_workflow(db_session, "g2-wf-fail")
+    db_session.add(WorkflowStep(
+        workflow_id="g2-wf-fail", step_name=WorkflowStepName.rewrite.value,
+        status=WorkflowStepStatus.success.value, retry_count=0,
+        result={"content_security": {"safe": False, "skipped": False}},
+    ))
+    await db_session.commit()
+
+    svc = await _svc(db_session, monkeypatch)
+    result = await svc.try_auto_approve(
+        workflow_id="g2-wf-fail", review_id=rv.id, review_created_at=rv.created_at,
+    )
+    assert result["auto_approved"] is False
+
+    stats = await _stats(db_session, "g2-wf-fail")
+    reason = json.loads(stats[-1].trigger_reason)
+    assert reason["failed_rules"] == ["内容安全检测命中违规"]
+    assert reason["skipped_rules"] == ["steps_first_success", "keyword_whitelist"]
+
+
 # ===== 路由出参与入参 =====
 
 @pytest.mark.asyncio

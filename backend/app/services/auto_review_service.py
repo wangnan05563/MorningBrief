@@ -465,7 +465,10 @@ class AutoReviewService:
                 review_id=review_id,
                 workflow_id=workflow_id,
                 success=False,
-                trigger_reason=json.dumps({"failed_rules": fail_reasons}, ensure_ascii=False),
+                trigger_reason=json.dumps(
+                    {"failed_rules": fail_reasons, "skipped_rules": skipped},
+                    ensure_ascii=False,
+                ),
                 error_message=fail_msg,
                 time_saved_sec=None,
             )
