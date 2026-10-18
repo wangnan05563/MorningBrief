@@ -68,7 +68,8 @@ class StatsService:
 
         V1.2 改造：DAU 趋势从原逐日 Redis BITCOUNT 改为 SQLite
         GROUP BY func.date(played_at) 一次聚合，与其他指标统一。
-        返回 dates 与 values 等长对齐，缺数据的日期补 0。
+        返回 dates 与 values 等长对齐；没有记录的日期值为 null（不是 0），
+        前端据此区分「没有数据」与「数据为 0」，不再把空档期画成 0 折线。
         """
         # 项目约定：所有时间字段存为本地 naive datetime（香港 UTC+8，无夏令时）
         # 与 get_overview 的 day_start/day_end 切分逻辑保持一致，避免 UTC vs 本地偏差
@@ -99,15 +100,18 @@ class StatsService:
             .where(PlayLog.played_at >= day_start, PlayLog.played_at < day_end)
             .group_by(func.date(PlayLog.played_at))
         )
-        # 按"日期字符串 -> 值"建表，便于按预期日期序列对齐补 0
-        db_map: dict[str, float] = {}
+        # 按"日期字符串 -> 值"建表，便于按预期日期序列对齐（缺日不补值）
+        db_map: dict[str, float | None] = {}
         for d, v in result.all():
-            db_map[str(d)] = float(v) if v is not None else 0.0
+            # 当天有记录但聚合结果为 NULL（如 duration 全空）同样是「未知」，不能记成 0
+            db_map[str(d)] = float(v) if v is not None else None
 
         for i in range(range_days - 1, -1, -1):
             d = today - timedelta(days=i)
             dates.append(d.isoformat())
-            values.append(db_map.get(d.isoformat(), 0))
+            # 缺数据的日期给 null 而不是 0：真实为 0（当天有记录但计数为 0）与
+            # 「当天什么都没有」必须能区分，否则前端会把无数据的日子画成一条 0 折线
+            values.append(db_map.get(d.isoformat()))
 
         return {"dates": dates, "values": values}
 

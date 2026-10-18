@@ -62,6 +62,8 @@ Page({
     durationLabel: '',
     loading: true,
     error: '',
+    // T02496（FR-UX-302 / J32）：错误态的「重试」要重新拉同一集，需要留住这个 id
+    episodeId: '',
     // 音频缓冲中：onWaiting 触发时显示菊花，onCanplay/onPlay 解除
     isWaiting: false,
     // V1.3 新增
@@ -117,6 +119,8 @@ Page({
       this.setData({ loading: false, error: '缺少节目参数' });
       return;
     }
+    // 「缺少节目参数」这种失败重试也没意义，所以只在拿到 id 后才记录
+    this.setData({ episodeId: id });
     // 课程章节语义（FR-MC-04）：从课程主页跳转时携带 channelId/chapterIndex/chapterTotal
     // 仅当频道类型为 course/audiobook 时启用，news 频道无此语义（向后兼容）
     const channelId = options.channelId;
@@ -235,12 +239,24 @@ Page({
     }
   },
 
+  /**
+   * T02496（FR-UX-302 / J32）：详情加载失败后就地重试。
+   * 此前错误态只有一句提示，用户只能退回上一页再进来。
+   */
+  onRetryLoad() {
+    const id = this.data.episodeId;
+    if (!id) return;
+    this.setData({ loading: true, error: '' });
+    this.loadDetail(id);
+  },
+
   async loadDetail(id) {
     try {
       const episode = await fetchEpisodeDetail(id);
       this.setData({
         episode,
         loading: false,
+        error: '',
         durationLabel: this.formatDuration(episode.duration),
         // 任务10：先用 episode 自带的 cover_url 作为背景，避免等 loadScript 才显示
         // 后续 onLoadScript 加载完后会用 segments 第一张 cover 覆盖（更精确）

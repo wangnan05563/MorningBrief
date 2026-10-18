@@ -20,6 +20,12 @@
     </section>
 
     <div v-if="loading && !tasks.length" class="m-empty">加载中…</div>
+    <!-- T02496（FR-UX-302 / ACC-UX-301 第 3 条）：断网进队列页必须显示「加载失败，重试」，
+         而不是「队列为空」——后者会让值班同学以为队列真的没有任务 -->
+    <div v-else-if="loadError" class="m-empty">
+      <div>加载失败：{{ loadError }}</div>
+      <button type="button" class="m-btn m-btn--primary" :disabled="loading" @click="reload">重试</button>
+    </div>
     <div v-else-if="!tasks.length" class="m-empty">队列为空</div>
 
     <div v-for="t in tasks" :key="t.id" class="m-q__item">
@@ -73,6 +79,8 @@ const router = useRouter()
 const stats = ref(null)
 const tasks = ref([])
 const loading = ref(false)
+// T02496（FR-UX-302）：非空即「这次没取到」，与「队列为空」区分开
+const loadError = ref('')
 
 // 跳转至作用域审核页：携带 workflow_id 与频道名，
 // 供移动端审核页顶部上下文标题区展示「当前频道 + 工作流」
@@ -102,8 +110,10 @@ async function reload() {
     ])
     stats.value = s
     tasks.value = d.items || []
-  } catch {
-    // 拦截器已提示
+    loadError.value = ''
+  } catch (e) {
+    // 拦截器已提示；页内还要留一个可重试的错误态，不能退化成「队列为空」
+    loadError.value = e?.message || '队列加载失败'
   } finally {
     loading.value = false
   }
@@ -304,5 +314,11 @@ onMounted(reload)
   color: #b0b4bb;
   padding: 40px 0;
   font-size: 14px;
+}
+
+/* 错误态里的重试：按钮比正文高一档间距，避免贴在文字下面误触 */
+.m-empty .m-btn {
+  margin-top: 12px;
+  height: 40px;
 }
 </style>

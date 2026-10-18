@@ -105,6 +105,14 @@
 
     <!-- 任务表格 -->
     <el-card shadow="never">
+      <!-- T02496（FR-UX-302）：请求失败必须与「真的没有队列任务」区分开 -->
+      <ListLoadError
+        v-if="listError"
+        :message="listError"
+        :retrying="retryingList"
+        :stale="tasks.length > 0"
+        @retry="retryLoadTasks"
+      />
       <el-table
         ref="tableRef"
         :data="tasks"
@@ -171,7 +179,10 @@
             <IconButton size="small" :icon="View" label="详情" desc="查看任务详情" @click="openDetail(row)" />
           </template>
         </el-table-column>
-        <template #empty><el-empty description="暂无队列任务" :image-size="90" /></template>
+        <!-- 失败态由表上方 ListLoadError 承担：请求没成功时不能谎报「暂无队列任务」 -->
+        <template #empty>
+          <el-empty v-if="!listError" description="暂无队列任务" :image-size="90" />
+        </template>
       </el-table>
 
       <div class="pagination">
@@ -243,6 +254,7 @@ import {
 import { listChannels } from '../../api/channels'
 import { subscribe } from '../../utils/sse'
 import { formatTime } from '../../utils/format'
+import ListLoadError from '../../components/ListLoadError.vue'
 
 // 角色控制：直接读 localStorage，operator 隐藏操作按钮
 const role = localStorage.getItem('admin_role') || ''
@@ -288,6 +300,9 @@ const total = ref(0)
 const page = ref(1)
 const size = ref(20)
 const loading = ref(false)
+// T02496（FR-UX-302）：非空即「这次请求没成功」，页面据此显示错误态而非空态
+const listError = ref('')
+const retryingList = ref(false)
 
 // 排序状态：默认视觉提示为 started_at 倒序，与后端默认排序（failed 优先+started_at 倒序）保持视觉一致
 // userSort 仅在用户主动点击表头时填充；为 null 时不传参，后端走默认排序
@@ -400,10 +415,12 @@ async function loadTasks() {
     // 后端返回 items 字段，对齐 SRS 5.1 API 规范
     tasks.value = data.items || []
     total.value = data.total || 0
-  } catch {
-    // 响应拦截器已弹出 ElMessage，此处兜底防止轮询链断裂
-    tasks.value = []
-    total.value = 0
+    listError.value = ''
+  } catch (e) {
+    // 旧行为是把 tasks 清空——界面于是显示「暂无队列任务」，
+    // 用户以为队列真的空了（ACC-UX-301 第 3 条要消除的正是这个误读）。
+    // 现在保留上一次的行并进入错误态；拦截器的 toast 仍照常弹（不在此重复弹）。
+    listError.value = e?.message || '队列任务加载失败'
   } finally {
     loading.value = false
   }
@@ -416,6 +433,16 @@ async function loadTasks() {
     const sortOrder = userSort.value ? userSort.value.order : defaultSort.order
     tableRef.value.sort(sortProp, sortOrder)
     isRestoringSort = false
+  }
+}
+
+// 错误态里的「重试」：走同一条 loadTasks，成功后 listError 自动清空
+async function retryLoadTasks() {
+  retryingList.value = true
+  try {
+    await loadTasks()
+  } finally {
+    retryingList.value = false
   }
 }
 

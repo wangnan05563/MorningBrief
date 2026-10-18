@@ -15,49 +15,13 @@
  * 同样不能让默认值冒充已加载值。retry() 不复位成 loading 态，
  * 否则错误提示连同按钮会在重试期间消失。
  */
-import { computed, ref } from 'vue'
+import { useLoadState } from './useLoadState'
 
+// 三态机本体在 useLoadState（T02496 抽出，列表/详情共用）；
+// 这里只固定配置页的文案，保留 useConfigLoad 名字给既有配置页与测试断言。
 export function useConfigLoad(loader) {
-  const state = ref('loading')
-  const errorMessage = ref('')
-  const retrying = ref(false)
-
-  const isReady = computed(() => state.value === 'ready')
-  const isError = computed(() => state.value === 'error')
-  const isLoading = computed(() => state.value === 'loading')
-
-  async function attempt() {
-    try {
-      const data = await loader()
-      if (data === null || data === undefined) {
-        state.value = 'error'
-        errorMessage.value = '配置接口未返回数据'
-        return false
-      }
-      state.value = 'ready'
-      errorMessage.value = ''
-      return true
-    } catch (e) {
-      state.value = 'error'
-      errorMessage.value = e?.message || '配置加载失败'
-      return false
-    }
-  }
-
-  async function load() {
-    state.value = 'loading'
-    errorMessage.value = ''
-    return attempt()
-  }
-
-  async function retry() {
-    retrying.value = true
-    try {
-      return await attempt()
-    } finally {
-      retrying.value = false
-    }
-  }
-
-  return { state, errorMessage, isReady, isError, isLoading, retrying, load, retry }
+  return useLoadState(loader, {
+    failMessage: '配置加载失败',
+    emptyMessage: '配置接口未返回数据',
+  })
 }

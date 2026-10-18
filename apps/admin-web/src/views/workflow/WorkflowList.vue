@@ -51,6 +51,14 @@
           <el-option label="定时" value="cron" />
           <el-option label="手动" value="manual" />
         </el-select>
+        <!-- T02496（FR-UX-302 / E1）：此前页面没有独立刷新入口，只能靠改筛选条件触发重载 -->
+        <IconButton
+          :icon="Refresh"
+          label="刷新"
+          desc="重新拉取工作流列表"
+          :loading="loading"
+          @click="retryLoadList"
+        />
         <IconButton :icon="RefreshLeft" label="重置" desc="清空筛选条件并刷新列表" @click="resetFilters" />
       </div>
       <div class="top-actions">
@@ -112,6 +120,14 @@
         - @selection-change 同步选中行到 selectedRows
         - ref 用于删除后调用 clearSelection() 重置选中状态
       -->
+      <!-- T02496（FR-UX-302 / E1）：请求失败必须显示错误态，不能落到「暂无工作流」空态 -->
+      <ListLoadError
+        v-if="listError"
+        :message="listError"
+        :retrying="retryingList"
+        :stale="list.length > 0"
+        @retry="retryLoadList"
+      />
       <el-table
         ref="tableRef"
         :data="list"
@@ -163,7 +179,9 @@
         <el-table-column label="结束时间" min-width="170">
           <template #default="{ row }">{{ formatTime(row.finished_at) }}</template>
         </el-table-column>
-        <template #empty><el-empty description="暂无工作流" :image-size="90" /></template>
+        <template #empty>
+          <el-empty v-if="!listError" description="暂无工作流" :image-size="90" />
+        </template>
       </el-table>
 
       <!-- 分页 -->
@@ -260,6 +278,7 @@ import { subscribe, broadcastLocal } from '../../utils/sse'
 import { cleanupLoadingMasks } from '../../utils/window-guard'
 import { formatTime } from '../../utils/format'
 import WorkflowProgressIndicator from './components/WorkflowProgressIndicator.vue'
+import ListLoadError from '../../components/ListLoadError.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -276,6 +295,9 @@ const triggerAllResult = ref(null)
 const retrying = ref(false)
 const list = ref([])
 const total = ref(0)
+// T02496（FR-UX-302）：非空即「这次请求没成功」，页面据此显示错误态而非空态
+const listError = ref('')
+const retryingList = ref(false)
 const page = ref(1)
 const size = ref(20)
 
@@ -356,6 +378,7 @@ async function loadList(silent = false) {
     const data = await api.get('/workflows', { params, silent })
     list.value = data.list || []
     total.value = data.total || 0
+    listError.value = ''
 
     // 安全页码修正：删除后当前页可能变空（如第 3 页只剩 1 条被删），
     // 此时回退到上一页避免用户面对空白列表
@@ -367,8 +390,23 @@ async function loadList(silent = false) {
 
     // 根据最新列表状态启停轮询：有活跃工作流时启动，全部终态时停止
     startPollingIfNeeded()
+  } catch (e) {
+    // E1：此前只有 try/finally 没有 catch，异常直接冒泡——
+    // silent 轮询时打断轮询链，首屏时留下「暂无工作流」的空态误导。
+    // 拦截器已弹过一次 toast，这里只落页内错误态，不重复弹。
+    listError.value = e?.message || '工作流列表加载失败'
   } finally {
     if (!silent) loading.value = false
+  }
+}
+
+// 错误态与「刷新」按钮共用：重试期间按钮转圈，成功后错误提示自动消失
+async function retryLoadList() {
+  retryingList.value = true
+  try {
+    await loadList()
+  } finally {
+    retryingList.value = false
   }
 }
 

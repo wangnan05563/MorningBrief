@@ -15,6 +15,11 @@
   <view class="empty-state" wx:elif="{{error}}">
     <image class="empty-icon-img" lazy-load src="/images/icons/alert.png" mode="aspectFit" />
     <text>{{error}}</text>
+    <!-- T02496（FR-UX-302 / J32）：失败必须能原地重试；缺 id 时重试无意义，不显示按钮。
+         复用 app.wxss 的 .load-retry-btn（T00599），不另造一套重试按钮样式 -->
+    <view class="load-retry-wrap" wx:if="{{episodeId}}">
+      <button class="load-retry-btn" hover-class="none" aria-label="重新加载该节目" bindtap="onRetryLoad">重试</button>
+    </view>
   </view>
 
   <block wx:else>

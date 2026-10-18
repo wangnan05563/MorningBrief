@@ -6,6 +6,14 @@
     </div>
 
     <el-card shadow="never">
+      <!-- T02496（FR-UX-302）：接口失败不再伪装成「暂无频道」 -->
+      <ListLoadError
+        v-if="listError"
+        :message="listError"
+        :retrying="retryingList"
+        :stale="list.length > 0"
+        @retry="retryLoadList"
+      />
       <el-table :data="list" v-loading="loading" stripe>
         <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
@@ -75,7 +83,9 @@
             <IconButton size="small" type="danger" :loading="deletingIds.has(row.id)" :icon="Delete" label="删除" desc="删除该频道" @click="handleDelete(row)" />
           </template>
         </el-table-column>
-        <template #empty><el-empty description="暂无频道，点击右上角「新增频道」创建" :image-size="90" /></template>
+        <template #empty>
+          <el-empty v-if="!listError" description="暂无频道，点击右上角「新增频道」创建" :image-size="90" />
+        </template>
       </el-table>
     </el-card>
 
@@ -554,6 +564,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { Plus, VideoPlay, Edit, Delete, View, Refresh, Close, Check } from '@element-plus/icons-vue'
 import BookPoolPanel from './BookPoolPanel.vue'
+import ListLoadError from '../../components/ListLoadError.vue'
 import { getScriptMode, setScriptMode } from '../../api/bookPool'
 import { uploadChannelIcon, generateChannelIcon, listCoverPresets } from '../../api/channels'
 import {
@@ -568,6 +579,9 @@ const canOperate = role === 'admin'
 
 const list = ref([])
 const loading = ref(false)
+// T02496（FR-UX-302）：非空即「这次请求没成功」，页面据此显示错误态而非空态
+const listError = ref('')
+const retryingList = ref(false)
 const dialogVisible = ref(false)
 const editing = ref(false)
 const submitting = ref(false)
@@ -679,8 +693,23 @@ async function loadList() {
     const data = await listChannels(false)
     // 兼容后端返回数组或 { list } 两种结构
     list.value = Array.isArray(data) ? data : (data.list || [])
+    listError.value = ''
+  } catch (e) {
+    // C5：此前只有 try/finally，请求失败时 list 保持为空 → 页面显示「暂无频道」，
+    // 与「真的一个频道都没有」无法区分。失败进入错误态并保留上一次的列表。
+    listError.value = e?.message || '频道列表加载失败'
   } finally {
     loading.value = false
+  }
+}
+
+// 错误态里的「重试」：成功后错误提示自动消失
+async function retryLoadList() {
+  retryingList.value = true
+  try {
+    await loadList()
+  } finally {
+    retryingList.value = false
   }
 }
 

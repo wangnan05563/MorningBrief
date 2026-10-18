@@ -13,6 +13,14 @@
       />
     </div>
 
+    <!-- T02496（FR-UX-302）：概览请求失败要说清「没取到」，不能让 5 个「-」看着像当天真的全是 0 -->
+    <ListLoadError
+      v-if="overviewError"
+      :message="overviewError"
+      :retrying="retryingOverview"
+      @retry="retryOverview"
+    />
+
     <!-- 指标卡片：5 个核心指标横向铺开 -->
     <el-row :gutter="16" class="metric-row">
       <el-col v-for="m in metrics" :key="m.key" :xs="12" :sm="8" :md="6" :lg="4" :xl="4">
@@ -43,7 +51,14 @@
         </div>
       </div>
       <div class="trend-canvas">
-        <Line v-if="hasTrend" :data="trendData" :options="trendOptions" />
+        <!-- T02496（FR-UX-302）：失败态优先于空态；空档期（values 全为 null）不画 0 折线 -->
+        <ListLoadError
+          v-if="trendError"
+          :message="trendError"
+          :retrying="retryingTrend"
+          @retry="retryTrend"
+        />
+        <Line v-else-if="hasTrend" :data="trendData" :options="trendOptions" />
         <el-empty v-else description="暂无趋势数据" />
       </div>
     </el-card>
@@ -67,6 +82,7 @@ import {
 } from 'chart.js'
 import dayjs from 'dayjs'
 import api from '../../api'
+import ListLoadError from '../../components/ListLoadError.vue'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
 
@@ -90,7 +106,12 @@ const metric = ref('dau')
 const range = ref('7d')
 const trend = ref({ dates: [], values: [] })
 
-const hasTrend = computed(() => trend.value.dates && trend.value.dates.length > 0)
+// T02496（FR-UX-302）：后端现在对没有记录的日期返回 null（而不是补 0），
+// 因此「有没有趋势」要看实际数据点，而不是 dates 长度——dates 恒等于区间天数，
+// 用它判断会让空档期画出一条贴着 0 的折线，被读成「这些天都是 0」。
+const hasTrend = computed(() =>
+  (trend.value.values || []).some((v) => v !== null && v !== undefined),
+)
 
 // 中文标题映射：用于图例与空状态切换
 const metricLabelMap = {
@@ -143,18 +164,51 @@ function formatRate(v) {
 }
 
 const loading = ref(false)
+// T02496（FR-UX-302）：概览/趋势各自的失败态与重试标志
+const overviewError = ref('')
+const trendError = ref('')
+const retryingOverview = ref(false)
+const retryingTrend = ref(false)
 
 async function loadOverview() {
   loading.value = true
   try {
     overview.value = await api.get('/stats/overview', { params: { date: selectedDate.value } })
+    overviewError.value = ''
+  } catch (e) {
+    // 拦截器已弹 toast，这里补页内错误态：5 张卡片全是「-」不叫失败告知
+    overviewError.value = e?.message || '统计概览加载失败'
   } finally {
     loading.value = false
   }
 }
 
 async function loadTrend() {
-  trend.value = await api.get('/stats/trend', { params: { metric: metric.value, range: range.value } })
+  try {
+    // 失败时保留上一份数据（图上仍是旧曲线），但错误态必须显示出来
+    trend.value = await api.get('/stats/trend', { params: { metric: metric.value, range: range.value } })
+    trendError.value = ''
+  } catch (e) {
+    trendError.value = e?.message || '趋势数据加载失败'
+  }
+}
+
+async function retryOverview() {
+  retryingOverview.value = true
+  try {
+    await loadOverview()
+  } finally {
+    retryingOverview.value = false
+  }
+}
+
+async function retryTrend() {
+  retryingTrend.value = true
+  try {
+    await loadTrend()
+  } finally {
+    retryingTrend.value = false
+  }
 }
 
 onMounted(() => {

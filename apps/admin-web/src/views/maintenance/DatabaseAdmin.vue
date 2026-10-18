@@ -25,12 +25,21 @@
             <span class="table-label">{{ t.label }}</span>
             <el-tag size="small" type="info" round>{{ t.rows }}</el-tag>
           </div>
-          <el-empty v-if="filteredTables.length === 0" description="无匹配表" :image-size="60" />
+          <el-empty v-if="filteredTables.length === 0 && !tablesError" description="无匹配表" :image-size="60" />
         </div>
       </el-aside>
 
       <!-- 右侧：数据区 -->
       <el-main class="content-area">
+        <!-- T02496（FR-UX-302 / M54）：拉不到表/数据时必须显式报错并禁用写操作，
+             不能让失败显示成「请从左侧选择一张表」——那会让人以为库里没东西 -->
+        <ListLoadError
+          v-if="loadFailed"
+          :message="loadErrorMessage"
+          :retrying="retryingLoad"
+          :stale="rows.length > 0"
+          @retry="reloadAll"
+        />
         <template v-if="selectedTable">
           <!-- 工具栏 -->
           <div class="toolbar">
@@ -53,13 +62,14 @@
                 label="新增"
                 desc="新增一行记录"
                 :icon="Plus"
+                :disabled="loadFailed"
                 @click="openCreateDialog"
               />
               <IconButton
                 size="small"
                 type="danger"
                 :icon="Delete"
-                :disabled="selectedRows.length === 0"
+                :disabled="selectedRows.length === 0 || loadFailed"
                 :label="`批量删除 (${selectedRows.length})`"
                 desc="删除选中的多行记录"
                 @click="handleBatchDelete"
@@ -86,6 +96,7 @@
                 label="导入"
                 desc="从 CSV/JSON 导入数据"
                 :icon="Upload"
+                :disabled="loadFailed"
                 @click="importDialogVisible = true"
               />
               <IconButton
@@ -154,6 +165,7 @@
                   label="编辑"
                   desc="编辑该行记录"
                   :icon="Edit"
+                  :disabled="loadFailed"
                   @click="openEditDialog(row)"
                 />
                 <IconButton
@@ -163,6 +175,7 @@
                   label="删除"
                   desc="删除该行记录"
                   :icon="Delete"
+                  :disabled="loadFailed"
                   @click="handleDelete(row)"
                 />
               </template>
@@ -184,7 +197,7 @@
           </div>
         </template>
 
-        <el-empty v-else description="请从左侧选择一张表" />
+        <el-empty v-else-if="!loadFailed" description="请从左侧选择一张表" />
       </el-main>
     </el-container>
 
@@ -409,6 +422,7 @@ import {
   cascadePreview, exportRows, importRows, listAuditLogs, previewImport,
 } from '../../api/dbAdmin'
 import { formatTime } from '../../utils/format'
+import ListLoadError from '../../components/ListLoadError.vue'
 
 // ---- 表列表 ----
 const tables = ref([])
@@ -442,6 +456,16 @@ const orderBy = ref('')
 const orderDir = ref('ASC')
 const selectedRows = ref([])
 const rowsLoading = ref(false)
+
+// T02496（FR-UX-302 / M54）：加载失败态。失败时页面不得显示成「没有表/没有数据」，
+// 且新增、编辑、删除、导入这些写操作必须禁用——列信息（columns）没拿到时
+// 弹出的编辑表单是空的，提交上去等于用空对象覆盖该行。
+const tablesError = ref('')
+const schemaError = ref('')
+const rowsError = ref('')
+const retryingLoad = ref(false)
+const loadFailed = computed(() => !!tablesError.value || !!schemaError.value || !!rowsError.value)
+const loadErrorMessage = computed(() => tablesError.value || schemaError.value || rowsError.value)
 
 // ---- 弹窗状态 ----
 const formDialogVisible = ref(false)
@@ -488,11 +512,12 @@ function debouncedSearch() {
 async function loadTables() {
   try {
     tables.value = await listTables()
+    tablesError.value = ''
     if (tables.value.length > 0 && !selectedTable.value) {
       selectTable(tables.value[0].name)
     }
   } catch (e) {
-    console.warn('loadTables failed:', e)
+    tablesError.value = e?.message || '数据表清单加载失败'
   }
 }
 
@@ -511,8 +536,10 @@ async function loadSchema() {
   try {
     const schema = await getTableSchema(selectedTable.value)
     columns.value = schema.columns || []
+    schemaError.value = columns.value.length === 0 ? '表结构未返回列信息' : ''
   } catch (e) {
-    console.warn('loadSchema failed:', e)
+    // 列信息缺失时编辑弹窗会渲染成空表单，必须按失败处理而不是「这张表没有字段」
+    schemaError.value = e?.message || '表结构加载失败'
     columns.value = []
   }
 }
@@ -530,12 +557,30 @@ async function loadRows() {
     })
     rows.value = data.rows || []
     total.value = data.total || 0
+    rowsError.value = ''
   } catch (e) {
-    console.warn('loadRows failed:', e)
-    rows.value = []
-    total.value = 0
+    // 旧行为：置空 rows + console.warn → 界面显示空表，与「这张表真的没有数据」同形。
+    // 现在保留上一次的行并进入错误态，写操作按钮同步禁用。
+    rowsError.value = e?.message || '表数据加载失败'
   } finally {
     rowsLoading.value = false
+  }
+}
+
+// 错误态里的「重试」：重新拉清单 + 当前表的结构与数据
+async function reloadAll() {
+  retryingLoad.value = true
+  try {
+    tablesError.value = ''
+    schemaError.value = ''
+    rowsError.value = ''
+    await loadTables()
+    if (selectedTable.value) {
+      await loadSchema()
+      await loadRows()
+    }
+  } finally {
+    retryingLoad.value = false
   }
 }
 
