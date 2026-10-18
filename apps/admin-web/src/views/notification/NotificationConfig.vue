@@ -6,11 +6,20 @@
         type="primary"
         :icon="Check"
         :loading="saving"
+        :disabled="!configReady"
         label="保存配置"
         desc="保存当前通知配置"
         @click="handleSaveConfig"
       />
     </div>
+
+    <ConfigLoadError
+      :visible="configError"
+      :message="configErrorMsg"
+      :retrying="configRetrying"
+      :draft-blocked="draftBlocked"
+      @retry="retryLoad"
+    />
 
     <el-tabs v-model="activeTab" class="config-tabs">
       <!-- 基础配置 -->
@@ -175,6 +184,7 @@
                 plain
                 :icon="Connection"
                 :loading="testing"
+                :disabled="!configReady"
                 label="测试发送"
                 desc="向所有已配置渠道发送测试通知"
                 @click="handleTestSend"
@@ -488,6 +498,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useDraft } from '../../composables/useDraft'
+import { useConfigLoad } from '../../composables/useConfigLoad'
 import { Check, View, Refresh, Hide, Connection, Close } from '@element-plus/icons-vue'
 import { ElMessage } from '../../utils/message'
 import {
@@ -540,11 +551,36 @@ const configForm = reactive({
 })
 // T00828：断点续录——表单变化自动持久化，重新进入页面恢复未提交输入（密钥字段不落盘）
 // T01834：钉钉/企微 webhook URL 含 access_token 等密钥参数，一并排除不落盘
-const { apply: applyDraft, track: trackDraft, commit: commitDraft } = useDraft('notification-config')
+const { apply: applyDraft, peek: peekDraft, track: trackDraft, commit: commitDraft } = useDraft('notification-config')
 const enableDraft = trackDraft(configForm, {
   excludePaths: ['dingtalk_webhook', 'dingtalk_secret', 'wecom_webhook', 'email_smtp_password'],
 })
 
+// T02487（FR-UX-104）：加载失败 → 页内错误态 + 重试 + 禁用保存，草稿默认不恢复
+const cfgLoad = useConfigLoad(loadConfig)
+const configReady = cfgLoad.isReady
+const configError = cfgLoad.isError
+const configErrorMsg = cfgLoad.errorMessage
+const configRetrying = cfgLoad.retrying
+const draftBlocked = ref(false)
+
+function restoreDraft() {
+  applyDraft(configForm)
+  enableDraft()
+}
+
+async function retryLoad() {
+  const ok = await cfgLoad.retry()
+  if (ok) {
+    draftBlocked.value = false
+    restoreDraft()
+  } else {
+    draftBlocked.value = peekDraft()
+  }
+}
+
+// 加载失败必须让异常冒泡：本表单默认值是「开关全开 + 端口 587」，
+// 吞掉异常后保存会把默认值当已加载配置覆盖线上通知设置。
 async function loadConfig() {
   configLoading.value = true
   try {
@@ -566,21 +602,24 @@ async function loadConfig() {
       admin_base_url: data.admin_base_url || '',
     })
     detectedBaseUrl.value = data.auto_detected_base_url || ''
-  } catch (e) {
-    // 拦截器已统一提示
+    return data ?? null
   } finally {
     configLoading.value = false
   }
 }
 
 async function handleSaveConfig() {
+  if (!configReady.value) {
+    ElMessage.error('通知配置未加载成功，已禁止保存（会用默认值覆盖线上配置）')
+    return
+  }
   saving.value = true
   try {
     await saveNotificationConfig({ ...configForm })
     ElMessage.success('配置已保存')
     commitDraft()
     // 重新加载以刷新脱敏显示与 detected_base_url
-    await loadConfig()
+    await cfgLoad.load()
   } catch (e) {
     // 拦截器已统一提示
   } finally {
@@ -589,6 +628,10 @@ async function handleSaveConfig() {
 }
 
 async function handleTestSend() {
+  if (!configReady.value) {
+    ElMessage.error('通知配置未加载成功，已禁止测试（测试前会先保存配置）')
+    return
+  }
   testing.value = true
   testResult.value = null
   try {
@@ -805,10 +848,14 @@ function formatTime(iso) {
 }
 
 onMounted(async () => {
-  await loadConfig()
-  // T00828：服务端配置加载完成后恢复草稿，再启用持久化（避免初始化赋值误入草稿）
-  applyDraft(configForm)
-  enableDraft()
+  const ok = await cfgLoad.load()
+  // T00828：服务端配置加载成功后才恢复草稿并启用持久化
+  // T02487（FR-UX-104）：加载失败时草稿默认不恢复，只提示「配置未加载，保存会覆盖」
+  if (ok) {
+    restoreDraft()
+  } else {
+    draftBlocked.value = peekDraft()
+  }
   loadTemplates()
   loadLogs()
 })

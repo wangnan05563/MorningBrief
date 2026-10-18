@@ -112,6 +112,15 @@ export function useDraft(key) {
     }
   }
 
+  /** 是否存在本地草稿但不合并进表单（T02487：配置加载失败时须「默认不恢复」，只能提示） */
+  function peek() {
+    try {
+      return Boolean(localStorage.getItem(storageKey))
+    } catch {
+      return false
+    }
+  }
+
   /** 保存成功 / 重置后清除草稿，避免旧输入干扰下次进入 */
   function commit() {
     try {
@@ -122,5 +131,5 @@ export function useDraft(key) {
     hasDraft.value = false
   }
 
-  return { hasDraft, apply, track, commit }
+  return { hasDraft, apply, peek, track, commit }
 }

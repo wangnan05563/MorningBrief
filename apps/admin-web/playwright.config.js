@@ -27,7 +27,15 @@ export default defineConfig({
   // 单个测试超时：vite 编译 + 多次重试可能耗时较长
   timeout: 60000,
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    // PW_CHANNEL=chrome 时改用本机 Chrome：用于未下载 playwright 浏览器缓存的机器
+    // （默认行为不变，CI 仍用 playwright 自带 chromium headless shell）
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(process.env.PW_CHANNEL ? { channel: process.env.PW_CHANNEL } : {}),
+      },
+    },
   ],
   webServer: {
     command: 'npm run dev',

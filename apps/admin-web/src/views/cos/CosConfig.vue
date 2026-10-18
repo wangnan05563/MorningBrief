@@ -7,6 +7,7 @@
         type="primary"
         plain
         :loading="testing"
+        :disabled="!configReady"
         label="测试连接"
         desc="测试 COS 凭证与存储桶连通性"
         :icon="Connection"
@@ -15,12 +16,21 @@
       <IconButton
         type="primary"
         :loading="saving"
+        :disabled="!configReady"
         label="保存配置"
         desc="保存并热更新 COS 配置"
         :icon="Check"
         @click="handleSave"
       />
     </div>
+
+    <ConfigLoadError
+      :visible="configError"
+      :message="configErrorMsg"
+      :retrying="configRetrying"
+      :draft-blocked="draftBlocked"
+      @retry="retryLoad"
+    />
 
     <!-- 连接测试结果 -->
     <el-alert
@@ -140,6 +150,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useDraft } from '../../composables/useDraft'
+import { useConfigLoad } from '../../composables/useConfigLoad'
 import { Check, Connection, View, Hide } from '@element-plus/icons-vue'
 import { ElMessage } from '../../utils/message'
 import {
@@ -163,7 +174,7 @@ const form = ref({
   cdn_domain: '',
 })
 // T00828：断点续录（SecretId/SecretKey 敏感字段不落盘）
-const { apply: applyDraft, track: trackDraft, commit: commitDraft } = useDraft('cos-config')
+const { apply: applyDraft, peek: peekDraft, track: trackDraft, commit: commitDraft } = useDraft('cos-config')
 const enableDraft = trackDraft(form, { excludePaths: ['secret_id', 'secret_key'] })
 
 // 配置就绪状态（进入页面快速判断）
@@ -201,14 +212,40 @@ async function loadConfig() {
     const [cfg, st] = await Promise.all([getCosConfig(), getCosStatus()])
     if (cfg) Object.assign(form.value, cfg)
     if (st) status.value = st
-  } catch (e) {
-    // 全局拦截器已提示
+    return cfg ?? null
   } finally {
     loading.value = false
   }
 }
 
+// T02487（FR-UX-104）：加载失败时页内报错 + 重试，保存禁用，草稿不自动恢复
+const configLoad = useConfigLoad(loadConfig)
+const configReady = configLoad.isReady
+const configError = configLoad.isError
+const configErrorMsg = configLoad.errorMessage
+const configRetrying = configLoad.retrying
+const draftBlocked = ref(false)
+
+function restoreDraft() {
+  applyDraft(form)
+  enableDraft()
+}
+
+async function retryLoad() {
+  const ok = await configLoad.retry()
+  if (ok) {
+    draftBlocked.value = false
+    restoreDraft()
+  } else {
+    draftBlocked.value = peekDraft()
+  }
+}
+
 async function handleSave() {
+  if (!configLoad.isReady.value) {
+    ElMessage.error('配置未加载成功，已禁止保存（会用默认值覆盖线上配置）')
+    return
+  }
   saving.value = true
   try {
     await saveCosConfig({
@@ -220,7 +257,7 @@ async function handleSave() {
     })
     ElMessage.success('COS 配置已保存并热更新')
     commitDraft()
-    await loadConfig()
+    await configLoad.load()
   } finally {
     saving.value = false
   }
@@ -240,9 +277,12 @@ async function handleTest() {
 }
 
 onMounted(async () => {
-  await loadConfig()
-  applyDraft(form)
-  enableDraft()
+  const ok = await configLoad.load()
+  if (ok) {
+    restoreDraft()
+  } else {
+    draftBlocked.value = peekDraft()
+  }
 })
 </script>
 

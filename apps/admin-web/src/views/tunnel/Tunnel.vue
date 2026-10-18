@@ -123,6 +123,15 @@
       </div>
     </el-alert>
 
+    <!-- T02487（FR-UX-104）：配置加载失败态 -->
+    <ConfigLoadError
+      :visible="configError"
+      :message="configErrorMsg"
+      :retrying="configRetrying"
+      :draft-blocked="draftBlocked"
+      @retry="retryLoad"
+    />
+
     <!-- 配置卡片 -->
     <div class="card-soft config-card">
       <div class="card-header">
@@ -308,6 +317,7 @@
           <IconButton
             type="primary"
             :loading="savingConfig"
+            :disabled="!configReady"
             label="保存配置"
             desc="保存隧道配置，下次启动生效"
             :icon="Check"
@@ -347,6 +357,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useDraft } from '../../composables/useDraft'
+import { useConfigLoad } from '../../composables/useConfigLoad'
 import { ElMessage } from '../../utils/message'
 import {
   CopyDocument, Link, VideoPlay, VideoPause, Setting, Check,
@@ -380,8 +391,31 @@ const form = ref({
   cert_file: '',
 })
 // T00828：断点续录（cpolar_authtoken 为令牌，不落盘）
-const { apply: applyDraft, track: trackDraft, commit: commitDraft } = useDraft('tunnel-config')
+const { apply: applyDraft, peek: peekDraft, track: trackDraft, commit: commitDraft } = useDraft('tunnel-config')
 const enableDraft = trackDraft(form, { excludePaths: ['cpolar_authtoken'] })
+
+// T02487（FR-UX-104）：加载失败 → 页内错误态 + 重试 + 禁用保存，草稿默认不恢复
+const configLoad = useConfigLoad(loadConfig)
+const configReady = configLoad.isReady
+const configError = configLoad.isError
+const configErrorMsg = configLoad.errorMessage
+const configRetrying = configLoad.retrying
+const draftBlocked = ref(false)
+
+function restoreDraft() {
+  applyDraft(form)
+  enableDraft()
+}
+
+async function retryLoad() {
+  const ok = await configLoad.retry()
+  if (ok) {
+    draftBlocked.value = false
+    restoreDraft()
+  } else {
+    draftBlocked.value = peekDraft()
+  }
+}
 
 // 下载失败指引
 const downloadError = ref(null)
@@ -425,27 +459,26 @@ async function loadStatus() {
 }
 
 // 加载配置
+// T02487（FR-UX-104）：不再吞异常——加载失败必须让页面进入错误态并禁保存，
+// 否则表单停留在代码默认值上，保存等于用默认值覆盖线上隧道配置。
 async function loadConfig() {
-  try {
-    const data = await api.get('/tunnel/config')
-    config.value = data
-    form.value.provider = data.provider
-    form.value.local_port = data.local_port
-    form.value.binary_path = data.binary_path
-    form.value.auto_start = data.auto_start
-    form.value.tunnel_mode = data.tunnel_mode || 'quick'
-    form.value.tunnel_name = data.tunnel_name || ''
-    form.value.tunnel_id = data.tunnel_id || ''
-    form.value.credentials_file = data.credentials_file || ''
-    form.value.hostname = data.hostname || ''
-    form.value.cert_file = data.cert_file || ''
-    // authtoken 不回显明文，已配置时显示占位
-    form.value.cpolar_authtoken = ''
-    // 根据 Named Tunnel 配置状态同步向导步骤
-    updateWizardStep()
-  } catch (error) {
-    console.error('加载隧道配置失败', error)
-  }
+  const data = await api.get('/tunnel/config')
+  config.value = data
+  form.value.provider = data.provider
+  form.value.local_port = data.local_port
+  form.value.binary_path = data.binary_path
+  form.value.auto_start = data.auto_start
+  form.value.tunnel_mode = data.tunnel_mode || 'quick'
+  form.value.tunnel_name = data.tunnel_name || ''
+  form.value.tunnel_id = data.tunnel_id || ''
+  form.value.credentials_file = data.credentials_file || ''
+  form.value.hostname = data.hostname || ''
+  form.value.cert_file = data.cert_file || ''
+  // authtoken 不回显明文，已配置时显示占位
+  form.value.cpolar_authtoken = ''
+  // 根据 Named Tunnel 配置状态同步向导步骤
+  updateWizardStep()
+  return data ?? null
 }
 
 // 根据配置状态更新向导步骤
@@ -516,6 +549,10 @@ async function handleStop() {
 
 // 保存配置
 async function handleSaveConfig() {
+  if (!configReady.value) {
+    ElMessage.error('隧道配置未加载成功，已禁止保存（会用默认值覆盖线上配置）')
+    return
+  }
   savingConfig.value = true
   try {
     await api.post('/tunnel/config', {
@@ -534,7 +571,7 @@ async function handleSaveConfig() {
     })
     ElMessage.success('配置已保存，下次启动隧道时生效')
     commitDraft()
-    await loadConfig()
+    await configLoad.load()
   } catch (error) {
     const resp = error?.response?.data || error
     ElMessage.error(resp?.message || '配置保存失败')
@@ -575,7 +612,7 @@ function startLoginPolling() {
       if (data.status === 'success') {
         stopLoginPolling()
         ElMessage.success('授权成功！cert.pem 已保存')
-        await loadConfig()
+        await configLoad.load()
         wizardStep.value = 1
       } else if (data.status === 'failed') {
         stopLoginPolling()
@@ -605,7 +642,7 @@ async function handleCloudflareCreate() {
       { timeout: 120000 }
     )
     ElMessage.success('隧道创建成功')
-    await loadConfig()
+    await configLoad.load()
     wizardStep.value = 2
   } catch (error) {
     const resp = error?.response?.data || error
@@ -628,7 +665,7 @@ async function handleCloudflareRouteDns() {
       { timeout: 120000 }
     )
     ElMessage.success('DNS 路由配置成功')
-    await loadConfig()
+    await configLoad.load()
     wizardStep.value = 3
   } catch (error) {
     const resp = error?.response?.data || error
@@ -710,10 +747,13 @@ watch(isRunning, (running) => {
 
 onMounted(async () => {
   loading.value = true
-  await Promise.all([loadStatus(), loadConfig()])
-  // T00828：加载完成后恢复草稿再启用持久化
-  applyDraft(form)
-  enableDraft()
+  const [, ok] = await Promise.all([loadStatus(), configLoad.load()])
+  // T00828：仅在配置加载成功后恢复草稿并启用持久化（T02487：失败时默认不恢复）
+  if (ok) {
+    restoreDraft()
+  } else {
+    draftBlocked.value = peekDraft()
+  }
   loading.value = false
   startPolling()
   document.addEventListener('visibilitychange', handleVisibilityChange)

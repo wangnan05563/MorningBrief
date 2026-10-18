@@ -1,8 +1,25 @@
 <template>
   <div class="page-container ai-config" v-loading="loading">
     <div class="top-bar">
-      <IconButton type="primary" :icon="Check" :loading="saving" label="保存配置" desc="保存当前配置" @click="handleSave" />
+      <IconButton
+        type="primary"
+        :icon="Check"
+        :loading="saving"
+        :disabled="!configReady"
+        label="保存配置"
+        desc="保存当前配置"
+        @click="handleSave"
+      />
     </div>
+
+    <!-- T02487（FR-UX-104）：配置加载失败态 -->
+    <ConfigLoadError
+      :visible="configError"
+      :message="configErrorMsg"
+      :retrying="configRetrying"
+      :draft-blocked="draftBlocked"
+      @retry="retryLoad"
+    />
 
     <el-tabs v-model="activeTab" class="config-tabs" @tab-change="handleTabChange">
       <!-- LLM 配置 -->
@@ -39,6 +56,7 @@
               plain
               :icon="RefreshLeft"
               :loading="resetting"
+              :disabled="!configReady"
               style="margin-left: auto"
               label="恢复初始配置"
               desc="恢复 LLM 初始配置"
@@ -833,6 +851,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDraft } from '../../composables/useDraft'
+import { useConfigLoad } from '../../composables/useConfigLoad'
 import { useRoute, useRouter } from 'vue-router'
 
 import { ElMessage, ElMessageBox } from '../../utils/message'
@@ -860,7 +879,7 @@ const llmForm = ref({
   llm_max_script_segments: 10,
 })
 // T00828：断点续录——LLM 主配置表单（api_key 敏感字段不落盘）
-const { apply: applyDraft, track: trackDraft, commit: commitDraft } = useDraft('ai-config-llm')
+const { apply: applyDraft, peek: peekDraft, track: trackDraft, commit: commitDraft } = useDraft('ai-config-llm')
 const enableDraft = trackDraft(llmForm, { excludePaths: ['api_key'] })
 const showLlmKey = ref(false)
 
@@ -943,6 +962,37 @@ const enableDraftTts = draftTts.track(ttsForm, {
 })
 const draftImage = useDraft('ai-config-image')
 const enableDraftImage = draftImage.track(imageForm, { excludePaths: ['api_key'] })
+
+// T02487（FR-UX-104）：配置加载失败 → 页内错误态 + 重试 + 禁用保存/恢复初始配置，草稿默认不恢复
+const cfgLoad = useConfigLoad(loadConfig)
+const configReady = cfgLoad.isReady
+const configError = cfgLoad.isError
+const configErrorMsg = cfgLoad.errorMessage
+const configRetrying = cfgLoad.retrying
+const draftBlocked = ref(false)
+
+function restoreDrafts() {
+  applyDraft(llmForm)
+  enableDraft()
+  draftTts.apply(ttsForm)
+  enableDraftTts()
+  draftImage.apply(imageForm)
+  enableDraftImage()
+}
+
+function hasAnyDraft() {
+  return Boolean(peekDraft() || draftTts.peek() || draftImage.peek())
+}
+
+async function retryLoad() {
+  const ok = await cfgLoad.retry()
+  if (ok) {
+    draftBlocked.value = false
+    restoreDrafts()
+  } else {
+    draftBlocked.value = hasAnyDraft()
+  }
+}
 
 // TTS Provider 选项
 const ttsProviders = [
@@ -1192,6 +1242,7 @@ async function loadConfig() {
       Object.assign(imageForm.value, configData.image)
     }
     presets.value = presetData || []
+    // T02487：把 config 原样返回给 useConfigLoad，作为「确实拿到配置」的判据
     // 音色列表按当前 provider 加载（不同 provider 音色 ID 体系不同）
     await loadVoices(ttsForm.value.provider)
     // 兜底：后端未返回 selected_preset 时根据 base_url 自动匹配
@@ -1199,8 +1250,7 @@ async function loadConfig() {
       const matched = presets.value.find((p) => p.base_url === llmForm.value.base_url)
       if (matched) selectedPreset.value = matched.key
     }
-  } catch (e) {
-    // 拦截器已弹出错误提示；此处兜底，防止 Promise 拒绝冒泡为 uncaught rejection
+    return configData ?? null
   } finally {
     loading.value = false
   }
@@ -1264,6 +1314,10 @@ function applyPreset(key) {
 
 // 保存配置
 async function handleSave() {
+  if (!configReady.value) {
+    ElMessage.error('AI 配置未加载成功，已禁止保存（会用表单默认值覆盖线上配置）')
+    return
+  }
   saving.value = true
   try {
     await api.put('/ai/config', {
@@ -1277,7 +1331,7 @@ async function handleSave() {
     draftTts.commit()
     draftImage.commit()
     // 保存后重新加载配置，刷新 presetConfigs 中的脱敏值
-    await loadConfig()
+    await cfgLoad.load()
     saving.value = false
   } catch (e) {
     // 拦截器已弹出错误提示；兜底重置保存按钮 loading 态，避免界面卡死
@@ -1309,6 +1363,10 @@ async function handleTestImage() {
 
 // 恢复初始配置：清空所有预设配置和当前 LLM 配置，回退到出厂默认值
 async function handleResetConfig() {
+  if (!configReady.value) {
+    ElMessage.error('AI 配置未加载成功，已禁止恢复初始配置（避免在未知状态下清空线上配置）')
+    return
+  }
   try {
     await ElMessageBox.confirm(
       '确认恢复 LLM 初始配置？将清空所有预设的已保存配置（API Key/Base URL/Model）和当前 LLM 配置，此操作不可恢复。',
@@ -1569,19 +1627,13 @@ function applyCalculatorParams() {
 }
 
 onMounted(async () => {
-  try {
-    await loadConfig()
-  } catch (e) {
-    // loadConfig 内部已兜底，这里防止 onMounted 异步异常冒泡为 uncaught rejection
+  // T02487（FR-UX-104）：加载失败时不恢复草稿、不启用持久化，页面进入错误态并禁用保存
+  const ok = await cfgLoad.load()
+  if (ok) {
+    restoreDrafts()
+  } else {
+    draftBlocked.value = hasAnyDraft()
   }
-  // T00828：加载完成后恢复草稿再启用持久化
-  applyDraft(llmForm)
-  enableDraft()
-  // T01834：TTS / 图片生成表单同套断点续录
-  draftTts.apply(ttsForm)
-  enableDraftTts()
-  draftImage.apply(imageForm)
-  enableDraftImage()
   applyCalculatorParams()
 })
 
