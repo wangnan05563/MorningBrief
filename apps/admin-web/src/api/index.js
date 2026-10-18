@@ -45,8 +45,9 @@ api.interceptors.response.use(
     return data
   },
   (error) => {
-    // 页面隐藏时所有错误静默处理，防止 ElMessage 或跳转激活窗口
-    if (document.hidden) {
+    // 页面隐藏时不再整体静默丢弃提示：401 维持「不跳转、不清本地态」（避免后台标签页把人踢下线），
+    // 其余错误交给 ElMessage 安全包装器入队、恢复后聚合补发（FR-UX-301）
+    if (error.response?.status === 401 && document.hidden) {
       return Promise.reject(error)
     }
     if (error.response?.status === 401) {
