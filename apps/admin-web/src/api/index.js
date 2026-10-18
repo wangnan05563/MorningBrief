@@ -19,6 +19,24 @@ const api = axios.create({
   withCredentials: true,
 })
 
+/**
+ * 标记「这条失败已经由拦截器弹过提示」。
+ *
+ * 为什么要标记而不只靠文案去重：页面 catch 里常写
+ * `ElMessage.error('删除预览失败：' + e.message)` 这类带上下文的文案，与拦截器
+ * 弹的原文并不相同，按文案去重合不起来，用户就会看到同一件事两条 toast。
+ * 页面改用 notifyErrorOnce(e, ...) 即可让「谁先弹过」成为唯一判据。
+ * silent 请求不标记——拦截器根本没弹，页面当然还要提示。
+ */
+function _markNotified(err) {
+  try {
+    err.__uiNotified = true
+  } catch {
+    // 极少数冻结对象无法附加标记：退化为只做文案去重，不影响主流程
+  }
+  return err
+}
+
 // 请求拦截：鉴权 token 由 HttpOnly Cookie 自动携带（NFR-M103），
 // 非浏览器 API 客户端仍可经 Authorization 头调用（后端双通道兼容）。
 api.interceptors.request.use((config) => {
@@ -37,10 +55,12 @@ api.interceptors.response.use(
     const { code, message, data } = response.data
     // code !== 0 表示业务错误（如参数校验失败），统一提示
     if (code !== 0) {
+      const err = new Error(message)
       if (!response.config?.silent) {
         ElMessage.error(message || '请求失败')
+        _markNotified(err)
       }
-      return Promise.reject(new Error(message))
+      return Promise.reject(err)
     }
     return data
   },
@@ -67,6 +87,7 @@ api.interceptors.response.use(
       } else {
         ElMessage.error(error.response?.data?.message || error.message || '请求失败')
       }
+      _markNotified(error)
     }
     return Promise.reject(error)
   }

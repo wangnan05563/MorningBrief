@@ -270,7 +270,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from '../../utils/message'
+import { ElMessage, notifyErrorOnce } from '../../utils/message'
 import { Refresh, Promotion, ChatDotRound, MagicStick, Check, Delete, ArrowRight } from '@element-plus/icons-vue'
 import api from '../../api'
 import { planAssistantAction, executeAssistantAction } from '../../api/assistant'
@@ -344,7 +344,8 @@ async function sendPlan() {
       })
     }
   } catch (e) {
-    ElMessage.error(e?.message || '生成草稿失败')
+    // 拦截器已为这条失败弹过后不再重复弹（FR-UX-303）
+    notifyErrorOnce(e, '生成草稿失败')
     dispatchMsgs.value.push({
       role: 'assistant',
       type: 'text',
@@ -371,7 +372,7 @@ async function confirmExecute(msg) {
     ElMessage.success(`频道「${data?.name}」已创建`)
     await scrollDispatch()
   } catch (e) {
-    ElMessage.error(e?.message || '创建失败')
+    notifyErrorOnce(e, '创建失败')
   } finally {
     msg.loading = false
   }

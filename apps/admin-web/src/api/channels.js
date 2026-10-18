@@ -81,4 +81,6 @@ export const recommendChannelSources = (id) => api.post(`/channels/${id}/recomme
 export const listCoverPresets = () => api.get('/channels/cover-presets')
 
 // 删除影响面预览（T02490 / FR-UX-202 C10）：确认框必须给出真实连带后果
-export const deleteChannelPreview = (id) => api.get(`/channels/${id}/delete-preview`)
+// silent 由调用方决定：页面 catch 会弹「无法获取删除影响面预览，已禁止删除：xxx」
+// 这种带后果说明的完整文案，若此处不静默，拦截器会再弹一条原文造成二次提示（FR-UX-303）
+export const deleteChannelPreview = (id, config) => api.get(`/channels/${id}/delete-preview`, config)

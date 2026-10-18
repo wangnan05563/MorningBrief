@@ -319,7 +319,9 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useDraft } from '../../composables/useDraft'
 import { Refresh, Setting, Plus, DataLine, CircleCheck, CircleClose, Timer, List, WarningFilled, Check } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+// 提示必须走统一出口：直接从 element-plus 取 ElMessage 会绕过 2 秒去重与
+// 「隐藏期间不入 DOM」的窗口守卫（FR-UX-301/303）
+import { ElMessage, ElMessageBox } from '../../utils/message'
 import {
   getAutoReviewConfig,
   updateAutoReviewConfig,

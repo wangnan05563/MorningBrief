@@ -1104,7 +1104,8 @@ async function handleDelete(row) {
   // 先取真实连带影响再确认；预览失败不得降级成「只有一句不可恢复」的空确认（C10）
   let preview = null
   try {
-    preview = await deleteChannelPreview(row.id)
+    // 静默：失败提示由下面的 catch 以「已禁止删除」的完整语义给出，避免拦截器再弹一条
+    preview = await deleteChannelPreview(row.id, { silent: true })
   } catch (e) {
     ElMessage.error(`无法获取删除影响面预览，已禁止删除：${e?.message || '请重试'}`)
     return
