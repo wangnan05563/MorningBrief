@@ -519,6 +519,21 @@ async def generate_prompts(
     return success(data=_channel_to_dict(channel))
 
 
+@router.get("/{channel_id}/delete-preview")
+async def delete_channel_preview(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """删除频道的影响面预览：书单条数、会变成无主的素材条数、会被置空的工作流条数。"""
+    svc = ChannelService(db)
+    try:
+        data = await svc.delete_preview(channel_id=channel_id)
+    except ValueError as e:
+        return error(code=404, message=str(e))
+    return success(data=data)
+
+
 @router.delete("/{channel_id}")
 async def delete_channel(
     channel_id: int,

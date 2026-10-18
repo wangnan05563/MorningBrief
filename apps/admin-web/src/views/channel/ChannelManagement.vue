@@ -557,10 +557,11 @@ import BookPoolPanel from './BookPoolPanel.vue'
 import { getScriptMode, setScriptMode } from '../../api/bookPool'
 import { uploadChannelIcon, generateChannelIcon, listCoverPresets } from '../../api/channels'
 import {
-  listChannels, createChannel, updateChannel, deleteChannel, generateChannelPrompts,
+  listChannels, createChannel, updateChannel, deleteChannel, deleteChannelPreview, generateChannelPrompts,
   listBgmFiles, uploadBgmFile, recommendChannelBgm, listRssSources, listBookRssSources, recommendChannelSources,
 } from '../../api/channels'
 import { formatTime } from '../../utils/format'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 // 角色控制：直接读 localStorage，operator 隐藏增删改操作
 const role = localStorage.getItem('admin_role') || ''
 const canOperate = role === 'admin'
@@ -1071,15 +1072,28 @@ async function handleToggle(row, val) {
 async function handleDelete(row) {
   // 防重复点击：同一行删除中直接忽略
   if (deletingIds.value.has(row.id)) return
+  // 先取真实连带影响再确认；预览失败不得降级成「只有一句不可恢复」的空确认（C10）
+  let preview = null
   try {
-    await ElMessageBox.confirm(`确认删除频道「${row.name}」？此操作不可恢复。`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '确认删除',
-    })
-  } catch {
-    // 用户取消确认，静默退出
+    preview = await deleteChannelPreview(row.id)
+  } catch (e) {
+    ElMessage.error(`无法获取删除影响面预览，已禁止删除：${e?.message || '请重试'}`)
     return
   }
+  const ok = await dangerConfirm({
+    action: '删除频道',
+    target: `频道「${row.name}」`,
+    scope: `书单 ${preview.book_pool_items} 本 / 素材 ${preview.materials} 条 / 工作流 ${preview.workflows} 条`,
+    lines: [
+      `· 讲书稿书单 ${preview.book_pool_items} 条随频道一并删除（外键 ON DELETE CASCADE）；`,
+      `· 素材 ${preview.materials} 条的 channel_id 无外键约束，删除后变成无主数据，列表与聚合视图永久筛不到；`,
+      `· 关联工作流 ${preview.workflows} 条仅把 channel_id 置空，记录本身保留。`,
+    ],
+    irreversible: '此操作不可恢复：频道及其书单没有回收站，只能靠事先备份还原。',
+    confirmWord: row.name,
+    confirmLabel: '确认删除',
+  })
+  if (!ok) return
   deletingIds.value.add(row.id)
   try {
     await deleteChannel(row.id)

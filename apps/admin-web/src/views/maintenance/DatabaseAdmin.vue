@@ -337,10 +337,13 @@
       </template>
     </el-dialog>
 
-    <!-- 删除确认弹窗（含级联预览 + 令牌输入） -->
+    <!-- 删除确认弹窗（含级联预览 + 确认词；预览失败不允许进入本弹窗） -->
     <el-dialog v-model="deleteDialogVisible" title="确认删除" width="500px">
       <div v-if="deleteCascade" class="cascade-preview">
-        <p class="cascade-title">将删除 {{ deleteTarget }} 表的 {{ deleteIds.length }} 行记录</p>
+        <p class="cascade-title">
+          删除「{{ selectedTableLabel }}」（{{ deleteTarget }}）表的
+          {{ deleteIds.length }} 行记录
+        </p>
         <div v-if="deleteCascade.relations.length > 0" class="cascade-relations">
           <p class="cascade-subtitle">关联影响：</p>
           <div v-for="rel in deleteCascade.relations" :key="rel.table" class="cascade-item">
@@ -354,8 +357,22 @@
             </el-tag>
           </div>
         </div>
-        <el-alert v-else type="success" :closable="false">无关联影响</el-alert>
+        <el-alert v-else type="success" :closable="false">无已声明的关联影响</el-alert>
+        <p class="cascade-total">
+          合计受影响 {{ deleteTotalAffected }} 行（主表 {{ deleteIds.length }} +
+          级联 {{ deleteCascade.total_affected || 0 }}）
+        </p>
+        <el-alert
+          v-if="deleteCascade.undeclared_downstream"
+          type="warning"
+          :closable="false"
+          class="cascade-undeclared"
+          :title="deleteCascade.undeclared_downstream"
+        />
       </div>
+      <el-alert type="error" :closable="false" class="cascade-irreversible">
+        此操作不可恢复：SQLite 没有回收站，删除后只能靠事先备份还原。
+      </el-alert>
       <el-divider />
       <p class="confirm-hint">请输入表名 <code>{{ selectedTable }}</code> 以确认删除操作：</p>
       <el-input v-model="deleteConfirmInput" :placeholder="selectedTable" clearable />
@@ -447,6 +464,15 @@ const deleteCascade = ref(null)
 const deleteIds = ref([])
 const deleteTarget = ref('')
 const deleteConfirmInput = ref('')
+
+// 左栏给的是中文名（t.label），确认框只用英文表名会让人对不上对象（M32）
+const selectedTableLabel = computed(() => {
+  const hit = tables.value.find((t) => t.name === deleteTarget.value || t.name === selectedTable.value)
+  return hit?.label || deleteTarget.value || selectedTable.value
+})
+const deleteTotalAffected = computed(
+  () => deleteIds.value.length + (deleteCascade.value?.total_affected || 0),
+)
 
 // ---- 防抖搜索 ----
 let searchTimer = null
@@ -583,12 +609,13 @@ async function handleDelete(row) {
   deleteIds.value = [pkValue]
   deleteTarget.value = selectedTable.value
   deleteConfirmInput.value = ''
-  // 预览级联影响
+  // 预览级联影响：失败时不得降级成「零信息确认」，直接拒绝进入删除流程（M31）
   try {
     deleteCascade.value = await cascadePreview(selectedTable.value, [pkValue])
   } catch (e) {
-    console.warn('cascadePreview failed:', e)
     deleteCascade.value = null
+    ElMessage.error(`级联影响预览失败，已禁止删除：${e?.message || '请重试'}`)
+    return
   }
   deleteDialogVisible.value = true
 }
@@ -606,8 +633,9 @@ async function handleBatchDelete() {
   try {
     deleteCascade.value = await cascadePreview(selectedTable.value, deleteIds.value)
   } catch (e) {
-    console.warn('batch cascadePreview failed:', e)
     deleteCascade.value = null
+    ElMessage.error(`级联影响预览失败，已禁止批量删除：${e?.message || '请重试'}`)
+    return
   }
   deleteDialogVisible.value = true
 }
@@ -618,15 +646,29 @@ async function confirmDelete() {
     ElMessage.error(`请输入表名 ${selectedTable.value} 以确认删除`)
     return
   }
+  const requested = deleteIds.value.length
   try {
-    if (deleteIds.value.length === 1) {
-      await deleteRow(selectedTable.value, deleteIds.value[0], confirmText)
+    const res =
+      requested === 1
+        ? await deleteRow(selectedTable.value, deleteIds.value[0], confirmText)
+        : await batchDelete(selectedTable.value, deleteIds.value, confirmText)
+    // 以服务端实际影响行数为准（请求数 ≠ 实际数，M37）
+    const affected = res?.affected ?? requested
+    const cascadeAffected = Object.values(res?.cascade || {}).reduce(
+      (sum, n) => sum + (Number(n) || 0),
+      0,
+    )
+    const detail = cascadeAffected ? `，级联 ${cascadeAffected} 行` : ''
+    if (affected < requested) {
+      ElMessage.warning(
+        `已删除 ${affected}/${requested} 行（其余主键未命中）${detail}，请刷新核对剩余数据`,
+      )
     } else {
-      await batchDelete(selectedTable.value, deleteIds.value, confirmText)
+      ElMessage.success(`已删除 ${affected} 行${detail}`)
     }
-    ElMessage.success(`已删除 ${deleteIds.value.length} 行`)
     deleteDialogVisible.value = false
     deleteConfirmInput.value = ''
+    deleteCascade.value = null
     selectedRows.value = []
     await loadRows()
   } catch (e) {
@@ -937,6 +979,21 @@ onMounted(() => {
     padding: 6px 0;
     font-size: 13px;
   }
+
+  .cascade-total {
+    margin-top: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: $color-text-primary;
+  }
+
+  .cascade-undeclared {
+    margin-top: 10px;
+  }
+}
+
+.cascade-irreversible {
+  margin-top: 12px;
 }
 
 .confirm-hint {

@@ -159,6 +159,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 import {
   Refresh, CopyDocument, CircleCheckFilled, Top, TopRight, Search, Download, Loading,
 } from '@element-plus/icons-vue'
@@ -373,6 +374,22 @@ function openRelease() {
 // 为什么轮询：后端下载整包耗时可达分钟级，POST 同步等待会占用 axios 连接，
 // 改为立即返回 + 轮询 /about/upgrade/status，前端持续刷新进度条
 async function runUpgrade() {
+  // 一键升级会替换程序并重启服务，进行中的工作流/审核会中断（M95）
+  const st = updateState.value
+  const ok = await dangerConfirm({
+    action: '立即更新',
+    target: `当前版本 ${info.value?.version || '未知'} → ${st.latest || '最新版本'}`,
+    scope: st.publishedAt ? `发布时间 ${st.publishedAt}` : '发布时间未知',
+    lines: [
+      '桌面端将在下载完成后自动替换文件并重启服务；',
+      '重启会中断进行中的工作流与审核任务，请先确认队列为空；',
+      st.url ? `更新包来源：<a href="${st.url}" target="_blank" rel="noopener noreferrer">Release 页面</a>` : '',
+    ],
+    irreversible: '升级后不支持在管理端内回滚，如需回退要手动重装旧版本。',
+    confirmWord: 'UPDATE',
+    confirmLabel: '开始更新',
+  })
+  if (!ok) return
   if (pollTimer) {
     clearTimeout(pollTimer)
     pollTimer = null

@@ -10,14 +10,16 @@ WorkflowScheduler 订阅该事件以取消已入队的禁用频道工作流，�
 import logging
 from typing import Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache.manager import cache as cache_manager
 from app.core.event_bus import Event, get_event_bus
 from app.core.timeutil import localnow_naive
+from app.models.book_pool import BookPoolItem
 from app.models.channel import Channel
+from app.models.material import Material
 from app.models.workflow import Workflow
 
 logger = logging.getLogger(__name__)
@@ -278,6 +280,33 @@ class ChannelService:
             ))
         except Exception:
             logger.debug("EventBus 发布 channel.schedule_changed 失败（不影响主流程）", exc_info=True)
+
+    async def delete_preview(self, channel_id: int) -> dict:
+        """删除频道前的影响面预览（T02490 / FR-UX-202 C10）。
+
+        口径与 delete_channel 的真实行为逐条对齐，避免确认框只说「不可恢复」
+        而让人低估连带损失：
+        - book_pool_item 带 ON DELETE CASCADE，随频道整本删除；
+        - material.channel_id 没有外键约束，删除后变成无主数据（列表与聚合永久筛不到）；
+        - workflow.channel_id 由 delete_channel 显式置 NULL，工作流本身保留。
+        """
+        channel = await self.get_channel(channel_id)
+        if channel is None:
+            raise ValueError(f"频道不存在: {channel_id}")
+
+        async def _count(model) -> int:
+            result = await self.db.execute(
+                select(func.count()).select_from(model).where(model.channel_id == channel_id)
+            )
+            return result.scalar() or 0
+
+        return {
+            "channel_id": channel_id,
+            "channel_name": channel.name,
+            "book_pool_items": await _count(BookPoolItem),
+            "materials": await _count(Material),
+            "workflows": await _count(Workflow),
+        }
 
     async def delete_channel(self, channel_id: int) -> None:
         """删除频道。关联 workflow 的 channel_id 手动置 NULL。

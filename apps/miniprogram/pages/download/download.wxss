@@ -40,6 +40,20 @@
   border-radius: var(--radius-btn);
   background: var(--danger-soft);
 }
+/* J60：三枚删除按钮此前同形同色，「清空 30 章」与「删 1 章」视觉权重一致。
+   现在按影响面分级：全部清空（红底 + 文字）> 清空本课程（灰底 + 文字）> 单章删除（仅图标）。 */
+.stat-clear--all {
+  width: auto;
+  padding: 0 20rpx;
+  gap: 8rpx;
+}
+.clear-text {
+  font-size: 22rpx;
+  color: var(--danger, #b0554a);
+}
+.clear-text--group {
+  color: var(--text-muted);
+}
 
 /* 分组 */
 .dl-group {
@@ -65,8 +79,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 72rpx;
   height: 72rpx;
+  width: auto;
+  padding: 0 16rpx;
+  gap: 6rpx;
   border-radius: var(--radius-btn);
   background: var(--bg-subtle);
 }
@@ -103,7 +119,7 @@
   height: 88rpx;
   margin-left: 16rpx;
   border-radius: var(--radius-btn);
-  background: var(--danger-soft);
+  background: transparent;
 }
 /* 图标按钮内的图标尺寸（本页统一 40rpx） */
 .dl-icon {

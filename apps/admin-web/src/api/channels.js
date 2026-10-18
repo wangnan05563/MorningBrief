@@ -79,3 +79,6 @@ export const recommendChannelSources = (id) => api.post(`/channels/${id}/recomme
  * @returns {Promise<Array<{channel_id:number,name:string,url:string,size_kb:number,mtime:number}>>} mtime=文件修改时间（秒），供缩略图加 ?v= 版本号
  */
 export const listCoverPresets = () => api.get('/channels/cover-presets')
+
+// 删除影响面预览（T02490 / FR-UX-202 C10）：确认框必须给出真实连带后果
+export const deleteChannelPreview = (id) => api.get(`/channels/${id}/delete-preview`)

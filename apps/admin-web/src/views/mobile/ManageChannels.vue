@@ -29,6 +29,7 @@
 import { ref, onMounted } from 'vue'
 import { listChannels, updateChannel } from '../../api/channels'
 import { ElMessage } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 
 const list = ref([])
 const loading = ref(false)
@@ -47,6 +48,18 @@ async function reload() {
 
 async function toggle(c) {
   const next = c.is_active ? 0 : 1
+  if (!next) {
+    // 停用是线上影响动作：该频道 queued 任务会被取消、内容停止产出（I42）
+    const ok = await dangerConfirm({
+      action: '停用频道',
+      target: `频道「${c.name || c.id}」`,
+      scope: '该频道下排队中的工作流任务会被取消，新内容不再产出',
+      lines: ['C 端该频道页面将不再更新。'],
+      irreversible: '被取消的排队任务不会自动恢复，重新启用后需要手工重跑。',
+      confirmLabel: '确认停用',
+    })
+    if (!ok) return
+  }
   try {
     await updateChannel(c.id, { is_active: next })
     c.is_active = next

@@ -8,8 +8,9 @@
       <text class="stat-size">占用 {{totalSizeLabel}}</text>
     </view>
     <!-- T00384：清空/删除全部改为图标按钮 -->
-    <view class="stat-clear" bindtap="onClearAll" aria-label="清空全部下载">
+    <view class="stat-clear stat-clear--all" bindtap="onClearAll" aria-label="清空全部下载">
       <image class="dl-icon" lazy-load src="/images/icons/trash.png" mode="aspectFit" />
+      <text class="clear-text">清空全部 {{totalCount}} 章</text>
     </view>
   </view>
 
@@ -20,6 +21,7 @@
         <text class="group-name">{{group.channelName}}</text>
         <view class="group-clear" catchtap="onClearChannel" data-channel-id="{{group.channelId}}" aria-label="清空该频道下载">
           <image class="dl-icon" lazy-load src="/images/icons/trash.png" mode="aspectFit" />
+          <text class="clear-text clear-text--group">清空本课程 {{group.items.length}} 章</text>
         </view>
       </view>
       <view
@@ -35,7 +37,13 @@
           <text class="dl-title">{{item.titleText}}</text>
           <text class="dl-sub">{{item.subText}}</text>
         </view>
-        <view class="dl-del" catchtap="onDeleteItem" data-id="{{item.episodeId}}" aria-label="删除该下载">
+        <view
+          class="dl-del"
+          catchtap="onDeleteItem"
+          data-id="{{item.episodeId}}"
+          data-title="{{item.titleText}}"
+          aria-label="删除该下载"
+        >
           <image class="dl-icon" lazy-load src="/images/icons/x.png" mode="aspectFit" />
         </view>
       </view>

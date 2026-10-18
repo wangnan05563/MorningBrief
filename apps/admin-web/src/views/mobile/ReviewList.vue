@@ -164,6 +164,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { listReviews, getReview, handleReviewAction, batchHandleReviewAction } from '../../api/reviews'
 import { ElMessage, ElMessageBox } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 
 const route = useRoute()
 
@@ -245,6 +246,18 @@ async function toggleExpand(item) {
 // 单条审核：通过 / 驳回
 async function act(item, action) {
   let reason = null
+  if (action === 'approve') {
+    // 通过 = 立即自动发布，此前单击即执行（驳回反而要填理由），确认强度与安全等级倒挂（I1）
+    const ok = await dangerConfirm({
+      action: '通过并自动发布',
+      target: item.title || `审核 #${item.id}`,
+      scope: item.channel_name ? `频道「${item.channel_name}」` : '频道未知',
+      lines: ['通过后系统会立即发布对应节目，读者即刻可见。'],
+      irreversible: '发布后无法在本页撤回，需要到节目侧手工下线。',
+      confirmLabel: '确认通过',
+    })
+    if (!ok) return
+  }
   // 驳回需采集理由（桌面端强约束的语义对齐）：弹窗输入，留空则用默认理由；
   // 用户取消则直接返回，不改动审核状态
   if (action === 'reject') {
@@ -289,15 +302,25 @@ async function approveAll() {
   const ids = list.value.map((i) => i.id)
   if (!ids.length) return
 
-  try {
-    await ElMessageBox.confirm(
-      `确认一键通过当前 ${ids.length} 条待审内容？\n通过后系统将自动发布对应节目。`,
-      '批量审批确认',
-      { type: 'warning', confirmButtonText: '确认通过', cancelButtonText: '取消' }
-    )
-  } catch {
-    return // 用户取消
+  // 按频道聚合分布：跨频道一键批量发布时，只报总条数不足以让人意识到影响面（I2）
+  const byChannel = {}
+  for (const i of list.value) {
+    const key = i.channel_name || '未知频道'
+    byChannel[key] = (byChannel[key] || 0) + 1
   }
+  const distribution = Object.entries(byChannel).map(
+    ([name, count]) => `· ${name}：${count} 条`,
+  )
+  const ok = await dangerConfirm({
+    action: '一键全部通过并自动发布',
+    target: `本页 ${ids.length} 条待审内容（覆盖 ${Object.keys(byChannel).length} 个频道）`,
+    scope: distribution.length ? distribution : ['无频道分布数据'],
+    lines: ['通过后系统会逐条自动发布对应节目。'],
+    irreversible: '批量发布后无法整体撤回，只能逐条到节目侧下线。',
+    confirmWord: scoped.value ? undefined : '全部通过',
+    confirmLabel: '确认通过',
+  })
+  if (!ok) return
 
   approving.value = true
   try {

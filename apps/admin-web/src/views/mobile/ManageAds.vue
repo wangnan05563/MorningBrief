@@ -31,6 +31,7 @@
 import { ref, onMounted } from 'vue'
 import { listPlacements, updatePlacement } from '../../api/ads'
 import { ElMessage } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 
 const list = ref([])
 const loading = ref(false)
@@ -49,6 +50,15 @@ async function reload() {
 
 async function toggle(p) {
   const next = p.enabled ? 0 : 1
+  // 启停直接改变线上曝光，与用户禁用有确认的口径对齐（I45）
+  const ok = await dangerConfirm({
+    action: next ? '启用广告投放' : '停用广告投放',
+    target: `投放「${p.name || p.id}」`,
+    scope: next ? '保存后立即开始对外曝光' : '立即停止对外曝光，已排期不变',
+    irreversible: '启停会即时生效于 C 端，本次操作没有批量回滚入口。',
+    confirmLabel: next ? '确认启用' : '确认停用',
+  })
+  if (!ok) return
   try {
     await updatePlacement(p.id, next)
     p.enabled = next

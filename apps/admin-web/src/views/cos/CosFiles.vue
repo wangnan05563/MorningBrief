@@ -290,6 +290,22 @@ async function handleFileSelected(e) {
   if (!file) return
   opLoading.value = true
   try {
+    // 同名即覆盖：后端 key = prefix + 原文件名直接 put_object，先拉一次列表再判定（H9）
+    await loadList()
+    const targetKey = currentPrefix.value + file.name
+    const hit = files.value.find((f) => (f.key || f.name) === targetKey || f.name === file.name)
+    if (hit) {
+      const ok = await dangerConfirm({
+        action: '上传并覆盖同名文件',
+        target: `${currentPrefix.value || '/'}${file.name}`,
+        scope: `云端已存在同名对象（${hit.size_text || hit.size || '大小未知'}）`,
+        lines: ['上传后旧对象由 COS 版本策略决定是否能找回。'],
+        irreversible: '覆盖不可逆：未开启版本控制的桶不会保留旧对象。',
+        confirmWord: '覆盖',
+        confirmLabel: '确认覆盖上传',
+      })
+      if (!ok) return
+    }
     await uploadCosFile(file, currentPrefix.value)
     ElMessage.success(`已上传 ${file.name}`)
     await loadList()

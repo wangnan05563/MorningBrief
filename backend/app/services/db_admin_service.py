@@ -81,6 +81,16 @@ TABLE_RELATIONS: dict[str, list[dict]] = {
     ],
 }
 
+# 未声明的下游数据：预览与删除都不会处理，必须显式告知运维（T02490 / FR-UX-202 M33）。
+# 口径：这里只写「确实存在引用但本服务不处理」的表，不做全链删除（那是系统清理页的语义）。
+UNDECLARED_DOWNSTREAM: dict[str, str] = {
+    "workflow": (
+        "本预览只覆盖已声明的关联表（workflow_step）。"
+        "script / review / episode / play_log 等下游数据不会随之删除，可能留下悬空引用；"
+        "需要按全链路清理请改用「系统清理」页。"
+    ),
+}
+
 # ---- 敏感字段脱敏配置 ----
 # 1. 精确列名脱敏：列名完全匹配时脱敏
 SENSITIVE_COLUMNS: set[str] = {"password_hash", "token", "secret"}
@@ -472,7 +482,12 @@ class DbAdminService:
             if rel["action"] == "cascade":
                 total_affected += count
 
-        return {"table": table, "relations": relations, "total_affected": total_affected}
+        return {
+            "table": table,
+            "relations": relations,
+            "total_affected": total_affected,
+            "undeclared_downstream": UNDECLARED_DOWNSTREAM.get(table),
+        }
 
     # ---- 导出 ----
 

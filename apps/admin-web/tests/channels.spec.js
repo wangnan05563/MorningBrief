@@ -119,6 +119,16 @@ test.describe('频道管理', () => {
   })
 
   test('删除频道二次确认', async ({ page }) => {
+    // T02490 后删除要先取影响面预览，且必须逐字输入频道名才放行
+    await page.route('**/admin/api/v1/channels/1/delete-preview', (route) =>
+      route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: { channel_id: 1, channel_name: '科技频道', book_pool_items: 3, materials: 10, workflows: 1 },
+        },
+      })
+    )
     await setLoginState(page, 'admin')
     await page.goto('/channels')
 
@@ -128,13 +138,16 @@ test.describe('频道管理', () => {
     // 点击删除
     await page.getByRole('button', { name: '删除' }).first().click()
 
-    // ElMessageBox 二次确认：消息含频道名，用部分文本匹配避免特殊字符问题
-    await expect(page.locator('.el-message-box').getByText(/确认删除频道/)).toBeVisible({ timeout: 30000 })
-    // 确认按钮文本为"确认删除"（handleDelete 中 confirmButtonText 指定）
-    await page.locator('.el-message-box').getByRole('button', { name: '确认删除' }).click()
+    // ElMessageBox 危险操作确认：正文含动作+对象+影响条数
+    const box = page.locator('.el-message-box')
+    await expect(box.getByText('删除频道：频道「科技频道」')).toBeVisible({ timeout: 30000 })
+    await expect(box.getByText('书单 3 本 / 素材 10 条 / 工作流 1 条')).toBeVisible()
+    await box.locator('input').fill('科技频道')
+    // 确认按钮文本为"确认删除"（handleDelete 中 confirmLabel 指定）
+    await box.getByRole('button', { name: '确认删除' }).click()
 
-    // 成功提示（后端代码实际消息为"已删除"）
-    await expect(page.locator('.el-message').getByText('已删除')).toBeVisible({ timeout: 30000 })
+    // 成功提示（前端固定文案）
+    await expect(page.locator('.el-message').getByText('已删除').first()).toBeVisible({ timeout: 30000 })
   })
 
   test('启用/停用切换', async ({ page }) => {

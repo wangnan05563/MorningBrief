@@ -90,6 +90,7 @@
                 :type="cacheForm.dry_run ? 'primary' : 'danger'"
                 :loading="cacheLoading"
                 :label="cacheForm.dry_run ? '预览清理' : '立即执行清理'"
+                :inline-text="cacheForm.dry_run ? '预览清理' : '立即执行清理（不可恢复）'"
                 :desc="cacheForm.dry_run ? '仅预览，不实际删除' : '执行真实删除，不可恢复'"
                 :icon="Delete"
                 @click="handleCleanup('cache')"
@@ -143,6 +144,7 @@
                 :type="dbForm.dry_run ? 'primary' : 'danger'"
                 :loading="dbLoading"
                 :label="dbForm.dry_run ? '预览清理' : '立即执行清理'"
+                :inline-text="dbForm.dry_run ? '预览清理' : '立即执行清理（不可恢复）'"
                 :desc="dbForm.dry_run ? '仅预览，不实际删除' : '执行真实删除，不可恢复'"
                 :icon="Delete"
                 @click="handleCleanup('database')"
@@ -191,6 +193,7 @@
                 :type="logForm.dry_run ? 'primary' : 'danger'"
                 :loading="logLoading"
                 :label="logForm.dry_run ? '预览清理' : '立即执行清理'"
+                :inline-text="logForm.dry_run ? '预览清理' : '立即执行清理（不可恢复）'"
                 :desc="logForm.dry_run ? '仅预览，不实际删除' : '执行真实删除，不可恢复'"
                 :icon="Delete"
                 @click="handleCleanup('logs')"
@@ -219,11 +222,35 @@
 
 <script setup>
 import { ref, computed, onMounted, h } from 'vue'
-import { ElMessage, ElMessageBox } from '../../utils/message'
+import { ElMessage } from '../../utils/message'
 import {
   Refresh, Coin, Document, Cpu, Delete,
 } from '@element-plus/icons-vue'
 import api from '../../api'
+import { dangerConfirm } from '../../utils/dangerConfirm'
+
+// 确认文案要给出中文对象名，英文 target 值只用于请求参数（M59）
+const CATEGORY_NAMES = { cache: '缓存清理', database: '数据库清理', logs: '日志清理' }
+const TARGET_LABELS = {
+  all: '全部', ttlcache: 'TTLCache（进程内缓存）', pycache: '__pycache__ 目录', temp: '临时文件',
+  old_playlogs: '旧播放日志', old_workflows: '旧工作流记录', old_reviews: '旧审核记录（已完结）',
+  expired_blacklist: '过期 JWT 黑名单', old_dedup: '旧爬虫去重记录', old_ai_usage: '旧 AI 用量日志',
+  vacuum: 'VACUUM 压缩', old_logs: '旧日志文件', large_logs: '大日志文件（>10MB）',
+}
+const CATEGORY_TARGETS = {
+  cache: ['all', 'ttlcache', 'pycache', 'temp'],
+  database: ['all', 'old_playlogs', 'old_workflows', 'old_reviews', 'expired_blacklist', 'old_dedup', 'old_ai_usage', 'vacuum'],
+  logs: ['all', 'old_logs', 'large_logs'],
+}
+function targetLabel(category, target) {
+  const known = (CATEGORY_TARGETS[category] || []).includes(target)
+  return known ? `${TARGET_LABELS[target] || target}（${target}）` : target
+}
+function showDays(category, form) {
+  if (category === 'cache') return false
+  if (category === 'logs') return form.target !== 'large_logs'
+  return !['vacuum', 'expired_blacklist'].includes(form.target)
+}
 
 const CleanupResult = {
   props: ['result'],
@@ -307,17 +334,26 @@ async function handleCleanup(category) {
   const loading = loadingMap[category]
   const result = resultMap[category]
 
-  // 非预览模式二次确认
+  // 非预览模式二次确认：写清删什么、保留多久、预览到多少条、能否恢复（M59）
   if (!form.dry_run) {
-    try {
-      await ElMessageBox.confirm(
-        '即将执行真实删除操作，此操作不可逆，是否继续？',
-        '危险操作确认',
-        { type: 'warning', confirmButtonText: '确认执行', cancelButtonText: '取消' }
-      )
-    } catch {
-      return
-    }
+    const previewLines = result.value?.cleaned?.length
+      ? [
+          `上次预览命中 ${result.value.cleaned.length} 项，前 ${Math.min(5, result.value.cleaned.length)} 项：`,
+          ...result.value.cleaned.slice(0, 5).map((line) => `· ${line}`),
+          ...(result.value.cleaned.length > 5 ? ['…'] : []),
+        ]
+      : ['尚未做过 dry-run 预览，建议先切到「预览清理」确认影响范围。']
+    const ok = await dangerConfirm({
+      action: '立即执行清理',
+      target: `${CATEGORY_NAMES[category]} · ${targetLabel(category, form.target)}`,
+      scope: showDays(category, form)
+        ? `仅保留最近 ${form.days} 天，早于该窗口的数据与文件会被删除`
+        : '该目标不受天数条件约束',
+      lines: previewLines,
+      irreversible: '删除后不可恢复：SQLite 没有回收站，只能靠事先备份还原。',
+      confirmLabel: '确认执行',
+    })
+    if (!ok) return
   }
 
   loading.value = true
