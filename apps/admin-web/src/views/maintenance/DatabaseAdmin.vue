@@ -357,8 +357,8 @@
         <el-alert v-else type="success" :closable="false">无关联影响</el-alert>
       </div>
       <el-divider />
-      <p class="confirm-hint">请输入 <code>CONFIRM_DELETE</code> 以确认删除操作：</p>
-      <el-input v-model="deleteConfirmInput" placeholder="CONFIRM_DELETE" clearable />
+      <p class="confirm-hint">请输入表名 <code>{{ selectedTable }}</code> 以确认删除操作：</p>
+      <el-input v-model="deleteConfirmInput" :placeholder="selectedTable" clearable />
       <template #footer>
         <IconButton
           label="取消"
@@ -368,7 +368,7 @@
         />
         <IconButton
           type="danger"
-          :disabled="deleteConfirmInput !== 'CONFIRM_DELETE'"
+          :disabled="deleteConfirmInput !== selectedTable"
           label="确认删除"
           desc="执行删除操作"
           :icon="Delete"
@@ -613,14 +613,20 @@ async function handleBatchDelete() {
 }
 
 async function confirmDelete() {
+  const confirmText = (deleteConfirmInput.value || '').trim()
+  if (confirmText !== selectedTable.value) {
+    ElMessage.error(`请输入表名 ${selectedTable.value} 以确认删除`)
+    return
+  }
   try {
     if (deleteIds.value.length === 1) {
-      await deleteRow(selectedTable.value, deleteIds.value[0])
+      await deleteRow(selectedTable.value, deleteIds.value[0], confirmText)
     } else {
-      await batchDelete(selectedTable.value, deleteIds.value)
+      await batchDelete(selectedTable.value, deleteIds.value, confirmText)
     }
     ElMessage.success(`已删除 ${deleteIds.value.length} 行`)
     deleteDialogVisible.value = false
+    deleteConfirmInput.value = ''
     selectedRows.value = []
     await loadRows()
   } catch (e) {

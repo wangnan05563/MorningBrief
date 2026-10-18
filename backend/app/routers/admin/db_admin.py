@@ -1,7 +1,7 @@
 """B 端数据库维护路由（对标 17_xianyu api_db_admin）。
 
 仅 admin 角色可访问（require_admin 依赖）。
-所有写操作（删除/批量删除/导入）须传 confirm_token 校验。
+所有写操作（删除/批量删除/导入）须传手输确认文本；真正的开关是服务端 DB_ADMIN_CONFIRM_TOKEN 配置。
 """
 import csv
 import hmac
@@ -43,7 +43,7 @@ class RowUpdateRequest(BaseModel):
 class BatchDeleteRequest(BaseModel):
     """批量删除请求体。"""
     ids: list
-    confirm_token: str
+    confirm_text: str  # 手输确认文本（须为表名）
 
 
 class CascadePreviewRequest(BaseModel):
@@ -55,7 +55,7 @@ class ImportRequest(BaseModel):
     """导入请求体。"""
     rows: list[dict] = []
     mode: str = "insert"  # insert | replace
-    confirm_token: str
+    confirm_text: str = "IMPORT"  # 危险操作确认文本
     content: str | None = None  # 原始 CSV/JSON 文本，由后端统一解析
     format: str = "csv"
 
@@ -68,16 +68,14 @@ class ImportPreviewRequest(BaseModel):
     format: str = "csv"
 
 
-def _validate_confirm_token(token: str) -> None:
-    """校验危险操作确认令牌。
-
-    空值拒绝执行：DB_ADMIN_CONFIRM_TOKEN 未配置时禁止危险操作。
-    使用 hmac.compare_digest 常量时间比较，防御时序攻击。
-    """
+def _validate_danger_op(confirm_text: str, expected: str) -> None:
+    """危险操作放行条件：服务端配置了 DB_ADMIN_CONFIRM_TOKEN（总开关，未配置即禁止），
+    且操作者手输的确认文本与预期一致。令牌本身不再下发前端——
+    前端内置固定令牌等于把删除/导入权限打包进了浏览器产物。"""
     if not CONFIRM_TOKEN:
         raise ParamError("服务器未配置 DB_ADMIN_CONFIRM_TOKEN，危险操作被禁止")
-    if not hmac.compare_digest(token, CONFIRM_TOKEN):
-        raise ParamError("confirm_token 校验失败")
+    if not hmac.compare_digest((confirm_text or "").strip(), expected):
+        raise ParamError(f"确认文本不匹配，请输入 {expected}")
 
 
 # ---- 表浏览 ----
@@ -167,12 +165,12 @@ async def update_row(
 async def delete_row(
     table: str,
     pk_value: str,
-    confirm_token: str = Query(..., description="危险操作确认令牌"),
+    confirm_text: str = Query(..., description="确认文本，须输入目标表名"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
     """删除一行（含级联）。"""
-    _validate_confirm_token(confirm_token)
+    _validate_danger_op(confirm_text, table)
     svc = DbAdminService(db)
     result = await svc.delete_row(table, pk_value)
     await svc.write_audit(
@@ -191,7 +189,7 @@ async def batch_delete(
     admin: AdminPayload = Depends(require_admin),
 ):
     """批量删除（上限 DB_ADMIN_MAX_PAGE_SIZE）。"""
-    _validate_confirm_token(body.confirm_token)
+    _validate_danger_op(body.confirm_text, table)
     svc = DbAdminService(db)
     result = await svc.batch_delete(table, body.ids)
     await svc.write_audit(
@@ -281,7 +279,7 @@ async def import_rows(
     admin: AdminPayload = Depends(require_admin),
 ):
     """导入数据（insert 或 replace 模式）。"""
-    _validate_confirm_token(body.confirm_token)
+    _validate_danger_op(body.confirm_text, "IMPORT")
     svc = DbAdminService(db)
     rows = (
         svc.parse_import_payload(body.content, body.format)

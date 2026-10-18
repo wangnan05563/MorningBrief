@@ -6,8 +6,8 @@
  */
 import api from './index'
 
-// 危险操作确认令牌，须与后端 DB_ADMIN_CONFIRM_TOKEN 一致
-export const CONFIRM_TOKEN = 'CONFIRM_DELETE'
+// 危险操作不再内置确认令牌：前端只提交「确认文本」（表名 / IMPORT），
+// 真正的开关是后端 DB_ADMIN_CONFIRM_TOKEN 配置（未配置即禁止危险操作）。
 
 // ---- 表浏览 ----
 
@@ -40,18 +40,18 @@ export function updateRow(table, pkValue, values) {
   return api.patch(`/db-admin/tables/${table}/rows/${pkValue}`, { values })
 }
 
-/** 删除一行（含级联，需 confirm_token） */
-export function deleteRow(table, pkValue) {
+/** 删除一行（含级联，需手输表名作为确认文本） */
+export function deleteRow(table, pkValue, confirmText) {
   return api.delete(`/db-admin/tables/${table}/rows/${pkValue}`, {
-    params: { confirm_token: CONFIRM_TOKEN },
+    params: { confirm_text: confirmText },
   })
 }
 
-/** 批量删除（需 confirm_token） */
-export function batchDelete(table, ids) {
+/** 批量删除（需手输表名作为确认文本） */
+export function batchDelete(table, ids, confirmText) {
   return api.post(`/db-admin/tables/${table}/rows/batch-delete`, {
     ids,
-    confirm_token: CONFIRM_TOKEN,
+    confirm_text: confirmText,
   })
 }
 
@@ -92,13 +92,13 @@ export function previewImport(table, content, format = 'csv', mode = 'insert') {
   })
 }
 
-/** 导入数据（需 confirm_token）；原始文本交后端用标准 csv/json 解析 */
+/** 导入数据（需确认文本 IMPORT）；原始文本交后端用标准 csv/json 解析 */
 export function importRows(table, content, format = 'csv', mode = 'insert') {
   return api.post(`/db-admin/tables/${table}/import`, {
     content,
     format,
     mode,
-    confirm_token: CONFIRM_TOKEN,
+    confirm_text: 'IMPORT',
   })
 }
 

@@ -420,7 +420,7 @@ const docSections = [
       {
         type: 'feature',
         title: '核心功能',
-        content: '提供 20+ 业务表的在线 CRUD 操作，支持表结构查看、记录编辑、SQL 查询、CSV 导入导出；敏感字段（password/secret/token/key）自动脱敏；危险操作需 CONFIRM_DELETE 令牌双重确认。',
+        content: '提供 20+ 业务表的在线 CRUD 操作，支持表结构查看、记录编辑、SQL 查询、CSV 导入导出；敏感字段（password/secret/token/key）在列表、编辑与审计日志中均自动脱敏；危险操作需手输确认文本（删除输入表名、导入输入 IMPORT），且仅在服务端配置了确认开关时才放行。',
       },
       {
         type: 'note',

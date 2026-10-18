@@ -165,6 +165,34 @@ def _mask_writeback_message(cols: list[str]) -> str:
     )
 
 
+_SECRET_KEY_RE = re.compile(
+    r"(password|passwd|secret|token|api_?key|access_?key|private_?key)", re.IGNORECASE
+)
+
+
+def _mask_audit_detail(detail: Any, table: Optional[str] = None) -> Any:
+    """审计详情脱敏：按列名语义 + 白名单表的行级敏感判定，避免把新密钥明文写进 audit_log。"""
+    if isinstance(detail, dict):
+        row_ctx = table if table in ALLOWED_TABLES else None
+        sensitive = _row_sensitive_columns(row_ctx, detail) if row_ctx else set()
+        # 审计详情常只带被改的那一列（update 提交 {"values": {"config_value": ...}}），
+        # 此时拿不到 config_key 语义，按 fail-safe 一律脱敏。
+        if row_ctx == "ai_config" and "config_value" in detail and "config_key" not in detail:
+            sensitive.add("config_value")
+        masked = {}
+        for key, value in detail.items():
+            if isinstance(value, (dict, list)):
+                masked[key] = _mask_audit_detail(value, table)
+            elif _SECRET_KEY_RE.search(str(key)) or key in sensitive:
+                masked[key] = value if value in (None, "") else "***"
+            else:
+                masked[key] = value
+        return masked
+    if isinstance(detail, list):
+        return [_mask_audit_detail(item, table) for item in detail]
+    return detail
+
+
 class DbAdminService:
     """数据库维护服务。"""
 
@@ -702,7 +730,7 @@ class DbAdminService:
                 action=action,
                 target=target,
                 operator=operator,
-                detail=json.dumps(detail, ensure_ascii=False, default=str) if detail else None,
+                detail=json.dumps(_mask_audit_detail(detail, target), ensure_ascii=False, default=str) if detail else None,
             )
             self.db.add(log)
             await self.db.flush()
@@ -728,6 +756,10 @@ class DbAdminService:
                     d["detail"] = json.loads(d["detail"])
                 except (json.JSONDecodeError, TypeError):
                     pass
+            # 读侧再脱敏一次：修复前写入的历史审计行仍是明文，
+            # 只有展示层也过滤，才不会再从审计日志里读到旧密钥。
+            if isinstance(d.get("detail"), (dict, list)):
+                d["detail"] = _mask_audit_detail(d["detail"], d.get("target"))
             logs.append(d)
         return logs
 
