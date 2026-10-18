@@ -66,7 +66,9 @@ test.describe('广告投放启停', () => {
     // 确认规范四要素：动作 + 对象 + 影响范围 + 结论声明
     await expect(box.getByText('停用投放：开头位 · 品牌广告A')).toBeVisible()
     await expect(box.getByText('生效区间 2026-07-01 ~ 2026-07-31')).toBeVisible()
-    await expect(box.getByText('停用后 C 端当期立即不再播放该广告')).toBeVisible()
+    await expect(box.getByText('停用后，之后新生成的节目不再插入该广告')).toBeVisible()
+    // 文案必须如实说明生效边界：已生成节目里的广告是拼进音频的，停用不会去掉
+    await expect(box.getByText('已经生成好的节目里广告是拼在音频里的')).toBeVisible()
 
     await box.getByRole('button', { name: '取消' }).click()
     await expect(box).toBeHidden({ timeout: 30000 })
@@ -101,6 +103,38 @@ test.describe('广告投放启停', () => {
     // 失败后 row.enabled 未写回 → 开关回到启用态
     await expect(page.locator('.el-table__row').nth(0).locator('.el-switch.is-checked')).toBeVisible()
     await expect(page.locator('.el-message').getByText('已停用')).toBeHidden()
+  })
+
+  test('移动端启停文案如实描述生效边界，确认后 badge 落位', async ({ page }) => {
+    await setLoginState(page, 'admin')
+    const calls = []
+    await page.route('**/admin/api/v1/ads/placements**', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({ json: adPlacementsListResponse })
+      } else if (route.request().method() === 'PUT') {
+        calls.push(JSON.parse(route.request().postData() || '{}'))
+        await route.fulfill({ json: { code: 0, message: 'success', data: { id: 1, enabled: 0 } } })
+      } else {
+        await route.continue()
+      }
+    })
+    await page.goto('/m/manage/ads')
+    await expect(page.locator('.m-ads__item').first()).toBeVisible({ timeout: 30000 })
+
+    await page.locator('.m-ads__item').first().getByRole('button', { name: '停用' }).click()
+    const box = page.getByRole('dialog')
+    await expect(box).toBeVisible({ timeout: 30000 })
+    // 对象名取自 material_name（修复前用不存在的 p.name，永远只显示 id）
+    await expect(box.getByText('停用广告投放：投放「品牌广告A」')).toBeVisible()
+    await expect(box.getByText('之后新生成的节目不再插入该广告，已排期不变')).toBeVisible()
+    await expect(box.getByText('停用不会去掉已生成节目里的广告')).toBeVisible()
+
+    await box.getByRole('button', { name: '确认停用' }).click()
+    await expect.poll(() => calls.length, { timeout: 30000 }).toBe(1)
+    expect(calls[0]).toEqual({ enabled: 0 })
+    await expect(
+      page.locator('.m-ads__item').first().getByText('已停用')
+    ).toBeVisible({ timeout: 30000 })
   })
 
   test('排期日历标出「已停用」', async ({ page }) => {

@@ -53,9 +53,11 @@ async function toggle(p) {
   // 启停直接改变线上曝光，与用户禁用有确认的口径对齐（I45）
   const ok = await dangerConfirm({
     action: next ? '启用广告投放' : '停用广告投放',
-    target: `投放「${p.name || p.id}」`,
-    scope: next ? '保存后立即开始对外曝光' : '立即停止对外曝光，已排期不变',
-    irreversible: '启停会即时生效于 C 端，本次操作没有批量回滚入口。',
+    target: `投放「${p.material_name || p.id}」`,
+    scope: next
+      ? '之后新生成的节目在排期区间内恢复插入该广告'
+      : '之后新生成的节目不再插入该广告，已排期不变',
+    irreversible: '广告是生成节目时拼进音频的：停用不会去掉已生成节目里的广告。',
     confirmLabel: next ? '确认启用' : '确认停用',
   })
   if (!ok) return
