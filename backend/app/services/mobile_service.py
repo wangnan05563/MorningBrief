@@ -351,7 +351,17 @@ async def emergency_stop(db, admin, reason: str) -> dict:
 
     高危操作——路由层已用 require_admin 限定超级管理员，并强制 reason 必填。
     维护态由 workflow_scheduler.trigger_workflow 守卫拒绝新任务触发（FR-M902）。
+
+    幂等（FR-UX-201）：已是停服态时直接返回当前状态（``already=True``），既不重写标志
+    也不追加审计——否则连点会把首次停服时间/原因覆盖掉，审计里全是同名重复条目。
     """
+    current = await get_maintenance(db)
+    if current.get("enabled"):
+        with _maint_cache_lock:
+            _maint_cache["value"] = True
+            _maint_cache["ts"] = time.time()
+        return {**current, "already": True}
+
     await _upsert_flag(
         db,
         MAINTENANCE_KEY,
@@ -378,7 +388,7 @@ async def emergency_stop(db, admin, reason: str) -> dict:
     with _maint_cache_lock:
         _maint_cache["value"] = True
         _maint_cache["ts"] = time.time()
-    return await get_maintenance(db)
+    return {**await get_maintenance(db), "already": False}
 
 
 async def resume_maintenance(db, admin, reason: str = "") -> dict:

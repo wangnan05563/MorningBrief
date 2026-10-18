@@ -24,7 +24,8 @@ export const registerPush = (body) => api.post('/m/push/register', body)
 export const emergencyStop = (body) => api.post('/m/emergency/stop', body)
 
 // 维护态查询（移动端展示停服横幅）：{ enabled, reason, by, at }
-export const getMaintenanceStatus = () => api.get('/m/maintenance-status')
+// silent：读失败由页面「维护态未知」横幅统一提示，不再叠加 toast
+export const getMaintenanceStatus = () => api.get('/m/maintenance-status', { silent: true })
 
 // 解除应急停服（仅超级管理员）
 export const emergencyResume = () => api.post('/m/emergency/resume')
