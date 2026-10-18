@@ -92,7 +92,7 @@
             </div>
             <div v-if="item.auto_approved" class="m-detail__field">
               <dt>自动审批</dt>
-              <dd>{{ item.detail.auto_trigger_reason || '系统自动通过' }}</dd>
+              <dd>{{ formatTriggerReason(item.detail.auto_trigger_reason, '系统自动通过') }}</dd>
             </div>
             <div class="m-detail__field">
               <dt>创建时间</dt><dd>{{ item.detail.created_at || '—' }}</dd>
@@ -165,6 +165,7 @@ import { useRoute } from 'vue-router'
 import { listReviews, getReview, handleReviewAction, batchHandleReviewAction } from '../../api/reviews'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
+import { formatTriggerReason } from '../../utils/autoReviewRules'
 
 const route = useRoute()
 

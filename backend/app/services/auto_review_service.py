@@ -103,6 +103,35 @@ class AutoReviewService:
             logger.info("自动审批配置已 seed 默认值（enabled=False）")
         return config
 
+    @staticmethod
+    def parse_keywords(raw: Optional[str]) -> list[str]:
+        """白名单 JSON 解析：解析失败按空列表处理（即该规则视为跳过）。"""
+        try:
+            data = json.loads(raw or "[]")
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("keyword_whitelist 解析失败，按空列表处理")
+            return []
+        return data if isinstance(data, list) else []
+
+    @staticmethod
+    def split_rules(
+        require_content_safe: bool,
+        require_steps_first_success: bool,
+        keywords: list[str],
+    ) -> tuple[list[str], list[str]]:
+        """拆出「生效校验」与「显式跳过的校验」（T02492 / FR-UX-204）。
+
+        配置层与运行期护栏共用这一份口径，避免两边各写一遍判断后漂移。
+        """
+        pairs = (
+            ("content_safe", bool(require_content_safe)),
+            ("steps_first_success", bool(require_steps_first_success)),
+            ("keyword_whitelist", bool(keywords)),
+        )
+        enforced = [name for name, on in pairs if on]
+        skipped = [name for name, on in pairs if not on]
+        return enforced, skipped
+
     async def update_config(
         self,
         enabled: bool,
@@ -110,21 +139,71 @@ class AutoReviewService:
         require_steps_first_success: bool,
         keyword_whitelist: list[str],
         operator: str,
+        risk_acknowledged: bool = False,
     ) -> AutoReviewConfig:
         """更新自动审批配置，记录操作人与时间。
 
         所有字段必须显式传入，避免部分更新导致配置不一致。
+
+        护栏（T02492 / FR-UX-204）：开启总开关时，既不能三条校验全关
+        （那等于「无条件全部命中」，任意内容零检查自动上线），
+        也不能缺少管理员的风险确认勾选。
+
+        风险确认可沿用（不必每次保存都重新打勾）的前提是：总开关本来就开着、
+        此前已确认过、且跳过的校验没有变多——多关一条就意味着风险面扩大，
+        必须重新确认。关闭总开关会清掉确认状态，下次开启需重新确认。
         """
         config = await self.get_config()
+        keywords = [str(k).strip() for k in (keyword_whitelist or []) if str(k).strip()]
+        enforced, skipped = self.split_rules(
+            require_content_safe, require_steps_first_success, keywords,
+        )
+        _, prev_skipped = self.split_rules(
+            config.require_content_safe,
+            config.require_steps_first_success,
+            self.parse_keywords(config.keyword_whitelist),
+        )
+        ack_carried = bool(
+            enabled and config.enabled and config.risk_acknowledged
+            and set(skipped) <= set(prev_skipped)
+        )
+        # 护栏拒绝走 BizError(code=400)（HTTP 200 + 业务码），与管理端其他业务错误同口径：
+        # 响应拦截器只在 code!=0 分支把 message 交给页面，用 ParamError(HTTP400) 会让
+        # 前端只剩下「Request failed with status code 400」这句没用的话。
+        if enabled:
+            if not enforced:
+                raise BizError(
+                    code=400,
+                    message=(
+                        "三条校验全部关闭时不能开启自动审批："
+                        "至少保留一条校验（内容安全检测 / 步骤一次成功 / 关键词白名单）"
+                    ),
+                )
+            if not risk_acknowledged and not ack_carried:
+                if skipped:
+                    msg = "开启自动审批前需勾选风险确认：跳过的校验（{}）将不再检查".format(
+                        "、".join(skipped),
+                    )
+                else:
+                    msg = "开启自动审批前需勾选风险确认：命中的稿件将绕过人工审核直接发布"
+                raise BizError(code=400, message=msg)
+
         config.enabled = enabled
         config.require_content_safe = require_content_safe
         config.require_steps_first_success = require_steps_first_success
         # 关键词白名单统一序列化为 JSON 字符串存储
-        config.keyword_whitelist = json.dumps(
-            keyword_whitelist or [], ensure_ascii=False,
-        )
+        config.keyword_whitelist = json.dumps(keywords, ensure_ascii=False)
         config.updated_by = operator
         config.updated_at = localnow_naive()
+        # 风险确认状态：本次勾选=刷新确认人/时间；沿用旧确认=保持不变；其余清空
+        acknowledged = bool(risk_acknowledged) or ack_carried
+        config.risk_acknowledged = acknowledged
+        if risk_acknowledged:
+            config.risk_acknowledged_by = operator
+            config.risk_acknowledged_at = localnow_naive()
+        elif not acknowledged:
+            config.risk_acknowledged_by = None
+            config.risk_acknowledged_at = None
 
         # 配置变更记录审计日志，便于追溯谁在何时切换了开关
         self.db.add(AuditLog(
@@ -136,7 +215,12 @@ class AutoReviewService:
                 "enabled": enabled,
                 "require_content_safe": require_content_safe,
                 "require_steps_first_success": require_steps_first_success,
-                "keyword_whitelist": keyword_whitelist or [],
+                "keyword_whitelist": keywords,
+                "risk_acknowledged": acknowledged,
+                "risk_ack_carried": ack_carried,
+                # 跳过的校验项进审计：出问题时能直接看出这次放行少了哪道检查
+                "enforced_rules": enforced,
+                "skipped_rules": skipped,
             }, ensure_ascii=False),
         ))
         await self.db.commit()
@@ -315,6 +399,33 @@ class AutoReviewService:
         if not config.enabled:
             return {"auto_approved": False, "reason": "自动审批开关未启用"}
 
+        keywords = self.parse_keywords(config.keyword_whitelist)
+        enforced, skipped = self.split_rules(
+            config.require_content_safe, config.require_steps_first_success, keywords,
+        )
+
+        # 1.5 运行期护栏（T02492）：库内可能仍存着改造前遗留的「开启 + 三条全关」配置，
+        # 那种组合下 matched_rules 与 fail_reasons 皆空 → 旧逻辑会零检查放行。
+        # 校验项为零时一律不自动通过，转人工，并把原因写进统计供追溯。
+        if not enforced:
+            guard_msg = "无生效校验规则（三条校验均关闭），已拒绝自动通过并转人工审核"
+            await self._record_stat(
+                review_id=review_id,
+                workflow_id=workflow_id,
+                success=False,
+                trigger_reason=json.dumps(
+                    {"skipped_rules": skipped, "guard": "no_enforced_rule"},
+                    ensure_ascii=False,
+                ),
+                error_message=guard_msg,
+                time_saved_sec=None,
+            )
+            logger.warning(
+                "自动审批被护栏拦截 workflow_id=%s review_id=%s 原因=%s",
+                workflow_id, review_id, guard_msg,
+            )
+            return {"auto_approved": False, "reason": guard_msg}
+
         # 2. 规则匹配（收集命中的规则与失败原因）
         matched_rules: list[str] = []
         fail_reasons: list[str] = []
@@ -333,11 +444,6 @@ class AutoReviewService:
             else:
                 fail_reasons.append(msg)
 
-        keywords = []
-        try:
-            keywords = json.loads(config.keyword_whitelist or "[]")
-        except (json.JSONDecodeError, TypeError):
-            logger.warning("keyword_whitelist 解析失败，按空列表处理")
         if keywords:
             ok, msg = await self._check_keyword_whitelist(workflow_id, keywords)
             if ok:
@@ -372,7 +478,7 @@ class AutoReviewService:
         # 4. 全部规则命中，执行自动审批
         try:
             episode_id = await self._execute_auto_approve(
-                review_id, workflow_id, matched_rules, review_created_at,
+                review_id, workflow_id, matched_rules, review_created_at, skipped,
             )
             logger.info(
                 "自动审批成功 workflow_id=%s review_id=%s episode_id=%s",
@@ -389,7 +495,10 @@ class AutoReviewService:
                 review_id=review_id,
                 workflow_id=workflow_id,
                 success=False,
-                trigger_reason=json.dumps({"matched_rules": matched_rules}, ensure_ascii=False),
+                trigger_reason=json.dumps(
+                    {"matched_rules": matched_rules, "skipped_rules": skipped},
+                    ensure_ascii=False,
+                ),
                 error_message=str(exc),
                 time_saved_sec=None,
             )
@@ -406,17 +515,24 @@ class AutoReviewService:
         workflow_id: str,
         matched_rules: list[str],
         review_created_at: datetime,
+        skipped_rules: Optional[list[str]] = None,
     ) -> int:
         """执行自动审批通过操作并发布节目。
 
         复用 ContentService.publish_episode 完成节目发布。
         标记 Review.auto_approved=True 与 auto_trigger_reason，
         使审批历史明确区分系统自动审批与人工审批。
+        trigger_reason 同时记录「命中」与「显式跳过」的校验项（T02492），
+        事后看一条自动通过就能知道这次放行少查了什么。
         """
         from app.services.content_service import ContentService
 
         now = localnow_naive()
-        trigger_reason_json = json.dumps(matched_rules, ensure_ascii=False)
+        skipped_rules = skipped_rules or []
+        trigger_reason_json = json.dumps(
+            {"matched_rules": matched_rules, "skipped_rules": skipped_rules},
+            ensure_ascii=False,
+        )
 
         async with AsyncSessionLocal() as session:
             # 锁定审核记录，确保状态变更原子性
@@ -458,6 +574,7 @@ class AutoReviewService:
                     "review_id": review_id,
                     "action": "approve",
                     "matched_rules": matched_rules,
+                    "skipped_rules": skipped_rules,
                     "episode_id": episode_id,
                     "workflow_id": workflow_id,
                 }, ensure_ascii=False),

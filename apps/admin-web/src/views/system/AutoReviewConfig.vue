@@ -33,7 +33,7 @@
             <div class="switch-meta">
               <span class="switch-label">启用自动审批</span>
               <span class="text-muted">
-                开启后，工作流完成时自动检查规则，全部命中则自动通过并发布节目
+                开启后，工作流完成时按下方校验逐项检查，全部命中的稿件将跳过人工审核直接发布
               </span>
             </div>
             <!-- active-value/inactive-value 显式声明，与后端 bool 字段一致 -->
@@ -45,7 +45,9 @@
           </div>
         </el-form-item>
 
-        <el-divider content-position="left">触发条件（全部命中才自动通过）</el-divider>
+        <el-divider content-position="left">
+          触发条件（默认全部校验；关闭即跳过，至少保留一条）
+        </el-divider>
 
         <el-form-item>
           <div class="switch-row">
@@ -53,6 +55,9 @@
               <span class="switch-label">内容安全检测通过</span>
               <span class="text-muted">
                 要求 rewrite 步骤的微信 msgSecCheck 结果为 safe
+              </span>
+              <span v-if="!form.require_content_safe" class="skip-warn">
+                已关闭：本项不再检查，命中即放行
               </span>
             </div>
             <el-switch
@@ -69,6 +74,9 @@
               <span class="switch-label">工作流步骤一次成功</span>
               <span class="text-muted">
                 要求前 4 步（crawl/rewrite/tts/stitch）全部一次成功，无重试记录
+              </span>
+              <span v-if="!form.require_steps_first_success" class="skip-warn">
+                已关闭：本项不再检查，命中即放行
               </span>
             </div>
             <el-switch
@@ -103,9 +111,42 @@
             >
               {{ kw }}
             </el-tag>
-            <span v-if="!form.keyword_whitelist.length" class="text-muted">
-              未配置关键词，该规则不启用
+            <span v-if="!form.keyword_whitelist.length" class="skip-warn">
+              未配置关键词：本项不检查
             </span>
+          </div>
+        </el-form-item>
+
+        <!-- T02492 / FR-UX-204：护栏提示——生效/跳过的校验一眼可见 -->
+        <el-form-item v-if="form.enabled">
+          <div class="rule-summary">
+            <span class="text-muted">本次生效：</span>
+            <el-tag v-for="r in enforcedNow" :key="r" size="small" type="success" effect="plain">
+              {{ ruleLabel(r) }}
+            </el-tag>
+            <span v-if="!enforcedNow.length" class="skip-warn">
+              无（三条校验全部关闭，不能开启）
+            </span>
+            <template v-if="skippedNow.length">
+              <span class="text-muted">跳过：</span>
+              <el-tag v-for="r in skippedNow" :key="r" size="small" type="danger" effect="plain">
+                {{ ruleLabel(r) }}
+              </el-tag>
+            </template>
+          </div>
+        </el-form-item>
+
+        <!-- 风险确认：首次开启或跳过项发生变化时必须重新勾选 -->
+        <el-form-item v-if="form.enabled && needsAck">
+          <el-checkbox v-model="riskAck" data-testid="risk-ack">
+            我已确认风险：勾选后，命中剩余校验的稿件将<b>不经人工审核自动发布</b>
+            <template v-if="skippedNow.length">
+              ，且{{ skippedNow.map(ruleLabel).join('、') }}已被跳过
+            </template>
+            。
+          </el-checkbox>
+          <div v-if="config?.risk_acknowledged_at" class="ack-history text-muted">
+            上次确认：{{ formatTime(config.risk_acknowledged_at) }}（{{ config.risk_acknowledged_by || '未知' }}）
           </div>
         </el-form-item>
 
@@ -228,7 +269,7 @@
         </el-table-column>
         <el-table-column label="触发原因" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
-            <span v-if="row.success">{{ formatRules(row.trigger_reason) }}</span>
+            <span v-if="row.success">{{ formatTriggerReason(row.trigger_reason) }}</span>
             <span v-else class="text-error">{{ row.error_message || '-' }}</span>
           </template>
         </el-table-column>
@@ -275,7 +316,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useDraft } from '../../composables/useDraft'
 import { Refresh, Setting, Plus, DataLine, CircleCheck, CircleClose, Timer, List, WarningFilled, Check } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -286,6 +327,7 @@ import {
   listAutoReviewHistory,
   retryFailedAutoReview,
 } from '../../api/autoReview'
+import { ruleLabel, formatTriggerReason } from '../../utils/autoReviewRules'
 
 // 配置数据
 const config = ref(null)
@@ -304,6 +346,33 @@ const { apply: applyDraft, track: trackDraft, commit: commitDraft } = useDraft('
 const enableDraft = trackDraft(form)
 const keywordInput = ref('')
 
+// T02492 / FR-UX-204：风险确认勾选——刻意不放进 form，避免断点续录把上次的勾选恢复出来
+// （恢复即等于替管理员预先确认，护栏失效）
+const riskAck = ref(false)
+
+const RULE_ORDER = ['content_safe', 'steps_first_success', 'keyword_whitelist']
+
+// 与后端 split_rules 同口径：关闭的开关 + 空白名单 = 该校验被显式跳过
+const skippedNow = computed(() => {
+  const skipped = []
+  if (!form.require_content_safe) skipped.push('content_safe')
+  if (!form.require_steps_first_success) skipped.push('steps_first_success')
+  if (!form.keyword_whitelist.length) skipped.push('keyword_whitelist')
+  return skipped
+})
+const enforcedNow = computed(() => RULE_ORDER.filter((r) => !skippedNow.value.includes(r)))
+
+// 需要重新确认风险：首次开启，或跳过的校验比服务端已保存的更多（风险面扩大）
+// 与服务端 ack_carried 同口径，两侧判断保持一致才不会保存被 400 打回
+const needsAck = computed(() => {
+  if (!form.enabled) return false
+  const saved = config.value
+  const savedSkipped = saved?.skipped_rules || []
+  const carried = saved?.enabled && saved?.risk_acknowledged
+    && skippedNow.value.every((r) => savedSkipped.includes(r))
+  return !carried
+})
+
 // 统计数据
 const stats = ref(null)
 const loadingStats = ref(true)
@@ -317,6 +386,12 @@ const historySize = ref(20)
 const historyFilter = ref(null)
 
 const loadingAll = ref(false)
+
+// 风险面发生变化（跳过项增减 / 需要重新确认）时清空勾选，避免沿用旧确认
+watch(
+  () => `${needsAck.value}|${skippedNow.value.join(',')}`,
+  () => { riskAck.value = false },
+)
 
 // 加载配置
 async function loadConfig() {
@@ -337,6 +412,16 @@ async function loadConfig() {
 
 // 保存配置
 async function saveConfig() {
+  // 前端预拦截与服务端护栏同口径：全关、未确认风险都不放行，
+  // 让用户在当前界面就看到原因，而不是等一个 400 弹窗
+  if (form.enabled && !enforcedNow.value.length) {
+    ElMessage.error('三条校验全部关闭时不能开启自动审批：至少保留一条校验')
+    return
+  }
+  if (form.enabled && needsAck.value && !riskAck.value) {
+    ElMessage.error('请先勾选风险确认，再开启自动审批')
+    return
+  }
   saving.value = true
   try {
     const res = await updateAutoReviewConfig({
@@ -344,6 +429,7 @@ async function saveConfig() {
       require_content_safe: form.require_content_safe,
       require_steps_first_success: form.require_steps_first_success,
       keyword_whitelist: form.keyword_whitelist,
+      risk_acknowledged: riskAck.value,
     })
     config.value = res
     ElMessage.success('配置已保存，下次工作流创建审核记录时按新配置判定')
@@ -466,19 +552,6 @@ function formatDuration(sec) {
   return `${Math.floor(sec / 3600)} 时 ${Math.floor((sec % 3600) / 60)} 分`
 }
 
-function formatRules(reasonJson) {
-  if (!reasonJson) return '-'
-  try {
-    const rules = JSON.parse(reasonJson)
-    if (Array.isArray(rules)) {
-      return rules.join('、')
-    }
-    return reasonJson
-  } catch {
-    return reasonJson
-  }
-}
-
 onMounted(async () => {
   await loadAll()
   // T00828：加载完成后恢复草稿再启用持久化
@@ -552,6 +625,23 @@ onMounted(async () => {
 
 .text-error {
   color: var(--el-color-danger);
+}
+
+/* T02492：关闭即跳过的校验用告警色显式提示，避免「看起来还在检查」 */
+.skip-warn {
+  color: var(--el-color-warning);
+  font-size: 13px;
+}
+
+.rule-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ack-history {
+  margin-top: 4px;
 }
 
 .keyword-input-wrap {

@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.response import success, error
 from app.database import get_db
-from app.models import AuditLog, AutoReviewStat
+from app.models import AuditLog, AutoReviewConfig, AutoReviewStat
 from app.services.auto_review_service import AutoReviewService
 
 router = APIRouter(prefix="/admin/api/v1/auto-review", tags=["B端-自动审批"])
@@ -30,12 +30,39 @@ class ConfigUpdateRequest(BaseModel):
     所有字段必须显式传入，避免部分更新导致规则集不完整。
     """
     enabled: bool = Field(description="总开关，启用后满足规则的工作流将自动审批通过")
-    require_content_safe: bool = Field(description="要求微信内容安全检测通过")
-    require_steps_first_success: bool = Field(description="要求前 4 步全部一次成功（无重试）")
+    require_content_safe: bool = Field(description="要求微信内容安全检测通过（默认校验，关闭即跳过）")
+    require_steps_first_success: bool = Field(description="要求前 4 步全部一次成功（默认校验，关闭即跳过）")
     keyword_whitelist: List[str] = Field(
         default_factory=list,
         description="关键词白名单（空列表表示不启用此规则）",
     )
+    # T02492 / FR-UX-204：开启总开关必须由管理员显式勾选风险确认，服务端强校验
+    risk_acknowledged: bool = Field(
+        default=False,
+        description="已阅读并确认自动审批风险（开启总开关时必填 true）",
+    )
+
+
+def _config_payload(config: AutoReviewConfig, keywords: List[str]) -> dict:
+    """配置出参：GET/PUT 共用一份，顺带算出「生效/跳过的校验」给界面直接展示。"""
+    enforced, skipped = AutoReviewService.split_rules(
+        config.require_content_safe, config.require_steps_first_success, keywords,
+    )
+    return {
+        "enabled": config.enabled,
+        "require_content_safe": config.require_content_safe,
+        "require_steps_first_success": config.require_steps_first_success,
+        "keyword_whitelist": keywords,
+        "risk_acknowledged": config.risk_acknowledged,
+        "risk_acknowledged_by": config.risk_acknowledged_by,
+        "risk_acknowledged_at": (
+            config.risk_acknowledged_at.isoformat() if config.risk_acknowledged_at else None
+        ),
+        "enforced_rules": enforced,
+        "skipped_rules": skipped,
+        "updated_by": config.updated_by,
+        "updated_at": config.updated_at.isoformat() if config.updated_at else None,
+    }
 
 
 @router.get("/config")
@@ -46,20 +73,7 @@ async def get_config(
     """获取自动审批配置。admin + operator 均可查看。"""
     svc = AutoReviewService(db)
     config = await svc.get_config()
-    # 解析 keyword_whitelist JSON 字符串为列表，便于前端直接使用
-    import json as _json
-    try:
-        keywords = _json.loads(config.keyword_whitelist or "[]")
-    except (ValueError, TypeError):
-        keywords = []
-    return success(data={
-        "enabled": config.enabled,
-        "require_content_safe": config.require_content_safe,
-        "require_steps_first_success": config.require_steps_first_success,
-        "keyword_whitelist": keywords,
-        "updated_by": config.updated_by,
-        "updated_at": config.updated_at.isoformat() if config.updated_at else None,
-    })
+    return success(data=_config_payload(config, svc.parse_keywords(config.keyword_whitelist)))
 
 
 @router.put("/config")
@@ -72,6 +86,7 @@ async def update_config(
 
     配置变更会立即生效（下次工作流创建 Review 时按新配置判定）。
     变更记录写入 audit_log，便于追溯谁在何时切换了开关。
+    开启总开关需通过服务端护栏：至少一条校验生效 + 已勾选风险确认。
     """
     svc = AutoReviewService(db)
     config = await svc.update_config(
@@ -80,15 +95,9 @@ async def update_config(
         require_steps_first_success=req.require_steps_first_success,
         keyword_whitelist=req.keyword_whitelist,
         operator=admin.username,
+        risk_acknowledged=req.risk_acknowledged,
     )
-    return success(data={
-        "enabled": config.enabled,
-        "require_content_safe": config.require_content_safe,
-        "require_steps_first_success": config.require_steps_first_success,
-        "keyword_whitelist": req.keyword_whitelist,
-        "updated_by": config.updated_by,
-        "updated_at": config.updated_at.isoformat() if config.updated_at else None,
-    })
+    return success(data=_config_payload(config, svc.parse_keywords(config.keyword_whitelist)))
 
 
 @router.get("/stats")

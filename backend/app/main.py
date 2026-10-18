@@ -853,6 +853,53 @@ async def _migrate_adplacement_enabled_column() -> None:  # NOSONAR
         conn.close()
 
 
+async def _migrate_auto_review_risk_columns() -> None:
+    """auto_review_config 表追加风险确认列（T02492 / FR-UX-204，幂等）。
+
+    同时把「总开关已开但三条校验全关」的存量配置点名出来：运行期护栏会拒绝
+    这种组合自动放行，日志先说明原因，免得管理员以为自动审批无故失效。
+    """
+    import sqlite3
+    from app.paths import resolve_db_path
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(auto_review_config)")
+        existing = {row[1] for row in cur.fetchall()}
+        if not existing:
+            return  # 表尚未创建（首次访问时由 get_config seed）
+        added = []
+        for col, ddl in (
+            ("risk_acknowledged", "BOOLEAN NOT NULL DEFAULT 0"),
+            ("risk_acknowledged_by", "TEXT"),
+            ("risk_acknowledged_at", "DATETIME"),
+        ):
+            if col not in existing:
+                cur.execute(f"ALTER TABLE auto_review_config ADD COLUMN {col} {ddl}")
+                added.append(col)
+        if added:
+            conn.commit()
+            logger.info("[startup] auto_review_config 迁移完成，新增列 {}", ",".join(added))
+        cur.execute(
+            "SELECT COUNT(*) FROM auto_review_config "
+            "WHERE enabled = 1 AND require_content_safe = 0 "
+            "AND require_steps_first_success = 0 "
+            "AND (keyword_whitelist IS NULL OR keyword_whitelist IN ('', '[]'))"
+        )
+        if cur.fetchone()[0]:
+            logger.warning(
+                "[startup] 自动审批配置处于「总开关已开但三条校验全关」状态："
+                "按 T02492 护栏，此类配置不再自动放行任何内容，全部转人工审核，"
+                "请在「系统配置 > 自动审批」至少保留一条校验并勾选风险确认"
+            )
+    except Exception as e:
+        logger.warning("[startup] auto_review_config 风险列迁移失败: {}", e)
+    finally:
+        conn.close()
+
+
 async def _migrate_script_quality_report_column() -> None:
     """script 表追加 quality_report 列（T01712 P1，幂等）。
 
@@ -1162,6 +1209,12 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
             await _migrate_adplacement_enabled_column()
         except Exception as e:
             logger.warning("[startup] ad_placement enabled 列迁移失败: {}", e)
+
+        # auto_review_config 风险确认列迁移（T02492 / FR-UX-204）
+        try:
+            await _migrate_auto_review_risk_columns()
+        except Exception as e:
+            logger.warning("[startup] auto_review_config risk 列迁移失败: {}", e)
 
         # T01712 P1：script.quality_report 列迁移（LLM 质量审核报告落库）
         try:

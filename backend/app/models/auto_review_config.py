@@ -33,6 +33,8 @@ class AutoReviewConfig(Base):
     DEFAULT_REQUIRE_STEPS_FIRST_SUCCESS: bool = True
     # 默认关键词白名单为空：空表示不启用关键词匹配
     DEFAULT_KEYWORD_WHITELIST: str = "[]"
+    # 风险确认默认未勾选：开启总开关必须由管理员显式勾选（T02492 / FR-UX-204）
+    DEFAULT_RISK_ACKNOWLEDGED: bool = False
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     # 总开关：False 时所有自动审批逻辑跳过
@@ -40,6 +42,7 @@ class AutoReviewConfig(Base):
         Boolean, nullable=False, default=DEFAULT_ENABLED,
     )
     # 规则 1：要求 rewrite 步骤的微信内容安全检测为 safe
+    # 语义（T02492 / FR-UX-204）：默认校验，置为 False 才是「显式跳过」
     require_content_safe: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=DEFAULT_REQUIRE_CONTENT_SAFE,
     )
@@ -52,6 +55,13 @@ class AutoReviewConfig(Base):
         Text, nullable=False, default=DEFAULT_KEYWORD_WHITELIST,
         comment="JSON 数组，空数组表示不启用关键词白名单规则",
     )
+    # 风险确认（T02492）：enabled=True 必须伴随该标记，且记录是谁在哪一刻确认的
+    risk_acknowledged: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=DEFAULT_RISK_ACKNOWLEDGED,
+        comment="开启自动审批前管理员已勾选风险确认",
+    )
+    risk_acknowledged_by: Mapped[Optional[str]] = mapped_column(String(64))
+    risk_acknowledged_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     # 配置变更追溯：记录最后修改人与时间
     updated_by: Mapped[Optional[str]] = mapped_column(String(64))
     updated_at: Mapped[Optional[datetime]] = mapped_column(
