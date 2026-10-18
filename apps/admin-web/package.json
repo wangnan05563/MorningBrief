@@ -8,6 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "validate:nav": "node scripts/validate-nav.mjs",
+    "test:nav": "node --test scripts/validate-nav.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },

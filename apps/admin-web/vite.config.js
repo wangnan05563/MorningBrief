@@ -4,6 +4,30 @@ import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import path from 'path'
+import { validate as validateNav } from './scripts/validate-nav.mjs'
+
+/**
+ * 导航一致性门禁（T02500 / FR-UX-401）
+ *
+ * 菜单、引导、帮助文档之间的引用失配属于「文案级」错误：运行时不报错，
+ * 只表现为引导气泡指错元素、帮助文档把人带不到页面、侧栏少一项，
+ * 用户说不清、e2e 也测不出。所以放在构建期失败，而不是等运行时的偶然反馈。
+ *
+ * 只挂 build：dev 不该因为一条分组注释漂移而启不了服务（e2e 也跑在 dev 上）。
+ * 独立校验走 `npm run validate:nav`。
+ */
+function navConsistencyGate() {
+  return {
+    name: 'nav-consistency-gate',
+    apply: 'build',
+    async buildStart() {
+      const { errors } = await validateNav()
+      if (errors.length) {
+        this.error(`[validate-nav] 导航引用不一致，构建中止：\n${errors.map((e) => `  ✗ ${e}`).join('\n')}`)
+      }
+    },
+  }
+}
 
 // Vite 配置：开发代理 + 生产构建
 // dev 模式 base 为 '/'：Playwright 测试可直接用 page.goto('/ads/materials') 导航，
@@ -21,6 +45,7 @@ export default defineConfig(({ command }) => ({
     Components({
       resolvers: [ElementPlusResolver()],
     }),
+    navConsistencyGate(),
   ],
   // dev base '/' 方便本地测试；build base '/news/' 适配生产路径区分
   base: command === 'build' ? '/news/' : '/',

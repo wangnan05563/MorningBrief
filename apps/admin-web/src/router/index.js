@@ -5,14 +5,18 @@
  * - /login          公开页面（无需登录）
  * - /               主布局（需登录），子路由按职能分组
  *
- * 菜单分组（meta.group）：
- *   内容运营  - 内容审核、频道管理、队列管理
+ * 菜单分组（meta.group，与 Layout.vue 的 groupConfig 一一对应）：
+ *   内容运营  - 内容审核、频道管理、素材库管理、讲书稿素材池、素材录入、找书工具、队列管理
  *   广告管理  - 广告素材、投放规则、排期日历
- *   数据分析  - 数据统计
- *   AI 自动化 - 工作流监控、AI 服务（仅 admin）
- *   系统配置  - 通知管理、内网穿透（仅 admin）
- *   维护工具  - 数据库维护、系统清理、参数计算器（仅 admin）
+ *   数据分析  - 数据统计、频道健康度、RSS 源状态、LLM 重试指标
+ *   AI 自动化 - 工作流监控（仅 admin）、AI 服务（仅 admin）、智能助手（仅 admin）
+ *   云端存储  - 云端配置（仅 admin）、文件管理（仅 admin）
+ *   系统配置  - 内网穿透（仅 admin）、通知管理（仅 admin）、自动审批（仅 admin）
+ *   维护工具  - 参数计算器（仅 admin）、数据库维护（仅 admin）、系统清理（仅 admin）
  *   帮助      - 帮助文档、关于
+ *
+ * 分组与侧栏由 meta 派生，不手写菜单项；这份注释是给人看的概览，
+ * 漂移由 `npm run validate:nav` 校验（见 scripts/validate-nav.mjs）。
  */
 import { createRouter, createWebHistory } from 'vue-router'
 import { ElMessage } from '../utils/message'

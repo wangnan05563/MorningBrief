@@ -68,7 +68,9 @@ export const GUIDE_STEPS = {
   ],
   '/workflows': [
     { s: ['.top-bar', '.page-container'], t: '工作流监控', d: '跟踪各频道工作流执行进度，可手动触发一期工作流。' },
-    { s: ['[aria-label="立即触发一期工作流"]', '.top-bar .el-button'], t: '手动触发', d: '点击触发按钮按频道生成新一期节目；跳过爬虫开关见工具提示。' },
+    // 选择器要指真实存在的 aria-label：原来的 `[aria-label="立即触发一期工作流"]` 是按钮的 tooltip 文案，
+    // 不是标签，永远选不中，于是退到 `.top-bar .el-button` 高亮了工具栏第一个按钮（指错元素）。
+    { s: ['[aria-label="手动触发"]', '.top-bar .el-button'], t: '手动触发', d: '点击触发按钮按频道生成新一期节目；跳过爬虫开关见工具提示。' },
     { s: ['.el-table'], t: '执行列表', d: '进度条展示各阶段完成度，支持展开查看明细。' },
   ],
   '/tunnel': [
