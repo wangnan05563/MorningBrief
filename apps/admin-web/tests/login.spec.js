@@ -80,7 +80,7 @@ test.describe('登录流程', () => {
     expect(loginState.username).toBe('admin')
   })
 
-  test('错误凭据显示错误提示', async ({ page }) => {
+  test('错误凭据在页面上常驻显示原因并聚焦密码框', async ({ page }) => {
     // 覆盖默认 mock：本次返回业务错误
     await page.route('**/admin/api/v1/auth/login', async (route) => {
       await route.fulfill({ json: loginFailResponse })
@@ -92,9 +92,16 @@ test.describe('登录流程', () => {
     await page.getByPlaceholder('请输入密码').fill('wrong')
     await page.getByRole('button', { name: '登录' }).click()
 
-    // axios 拦截器对 code !== 0 调用 ElMessage.error 显示错误
-    await expect(page.locator('.el-message').getByText('用户名或密码错误')).toBeVisible({ timeout: 30000 })
-    // 仍停留在登录页
+    // T02498（FR-UX-304）：登录请求改为 silent，原因由登录页常驻横幅给出而非三秒即散的 toast
+    const banner = page.locator('[data-testid="login-error"]')
+    await expect(banner).toBeVisible({ timeout: 30000 })
+    await expect(banner).toContainText('用户名或密码错误')
+    await expect(page.locator('.el-message')).toHaveCount(0)
+    // 仍停留在登录页，且输入内容未被清空（否则用户要重新敲一遍账号）
     await expect(page).toHaveURL(/\/login/)
+    await expect(page.getByPlaceholder('请输入用户名')).toHaveValue('wrong')
+    await expect(page.getByPlaceholder('请输入密码')).toHaveValue('wrong')
+    // 焦点落在密码框：错的通常是密码，直接改即可回车重试
+    await expect(page.getByPlaceholder('请输入密码')).toBeFocused()
   })
 })

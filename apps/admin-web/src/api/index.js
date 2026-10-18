@@ -74,11 +74,22 @@ api.interceptors.response.use(
       // token 失效：清除本地非敏感状态（admin_token 已存 HttpOnly Cookie，JS 不可清除）
       localStorage.removeItem('admin_username')
       localStorage.removeItem('admin_role')
-      // 根据当前所在端（PC / 移动）跳转到对应登录页；路径必须带 /news 前缀
-      const isMobile = globalThis.location.pathname.startsWith('/news/m')
-      const loginPath = isMobile ? '/news/m/login' : '/news/login'
-      if (!document.hidden && globalThis.location.pathname !== loginPath) {
+      // 按端（PC / 移动）跳转对应登录页；前缀取 vite base，dev 下是 '/'、生产是 '/news/'。
+      // 原先硬编码 '/news' 前缀：dev 下 pathname 永远不等于 loginPath，「已在登录页」
+      // 判不出来，于是登录失败会被 location.href 刷走页面，错误提示根本没机会显示（FR-UX-304）
+      const pathname = globalThis.location.pathname
+      const isMobile = pathname.includes('/m/')
+      const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+      const loginPath = `${base}/${isMobile ? 'm/' : ''}login`
+      // 只看末段是否登录页：base 前缀在 dev / 生产下不同，按后缀判定两端一致
+      const onLoginPage = pathname.endsWith(`${isMobile ? '/m' : ''}/login`)
+      if (!document.hidden && !onLoginPage) {
         globalThis.location.href = loginPath
+      } else if (!error.config?.silent) {
+        // 已经在登录页（或页面隐藏不便跳转）时，401 不能是静默失败：
+        // 用户点了「登录」却毫无反应，只会反复重试同一个错密码（FR-UX-304）
+        ElMessage.error(error.response?.data?.message || '用户名或密码错误')
+        _markNotified(error)
       }
     } else if (!error.config?.silent) {
       // silent 请求（如后台轮询）不弹 ElMessage，避免最小化时积压错误提示

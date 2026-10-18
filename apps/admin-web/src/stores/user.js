@@ -20,7 +20,8 @@ export const useUserStore = defineStore('user', {
 
   actions: {
     async login(username, password) {
-      const data = await api.post('/auth/login', { username, password })
+      // silent：登录失败的原因由登录页常驻显示（FR-UX-304），不再叠加一条三秒就消失的 toast
+      const data = await api.post('/auth/login', { username, password }, { silent: true })
       // NFR-M103：token 由后端写入 HttpOnly Cookie，前端不持有；仅保留非敏感态
       this.username = data.username
       this.role = data.role

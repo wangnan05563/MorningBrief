@@ -12,12 +12,15 @@
         autocomplete="username"
       />
       <input
+        ref="passwordRef"
         v-model="password"
         class="m-input"
         type="password"
         placeholder="密码"
         autocomplete="current-password"
       />
+      <!-- 失败原因常驻：移动端 toast 更容易被忽略，且键盘收起后用户看不到提示 -->
+      <p v-if="loginError" class="m-login__error" role="alert" data-testid="login-error">{{ loginError }}</p>
       <button class="m-btn m-btn--primary" type="submit" :disabled="loading">
         {{ loading ? '登录中…' : '登 录' }}
       </button>
@@ -28,10 +31,11 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../../stores/user'
 import { ElMessage } from '../../utils/message'
+import { describeLoginError } from '../../utils/loginError'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -39,6 +43,8 @@ const userStore = useUserStore()
 const username = ref('')
 const password = ref('')
 const loading = ref(false)
+const loginError = ref('')
+const passwordRef = ref(null)
 
 async function onLogin() {
   if (!username.value || !password.value) {
@@ -46,11 +52,15 @@ async function onLogin() {
     return
   }
   loading.value = true
+  loginError.value = ''
   try {
     await userStore.login(username.value, password.value)
     router.replace('/m/home')
-  } catch {
-    // 错误已由响应拦截器统一提示
+  } catch (e) {
+    // 保留已输入内容，把原因常驻显示并聚焦密码框（FR-UX-304）
+    loginError.value = describeLoginError(e)
+    await nextTick()
+    passwordRef.value?.focus?.()
   } finally {
     loading.value = false
   }
@@ -119,6 +129,17 @@ async function onLogin() {
 
 .m-btn--primary:disabled {
   opacity: 0.6;
+}
+
+.m-login__error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fef0f0;
+  color: #d54941;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: left;
 }
 
 .m-login__hint {

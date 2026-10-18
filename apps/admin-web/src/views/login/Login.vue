@@ -27,6 +27,19 @@
       <h1 class="login-title">MorningBrief</h1>
       <p class="login-subtitle">智能新闻播客运营平台</p>
 
+      <!-- 失败原因常驻显示：toast 三秒就消失，用户抬头时已经看不到自己错在哪（FR-UX-304） -->
+      <el-alert
+        v-if="loginError"
+        class="login-error"
+        type="error"
+        :closable="false"
+        show-icon
+        data-testid="login-error"
+        role="alert"
+      >
+        <template #title>{{ loginError }}</template>
+      </el-alert>
+
       <el-form
         ref="formRef"
         :model="form"
@@ -44,6 +57,7 @@
         </el-form-item>
         <el-form-item prop="password">
           <el-input
+            ref="passwordRef"
             v-model="form.password"
             type="password"
             placeholder="请输入密码"
@@ -81,11 +95,12 @@
  * - 装饰元素缓慢浮动，营造柔和动态氛围
  * - 登录态由 useUserStore 管理，组件只负责表单与提交
  */
-import { ref, reactive } from 'vue'
+import { ref, reactive, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from '../../utils/message'
 import { User, Lock, Check } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
+import { describeLoginError } from '../../utils/loginError'
 
 // publicPath 跟随 Vite base：base='/news/' 时 publicPath='/news/'
 // public/ 目录的文件引用不会自动加 base 前缀，需手动拼接
@@ -95,7 +110,9 @@ const router = useRouter()
 const userStore = useUserStore()
 
 const formRef = ref()
+const passwordRef = ref()
 const loading = ref(false)
+const loginError = ref('')
 const form = reactive({ username: '', password: '' })
 
 const rules = {
@@ -138,13 +155,18 @@ async function handleLogin() {
     return
   }
   loading.value = true
+  loginError.value = ''
   try {
     await userStore.login(form.username, form.password)
     ElMessage.success('登录成功')
     // 登录后跳转到审核页（懒加载分块）；catch 避免分块瞬时拉取失败冒泡为 Uncaught
     router.push('/review').catch((err) => console.warn('[Login] 跳转被拒绝（已静默处理）:', err?.message || err))
-  } catch {
-    // 错误提示由 axios 拦截器统一处理
+  } catch (e) {
+    // 失败原因常驻在表单上方，同时保留已输入的用户名、聚焦密码框方便改；
+    // 登录请求走 silent，不再叠一条会消失的 toast（FR-UX-304）
+    loginError.value = describeLoginError(e)
+    await nextTick()
+    passwordRef.value?.focus?.()
   } finally {
     loading.value = false
   }
@@ -330,6 +352,12 @@ async function handleLogin() {
 
 // 输入框大圆角，与马卡龙风格统一
 :deep(.el-input__wrapper) {
+  border-radius: var(--radius-md);
+}
+
+/* 失败原因常驻条：与下方表单同宽，出现时把焦点交给密码框，改完可直接回车重试 */
+.login-error {
+  margin-bottom: 16px;
   border-radius: var(--radius-md);
 }
 
