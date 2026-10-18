@@ -105,6 +105,15 @@ async def test_list_audit_logs_masks_legacy_plaintext(db_session):
     assert logs[0]["detail"]["values"]["password_hash"] == "***"
 
 
+def test_mask_sensitive_shares_row_level_judgment():
+    """重构后读取脱敏与写回守卫、审计脱敏口径一致（列表行仍打码）。"""
+    from app.services.db_admin_service import _mask_sensitive
+
+    assert _mask_sensitive("admin_user", {"username": "a", "password_hash": "hash"})["password_hash"] == "***"
+    assert _mask_sensitive("ai_config", {"config_key": "api_key", "config_value": SECRET})["config_value"] == "***"
+    assert _mask_sensitive("ai_config", {"config_key": "default_model", "config_value": "gpt"})["config_value"] == "gpt"
+
+
 def test_danger_op_confirms_by_text_not_embedded_token(client, admin_token, monkeypatch):
     headers = {"Authorization": f"Bearer {admin_token['token']}"}
     url = "/admin/api/v1/db-admin/tables/admin_user/rows/1"

@@ -127,16 +127,9 @@ def _serialize_value(val: Any) -> Any:
 
 
 def _mask_sensitive(table: str, row: dict) -> dict:
-    """脱敏行数据中的敏感字段。"""
-    for col in row.keys():
-        if _is_sensitive_column(table, col):
-            # ai_config 表的 config_value 动态判断
-            if table == "ai_config" and col == "config_value":
-                key_val = str(row.get("config_key", "")).lower()
-                if any(p in key_val for p in SENSITIVE_KEY_PATTERNS):
-                    row[col] = "***"
-            else:
-                row[col] = "***"
+    """脱敏行数据中的敏感字段（与写回守卫、审计脱敏共用 `_row_sensitive_columns` 口径）。"""
+    for col in _row_sensitive_columns(table, row):
+        row[col] = "***"
     return row
 
 
