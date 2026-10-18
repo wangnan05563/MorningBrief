@@ -6,7 +6,8 @@
 - POST /admin/api/v1/cos/test-connection 测试 COS 连接（列举桶验证凭证）
 - GET  /admin/api/v1/cos/status          配置就绪状态（前端管理页快速判断）
 - GET  /admin/api/v1/cos/objects         列举某前缀下的目录与文件
-- POST /admin/api/v1/cos/upload          上传文件（multipart，含 prefix）
+- POST /admin/api/v1/cos/upload          上传文件（multipart，含 prefix / overwrite）
+- GET  /admin/api/v1/cos/exists          对象存在性检查（同名检测）
 - GET  /admin/api/v1/cos/download        获取对象下载地址（CDN 直链或预签名）
 - DELETE /admin/api/v1/cos/object        删除单个对象
 - POST /admin/api/v1/cos/folder          新建文件夹
@@ -124,11 +125,14 @@ async def list_objects(
 async def upload_file(
     file: UploadFile = File(...),
     prefix: str = Form("", description="上传目标前缀（目录），以 / 结尾"),
+    overwrite: bool = Form(False, description="同名对象已存在时是否覆盖（覆盖前自动留快照）"),
     admin: AdminPayload = Depends(require_admin),
 ):
     """上传文件到 COS。
 
     key = prefix + 原始文件名。文件名已做安全校验（拒绝路径穿越）。
+    同名对象默认拒绝覆盖（业务码 409），确认后带 overwrite=true 重传，
+    覆盖前旧对象会复制到同目录 .backup/<时间戳>/ 下（FR-UX-205 可回退）。
     """
     import os
 
@@ -146,9 +150,27 @@ async def upload_file(
     data = await file.read()
     svc = CosStorageService()
     result = await svc.upload_file(
-        key=key, data=data, content_type=file.content_type
+        key=key, data=data, content_type=file.content_type, overwrite=overwrite
     )
-    return success(data=result, message="上传成功")
+    backup_key = result.get("backup_key")
+    message = "上传成功"
+    if result.get("overwritten"):
+        message = (
+            f"已覆盖上传，旧文件已备份至 {backup_key}" if backup_key
+            else "已覆盖上传"
+        )
+    return success(data=result, message=message)
+
+
+@router.get("/exists")
+async def check_exists(
+    key: str = Query(..., description=_DESC_OBJECT_KEY),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """对象存在性检查（上传/移动前的同名检测，FR-UX-205）。"""
+    svc = CosStorageService()
+    data = await svc.object_exists(key=key)
+    return success(data=data)
 
 
 @router.get("/download")

@@ -28,14 +28,21 @@ export const listCosObjects = (prefix = '') =>
   api.get('/cos/objects', { params: { prefix } })
 
 // 上传文件（multipart）：file 为 File 对象，prefix 为目标目录（以 / 结尾）
-export const uploadCosFile = (file, prefix = '') => {
+// overwrite=false 时后端对同名对象返回业务码 409（拒绝静默覆盖，FR-UX-205）
+export const uploadCosFile = (file, prefix = '', { overwrite = false } = {}) => {
   const formData = new FormData()
   formData.append('file', file)
   if (prefix) formData.append('prefix', prefix)
+  formData.append('overwrite', overwrite ? 'true' : 'false')
   return api.post('/cos/upload', formData, {
     timeout: 60000,
   })
 }
+
+// 对象存在性检查（上传/移动前的同名检测）
+// silent：检测失败由调用方给出「已取消上传」的针对性提示，避免拦截器二次弹错
+export const checkCosObject = (key) =>
+  api.get('/cos/exists', { params: { key }, silent: true })
 
 // 获取对象下载地址（CDN 直链优先，否则预签名）
 export const getCosDownloadUrl = (key, expired = 300) =>

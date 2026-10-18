@@ -2,7 +2,8 @@
 
 在 app.cos.client.cos_client 异步封装之上，提供面向管理界面的对象存储操作：
 - 目录/文件列举（用 Delimiter 模拟目录树）
-- 文件上传（bytes）
+- 文件上传（bytes；同名默认拒绝，覆盖前自动留 .backup 快照）
+- 对象存在性检查（上传/移动前的同名检测）
 - 下载 URL（CDN 直链优先，否则预签名）
 - 单文件删除
 - 新建文件夹（占位对象）
@@ -14,6 +15,7 @@
 避免创建空客户端抛晦涩错误。KEY/Prefix 做路径穿越校验，拒绝绝对路径与 ".."。
 """
 import logging
+from datetime import datetime
 from functools import wraps
 from typing import Optional
 from urllib.parse import urlparse
@@ -36,6 +38,12 @@ _ERROR_MESSAGE_COS_NOT_CONFIGURED = "COS 未配置：请先在「云端配置」
 # 单页列举上限；多页自动翻页（最多 10 页，覆盖 1 万对象，超出视为异常大桶需分批）
 _LIST_PAGE_SIZE = 1000
 _LIST_MAX_PAGES = 10
+
+# 覆盖上传前的快照目录名（落在被覆盖对象同目录下，便于按目录找回旧版本）
+_BACKUP_DIR_NAME = ".backup"
+
+# 快照重名探测上限：同一秒内连续覆盖到第 N 份即中止，避免探测无限循环
+_MAX_BACKUP_PROBES = 20
 
 
 def _validate_key(key: str) -> None:
@@ -88,6 +96,21 @@ def _cos_sdk_message(exc: Exception) -> str:
 def _cos_bucket() -> str:
     """返回当前生效的 Bucket 名（语义化消息里展示用）。"""
     return getattr(get_settings(), "COS_BUCKET", "") or ""
+
+
+def _human_size(size) -> str:
+    """把字节数转成运营可读的大小（错误提示里用，避免裸数字）。"""
+    if size is None:
+        return "大小未知"
+    try:
+        n = float(size)
+    except (TypeError, ValueError):
+        return "大小未知"
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} GB"
 
 
 async def _cos_call(coro):
@@ -177,19 +200,104 @@ class CosStorageService:
         files.sort(key=lambda f: f["name"])
         return {"prefix": prefix, "folders": folders, "files": files}
 
-    # ---- 上传 ----
+    # ---- 存在性检查 ----
 
-    async def upload_file(self, key: str, data: bytes, content_type: Optional[str] = None) -> dict:
-        """上传对象到 COS。
+    async def object_exists(self, key: str) -> dict:
+        """检查对象是否存在并回带元数据（上传/移动前的同名检测，FR-UX-205）。
 
-        key 为该对象的完整路径（含前缀）。返回 {key, size, content_type}。
+        不存在时 exists=False 且元数据为空，不抛异常 —— 调用方需要的是
+        「有没有」这个事实，而不是把 NoSuchKey 翻译成错误提示。
         """
         if not is_cos_configured():
             raise BizError(code=400, message=_ERROR_MESSAGE_COS_NOT_CONFIGURED)
         _validate_key(key)
 
+        exists = await _cos_call(cos_client.object_exists(Key=key))
+        meta = await _cos_call(cos_client.head_object(Key=key)) if exists else {}
+        return {
+            "key": key,
+            "exists": exists,
+            "size": meta.get("size", 0),
+            "last_modified": meta.get("last_modified", ""),
+            "content_type": meta.get("content_type", ""),
+        }
+
+    # ---- 上传 ----
+
+    async def upload_file(
+        self,
+        key: str,
+        data: bytes,
+        content_type: Optional[str] = None,
+        overwrite: bool = False,
+    ) -> dict:
+        """上传对象到 COS（同名默认拒绝，覆盖前自动留快照）。
+
+        key 为该对象的完整路径（含前缀）。返回 {key, size, content_type,
+        overwritten, previous, backup_key}。
+
+        FR-UX-205：旧实现直接 put_object，重传同名文件即静默覆盖旧对象。
+        现在由服务端把关（前端确认框可被绕过、列表拉取也存在时间窗）：
+        - 同名已存在且 overwrite=False → 业务码 409，让调用方先确认；
+        - overwrite=True → 先把旧对象复制到同目录 .backup/<时间戳>/ 再写入，
+          覆盖动作因此可回退；备份失败即中止覆盖，绝不退化成静默覆盖。
+        """
+        if not is_cos_configured():
+            raise BizError(code=400, message=_ERROR_MESSAGE_COS_NOT_CONFIGURED)
+        _validate_key(key)
+
+        previous = await _cos_call(cos_client.head_object(Key=key)) \
+            if await _cos_call(cos_client.object_exists(Key=key)) else None
+        if previous is not None and not overwrite:
+            raise BizError(
+                code=409,
+                message=(
+                    f"同名文件已存在：{key}（{_human_size(previous.get('size', 0))}，"
+                    f"更新于 {previous.get('last_modified') or '时间未知'}）；"
+                    "已拒绝覆盖上传，请确认后再以覆盖方式重传"
+                ),
+            )
+
+        backup_key = None
+        if previous is not None:
+            backup_key = await self._snapshot_before_overwrite(key)
+
         await _cos_call(cos_client.put_object(Key=key, Body=data, ContentType=content_type))
-        return {"key": key, "size": len(data), "content_type": content_type or ""}
+        return {
+            "key": key,
+            "size": len(data),
+            "content_type": content_type or "",
+            "overwritten": previous is not None,
+            "previous": previous,
+            "backup_key": backup_key,
+        }
+
+    async def _snapshot_before_overwrite(self, key: str) -> str:
+        """把将被覆盖的旧对象复制到 .backup/<时间戳>/ 下，返回备份 Key。
+
+        备份对象永不覆盖：同一秒内连续覆盖时依次追加 -1/-2 后缀。
+        """
+        directory, _, name = key.rpartition("/")
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        base = f"{directory + '/' if directory else ''}{_BACKUP_DIR_NAME}/{stamp}"
+        backup_key = f"{base}/{name}"
+        for seq in range(_MAX_BACKUP_PROBES):
+            if not await _cos_call(cos_client.object_exists(Key=backup_key)):
+                break
+            backup_key = f"{base}/{name}-{seq + 1}"
+        else:
+            raise BizError(
+                code=409,
+                message=f"同一秒内已有 {_MAX_BACKUP_PROBES} 份快照，请稍后重传（已中止覆盖）",
+            )
+        try:
+            await _cos_call(cos_client.copy_object(SourceKey=key, Key=backup_key))
+        except BizError as exc:
+            raise BizError(
+                code=exc.code,
+                message=f"覆盖前快照备份失败，已中止覆盖：{exc.message}",
+            ) from exc
+        return backup_key
 
     # ---- 下载 ----
 

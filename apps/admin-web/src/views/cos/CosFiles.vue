@@ -176,10 +176,12 @@ import {
   Plus, Close, Check,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 import {
   getCosStatus,
   listCosObjects,
   uploadCosFile,
+  checkCosObject,
   getCosDownloadUrl,
   deleteCosObject,
   createCosFolder,
@@ -290,24 +292,45 @@ async function handleFileSelected(e) {
   if (!file) return
   opLoading.value = true
   try {
-    // 同名即覆盖：后端 key = prefix + 原文件名直接 put_object，先拉一次列表再判定（H9）
-    await loadList()
     const targetKey = currentPrefix.value + file.name
-    const hit = files.value.find((f) => (f.key || f.name) === targetKey || f.name === file.name)
-    if (hit) {
+    // 同名检测以服务端 HEAD 为准（列表是进入目录时的快照，可能已过期）。
+    // 检测失败就中止：不知道会不会覆盖时不允许盲传（FR-UX-205 / H9）
+    let exists = false
+    let hit = null
+    try {
+      hit = await checkCosObject(targetKey)
+      exists = !!hit?.exists
+    } catch {
+      ElMessage.error('同名检测失败，已取消上传：无法确认是否会覆盖已有文件')
+      return
+    }
+    if (exists) {
       const ok = await dangerConfirm({
         action: '上传并覆盖同名文件',
         target: `${currentPrefix.value || '/'}${file.name}`,
-        scope: `云端已存在同名对象（${hit.size_text || hit.size || '大小未知'}）`,
-        lines: ['上传后旧对象由 COS 版本策略决定是否能找回。'],
-        irreversible: '覆盖不可逆：未开启版本控制的桶不会保留旧对象。',
+        scope: `云端已存在同名对象（${formatSize(hit.size)}${hit.last_modified ? `，更新于 ${hit.last_modified}` : ''}）`,
+        lines: [
+          `覆盖前旧文件自动备份到 ${currentPrefix.value}.backup/<时间戳>/${file.name}，可在文件列表逐层找回`,
+        ],
+        irreversible: '快照只保留覆盖前的那一份：如需长期保留多版本请为存储桶开启版本控制。',
         confirmWord: '覆盖',
         confirmLabel: '确认覆盖上传',
       })
       if (!ok) return
     }
-    await uploadCosFile(file, currentPrefix.value)
-    ElMessage.success(`已上传 ${file.name}`)
+    // overwrite 由服务端把关：绕过本页直接调接口时，同名上传会被拒绝而不是静默覆盖
+    let result
+    try {
+      result = await uploadCosFile(file, currentPrefix.value, { overwrite: exists })
+    } catch {
+      // 服务端同名检测兜底命中（业务码 409）等错误，全局拦截器已给出可读提示
+      return
+    }
+    ElMessage.success(
+      result?.backup_key
+        ? `已覆盖 ${file.name}，旧文件已备份至 ${result.backup_key}`
+        : `已上传 ${file.name}`,
+    )
     await loadList()
   } finally {
     opLoading.value = false

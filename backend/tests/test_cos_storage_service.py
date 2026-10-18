@@ -90,11 +90,13 @@ async def test_upload_success(cos_configured, monkeypatch):
         captured["size"] = len(Body)
 
     monkeypatch.setattr(_instance(), "put_object", fake_put)
+    monkeypatch.setattr(_instance(), "object_exists", AsyncMock(return_value=False))
     svc = cos_storage_service.CosStorageService()
     result = await svc.upload_file("docs/a.txt", b"hello", "text/plain")
     assert result["key"] == "docs/a.txt"
     assert result["size"] == 5
     assert captured["key"] == "docs/a.txt"
+    assert result["overwritten"] is False and result["backup_key"] is None
 
 
 async def test_get_download_url_cdn(cos_configured, monkeypatch):
@@ -252,6 +254,7 @@ async def test_list_path_cos_client_error_translated(cos_configured, monkeypatch
 
 async def test_upload_service_error_translated(cos_configured, monkeypatch):
     """上传接口同样受保护：SDK 异常不冒泡成 500。"""
+    monkeypatch.setattr(_instance(), "object_exists", AsyncMock(return_value=False))
     monkeypatch.setattr(
         _instance(), "put_object",
         AsyncMock(side_effect=_svc_error("NoSuchBucket")),

@@ -216,6 +216,7 @@ def test_download_cdn(client, admin_token, cos_configured, monkeypatch):
 
 
 def test_upload_file(client, admin_token, cos_configured, monkeypatch):
+    monkeypatch.setattr(cos_client_mod.cos_client, "object_exists", AsyncMock(return_value=False))
     monkeypatch.setattr(cos_client_mod.cos_client, "put_object", AsyncMock())
     resp = client.post(
         "/admin/api/v1/cos/upload",
