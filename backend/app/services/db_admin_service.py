@@ -140,6 +140,31 @@ def _mask_sensitive(table: str, row: dict) -> dict:
     return row
 
 
+_MASK_SENTINEL_RE = re.compile(r"^\*{2,}$")
+
+
+def _is_mask_sentinel(val: Any) -> bool:
+    """识别列表接口下发的脱敏占位值（形如 `***`）。"""
+    return isinstance(val, str) and bool(_MASK_SENTINEL_RE.match(val.strip()))
+
+
+def _row_sensitive_columns(table: str, row: dict) -> set[str]:
+    """按整行数据判断该行哪些列敏感（ai_config.config_value 是否敏感取决于 config_key）。"""
+    sensitive = {col for col in row if col in SENSITIVE_COLUMNS}
+    if table == "ai_config" and "config_value" in row:
+        key_val = str(row.get("config_key", "")).lower()
+        if any(p in key_val for p in SENSITIVE_KEY_PATTERNS):
+            sensitive.add("config_value")
+    return sensitive
+
+
+def _mask_writeback_message(cols: list[str]) -> str:
+    return (
+        f"敏感字段 {', '.join(cols)} 传入的是脱敏占位值，保存会用 *** 覆盖真实凭据；"
+        "请留空保持原值，或通过对应的专用配置入口修改"
+    )
+
+
 class DbAdminService:
     """数据库维护服务。"""
 
@@ -280,6 +305,14 @@ class DbAdminService:
         if not filtered:
             raise ParamError("无有效字段")
 
+        blocked = sorted(
+            col
+            for col in filtered
+            if col in _row_sensitive_columns(table, filtered) and _is_mask_sentinel(filtered[col])
+        )
+        if blocked:
+            raise BizError(code=400, message=_mask_writeback_message(blocked))
+
         cols = ", ".join(filtered.keys())
         placeholders = ", ".join(f":{k}" for k in filtered.keys())
         sql = f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"
@@ -308,6 +341,25 @@ class DbAdminService:
         filtered = {k: v for k, v in filtered.items() if v is not None and v != ""}
         if not filtered:
             raise ParamError("无有效更新字段")
+
+        probe = dict(filtered)
+        if table == "ai_config" and "config_value" in filtered and "config_key" not in filtered:
+            pk_col = self._get_single_pk_column(schema)
+            current = (
+                await self.db.execute(
+                    text(f"SELECT config_key FROM {table} WHERE {pk_col} = :pk"),
+                    {"pk": self._coerce_pk(pk_value, schema)},
+                )
+            ).mappings().first()
+            if current:
+                probe["config_key"] = current["config_key"]
+        blocked = sorted(
+            col
+            for col in filtered
+            if col in _row_sensitive_columns(table, probe) and _is_mask_sentinel(filtered[col])
+        )
+        if blocked:
+            raise BizError(code=400, message=_mask_writeback_message(blocked))
 
         set_clause = ", ".join(f"{k} = :{k}" for k in filtered.keys())
         params = dict(filtered)

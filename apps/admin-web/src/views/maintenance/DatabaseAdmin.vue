@@ -205,11 +205,16 @@
             :is="getFormComponent(col)"
             v-model="formData[col.name]"
             :placeholder="col.type"
-            :disabled="formMode === 'edit' && col.primary_key"
+            :disabled="formMode === 'edit' && (col.primary_key || col.sensitive)"
             type="primary"
             clearable
           />
-          <span class="field-hint">{{ col.type }}{{ col.nullable ? '' : ' (必填)' }}</span>
+          <span class="field-hint">
+            {{ col.type }}{{ col.nullable ? '' : ' (必填)' }}
+            <template v-if="col.sensitive">
+              · 敏感字段{{ formMode === 'edit' ? '（编辑时只读，保持原值）' : '' }}
+            </template>
+          </span>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -404,6 +409,7 @@ const rowsLoading = ref(false)
 const formDialogVisible = ref(false)
 const formMode = ref('create')
 const formData = ref({})
+const originalForm = ref({})
 const editingPkValue = ref(null)
 
 const schemaDialogVisible = ref(false)
@@ -490,6 +496,7 @@ async function loadRows() {
 function openCreateDialog() {
   formMode.value = 'create'
   formData.value = {}
+  originalForm.value = {}
   formDialogVisible.value = true
 }
 
@@ -497,10 +504,30 @@ function openEditDialog(row) {
   formMode.value = 'edit'
   // 深拷贝行数据，避免直接修改原数据
   formData.value = { ...row }
+  originalForm.value = { ...row }
   // 记录主键值（用于更新接口）
   const pkCol = columns.value.find((c) => c.primary_key)
   editingPkValue.value = pkCol ? String(row[pkCol.name]) : null
   formDialogVisible.value = true
+}
+
+const MASK_SENTINEL_RE = /^\*{2,}$/
+
+// 编辑时只提交变化过的字段：整行回传会把后端下发的 *** 脱敏值写回真实凭据列
+function buildDirtyValues() {
+  const skip = new Set(
+    columns.value
+      .filter((c) => c.primary_key || c.sensitive)
+      .map((c) => c.name),
+  )
+  const payload = {}
+  for (const [name, value] of Object.entries(formData.value)) {
+    if (skip.has(name)) continue
+    if (typeof value === 'string' && MASK_SENTINEL_RE.test(value.trim())) continue
+    if (String(originalForm.value[name] ?? '') === String(value ?? '')) continue
+    payload[name] = value
+  }
+  return payload
 }
 
 async function submitForm() {
@@ -509,7 +536,12 @@ async function submitForm() {
       await createRow(selectedTable.value, formData.value)
       ElMessage.success('新增成功')
     } else {
-      await updateRow(selectedTable.value, editingPkValue.value, formData.value)
+      const values = buildDirtyValues()
+      if (!Object.keys(values).length) {
+        ElMessage.info('没有需要保存的修改')
+        return
+      }
+      await updateRow(selectedTable.value, editingPkValue.value, values)
       ElMessage.success('更新成功')
     }
     formDialogVisible.value = false
