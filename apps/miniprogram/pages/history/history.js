@@ -16,6 +16,8 @@ const { setQueue, playEpisode, setPendingSeek, safePlay, getCurrentEpisode, onPl
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 // T00599：加载态控制器（最短骨架展示 + 慢加载提示 + 超时重试）
 const { createLoadingController } = require('../../utils/loading');
+// T02510：切回底部导航时刷新「历史」tab 的队列待播角标
+const { refreshTabBadge } = require('../../utils/tab-badge');
 
 // 分页渲染步长：每次 onReachBottom 增量渲染的项数
 // 选 20 与 size 对齐：单次分页加载的数据量与单次渲染增量一致，
@@ -82,6 +84,8 @@ Page({
   onShow() {
     // 进入页面时立即同步一次播放状态，避免从详情页返回时图标状态滞后
     this.syncPlayerState();
+    // T02510：「历史」tab 正是队列角标的挂载位，回到本页时立刻校准
+    refreshTabBadge();
     // 从详情页返回时重新读取续播缓存，确保"继续播放"卡片反映最新进度（评审 MEDIUM A6）
     this.loadLastPlayed();
     // 从详情页返回时刷新已播放标记（详情页可能播完了新节目）

@@ -12,7 +12,7 @@
   </view>
 
   <!-- 已登录 -->
-  <block wx:else>
+  <block wx:if="{{userInfo}}">
     <!-- 用户信息卡片：T00430 头像区背景图（AI 生成，商务蓝声波主题） -->
     <view class="user-card">
       <image
@@ -168,30 +168,6 @@
       <view class="course-empty-text">{{firstTabEmptyText}}</view>
     </view>
 
-    <!-- 反馈与设置保持列表形态（T00726 反馈：入口已并入第二层 Tab，不再重复展示） -->
-    <view class="card list-card">
-      <view class="list-item" bindtap="onTapSetting" data-key="feedback">
-        <text class="list-text">意见反馈</text>
-        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
-      </view>
-      <view class="list-item" bindtap="onTapSetting" data-key="settings">
-        <text class="list-text">播放设置</text>
-        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
-      </view>
-      <view class="list-item" bindtap="onTapSetting" data-key="about">
-        <text class="list-text">关于我们</text>
-        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
-      </view>
-      <view class="list-item" bindtap="onTapSetting" data-key="agreement">
-        <text class="list-text">用户协议</text>
-        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
-      </view>
-      <view class="list-item" bindtap="onTapSetting" data-key="privacy">
-        <text class="list-text">隐私政策</text>
-        <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
-      </view>
-    </view>
-
     <!-- 退出登录 -->
     <view class="card list-card">
       <view class="list-item" bindtap="onTapSetting" data-key="logout">
@@ -208,6 +184,39 @@
       </view>
     </view>
   </block>
+
+  <!-- T02510 / J19 + J12：合规与自助入口对游客同样开放。
+       原实现把这张卡整个放在 `wx:if="{{!userInfo}}"` 的 else 分支里，未登录用户既读不到
+       《隐私政策》《用户协议》，也无法反馈/清缓存——而产品首启就要弹隐私授权
+       （app.json `__usePrivacyCheck__`），等于「要你同意却看不到条款」。
+       退出登录、编辑资料仍留在登录分支内，其余各项与登录态无关，移出分支常驻。
+       顺带补一条带文字的「播放队列」入口（J12：原先全站唯一入口是历史页一枚纯图标 chip）。 -->
+  <view class="card list-card">
+    <view class="list-item" bindtap="onTapSetting" data-key="queue">
+      <text class="list-text">播放队列</text>
+      <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
+    </view>
+    <view class="list-item" bindtap="onTapSetting" data-key="feedback">
+      <text class="list-text">意见反馈</text>
+      <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
+    </view>
+    <view class="list-item" bindtap="onTapSetting" data-key="settings">
+      <text class="list-text">播放设置</text>
+      <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
+    </view>
+    <view class="list-item" bindtap="onTapSetting" data-key="about">
+      <text class="list-text">关于我们</text>
+      <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
+    </view>
+    <view class="list-item" bindtap="onTapSetting" data-key="agreement">
+      <text class="list-text">用户协议</text>
+      <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
+    </view>
+    <view class="list-item" bindtap="onTapSetting" data-key="privacy">
+      <text class="list-text">隐私政策</text>
+      <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" />
+    </view>
+  </view>
 
   <!-- 使用微信资料弹窗：用 button chooseAvatar + input nickname 获取微信头像和昵称（微信官方推荐方式） -->
   <view class="edit-modal-mask" wx:if="{{showEditProfile}}" bindtap="onCloseEditProfile">

@@ -25,6 +25,8 @@ const { fetchTodayEpisode, channelType } = require('./services/api');
 const { discoverServer, PROD_API_BASE_URL, getEnvVersion } = require('./utils/server-discovery');
 // T00609：隐私授权协调器（官方 agreePrivacyAuthorization 按钮模式，见 utils/privacy.js）
 const { createPrivacyCoordinator } = require('./utils/privacy');
+// T02510：底部导航角标（队列待播数挂在「历史」tab，口径与索引绑定见 utils/tab-badge.js）
+const { refreshTabBadge } = require('./utils/tab-badge');
 
 // 构建脚本可在编译期注入 VERSION / BUILD_DATE 全局变量覆盖默认值
 const VERSION = (typeof __VERSION__ !== 'undefined' && __VERSION__) || '1.3.0';
@@ -128,6 +130,12 @@ App({
       // 放在并行任务之后：player 初始化不依赖网络，但页面 onLoad 可能取 player，故仍需在 readyPromise 内
       this.globalData.player = initPlayer();
 
+      // 4.1 T02510：订阅队列变更刷新底部角标。
+      // 页面 onShow 只能覆盖「切 tab」这一种时机；用户在详情页/队列页增删节目后停在
+      // 非 tab 页时角标不会动——回到 tab 页 by onShow 补挂，队列变更由这里即时反映。
+      const { onQueueChange } = require('./services/audio');
+      onQueueChange(() => refreshTabBadge());
+
       // 5. 监听网络变化（弱网时进度上报降频）
       wx.onNetworkStatusChange((res) => {
         this.globalData.networkType = res.networkType;
@@ -166,6 +174,9 @@ App({
   onShow(options) {
     // T00637：回前台补发失败的播放上报（失败不再静默丢弃）——节流 60s，避免频繁请求
     this._flushPendingReportsThrottled();
+    // T02510：回前台时角标可能已过期（后台播完自动连播会吃掉队列），重挂一次；
+    // 冷启动时页面栈尚空，refresh 内部会判定「非 tab 页」自行跳过
+    refreshTabBadge();
     if (!options || options.scene !== 1014) return;
     const q = options.query || {};
     const channelId = q.channelId;

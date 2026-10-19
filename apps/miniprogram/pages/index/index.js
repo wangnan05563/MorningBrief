@@ -23,6 +23,8 @@ const { trackPageView, trackEvent } = require('../../utils/tracker');
 const { createLoadingController } = require('../../utils/loading');
 // 带 TTL 的 storage 工具：lastPlayedEpisode 是续播缓存，7 天后自动过期清理
 const { setWithTTL, getWithTTL } = require('../../utils/storage');
+// T02510：切回底部导航时刷新「历史」tab 的队列待播角标
+const { refreshTabBadge } = require('../../utils/tab-badge');
 
 // lastPlayedEpisode 缓存有效期：7 天
 // 为什么：用户长期不打开 app 后，旧节目的续播进度已无意义，过期清理避免 storage 膨胀
@@ -170,6 +172,8 @@ Page({
   async onShow() {
     // 等待 onLaunch 完成（后端发现 + 登录 + 预加载），避免 baseUrl 未就绪时请求打到 localhost
     await getApp().readyPromise;
+    // T02510：本页是 tab 页，角标只能在 tab 页调用 setTabBarBadge，切回来时补挂一次
+    refreshTabBadge();
     // 每次显示页面时同步播放器状态（从其他页返回时播放状态可能已变化）
     this.syncPlayerState();
     this.setData({ currentRate: getPlaybackRate() });
@@ -694,6 +698,7 @@ Page({
     });
   },
 
+  /* gate-allow: 首页迷你播放控制条残留下（同文件同名方法在 pages/detail 有真实入口），当前 wxml 无宿主控件；清理见派生单 T02736，勿随手删——删前先确认 UI 不回摆 */
   onTogglePlay() {
     const { episode, isPlaying } = this.data;
     if (!episode) return;
@@ -709,6 +714,7 @@ Page({
     }
   },
 
+  /* gate-allow: 同 onTogglePlay（首页播放控制条残留簇，派生单 T02736） */
   onSeek(e) {
     const player = app.globalData.player;
     if (!player) return;
@@ -718,6 +724,7 @@ Page({
     this.setData({ currentTime: position });
   },
 
+  /* gate-allow: 同 onTogglePlay——showScript/scriptLoaded/loadScript 整条「首页本地展开文稿」链在 wxml 里没有宿主控件，功能当前不可达（非本单范围，派生单 T02736） */
   onViewScript() {
     // 任务1：首页本地展开文稿
     // setData 异步，先计算目标态再触发，避免读取 this.data.showScript 仍是旧值导致漏加载
@@ -869,6 +876,7 @@ Page({
   /**
    * 倍速循环切换：1.0 → 1.25 → 1.5 → 0.75 → 2.0 → 1.0
    */
+  /* gate-allow: 同 onTogglePlay（首页播放控制条残留簇；currentRate 仍会在 onShow 同步，属「有状态无入口」，派生单 T02736） */
   onCycleRate() {
     const current = getPlaybackRate();
     const idx = RATE_OPTIONS.indexOf(current);

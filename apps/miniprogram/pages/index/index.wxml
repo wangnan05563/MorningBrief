@@ -16,6 +16,11 @@
         >{{item.name}}<text wx:if="{{item.type_label && item.type_label !== '资讯'}}" class="pill-badge">{{item.type_label}}</text></view>
       </block>
     </scroll-view>
+    <!-- T02510 / J12：首页补队列入口（原先 index.js 的 onOpenQueue 无 wxml 绑定，
+         全站唯一入口是历史页那枚纯图标 chip，多数用户不知道自己有播放队列页） -->
+    <view class="top-action" bindtap="onOpenQueue" aria-label="打开播放队列">
+      <image class="action-icon" lazy-load src="/images/icons/list.png" mode="aspectFit" />
+    </view>
     <view class="top-action" bindtap="onSleepTimer">
       <image class="action-icon" lazy-load src="{{sleepActive ? '/images/icons/alarm.png' : '/images/icons/moon.png'}}" mode="aspectFit" />
     </view>

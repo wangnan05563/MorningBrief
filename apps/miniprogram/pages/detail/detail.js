@@ -478,6 +478,7 @@ Page({
     });
   },
 
+  /* gate-allow: 与 onTogglePlay 的「非当前期→playEpisode」分支重复，wxml 里唯一播放控件绑的是 onTogglePlay；留着是历史 API 面，删除属独立清理（派生单 T02736） */
   onPlay() {
     const ep = this.data.episode;
     if (!ep) return;

@@ -1,6 +1,6 @@
 # MorningBrief 项目 CI 流水线
 # 触发：push / PR 到 main 分支
-# 三个 job：backend-test、frontend-build-test、pyinstaller-build
+# 四个 job：backend-test、frontend-build-test、miniprogram-check、pyinstaller-build
 name: CI
 
 on:
@@ -102,7 +102,34 @@ jobs:
           retention-days: 7
 
   # ==========================================================================
-  # Job 3: PyInstaller 打包验证
+  # Job 3: 小程序底部导航门禁与纯逻辑单测（T02510 / FR-UX-601）
+  # 小程序没有 package.json、也不参与 npm 构建，但它的底部导航错法全部是静默的：
+  # 缺 tab 文案只是不显示字、死方法只是点不到、入口藏进登录分支只是看不到——
+  # 运行时没有任何异常可捕获，只有构建期静态门禁能拦住（口径对齐 admin-web 的 validate-nav）。
+  # 因此这里跑「门禁 + 门禁自测 + utils 单测」，不依赖微信开发者工具。
+  # ==========================================================================
+  miniprogram-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 底部导航一致性门禁
+        # 校验 tabBar 文案/图标/路由三件套、角标挂载点与 tab 顺序的绑定、
+        # 死入口 / 死路由键 / 合规入口是否藏在条件分支里
+        run: node apps/miniprogram/scripts/validate-tabbar.mjs
+
+      - name: 运行小程序单元测试
+        # 纯 node:test，零第三方依赖；含门禁自测（证明门禁真的会红）与 tab-badge 口径测试
+        run: cd apps/miniprogram && node --test tests/*.test.js tests/*.test.mjs
+
+  # ==========================================================================
+  # Job 4: PyInstaller 打包验证
   # 仅 push 到 main（非 PR）时触发，验证 MorningBrief.spec 能正确打包
   # V1.2 起从 Docker 部署改为单机 exe（PyInstaller + Inno Setup）
   # ==========================================================================

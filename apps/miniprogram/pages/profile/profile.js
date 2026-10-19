@@ -17,6 +17,8 @@ const localData = require('../../services/local-data');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 // T00593：从相册/相机自选头像（chooseAvatar 被隐私声明拦截时的降级路径）
 const { pickAvatarFromAlbum } = require('../../utils/avatar-picker');
+// T02510：切回底部导航时刷新「历史」tab 的队列待播角标
+const { refreshTabBadge } = require('../../utils/tab-badge');
 
 Page({
   data: {
@@ -43,6 +45,8 @@ Page({
 
   onShow() {
     trackPageView('pages/profile/profile');
+    // T02510：tab 页才可调 setTabBarBadge，切回本页时补挂队列待播角标
+    refreshTabBadge();
     // 每次展示都刷新，确保登录态/统计为最新
     const app = getApp();
     const userInfo = app.globalData.userInfo || getUser();
@@ -734,12 +738,12 @@ Page({
     }
     trackEvent('profile', 'tap_menu', key);
 
+    // T02510 / J20 残留清理：favorites/recent/channels/downloads/preferred 五项在
+    // T00726 已并入第二层 Tab（走 goSecondPage，wxml 里没有对应的 data-key），
+    // 留在 routeMap 里是永远不会被命中的死键；validate-tabbar 门禁会点名
+    // 「routeMap 有键但页面 wxml 无 data-key 绑定」，故在此删除，只保留真实入口。
     const routeMap = {
-      favorites: '/pages/favorites/favorites',
-      recent: '/pages/recent/recent',
-      channels: '/pages/channels/channels',
-      downloads: '/pages/download/download',
-      preferred: '/pages/preferred-settings/preferred-settings',
+      queue: '/pages/queue/queue',
       feedback: '/pages/feedback/feedback',
       settings: '/pages/settings/settings',
       about: '/pages/about/about',
