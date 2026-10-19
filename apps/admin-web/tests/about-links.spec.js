@@ -177,6 +177,54 @@ test.describe('关于页 · 外链来源与更新态', () => {
     await expect(page.getByRole('button', { name: '已是最新', exact: true })).toHaveCount(0)
   })
 
+  test('升级仍是逐字确认：不输入 UPDATE 不发升级请求', async ({ page }) => {
+    await mockAbout(page, {
+      check: { current: 'v1.0.20260921.003', latest: 'v9.9.9', has_update: true, release_url: `${REPO}/releases/tag/v9.9.9`, checked_at: '2026-10-19T10:00:00', source: 'remote', published_at: '2026-10-01T00:00:00' },
+    })
+    // 必须在 mockAbout 之后注册：`**/about**` 也会命中 upgrade，后注册的才优先
+    await page.route('**/admin/api/v1/about/upgrade**', (route) =>
+      route.fulfill({ status: 200, json: ok({ state: 'dev_staged', percent: 100, message: '开发环境仅暂存' }) }),
+    )
+    await openAbout(page)
+
+    const early = await page
+      .waitForRequest((r) => r.url().includes('/about/upgrade') && r.method() === 'POST', { timeout: 2000 })
+      .then(() => true)
+      .catch(() => false)
+    expect(early).toBe(false) // 页面加载与检查更新都不该触发升级
+
+    // 不再手动点「检查更新」：挂载 5s 的自动检查一定会跑（mock 返回 has_update=true），
+    // 去点按钮反而会和自动态抢——直接等「立即更新」出现
+    const newer = page.getByRole('button', { name: /立即更新/ })
+    await expect(newer).toBeVisible({ timeout: 30000 })
+
+    // Layout 启动 1.5s 的静默检查发现新版本会弹「去更新/稍后」模态，会挡住整页；
+    // 本单测的是升级确认，先把它收掉（它的行为本身由 T00879 的既有用例覆盖）
+    const nudge = page.locator('.el-message-box').filter({ hasText: '发现新版本' })
+    if (await nudge.isVisible().catch(() => false)) {
+      await nudge.getByRole('button', { name: '稍后' }).click()
+      await expect(nudge).toBeHidden()
+    }
+
+    await newer.click()
+    const box = page.locator('.el-message-box').filter({ hasText: '开始更新' })
+    await expect(box).toBeVisible({ timeout: 30000 })
+    await expect(box.getByText('当前版本 v1.0.20260921.003 → v9.9.9')).toBeVisible()
+    await expect(box.getByText(/重启会中断进行中的工作流/)).toBeVisible()
+    await expect(box.getByText(/升级后不支持在管理端内回滚/)).toBeVisible()
+
+    await box.getByRole('button', { name: '开始更新' }).click()
+    await expect(box.getByText('请逐字输入 UPDATE')).toBeVisible()
+
+    const upgradeRequest = page.waitForRequest(
+      (r) => r.url().includes('/about/upgrade') && r.method() === 'POST',
+      { timeout: 30000 },
+    )
+    await box.locator('input').fill('UPDATE')
+    await box.getByRole('button', { name: '开始更新' }).click()
+    await upgradeRequest
+  })
+
   test('远端确认最新才显示「已是最新」', async ({ page }) => {
     await mockAbout(page, {
       check: { current: 'v1.0.20260921.003', latest: 'v1.0.20260921.003', has_update: false, release_url: `${REPO}/releases`, checked_at: '2026-10-19T10:00:00', source: 'remote', published_at: '2026-09-21T00:00:00' },
