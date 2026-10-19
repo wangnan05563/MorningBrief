@@ -36,7 +36,7 @@
             </template>
           </div>
 
-          <!-- 五态按钮：idle / loading / latest / newer / error -->
+          <!-- 六态按钮：idle / loading / latest / newer / unavailable / error -->
           <template v-else>
             <IconButton
               v-if="updateState.kind === 'idle'"
@@ -64,6 +64,18 @@
             <div v-else-if="updateState.kind === 'newer'" class="newer-btns">
               <IconButton type="primary" :icon="Download" :label="`立即更新 (${updateState.latest})`" desc="下载并安装新版本" @click="runUpgrade" />
               <IconButton plain :icon="Top" label="查看详情" desc="打开版本发布页" @click="openRelease" />
+            </div>
+            <!-- 检查未完成：显示原因并提供重试，不得伪装成「已是最新」（M94） -->
+            <div v-else-if="updateState.kind === 'unavailable'" class="unavailable-row">
+              <IconButton
+                type="warning"
+                plain
+                :icon="Refresh"
+                label="无法确认，点击重试"
+                desc="更新检查未完成，点击重新检查"
+                @click="runCheckUpdate"
+              />
+              <span class="update-hint">{{ updateState.error }}</span>
             </div>
             <IconButton
               v-else
@@ -164,10 +176,12 @@ import {
   Refresh, CopyDocument, CircleCheckFilled, Top, TopRight, Search, Download, Loading,
 } from '@element-plus/icons-vue'
 import { getAbout, checkUpdate, startUpgrade, getUpgradeStatus } from '../../api/about'
+import { API_DOCS_PATH, buildRepoLinks } from '../../utils/links'
 
 const router = useRouter()
 
 // API 失败时的兜底值，确保 UI 不白屏
+// repo_url 为空意味着「后端未配置代码仓库」，此时项目类外链入口整体隐藏
 const FALLBACK_INFO = {
   product: 'MorningBrief',
   version: '--',
@@ -175,12 +189,14 @@ const FALLBACK_INFO = {
   git_sha: 'unknown',
   python: '--',
   platform: '--',
+  repo_url: '',
+  docs_enabled: false,
 }
 
 const info = ref({ ...FALLBACK_INFO })
 
-// 检查更新状态机：idle → loading → (latest | newer | error)
-// latest 3s 后自动回 idle，newer/error 为终态
+// 检查更新状态机：idle → loading → (latest | newer | unavailable | error)
+// latest 3s 后自动回 idle；newer/unavailable/error 为终态（unavailable=没能确认，不是没更新）
 const updateState = ref({ kind: 'idle' })
 let latestTimer = null
 let autoCheckTimer = null
@@ -202,20 +218,27 @@ const showSha = computed(
   () => info.value.git_sha && info.value.git_sha !== 'unknown'
 )
 
-// 8 个外部链接 + 2 个站内链接（开源声明触发 Modal、帮助文档走 SPA 路由）
-const menuItems = [
-  { key: 'terms', label: '用户协议', href: 'https://example.com/terms', external: true },
-  { key: 'privacy', label: '隐私条款', href: 'https://example.com/privacy', external: true },
-  { key: 'licenses', label: '开源软件声明', href: '#licenses', external: false },
-  { key: 'help', label: '帮助文档', href: '/help', external: false },
-  { key: 'api', label: 'API 文档', href: '/docs', external: true },
-  { key: 'contact', label: '联系我们', href: 'mailto:dev@example.com', external: true },
-  { key: 'community', label: '官方社区', href: 'https://example.com/community', external: true },
-  { key: 'report', label: '报告问题', href: 'https://example.com/issues/new', external: true },
-]
+// 链接清单：2 个站内入口（开源声明 Modal、帮助文档 SPA 路由）+ 后端下发的仓库派生外链
+// + 仅在开放了交互式文档时才出现的 API 文档。
+// 曾经这里有 5 条 example.com 占位外链（用户协议/隐私条款/官方社区/报告问题/联系我们），
+// 它们不是「以后会填」而是没人填过——占位地址会原样出厂并被当成官方入口，
+// 故直接移除而非改名（FR-UX-404 / M101）。真实协议文本若需要，属产品决策，另单跟踪。
+const menuItems = computed(() => {
+  const items = [
+    { key: 'help', label: '帮助文档', href: '/help', external: false },
+    { key: 'licenses', label: '开源软件声明', href: '#licenses', external: false },
+    ...buildRepoLinks(info.value.repo_url),
+  ]
+  if (info.value.docs_enabled) {
+    items.push({ key: 'api', label: 'API 文档', href: API_DOCS_PATH, external: true })
+  }
+  return items
+})
 
 // 开源依赖清单：首版静态写入（P2 接入 license-checker 自动生成）
 // 数据来源：admin-web/package.json + backend/requirements.txt
+// 版本号是抄来的，抄来的东西会过期——所以构建期由 scripts/validate-nav.mjs
+// 把这张表与两份清单逐条比对（缺失/多余/版本不符都让构建失败），改依赖时不必再记得改这里。
 const licenses = [
   // 前端依赖
   { name: '@element-plus/icons-vue', version: '^2.3.0', license: 'MIT', repo: 'https://github.com/element-plus/element-plus-icons' },
@@ -245,7 +268,7 @@ const licenses = [
   { name: 'bcrypt', version: '4.1.2', license: 'Apache-2.0', repo: 'https://github.com/pyca/bcrypt' },
   { name: 'openai', version: '1.12.0', license: 'MIT', repo: 'https://github.com/openai/openai-python' },
   { name: 'tenacity', version: '8.2.3', license: 'Apache-2.0', repo: 'https://github.com/jd/tenacity' },
-  { name: 'edge-tts', version: '6.1.10', license: 'MIT', repo: 'https://github.com/rany2/edge-tts' },
+  { name: 'edge-tts', version: '7.2.8', license: 'MIT', repo: 'https://github.com/rany2/edge-tts' },
   { name: 'httpx', version: '0.27.0', license: 'BSD-3-Clause', repo: 'https://github.com/encode/httpx' },
   { name: 'feedparser', version: '6.0.11', license: 'BSD-2-Clause', repo: 'https://github.com/kurtmckee/feedparser' },
   { name: 'selectolax', version: '0.4.10', license: 'MIT', repo: 'https://github.com/rushter/selectolax' },
@@ -255,11 +278,14 @@ const licenses = [
   { name: 'pydantic-settings', version: '2.1.0', license: 'MIT', repo: 'https://github.com/pydantic/pydantic-settings' },
   { name: 'pyyaml', version: '6.0.1', license: 'MIT', repo: 'https://github.com/yaml/pyyaml' },
   { name: 'python-dotenv', version: '1.0.1', license: 'BSD-3-Clause', repo: 'https://github.com/theskumar/python-dotenv' },
+  { name: 'python-multipart', version: '0.0.9', license: 'Apache-2.0', repo: 'https://github.com/Kludex/python-multipart' },
+  { name: 'slowapi', version: '0.1.9', license: 'MIT', repo: 'https://github.com/laurents/slowapi' },
+  { name: 'PyMuPDF', version: '1.28.2', license: 'AGPL-3.0', repo: 'https://github.com/pymupdf/PyMuPDF' },
   { name: 'apscheduler', version: '3.10.4', license: 'MIT', repo: 'https://github.com/agronholm/apscheduler' },
   { name: 'loguru', version: '0.7.2', license: 'MIT', repo: 'https://github.com/Delgan/loguru' },
   { name: 'colorama', version: '0.4.6', license: 'BSD-3-Clause', repo: 'https://github.com/tartley/colorama' },
-  { name: 'pytest', version: '8.0.0', license: 'MIT', repo: 'https://github.com/pytest-dev/pytest' },
-  { name: 'pytest-asyncio', version: '0.23.0', license: 'Apache-2.0', repo: 'https://github.com/pytest-dev/pytest-asyncio' },
+  { name: 'pytest', version: '8.4.2', license: 'MIT', repo: 'https://github.com/pytest-dev/pytest' },
+  { name: 'pytest-asyncio', version: '0.24.0', license: 'Apache-2.0', repo: 'https://github.com/pytest-dev/pytest-asyncio' },
 ].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
 
 // 按搜索关键词过滤依赖
@@ -304,6 +330,17 @@ async function performCheck() {
   updateState.value = { kind: 'loading' }
   try {
     const res = await checkUpdate()
+    if (res.source !== 'remote') {
+      // 后端没能确认远端版本（未配置仓库 / 仓库无 release / GitHub 限速 / 网络失败）。
+      // 「没能确认」不等于「已是最新」——原先一律显示绿色「已是最新」，
+      // 用户据此以为版本没问题（M94 的谎报形态）。改为独立终态 + 后端给的原文案。
+      updateState.value = {
+        kind: 'unavailable',
+        error: res.error || '暂时无法确认是否有新版本',
+        url: res.release_url,
+      }
+      return
+    }
     if (res.has_update) {
       updateState.value = {
         kind: 'newer',
@@ -311,43 +348,14 @@ async function performCheck() {
         latest: res.latest,
         publishedAt: res.published_at,
       }
-    } else if (res.source === 'remote' && res.published_at) {
-      // 已是最新但拿到了远端发布时间：把当前版本的「发布于」日期替换为
-      // 本次 release 的真实发布时间，避免显示过期的 build_date 硬编码值
-      info.value = {
-        ...info.value,
-        build_date: _formatPublishedAt(res.published_at),
-      }
-      updateState.value = { kind: 'latest' }
-      // 清理上一次未触发的定时器，避免堆叠多个 timer
-      if (latestTimer) {
-        clearTimeout(latestTimer)
-        latestTimer = null
-      }
-      // 3s 后自动回 idle，让按钮恢复可点击的初始态
-      // 仅当当前仍为 latest 时才回退，避免覆盖 newer/error 终态
-      latestTimer = setTimeout(() => {
-        latestTimer = null
-        if (updateState.value.kind === 'latest') {
-          updateState.value = { kind: 'idle' }
-        }
-      }, 3000)
-    } else {
-      updateState.value = { kind: 'latest' }
-      // 清理上一次未触发的定时器，避免堆叠多个 timer
-      if (latestTimer) {
-        clearTimeout(latestTimer)
-        latestTimer = null
-      }
-      // 3s 后自动回 idle，让按钮恢复可点击的初始态
-      // 仅当当前仍为 latest 时才回退，避免覆盖 newer/error 终态
-      latestTimer = setTimeout(() => {
-        latestTimer = null
-        if (updateState.value.kind === 'latest') {
-          updateState.value = { kind: 'idle' }
-        }
-      }, 3000)
+      return
     }
+    if (res.published_at) {
+      // 已是最新但拿到了远端发布时间：把「发布于」替换为本次 release 的真实发布时间，
+      // 而非过期的打包 build_date 硬编码值
+      info.value = { ...info.value, build_date: _formatPublishedAt(res.published_at) }
+    }
+    _showLatest()
   } catch (e) {
     // axios 错误简易判定：网络中断通常无 response
     const isNetwork = !e?.response
@@ -358,6 +366,22 @@ async function performCheck() {
   } finally {
     isChecking = false
   }
+}
+
+// 「已是最新」是 3 秒的瞬时反馈，随后自动回 idle 让按钮恢复可点击初始态。
+// 定时器先清后设：反复检查会堆叠多个 timer，后到的定时器会把新状态又打回 idle。
+function _showLatest() {
+  updateState.value = { kind: 'latest' }
+  if (latestTimer) {
+    clearTimeout(latestTimer)
+    latestTimer = null
+  }
+  latestTimer = setTimeout(() => {
+    latestTimer = null
+    if (updateState.value.kind === 'latest') {
+      updateState.value = { kind: 'idle' }
+    }
+  }, 3000)
 }
 
 function runCheckUpdate() {
@@ -593,6 +617,21 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  // 未能确认远端版本：按钮 + 一行原因文案（原因来自后端，前端不再自行猜测错误类型）
+  .unavailable-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 200px;
+  }
+
+  .update-hint {
+    font-size: 12px;
+    line-height: 1.5;
+    color: $color-text-secondary;
   }
 
   .upgrade-panel {

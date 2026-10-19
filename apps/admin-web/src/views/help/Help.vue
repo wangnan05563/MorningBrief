@@ -11,7 +11,16 @@
             本文档详细介绍各功能模块的使用方法，包括核心功能、操作步骤、使用场景、参数配置和注意事项。
           </p>
         </div>
-        <IconButton type="primary" plain :icon="Document" label="API 文档" desc="打开后端 API 文档" @click="openApiDocs" />
+        <!-- /about 是 admin 专属接口，运营角色点了只会得到「需要管理员权限」，故不显示入口 -->
+        <IconButton
+          v-if="userStore.role === 'admin'"
+          type="primary"
+          plain
+          :icon="Document"
+          label="API 文档"
+          desc="打开后端 API 文档"
+          @click="openApiDocs"
+        />
       </div>
     </div>
 
@@ -146,7 +155,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, markRaw } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from '../../utils/message'
+import { ElMessage, ElMessageBox, notifyErrorOnce } from '../../utils/message'
 import {
   Promotion, Document, Search, Aim, CircleCheck, Warning,
   Setting, MagicStick, DataLine, List, Picture, Bell, Cpu, Coin,
@@ -156,6 +165,8 @@ import IconButton from '../../components/IconButton.vue'
 import { useUserStore } from '../../stores/user'
 import { useGuide } from '../../guide/useGuide'
 import { GUIDE_STEPS } from '../../guide/guideConfig'
+import { getAbout } from '../../api/about'
+import { API_DOCS_PATH } from '../../utils/links'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -593,7 +604,7 @@ const docSections = [
       {
         type: 'feature',
         title: '核心功能',
-        content: '展示当前版本号、发布日期、Git SHA、Python 版本、平台；一键检查 GitHub 最新版本；汇总 8 项外部资源链接（用户协议、隐私条款、开源声明、帮助文档、API 文档、联系我们、官方社区、报告问题）；浏览 40+ 项前后端依赖的开源许可清单。',
+        content: '展示当前版本号、发布日期、Git SHA、Python 版本、平台；一键检查最新发布版本——检查未完成时显示具体原因与重试入口，不会谎报「已是最新」。链接入口为帮助文档、开源软件声明，以及由后端配置的仓库地址派生的项目主页、版本发布、报告问题（未配置仓库则不显示）；开发环境另有 API 文档。开源许可清单列出前后端依赖，其版本号在构建期与 package.json / requirements.txt 逐条比对，漂移即构建失败。',
       },
       {
         type: 'steps',
@@ -601,9 +612,9 @@ const docSections = [
         content: [
           '点击侧边栏「关于」进入关于页面',
           '查看版本号、发布日期、Git SHA 等元信息',
-          '点击「检查更新」按钮查询 GitHub 最新发布',
-          '点击菜单列表项跳转外部资源或打开开源声明 Modal',
-          '在 Modal 搜索框按包名/许可证过滤依赖',
+          '点击「检查更新」查询最新发布；显示「无法确认」时按提示的原因处理后再重试',
+          '点击列表项打开项目主页、版本发布或报告问题',
+          '在开源软件声明 Modal 搜索框按包名/许可证过滤依赖',
         ],
       },
       {
@@ -625,8 +636,19 @@ const filteredSections = computed(() => {
   )
 })
 
-function openApiDocs() {
-  window.open('/docs', '_blank', 'noopener,noreferrer')
+async function openApiDocs() {
+  // 交互式文档只在后端 development 环境挂载（main.py 的 docs_url 受 is_dev 控制），
+  // 生产点 /docs 是 404 死链——先向 /about 取这个事实，再决定打开还是说明（FR-UX-404）。
+  try {
+    const info = await getAbout()
+    if (!info?.docs_enabled) {
+      ElMessage.info('当前环境未开放交互式 API 文档（仅开发环境挂载）；接口清单见 docs/详细设计说明书.md。')
+      return
+    }
+    window.open(API_DOCS_PATH, '_blank', 'noopener,noreferrer')
+  } catch (e) {
+    notifyErrorOnce(e, '无法确认 API 文档是否开放，请稍后重试')
+  }
 }
 
 function scrollToSection(id) {

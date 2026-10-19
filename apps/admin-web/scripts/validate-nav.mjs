@@ -8,7 +8,11 @@
  * - 帮助文档里「进入「X」」这类菜单指引必须对应真实存在的菜单项；
  * - 侧栏分组（groupConfig）与路由 meta.group 必须互相闭合；
  * - 移动端手写的 tab / 管理入口 `to` 必须能匹配到真实路由；
- * - 菜单项必须有 title 与 icon，且图标名真实存在（图标名写错是静默不渲染，不会报错）。
+ * - 菜单项必须有 title 与 icon，且图标名真实存在（图标名写错是静默不渲染，不会报错）；
+ * - 关于页不得残留 `example.com` 占位外链（T02503 / FR-UX-404）：只查链接位置
+ *   （`href=` / `href:` / `window.open(`），输入框示例值与正文说明不算；
+ * - 关于页开源清单的版本号必须与 `package.json` / `backend/requirements.txt` 逐条对上——
+ *   手抄清单一定漂移（M101：漂移的清单比没有清单更误导）。
  *
  * 之所以是构建期而不是运行时：这些错全部发生在「文案/选择器」层面，运行时只会表现为
  * 引导气泡指错元素、帮助文档把人带不到页面、菜单少一项——用户说不清、测试也测不出。
@@ -48,11 +52,11 @@ function literalAt(text, from) {
   throw new Error(`括号未配对：起始偏移 ${from}`)
 }
 
-function walk(dir, acc = []) {
+function walk(dir, acc = [], exts = ['.vue']) {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name)
-    if (statSync(p).isDirectory()) walk(p, acc)
-    else if (name.endsWith('.vue')) acc.push(p)
+    if (statSync(p).isDirectory()) walk(p, acc, exts)
+    else if (exts.some((e) => name.endsWith(e))) acc.push(p)
   }
   return acc
 }
@@ -145,6 +149,84 @@ function groupNamesInHeaderComment(routerText) {
   return [...block.matchAll(/^\s*\*\s{2,}(\S.*?)\s*-\s/gm)].map((m) => m[1].trim())
 }
 
+/**
+ * 占位外链检测（T02503 / FR-UX-404 / ACC-UX-401）。
+ *
+ * 只匹配「链接位置」：模板里的 `href="…"`、对象里的 `href: '…'`、`window.open('…')`。
+ * 输入框的 `placeholder="https://cdn.example.com"`、帮助正文里的示例域名是合法用法，
+ * 因此不做全文 grep——全文匹配会在 CosConfig / Tunnel / Notification / Help 里全是误报，
+ * 误报的门禁等于没有门禁。
+ */
+const PLACEHOLDER_PATTERNS = [
+  /href\s*=\s*"[^"]*example\.com[^"]*"/gi,
+  /href\s*:\s*['"][^'"]*example\.com[^'"]*['"]/gi,
+  /window\.open\(\s*['"][^'"]*example\.com/gi,
+]
+
+function collectPlaceholderLinks() {
+  const out = []
+  for (const file of walk(SRC, [], ['.vue', '.js'])) {
+    const rel = file.slice(SRC.length + 1).replace(/\\/g, '/')
+    const text = readFileSync(file, 'utf8')
+    for (const re of PLACEHOLDER_PATTERNS) {
+      for (const m of text.matchAll(re)) out.push({ from: rel, text: m[0].slice(0, 90) })
+    }
+  }
+  return out
+}
+
+/** 关于页开源清单：`{ name: 'x', version: '1.2.3', … }` 的字面量条目 */
+function readLicenseTable(aboutText) {
+  const head = 'const licenses = ['
+  const i = aboutText.indexOf(head)
+  if (i < 0) return []
+  const literal = literalAt(aboutText, i + head.length - 1)
+  return [...literal.matchAll(/\{\s*name:\s*'([^']+)',\s*version:\s*'([^']+)'/g)].map((m) => ({
+    name: m[1],
+    version: m[2],
+  }))
+}
+
+/** npm 清单：dependencies + devDependencies（关于页那张表按这两段列前端依赖） */
+function readNpmManifest() {
+  const pkgPath = resolve(SRC, '../package.json')
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'))
+  return { ...pkg.dependencies, ...pkg.devDependencies }
+}
+
+/** PEP 503 名字归一：大小写与 `_`/`-` 混用在 PyPI 里等价（PyMuPDF ↔ pymupdf） */
+function normPyName(name) {
+  return name.toLowerCase().replace(/_/g, '-')
+}
+
+/**
+ * 后端清单：`backend/requirements.txt` 的 `name[extras]==pin` 行。
+ *
+ * 读不到时返回 null——本门禁跑在 admin-web 的构建里，脱离 monorepo（单独打包前端、
+ * 只做前端 CI）时不应该因为「对账不了后端」直接构建失败，改为在输出里说明。
+ */
+function readPyManifest() {
+  const reqPath = resolve(SRC, '../../../backend/requirements.txt')
+  let text
+  try {
+    text = readFileSync(reqPath, 'utf8')
+  } catch {
+    return null
+  }
+  const pins = new Map()
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/#.*$/, '').trim()
+    const m = /^([A-Za-z0-9._-]+)(?:\[[^\]]*\])?==([A-Za-z0-9][A-Za-z0-9.\-_]*)/.exec(line)
+    if (m) pins.set(normPyName(m[1]), { name: m[1], version: m[2] })
+  }
+  return pins
+}
+
+/** semver range → 版本主体（`^1.2.0` / `~1.2` / `>=1.2.0` 都去掉前置操作符再比） */
+function versionCore(v) {
+  return String(v).replace(/^[\^~>=<]+/, '').replace(/^v/, '').replace(/\.+$/, '')
+}
+
 export async function collectFacts() {
   const routerText = read('router/index.js')
   const routes = collectRoutes(routesLiteralText())
@@ -195,6 +277,10 @@ export async function collectFacts() {
     .map((m) => m[1])
     .filter((h) => h.startsWith('/') && !h.startsWith('/docs'))
 
+  const dependencyTable = readLicenseTable(aboutText)
+  const npmManifest = readNpmManifest()
+  const pyManifest = readPyManifest()
+
   return {
     routes,
     guideSteps,
@@ -206,6 +292,10 @@ export async function collectFacts() {
     mobileTargets,
     aboutHrefs,
     commentGroups: groupNamesInHeaderComment(routerText),
+    placeholderLinks: collectPlaceholderLinks(),
+    dependencyTable,
+    npmManifest,
+    pyManifest,
   }
 }
 
@@ -253,6 +343,71 @@ function anchorProblem(sel, path, f) {
   return `引导步骤禁止未打显式锚点的裸类：${path} → ${sel}；该类的实例数不受约束（同页可能有多个），请给目标元素打 data-guide`
 }
 
+/**
+ * 依赖清单对账（T02503 / FR-UX-404）：关于页那张手抄的开源声明表 ↔ 两份真实清单。
+ *
+ * 三个漂移方向都要报，缺一个就等于没对账：
+ * - 表里有、清单里没有 → 依赖早已移除，用户却以为系统带了它（还捎带着许可声明是假的）；
+ * - 清单里有、表里没有 → 新增依赖忘了声明，合规清单少了实际在分发的包；
+ * - 两边都有但版本不同 → 表是旧的（这一类最常见：升级只改清单，没人回头改表）。
+ * `requirements.txt` 读不到时只跳过对后端依赖的判定，不失败——前端单独构建的环境里
+ * 「无法对账」不是错误，谎报「依赖已移除」才是错误。
+ */
+function checkDependencies(f) {
+  const errors = []
+  const table = f.dependencyTable
+  if (!table) return { errors, skipped: true } // 调用方没给这一项（例如只校验导航的测试夹具）
+  const npm = f.npmManifest ?? {}
+  const py = f.pyManifest instanceof Map ? f.pyManifest : null
+  if (!table.length) {
+    return { errors: ['关于页开源清单（licenses）解析为空：数组写法被改动，门禁无法逐条对账'], skipped: false }
+  }
+
+  const byName = new Map()
+  for (const row of table) {
+    const key = normPyName(row.name)
+    if (byName.has(key)) errors.push(`关于页开源清单重复列出 ${row.name}：同一依赖出现两次，Modal 会显示两条`)
+    else byName.set(key, row)
+  }
+
+  for (const row of table) {
+    const key = normPyName(row.name)
+    const npmRange = Object.prototype.hasOwnProperty.call(npm, row.name) ? npm[row.name] : null
+    const pyPin = py?.get(key)?.version ?? null
+    if (npmRange === null && pyPin === null) {
+      if (py === null) continue // 后端清单不可用时无法判定后端依赖
+      errors.push(
+        `关于页开源清单列了 ${row.name}（${row.version}），但 package.json 与 backend/requirements.txt 都没有：` +
+          `依赖已移除/改名而清单没删，用户会看到不存在的开源声明`,
+      )
+      continue
+    }
+    const listed = versionCore(row.version)
+    const actual = npmRange !== null ? versionCore(npmRange) : versionCore(pyPin)
+    const source = npmRange !== null ? 'package.json' : 'backend/requirements.txt'
+    if (listed !== actual) {
+      errors.push(
+        `关于页开源清单的 ${row.name} 版本是 ${row.version}，但 ${source} 里是 ${npmRange !== null ? npmRange : pyPin}：` +
+          `手抄清单与真实依赖漂移（升版本时只改了清单）`,
+      )
+    }
+  }
+
+  for (const name of Object.keys(npm)) {
+    if (!byName.has(normPyName(name))) {
+      errors.push(`package.json 依赖 ${name}（${npm[name]}）没有列入关于页开源清单：新增依赖忘了同步合规声明`)
+    }
+  }
+  if (py) {
+    for (const [key, pin] of py) {
+      if (!byName.has(key)) {
+        errors.push(`backend/requirements.txt 依赖 ${pin.name}（${pin.version}）没有列入关于页开源清单`)
+      }
+    }
+  }
+  return { errors, skipped: false }
+}
+
 export function checkFacts(f) {
   const errors = []
   const menuTitles = new Set(f.routes.map((r) => r.meta.title).filter(Boolean))
@@ -291,6 +446,13 @@ export function checkFacts(f) {
     if (!matchRoute(f.routes, h)) errors.push(`关于页菜单项指向不存在的路由：${h}`)
   }
 
+  for (const p of f.placeholderLinks ?? []) {
+    errors.push(
+      `占位外链残留在链接位置：${p.from} → ${p.text}；` +
+        `example.com 会原样出厂，用户点开的是与自己无关的保留域名（FR-UX-404）`,
+    )
+  }
+
   const visible = f.routes.filter((r) => r.meta.group && !r.meta.hidden)
   for (const r of visible) {
     if (!groupNames.has(r.meta.group)) {
@@ -319,7 +481,10 @@ export function checkFacts(f) {
   for (const r of f.routes) if (r.meta.icon) iconNames.add(r.meta.icon)
   for (const g of f.groups) iconNames.add(g.icon)
 
-  return { errors, iconNames: [...iconNames] }
+  const dep = checkDependencies(f)
+  errors.push(...dep.errors)
+
+  return { errors, iconNames: [...iconNames], depsSkipped: !!dep.skipped }
 }
 
 /** Element Plus 图标名校验：包体积大（>1000 个组件），只在显式请求时加载 */
@@ -338,21 +503,31 @@ async function checkIconNames(iconNames) {
 
 export async function validate({ includeIcons = false } = {}) {
   const facts = await collectFacts()
-  const { errors, iconNames } = checkFacts(facts)
+  const { errors, iconNames, depsSkipped } = checkFacts(facts)
   const iconResult = includeIcons ? await checkIconNames(iconNames) : { errors: [], skipped: true }
-  return { facts, errors, iconErrors: iconResult.errors, iconsSkipped: iconResult.skipped }
+  return {
+    facts,
+    errors,
+    iconErrors: iconResult.errors,
+    iconsSkipped: iconResult.skipped,
+    depsSkipped,
+  }
 }
 
 const isCli = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 if (isCli) {
   const includeIcons = process.argv.includes('--icons')
-  const { errors, iconErrors, iconsSkipped, facts } = await validate({ includeIcons })
+  const { errors, iconErrors, iconsSkipped, depsSkipped, facts } = await validate({ includeIcons })
   const all = [...errors, ...iconErrors]
+  const py = facts.pyManifest
   console.log(
     `[validate-nav] 路由 ${facts.routes.length} 条 · 引导 ${Object.keys(facts.guideSteps).length} 页 · ` +
-      `aria-label ${facts.ariaLabels.size} 个 · 分组 ${facts.groups.length} 个 · 帮助章节 ${facts.helpIds.length} 篇`,
+      `aria-label ${facts.ariaLabels.size} 个 · 分组 ${facts.groups.length} 个 · 帮助章节 ${facts.helpIds.length} 篇 · ` +
+      `开源清单 ${facts.dependencyTable.length} 项（npm ${Object.keys(facts.npmManifest).length} + ` +
+      `pip ${py ? py.size : '—'}）`,
   )
   if (iconsSkipped && includeIcons) console.log('[validate-nav] 图标名单加载失败，已跳过该项')
+  if (depsSkipped) console.log('[validate-nav] 未提供依赖清单，跳过开源清单对账')
   if (all.length) {
     for (const e of all) console.error(`  ✗ ${e}`)
     console.error(`[validate-nav] ${all.length} 项不一致`)

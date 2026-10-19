@@ -13,8 +13,11 @@ import api from './index'
  * @property {string} version - 版本号
  * @property {string} build_date - 构建日期（YYYY-MM-DD）
  * @property {string} git_sha - Git 短 SHA
- * @property {string} python - Python 版本
+ * @property {string} python - Python 版本（X.Y.Z）
  * @property {string} platform - 平台（windows/linux/darwin）
+ * @property {string} repo_url - 代码仓库地址（REPO_URL）；空串表示未配置，
+ *   关于页的项目类外链入口据此显隐（FR-UX-404）
+ * @property {boolean} docs_enabled - 后端是否挂载了交互式 API 文档（仅 development）
  */
 
 /**
@@ -25,9 +28,11 @@ import api from './index'
  * @property {boolean} has_update - 是否有更新
  * @property {string} release_url - Release 跳转 URL
  * @property {string} checked_at - 检查时间（ISO 8601）
- * @property {'local'|'remote'} source - 数据来源：local=降级，remote=实际查询
+ * @property {'local'|'remote'} source - 数据来源：local=未能确认（不等于无更新），remote=实际查询
  * @property {string} [published_at] - 发布时间（仅 source=remote 时）
- * @property {string} [error] - 失败诊断信息（仅 source=local 时）
+ * @property {string} [reason] - 降级原因（仅 source=local 时）：repo_not_configured |
+ *   no_release | rate_limited | network | bad_response
+ * @property {string} [error] - 降级原因的用户可读文案（仅 source=local 时）
  */
 
 /**

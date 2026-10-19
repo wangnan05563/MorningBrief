@@ -85,6 +85,21 @@ export default defineConfig(({ command }) => ({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/news/, ''),
       },
+      // T02503（FR-UX-404 死链）：后端交互式文档。后端只在 development 挂载 /docs，
+      // 前端入口统一用 /news/docs（与 axios/SSE 的 /news 前缀约定一致），dev 在此去前缀转发。
+      '/news/docs': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/news/, ''),
+      },
+      '/news/openapi.json': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/news/, ''),
+      },
+      // Swagger UI 页面以绝对路径取规范文件与回调地址，故裸路径同样代理
+      '/openapi.json': { target: 'http://localhost:8000', changeOrigin: true },
+      '/docs': { target: 'http://localhost:8000', changeOrigin: true },
     },
   },
   // 切换到 Sass modern API，避免 legacy JS API 在 Dart Sass 2.0 被移除

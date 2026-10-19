@@ -94,6 +94,25 @@ def test_get_about_reflects_build_info(client, admin_token):
     assert data["git_sha"] == _build_info.git_sha
 
 
+def test_get_about_exposes_link_source(client, admin_token):
+    """FR-UX-404：/about 给出外链单一来源与 API 文档可用性。
+
+    关于页的项目类链接由 repo_url 拼装（未配置则前端隐藏入口），
+    docs_enabled 跟随后端是否真的挂载了交互式文档——把「链接是否可达」
+    交给服务端事实判定，前端不再硬编码 example.com 占位。
+    """
+    from app.config import get_settings
+
+    with patch("app.routers.admin.about._REPO_URL", "https://github.com/test/repo"):
+        resp = client.get(
+            "/admin/api/v1/about",
+            headers=_admin_headers(admin_token),
+        )
+    data = resp.json()["data"]
+    assert data["repo_url"] == "https://github.com/test/repo"
+    assert data["docs_enabled"] is get_settings().is_dev
+
+
 # ====================== 版本号解析与比较测试 ======================
 
 @pytest.mark.parametrize("raw,expected", [
@@ -189,7 +208,7 @@ def _reset_cache():
 
 def test_check_update_github_failure_degrades_to_local(client, admin_token):
     """GitHub API 失败时降级返回 source='local'，has_update=False。"""
-    mock_fetch = AsyncMock(return_value=None)
+    mock_fetch = AsyncMock(return_value=(None, "network"))
     with patch(
         "app.routers.admin.about._fetch_latest_release",
         mock_fetch,
@@ -205,8 +224,29 @@ def test_check_update_github_failure_degrades_to_local(client, admin_token):
     assert data["current"] == data["latest"]
     assert "checked_at" in data
     assert "release_url" in data
+    # M94：降级必须带原因与可读文案，供前端显示「无法确认」而不是「已是最新」
+    assert data["reason"] == "network"
+    assert data["error"]
     # 失败不写缓存，便于下次重试
     mock_fetch.assert_awaited_once()
+
+
+def test_check_update_repo_not_configured_reason(client, admin_token):
+    """未配置 REPO_URL 时降级原因必须是 repo_not_configured，且不发起远端请求。"""
+    mock_fetch = AsyncMock(return_value=(None, "network"))
+    with patch("app.routers.admin.about._REPO_URL", ""), patch(
+        "app.routers.admin.about._fetch_latest_release",
+        mock_fetch,
+    ):
+        resp = client.get(
+            "/admin/api/v1/about/check-update",
+            headers=_admin_headers(admin_token),
+        )
+    data = resp.json()["data"]
+    assert data["source"] == "local"
+    assert data["reason"] == "repo_not_configured"
+    assert "REPO_URL" in data["error"]
+    mock_fetch.assert_not_awaited()
 
 
 def test_check_update_same_version_returns_no_update(client, admin_token):
@@ -214,12 +254,12 @@ def test_check_update_same_version_returns_no_update(client, admin_token):
     from app import _build_info
     current_version = _build_info.__version__
 
-    mock_fetch = AsyncMock(return_value={
+    mock_fetch = AsyncMock(return_value=({
         "tag_name": current_version,
         "html_url": "https://github.com/your-org/MorningBrief/releases/tag/" + current_version,
         "published_at": "2026-07-20T00:00:00Z",
         "name": "Release " + current_version,
-    })
+    }, "",))
     with patch(
         "app.routers.admin.about._fetch_latest_release",
         mock_fetch,
@@ -238,12 +278,12 @@ def test_check_update_same_version_returns_no_update(client, admin_token):
 
 def test_check_update_higher_version_returns_update(client, admin_token):
     """远端版本更高时 has_update=True，release_url 指向具体 release 页面。"""
-    mock_fetch = AsyncMock(return_value={
+    mock_fetch = AsyncMock(return_value=({
         "tag_name": "v99.99.99",
         "html_url": "https://github.com/your-org/MorningBrief/releases/tag/v99.99.99",
         "published_at": "2026-07-21T00:00:00Z",
         "name": "Release v99.99.99",
-    })
+    }, "",))
     with patch(
         "app.routers.admin.about._fetch_latest_release",
         mock_fetch,
@@ -264,12 +304,12 @@ def test_check_update_higher_version_returns_update(client, admin_token):
 
 def test_check_update_lower_version_returns_no_update(client, admin_token):
     """远端版本更低时 has_update=False（避免回退误判）。"""
-    mock_fetch = AsyncMock(return_value={
+    mock_fetch = AsyncMock(return_value=({
         "tag_name": "v0.0.1",
         "html_url": "https://github.com/your-org/MorningBrief/releases/tag/v0.0.1",
         "published_at": "2020-01-01T00:00:00Z",
         "name": "Release v0.0.1",
-    })
+    }, "",))
     with patch(
         "app.routers.admin.about._fetch_latest_release",
         mock_fetch,
@@ -286,12 +326,12 @@ def test_check_update_lower_version_returns_no_update(client, admin_token):
 
 def test_check_update_cache_hit_avoids_refetch(client, admin_token):
     """缓存命中时不再次调用 GitHub API。"""
-    mock_fetch = AsyncMock(return_value={
+    mock_fetch = AsyncMock(return_value=({
         "tag_name": "v1.0.0",
         "html_url": "https://github.com/your-org/MorningBrief/releases/tag/v1.0.0",
         "published_at": "2026-07-20T00:00:00Z",
         "name": "Release v1.0.0",
-    })
+    }, "",))
     with patch(
         "app.routers.admin.about._fetch_latest_release",
         mock_fetch,
@@ -317,12 +357,12 @@ def test_check_update_cache_hit_avoids_refetch(client, admin_token):
 
 def test_check_update_invalid_tag_treated_as_no_update(client, admin_token):
     """远端 tag_name 非语义化版本时 has_update=False（保守策略）。"""
-    mock_fetch = AsyncMock(return_value={
+    mock_fetch = AsyncMock(return_value=({
         "tag_name": "main",
         "html_url": "https://github.com/your-org/MorningBrief",
         "published_at": "2026-07-20T00:00:00Z",
         "name": "main branch",
-    })
+    }, "",))
     with patch(
         "app.routers.admin.about._fetch_latest_release",
         mock_fetch,
@@ -338,22 +378,25 @@ def test_check_update_invalid_tag_treated_as_no_update(client, admin_token):
 
 
 # ====================== _fetch_latest_release 异常处理测试 ======================
+# 契约：返回 (release, reason)。reason 非空即「未能确认」，前端据此显示
+# 「无法确认新版本」而不是「已是最新」（M94 的谎报形态）。
 
 @pytest.mark.asyncio
 async def test_fetch_latest_release_returns_none_on_404():
-    """GitHub 404（无 release）返回 None。"""
+    """GitHub 404（仓库无 release）→ (None, 'no_release')。"""
     import httpx
     from app.routers.admin.about import _fetch_latest_release
 
     mock_response = httpx.Response(404, json={})
     with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_response)):
-        result = await _fetch_latest_release()
-    assert result is None
+        release, reason = await _fetch_latest_release()
+    assert release is None
+    assert reason == "no_release"
 
 
 @pytest.mark.asyncio
 async def test_fetch_latest_release_returns_none_on_403():
-    """GitHub 限速 403 返回 None。"""
+    """GitHub 限速 403 → (None, 'rate_limited')。"""
     import httpx
     from app.routers.admin.about import _fetch_latest_release
 
@@ -363,25 +406,27 @@ async def test_fetch_latest_release_returns_none_on_403():
         json={},
     )
     with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_response)):
-        result = await _fetch_latest_release()
-    assert result is None
+        release, reason = await _fetch_latest_release()
+    assert release is None
+    assert reason == "rate_limited"
 
 
 @pytest.mark.asyncio
 async def test_fetch_latest_release_returns_none_on_missing_tag():
-    """响应缺少 tag_name 字段时返回 None。"""
+    """响应缺少 tag_name 字段 → (None, 'bad_response')。"""
     import httpx
     from app.routers.admin.about import _fetch_latest_release
 
     mock_response = httpx.Response(200, json={"html_url": "x"})
     with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_response)):
-        result = await _fetch_latest_release()
-    assert result is None
+        release, reason = await _fetch_latest_release()
+    assert release is None
+    assert reason == "bad_response"
 
 
 @pytest.mark.asyncio
 async def test_fetch_latest_release_parses_valid_response():
-    """有效响应解析为 dict，含 tag_name/html_url/published_at/name 字段。"""
+    """有效响应解析为 dict（reason 为空串），含 tag_name/html_url/published_at/name 字段。"""
     import httpx
     from app.routers.admin.about import _fetch_latest_release
 
@@ -392,16 +437,17 @@ async def test_fetch_latest_release_parses_valid_response():
         "name": "Release v1.2.3",
     })
     with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_response)):
-        result = await _fetch_latest_release()
-    assert result is not None
-    assert result["tag_name"] == "v1.2.3"
-    assert result["html_url"].endswith("v1.2.3")
-    assert result["published_at"] == "2026-07-20T00:00:00Z"
+        release, reason = await _fetch_latest_release()
+    assert reason == ""
+    assert release is not None
+    assert release["tag_name"] == "v1.2.3"
+    assert release["html_url"].endswith("v1.2.3")
+    assert release["published_at"] == "2026-07-20T00:00:00Z"
 
 
 @pytest.mark.asyncio
 async def test_fetch_latest_release_handles_timeout():
-    """网络超时返回 None（不抛异常）。"""
+    """网络超时 → (None, 'network')（不抛异常）。"""
     import httpx
     from app.routers.admin.about import _fetch_latest_release
 
@@ -409,8 +455,9 @@ async def test_fetch_latest_release_handles_timeout():
         "httpx.AsyncClient.get",
         new=AsyncMock(side_effect=httpx.TimeoutException("timeout")),
     ):
-        result = await _fetch_latest_release()
-    assert result is None
+        release, reason = await _fetch_latest_release()
+    assert release is None
+    assert reason == "network"
 
 
 # ====================== 升级端点测试（T00879） ======================
@@ -431,13 +478,13 @@ def test_upgrade_requires_admin(client, user_token):
 
 def test_upgrade_rejects_without_asset(client, admin_token):
     """release 无更新包资产时升级端返回 400（避免对空包发起下载）。"""
-    mock_fetch = AsyncMock(return_value={
+    mock_fetch = AsyncMock(return_value=({
         "tag_name": "v99.99.99",
         "html_url": "https://github.com/your-org/MorningBrief/releases/tag/v99.99.99",
         "published_at": "2026-07-21T00:00:00Z",
         "name": "Release v99.99.99",
         "asset": None,
-    })
+    }, "",))
     with patch(
         "app.routers.admin.about._fetch_latest_release",
         mock_fetch,
@@ -451,7 +498,7 @@ def test_upgrade_rejects_without_asset(client, admin_token):
 
 def test_check_update_exposes_asset_given_release_zip(client, admin_token):
     """远端 release 含更新包安装器时，check-update 返回 asset 供前端一键更新。"""
-    mock_fetch = AsyncMock(return_value={
+    mock_fetch = AsyncMock(return_value=({
         "tag_name": "v99.99.99",
         "html_url": "https://github.com/your-org/MorningBrief/releases/tag/v99.99.99",
         "published_at": "2026-07-21T00:00:00Z",
@@ -461,7 +508,7 @@ def test_check_update_exposes_asset_given_release_zip(client, admin_token):
             "size_bytes": 12345,
             "download_url": "https://github.com/your-org/MorningBrief/releases/download/v99.99.99/MorningBrief-Setup-v99.99.99.exe",
         },
-    })
+    }, "",))
     with patch(
         "app.routers.admin.about._fetch_latest_release",
         mock_fetch,

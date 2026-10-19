@@ -41,6 +41,17 @@ test('真实仓库通过校验（且抽取到的是真数据，不是空集合�
   assert.deepEqual(checkFacts(f).errors, [])
 })
 
+test('真实仓库的开源清单与外链都是实况（T02503）', async () => {
+  const f = await collectFacts()
+  // 抽取本身要非空，否则「对账通过」只是因为什么都没对
+  assert.ok(f.dependencyTable.length > 30, `开源清单条目异常：${f.dependencyTable.length}`)
+  assert.ok(Object.keys(f.npmManifest).length >= 15, 'package.json 依赖没读到')
+  assert.ok(f.pyManifest && f.pyManifest.size >= 20, 'requirements.txt 没读到，pip 侧对账等于没跑')
+  // 占位外链必须为 0：视图里仍有合法的 example.com 示例值（placeholder、正文说明），
+  // 因此这里断言的是「链接位置为 0」而不是「全文查不到 example.com」
+  assert.deepEqual(f.placeholderLinks, [])
+})
+
 test('引导指向不存在的路由时报错', () => {
   const r = checkFacts(
     facts({ guideSteps: { '/nope': [{ s: ['[data-guide="review-table"]'], t: 'x', d: '' }] } }),
@@ -128,4 +139,104 @@ test('移动端手写入口与分组注释漂移同样报错', () => {
   assert.match(badTo.errors.join('\n'), /移动端入口指向不存在的路由/)
   const staleComment = checkFacts(facts({ commentGroups: ['内容运营', '已删除分组'] }))
   assert.match(staleComment.errors.join('\n'), /列出不存在的分组/)
+})
+
+/** 依赖对账夹具：导航项全空，只留下对账需要的字段 */
+function depFacts(over = {}) {
+  return {
+    routes: [],
+    guideSteps: {},
+    groups: [],
+    ariaLabels: new Set(),
+    dataGuides: new Set(),
+    helpIds: [],
+    menuRefs: [],
+    mobileTargets: [],
+    aboutHrefs: [],
+    commentGroups: [],
+    placeholderLinks: [],
+    dependencyTable: [
+      { name: 'vue', version: '^3.4.0' },
+      { name: 'fastapi', version: '0.110.0' },
+    ],
+    npmManifest: { vue: '^3.4.0' },
+    pyManifest: new Map([['fastapi', { name: 'fastapi', version: '0.110.0' }]]),
+    ...over,
+  }
+}
+
+test('依赖对账：两边一致时不报错', () => {
+  assert.deepEqual(checkFacts(depFacts()).errors, [])
+})
+
+test('依赖对账：表里的幽灵依赖、漏声明、版本漂移三个方向都报错（T02503）', () => {
+  const ghost = checkFacts(
+    depFacts({ dependencyTable: [{ name: 'vue', version: '^3.4.0' }, { name: 'gone-lib', version: '1.0.0' }] }),
+  )
+  assert.match(ghost.errors.join('\n'), /列了 gone-lib（1\.0\.0）/)
+
+  const unlisted = checkFacts(depFacts({ npmManifest: { vue: '^3.4.0', axios: '^1.6.0' } }))
+  assert.match(unlisted.errors.join('\n'), /package\.json 依赖 axios（\^1\.6\.0）没有列入/)
+
+  const drifted = checkFacts(
+    depFacts({ dependencyTable: [{ name: 'vue', version: '^3.3.0' }, { name: 'fastapi', version: '0.110.0' }] }),
+  )
+  assert.match(drifted.errors.join('\n'), /vue 版本是 \^3\.3\.0，但 package\.json 里是 \^3\.4\.0/)
+
+  const pyDrift = checkFacts(
+    depFacts({ dependencyTable: [{ name: 'vue', version: '^3.4.0' }, { name: 'fastapi', version: '0.100.0' }] }),
+  )
+  assert.match(pyDrift.errors.join('\n'), /fastapi 版本是 0\.100\.0，但 backend\/requirements\.txt 里是 0\.110\.0/)
+})
+
+test('依赖对账：Python 包名大小写与连字符等价（PyMuPDF ↔ pymupdf）不误报', () => {
+  const r = checkFacts(
+    depFacts({
+      dependencyTable: [{ name: 'vue', version: '^3.4.0' }, { name: 'PyMuPDF', version: '1.28.2' }],
+      pyManifest: new Map([['pymupdf', { name: 'PyMuPDF', version: '1.28.2' }]]),
+    }),
+  )
+  assert.deepEqual(r.errors, [])
+})
+
+test('依赖对账：后端清单读不到时只跳过，不谎报「依赖已移除」（前端单独构建场景）', () => {
+  const r = checkFacts(
+    depFacts({
+      dependencyTable: [{ name: 'vue', version: '^3.4.0' }, { name: 'fastapi', version: '0.110.0' }],
+      pyManifest: null,
+    }),
+  )
+  assert.deepEqual(r.errors, [])
+})
+
+test('依赖对账：重复条目与解析不出条目都会报错，不会静默通过', () => {
+  const dup = checkFacts(
+    depFacts({
+      dependencyTable: [
+        { name: 'vue', version: '^3.4.0' },
+        { name: 'vue', version: '^3.4.0' },
+        { name: 'fastapi', version: '0.110.0' },
+      ],
+    }),
+  )
+  assert.match(dup.errors.join('\n'), /重复列出 vue/)
+
+  const empty = checkFacts(depFacts({ dependencyTable: [] }))
+  assert.match(empty.errors.join('\n'), /解析为空/)
+})
+
+test('占位外链：链接位置出现 example.com 即报错（ACC-UX-401）', () => {
+  const r = checkFacts(
+    depFacts({
+      placeholderLinks: [{ from: 'views/about/About.vue', text: `href: 'https://example.com/terms'` }],
+    }),
+  )
+  assert.match(r.errors.join('\n'), /占位外链残留在链接位置：views\/about\/About\.vue/)
+})
+
+test('占位外链抽取只认链接位置：placeholder 与正文示例不算（避免误报）', async () => {
+  // collectPlaceholderLinks 的判据来自视图实况——真实仓库里 CosConfig / Tunnel /
+  // Notification / Help 都有 example.com 的示例值，但都不在链接位置，故必须抽到 0 条。
+  const f = await collectFacts()
+  assert.equal(f.placeholderLinks.length, 0)
 })

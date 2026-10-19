@@ -123,12 +123,17 @@ def _is_newer(current: str, latest: str) -> bool:
 # GitHub Releases API 调用
 # ---------------------------------------------------------------------------
 
-def _build_local_response(current: str, *, error: str | None = None) -> dict[str, Any]:
-    """构造降级响应：网络失败或缓存未命中时使用，UI 显示「已是最新」或异常提示。
+def _build_local_response(
+    current: str, *, error: str | None = None, reason: str | None = None
+) -> dict[str, Any]:
+    """构造降级响应：网络失败或缓存未命中时使用。
 
     为什么失败时仍返回 has_update=False 而非 5xx：
     /admin/api/v1/about/check-update 是元信息端点，500 会污染前端更新检查逻辑，
-    返回 200 + source='local' + error 字段让前端按需提示。
+    返回 200 + source='local' + reason/error 让前端按需提示。
+
+    source='local' 的含义是「没能确认」，不是「已是最新」——UI 不得据此显示
+    绿色「已是最新」（M94）。reason 给机器判定，error 给人读的一句话。
     """
     resp: dict[str, Any] = {
         "current": current,
@@ -138,17 +143,29 @@ def _build_local_response(current: str, *, error: str | None = None) -> dict[str
         "checked_at": _now_iso(),
         "source": "local",
     }
-    if error:
-        # error 字段仅供前端在「长时间无更新」时给出诊断提示，不强制展示
+    if reason:
+        resp["reason"] = reason
+        resp["error"] = error or _UPDATE_REASON_TEXT.get(reason, "暂时无法确认是否有新版本")
+    elif error:
         resp["error"] = error
     return resp
 
 
-async def _fetch_latest_release() -> dict[str, Any] | None:
-    """调用 GitHub Releases API 获取最新 release。
+# 降级原因 → 用户可读文案（前端直接展示，不再自行猜测错误类型）
+_UPDATE_REASON_TEXT: dict[str, str] = {
+    "repo_not_configured": "未配置代码仓库地址（REPO_URL），已跳过更新检查",
+    "no_release": "代码仓库暂无正式发布版本",
+    "rate_limited": "更新服务访问受限（GitHub 频率限制），请稍后重试",
+    "network": "无法连接更新服务，请检查网络后重试",
+    "bad_response": "更新服务返回异常，请稍后重试",
+}
 
-    返回 dict（含 tag_name/html_url/published_at/name）或 None（任何失败）。
-    任何异常都吞掉并记录日志，调用方降级处理。
+
+async def _fetch_latest_release() -> tuple[dict[str, Any] | None, str]:
+    """调用 GitHub Releases API 获取最新 release，同时返回失败原因。
+
+    返回 (release, "")；失败时为 (None, reason)，reason 取值见 _UPDATE_REASON_TEXT。
+    任何异常都吞掉并记录日志——这个端点不允许 500。
     """
     try:
         async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT, headers=_HTTP_HEADERS) as client:
@@ -156,22 +173,22 @@ async def _fetch_latest_release() -> dict[str, Any] | None:
         # 404：仓库无任何 release（仅 tag 或预发布），不是错误，正常降级
         if resp.status_code == 404:
             logger.info("[about] GitHub 返回 404：仓库暂无正式 release")
-            return None
+            return None, "no_release"
         # 403 通常为限速触发（GitHub 未认证 60/小时/IP）
         if resp.status_code == 403:
             remaining = resp.headers.get("X-RateLimit-Remaining", "?")
             logger.warning(
                 "[about] GitHub API 限速或拒绝访问 (403)，剩余配额={}", remaining
             )
-            return None
+            return None, "rate_limited"
         if resp.status_code != 200:
             logger.warning("[about] GitHub API 非预期状态码: {}", resp.status_code)
-            return None
+            return None, "bad_response"
         data = resp.json()
         # 必要字段缺失视为无效响应
         if not isinstance(data, dict) or "tag_name" not in data:
             logger.warning("[about] GitHub API 响应缺少 tag_name 字段")
-            return None
+            return None, "bad_response"
         return {
             "tag_name": str(data.get("tag_name", "")).strip(),
             "html_url": str(data.get("html_url", _RELEASE_URL)),
@@ -179,17 +196,17 @@ async def _fetch_latest_release() -> dict[str, Any] | None:
             "name": str(data.get("name", "")),
             # 更新包资产：供前端"立即更新"一键下载安装；无 zip 时为 None
             "asset": pick_release_asset(data),
-        }
+        }, ""
     except httpx.TimeoutException:
         logger.warning("[about] GitHub API 请求超时，降级返回本地版本")
-        return None
+        return None, "network"
     except httpx.HTTPError as e:
         logger.warning("[about] GitHub API 网络错误: {}", e)
-        return None
+        return None, "network"
     except Exception as e:
         # JSON 解析、未知异常等：吞掉防止 check-update 端点 500
         logger.warning("[about] GitHub API 未知异常: {}", e)
-        return None
+        return None, "bad_response"
 
 
 @router.get("")
@@ -208,6 +225,12 @@ async def get_about(
         "git_sha": info["git_sha"],
         "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
         "platform": _platform.system().lower(),
+        # 外链单一来源（FR-UX-404）：关于页的项目类链接一律由此拼装，
+        # 未配置时前端隐藏这些入口，而不是留着 example.com 占位。
+        "repo_url": _REPO_URL,
+        # 交互式文档只在 development 挂载（main.py 的 docs_url 受 is_dev 控制），
+        # 生产为 None → 前端隐藏「API 文档」入口，避免点开 404 死链。
+        "docs_enabled": bool(_get_settings().is_dev),
     })
 
 
@@ -228,7 +251,9 @@ async def check_update(
 
     # 未配置仓库 URL 时直接降级，避免向空地址发请求
     if not _REPO_URL:
-        return success(data=_build_local_response(current, error="未配置 REPO_URL，跳过更新检查"))
+        return success(
+            data=_build_local_response(current, reason="repo_not_configured")
+        )
 
     # 缓存命中：5 分钟内直接复用上次结果
     now = time.monotonic()
@@ -240,10 +265,10 @@ async def check_update(
             return success(data=cached)
 
     # 缓存过期或 current 变化，发起 GitHub API 请求
-    release = await _fetch_latest_release()
+    release, reason = await _fetch_latest_release()
     if release is None:
-        # 降级：不写缓存，便于下次请求立即重试
-        return success(data=_build_local_response(current))
+        # 降级：不写缓存，便于下次请求立即重试；带上原因供 UI 显示「无法确认」而非「已是最新」
+        return success(data=_build_local_response(current, reason=reason))
 
     latest = release["tag_name"]
     has_update = _is_newer(current, latest)
@@ -280,7 +305,7 @@ async def trigger_upgrade(
     """
     if not _REPO_URL:
         raise HTTPException(status_code=400, detail="未配置 REPO_URL，无法进行升级")
-    release = await _fetch_latest_release()
+    release, _reason = await _fetch_latest_release()
     if release is None:
         raise HTTPException(status_code=400, detail="无法从仓库获取最新版本，请稍后重试")
     asset = release.get("asset")
