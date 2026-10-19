@@ -74,15 +74,19 @@ function applyHighlight() {
   clearHighlight()
   const target = resolveTarget()
   if (!target) {
-    // 目标未渲染（如数据未加载）：气泡居中展示，步骤仍可继续
+    // 目标未渲染（如数据未加载）：气泡居中展示，步骤仍可继续。
+    // 同时把「这一步没锚中任何元素」标到 DOM 上，供验收与门禁判定——
+    // 静默居中正是 T02500 抓到的「引导指错元素」能长期隐藏的原因（T02502）。
     place.value = 'center'
     if (bubbleEl.value) {
       const el = bubbleEl.value
+      el.dataset.guideMissing = currentStep.value.s?.join(' | ') || 'no-selector'
       el.style.left = `${Math.max(16, (window.innerWidth - BUBBLE_W) / 2)}px`
       el.style.top = `${Math.max(16, window.innerHeight / 2 - 120)}px`
     }
     return
   }
+  if (bubbleEl.value) delete bubbleEl.value.dataset.guideMissing
   target.classList.add('mb-guide-highlight')
   highlightEl = target
   // 即时定位目标到视口中央，避免 smooth 滚动过程中 rect 处于过渡态导致气泡错位/靠边

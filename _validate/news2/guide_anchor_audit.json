@@ -1,0 +1,1446 @@
+{
+  "summary": {
+    "generatedAt": "2026-10-19T02:42:04.909Z",
+    "routes": 27,
+    "steps": 59,
+    "missingSteps": 0,
+    "titleDrift": [],
+    "hits": [
+      {
+        "route": "/review",
+        "step": "内容审核",
+        "selector": "[data-guide=\"review-page\"]",
+        "hit": "div[aria-label=-][data-guide=review-page] \"待审核已通过已打回勾选下方记录后可批量操作日期工作流ID状态时长审核人创建时间操\""
+      },
+      {
+        "route": "/review",
+        "step": "审核列表",
+        "selector": "[data-guide=\"review-table\"]",
+        "hit": "div[aria-label=-][data-guide=review-table] \"日期工作流ID状态时长审核人创建时间操作暂无待审核稿件\""
+      },
+      {
+        "route": "/review",
+        "step": "分页浏览",
+        "selector": "[data-guide=\"review-pagination\"]",
+        "hit": "div[aria-label=-][data-guide=review-pagination] \"1 Total 0\""
+      },
+      {
+        "route": "/ads/materials",
+        "step": "广告素材",
+        "selector": "[data-guide=\"ads-materials-page\"]",
+        "hit": "div[aria-label=-][data-guide=ads-materials-page] \"名称描述时长(秒)默认占位操作暂无广告素材，点击右上角「新增素材」上传Total\""
+      },
+      {
+        "route": "/ads/materials",
+        "step": "素材列表",
+        "selector": "[data-guide=\"ads-materials-table\"]",
+        "hit": "div[aria-label=-][data-guide=ads-materials-table] \"名称描述时长(秒)默认占位操作暂无广告素材，点击右上角「新增素材」上传\""
+      },
+      {
+        "route": "/ads/placements",
+        "step": "投放规则",
+        "selector": "[data-guide=\"ads-placements-page\"]",
+        "hit": "div[aria-label=-][data-guide=ads-placements-page] \"素材名称广告位开始日期结束日期状态操作暂无投放规则，点击右上角「新增规则」创建T\""
+      },
+      {
+        "route": "/ads/placements",
+        "step": "规则列表",
+        "selector": "[data-guide=\"ads-placements-table\"]",
+        "hit": "div[aria-label=-][data-guide=ads-placements-table] \"素材名称广告位开始日期结束日期状态操作暂无投放规则，点击右上角「新增规则」创建\""
+      },
+      {
+        "route": "/ads/schedule",
+        "step": "排期日历",
+        "selector": "[data-guide=\"ads-schedule-page\"]",
+        "hit": "div[aria-label=-][data-guide=ads-schedule-page] \"开头（head）中间（mid）结尾（tail）2026 OctoberPrevi\""
+      },
+      {
+        "route": "/ads/schedule",
+        "step": "日历视图",
+        "selector": "[data-guide=\"ads-schedule-calendar\"]",
+        "hit": "div[aria-label=-][data-guide=ads-schedule-calendar] \"2026 OctoberPrevious MonthTodayNext Mont\""
+      },
+      {
+        "route": "/stats",
+        "step": "数据统计",
+        "selector": "[data-guide=\"stats-page\"]",
+        "hit": "div[aria-label=-][data-guide=stats-page] \"DAU-播放量-完播率(%)-平均收听(分钟)-广告曝光-趋势分析DAU播放量完\""
+      },
+      {
+        "route": "/stats",
+        "step": "指标卡片",
+        "selector": "[data-guide=\"stats-metric-card\"]",
+        "hit": "div[aria-label=-][data-guide=stats-metric-card] \"DAU-\""
+      },
+      {
+        "route": "/stats/channel-health",
+        "step": "频道健康度",
+        "selector": "[data-guide=\"channel-health-page\"]",
+        "hit": "div[aria-label=-][data-guide=channel-health-page] \"近 7 天近 14 天近 30 天健康0警告0严重0频道总数0暂无频道数据\""
+      },
+      {
+        "route": "/stats/channel-health",
+        "step": "频道卡片",
+        "selector": "[data-guide=\"channel-health-cards\"]",
+        "hit": "div[aria-label=-][data-guide=channel-health-cards] \"\""
+      },
+      {
+        "route": "/stats/rss-health",
+        "step": "RSS 源状态",
+        "selector": "[data-guide=\"rss-health-page\"]",
+        "hit": "div[aria-label=-][data-guide=rss-health-page] \"源总数0正常0失败0未巡检0全部（0）正常（0）失败（0）未巡检（0）源名品类状\""
+      },
+      {
+        "route": "/stats/rss-health",
+        "step": "源列表",
+        "selector": "[data-guide=\"rss-health-table\"]",
+        "hit": "div[aria-label=-][data-guide=rss-health-table] \"源名品类状态延迟连续失败最近巡检URL错误信息修复建议暂无 RSS 源\""
+      },
+      {
+        "route": "/stats/llm-metrics",
+        "step": "LLM 重试指标",
+        "selector": "[data-guide=\"llm-metrics-page\"]",
+        "hit": "div[aria-label=-][data-guide=llm-metrics-page] \"触发率 = 触发次数 / 总调用；改善率 = 改善次数 / 触发次数。 触发率 \""
+      },
+      {
+        "route": "/stats/llm-metrics",
+        "step": "重试率概览",
+        "selector": "[data-guide=\"llm-metrics-rates\"]",
+        "hit": "div[aria-label=-][data-guide=llm-metrics-rates] \"触发率50.00%60 / 120 次调用改善率50.00%30 / 60 次触\""
+      },
+      {
+        "route": "/channels",
+        "step": "频道管理",
+        "selector": "[data-guide=\"channels-page\"]",
+        "hit": "div[aria-label=-][data-guide=channels-page] \"名称描述类型广告定时触发段间静音段间BGM状态展示排序素材回溯(天)创建时间操作\""
+      },
+      {
+        "route": "/channels",
+        "step": "新增频道",
+        "selector": "[aria-label=\"新增频道\"]",
+        "hit": "button[aria-label=新增频道][data-guide=-] \"\""
+      },
+      {
+        "route": "/channels",
+        "step": "频道列表",
+        "selector": "[data-guide=\"channels-table\"]",
+        "hit": "div[aria-label=-][data-guide=channels-table] \"名称描述类型广告定时触发段间静音段间BGM状态展示排序素材回溯(天)创建时间操作\""
+      },
+      {
+        "route": "/channels/material-library",
+        "step": "素材库管理",
+        "selector": "[data-guide=\"material-library-page\"]",
+        "hit": "div[aria-label=-][data-guide=material-library-page] \"频道全部频道状态全部状态来源类型全部渠道媒体类型全部类型关键词视图明细按书聚合I\""
+      },
+      {
+        "route": "/channels/material-library",
+        "step": "素材列表",
+        "selector": "[data-guide=\"material-library-table\"]",
+        "hit": "div[aria-label=-][data-guide=material-library-table] \"ID标题来源分类状态创建时间类型预览操作没有匹配的素材\""
+      },
+      {
+        "route": "/channels/book-pool",
+        "step": "讲书稿素材池",
+        "selector": "[data-guide=\"book-pool-page\"]",
+        "hit": "div[aria-label=-][data-guide=book-pool-page] \"选择频道请先选择频道：讲书稿模式按频道独立配置（素材池、排序与进度都属于所选频道\""
+      },
+      {
+        "route": "/channels/book-pool",
+        "step": "选择频道",
+        "selector": "[data-guide=\"book-pool-channel\"]",
+        "hit": "div[aria-label=-][data-guide=book-pool-channel] \"选择频道\""
+      },
+      {
+        "route": "/materials",
+        "step": "素材录入",
+        "selector": ".page-container",
+        "hit": "div[aria-label=-][data-guide=-] \"选择目标频道（必选）各渠道适用场景与数据格式要求 RSS（通用）与书籍 RSS \""
+      },
+      {
+        "route": "/materials",
+        "step": "上传入口",
+        "selector": ".el-upload",
+        "hit": "div[aria-label=-][data-guide=-] \"将文件拖到此处，或点击选择\""
+      },
+      {
+        "route": "/ebooks",
+        "step": "找书工具",
+        "selector": "[data-guide=\"ebooks-page\"]",
+        "hit": "div[aria-label=-][data-guide=ebooks-page] \"找书工具：检索结果来自第三方书源仓库，下载与入库需人工完成书源链接指向城通网盘（\""
+      },
+      {
+        "route": "/ebooks",
+        "step": "检索与随机",
+        "selector": "[data-guide=\"ebooks-search\"]",
+        "hit": "form[aria-label=-][data-guide=ebooks-search] \"关键词分类全部分类（较慢）上限\""
+      },
+      {
+        "route": "/ebooks",
+        "step": "结果列表",
+        "selector": "[data-guide=\"ebooks-results\"]",
+        "hit": "div[aria-label=-][data-guide=ebooks-results] \"#书名作者分类下载待讲书单点击「检索」或「随机」开始浏览\""
+      },
+      {
+        "route": "/queue",
+        "step": "队列管理",
+        "selector": "[data-guide=\"queue-page\"]",
+        "hit": "div[aria-label=-][data-guide=queue-page] \"等待中0执行中0已完成0失败0执行模式串行并行状态筛选频道筛选优先级筛选频道优先\""
+      },
+      {
+        "route": "/queue",
+        "step": "任务列表",
+        "selector": "[data-guide=\"queue-table\"]",
+        "hit": "div[aria-label=-][data-guide=queue-table] \"频道优先级状态开始时间耗时操作暂无队列任务\""
+      },
+      {
+        "route": "/workflows",
+        "step": "工作流监控",
+        "selector": "[data-guide=\"workflows-page\"]",
+        "hit": "div[aria-label=-][data-guide=workflows-page] \"频道状态来源跳过爬虫工作流 ID频道节目日期来源状态进度开始时间结束时间暂无工作\""
+      },
+      {
+        "route": "/workflows",
+        "step": "手动触发",
+        "selector": "[aria-label=\"手动触发\"]",
+        "hit": "button[aria-label=手动触发][data-guide=-] \"\""
+      },
+      {
+        "route": "/workflows",
+        "step": "执行列表",
+        "selector": "[data-guide=\"workflows-table\"]",
+        "hit": "div[aria-label=-][data-guide=workflows-table] \"工作流 ID频道节目日期来源状态进度开始时间结束时间暂无工作流\""
+      },
+      {
+        "route": "/tunnel",
+        "step": "内网穿透",
+        "selector": "[data-guide=\"tunnel-page\"]",
+        "hit": "div[aria-label=-][data-guide=tunnel-page] \"○ 已停止 隧道未启动，暂无公网地址 Provider 配置穿透服务Select\""
+      },
+      {
+        "route": "/tunnel",
+        "step": "隧道配置",
+        "selector": "[data-guide=\"tunnel-form\"]",
+        "hit": "form[aria-label=-][data-guide=tunnel-form] \"穿透服务Select本地端口0 表示从应用端口（APP_PORT）继承，通常无需\""
+      },
+      {
+        "route": "/ai-config",
+        "step": "AI 服务",
+        "selector": "[data-guide=\"ai-config-page\"]",
+        "hit": "div[aria-label=-][data-guide=ai-config-page] \"LLM 大模型TTS 语音合成图片模型用量统计快速选择提供商：选择预设节目参数（\""
+      },
+      {
+        "route": "/ai-config",
+        "step": "服务商配置",
+        "selector": "[data-guide=\"ai-config-form\"]",
+        "hit": "form[aria-label=-][data-guide=ai-config-form] \"节目参数（时长/字数联动）目标时长默认 600 秒（10 分钟），与稿件字数反向\""
+      },
+      {
+        "route": "/ai-qa",
+        "step": "智能助手",
+        "selector": "[data-guide=\"assistant-page\"]",
+        "hit": "div[aria-label=-][data-guide=assistant-page] \"协助管理员对系统菜单做自动调度，AI 生成完整配置、会话内确认落地选择模型自动无\""
+      },
+      {
+        "route": "/ai-qa",
+        "step": "提问输入",
+        "selector": "[data-guide=\"assistant-input\"]",
+        "hit": "textarea[aria-label=-][data-guide=assistant-input] \"\""
+      },
+      {
+        "route": "/cos-config",
+        "step": "云端配置",
+        "selector": "[data-guide=\"cos-config-page\"]",
+        "hit": "div[aria-label=-][data-guide=cos-config-page] \"尚未配置 腾讯云 COS 凭证用于音频/成品文件的云端存储与 CDN 分发。Se\""
+      },
+      {
+        "route": "/cos-config",
+        "step": "密钥配置",
+        "selector": "[data-guide=\"cos-config-form\"]",
+        "hit": "form[aria-label=-][data-guide=cos-config-form] \"SecretIdSecretKey地域ap-guangzhou（广州）存储桶所在\""
+      },
+      {
+        "route": "/cos-files",
+        "step": "文件管理",
+        "selector": "[data-guide=\"cos-files-page\"]",
+        "hit": "div[aria-label=-][data-guide=cos-files-page] \"COS 尚未配置请先在「云端配置」页填写 SecretId / SecretKe\""
+      },
+      {
+        "route": "/cos-files",
+        "step": "文件列表",
+        "selector": "[data-guide=\"cos-files-table\"]",
+        "hit": "div[aria-label=-][data-guide=cos-files-table] \"名称大小最后修改类型操作No Data\""
+      },
+      {
+        "route": "/notification",
+        "step": "通知管理",
+        "selector": "[data-guide=\"notification-page\"]",
+        "hit": "div[aria-label=-][data-guide=notification-page] \"基础配置消息模板发送日志通知开关全局总开关 关闭后所有通知都不发送（场景开关失效\""
+      },
+      {
+        "route": "/notification",
+        "step": "渠道配置",
+        "selector": "[data-guide=\"notification-form\"]",
+        "hit": "form[aria-label=-][data-guide=notification-form] \"全局总开关 关闭后所有通知都不发送（场景开关失效） 工作流失败通知 工作流异常时\""
+      },
+      {
+        "route": "/auto-review",
+        "step": "自动审批",
+        "selector": "[data-guide=\"auto-review-page\"]",
+        "hit": "div[aria-label=-][data-guide=auto-review-page] \"规则配置启用自动审批 开启后，工作流完成时按下方校验逐项检查，全部命中的稿件将跳\""
+      },
+      {
+        "route": "/auto-review",
+        "step": "审批历史",
+        "selector": "[data-guide=\"auto-review-table\"]",
+        "hit": "div[aria-label=-][data-guide=auto-review-table] \"ID工作流 ID审核 ID结果触发原因节省时间时间操作暂无审批记录\""
+      },
+      {
+        "route": "/tools/calculator",
+        "step": "参数计算器",
+        "selector": "[data-guide=\"calculator-page\"]",
+        "hit": "div[aria-label=-][data-guide=calculator-page] \"新闻语音三参数关系：时长(秒) = 总字数 / (210 × 倍率) × 60。\""
+      },
+      {
+        "route": "/tools/calculator",
+        "step": "参数输入",
+        "selector": "[data-guide=\"calculator-inputs\"]",
+        "hit": "div[aria-label=-][data-guide=calculator-inputs] \"\""
+      },
+      {
+        "route": "/db-admin",
+        "step": "数据库维护",
+        "selector": "[data-guide=\"db-admin-page\"]",
+        "hit": "div[aria-label=-][data-guide=db-admin-page] \"数据表请从左侧选择一张表\""
+      },
+      {
+        "route": "/db-admin",
+        "step": "表数据区",
+        "selector": "[data-guide=\"db-admin-content\"]",
+        "hit": "main[aria-label=-][data-guide=db-admin-content] \"请从左侧选择一张表\""
+      },
+      {
+        "route": "/maintenance",
+        "step": "系统清理",
+        "selector": "[data-guide=\"maintenance-page\"]",
+        "hit": "div[aria-label=-][data-guide=maintenance-page] \"数据库-播放日志 0 条工作流 0 条审核 0 条黑名单 0 条日志文件-文件数\""
+      },
+      {
+        "route": "/maintenance",
+        "step": "清理项",
+        "selector": "[data-guide=\"maintenance-form\"]",
+        "hit": "form[aria-label=-][data-guide=maintenance-form] \"清理目标全部缓存预览模式仅预览，不实际删除预览清理\""
+      },
+      {
+        "route": "/help",
+        "step": "帮助文档",
+        "selector": "[data-guide=\"help-page\"]",
+        "hit": "div[aria-label=-][data-guide=help-page] \"MorningBrief 使用文档 系统涵盖 RSS 抓取、LLM 改写、TTS\""
+      },
+      {
+        "route": "/help",
+        "step": "文档目录",
+        "selector": "[data-guide=\"help-catalog\"]",
+        "hit": "div[aria-label=-][data-guide=help-catalog] \"文档目录快速开始内容审核广告管理数据统计频道管理队列管理工作流监控内网穿透AI \""
+      },
+      {
+        "route": "/help",
+        "step": "菜单引导重放",
+        "selector": "[data-guide=\"help-replay\"]",
+        "hit": "div[aria-label=-][data-guide=help-replay] \"菜单引导重放内容审核 广告素材 投放规则 排期日历 数据统计 频道健康度 RSS\""
+      },
+      {
+        "route": "/about",
+        "step": "关于",
+        "selector": "[data-guide=\"about-page\"]",
+        "hit": "div[aria-label=-][data-guide=about-page] \"M版本：发布于 产品Python平台Git SHA用户协议隐私条款开源软件声明帮\""
+      },
+      {
+        "route": "/about",
+        "step": "品牌信息",
+        "selector": "[data-guide=\"about-brand\"]",
+        "hit": "div[aria-label=-][data-guide=about-brand] \"M版本：发布于\""
+      }
+    ]
+  },
+  "report": [
+    {
+      "route": "/review",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "内容审核",
+          "renderedTitle": "内容审核",
+          "selectors": [
+            "[data-guide=\"review-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "review-page",
+            "cls": "review-list page-container mb-guide-highlight",
+            "text": "待审核已通过已打回勾选下方记录后可批量操作日期工作流ID状态时长审核人创建时间操"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "审核列表",
+          "renderedTitle": "审核列表",
+          "selectors": [
+            "[data-guide=\"review-table\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "review-table",
+            "cls": "el-table--fit el-table--striped el-table el-table--layout-fixed list-table is-scrolling-none mb-guide-highlight",
+            "text": "日期工作流ID状态时长审核人创建时间操作暂无待审核稿件"
+          },
+          "missing": null
+        },
+        {
+          "index": 2,
+          "stepTitle": "分页浏览",
+          "renderedTitle": "分页浏览",
+          "selectors": [
+            "[data-guide=\"review-pagination\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "review-pagination",
+            "cls": "el-pagination is-background mb-guide-highlight",
+            "text": "1 Total 0"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/ads/materials",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "广告素材",
+          "renderedTitle": "广告素材",
+          "selectors": [
+            "[data-guide=\"ads-materials-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "ads-materials-page",
+            "cls": "page-container ad-materials mb-guide-highlight",
+            "text": "名称描述时长(秒)默认占位操作暂无广告素材，点击右上角「新增素材」上传Total"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "素材列表",
+          "renderedTitle": "素材列表",
+          "selectors": [
+            "[data-guide=\"ads-materials-table\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "ads-materials-table",
+            "cls": "el-table--fit el-table--striped el-table el-table--layout-fixed is-scrolling-none mb-guide-highlight",
+            "text": "名称描述时长(秒)默认占位操作暂无广告素材，点击右上角「新增素材」上传"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/ads/placements",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "投放规则",
+          "renderedTitle": "投放规则",
+          "selectors": [
+            "[data-guide=\"ads-placements-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "ads-placements-page",
+            "cls": "page-container ad-placements mb-guide-highlight",
+            "text": "素材名称广告位开始日期结束日期状态操作暂无投放规则，点击右上角「新增规则」创建T"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "规则列表",
+          "renderedTitle": "规则列表",
+          "selectors": [
+            "[data-guide=\"ads-placements-table\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "ads-placements-table",
+            "cls": "el-table--fit el-table--striped el-table el-table--layout-fixed is-scrolling-none mb-guide-highlight",
+            "text": "素材名称广告位开始日期结束日期状态操作暂无投放规则，点击右上角「新增规则」创建"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/ads/schedule",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "排期日历",
+          "renderedTitle": "排期日历",
+          "selectors": [
+            "[data-guide=\"ads-schedule-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "ads-schedule-page",
+            "cls": "page-container ad-schedule mb-guide-highlight",
+            "text": "开头（head）中间（mid）结尾（tail）2026 OctoberPrevi"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "日历视图",
+          "renderedTitle": "日历视图",
+          "selectors": [
+            "[data-guide=\"ads-schedule-calendar\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "ads-schedule-calendar",
+            "cls": "el-calendar mb-guide-highlight",
+            "text": "2026 OctoberPrevious MonthTodayNext Mont"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/stats",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "数据统计",
+          "renderedTitle": "数据统计",
+          "selectors": [
+            "[data-guide=\"stats-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "stats-page",
+            "cls": "page-container stats-page mb-guide-highlight",
+            "text": "DAU-播放量-完播率(%)-平均收听(分钟)-广告曝光-趋势分析DAU播放量完"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "指标卡片",
+          "renderedTitle": "指标卡片",
+          "selectors": [
+            "[data-guide=\"stats-metric-card\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "stats-metric-card",
+            "cls": "metric-card mb-guide-highlight",
+            "text": "DAU-"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/stats/channel-health",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "频道健康度",
+          "renderedTitle": "频道健康度",
+          "selectors": [
+            "[data-guide=\"channel-health-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "channel-health-page",
+            "cls": "page-container channel-health-page mb-guide-highlight",
+            "text": "近 7 天近 14 天近 30 天健康0警告0严重0频道总数0暂无频道数据"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "频道卡片",
+          "renderedTitle": "频道卡片",
+          "selectors": [
+            "[data-guide=\"channel-health-cards\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "channel-health-cards",
+            "cls": "el-row mb-guide-highlight",
+            "text": ""
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/stats/rss-health",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "RSS 源状态",
+          "renderedTitle": "RSS 源状态",
+          "selectors": [
+            "[data-guide=\"rss-health-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "rss-health-page",
+            "cls": "page-container rss-health-page mb-guide-highlight",
+            "text": "源总数0正常0失败0未巡检0全部（0）正常（0）失败（0）未巡检（0）源名品类状"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "源列表",
+          "renderedTitle": "源列表",
+          "selectors": [
+            "[data-guide=\"rss-health-table\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "rss-health-table",
+            "cls": "el-table--fit el-table--striped el-table--scrollable-x el-table--enable-row-hover el-table el-table--layout-fixed is-scrolling-left mb-guide-highlight",
+            "text": "源名品类状态延迟连续失败最近巡检URL错误信息修复建议暂无 RSS 源"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/stats/llm-metrics",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "LLM 重试指标",
+          "renderedTitle": "LLM 重试指标",
+          "selectors": [
+            "[data-guide=\"llm-metrics-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "llm-metrics-page",
+            "cls": "page-container llm-metrics-page mb-guide-highlight",
+            "text": "触发率 = 触发次数 / 总调用；改善率 = 改善次数 / 触发次数。 触发率 "
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "重试率概览",
+          "renderedTitle": "重试率概览",
+          "selectors": [
+            "[data-guide=\"llm-metrics-rates\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "llm-metrics-rates",
+            "cls": "el-row rate-row mb-guide-highlight",
+            "text": "触发率50.00%60 / 120 次调用改善率50.00%30 / 60 次触"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/channels",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "频道管理",
+          "renderedTitle": "频道管理",
+          "selectors": [
+            "[data-guide=\"channels-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "channels-page",
+            "cls": "page-container channel-management mb-guide-highlight",
+            "text": "名称描述类型广告定时触发段间静音段间BGM状态展示排序素材回溯(天)创建时间操作"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "新增频道",
+          "renderedTitle": "新增频道",
+          "selectors": [
+            "[aria-label=\"新增频道\"]"
+          ],
+          "hit": {
+            "tag": "button",
+            "ariaLabel": "新增频道",
+            "dataGuide": null,
+            "cls": "el-button el-button--primary el-button--default icon-btn el-tooltip__trigger mb-guide-highlight",
+            "text": ""
+          },
+          "missing": null
+        },
+        {
+          "index": 2,
+          "stepTitle": "频道列表",
+          "renderedTitle": "频道列表",
+          "selectors": [
+            "[data-guide=\"channels-table\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "channels-table",
+            "cls": "el-table--fit el-table--striped el-table--scrollable-x el-table el-table--layout-fixed is-scrolling-left mb-guide-highlight",
+            "text": "名称描述类型广告定时触发段间静音段间BGM状态展示排序素材回溯(天)创建时间操作"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/channels/material-library",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "素材库管理",
+          "renderedTitle": "素材库管理",
+          "selectors": [
+            "[data-guide=\"material-library-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "material-library-page",
+            "cls": "material-library page-container mb-guide-highlight",
+            "text": "频道全部频道状态全部状态来源类型全部渠道媒体类型全部类型关键词视图明细按书聚合I"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "素材列表",
+          "renderedTitle": "素材列表",
+          "selectors": [
+            "[data-guide=\"material-library-table\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "material-library-table",
+            "cls": "el-table--fit el-table--striped el-table--scrollable-x el-table el-table--layout-fixed is-scrolling-left mb-guide-highlight",
+            "text": "ID标题来源分类状态创建时间类型预览操作没有匹配的素材"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/channels/book-pool",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "讲书稿素材池",
+          "renderedTitle": "讲书稿素材池",
+          "selectors": [
+            "[data-guide=\"book-pool-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "book-pool-page",
+            "cls": "book-pool page-container mb-guide-highlight",
+            "text": "选择频道请先选择频道：讲书稿模式按频道独立配置（素材池、排序与进度都属于所选频道"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "选择频道",
+          "renderedTitle": "选择频道",
+          "selectors": [
+            "[data-guide=\"book-pool-channel\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "book-pool-channel",
+            "cls": "el-select mb-guide-highlight",
+            "text": "选择频道"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/materials",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "素材录入",
+          "renderedTitle": "素材录入",
+          "selectors": [
+            ".page-container"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": null,
+            "cls": "course-materials page-container mb-guide-highlight",
+            "text": "选择目标频道（必选）各渠道适用场景与数据格式要求 RSS（通用）与书籍 RSS "
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "上传入口",
+          "renderedTitle": "上传入口",
+          "selectors": [
+            ".el-upload"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": null,
+            "cls": "el-upload el-upload--text is-drag mb-guide-highlight",
+            "text": "将文件拖到此处，或点击选择"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/ebooks",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "找书工具",
+          "renderedTitle": "找书工具",
+          "selectors": [
+            "[data-guide=\"ebooks-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "ebooks-page",
+            "cls": "page-container book-finder mb-guide-highlight",
+            "text": "找书工具：检索结果来自第三方书源仓库，下载与入库需人工完成书源链接指向城通网盘（"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "检索与随机",
+          "renderedTitle": "检索与随机",
+          "selectors": [
+            "[data-guide=\"ebooks-search\"]"
+          ],
+          "hit": {
+            "tag": "form",
+            "ariaLabel": null,
+            "dataGuide": "ebooks-search",
+            "cls": "el-form el-form--default el-form--label-right el-form--inline mb-guide-highlight",
+            "text": "关键词分类全部分类（较慢）上限"
+          },
+          "missing": null
+        },
+        {
+          "index": 2,
+          "stepTitle": "结果列表",
+          "renderedTitle": "结果列表",
+          "selectors": [
+            "[data-guide=\"ebooks-results\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "ebooks-results",
+            "cls": "el-table--fit el-table--striped el-table el-table--layout-fixed is-scrolling-none mb-guide-highlight",
+            "text": "#书名作者分类下载待讲书单点击「检索」或「随机」开始浏览"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/queue",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "队列管理",
+          "renderedTitle": "队列管理",
+          "selectors": [
+            "[data-guide=\"queue-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "queue-page",
+            "cls": "page-container queue-management mb-guide-highlight",
+            "text": "等待中0执行中0已完成0失败0执行模式串行并行状态筛选频道筛选优先级筛选频道优先"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "任务列表",
+          "renderedTitle": "任务列表",
+          "selectors": [
+            "[data-guide=\"queue-table\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "queue-table",
+            "cls": "el-table--fit el-table--striped el-table el-table--layout-fixed is-scrolling-none mb-guide-highlight",
+            "text": "频道优先级状态开始时间耗时操作暂无队列任务"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/workflows",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "工作流监控",
+          "renderedTitle": "工作流监控",
+          "selectors": [
+            "[data-guide=\"workflows-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "workflows-page",
+            "cls": "page-container workflow-list mb-guide-highlight",
+            "text": "频道状态来源跳过爬虫工作流 ID频道节目日期来源状态进度开始时间结束时间暂无工作"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "手动触发",
+          "renderedTitle": "手动触发",
+          "selectors": [
+            "[aria-label=\"手动触发\"]"
+          ],
+          "hit": {
+            "tag": "button",
+            "ariaLabel": "手动触发",
+            "dataGuide": null,
+            "cls": "el-button el-button--primary el-button--default icon-btn el-tooltip__trigger mb-guide-highlight",
+            "text": ""
+          },
+          "missing": null
+        },
+        {
+          "index": 2,
+          "stepTitle": "执行列表",
+          "renderedTitle": "执行列表",
+          "selectors": [
+            "[data-guide=\"workflows-table\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "workflows-table",
+            "cls": "el-table--fit el-table--striped el-table--scrollable-x el-table--enable-row-hover el-table el-table--layout-fixed is-scrolling-left mb-guide-highlight",
+            "text": "工作流 ID频道节目日期来源状态进度开始时间结束时间暂无工作流"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/tunnel",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "内网穿透",
+          "renderedTitle": "内网穿透",
+          "selectors": [
+            "[data-guide=\"tunnel-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "tunnel-page",
+            "cls": "page-container tunnel-page mb-guide-highlight",
+            "text": "○ 已停止 隧道未启动，暂无公网地址 Provider 配置穿透服务Select"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "隧道配置",
+          "renderedTitle": "隧道配置",
+          "selectors": [
+            "[data-guide=\"tunnel-form\"]"
+          ],
+          "hit": {
+            "tag": "form",
+            "ariaLabel": null,
+            "dataGuide": "tunnel-form",
+            "cls": "el-form el-form--default el-form--label-right config-form mb-guide-highlight",
+            "text": "穿透服务Select本地端口0 表示从应用端口（APP_PORT）继承，通常无需"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/ai-config",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "AI 服务",
+          "renderedTitle": "AI 服务",
+          "selectors": [
+            "[data-guide=\"ai-config-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "ai-config-page",
+            "cls": "page-container ai-config mb-guide-highlight",
+            "text": "LLM 大模型TTS 语音合成图片模型用量统计快速选择提供商：选择预设节目参数（"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "服务商配置",
+          "renderedTitle": "服务商配置",
+          "selectors": [
+            "[data-guide=\"ai-config-form\"]"
+          ],
+          "hit": {
+            "tag": "form",
+            "ariaLabel": null,
+            "dataGuide": "ai-config-form",
+            "cls": "el-form el-form--default el-form--label-right config-form mb-guide-highlight",
+            "text": "节目参数（时长/字数联动）目标时长默认 600 秒（10 分钟），与稿件字数反向"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/ai-qa",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "智能助手",
+          "renderedTitle": "智能助手",
+          "selectors": [
+            "[data-guide=\"assistant-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "assistant-page",
+            "cls": "page-container assistant mb-guide-highlight",
+            "text": "协助管理员对系统菜单做自动调度，AI 生成完整配置、会话内确认落地选择模型自动无"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "提问输入",
+          "renderedTitle": "提问输入",
+          "selectors": [
+            "[data-guide=\"assistant-input\"]"
+          ],
+          "hit": {
+            "tag": "textarea",
+            "ariaLabel": null,
+            "dataGuide": "assistant-input",
+            "cls": "el-textarea__inner mb-guide-highlight",
+            "text": ""
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/cos-config",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "云端配置",
+          "renderedTitle": "云端配置",
+          "selectors": [
+            "[data-guide=\"cos-config-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "cos-config-page",
+            "cls": "page-container cos-config mb-guide-highlight",
+            "text": "尚未配置 腾讯云 COS 凭证用于音频/成品文件的云端存储与 CDN 分发。Se"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "密钥配置",
+          "renderedTitle": "密钥配置",
+          "selectors": [
+            "[data-guide=\"cos-config-form\"]"
+          ],
+          "hit": {
+            "tag": "form",
+            "ariaLabel": null,
+            "dataGuide": "cos-config-form",
+            "cls": "el-form el-form--default el-form--label-right config-form mb-guide-highlight",
+            "text": "SecretIdSecretKey地域ap-guangzhou（广州）存储桶所在"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/cos-files",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "文件管理",
+          "renderedTitle": "文件管理",
+          "selectors": [
+            "[data-guide=\"cos-files-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "cos-files-page",
+            "cls": "page-container cos-files mb-guide-highlight",
+            "text": "COS 尚未配置请先在「云端配置」页填写 SecretId / SecretKe"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "文件列表",
+          "renderedTitle": "文件列表",
+          "selectors": [
+            "[data-guide=\"cos-files-table\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "cos-files-table",
+            "cls": "el-table--fit el-table--striped el-table el-table--layout-fixed is-scrolling-none mb-guide-highlight",
+            "text": "名称大小最后修改类型操作No Data"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/notification",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "通知管理",
+          "renderedTitle": "通知管理",
+          "selectors": [
+            "[data-guide=\"notification-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "notification-page",
+            "cls": "page-container notification-config mb-guide-highlight",
+            "text": "基础配置消息模板发送日志通知开关全局总开关 关闭后所有通知都不发送（场景开关失效"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "渠道配置",
+          "renderedTitle": "渠道配置",
+          "selectors": [
+            "[data-guide=\"notification-form\"]"
+          ],
+          "hit": {
+            "tag": "form",
+            "ariaLabel": null,
+            "dataGuide": "notification-form",
+            "cls": "el-form el-form--default el-form--label-right config-form mb-guide-highlight",
+            "text": "全局总开关 关闭后所有通知都不发送（场景开关失效） 工作流失败通知 工作流异常时"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/auto-review",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "自动审批",
+          "renderedTitle": "自动审批",
+          "selectors": [
+            "[data-guide=\"auto-review-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "auto-review-page",
+            "cls": "page-container auto-review-page mb-guide-highlight",
+            "text": "规则配置启用自动审批 开启后，工作流完成时按下方校验逐项检查，全部命中的稿件将跳"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "审批历史",
+          "renderedTitle": "审批历史",
+          "selectors": [
+            "[data-guide=\"auto-review-table\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "auto-review-table",
+            "cls": "el-table--fit el-table--striped el-table el-table--layout-fixed is-scrolling-none mb-guide-highlight",
+            "text": "ID工作流 ID审核 ID结果触发原因节省时间时间操作暂无审批记录"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/tools/calculator",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "参数计算器",
+          "renderedTitle": "参数计算器",
+          "selectors": [
+            "[data-guide=\"calculator-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "calculator-page",
+            "cls": "page-container param-calculator mb-guide-highlight",
+            "text": "新闻语音三参数关系：时长(秒) = 总字数 / (210 × 倍率) × 60。"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "参数输入",
+          "renderedTitle": "参数输入",
+          "selectors": [
+            "[data-guide=\"calculator-inputs\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "calculator-inputs",
+            "cls": "el-input-number is-controls-right is-center mb-guide-highlight",
+            "text": ""
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/db-admin",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "数据库维护",
+          "renderedTitle": "数据库维护",
+          "selectors": [
+            "[data-guide=\"db-admin-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "db-admin-page",
+            "cls": "db-admin-page mb-guide-highlight",
+            "text": "数据表请从左侧选择一张表"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "表数据区",
+          "renderedTitle": "表数据区",
+          "selectors": [
+            "[data-guide=\"db-admin-content\"]"
+          ],
+          "hit": {
+            "tag": "main",
+            "ariaLabel": null,
+            "dataGuide": "db-admin-content",
+            "cls": "el-main content-area mb-guide-highlight",
+            "text": "请从左侧选择一张表"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/maintenance",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "系统清理",
+          "renderedTitle": "系统清理",
+          "selectors": [
+            "[data-guide=\"maintenance-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "maintenance-page",
+            "cls": "page-container maintenance-page mb-guide-highlight",
+            "text": "数据库-播放日志 0 条工作流 0 条审核 0 条黑名单 0 条日志文件-文件数"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "清理项",
+          "renderedTitle": "清理项",
+          "selectors": [
+            "[data-guide=\"maintenance-form\"]"
+          ],
+          "hit": {
+            "tag": "form",
+            "ariaLabel": null,
+            "dataGuide": "maintenance-form",
+            "cls": "el-form el-form--default el-form--label-top cleanup-form mb-guide-highlight",
+            "text": "清理目标全部缓存预览模式仅预览，不实际删除预览清理"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/help",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "帮助文档",
+          "renderedTitle": "帮助文档",
+          "selectors": [
+            "[data-guide=\"help-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "help-page",
+            "cls": "page-container help-page mb-guide-highlight",
+            "text": "MorningBrief 使用文档 系统涵盖 RSS 抓取、LLM 改写、TTS"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "文档目录",
+          "renderedTitle": "文档目录",
+          "selectors": [
+            "[data-guide=\"help-catalog\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "help-catalog",
+            "cls": "card-soft sidebar-card mb-guide-highlight",
+            "text": "文档目录快速开始内容审核广告管理数据统计频道管理队列管理工作流监控内网穿透AI "
+          },
+          "missing": null
+        },
+        {
+          "index": 2,
+          "stepTitle": "菜单引导重放",
+          "renderedTitle": "菜单引导重放",
+          "selectors": [
+            "[data-guide=\"help-replay\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "help-replay",
+            "cls": "replay-block mb-guide-highlight",
+            "text": "菜单引导重放内容审核 广告素材 投放规则 排期日历 数据统计 频道健康度 RSS"
+          },
+          "missing": null
+        }
+      ]
+    },
+    {
+      "route": "/about",
+      "steps": [
+        {
+          "index": 0,
+          "stepTitle": "关于",
+          "renderedTitle": "关于",
+          "selectors": [
+            "[data-guide=\"about-page\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "about-page",
+            "cls": "page-container about-page mb-guide-highlight",
+            "text": "M版本：发布于 产品Python平台Git SHA用户协议隐私条款开源软件声明帮"
+          },
+          "missing": null
+        },
+        {
+          "index": 1,
+          "stepTitle": "品牌信息",
+          "renderedTitle": "品牌信息",
+          "selectors": [
+            "[data-guide=\"about-brand\"]"
+          ],
+          "hit": {
+            "tag": "div",
+            "ariaLabel": null,
+            "dataGuide": "about-brand",
+            "cls": "card-soft brand-card mb-guide-highlight",
+            "text": "M版本：发布于"
+          },
+          "missing": null
+        }
+      ]
+    }
+  ]
+}

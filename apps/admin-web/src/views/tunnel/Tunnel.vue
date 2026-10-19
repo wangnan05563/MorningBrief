@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container tunnel-page">
+  <div data-guide="tunnel-page" class="page-container tunnel-page">
     <!-- 状态卡片 -->
     <div class="card-soft status-card" v-loading="loading">
       <div class="status-row">
@@ -138,7 +138,7 @@
         <el-icon><Setting /></el-icon>
         <span>Provider 配置</span>
       </div>
-      <el-form :model="form" label-width="140px" class="config-form">
+      <el-form data-guide="tunnel-form" :model="form" label-width="140px" class="config-form">
         <el-form-item label="穿透服务">
           <el-select v-model="form.provider" style="width: 100%">
             <el-option label="Cloudflare Tunnel（免注册）" value="cloudflare" />

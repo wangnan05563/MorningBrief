@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container channel-health-page">
+  <div data-guide="channel-health-page" class="page-container channel-health-page">
     <!-- 顶部操作区：回溯天数切换（T00811：移除与导航栏重复的页面标题） -->
     <div class="top-bar">
       <el-radio-group v-model="rangeDays" @change="loadData">
@@ -25,7 +25,7 @@
     <div v-loading="loading" class="channel-grid">
       <el-empty v-if="!loading && channels.length === 0" description="暂无频道数据" />
 
-      <el-row :gutter="16">
+      <el-row data-guide="channel-health-cards" :gutter="16">
         <el-col
           v-for="ch in channels"
           :key="ch.channel_id"

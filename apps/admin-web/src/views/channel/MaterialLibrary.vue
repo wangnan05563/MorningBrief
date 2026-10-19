@@ -1,6 +1,6 @@
 <template>
   <!-- page-container：补齐 24px 页面内边距（同 BookPool，缺它会 0px 贴边） -->
-  <div class="material-library page-container">
+  <div data-guide="material-library-page" class="material-library page-container">
     <el-card shadow="never">
       <template #header>
         <div class="page-header">
@@ -70,7 +70,7 @@
       </el-form>
 
       <!-- 明细视图：一条素材一行 -->
-      <el-table v-if="viewMode === 'list'" :data="items" v-loading="loading" stripe style="width: 100%">
+      <el-table data-guide="material-library-table" v-if="viewMode === 'list'" :data="items" v-loading="loading" stripe style="width: 100%">
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="title" label="标题" min-width="240" show-overflow-tooltip />
         <el-table-column label="来源" width="150" show-overflow-tooltip>

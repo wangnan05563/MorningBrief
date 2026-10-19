@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container ai-config" v-loading="loading">
+  <div data-guide="ai-config-page" class="page-container ai-config" v-loading="loading">
     <div class="top-bar">
       <IconButton
         type="primary"
@@ -64,7 +64,7 @@
             />
           </div>
 
-          <el-form :model="llmForm" label-width="120px" class="config-form">
+          <el-form data-guide="ai-config-form" :model="llmForm" label-width="120px" class="config-form">
             <el-divider content-position="left">节目参数（时长/字数联动）</el-divider>
             <el-form-item label="目标时长">
               <el-slider

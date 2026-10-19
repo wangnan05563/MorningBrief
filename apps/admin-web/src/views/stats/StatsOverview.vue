@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container stats-page" v-loading="loading">
+  <div data-guide="stats-page" class="page-container stats-page" v-loading="loading">
     <!-- 顶部操作区：日期选择（T00811：移除与导航栏重复的页面标题） -->
     <div class="top-bar">
       <el-date-picker
@@ -25,7 +25,7 @@
     <el-row :gutter="16" class="metric-row">
       <el-col v-for="m in metrics" :key="m.key" :xs="12" :sm="8" :md="6" :lg="4" :xl="4">
         <el-card shadow="hover">
-          <div class="metric-card">
+          <div data-guide="stats-metric-card" class="metric-card">
             <div class="metric-label">{{ m.label }}</div>
             <div class="metric-value">{{ m.value }}</div>
           </div>

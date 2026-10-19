@@ -3,6 +3,8 @@
  *
  * 校验的是「引用指向是否存在」，不是内容好不好：
  * - 引导步骤（GUIDE_STEPS）的路由键与 `[aria-label="…"]` 选择器必须命中真实路由/真实标签；
+ * - 引导步骤的锚点契约（T02502）：每步只允许一个选择器，且必须是视图里显式存在的
+ *   `[data-guide="x"]` / `[aria-label="x"]`——多选择器兜底链与裸类选择器一律报错；
  * - 帮助文档里「进入「X」」这类菜单指引必须对应真实存在的菜单项；
  * - 侧栏分组（groupConfig）与路由 meta.group 必须互相闭合；
  * - 移动端手写的 tab / 管理入口 `to` 必须能匹配到真实路由；
@@ -161,9 +163,11 @@ export async function collectFacts() {
   }
 
   const ariaLabels = new Set()
+  const dataGuides = new Set()
   for (const file of walk(SRC)) {
     const text = readFileSync(file, 'utf8')
     for (const m of text.matchAll(/[\s"]aria-label="([^"{]+)"/g)) ariaLabels.add(m[1])
+    for (const m of text.matchAll(/data-guide="([^"{]+)"/g)) dataGuides.add(m[1])
     for (const block of tagBlocks(text, 'IconButton')) {
       const label = attrValue(block, 'label')
       if (label && !label.includes('${')) ariaLabels.add(label)
@@ -196,6 +200,7 @@ export async function collectFacts() {
     guideSteps,
     groups,
     ariaLabels,
+    dataGuides,
     helpIds,
     menuRefs,
     mobileTargets,
@@ -214,6 +219,40 @@ function matchRoute(routes, path) {
   })
 }
 
+/**
+ * 锚点契约（T02502）：一个引导步骤选择器 → 错误说明（无错返回 null）。
+ *
+ * 判据只有一条：选择器必须「自己就能说明指哪个元素」。
+ * - `[data-guide="x"]` / `[aria-label="x"]`：显式锚点，视图里存在才算数；
+ * - 含空格/组合符的选择器（`.top-bar .el-button`）：位置兜底。真实锚点缺失时它会静默
+ *   命中另一个元素——T02500 的「引导指错元素」正是这样藏住的，比落空更坏；
+ * - 裸类：允许全页唯一的布局/组件根类（下面的清单），其余（`.el-table`、`.el-tabs`、
+ *   各视图自己的 `.xxx-page`）可能命中错误实例或随重构漂移，必须打 data-guide。
+ * 兜底链（一步写多个选择器）同样禁止：宁可这一步落空（浮层带 data-guide-missing，
+ * 门禁与运行时审计都能发现），也不要指错。
+ */
+const PAGE_UNIQUE_CLASSES = new Set(['.page-container', '.el-upload'])
+
+function anchorProblem(sel, path, f) {
+  const guide = /^\[data-guide="([^"]+)"\]$/.exec(sel)
+  if (guide) {
+    return f.dataGuides.has(guide[1])
+      ? null
+      : `引导步骤选择了视图里不存在的锚点：${path} → ${sel}；没有任何元素带 data-guide="${guide[1]}"（视图重构时锚点被删/改名），气泡会落空居中`
+  }
+  const aria = /^\[aria-label="([^"]+)"\]$/.exec(sel)
+  if (aria) {
+    return f.ariaLabels.has(aria[1])
+      ? null
+      : `引导步骤选择了不存在的 aria-label：${path} → ${sel}；页面上没有任何元素带这个标签，气泡会退到通用容器并指错元素`
+  }
+  if (/[\s>]/.test(sel)) {
+    return `引导步骤禁止位置兜底：${path} → ${sel}；组合选择器会在真实锚点缺失时静默命中另一个元素（T02500 抓到的缺陷形态），请给目标元素打 data-guide`
+  }
+  if (PAGE_UNIQUE_CLASSES.has(sel)) return null
+  return `引导步骤禁止未打显式锚点的裸类：${path} → ${sel}；该类的实例数不受约束（同页可能有多个），请给目标元素打 data-guide`
+}
+
 export function checkFacts(f) {
   const errors = []
   const menuTitles = new Set(f.routes.map((r) => r.meta.title).filter(Boolean))
@@ -224,14 +263,16 @@ export function checkFacts(f) {
       errors.push(`引导配置的路由不存在：GUIDE_STEPS['${path}']`)
     }
     for (const step of steps || []) {
-      for (const sel of step.s || []) {
-        const m = /^\[aria-label="([^"]+)"\]$/.exec(sel)
-        if (m && !f.ariaLabels.has(m[1])) {
-          errors.push(
-            `引导步骤选择了不存在的 aria-label：${path} → ${sel}（标题「${step.t}」）；` +
-              `页面上没有任何元素带这个标签，气泡会退到通用容器并指错元素`,
-          )
-        }
+      const selectors = step.s || []
+      if (selectors.length > 1) {
+        errors.push(
+          `引导步骤一步只允许一个选择器：${path} → ${selectors.join(' , ')}（标题「${step.t}」）；` +
+            `多选择器兜底链让上一步的错指被下一步掩盖`,
+        )
+      }
+      for (const sel of selectors) {
+        const problem = anchorProblem(sel, path, f)
+        if (problem) errors.push(`${problem}（标题「${step.t}」）`)
       }
     }
   }

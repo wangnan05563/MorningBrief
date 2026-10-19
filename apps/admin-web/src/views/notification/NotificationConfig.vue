@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container notification-config">
+  <div data-guide="notification-page" class="page-container notification-config">
     <div class="top-bar">
       <IconButton
         v-if="activeTab === 'config'"
@@ -27,7 +27,7 @@
         <el-card shadow="never" v-loading="configLoading">
           <!-- 开关组 -->
           <el-divider content-position="left">通知开关</el-divider>
-          <el-form :model="configForm" label-width="160px" class="config-form">
+          <el-form data-guide="notification-form" :model="configForm" label-width="160px" class="config-form">
             <el-form-item label="全局总开关">
               <el-switch v-model="configForm.global_enabled" />
               <span class="field-tip" style="margin-left: 12px">

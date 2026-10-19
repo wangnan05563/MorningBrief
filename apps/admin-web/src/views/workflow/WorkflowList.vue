@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container workflow-list">
+  <div data-guide="workflows-page" class="page-container workflow-list">
     <!-- 顶部操作区：查询条件 + 手动触发按钮（仅 admin 可见）
          去掉页面标题：导航栏已展示页面名称，避免重复 -->
     <div class="top-bar">
@@ -128,7 +128,7 @@
         :stale="list.length > 0"
         @retry="retryLoadList"
       />
-      <el-table
+      <el-table data-guide="workflows-table"
         ref="tableRef"
         :data="list"
         row-key="id"

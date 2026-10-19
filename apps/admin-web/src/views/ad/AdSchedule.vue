@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container ad-schedule">
+  <div data-guide="ads-schedule-page" class="page-container ad-schedule">
     <div class="toolbar">
       <!-- T00811：移除与导航栏重复的页面标题，仅保留月份选择 -->
       <el-date-picker
@@ -29,7 +29,7 @@
         </div>
       </div>
 
-      <el-calendar v-model="calendarDate" v-loading="loading">
+      <el-calendar data-guide="ads-schedule-calendar" v-model="calendarDate" v-loading="loading">
         <template #date-cell="{ data }">
           <div class="date-cell" :class="{ 'other-month': data.type !== 'current-month' }">
             <div class="date-num">{{ data.day.split('-').slice(2).join('') }}</div>

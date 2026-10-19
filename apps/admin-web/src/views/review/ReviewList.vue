@@ -1,6 +1,6 @@
 <template>
-  <div class="review-list page-container" v-loading="loading">
-    <el-tabs v-model="activeTab" @tab-change="handleTabChange">
+  <div data-guide="review-page" class="review-list page-container" v-loading="loading">
+    <el-tabs data-guide="review-tabs" v-model="activeTab" @tab-change="handleTabChange">
       <el-tab-pane label="待审核" name="pending" />
       <el-tab-pane label="已通过" name="approved" />
       <el-tab-pane label="已打回" name="rejected" />
@@ -36,7 +36,7 @@
       </div>
     </div>
 
-    <el-table
+    <el-table data-guide="review-table"
       ref="tableRef"
       :data="list"
       stripe
@@ -103,7 +103,7 @@
     </el-table>
 
     <div class="pagination-wrap">
-      <el-pagination
+      <el-pagination data-guide="review-pagination"
         v-model:current-page="page"
         :page-size="size"
         :total="total"

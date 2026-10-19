@@ -1,7 +1,7 @@
 <template>
-  <div class="page-container about-page">
+  <div data-guide="about-page" class="page-container about-page">
     <!-- 品牌卡：版本号 + 检查更新 -->
-    <div class="card-soft brand-card">
+    <div data-guide="about-brand" class="card-soft brand-card">
       <div class="brand-row">
         <!-- Logo：薄荷青渐变 + 首字母 M -->
         <div class="brand-logo" aria-hidden="true">M</div>

@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container cos-config">
+  <div data-guide="cos-config-page" class="page-container cos-config">
     <div class="top-bar">
       <el-tag v-if="status.configured" type="success" effect="dark">COS 已配置</el-tag>
       <el-tag v-else type="info">{{ status.bucket ? '凭证未齐' : '尚未配置' }}</el-tag>
@@ -56,7 +56,7 @@
         保存后以脱敏形式展示，重新填写即为更新，留空（显示为 **** ）则保留原值。
       </el-alert>
 
-      <el-form :model="form" label-width="140px" class="config-form">
+      <el-form data-guide="cos-config-form" :model="form" label-width="140px" class="config-form">
         <el-form-item label="SecretId" prop="secret_id">
           <el-input
             v-model="form.secret_id"

@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container channel-management">
+  <div data-guide="channels-page" class="page-container channel-management">
     <!-- 工具栏：新增按钮（仅 admin 可见），标题由顶部导航栏提供 -->
     <div class="top-bar">
       <IconButton v-if="canOperate" type="primary" :icon="Plus" label="新增频道" desc="新建一个频道" @click="openCreate" />
@@ -14,7 +14,7 @@
         :stale="list.length > 0"
         @retry="retryLoadList"
       />
-      <el-table :data="list" v-loading="loading" stripe>
+      <el-table data-guide="channels-table" :data="list" v-loading="loading" stripe>
         <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
         <el-table-column label="类型" width="110">

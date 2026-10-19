@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container queue-management">
+  <div data-guide="queue-page" class="page-container queue-management">
     <!-- 顶部统计卡片：4 种状态计数，左边框色区分 -->
     <el-row :gutter="16" class="stats-row">
       <el-col :span="6">
@@ -113,7 +113,7 @@
         :stale="tasks.length > 0"
         @retry="retryLoadTasks"
       />
-      <el-table
+      <el-table data-guide="queue-table"
         ref="tableRef"
         :data="tasks"
         row-key="id"

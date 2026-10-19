@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container param-calculator">
+  <div data-guide="calculator-page" class="page-container param-calculator">
     <div class="top-bar">
       <IconButton
         type="primary"
@@ -55,7 +55,7 @@
         </template>
 
         <div class="card-body">
-          <el-input-number
+          <el-input-number data-guide="calculator-inputs"
             v-model="durationSec"
             :min="60"
             :max="1800"

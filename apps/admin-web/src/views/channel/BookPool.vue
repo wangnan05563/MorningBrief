@@ -2,7 +2,7 @@
   <!-- page-container：提供 24px 页面内边距（Layout 的 .main-content padding 为 0，由页面负责）。
        缺失时卡片与内部标题/按钮会 0px 紧贴侧栏与窗口右缘（用户反馈「书单标题和从素材库
        导入按钮太靠近边缘」即此），与其它 25 个页面口径不一致。 -->
-  <div class="book-pool page-container">
+  <div data-guide="book-pool-page" class="book-pool page-container">
     <!-- 顶部：频道选择（讲书稿模式开关在下方面板内，与编辑弹窗的素材池弹窗映射同一组件） -->
     <!-- 标题卡片：内容全部放在 #header（标题 + 频道选择），默认插槽为空。
          Element Plus 的空 body 仍有 20px 上下内边距 ⇒ 标题与下方面板之间多出一条
@@ -12,7 +12,7 @@
       <template #header>
         <div class="page-header">
           <!-- T00811：移除与导航栏重复的页面标题，保留频道选择 -->
-          <el-select
+          <el-select data-guide="book-pool-channel"
             v-model="channelId"
             placeholder="选择频道"
             filterable

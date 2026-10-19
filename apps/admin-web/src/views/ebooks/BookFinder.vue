@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container book-finder">
+  <div data-guide="ebooks-page" class="page-container book-finder">
     <!-- 顶部说明：讲清「找书自动化 / 取件人工」的分工与取件后去向，避免误期待 -->
     <el-alert
       type="info"
@@ -53,7 +53,7 @@
 
     <!-- 检索区 -->
     <el-card shadow="never" class="search-card">
-      <el-form :inline="true" @submit.prevent>
+      <el-form data-guide="ebooks-search" :inline="true" @submit.prevent>
         <el-form-item label="关键词">
           <el-input
             v-model="keyword"
@@ -103,7 +103,7 @@
 
     <!-- 结果表 -->
     <el-card shadow="never" class="result-card">
-      <el-table :data="hits" v-loading="searching" stripe style="width: 100%">
+      <el-table data-guide="ebooks-results" :data="hits" v-loading="searching" stripe style="width: 100%">
         <el-table-column type="index" width="56" label="#" />
         <el-table-column prop="title" label="书名" min-width="240" show-overflow-tooltip />
         <el-table-column prop="author" label="作者" width="180" show-overflow-tooltip />

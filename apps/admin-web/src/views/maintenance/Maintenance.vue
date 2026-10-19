@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container maintenance-page">
+  <div data-guide="maintenance-page" class="page-container maintenance-page">
     <!-- 顶部工具栏（T00811：移除与导航栏重复的页面标题） -->
     <div class="toolbar">
       <IconButton
@@ -67,7 +67,7 @@
             <el-icon class="header-icon cache-icon"><Cpu /></el-icon>
             <span>缓存清理</span>
           </div>
-          <el-form :model="cacheForm" label-position="top" class="cleanup-form">
+          <el-form data-guide="maintenance-form" :model="cacheForm" label-position="top" class="cleanup-form">
             <el-form-item label="清理目标">
               <el-select v-model="cacheForm.target" style="width: 100%">
                 <el-option label="全部缓存" value="all" />

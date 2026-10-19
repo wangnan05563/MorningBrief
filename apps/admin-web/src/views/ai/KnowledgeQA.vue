@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container assistant">
+  <div data-guide="assistant-page" class="page-container assistant">
     <!-- 顶部：标题 + 模型选择 + 自动刷新 -->
     <div class="as-header">
       <div class="as-title">
@@ -239,7 +239,7 @@
           </div>
 
           <div class="as-input-bar">
-            <el-input
+            <el-input data-guide="assistant-input"
               v-model="inputText"
               type="textarea"
               :rows="3"

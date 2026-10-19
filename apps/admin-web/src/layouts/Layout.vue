@@ -118,6 +118,11 @@ const currentPath = ref('')
 function maybeGuide(path) {
   const cfg = GUIDE_STEPS[path]
   if (!cfg) return
+  // 帮助页点了「播放引导」：落地后强制重放，不等「是否引导过」
+  if (guide.takeReplay(path)) {
+    setTimeout(() => guide.open(path, cfg, { force: true }), 350)
+    return
+  }
   if (!guide.isDone(path) && !guide.active.value) {
     setTimeout(() => guide.open(path, cfg), 350)
   }
@@ -167,7 +172,8 @@ const hasGuide = computed(() => currentPath.value === '/help' && !guide.active.v
 // 常驻按钮：重放当前页的引导流程（已引导过的用户也能再看）
 function openGuide() {
   const cfg = GUIDE_STEPS[currentPath.value]
-  if (cfg) guide.open(currentPath.value, cfg)
+  // force：这是用户点击，不是自动弹层
+  if (cfg) guide.open(currentPath.value, cfg, { force: true })
 }
 
 function openThemeSwitcher() {

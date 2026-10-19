@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container auto-review-page">
+  <div data-guide="auto-review-page" class="page-container auto-review-page">
     <!-- 顶部工具栏（T00811：移除与导航栏重复的页面标题） -->
     <div class="toolbar">
       <IconButton
@@ -251,7 +251,7 @@
         </el-radio-group>
       </div>
 
-      <el-table
+      <el-table data-guide="auto-review-table"
         :data="history.list"
         v-loading="loadingHistory"
         stripe

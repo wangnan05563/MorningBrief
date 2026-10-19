@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container help-page">
+  <div data-guide="help-page" class="page-container help-page">
     <!-- 文档头部 -->
     <div class="card-soft header-card">
       <div class="header-row">
@@ -17,7 +17,7 @@
 
     <!-- 搜索 + 章节导航 -->
     <div class="layout-row">
-      <div class="card-soft sidebar-card">
+      <div data-guide="help-catalog" class="card-soft sidebar-card">
         <div class="sidebar-title">文档目录</div>
         <el-input
           v-model="search"
@@ -39,6 +39,37 @@
             <el-icon class="anchor-icon"><component :is="s.icon" /></el-icon>
             <span class="anchor-text">{{ s.title }}</span>
           </a>
+        </div>
+
+        <!-- T02502 / FR-UX-403：引导重放入口。
+             首访引导只弹一次、且点「跳过」后不再弹（同一需求要求的行为），
+             没有这个入口，用户想再看某个菜单的引导就只能清 localStorage。 -->
+        <div data-guide="help-replay" class="replay-block">
+          <div class="replay-head">
+            <span class="replay-title">菜单引导重放</span>
+            <IconButton
+              link
+              type="info"
+              size="small"
+              :icon="Delete"
+              label="清除引导记录"
+              desc="清除全部「已引导」记账，各菜单首访引导会恢复"
+              @click="resetGuideRecords"
+            />
+          </div>
+          <div class="replay-list">
+            <button
+              v-for="g in replayableMenus"
+              :key="g.path"
+              type="button"
+              class="replay-chip"
+              :aria-label="`播放「${g.title}」引导`"
+              @click="playGuide(g.path)"
+            >
+              {{ g.title }}
+              <el-icon v-if="g.done" class="replay-done"><Check /></el-icon>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -114,11 +145,54 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, markRaw } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from '../../utils/message'
 import {
   Promotion, Document, Search, Aim, CircleCheck, Warning,
   Setting, MagicStick, DataLine, List, Picture, Bell, Cpu, Coin,
-  Brush, Connection, Monitor, Operation, Menu, Calendar,
+  Brush, Connection, Monitor, Operation, Menu, Calendar, Delete, Check,
 } from '@element-plus/icons-vue'
+import IconButton from '../../components/IconButton.vue'
+import { useGuide } from '../../guide/useGuide'
+import { GUIDE_STEPS } from '../../guide/guideConfig'
+
+const router = useRouter()
+const guide = useGuide()
+
+// 菜单引导重放（T02502 / FR-UX-403）：清单来自 GUIDE_STEPS 的键，
+// 标题走 router.resolve 取路由 meta.title——菜单口径的唯一事实源仍是路由（FR-UX-401），
+// 这里不另写一份菜单名，免得两处漂移。
+const replayableMenus = computed(() =>
+  Object.keys(GUIDE_STEPS)
+    .filter((path) => path !== '/help')
+    .map((path) => ({
+      path,
+      title: router.resolve(path).meta?.title || path,
+      done: guide.isDone(path),
+    })),
+)
+
+function playGuide(path) {
+  // 重放前撤销「已引导」记账：否则落地后 maybeGuide 见 isDone 为真就不会再弹
+  guide.markUndone(path)
+  guide.requestReplay(path)
+  router.push(path)
+}
+
+async function resetGuideRecords() {
+  // 与全站一致走 ElMessageBox（Layout.vue 退出登录同款），不用 window.confirm
+  try {
+    await ElMessageBox.confirm('清除全部菜单的「已引导」记账？各菜单的首访引导会恢复。', '清除引导记录', {
+      type: 'warning',
+      confirmButtonText: '确认清除',
+    })
+  } catch {
+    return // 取消：safeElMessageBox 被阻断时也走这里，不产生副作用
+  }
+  for (const m of replayableMenus.value) guide.markUndone(m.path)
+  guide.markUndone('/help')
+  ElMessage.success('已清除引导记录，重新进入各菜单会再次引导')
+}
 
 const search = ref('')
 const activeSection = ref('quickstart')
@@ -694,6 +768,56 @@ onUnmounted(() => {
     .anchor-icon {
       color: $color-primary-dark;
     }
+  }
+}
+
+// 菜单引导重放（T02502 / FR-UX-403）：侧栏窄，用 chips 换行而不是逐个占一行
+.replay-block {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid $color-border;
+}
+
+.replay-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+
+  .replay-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: $color-text-primary;
+  }
+}
+
+.replay-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.replay-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: $color-text-secondary;
+  background: var(--color-bg);
+  border: 1px solid $color-border;
+  border-radius: $radius-md;
+  cursor: pointer;
+  transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1);
+
+  .replay-done {
+    font-size: 12px;
+    color: $color-primary-dark;
+  }
+
+  &:hover {
+    background: var(--color-primary-light);
+    color: $color-primary-dark;
   }
 }
 

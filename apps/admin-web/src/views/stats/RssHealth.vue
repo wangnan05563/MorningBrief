@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container rss-health-page">
+  <div data-guide="rss-health-page" class="page-container rss-health-page">
     <!-- 顶部操作区：刷新与最近巡检（T00811：移除与导航栏重复的页面标题） -->
     <div class="top-bar">
       <div class="actions">
@@ -49,7 +49,7 @@
 
     <!-- 源状态表格 -->
     <el-card shadow="never" class="table-card">
-      <el-table
+      <el-table data-guide="rss-health-table"
         v-loading="loading"
         :data="filteredSources"
         stripe

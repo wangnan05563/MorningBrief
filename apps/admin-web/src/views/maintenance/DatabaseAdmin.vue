@@ -1,5 +1,5 @@
 <template>
-  <div class="db-admin-page">
+  <div data-guide="db-admin-page" class="db-admin-page">
     <el-container class="main-container">
       <!-- 左侧：表列表 -->
       <el-aside width="220px" class="sidebar">
@@ -30,7 +30,7 @@
       </el-aside>
 
       <!-- 右侧：数据区 -->
-      <el-main class="content-area">
+      <el-main data-guide="db-admin-content" class="content-area">
         <!-- T02496（FR-UX-302 / M54）：拉不到表/数据时必须显式报错并禁用写操作，
              不能让失败显示成「请从左侧选择一张表」——那会让人以为库里没东西 -->
         <ListLoadError

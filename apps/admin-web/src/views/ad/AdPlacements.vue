@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container ad-placements">
+  <div data-guide="ads-placements-page" class="page-container ad-placements">
     <div class="toolbar">
       <!-- T00811：移除与导航栏重复的页面标题，仅保留操作按钮 -->
       <IconButton
@@ -12,7 +12,7 @@
     </div>
 
     <div class="card-soft table-card">
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <el-table data-guide="ads-placements-table" :data="tableData" v-loading="loading" stripe>
         <el-table-column prop="material_name" label="素材名称" min-width="160" show-overflow-tooltip />
         <el-table-column label="广告位" width="120" align="center">
           <template #default="{ row }">

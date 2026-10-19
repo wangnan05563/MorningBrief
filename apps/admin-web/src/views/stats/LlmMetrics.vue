@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container llm-metrics-page">
+  <div data-guide="llm-metrics-page" class="page-container llm-metrics-page">
     <!-- 顶部操作区：刷新按钮（T00811：移除与导航栏重复的页面标题） -->
     <div class="top-bar">
       <IconButton
@@ -34,7 +34,7 @@
 
       <template v-else>
         <!-- 派生率卡片：trigger / improve / not_improve -->
-        <el-row :gutter="16" class="rate-row">
+        <el-row data-guide="llm-metrics-rates" :gutter="16" class="rate-row">
           <el-col v-for="r in rateCards" :key="r.key" :xs="24" :sm="8">
             <el-card shadow="hover">
               <div class="rate-card" :class="r.cls">

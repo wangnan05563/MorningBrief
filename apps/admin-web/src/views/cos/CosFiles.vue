@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container cos-files">
+  <div data-guide="cos-files-page" class="page-container cos-files">
     <!-- 顶部状态 / 工具栏 -->
     <div class="top-bar">
       <el-alert
@@ -63,7 +63,7 @@
     <el-card shadow="never" v-loading="loading">
       <el-empty v-if="configured && !loading && folders.length === 0 && files.length === 0" description="该目录下暂无内容" />
 
-      <el-table v-else :data="tableData" stripe style="width: 100%">
+      <el-table data-guide="cos-files-table" v-else :data="tableData" stripe style="width: 100%">
         <el-table-column label="名称" min-width="280">
           <template #default="{ row }">
             <div class="name-cell" @click="row.isFolder ? enterFolder(row) : null">

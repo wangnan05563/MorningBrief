@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container ad-materials">
+  <div data-guide="ads-materials-page" class="page-container ad-materials">
     <!-- 顶部工具栏：主操作按钮（T00811：移除与导航栏重复的页面标题） -->
     <div class="toolbar">
       <IconButton
@@ -13,7 +13,7 @@
 
     <!-- 表格卡片化：复用全局 .card-soft 保持视觉一致 -->
     <div class="card-soft table-card">
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <el-table data-guide="ads-materials-table" :data="tableData" v-loading="loading" stripe>
         <el-table-column prop="name" label="名称" min-width="160" />
         <el-table-column
           prop="description"
