@@ -66,4 +66,12 @@ test.describe('引导重放与跳过记账', () => {
     const map = await page.evaluate(() => JSON.parse(localStorage.getItem('mb_guide_done') || '{}'))
     expect(map['/review']).toBeUndefined()
   })
+
+  test('重放清单与侧栏同口径：运营角色看不到 admin 专属菜单', async ({ page }) => {
+    // /tunnel（内网穿透）meta.requireRole=admin：给运营放出来只会点了被守卫弹回，引导永不弹
+    await setLoginState(page, 'operator')
+    await page.goto('/help')
+    await expect(page.getByRole('button', { name: '播放「内容审核」引导' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '播放「内网穿透」引导' })).toHaveCount(0)
+  })
 })

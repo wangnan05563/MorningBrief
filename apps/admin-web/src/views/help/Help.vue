@@ -153,10 +153,12 @@ import {
   Brush, Connection, Monitor, Operation, Menu, Calendar, Delete, Check,
 } from '@element-plus/icons-vue'
 import IconButton from '../../components/IconButton.vue'
+import { useUserStore } from '../../stores/user'
 import { useGuide } from '../../guide/useGuide'
 import { GUIDE_STEPS } from '../../guide/guideConfig'
 
 const router = useRouter()
+const userStore = useUserStore()
 const guide = useGuide()
 
 // 菜单引导重放（T02502 / FR-UX-403）：清单来自 GUIDE_STEPS 的键，
@@ -165,11 +167,11 @@ const guide = useGuide()
 const replayableMenus = computed(() =>
   Object.keys(GUIDE_STEPS)
     .filter((path) => path !== '/help')
-    .map((path) => ({
-      path,
-      title: router.resolve(path).meta?.title || path,
-      done: guide.isDone(path),
-    })),
+    .map((path) => ({ path, meta: router.resolve(path).meta || {} }))
+    // 与侧栏同一可见性口径（Layout.vue menuGroups）：requireRole=admin 的菜单对运营角色进不去，
+    // 放进来点了只会被路由守卫弹回，引导永远弹不出来
+    .filter(({ meta }) => !(meta.requireRole === 'admin' && userStore.role !== 'admin'))
+    .map(({ path, meta }) => ({ path, title: meta.title || path, done: guide.isDone(path) })),
 )
 
 function playGuide(path) {
