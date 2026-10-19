@@ -33,6 +33,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getDashboardSummary } from '../../api/mobile'
+import { metricLabel, metricValue } from '../../utils/format'
 
 const router = useRouter()
 
@@ -42,17 +43,17 @@ const unreadCount = ref(0)
 // 后端运营收件箱接口（INT-M101）已实现，首页未读走聚合接口
 const msgReady = ref(true)
 
-const fmt = (v) => (v == null ? '-' : Number(v).toLocaleString('zh-CN'))
-
-const cards = computed(() => [
-  { label: 'DAU', value: fmt(metrics.value.dau) },
-  { label: '播放量', value: fmt(metrics.value.play_count) },
-  {
-    label: '完播率',
-    value: metrics.value.completion_rate != null ? metrics.value.completion_rate + '%' : '-',
-  },
-  { label: '平均收听(分)', value: metrics.value.avg_listen_duration ?? '-' },
-])
+// 卡片顺序、名称与单位换算全部取自 dashboard-summary 里的 meta
+// （与 PC 统计页同源，FR-UX-501 / T02506）：此前这里把后端的秒值直接标成「(分)」、
+// 完播率又不乘 100，与 PC 卡片各错各的。
+// 首页只铺这 4 张卡（版式选择）；名称与单位换算仍取自 meta，不在这里重写
+const CARD_KEYS = ['dau', 'play_count', 'completion_rate', 'avg_listen_duration']
+const cards = computed(() =>
+  CARD_KEYS.map((key) => {
+    const meta = metrics.value.meta?.[key]
+    return { key, label: metricLabel(meta), value: metricValue(metrics.value[key], meta) }
+  }),
+)
 
 async function load() {
   const data = await getDashboardSummary().catch(() => ({

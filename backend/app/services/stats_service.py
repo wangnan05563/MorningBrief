@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import BizError
 from app.models import PlayLog, Material, Channel
 from app.models.material import MaterialStatus
+from app.services.stats_metrics import OVERVIEW_METRICS, meta_for
 
 
 class StatsService:
@@ -61,6 +62,8 @@ class StatsService:
             "completion_rate": completion_rate,
             "avg_listen_duration": avg_listen_duration,
             "ad_impression": play_count * 3,
+            # FR-UX-501 / T02506：单位与换算随数据下发，展示端不再自己猜「这是秒还是分」
+            "meta": meta_for(*OVERVIEW_METRICS),
         }
 
     async def get_trend(self, metric: str, range_days: int) -> dict:
@@ -113,7 +116,13 @@ class StatsService:
             # 「当天什么都没有」必须能区分，否则前端会把无数据的日子画成一条 0 折线
             values.append(db_map.get(d.isoformat()))
 
-        return {"dates": dates, "values": values}
+        return {
+            "dates": dates,
+            "values": values,
+            # FR-UX-501 / T02506：趋势曲线的 Y 轴单位与换算同样由后端下发
+            "metric": metric,
+            "meta": meta_for(metric),
+        }
 
     async def get_channel_health(self, range_days: int = 7) -> dict:  # NOSONAR S3776: 健康度仪表盘聚合多维度数据，职责单一
         """频道素材健康度仪表盘：按频道聚合近 N 天入库趋势与当日待改写量。

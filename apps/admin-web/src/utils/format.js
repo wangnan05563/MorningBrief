@@ -18,3 +18,37 @@ export function formatTime(t) {
   if (!t) return '-'
   return String(t).replace('T', ' ').substring(0, 19)
 }
+
+/**
+ * 指标格式化（FR-UX-501 / T02506）。
+ *
+ * 数值与单位换算一律取自接口随数据下发的 `meta`
+ * （后端唯一来源 `backend/app/services/stats_metrics.py`），页面不再各写一份
+ * 「(分钟)」「(%)」和 `*100`——那正是「平均收听标签写分钟、值是秒」的成因。
+ * meta 缺失时返回 '-'：宁可空着，也不猜单位把秒当分钟显示。
+ *
+ * @param {{label?:string, display?:{unit?:string, factor?:number, precision?:number}}} meta
+ */
+export function metricLabel(meta) {
+  if (!meta) return '-'
+  const unit = meta.display?.unit
+  return unit ? `${meta.label}(${unit})` : meta.label
+}
+
+export function metricValue(raw, meta) {
+  if (raw === null || raw === undefined || raw === '') return '-'
+  const n = Number(raw)
+  if (!Number.isFinite(n) || !meta) return '-'
+  const precision = meta.display?.precision ?? 0
+  const value = n * (meta.display?.factor ?? 1)
+  // 0 位小数按千分位分组（DAU/播放量常上万），带小数的（完播率、分钟）保留定点格式
+  return precision > 0
+    ? value.toFixed(precision)
+    : Math.round(value).toLocaleString('zh-CN')
+}
+
+export function metricText(raw, meta) {
+  const v = metricValue(raw, meta)
+  if (v === '-' || !meta?.display?.unit) return v
+  return `${v} ${meta.display.unit}`
+}

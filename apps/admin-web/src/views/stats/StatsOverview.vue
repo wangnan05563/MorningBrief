@@ -83,6 +83,7 @@ import {
 import dayjs from 'dayjs'
 import api from '../../api'
 import ListLoadError from '../../components/ListLoadError.vue'
+import { metricLabel, metricValue } from '../../utils/format'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
 
@@ -91,15 +92,17 @@ const overview = ref({})
 // 默认查今日，避免空日期引发后端默认行为不一致
 const selectedDate = ref(dayjs().format('YYYY-MM-DD'))
 
-// 指标卡片配置：label 为中文，key 与后端字段保持一致
-const metrics = computed(() => [
-  { key: 'dau', label: 'DAU', value: formatNum(overview.value.dau) },
-  { key: 'play_count', label: '播放量', value: formatNum(overview.value.play_count) },
-  // 后端完播率为 0~1 小数，展示时需乘 100 转百分比
-  { key: 'completion_rate', label: '完播率(%)', value: formatRate(overview.value.completion_rate) },
-  { key: 'avg_listen_duration', label: '平均收听(分钟)', value: overview.value.avg_listen_duration ?? '-' },
-  { key: 'ad_impression', label: '广告曝光', value: formatNum(overview.value.ad_impression) },
-])
+// 指标卡片：键序取自响应本身，名称、单位与换算取自 meta（FR-UX-501 / T02506），
+// 页面不再抄一份「平均收听(分钟)」「完播率(%)」——抄一次就漂移一次。
+// meta 缺失时仍然渲染卡片但显示 '-'（宁可空着，也不把秒当分钟猜一个单位）
+const metrics = computed(() =>
+  Object.keys(overview.value)
+    .filter((key) => key !== 'meta')
+    .map((key) => {
+      const meta = overview.value.meta?.[key]
+      return { key, label: metricLabel(meta), value: metricValue(overview.value[key], meta) }
+    }),
+)
 
 // 趋势查询参数
 const metric = ref('dau')
@@ -113,20 +116,17 @@ const hasTrend = computed(() =>
   (trend.value.values || []).some((v) => v !== null && v !== undefined),
 )
 
-// 中文标题映射：用于图例与空状态切换
-const metricLabelMap = {
-  dau: 'DAU',
-  play_count: '播放量',
-  completion_rate: '完播率(%)',
-}
-const metricLabel = computed(() => metricLabelMap[metric.value] || '')
+// 趋势曲线名称同样取自 meta（FR-UX-501 / T02506）；
+// Y 轴刻度换算（0~1 → %）属 FR-UX-502 / T02507，本单不动数值口径
+const trendMeta = computed(() => trend.value.meta?.[metric.value])
+const chartLabel = computed(() => trendMeta.value?.label || '')
 
 // 适配 Chart.js 数据结构：薄荷青主线 + 半透明填充
 const trendData = computed(() => ({
   labels: trend.value.dates,
   datasets: [
     {
-      label: metricLabel.value,
+      label: chartLabel.value,
       data: trend.value.values,
       borderColor: '#7ECEC1',
       backgroundColor: 'rgba(126, 206, 193, 0.18)',
@@ -149,18 +149,6 @@ const trendOptions = {
   scales: {
     y: { beginAtZero: true },
   },
-}
-
-// 数字加千分位，避免大数字阅读吃力
-function formatNum(n) {
-  if (n === null || n === undefined) return '-'
-  return Number(n).toLocaleString('zh-CN')
-}
-
-// 完播率：后端 0~1 小数 → 百分比，保留 1 位小数
-function formatRate(v) {
-  if (v === null || v === undefined) return '-'
-  return (Number(v) * 100).toFixed(1)
 }
 
 const loading = ref(false)

@@ -5,6 +5,9 @@
  * code === 0 表示业务成功，axios 拦截器会解包返回 data
  */
 
+// 统计指标单位元数据夹具：由后端 stats_metrics.py 生成，见 helpers/statsMeta.js
+import { statsMetricMeta } from './statsMeta'
+
 // ============== 当月日期：日历/排期 mock 需覆盖当前渲染月份，否则每月失效（T00811 建议2） ==============
 const _now = new Date()
 const _y = _now.getFullYear()
@@ -276,6 +279,10 @@ export const adScheduleResponse = {
 }
 
 // ============== 统计相关 ==============
+// avg_listen_duration 是「秒」（PlayLog.duration 存秒，stats_service.py:42），
+// 展示端按 meta 换算成分钟：512 秒 → 8.5 分钟。
+// 此前这里写成 8.5 并让 stats.spec.js 断言原样显示，等于把「标签分钟、值秒」
+// 的真 bug 固化成夹具契约，CI 从此看不见它（FR-UX-501 / T02506）。
 export const statsOverviewResponse = {
   code: 0,
   message: 'success',
@@ -283,8 +290,9 @@ export const statsOverviewResponse = {
     dau: 12345,
     play_count: 67890,
     completion_rate: 0.65,
-    avg_listen_duration: 8.5,
+    avg_listen_duration: 512,
     ad_impression: 5432,
+    meta: statsMetricMeta,
   },
 }
 
@@ -294,6 +302,8 @@ export const statsTrendResponse = {
   data: {
     dates: ['2026-07-01', '2026-07-02', '2026-07-03'],
     values: [1000, 1200, 1500],
+    metric: 'dau',
+    meta: { dau: statsMetricMeta.dau },
   },
 }
 

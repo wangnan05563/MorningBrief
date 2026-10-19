@@ -1,0 +1,47 @@
+{
+  "dau": {
+    "label": "DAU",
+    "unit": "count",
+    "display": {
+      "unit": "人",
+      "factor": 1,
+      "precision": 0
+    }
+  },
+  "play_count": {
+    "label": "播放量",
+    "unit": "count",
+    "display": {
+      "unit": "次",
+      "factor": 1,
+      "precision": 0
+    }
+  },
+  "completion_rate": {
+    "label": "完播率",
+    "unit": "ratio",
+    "display": {
+      "unit": "%",
+      "factor": 100,
+      "precision": 1
+    }
+  },
+  "avg_listen_duration": {
+    "label": "平均收听",
+    "unit": "second",
+    "display": {
+      "unit": "分钟",
+      "factor": 0.016666666666666666,
+      "precision": 1
+    }
+  },
+  "ad_impression": {
+    "label": "广告曝光",
+    "unit": "count",
+    "display": {
+      "unit": "次",
+      "factor": 1,
+      "precision": 0
+    }
+  }
+}

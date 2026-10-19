@@ -36,17 +36,67 @@ test.describe('统计页面', () => {
 
     await expect(page.getByText('数据统计').first()).toBeVisible({ timeout: 30000 })
 
-    // 5 个指标卡片：DAU/播放量/完播率/平均收听/广告曝光
+    // 5 个指标卡片：卡片名称与单位全部来自接口 meta（FR-UX-501 / T02506）
     await expect(page.getByText('DAU').first()).toBeVisible({ timeout: 30000 })
     await expect(page.getByText('播放量').first()).toBeVisible({ timeout: 30000 })
     await expect(page.getByText('完播率(%)').first()).toBeVisible({ timeout: 30000 })
     await expect(page.getByText('平均收听(分钟)')).toBeVisible({ timeout: 30000 })
     await expect(page.getByText('广告曝光').first()).toBeVisible({ timeout: 30000 })
 
-    // 概览数值应被渲染（formatNum 后的 12345）
+    // 概览数值应被渲染（千分位后的 12345）
     await expect(page.locator('.metric-value').filter({ hasText: '12,345' })).toBeVisible({ timeout: 30000 })
-    // 完播率 0.65 → 65.0
+    // 完播率 0.65 → 65.0（换算来自 meta.display，不是页面里写的 *100）
     await expect(page.locator('.metric-value').filter({ hasText: '65.0' })).toBeVisible({ timeout: 30000 })
+    // 平均收听：后端下发 512 秒，按 meta 换算显示 8.5 分钟；秒值原样出现在卡片即为回归
+    await expect(page.locator('.metric-value').filter({ hasText: '8.5' })).toBeVisible({ timeout: 30000 })
+    await expect(page.locator('.metric-value').filter({ hasText: '512' })).toHaveCount(0)
+  })
+
+  // T02506（FR-UX-501）：「全端一致」的用例——同一份数据（dashboard-summary 内嵌
+  // 与 PC 完全相同的 overview + meta），移动端首页必须显示与 PC 相同的单位与数值。
+  // 此前移动端把秒直接标成「(分)」、完播率不乘 100，同一指标两端差 60 倍 / 100 倍。
+  test('移动端首页与 PC 卡片同口径', async ({ page }) => {
+    await page.route('**/admin/api/v1/m/dashboard-summary*', async (route) => {
+      await route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: {
+            today: statsOverviewResponse.data,
+            pending_review: 4,
+            unread_message: 2,
+          },
+        },
+      })
+    })
+    await page.goto('/m/home')
+
+    const labels = page.locator('.m-card__label')
+    const values = page.locator('.m-card__value')
+    await expect(labels.nth(2)).toHaveText('完播率(%)', { timeout: 30000 })
+    await expect(values.nth(2)).toHaveText('65.0', { timeout: 30000 })
+    await expect(labels.nth(3)).toHaveText('平均收听(分钟)', { timeout: 30000 })
+    await expect(values.nth(3)).toHaveText('8.5', { timeout: 30000 })
+    // 秒值与「0.65%」这类未换算的原始值不得出现在首页
+    await expect(values.filter({ hasText: '512' })).toHaveCount(0)
+    await expect(values.filter({ hasText: /^0\.65/ })).toHaveCount(0)
+  })
+
+  // 缺元数据时的失败形态：卡片仍在，但显示 '-'，不会把后端的秒当分钟猜一个单位。
+  // 这是「宁可空着也不猜」的契约，用反证跑一次留成常驻用例（T02506）。
+  test('meta 缺失时显示 - 而不是原始秒值', async ({ page }) => {
+    const withoutMeta = { ...statsOverviewResponse.data }
+    delete withoutMeta.meta
+    await page.route('**/admin/api/v1/stats/overview*', async (route) => {
+      await route.fulfill({ json: { code: 0, message: 'success', data: withoutMeta } })
+    })
+    await page.goto('/stats')
+
+    const values = page.locator('.metric-value')
+    await expect(values).toHaveCount(5, { timeout: 30000 })
+    await expect(values.filter({ hasText: '-' })).toHaveCount(5, { timeout: 30000 })
+    await expect(values.filter({ hasText: '512' })).toHaveCount(0)
+    await expect(page.locator('.metric-label')).toHaveCount(5)
   })
 
   test('趋势图加载', async ({ page }) => {
