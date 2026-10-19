@@ -58,8 +58,25 @@
           :retrying="retryingTrend"
           @retry="retryTrend"
         />
-        <Line v-else-if="hasTrend" :data="trendData" :options="trendOptions" />
-        <el-empty v-else description="暂无趋势数据" />
+        <template v-else>
+          <!-- T02507（FR-UX-502）：纵轴单位与峰值写在图上方——既给视力正常的人一个
+               不用数刻度的结论，也让「三处同刻度」可被自动化断言 -->
+          <div class="trend-summary" data-guide="stats-trend-summary">
+            <span class="trend-summary__axis">纵轴 {{ axisTitle }}</span>
+            <span v-if="peak" class="trend-summary__peak">
+              峰值 {{ peak.text }}（{{ peak.date }}）
+            </span>
+            <span v-else class="trend-summary__peak">峰值 暂无数据</span>
+          </div>
+          <div
+            class="trend-plot"
+            :role="hasTrend ? 'img' : null"
+            :aria-label="hasTrend ? trendAriaLabel : null"
+          >
+            <Line v-if="hasTrend" :data="trendData" :options="trendOptions" />
+            <el-empty v-else description="暂无趋势数据" />
+          </div>
+        </template>
       </div>
     </el-card>
   </div>
@@ -83,7 +100,7 @@ import {
 import dayjs from 'dayjs'
 import api from '../../api'
 import ListLoadError from '../../components/ListLoadError.vue'
-import { metricLabel, metricValue } from '../../utils/format'
+import { metricLabel, metricNumber, metricText, metricValue } from '../../utils/format'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
 
@@ -116,10 +133,56 @@ const hasTrend = computed(() =>
   (trend.value.values || []).some((v) => v !== null && v !== undefined),
 )
 
-// 趋势曲线名称同样取自 meta（FR-UX-501 / T02506）；
-// Y 轴刻度换算（0~1 → %）属 FR-UX-502 / T02507，本单不动数值口径
-const trendMeta = computed(() => trend.value.meta?.[metric.value])
+// 趋势曲线名称同样取自 meta（FR-UX-501 / T02506）
+// meta 按「响应自带的 metric」取，而不是按当前选中项：切换指标到响应到达之间，
+// 图上画的还是上一份数据，坐标轴与换算必须跟着数据走，否则会出现
+// 「曲线是 DAU、轴写完播率(%)」这种自己和自己不一致的中间态（T02507）
+const trendMeta = computed(
+  () => trend.value.meta?.[trend.value.metric || metric.value],
+)
 const chartLabel = computed(() => trendMeta.value?.label || '')
+// FR-UX-502 / T02507：纵轴单位也取自 meta（"完播率(%)"），页面不写死 %
+const axisTitle = computed(() => metricLabel(trendMeta.value))
+const axisUnit = computed(() => trendMeta.value?.display?.unit || '')
+
+// FR-UX-502 / T02507：曲线值与卡片值必须同一刻度。
+// 后端按原始单位下发（完播率是 0~1 的 ratio），换算只走 metaNumber 这一个出口；
+// 缺 meta 时得到 null（断点）而不是把 0.65 当 65% 猜——与卡片「宁可空着」同规则。
+const trendPoints = computed(() =>
+  (trend.value.values || []).map((v) => metricNumber(v, trendMeta.value)),
+)
+
+// 峰值（区间内最大展示值及其日期）：null 数据点不参与比较，全空时不给峰值
+const peak = computed(() => {
+  const points = trendPoints.value
+  let index = -1
+  for (let i = 0; i < points.length; i++) {
+    const v = points[i]
+    if (v === null) continue
+    if (index < 0 || v > points[index]) index = i
+  }
+  if (index < 0) return null
+  return {
+    value: points[index],
+    date: trend.value.dates?.[index] || '',
+    text: metricText(trend.value.values[index], trendMeta.value),
+  }
+})
+
+// 无障碍/自动化读取的图摘要：读屏用户拿不到 canvas，这段是他们的「纵轴 + 峰值」
+const trendAriaLabel = computed(() => {
+  const parts = [`${axisTitle.value}趋势图`]
+  parts.push(peak.value ? `峰值 ${peak.value.text}（${peak.value.date}）` : '峰值 暂无数据')
+  return parts.join('，')
+})
+
+// 刻度与 tooltip 都按展示值格式化：轴上写 65 而不是 0.65，百分比紧跟符号
+function formatAxisValue(v) {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return ''
+  const text = axisUnit.value === '%' ? String(n) : n.toLocaleString('zh-CN')
+  return axisUnit.value === '%' ? `${text}%` : text
+}
 
 // 适配 Chart.js 数据结构：薄荷青主线 + 半透明填充
 const trendData = computed(() => ({
@@ -127,7 +190,7 @@ const trendData = computed(() => ({
   datasets: [
     {
       label: chartLabel.value,
-      data: trend.value.values,
+      data: trendPoints.value,
       borderColor: '#7ECEC1',
       backgroundColor: 'rgba(126, 206, 193, 0.18)',
       fill: true,
@@ -139,17 +202,36 @@ const trendData = computed(() => ({
   ],
 }))
 
-const trendOptions = {
+// 必须是 computed：vue-chartjs 只在 options 引用变化时 setOptions，
+// 静态对象切指标后纵轴单位与换算会停在上一份 meta 上（T02507）
+const trendOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
+  // 关动画有两个理由：一是运维会连着切好几个指标，入场动画每次拖 1s 反而挡读数；
+  // 二是曲线位置变得确定，e2e 才能用像素证明「画进 canvas 的是换算后的刻度」
+  // ——曲线刻度是本单最容易「测试全绿但图还是 0~1」的死角（T02507）
+  animation: false,
   plugins: {
     legend: { display: false },
-    tooltip: { mode: 'index', intersect: false },
+    tooltip: {
+      mode: 'index',
+      intersect: false,
+      callbacks: {
+        label: (ctx) => `${chartLabel.value}: ${formatAxisValue(ctx.parsed.y)}`,
+      },
+    },
   },
   scales: {
-    y: { beginAtZero: true },
+    y: {
+      beginAtZero: true,
+      // PRD FR-UX-502「Y 轴标注单位与最大值」：单位进轴标题，
+      // 最大值用 suggestedMax 保证峰值落在刻度范围内（不裁顶）
+      title: { display: true, text: axisTitle.value },
+      suggestedMax: peak.value?.value ?? 0,
+      ticks: { callback: (v) => formatAxisValue(v) },
+    },
   },
-}
+}))
 
 const loading = ref(false)
 // T02496（FR-UX-302）：概览/趋势各自的失败态与重试标志
@@ -253,7 +335,31 @@ onMounted(() => {
     }
 
     .trend-canvas {
+      display: flex;
+      flex-direction: column;
       height: 360px;
+
+      // T02507：图摘要占一行，画布吃剩余高度——直接给 canvas 定高会在窄屏挤压坐标轴
+      .trend-summary {
+        flex: 0 0 auto;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 16px;
+        margin-bottom: 8px;
+        font-size: 13px;
+        color: $color-text-secondary;
+
+        .trend-summary__peak {
+          font-weight: 600;
+          color: $color-text-primary;
+        }
+      }
+
+      .trend-plot {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
     }
   }
 }

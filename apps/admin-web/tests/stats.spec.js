@@ -2,6 +2,7 @@
 import {
   setLoginState,
   statsOverviewResponse,
+  statsTrendCompletionResponse,
   statsTrendResponse,
 } from './helpers/mock'
 
@@ -12,7 +13,41 @@ import {
  * - 指标卡片显示
  * - 趋势图加载
  * - 切换指标重新加载
+ * - 完播率三处同刻度（FR-UX-501 / FR-UX-502）
  */
+
+/**
+ * 读出画在 canvas 里的曲线位置（T02507）
+ *
+ * 曲线刻度是本单最容易「DOM 全绿、图还是 0~1」的死角：轴标题与峰值是 DOM 文字，
+ * 而 dataset 是画进画布的像素。Chart.js 的网格线 alpha≈0.1、面积填充 alpha≈0.18，
+ * 主线与数据点是实色（alpha=255），按 alpha>120 过滤后只剩曲线本身。
+ * 返回曲线顶端/底端在画布高度中的占比，供用例断言「画的是换算后的量级」。
+ */
+async function curveBand(page) {
+  return page.evaluate(() => {
+    const canvas = document.querySelector('.trend-plot canvas')
+    if (!canvas) return null
+    const g = canvas.getContext('2d')
+    const { data, width, height } = g.getImageData(0, 0, canvas.width, canvas.height)
+    // 横向只取 35%~90%：左侧是旋转的纵轴标题和刻度文字，右侧避开末端留白
+    const x0 = Math.floor(width * 0.35)
+    const x1 = Math.floor(width * 0.9)
+    let top = -1
+    let bottom = -1
+    for (let y = 0; y < height; y++) {
+      for (let x = x0; x <= x1; x++) {
+        if (data[(y * width + x) * 4 + 3] > 120) {
+          if (top < 0) top = y
+          bottom = y
+          break
+        }
+      }
+    }
+    if (top < 0) return null
+    return { topFrac: top / height, bottomFrac: bottom / height }
+  })
+}
 test.describe('统计页面', () => {
   // vite 首次按需编译路由组件可能耗时 15-25s，给到 30s 避免 flaky
   test.use({ expect: { timeout: 30000 } })
@@ -112,6 +147,73 @@ test.describe('统计页面', () => {
     await expect(page.getByRole('radio', { name: 'DAU' })).toBeVisible({ timeout: 30000 })
     await expect(page.getByRole('radio', { name: '播放量' })).toBeVisible({ timeout: 30000 })
     await expect(page.getByRole('radio', { name: '完播率' })).toBeVisible({ timeout: 30000 })
+  })
+
+  // T02507（FR-UX-502）：完播率在「卡片 / 趋势 / 移动端」三处必须是同一刻度。
+  // 趋势曲线本身画在 canvas 里断言不到，但峰值与曲线数据出自同一个
+  // trendPoints（按 meta.display.factor 换算的结果），所以断言峰值文案
+  // 就等于断言了曲线刻度；再与卡片 65.0、移动端 65.0 对齐即 ACC-UX-501 #2。
+  test('趋势图与卡片同刻度（完播率）', async ({ page }) => {
+    await page.route('**/admin/api/v1/stats/trend*', async (route) => {
+      await route.fulfill({ json: statsTrendCompletionResponse })
+    })
+    await page.goto('/stats')
+    await expect(page.locator('canvas')).toBeVisible({ timeout: 30000 })
+    await page.locator('.el-radio-button').filter({ hasText: '完播率' }).click()
+
+    await expect(page.locator('.trend-summary__axis')).toHaveText('纵轴 完播率(%)', {
+      timeout: 30000,
+    })
+    await expect(page.locator('.trend-summary__peak')).toHaveText(
+      '峰值 65.0%（2026-07-02）',
+      { timeout: 30000 },
+    )
+    // 卡片与趋势峰值是同一个数（0.65 → 65.0，只乘一次 100）
+    await expect(
+      page.locator('.metric-value').filter({ hasText: '65.0' }),
+    ).toBeVisible({ timeout: 30000 })
+    // 原始 ratio 不得出现在任何刻度文案里
+    await expect(page.locator('[data-guide="stats-trend-summary"]')).not.toContainText('0.65')
+    await expect(page.locator('.trend-plot')).toHaveAttribute(
+      'aria-label',
+      /完播率\(%\).*峰值 65\.0%/,
+    )
+  })
+
+  // 曲线本体：峰值文案证明「换算只乘一次」，这条证明「乘完的结果真的画进了画布」。
+  // 数据 50/65/42（占比 0.5/0.65/0.42 换算而来）应落在画布上半部；
+  // 若有人把原始 ratio 直接喂给 dataset（0.42~0.65 对 0~65 的轴），
+  // 曲线会贴着底部横轴，顶端占比 >0.9 —— 正是本次改造前的形态。
+  test('趋势曲线按换算后的刻度绘制', async ({ page }) => {
+    await page.route('**/admin/api/v1/stats/trend*', async (route) => {
+      await route.fulfill({ json: statsTrendCompletionResponse })
+    })
+    await page.goto('/stats')
+    await page.locator('.el-radio-button').filter({ hasText: '完播率' }).click()
+    await expect(page.locator('.trend-summary__peak')).toContainText('65.0%', {
+      timeout: 30000,
+    })
+
+    const band = await curveBand(page)
+    expect(band, '画布上读不到曲线（未渲染或被遮挡）').not.toBeNull()
+    expect(band.topFrac).toBeLessThan(0.5)
+    expect(band.bottomFrac).toBeGreaterThan(0.15)
+  })
+
+  // 反证：趋势缺 meta 时，页面不得把 0~1 的原始值当百分数报出来，  // 只能显示「没有单位 / 没有峰值」——与卡片的「宁可空着也不猜」同一条契约。
+  test('趋势缺 meta 时不猜刻度', async ({ page }) => {
+    const withoutMeta = { ...statsTrendCompletionResponse.data }
+    delete withoutMeta.meta
+    await page.route('**/admin/api/v1/stats/trend*', async (route) => {
+      await route.fulfill({ json: { code: 0, message: 'success', data: withoutMeta } })
+    })
+
+    await page.goto('/stats')
+    await expect(page.locator('.trend-summary__axis')).toHaveText('纵轴 -', { timeout: 30000 })
+    await expect(page.locator('.trend-summary__peak')).toHaveText('峰值 暂无数据', {
+      timeout: 30000,
+    })
+    await expect(page.locator('[data-guide="stats-trend-summary"]')).not.toContainText('0.65')
   })
 
   test('切换指标重新加载', async ({ page }) => {

@@ -10,6 +10,9 @@ import { defineConfig, devices } from '@playwright/test'
  */
 export default defineConfig({
   testDir: './tests',
+  // tests/unit/ 放 node:test 的纯函数用例（npm run test:unit），
+  // 不能让 playwright 按 *.test.mjs 把它们当 e2e 收集——它没有浏览器夹具
+  testIgnore: '**/unit/**',
   fullyParallel: true,
   // CI 环境下禁止 .only 防止误提交
   forbidOnly: !!process.env.CI,

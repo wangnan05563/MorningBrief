@@ -35,20 +35,38 @@ export function metricLabel(meta) {
   return unit ? `${meta.label}(${unit})` : meta.label
 }
 
-export function metricValue(raw, meta) {
-  if (raw === null || raw === undefined || raw === '') return '-'
+/**
+ * 换算后的**数值**（图表/坐标轴用它，文案用 `metricValue`）。
+ *
+ * FR-UX-502 / T02507：趋势曲线要和卡片同一个刻度，就不能各乘各的 100——
+ * 把「按 meta 换算」收敛成这一个出口，格式化只是给它加千分位和小数位。
+ * 不可换算（缺 meta / 非数）返回 null，调用方按「没有数据」处理，不返回 0。
+ */
+export function metricNumber(raw, meta) {
+  if (raw === null || raw === undefined || raw === '') return null
   const n = Number(raw)
-  if (!Number.isFinite(n) || !meta) return '-'
+  if (!Number.isFinite(n) || !meta) return null
   const precision = meta.display?.precision ?? 0
   const value = n * (meta.display?.factor ?? 1)
-  // 0 位小数按千分位分组（DAU/播放量常上万），带小数的（完播率、分钟）保留定点格式
-  return precision > 0
-    ? value.toFixed(precision)
-    : Math.round(value).toLocaleString('zh-CN')
+  return precision > 0 ? Number(value.toFixed(precision)) : Math.round(value)
 }
 
+export function metricValue(raw, meta) {
+  const value = metricNumber(raw, meta)
+  if (value === null) return '-'
+  const precision = meta.display?.precision ?? 0
+  // 0 位小数按千分位分组（DAU/播放量常上万），带小数的（完播率、分钟）保留定点格式
+  return precision > 0 ? value.toFixed(precision) : value.toLocaleString('zh-CN')
+}
+
+/**
+ * 带单位的展示文案（趋势图峰值、tooltip 用它，与卡片同源不同形）。
+ *
+ * `%` 按中文排版惯例紧跟数字（65.0%），其余单位加空格（8.5 分钟）。
+ */
 export function metricText(raw, meta) {
   const v = metricValue(raw, meta)
-  if (v === '-' || !meta?.display?.unit) return v
-  return `${v} ${meta.display.unit}`
+  const unit = meta?.display?.unit
+  if (v === '-' || !unit) return v
+  return unit === '%' ? `${v}${unit}` : `${v} ${unit}`
 }

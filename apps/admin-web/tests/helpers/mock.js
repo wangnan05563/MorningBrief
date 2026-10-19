@@ -307,6 +307,22 @@ export const statsTrendResponse = {
   },
 }
 
+// T02507（FR-UX-502）：完播率趋势夹具。
+// values 是后端真实口径——0~1 的 ratio（stats_service.py 用 func.avg(PlayLog.completed)），
+// 峰值 0.65 与上面概览卡片的 completion_rate: 0.65 是同一个数，
+// 用例据此断言「卡片 65.0% == 趋势峰值 65.0%」。
+// 若这里被改成 65（已经是百分数），换算后会显示 6500%，刻度回归会被抓到。
+export const statsTrendCompletionResponse = {
+  code: 0,
+  message: 'success',
+  data: {
+    dates: ['2026-07-01', '2026-07-02', '2026-07-03'],
+    values: [0.5, 0.65, 0.42],
+    metric: 'completion_rate',
+    meta: { completion_rate: statsMetricMeta.completion_rate },
+  },
+}
+
 // 频道素材健康度：3 个频道覆盖 healthy/warning/critical 三种状态
 export const channelHealthResponse = {
   code: 0,
