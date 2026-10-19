@@ -7,6 +7,8 @@
         <el-radio-button :value="14">近 14 天</el-radio-button>
         <el-radio-button :value="30">近 30 天</el-radio-button>
       </el-radio-group>
+      <!-- T02508（FR-UX-503）：写明"近 N 天"到底是哪几天，区间直接读后端下发的日期 -->
+      <span v-if="trendWindow" class="window-note">统计区间 {{ trendWindow }}</span>
     </div>
 
     <!-- 汇总卡片：healthy / warning / critical / total -->
@@ -68,7 +70,13 @@
 
             <!-- mini 折线图：近 N 天每日入库数 -->
             <div class="trend-area">
-              <div class="trend-title">每日入库趋势</div>
+              <!-- T02508（FR-UX-503）：卡片里的折线是缩略图，刻意不画坐标轴。
+                   既然不给刻度，就必须写明"仅趋势"并让悬停能读到准确条数，
+                   否则"那条线翘起来了"会被读成有量，实际可能只是 0→1 条 -->
+              <div class="trend-title" data-guide="channel-health-trend-caption">
+                <span>每日入库趋势</span>
+                <span class="trend-scope">仅趋势 · 未标刻度（悬停看条数）</span>
+              </div>
               <div class="trend-canvas">
                 <Line
                   v-if="ch.daily_trend && ch.daily_trend.length > 0"
@@ -115,13 +123,28 @@ const summaryCards = computed(() => [
   { key: 'total', label: '频道总数', value: summary.value.total, cls: 'is-total' },
 ])
 
+// 统计区间：从后端下发的 daily_trend 取真实日期窗口，不在本地按"今天"倒推——
+// 客户端日期与服务端聚合锚点不一致时，这里宁可显示数据里的区间（T02508 / FR-UX-503）
+const trendWindow = computed(() => {
+  const trend = channels.value.find((c) => c.daily_trend?.length)?.daily_trend || []
+  if (!trend.length) return ''
+  return `${trend[0].date} ~ ${trend[trend.length - 1].date}`
+})
+
 // mini 折线图配置：隐藏图例和坐标轴标签，仅保留 tooltip，紧凑展示
 const trendOptions = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
     legend: { display: false },
-    tooltip: { mode: 'index', intersect: false },
+    tooltip: {
+      mode: 'index',
+      intersect: false,
+      // 不画坐标轴就更要把单位说清：这里的数字是"条素材"，不是百分比也不是次数
+      callbacks: {
+        label: (ctx) => `${ctx.parsed.y} 条`,
+      },
+    },
   },
   scales: {
     x: { display: false },
@@ -194,6 +217,12 @@ onMounted(loadData)
       font-size: 18px;
       font-weight: 600;
       color: $color-text-primary;
+    }
+
+    // T02508：把"近 N 天"翻译成具体日期窗口，放在筛选器旁边而不是页面底部
+    .window-note {
+      font-size: 12px;
+      color: $color-text-secondary;
     }
   }
 
@@ -288,9 +317,19 @@ onMounted(loadData)
 
     .trend-area {
       .trend-title {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 2px 6px;
         font-size: 12px;
         color: $color-text-secondary;
         margin-bottom: 4px;
+
+        // 口径补充说明：比"每日入库趋势"更轻一档，避免和指标名抢视觉权重
+        .trend-scope {
+          font-size: 11px;
+          color: $color-text-secondary;
+        }
       }
 
       .trend-canvas {

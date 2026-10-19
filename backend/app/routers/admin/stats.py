@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AdminPayload, get_current_admin
 from app.core.exceptions import BizError
 from app.core.response import success
+from app.core.runtime import runtime_fields
 from app.database import get_db
 from app.services.stats_service import StatsService
 
@@ -69,13 +70,16 @@ async def get_rss_health(
     默认返回最近一次巡检结果（不触发新巡检，响应快）。
     refresh=true 时立即触发一次巡检，适合运维手动验证源状态。
     巡检任务每 2 小时自动执行一次，连续失败 3 次的源会自动 WARNING 日志。
+
+    T02508（FR-UX-503）：`consecutive_failures` 保存在进程内字典，重启即清零，
+    因此回传 `started_at` / `pid` 标明累计口径，前端才能写出「累计自 x，重启清零」。
     """
     from app.services.rss_source_service import check_all_sources, get_source_status
     if refresh:
         data = await check_all_sources()
     else:
         data = get_source_status()
-    return success(data=data)
+    return success(data={**data, **runtime_fields()})
 
 
 @router.get("/llm-metrics")
@@ -95,7 +99,11 @@ async def get_llm_metrics(
 
     用于运维评估 P2-2 改进效果：触发率高说明 LLM 字数缩水严重需优化 prompt；
     改善率低说明硬约束后缀效果不佳需更换策略。
+
+    T02508（FR-UX-503）：全部计数都是进程内累计（重启清零），不是按日统计，
+    因此额外回传 `started_at` / `pid` 作为累计起点，页面必须把它显示出来，
+    否则运维会把"攒了半个月的触发率"读成"今天的触发率"。
     """
     from app.workflow.llm.rewriter import get_word_count_retry_stats
     data = get_word_count_retry_stats()
-    return success(data=data)
+    return success(data={**data, **runtime_fields()})

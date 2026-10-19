@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { setLoginState, llmMetricsResponse } from './helpers/mock'
+import { setLoginState, llmMetricsResponse, llmMetricsLegacyResponse } from './helpers/mock'
 
 /**
  * LLM 字数重试命中率页面 E2E 测试
@@ -9,6 +9,7 @@ import { setLoginState, llmMetricsResponse } from './helpers/mock'
  * - 原始计数卡显示（total_calls / triggered / improved / not_improved）
  * - 漏斗可视化渲染（3 个 stage-bar）
  * - 刷新按钮触发重新加载
+ * - 累计口径标注（T02508 / FR-UX-503：起点、PID、重启清零、缺字段退化）
  */
 test.describe('LLM 重试指标页面', () => {
   // vite 首次按需编译路由组件可能耗时 15-25s，给到 30s 避免 flaky
@@ -85,5 +86,64 @@ test.describe('LLM 重试指标页面', () => {
 
     // 应触发一次新的 llm-metrics 请求
     await expect.poll(() => callCount).toBe(initialCount + 1)
+  })
+
+  // T02508（FR-UX-503）：本页计数全部是进程内累计，重启归零。
+  // PRD ACC-UX-501 要求「LLM 指标页明确显示累计自 x 时间，重启清零」，
+  // 这里断言的是"起点时间 + PID + 重启清零"三个要素都在页面上，而不只是一句空话
+  test('累计口径标注：写明累计起点与重启清零', async ({ page }) => {
+    await page.goto('/stats/llm-metrics')
+    const note = page.locator('[data-guide="llm-metrics-scope"]')
+
+    await expect(note).toContainText('累计自 2026-07-18 09:30:00', { timeout: 30000 })
+    await expect(note).toContainText('PID 4321')
+    await expect(note).toContainText('重启后清零')
+    // 运行时长让运维判断样本攒了多久（不断言具体天数，测试机时间不固定）
+    await expect(note).toContainText('已运行')
+  })
+
+  test('后端未升级时不编造起点日期', async ({ page }) => {
+    // 后注册的 route 优先命中：用不含 started_at 的老响应覆盖 beforeEach 的 mock
+    await page.route('**/admin/api/v1/stats/llm-metrics*', async (route) => {
+      await route.fulfill({ json: llmMetricsLegacyResponse })
+    })
+    await page.goto('/stats/llm-metrics')
+    const note = page.locator('[data-guide="llm-metrics-scope"]')
+
+    await expect(note).toContainText('后端未返回累计起点时间', { timeout: 30000 })
+    await expect(note).not.toContainText(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/)
+    // 口径字段缺失不能连带把数据也弄没
+    await expect(page.locator('.count-value').filter({ hasText: '100' })).toBeVisible({
+      timeout: 30000,
+    })
+  })
+
+  test('零调用空态同样标注口径', async ({ page }) => {
+    await page.route('**/admin/api/v1/stats/llm-metrics*', async (route) => {
+      await route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: {
+            total_calls: 0,
+            triggered: 0,
+            improved: 0,
+            not_improved: 0,
+            trigger_rate: 0.0,
+            improve_rate: 0.0,
+            not_improve_rate: 0.0,
+            started_at: '2026-07-18T09:30:00',
+            pid: 4321,
+          },
+        },
+      })
+    })
+    await page.goto('/stats/llm-metrics')
+
+    // 空态时"0%"最容易被误读成"问题已修复"，口径必须在这时候也在场
+    await expect(page.getByText('暂无 LLM 调用数据')).toBeVisible({ timeout: 30000 })
+    await expect(page.locator('[data-guide="llm-metrics-scope"]')).toContainText(
+      '累计自 2026-07-18 09:30:00',
+    )
   })
 })

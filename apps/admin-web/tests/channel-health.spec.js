@@ -8,6 +8,7 @@ import { setLoginState, channelHealthResponse } from './helpers/mock'
  * - 汇总卡片显示（healthy/warning/critical/total）
  * - 频道卡片渲染（含健康徽章）
  * - 切换回溯天数重新加载
+ * - 折线口径标注（T02508 / FR-UX-503：仅趋势声明 + 具体统计区间）
  */
 test.describe('频道健康度页面', () => {
   // vite 首次按需编译路由组件可能耗时 15-25s，给到 30s 避免 flaky
@@ -69,6 +70,18 @@ test.describe('频道健康度页面', () => {
 
     await expect.poll(() => callCount).toBe(initialCount + 1)
     expect(lastParams).toContain('range_days=14')
+  })
+
+  // T02508（FR-UX-503）：卡片里的 mini 折线刻意不画坐标轴，那就必须
+  // ① 写明"仅趋势"，② 把"近 N 天"落到具体日期窗口，③ 悬停能读到带单位的准确值
+  test('折线口径：标注仅趋势并给出具体统计区间', async ({ page }) => {
+    await page.goto('/stats/channel-health')
+
+    const caption = page.locator('[data-guide="channel-health-trend-caption"]').first()
+    await expect(caption).toContainText('仅趋势 · 未标刻度', { timeout: 30000 })
+
+    // 统计区间直接来自后端下发的 daily_trend 首尾日期，不是前端按"今天"倒推
+    await expect(page.locator('.window-note')).toContainText('2026-07-15 ~ 2026-07-21')
   })
 })
 

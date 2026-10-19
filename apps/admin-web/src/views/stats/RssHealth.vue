@@ -29,6 +29,13 @@
       </el-col>
     </el-row>
 
+    <!-- T02508（FR-UX-503）：巡检状态与「连续失败」次数保存在服务进程内存里，重启即归零。
+         不标起点，运维会把"刚重启所以全是正常"当成持续结论 -->
+    <div data-guide="rss-health-scope" class="scope-note">
+      <span class="scope-note__text">{{ scopeNote }}</span>
+      <span v-if="uptimeNote" class="scope-note__uptime">已运行 {{ uptimeNote }}</span>
+    </div>
+
     <!-- 筛选区：状态筛选 + 品类筛选 + 搜索 -->
     <div class="filter-bar">
       <el-radio-group v-model="statusFilter" @change="applyFilter">
@@ -139,11 +146,26 @@ import { ref, computed, onMounted } from 'vue'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import api from '../../api'
+import { cumulativeScopeText, uptimeText as formatUptime } from '../../utils/scope'
 
 const loading = ref(false)
 const refreshing = ref(false)
 const rawData = ref({ total: 0, ok: 0, fail: 0, unknown: 0, sources: [] })
 const lastCheckedAt = ref(null)
+// 累计口径（T02508）：后端 /stats/rss-health 回传进程启动时刻与 PID，null 表示后端未升级
+const startedAt = ref(null)
+const processPid = ref(null)
+const fetchedAt = ref(null)
+
+// 「累计自 x 时间，重启清零」——巡检状态存在进程内存里，不写起点就会误读成持久结论
+const scopeNote = computed(() =>
+  cumulativeScopeText({
+    startedAt: startedAt.value,
+    pid: processPid.value,
+    subject: '各源巡检状态与连续失败次数',
+  })
+)
+const uptimeNote = computed(() => formatUptime({ startedAt: startedAt.value, now: fetchedAt.value }))
 
 // 筛选状态：statusFilter 多状态单选 + keyword 模糊搜索
 const statusFilter = ref('all')
@@ -200,24 +222,33 @@ function applyFilter() {
   })
 }
 
+// 两个入口（普通读取 / 立即巡检）返回体结构一致，统一在这里落数据，
+// 避免以后加字段时只改了一条路径（T02508 的口径字段就是这么差点漏掉）
+function applyData(data) {
+  rawData.value = {
+    total: data.total || 0,
+    ok: data.ok || 0,
+    fail: data.fail || 0,
+    unknown: data.unknown || 0,
+    sources: data.sources || [],
+  }
+  startedAt.value = data.started_at || null
+  processPid.value = data.pid || null
+  // 推导最近巡检时间：所有源中最大的 last_check
+  const checks = rawData.value.sources
+    .map((s) => s.last_check)
+    .filter(Boolean)
+    .sort()
+  lastCheckedAt.value = checks.length ? checks[checks.length - 1] : null
+  applyFilter()
+}
+
 async function loadData() {
   loading.value = true
   try {
     const data = await api.get('/stats/rss-health')
-    rawData.value = {
-      total: data.total || 0,
-      ok: data.ok || 0,
-      fail: data.fail || 0,
-      unknown: data.unknown || 0,
-      sources: data.sources || [],
-    }
-    // 推导最近巡检时间：所有源中最大的 last_check
-    const checks = rawData.value.sources
-      .map((s) => s.last_check)
-      .filter(Boolean)
-      .sort()
-    lastCheckedAt.value = checks.length ? checks[checks.length - 1] : null
-    applyFilter()
+    applyData(data)
+    fetchedAt.value = dayjs()
   } finally {
     loading.value = false
   }
@@ -228,19 +259,8 @@ async function refresh() {
   refreshing.value = true
   try {
     const data = await api.get('/stats/rss-health', { params: { refresh: true }, timeout: 60000 })
-    rawData.value = {
-      total: data.total || 0,
-      ok: data.ok || 0,
-      fail: data.fail || 0,
-      unknown: data.unknown || 0,
-      sources: data.sources || [],
-    }
-    const checks = rawData.value.sources
-      .map((s) => s.last_check)
-      .filter(Boolean)
-      .sort()
-    lastCheckedAt.value = checks.length ? checks[checks.length - 1] : null
-    applyFilter()
+    applyData(data)
+    fetchedAt.value = dayjs()
   } finally {
     refreshing.value = false
   }
@@ -282,6 +302,23 @@ onMounted(loadData)
 
     .el-col {
       margin-bottom: 12px;
+    }
+  }
+
+  .scope-note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 12px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border-radius: $radius-sm;
+    background: $color-bg;
+    font-size: 12px;
+    color: $color-text-secondary;
+
+    .scope-note__text {
+      font-weight: 600;
     }
   }
 

@@ -11,6 +11,14 @@
       />
     </div>
 
+    <!-- T02508（FR-UX-503）：本页所有计数都是进程内累计，重启即清零。
+         不写清起点，运维会把"攒了半个月的触发率"读成"今天的触发率"。
+         放在空态之外：即使还没有调用，也要让人看到这批数字从什么时候开始算 -->
+    <div data-guide="llm-metrics-scope" class="scope-note">
+      <span class="scope-note__text">{{ scopeNote }}</span>
+      <span v-if="uptimeNote" class="scope-note__uptime">已运行 {{ uptimeNote }}</span>
+    </div>
+
     <!-- 说明卡：解释指标含义，便于运维理解派生率意义 -->
     <el-alert
       v-if="!loading && metrics.total_calls > 0"
@@ -84,11 +92,14 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import dayjs from 'dayjs'
 import { Refresh } from '@element-plus/icons-vue'
 import api from '../../api'
+import { cumulativeScopeText, uptimeText as formatUptime } from '../../utils/scope'
 
 const loading = ref(false)
 // 默认全 0，避免空态时 computed 除零报错
+// started_at / pid：后端 T02508 新增的累计口径字段，null 表示后端未升级（不能拿当前时间冒充起点）
 const metrics = ref({
   total_calls: 0,
   triggered: 0,
@@ -97,7 +108,26 @@ const metrics = ref({
   trigger_rate: 0.0,
   improve_rate: 0.0,
   not_improve_rate: 0.0,
+  started_at: null,
+  pid: null,
 })
+// 本次拉取时刻：用于算「已运行多久」，取到数就冻结，不做定时器（页面不需要秒级跳动）
+const fetchedAt = ref(null)
+
+// 累计口径文案：PRD ACC-UX-501 要求「明确显示累计自 x 时间，重启清零」
+// subject 说明这句口径覆盖的对象——本页所有数字（含三个派生率）都是进程内累计
+const scopeNote = computed(() =>
+  cumulativeScopeText({
+    startedAt: metrics.value.started_at,
+    pid: metrics.value.pid,
+    subject: '本页全部计数与派生率',
+  })
+)
+
+// 运行时长：让运维判断"这批累计值攒了多久"，样本只有 20 次调用时不必然是问题
+const uptimeNote = computed(() =>
+  formatUptime({ startedAt: metrics.value.started_at, now: fetchedAt.value })
+)
 
 // 派生率卡片：trigger_rate 高表示 LLM 字数缩水严重，improve_rate 高表示硬约束有效
 // 颜色映射：触发率用 warning（黄），改善率用 success（绿），未改善率用 danger（红）
@@ -194,6 +224,8 @@ async function loadData() {
     if (data && typeof data === 'object') {
       metrics.value = { ...metrics.value, ...data }
     }
+    // 仅在取数成功时冻结时刻：失败时保留上一次的值，口径不能变成"刚刚"
+    fetchedAt.value = dayjs()
   } catch (e) {
     // 拦截器已统一提示，这里保留 metrics 现值不清空，避免页面闪烁
   } finally {
@@ -218,6 +250,23 @@ onMounted(loadData)
       font-size: 18px;
       font-weight: 600;
       color: $color-text-primary;
+    }
+  }
+
+  .scope-note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 12px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border-radius: $radius-sm;
+    background: $color-bg;
+    font-size: 12px;
+    color: $color-text-secondary;
+
+    .scope-note__text {
+      font-weight: 600;
     }
   }
 

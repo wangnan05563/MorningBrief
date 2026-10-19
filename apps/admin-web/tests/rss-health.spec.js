@@ -9,6 +9,7 @@ import { setLoginState, rssHealthResponse } from './helpers/mock'
  * - 源状态表格渲染
  * - 立即巡检按钮触发 refresh=true 请求
  * - 状态筛选
+ * - 累计口径标注（T02508 / FR-UX-503：巡检状态存在进程内存，重启归零）
  */
 test.describe('RSS 源状态页面', () => {
   // vite 首次按需编译路由组件可能耗时 15-25s，给到 30s 避免 flaky
@@ -77,6 +78,18 @@ test.describe('RSS 源状态页面', () => {
 
     await expect(page.locator('.el-table__row')).toHaveCount(1, { timeout: 5000 })
     await expect(page.locator('.el-table__row').first()).toContainText('rsshub 失效源')
+  })
+
+  // T02508（FR-UX-503）：巡检状态与「连续失败次数」存在进程内存里，重启归零。
+  // 页面必须写出累计起点，否则"刚重启所以全绿"会被读成"源一直正常"
+  test('累计口径标注：写明巡检状态的累计起点与重启清零', async ({ page }) => {
+    await page.goto('/stats/rss-health')
+    const note = page.locator('[data-guide="rss-health-scope"]')
+
+    await expect(note).toContainText('累计自 2026-07-18 09:30:00', { timeout: 30000 })
+    await expect(note).toContainText('PID 4321')
+    await expect(note).toContainText('连续失败次数')
+    await expect(note).toContainText('重启后清零')
   })
 })
 

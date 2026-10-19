@@ -404,6 +404,9 @@ export const rssHealthResponse = {
     fail: 1,
     unknown: 1,
     checked_at: '2026-07-21T05:00:00+00:00',
+    // T02508（FR-UX-503）：巡检状态存在进程内存里，接口回传累计口径字段
+    started_at: '2026-07-18T09:30:00',
+    pid: 4321,
     sources: [
       {
         name: '人民网-国内',
@@ -442,6 +445,24 @@ export const rssHealthResponse = {
 // LLM 字数硬约束重试命中率：覆盖触发率/改善率/未改善率三种典型场景数据
 // mock 值典型场景：100 次调用 → 30 次触发 → 20 次改善 + 10 次未改善
 export const llmMetricsResponse = {
+  code: 0,
+  message: 'success',
+  data: {
+    total_calls: 100,
+    triggered: 30,
+    improved: 20,
+    not_improved: 10,
+    trigger_rate: 30.0,
+    improve_rate: 66.67,
+    not_improve_rate: 33.33,
+    // T02508（FR-UX-503）：以上计数全部是进程内累计，接口用 started_at / pid 标注起点
+    started_at: '2026-07-18T09:30:00',
+    pid: 4321,
+  },
+}
+
+// 老版本后端：没有口径字段，页面必须退化为「后端未返回累计起点时间」而不是编一个日期
+export const llmMetricsLegacyResponse = {
   code: 0,
   message: 'success',
   data: {

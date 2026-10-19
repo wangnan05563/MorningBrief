@@ -13,6 +13,15 @@
       />
     </div>
 
+    <!-- T02508（FR-UX-503）：日期选择器只管卡片，趋势图固定从今天往前取，两者互不影响。
+         实测切日期时趋势图一动不动，页面不写出来的话，运维会以为数据坏了 -->
+    <div data-guide="stats-scope-note" class="scope-note">
+      <span class="scope-note__item">上方日期只影响下面这组当日卡片</span>
+      <span class="scope-note__item">
+        趋势图固定按「近 {{ rangeDays }} 天」从今天往前取{{ trendWindow ? `（${trendWindow}）` : '' }}，不随所选日期改变
+      </span>
+    </div>
+
     <!-- T02496（FR-UX-302）：概览请求失败要说清「没取到」，不能让 5 个「-」看着像当天真的全是 0 -->
     <ListLoadError
       v-if="overviewError"
@@ -63,6 +72,7 @@
                不用数刻度的结论，也让「三处同刻度」可被自动化断言 -->
           <div class="trend-summary" data-guide="stats-trend-summary">
             <span class="trend-summary__axis">纵轴 {{ axisTitle }}</span>
+            <span v-if="trendWindow" class="trend-summary__window">区间 {{ trendWindow }}</span>
             <span v-if="peak" class="trend-summary__peak">
               峰值 {{ peak.text }}（{{ peak.date }}）
             </span>
@@ -169,9 +179,22 @@ const peak = computed(() => {
   }
 })
 
+// 趋势实际取数区间：直接读响应里的 dates，而不是本地按 range 算——
+// 后端把区间锚定在「今天」往前推，与上方日期选择器无关（T02508 / FR-UX-503）。
+// 把窗口写出来，"切日期趋势图为什么不动"这个问题就不需要口口相传了
+const trendWindow = computed(() => {
+  const dates = trend.value.dates || []
+  if (!dates.length) return ''
+  return `${dates[0]} ~ ${dates[dates.length - 1]}`
+})
+
+// 趋势回溯天数：range 是 '7d'/'30d' 字符串，展示给人看要还原成"7 天"
+const rangeDays = computed(() => parseInt(range.value, 10) || 0)
+
 // 无障碍/自动化读取的图摘要：读屏用户拿不到 canvas，这段是他们的「纵轴 + 峰值」
 const trendAriaLabel = computed(() => {
   const parts = [`${axisTitle.value}趋势图`]
+  if (trendWindow.value) parts.push(`区间 ${trendWindow.value}`)
   parts.push(peak.value ? `峰值 ${peak.value.text}（${peak.value.date}）` : '峰值 暂无数据')
   return parts.join('，')
 })
@@ -301,6 +324,21 @@ onMounted(() => {
       font-size: 18px;
       font-weight: 600;
       color: $color-text-primary;
+    }
+  }
+
+  // T02508（FR-UX-503）：口径说明——两个互不相干的时间窗必须一句话说清
+  .scope-note {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin: -4px 0 14px;
+    font-size: 12px;
+    color: $color-text-secondary;
+
+    // 只给第二句起加分隔点，否则第一句行首会挂一个孤零零的「·」
+    .scope-note__item + .scope-note__item::before {
+      content: '· ';
     }
   }
 

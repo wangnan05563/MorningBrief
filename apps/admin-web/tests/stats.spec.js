@@ -14,6 +14,7 @@ import {
  * - 趋势图加载
  * - 切换指标重新加载
  * - 完播率三处同刻度（FR-UX-501 / FR-UX-502）
+ * - 日期筛选与趋势范围的口径关系写明（FR-UX-503 / T02508）
  */
 
 /**
@@ -214,6 +215,52 @@ test.describe('统计页面', () => {
       timeout: 30000,
     })
     await expect(page.locator('[data-guide="stats-trend-summary"]')).not.toContainText('0.65')
+  })
+
+  // T02508（FR-UX-503）：日期选择器只驱动当日卡片，趋势固定按 range 从今天往前取，
+  // 两者互不相干。这里既断言文案写明，也用请求次数把这个关系钉死——
+  // 光有文案而行为不对，比没文案更误导
+  test('口径标注：日期筛选与趋势范围互不影响', async ({ page }) => {
+    let overviewCalls = 0
+    let trendCalls = 0
+    let lastOverviewUrl = ''
+    await page.route('**/admin/api/v1/stats/overview*', async (route) => {
+      overviewCalls++
+      lastOverviewUrl = route.request().url()
+      await route.fulfill({ json: statsOverviewResponse })
+    })
+    await page.route('**/admin/api/v1/stats/trend*', async (route) => {
+      trendCalls++
+      await route.fulfill({ json: statsTrendResponse })
+    })
+
+    await page.goto('/stats')
+
+    const note = page.locator('[data-guide="stats-scope-note"]')
+    await expect(note).toContainText('上方日期只影响下面这组当日卡片', { timeout: 30000 })
+    await expect(note).toContainText('近 7 天')
+    await expect(note).toContainText('不随所选日期改变')
+    // 区间直接取响应里的 dates 首尾，不是前端按"今天"倒推出来的猜测
+    await expect(page.locator('.trend-summary__window')).toContainText('2026-07-01 ~ 2026-07-03', {
+      timeout: 30000,
+    })
+
+    const overviewBefore = overviewCalls
+    const trendBefore = trendCalls
+
+    // 切趋势范围：只应重发 trend，卡片一次都不动
+    await page.locator('.el-radio-button').filter({ hasText: '30 天' }).click()
+    await expect.poll(() => trendCalls).toBe(trendBefore + 1)
+    expect(overviewCalls).toBe(overviewBefore)
+
+    // 改日期：只应重发 overview，趋势不跟着动
+    const dateInput = page.locator('.top-bar .el-date-editor input')
+    await dateInput.click()
+    await dateInput.fill('2026-07-05')
+    await page.keyboard.press('Enter')
+    await expect.poll(() => overviewCalls).toBe(overviewBefore + 1)
+    expect(lastOverviewUrl).toContain('date=2026-07-05')
+    expect(trendCalls).toBe(trendBefore + 1)
   })
 
   test('切换指标重新加载', async ({ page }) => {
