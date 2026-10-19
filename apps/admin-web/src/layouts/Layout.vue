@@ -57,8 +57,8 @@
                 {{ username.charAt(0).toUpperCase() }}
               </el-avatar>
               <span class="username">{{ username }}</span>
-              <el-tag size="small" :type="role === 'admin' ? 'success' : 'info'">
-                {{ role === 'admin' ? '管理员' : '运营' }}
+              <el-tag size="small" :type="enumTagType(ADMIN_ROLE, role)">
+                {{ enumLabel(ADMIN_ROLE, role) }}
               </el-tag>
             </span>
             <template #dropdown>
@@ -99,6 +99,7 @@ import { QuestionFilled } from '@element-plus/icons-vue'
 import { useGuide } from '../guide/useGuide'
 import { GUIDE_STEPS } from '../guide/guideConfig'
 import { checkUpdate } from '../api/about'
+import { ADMIN_ROLE, enumLabel, enumTagType } from '../constants/enums'
 
 const route = useRoute()
 const router = useRouter()

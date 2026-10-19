@@ -1,21 +1,9 @@
 <template>
   <div class="m-q">
     <section class="m-q__stats" v-if="stats">
-      <div class="m-q__stat">
-        <div class="m-q__stat-v">{{ stats.queued ?? stats.pending ?? '-' }}</div>
-        <div class="m-q__stat-l">排队中</div>
-      </div>
-      <div class="m-q__stat">
-        <div class="m-q__stat-v">{{ stats.running ?? '-' }}</div>
-        <div class="m-q__stat-l">执行中</div>
-      </div>
-      <div class="m-q__stat">
-        <div class="m-q__stat-v">{{ stats.failed ?? '-' }}</div>
-        <div class="m-q__stat-l">失败</div>
-      </div>
-      <div class="m-q__stat">
-        <div class="m-q__stat-v">{{ stats.finished ?? '-' }}</div>
-        <div class="m-q__stat-l">已完成</div>
+      <div v-for="c in STAT_CARDS" :key="c.key" class="m-q__stat">
+        <div class="m-q__stat-v">{{ stats[c.key] ?? '-' }}</div>
+        <div class="m-q__stat-l">{{ c.label }}</div>
       </div>
     </section>
 
@@ -31,7 +19,7 @@
     <div v-for="t in tasks" :key="t.id" class="m-q__item">
       <div class="m-q__head">
         <span class="m-q__ch">{{ t.channel_name || ('频道#' + t.channel_id) }}</span>
-        <span class="m-badge" :class="statusClass(t.status)">{{ statusLabel[t.status] || t.status }}</span>
+        <span class="m-badge" :class="statusClass(t.status)">{{ statusLabel(t.status) }}</span>
       </div>
       <div class="m-q__no">
         <span class="m-q__no-l">队列编号</span>
@@ -73,6 +61,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getQueueStats, listQueueTasks, cancelTask, retryTask } from '../../api/queue'
 import { ElMessage } from '../../utils/message'
+import { WORKFLOW_STATUS, enumLabel, enumBadge } from '../../constants/enums'
 
 const router = useRouter()
 
@@ -91,15 +80,15 @@ function goReview(t) {
   })
 }
 
-const statusLabel = {
-  queued: '排队中', running: '执行中', finished: '已完成',
-  failed: '失败', cancelled: '已取消',
-}
-const statusClass = (s) =>
-  ({
-    queued: 'm-badge--info', running: 'm-badge--warn', finished: 'm-badge--on',
-    failed: 'm-badge--off', cancelled: 'm-badge--off',
-  }[s] || 'm-badge--info')
+// 状态文案/配色与 PC 队列页同源（src/constants/enums.js，FR-UX-405 / T02504）。
+// 此前本地映射写的是 `finished`，后端 WorkflowStatus 实为 `success`：
+// 已完成任务在移动端漏出英文原值，统计卡「已完成」永远显示 -
+const STAT_CARDS = ['queued', 'running', 'success', 'failed'].map((key) => ({
+  key,
+  label: enumLabel(WORKFLOW_STATUS, key),
+}))
+const statusLabel = (s) => enumLabel(WORKFLOW_STATUS, s)
+const statusClass = (s) => enumBadge(WORKFLOW_STATUS, s)
 
 async function reload() {
   loading.value = true

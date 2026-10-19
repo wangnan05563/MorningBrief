@@ -86,9 +86,7 @@
             placeholder="请选择广告位"
             style="width: 100%"
           >
-            <el-option label="开头" value="head" />
-            <el-option label="中间" value="mid" />
-            <el-option label="结尾" value="tail" />
+            <el-option v-for="o in positionOptions" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="日期范围" prop="dateRange">
@@ -129,6 +127,9 @@ import { dangerConfirm } from '../../utils/dangerConfirm'
 import { Plus, Delete, Close, Check } from '@element-plus/icons-vue'
 
 import api from '../../api'
+import { AD_POSITION, enumLabel, enumTagType, enumOptions } from '../../constants/enums'
+
+const positionOptions = enumOptions(AD_POSITION)
 
 const tableData = ref([])
 const loading = ref(false)
@@ -154,17 +155,9 @@ const rules = {
   dateRange: [{ required: true, message: '请选择日期范围', trigger: 'change' }],
 }
 
-// 广告位中文映射：head/mid/tail 对应开头/中间/结尾
-const POSITION_LABEL = { head: '开头', mid: '中间', tail: '结尾' }
-// tag 颜色与排期日历的小标签视觉保持一致
-const POSITION_TAG_TYPE = { head: 'success', mid: 'danger', tail: 'info' }
-
-function positionLabel(p) {
-  return POSITION_LABEL[p] || p
-}
-function positionTagType(p) {
-  return POSITION_TAG_TYPE[p] || 'info'
-}
+// 广告位文案/标签色取自 src/constants/enums.js，与排期日历同源（FR-UX-405 / T02504）
+const positionLabel = (p) => enumLabel(AD_POSITION, p)
+const positionTagType = (p) => enumTagType(AD_POSITION, p)
 
 async function fetchList() {
   loading.value = true

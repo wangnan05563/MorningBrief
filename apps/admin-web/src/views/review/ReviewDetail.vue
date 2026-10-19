@@ -149,6 +149,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { ArrowLeft, Check, Close, ZoomIn } from '@element-plus/icons-vue'
 import api from '../../api'
+import { REVIEW_STATUS, enumLabel, enumTagType } from '../../constants/enums'
 
 const route = useRoute()
 const router = useRouter()
@@ -213,13 +214,13 @@ function actionText(a) {
   return { approve: '通过', reject: '打回', replace: '替换段落' }[a]
 }
 
-// 与 ReviewList.vue / WorkflowDetail.vue 同一套 4 态口径（T02501）
+// 与 ReviewList.vue / WorkflowDetail.vue 同一套 4 态口径，同取 src/constants/enums.js（T02504）
 function statusTagType(status) {
-  return { pending: 'warning', approved: 'success', rejected: 'danger', replaced: 'info' }[status] || 'info'
+  return enumTagType(REVIEW_STATUS, status)
 }
 
 function statusText(status) {
-  return { pending: '待审核', approved: '已通过', rejected: '已打回', replaced: '已替换' }[status] || status
+  return enumLabel(REVIEW_STATUS, status)
 }
 
 function goBack() {

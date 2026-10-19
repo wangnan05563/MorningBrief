@@ -62,7 +62,9 @@ test.describe('队列管理', () => {
     await setLoginState(page, 'admin')
     await page.goto('/queue')
 
-    // 统计卡片：等待中 3 / 执行中 1 / 已完成 10 / 失败 2
+    // 统计卡片：排队中 3 / 运行中 1 / 成功 10 / 失败 2
+    // （T02504 起文案取自 src/constants/enums.js，与任务列表页同一口径：
+    //   此前本页写「等待中 / 执行中 / 已完成」，同一状态在两个页面三种说法）
     await expect(page.locator('.stat-queued .stat-value')).toHaveText('3', { timeout: 30000 })
     await expect(page.locator('.stat-running .stat-value')).toHaveText('1', { timeout: 30000 })
     await expect(page.locator('.stat-success .stat-value')).toHaveText('10', { timeout: 30000 })
@@ -72,7 +74,7 @@ test.describe('队列管理', () => {
     await expect(page.getByText('科技频道').first()).toBeVisible({ timeout: 30000 })
     await expect(page.getByText('财经频道').first()).toBeVisible({ timeout: 30000 })
     // 状态标签
-    await expect(page.locator('.el-tag').filter({ hasText: '等待中' })).toBeVisible({ timeout: 30000 })
+    await expect(page.locator('.el-tag').filter({ hasText: '排队中' })).toBeVisible({ timeout: 30000 })
     await expect(page.locator('.el-tag').filter({ hasText: '失败' })).toBeVisible({ timeout: 30000 })
   })
 

@@ -274,6 +274,14 @@ import { useUserStore } from '../../stores/user'
 import { listChannels } from '../../api/channels'
 import { aggregateMaterials } from '../../api/materialLibrary'
 import {
+  MATERIAL_STATUS,
+  MATERIAL_MEDIA_TYPE,
+  MATERIAL_SOURCE_TYPE,
+  enumLabel,
+  enumTagType,
+  enumOptions,
+} from '../../constants/enums'
+import {
   createMaterial,
   deleteMaterial,
   deleteMaterialsBySource,
@@ -282,31 +290,15 @@ import {
   updateMaterial,
 } from '../../api/materials'
 
-/** 录入渠道选项（与后端 MaterialSourceType 枚举一致）；书稿类混在海量 RSS 里很难翻到 */
-const SOURCE_TYPE_OPTIONS = [
-  { label: '书稿文档（上传/手动录入）', value: 'list' },
-  { label: '云端存储导入', value: 'cos' },
-  { label: '资讯 RSS', value: 'rss' },
-  { label: '书籍 RSS', value: 'book_rss' },
-  { label: 'URL / API 拉取', value: 'api' },
-  { label: '二维码 / 链接分享', value: 'qrcode' },
-]
-
-/** T00716：媒体类型选项（录入/筛选/预览用）——text=文本，image=图片，video=视频 */
-const MEDIA_TYPE_OPTIONS = [
-  { label: '文本', value: 'text' },
-  { label: '图片', value: 'image' },
-  { label: '视频', value: 'video' },
-]
+/** 录入渠道 / 媒体类型选项与展示文案统一取自 src/constants/enums.js（FR-UX-405 / T02504） */
+const SOURCE_TYPE_OPTIONS = enumOptions(MATERIAL_SOURCE_TYPE)
+const MEDIA_TYPE_OPTIONS = enumOptions(MATERIAL_MEDIA_TYPE)
 
 const route = useRoute()
-const STATUS_LABELS = { pending: '待消费', selected: '已选题', skipped: '已跳过' }
-const STATUS_TAGS = { pending: 'info', selected: 'success', skipped: 'warning' }
-const statusLabel = (s) => STATUS_LABELS[s] || s || '-'
-const statusTagType = (s) => STATUS_TAGS[s] || 'info'
-// T00716：媒体类型展示辅助
-const mediaLabel = (t) => MEDIA_TYPE_OPTIONS.find((o) => o.value === t)?.label || t || '文本'
-const mediaTagType = (t) => ({ text: 'info', image: 'success', video: 'warning' })[t] || 'info'
+const statusLabel = (s) => enumLabel(MATERIAL_STATUS, s)
+const statusTagType = (s) => enumTagType(MATERIAL_STATUS, s)
+const mediaLabel = (t) => enumLabel(MATERIAL_MEDIA_TYPE, t)
+const mediaTagType = (t) => enumTagType(MATERIAL_MEDIA_TYPE, t)
 
 const channels = ref([])
 const items = ref([])

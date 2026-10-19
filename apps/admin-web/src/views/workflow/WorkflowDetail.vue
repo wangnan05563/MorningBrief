@@ -362,9 +362,7 @@
         </el-form-item>
         <el-form-item label="状态" v-if="materialDialog.id">
           <el-select v-model="materialDialog.form.status" style="width: 120px">
-            <el-option label="待处理" value="pending" />
-            <el-option label="已选中" value="selected" />
-            <el-option label="已跳过" value="skipped" />
+            <el-option v-for="o in materialStatusOptions" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="正文" required>
@@ -444,6 +442,18 @@ import {
   deleteTtsAudio, deleteEpisodeAudio,
 } from '../../api/audio'
 import { listReviews, handleReviewAction } from '../../api/reviews'
+import {
+  WORKFLOW_STATUS,
+  WORKFLOW_SOURCE,
+  WORKFLOW_STEP_NAME,
+  WORKFLOW_STEP_STATUS,
+  REVIEW_STATUS,
+  MATERIAL_STATUS,
+  enumLabel,
+  enumTagType,
+  enumStepStatus,
+  enumOptions,
+} from '../../constants/enums'
 
 const route = useRoute()
 const router = useRouter()
@@ -453,41 +463,17 @@ const retrying = ref(false)
 const detail = ref({})
 const retryStep = ref('')
 
+// 详情页 6 阶段时间线只展示产出可见的 6 步（publish 不产素材，后端仍会返回其状态）；
+// 步骤名/状态文案一律取自 src/constants/enums.js（FR-UX-405 / T02504）
 const STEP_ORDER = ['crawl', 'rewrite', 'quality_check', 'tts', 'stitch', 'review']
-const STEP_LABEL_MAP = {
-  crawl: '爬虫采集',
-  rewrite: 'LLM改写',
-  quality_check: '质量审核',
-  tts: '语音合成',
-  stitch: '音频拼接',
-  review: '创建审核',
-}
-const STEP_EL_STATUS_MAP = {
-  success: 'success', failed: 'error', running: 'process',
-  pending: 'wait', retrying: 'process',
-}
-const STEP_STATUS_TEXT = {
-  pending: '等待中', running: '运行中', success: '成功',
-  retrying: '重试中', failed: '失败',
-}
-const STEP_TAG_TYPE_MAP = {
-  success: 'success', failed: 'danger', running: 'warning',
-  pending: 'info', retrying: 'warning',
-}
-const STATUS_TAG_MAP = {
-  running: 'warning', success: 'success', failed: 'danger', cancelled: 'info', queued: 'info',
-}
-const STATUS_LABEL_MAP = {
-  running: '运行中', success: '成功', failed: '失败', cancelled: '已取消', queued: '排队中',
-}
 
-function statusTagType(s) { return STATUS_TAG_MAP[s] || 'info' }
-function statusLabel(s) { return STATUS_LABEL_MAP[s] || s }
-function sourceLabel(s) { return s === 'cron' ? '定时' : s === 'manual' ? '手动' : s || '-' }
-function stepLabel(name) { return STEP_LABEL_MAP[name] || name }
-function stepElStatus(s) { return STEP_EL_STATUS_MAP[s] || 'wait' }
-function stepStatusText(s) { return STEP_STATUS_TEXT[s] || s }
-function stepTagType(s) { return STEP_TAG_TYPE_MAP[s] || 'info' }
+const statusTagType = (s) => enumTagType(WORKFLOW_STATUS, s)
+const statusLabel = (s) => enumLabel(WORKFLOW_STATUS, s)
+const sourceLabel = (s) => enumLabel(WORKFLOW_SOURCE, s, '-')
+const stepLabel = (name) => enumLabel(WORKFLOW_STEP_NAME, name)
+const stepElStatus = (s) => enumStepStatus(WORKFLOW_STEP_STATUS, s)
+const stepStatusText = (s) => enumLabel(WORKFLOW_STEP_STATUS, s)
+const stepTagType = (s) => enumTagType(WORKFLOW_STEP_STATUS, s)
 
 const orderedSteps = computed(() => {
   const steps = detail.value.steps || []
@@ -585,13 +571,12 @@ async function loadMaterials() {
   }
 }
 
-const MATERIAL_STATUS_MAP = {
-  pending: { label: '待处理', type: 'info' },
-  selected: { label: '已选中', type: 'success' },
-  skipped: { label: '已跳过', type: 'warning' },
-}
-function materialStatusLabel(s) { return MATERIAL_STATUS_MAP[s]?.label || s }
-function materialStatusType(s) { return MATERIAL_STATUS_MAP[s]?.type || 'info' }
+// 素材状态文案取自 src/constants/enums.js（FR-UX-405 / T02504）：
+// 此前这里抄了一份「待处理/已选中」，素材库管理页同字段叫「待消费/已选题」——
+// 同一条素材在两个页面两种说法，门禁（validate-nav）现在会拦住这种第二份映射
+const materialStatusOptions = enumOptions(MATERIAL_STATUS)
+function materialStatusLabel(s) { return enumLabel(MATERIAL_STATUS, s) }
+function materialStatusType(s) { return enumTagType(MATERIAL_STATUS, s) }
 
 const materialDialog = ref({
   visible: false, id: null, saving: false, contentLoading: false,
@@ -851,14 +836,8 @@ async function handleDeleteEpisode() {
 // ===== review 审核 =====
 const review = ref({ data: null, loading: false })
 
-const REVIEW_STATUS_MAP = {
-  pending: { label: '待审核', type: 'warning' },
-  approved: { label: '已通过', type: 'success' },
-  rejected: { label: '已打回', type: 'danger' },
-  replaced: { label: '已替换', type: 'info' },
-}
-function reviewStatusLabel(s) { return REVIEW_STATUS_MAP[s]?.label || s }
-function reviewStatusType(s) { return REVIEW_STATUS_MAP[s]?.type || 'info' }
+function reviewStatusLabel(s) { return enumLabel(REVIEW_STATUS, s) }
+function reviewStatusType(s) { return enumTagType(REVIEW_STATUS, s) }
 
 async function loadReview() {
   review.value.loading = true

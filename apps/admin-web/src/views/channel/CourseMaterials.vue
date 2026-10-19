@@ -207,9 +207,10 @@ import {
   importFromUrl,
   sharePreview,
 } from '../../api/materials'
+import { CHANNEL_TYPE, enumLabel } from '../../constants/enums'
 
-const TYPE_LABELS = { news: '资讯', course: '课程', audiobook: '有声读物' }
-const typeLabel = (t) => TYPE_LABELS[t] || t || '资讯'
+// 频道类型文案取自 src/constants/enums.js（FR-UX-405 / T02504）；类型为空不再显示「资讯」
+const typeLabel = (t) => enumLabel(CHANNEL_TYPE, t)
 
 const channels = ref([])
 const targetChannelId = ref(null)

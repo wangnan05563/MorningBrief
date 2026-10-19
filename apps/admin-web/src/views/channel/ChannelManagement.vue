@@ -19,9 +19,11 @@
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
         <el-table-column label="类型" width="110">
           <template #default="{ row }">
-            <el-tag v-if="row.channel_type === 'course'" type="success" effect="plain">课程</el-tag>
-            <el-tag v-else-if="row.channel_type === 'audiobook'" type="warning" effect="plain">有声读物</el-tag>
-            <el-tag v-else effect="plain">资讯</el-tag>
+            <!-- C23 / T02504：type_label 是运营在表单里填的值，列表必须优先显示它，
+                 否则「填了不显示」；未填时回落到 channel_type 的字典文案 -->
+            <el-tag :type="enumTagType(CHANNEL_TYPE, row.channel_type)" effect="plain">
+              {{ row.type_label || enumLabel(CHANNEL_TYPE, row.channel_type) }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="广告" width="80" align="center">
@@ -105,9 +107,7 @@
         </el-form-item>
         <el-form-item label="频道类型">
           <el-select v-model="form.channel_type" style="width: 200px">
-            <el-option label="资讯（默认）" value="news" />
-            <el-option label="课程" value="course" />
-            <el-option label="有声读物" value="audiobook" />
+            <el-option v-for="o in channelTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
           <span class="form-tip">课程/有声读物走章节列表 + 学习进度 UI，并自动展示合规提示</span>
         </el-form-item>
@@ -573,6 +573,9 @@ import {
 } from '../../api/channels'
 import { formatTime } from '../../utils/format'
 import { dangerConfirm } from '../../utils/dangerConfirm'
+import { CHANNEL_TYPE, enumLabel, enumTagType, enumOptions } from '../../constants/enums'
+
+const channelTypeOptions = enumOptions(CHANNEL_TYPE)
 // 角色控制：直接读 localStorage，operator 隐藏增删改操作
 const role = localStorage.getItem('admin_role') || ''
 const canOperate = role === 'admin'

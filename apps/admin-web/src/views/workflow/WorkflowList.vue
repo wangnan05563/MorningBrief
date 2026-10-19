@@ -35,11 +35,7 @@
           style="width: 130px"
           @change="handleFilterChange"
         >
-          <el-option label="排队中" value="queued" />
-          <el-option label="运行中" value="running" />
-          <el-option label="成功" value="success" />
-          <el-option label="失败" value="failed" />
-          <el-option label="已取消" value="cancelled" />
+          <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
         </el-select>
         <el-select
           v-model="filterSource"
@@ -48,8 +44,7 @@
           style="width: 120px"
           @change="handleFilterChange"
         >
-          <el-option label="定时" value="cron" />
-          <el-option label="手动" value="manual" />
+          <el-option v-for="o in sourceOptions" :key="o.value" :label="o.label" :value="o.value" />
         </el-select>
         <!-- T02496（FR-UX-302 / E1）：此前页面没有独立刷新入口，只能靠改筛选条件触发重载 -->
         <IconButton
@@ -153,8 +148,8 @@
         <el-table-column prop="episode_date" label="节目日期" width="130" />
         <el-table-column prop="source" label="来源" width="100">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.source === 'cron' ? 'info' : 'warning'">
-              {{ row.source === 'cron' ? '定时' : '手动' }}
+            <el-tag size="small" :type="enumTagType(WORKFLOW_SOURCE, row.source)">
+              {{ enumLabel(WORKFLOW_SOURCE, row.source, '-') }}
             </el-tag>
           </template>
         </el-table-column>
@@ -277,6 +272,13 @@ import { triggerAllWorkflows, triggerWorkflow } from '../../api/workflow'
 import { subscribe, broadcastLocal } from '../../utils/sse'
 import { cleanupLoadingMasks } from '../../utils/window-guard'
 import { formatTime } from '../../utils/format'
+import {
+  WORKFLOW_STATUS,
+  WORKFLOW_SOURCE,
+  enumLabel,
+  enumTagType,
+  enumOptions,
+} from '../../constants/enums'
 import WorkflowProgressIndicator from './components/WorkflowProgressIndicator.vue'
 import ListLoadError from '../../components/ListLoadError.vue'
 
@@ -335,26 +337,15 @@ function resetFilters() {
   loadList()
 }
 
-// 状态到 el-tag 类型的映射：保持与 UI 语义一致（橙/绿/红/灰）
-const STATUS_TAG_MAP = {
-  running: 'warning',
-  success: 'success',
-  failed: 'danger',
-  cancelled: 'info',
-  queued: 'info',
-}
-const STATUS_LABEL_MAP = {
-  running: '运行中',
-  success: '成功',
-  failed: '失败',
-  cancelled: '已取消',
-  queued: '排队中',
-}
+// 状态/来源文案与标签色统一取 src/constants/enums.js（FR-UX-405 / T02504）：
+// 此前本页与队列页、详情页各写一份映射，同一个 success 在列表叫「成功」、在队列叫「已完成」
+const statusOptions = enumOptions(WORKFLOW_STATUS)
+const sourceOptions = enumOptions(WORKFLOW_SOURCE)
 function statusTagType(s) {
-  return STATUS_TAG_MAP[s] || 'info'
+  return enumTagType(WORKFLOW_STATUS, s)
 }
 function statusLabel(s) {
-  return STATUS_LABEL_MAP[s] || s
+  return enumLabel(WORKFLOW_STATUS, s)
 }
 
 // silent=true 时为轮询调用：不显示整表遮罩、不弹错误提示

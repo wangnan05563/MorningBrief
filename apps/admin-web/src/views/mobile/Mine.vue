@@ -21,12 +21,14 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../../stores/user'
+import { ADMIN_ROLE, enumLabel } from '../../constants/enums'
 
 const router = useRouter()
 const userStore = useUserStore()
 
 const initial = computed(() => (userStore.username || '?').charAt(0).toUpperCase())
-const roleLabel = computed(() => (userStore.isAdmin ? '管理员' : '运营人员'))
+// 角色文案与 PC 端同源（src/constants/enums.js，FR-UX-405 / T02504）：此前两端一个叫「运营」一个叫「运营人员」
+const roleLabel = computed(() => enumLabel(ADMIN_ROLE, userStore.role))
 
 function goPc() {
   router.push('/review')

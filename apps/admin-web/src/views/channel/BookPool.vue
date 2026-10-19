@@ -48,9 +48,11 @@ import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { listChannels } from '../../api/channels'
 import BookPoolPanel from './BookPoolPanel.vue'
+import { CHANNEL_TYPE, enumLabel } from '../../constants/enums'
 
-const TYPE_LABELS = { news: '资讯', course: '课程', audiobook: '有声读物' }
-const typeLabel = (t) => TYPE_LABELS[t] || t || '资讯'
+// 频道类型文案取自 src/constants/enums.js（FR-UX-405 / T02504）；
+// 此前类型为空会无条件显示「资讯」，与频道真实类型无关
+const typeLabel = (t) => enumLabel(CHANNEL_TYPE, t)
 
 const route = useRoute()
 const channels = ref([])

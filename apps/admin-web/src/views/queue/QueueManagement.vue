@@ -1,29 +1,11 @@
 <template>
   <div data-guide="queue-page" class="page-container queue-management">
-    <!-- 顶部统计卡片：4 种状态计数，左边框色区分 -->
+    <!-- 顶部统计卡片：4 种状态计数，左边框色区分；文案取自枚举字典（T02504） -->
     <el-row :gutter="16" class="stats-row">
-      <el-col :span="6">
-        <el-card shadow="never" class="stat-card stat-queued">
-          <div class="stat-label">等待中</div>
-          <div class="stat-value">{{ stats.queued || 0 }}</div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="never" class="stat-card stat-running">
-          <div class="stat-label">执行中</div>
-          <div class="stat-value">{{ stats.running || 0 }}</div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="never" class="stat-card stat-success">
-          <div class="stat-label">已完成</div>
-          <div class="stat-value">{{ stats.success || 0 }}</div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="never" class="stat-card stat-failed">
-          <div class="stat-label">失败</div>
-          <div class="stat-value">{{ stats.failed || 0 }}</div>
+      <el-col v-for="c in STAT_CARDS" :key="c.key" :span="6">
+        <el-card shadow="never" class="stat-card" :class="`stat-${c.key}`">
+          <div class="stat-label">{{ c.label }}</div>
+          <div class="stat-value">{{ stats[c.key] || 0 }}</div>
         </el-card>
       </el-col>
     </el-row>
@@ -56,11 +38,7 @@
             style="width: 100%"
             @change="handleFilterChange"
           >
-            <el-option label="等待中" value="queued" />
-            <el-option label="执行中" value="running" />
-            <el-option label="已完成" value="success" />
-            <el-option label="失败" value="failed" />
-            <el-option label="已取消" value="cancelled" />
+            <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-col>
         <el-col :span="6">
@@ -221,9 +199,9 @@
             :timestamp="formatTime(step.finished_at || step.started_at)"
             :type="stepStatusType(step.status)"
           >
-            <div class="step-name">{{ step.name }}</div>
+            <div class="step-name">{{ enumLabel(WORKFLOW_STEP_NAME, step.name) }}</div>
             <div class="step-status">
-              <el-tag size="small" :type="stepStatusType(step.status)">{{ statusLabel(step.status) }}</el-tag>
+              <el-tag size="small" :type="stepStatusType(step.status)">{{ stepStatusLabel(step.status) }}</el-tag>
             </div>
             <div v-if="step.started_at" class="step-time">
               {{ formatTime(step.started_at) }} ~ {{ step.finished_at ? formatTime(step.finished_at) : '进行中' }}
@@ -255,34 +233,40 @@ import { listChannels } from '../../api/channels'
 import { subscribe } from '../../utils/sse'
 import { formatTime } from '../../utils/format'
 import ListLoadError from '../../components/ListLoadError.vue'
+import {
+  WORKFLOW_STATUS,
+  WORKFLOW_STEP_STATUS,
+  WORKFLOW_STEP_NAME,
+  enumLabel,
+  enumTagType,
+  enumOptions,
+} from '../../constants/enums'
 
 // 角色控制：直接读 localStorage，operator 隐藏操作按钮
 const role = localStorage.getItem('admin_role') || ''
 const canOperate = role === 'admin'
 
-// 状态到 el-tag 类型映射（保持与 UI 语义一致）
-const STATUS_TAG_MAP = {
-  queued: 'warning',
-  running: 'primary',
-  success: 'success',
-  failed: 'danger',
-  cancelled: 'info',
-}
-const STATUS_LABEL_MAP = {
-  queued: '等待中',
-  running: '执行中',
-  success: '已完成',
-  failed: '失败',
-  cancelled: '已取消',
-}
+// 状态文案与标签色统一取 src/constants/enums.js（FR-UX-405 / T02504）：
+// 此前本页叫「已完成/执行中」、工作流列表与详情叫「成功/运行中」，同一枚举两套口径
+const STAT_CARDS = ['queued', 'running', 'success', 'failed'].map((key) => ({
+  key,
+  label: enumLabel(WORKFLOW_STATUS, key),
+}))
+const statusOptions = enumOptions(WORKFLOW_STATUS)
+
 function statusTagType(s) {
-  return STATUS_TAG_MAP[s] || 'info'
+  return enumTagType(WORKFLOW_STATUS, s)
 }
 function statusLabel(s) {
-  return STATUS_LABEL_MAP[s] || s
+  return enumLabel(WORKFLOW_STATUS, s)
+}
+// 步骤状态是另一个枚举（WorkflowStepStatus：pending/running/success/failed/retrying），
+// 此前误用工作流状态映射，pending / retrying 直接漏出英文原值
+function stepStatusLabel(s) {
+  return enumLabel(WORKFLOW_STEP_STATUS, s)
 }
 function stepStatusType(s) {
-  return STATUS_TAG_MAP[s] || 'info'
+  return enumTagType(WORKFLOW_STEP_STATUS, s)
 }
 
 // 统计数据

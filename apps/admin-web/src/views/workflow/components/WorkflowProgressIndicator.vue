@@ -30,6 +30,7 @@
 import { computed } from 'vue'
 import { ElMessageBox } from '../../../utils/message'
 import { formatTime } from '../../../utils/format'
+import { WORKFLOW_STEP_NAME, WORKFLOW_STEP_STATUS, enumLabel } from '../../../constants/enums'
 
 const props = defineProps({
   // 后端返回的 steps_summary 数组：[{ name, status, finished_at, error }, ...]
@@ -49,15 +50,9 @@ const props = defineProps({
   },
 })
 
-// 6 阶段固定顺序与中文标签：与详情页 STEP_LABEL_MAP 保持一致
-const STEP_LABELS = {
-  crawl: '爬虫采集',
-  rewrite: 'LLM改写',
-  quality_check: '质量审核',
-  tts: '语音合成',
-  stitch: '音频拼接',
-  review: '创建审核',
-}
+// 状态灯只展示这 6 个阶段（与详情页时间线的 STEP_ORDER 同口径）；
+// 中文标签与步骤状态文案取自 src/constants/enums.js，两处不再各写一份（FR-UX-405 / T02504）
+const STEP_PHASES = ['crawl', 'rewrite', 'quality_check', 'tts', 'stitch', 'review']
 
 // 步骤状态到状态灯颜色的映射：
 // success → 绿色，running/retrying → 黄色，failed → 红色，pending → 灰色
@@ -79,10 +74,10 @@ const stepsWithMeta = computed(() => {
     return acc
   }, {})
 
-  return Object.keys(STEP_LABELS).map((name) => {
+  return STEP_PHASES.map((name) => {
     const step = stepMap[name] || { name, status: 'pending' }
     const lightStatus = mapLightStatus(step.status, props.workflowStatus)
-    const label = STEP_LABELS[name]
+    const label = enumLabel(WORKFLOW_STEP_NAME, name)
     const finishedText = step.finished_at
       ? `完成时间：${formatTime(step.finished_at)}`
       : '未完成'
@@ -100,17 +95,8 @@ const stepsWithMeta = computed(() => {
   })
 })
 
-// 步骤状态中文文案
-function stepStatusLabel(s) {
-  const m = {
-    pending: '等待中',
-    running: '运行中',
-    success: '成功',
-    retrying: '重试中',
-    failed: '失败',
-  }
-  return m[s] || s
-}
+// 步骤状态中文文案（与详情页 stepStatusText 同源）
+const stepStatusLabel = (s) => enumLabel(WORKFLOW_STEP_STATUS, s)
 
 // 进度百分比：已完成阶段数 / 总数 * 100，四舍五入
 const progressPercent = computed(() => {

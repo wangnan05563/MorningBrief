@@ -13,19 +13,11 @@
     </div>
 
     <div class="card-soft calendar-card">
-      <!-- 图例：帮助用户快速识别三个广告位的颜色含义 -->
+      <!-- 图例：帮助用户快速识别三个广告位的颜色含义（文案取自枚举字典，T02504） -->
       <div class="legend">
-        <div class="legend-item">
-          <span class="legend-dot dot-head"></span>
-          <span>开头（head）</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-dot dot-mid"></span>
-          <span>中间（mid）</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-dot dot-tail"></span>
-          <span>结尾（tail）</span>
+        <div v-for="p in positionOptions" :key="p.value" class="legend-item">
+          <span class="legend-dot" :class="`dot-${p.value}`"></span>
+          <span>{{ p.label }}（{{ p.value }}）</span>
         </div>
       </div>
 
@@ -35,12 +27,12 @@
             <div class="date-num">{{ data.day.split('-').slice(2).join('') }}</div>
             <div class="slots">
               <div
-                v-for="pos in ['head', 'mid', 'tail']"
+                v-for="pos in positionValues"
                 :key="pos"
                 class="slot"
                 :class="[`slot-${pos}`, { 'slot-off': isSlotDisabled(data.day, pos) }]"
               >
-                <span class="slot-label">{{ POSITION_LABEL[pos] }}</span>
+                <span class="slot-label">{{ enumLabel(AD_POSITION, pos) }}</span>
                 <span v-if="getSlotMaterial(data.day, pos)" class="slot-name">
                   {{ getSlotMaterial(data.day, pos).material_name }}
                 </span>
@@ -59,6 +51,7 @@
 import { ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import api from '../../api'
+import { AD_POSITION, enumLabel, enumOptions } from '../../constants/enums'
 
 const loading = ref(false)
 // 月份选择器的值（YYYY-MM 字符串），作为月份切换的数据源
@@ -68,8 +61,9 @@ const calendarDate = ref(dayjs().startOf('month').toDate())
 
 const scheduleMap = ref({})
 
-// 广告位中文映射，与投放规则页保持一致
-const POSITION_LABEL = { head: '开头', mid: '中间', tail: '结尾' }
+// 广告位文案与投放规则页同源（src/constants/enums.js，FR-UX-405 / T02504）
+const positionOptions = enumOptions(AD_POSITION)
+const positionValues = positionOptions.map((o) => o.value)
 
 function getSlotMaterial(dayStr, pos) {
   return scheduleMap.value[dayStr]?.[pos] || null

@@ -12,7 +12,11 @@
  * - 关于页不得残留 `example.com` 占位外链（T02503 / FR-UX-404）：只查链接位置
  *   （`href=` / `href:` / `window.open(`），输入框示例值与正文说明不算；
  * - 关于页开源清单的版本号必须与 `package.json` / `backend/requirements.txt` 逐条对上——
- *   手抄清单一定漂移（M101：漂移的清单比没有清单更误导）。
+ *   手抄清单一定漂移（M101：漂移的清单比没有清单更误导）；
+ * - 枚举字典（T02504 / FR-UX-405）：`src/constants/enums.js` 的键集合必须与
+ *   `backend/app/models` 里的 `class X(str, Enum)` 成员逐值对上（双向），且页面里不得再
+ *   出现同一枚举的第二份「值 → 文案」映射——四份映射必然漂成四种说法，移动端还抄过
+ *   一个后端根本不存在的值，于是状态直接漏出英文原值。
  *
  * 之所以是构建期而不是运行时：这些错全部发生在「文案/选择器」层面，运行时只会表现为
  * 引导气泡指错元素、帮助文档把人带不到页面、菜单少一项——用户说不清、测试也测不出。
@@ -59,6 +63,55 @@ function walk(dir, acc = [], exts = ['.vue']) {
     else if (exts.some((e) => name.endsWith(e))) acc.push(p)
   }
   return acc
+}
+
+/** 取 `<script>` 段（.vue 的 template/style 里的大括号是 CSS 与插值，扫它们只会造误报） */
+function scriptPart(text) {
+  const m = /<script[^>]*>([\s\S]*?)<\/script>/.exec(text)
+  return m ? m[1] : text
+}
+
+/**
+ * 取对象字面量的「顶层键」：跳过字符串内的括号，只认深度 1 的 `key:`。
+ * 返回 `[{ key, stringValue, objectValue }]`——`stringValue` 用于区分「枚举 → 文案」映射
+ * （值是字符串）与计数/结果对象（值是数字）；`objectValue` 认字典自己的写法
+ * （`{ queued: { label: '排队中', type: 'info' } }`），页面里抄这种映射同样会漂。
+ */
+function topLevelKeys(literal) {
+  const out = []
+  let depth = 0
+  let quote = null
+  for (let i = 0; i < literal.length; i += 1) {
+    const ch = literal[i]
+    if (quote) {
+      if (ch === '\\') i += 1
+      else if (ch === quote) quote = null
+      continue
+    }
+    if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch
+      continue
+    }
+    if (ch === '{' || ch === '[' || ch === '(') {
+      depth += 1
+      continue
+    }
+    if (ch === '}' || ch === ']' || ch === ')') {
+      depth -= 1
+      continue
+    }
+    if (depth === 1 && /[A-Za-z_$]/.test(ch)) {
+      const word = /^[A-Za-z_$][\w$]*/.exec(literal.slice(i))[0]
+      const rest = /^\s*:\s*/.exec(literal.slice(i + word.length))
+      if (rest) {
+        const valueStart = i + word.length + rest[0].length
+        const next = literal[valueStart]
+        out.push({ key: word, stringValue: /["'`]/.test(next), objectValue: next === '{' })
+      }
+      i += word.length - 1
+    }
+  }
+  return out
 }
 
 /** 收集组件标签块：`<IconButton ... label="新增频道" ...>` 里的静态属性 */
@@ -175,6 +228,128 @@ function collectPlaceholderLinks() {
   return out
 }
 
+/**
+ * 前端枚举字典（src/constants/enums.js，T02504 / FR-UX-405）。
+ * 解析不出来时返回 null（前端单独构建、字典文件尚未创建的场景），对账改为跳过并说明。
+ */
+function readEnumDictionary() {
+  let text
+  try {
+    text = read('constants/enums.js')
+  } catch {
+    return null
+  }
+  const dicts = new Map()
+  let backendOf = new Map()
+  for (const m of text.matchAll(/export const ([A-Z][\w]*)\s*=\s*\{/g)) {
+    const literal = literalAt(text, text.indexOf('{', m.index))
+    const keys = topLevelKeys(literal).map((e) => e.key)
+    if (m[1] === 'BACKEND_ENUM_OF') {
+      backendOf = new Map(
+        [...literal.matchAll(/([A-Z][\w]*):\s*(?:'([^']+)'|null)/g)].map((x) => [x[1], x[2] ?? null]),
+      )
+      continue
+    }
+    if (keys.length) dicts.set(m[1], keys)
+  }
+  return { dicts, backendOf }
+}
+
+/**
+ * 后端模型里的枚举定义：`class WorkflowStatus(str, Enum):` 下的 `queued = "queued"` 成员。
+ * 读不到 backend（脱离 monorepo 单独构建前端）时返回 null，跳过比对而不是失败。
+ */
+function readBackendEnums() {
+  const dir = resolve(SRC, '../../../backend/app/models')
+  let files
+  try {
+    files = walk(dir, [], ['.py'])
+  } catch {
+    return null
+  }
+  const out = new Map()
+  for (const file of files) {
+    let current = null
+    for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
+      const cls = /^class\s+(\w+)\s*\([^)]*Enum[^)]*\):/.exec(line)
+      if (cls) {
+        current = cls[1]
+        out.set(current, [])
+        continue
+      }
+      if (current === null) continue
+      if (/^\S/.test(line)) {
+        current = null
+        continue
+      }
+      const member = /^\s{4}(\w+)\s*=\s*"([^"]+)"/.exec(line)
+      if (member) out.get(current).push(member[2])
+    }
+  }
+  return out
+}
+
+/**
+ * 枚举映射重复声明检测（T02504 / FR-UX-405）。
+ *
+ * 「后端枚举 → 前端文案」一旦被抄第二份，两份必然漂移——本仓库里同一个 WorkflowStatus
+ * 曾有 4 份映射（成功/已完成、运行中/执行中、排队中/等待中），移动端还抄了个后端
+ * 根本不存在的 `finished`，于是已完成任务在手机上直接漏出英文原值。
+ * 这两类形态都只靠人眼是查不出来的（文案对不上不是报错），所以做成构建期门禁：
+ * - 键集合 ⊂ 某枚举值集（≥2 个键）→ 重复声明，必须 import 字典；值写成字符串
+ *   （`{ queued: '排队中' }`）或对象（`{ queued: { label, type } }`）都算——后者正是字典
+ *   自己的形状，WorkflowDetail 曾这样抄过第二份素材状态，与素材库页漂成两套文案；
+ * - ≥3 个键命中某枚举、且只有 1 个键不在值集里 → 该键是幻影值，永远不会命中。
+ * 只扫 `<script>` 段：CSS 与模板插值里的大括号造误报，误报的门禁等于没有门禁。
+ */
+const ENUM_DUP_MIN_KEYS = 2
+const ENUM_PHANTOM_MIN_HITS = 3
+const ENUM_PHANTOM_MAX_UNKNOWN = 1
+
+export function collectEnumDuplicates(dicts, srcDir = SRC) {
+  const dupes = []
+  const phantoms = []
+  const entries = [...dicts.entries()].map(([name, keys]) => [name, new Set(keys)])
+  for (const file of walk(srcDir, [], ['.vue', '.js'])) {
+    const rel = file.slice(srcDir.length + 1).replace(/\\/g, '/')
+    if (rel === 'constants/enums.js') continue
+    const raw = readFileSync(file, 'utf8')
+    const text = scriptPart(raw)
+    // 报错里的行号要能直接跳进 .vue，所以补回「<script> 之前的行数」
+    const tag = /<script[^>]*>/.exec(raw)
+    const lineOffset = tag && tag.index > 0 ? raw.slice(0, tag.index + tag[0].length).split('\n').length - 1 : 0
+    for (let i = text.indexOf('{'); i >= 0; i = text.indexOf('{', i + 1)) {
+      let literal
+      try {
+        literal = literalAt(text, i)
+      } catch {
+        continue
+      }
+      const entries0 = topLevelKeys(literal)
+      // 只把「键 → 字符串」或「键 → 对象」的映射当候选：`{ success: 3, failed: 1 }`
+      // 这类计数对象不是枚举映射（误报的门禁等于没有门禁）
+      if (!entries0.length || !entries0.every((e) => e.stringValue || e.objectValue)) continue
+      const keys = entries0.map((e) => e.key)
+      if (keys.length < ENUM_DUP_MIN_KEYS) continue
+      for (const [name, values] of entries) {
+        const known = keys.filter((k) => values.has(k))
+        const unknown = keys.filter((k) => !values.has(k))
+        if (!known.length) continue
+        const where = `${rel}:${lineOffset + text.slice(0, i).split('\n').length}`
+        if (!unknown.length && known.length >= ENUM_DUP_MIN_KEYS) {
+          dupes.push({ name, where, keys: known })
+        } else if (
+          unknown.length <= ENUM_PHANTOM_MAX_UNKNOWN &&
+          known.length >= ENUM_PHANTOM_MIN_HITS
+        ) {
+          phantoms.push({ name, where, keys: unknown })
+        }
+      }
+    }
+  }
+  return { dupes, phantoms }
+}
+
 /** 关于页开源清单：`{ name: 'x', version: '1.2.3', … }` 的字面量条目 */
 function readLicenseTable(aboutText) {
   const head = 'const licenses = ['
@@ -281,6 +456,10 @@ export async function collectFacts() {
   const npmManifest = readNpmManifest()
   const pyManifest = readPyManifest()
 
+  const enumDictionary = readEnumDictionary()
+  const backendEnums = readBackendEnums()
+  const enumDuplicates = enumDictionary ? collectEnumDuplicates(enumDictionary.dicts) : null
+
   return {
     routes,
     guideSteps,
@@ -296,6 +475,9 @@ export async function collectFacts() {
     dependencyTable,
     npmManifest,
     pyManifest,
+    enumDictionary,
+    backendEnums,
+    enumDuplicates,
   }
 }
 
@@ -408,6 +590,53 @@ function checkDependencies(f) {
   return { errors, skipped: false }
 }
 
+/**
+ * 枚举对账（T02504 / FR-UX-405）：字典 ↔ 后端模型 ↔ 页面里的重复映射。
+ * 后端模型读不到时跳过值集比对（脱离 monorepo 的前端构建），重复映射检测照做。
+ */
+export function checkEnums(f) {
+  const errors = []
+  const dict = f.enumDictionary
+  if (!dict) return { errors, skipped: true }
+  const backend = f.backendEnums
+  for (const [name, values] of dict.dicts) {
+    const cls = dict.backendOf.get(name)
+    if (!cls || !backend) continue
+    const defined = backend.get(cls)
+    if (!defined) {
+      errors.push(
+        `枚举字典 ${name} 声明对应后端枚举 ${cls}，但在 backend/app/models 里找不到该定义：` +
+          `枚举已改名/删除，字典是过期的`,
+      )
+      continue
+    }
+    const missing = defined.filter((v) => !values.includes(v))
+    const extra = values.filter((v) => !defined.includes(v))
+    if (missing.length) {
+      errors.push(
+        `枚举字典 ${name} 缺少后端 ${cls} 的值：${missing.join('、')}；` +
+          `后端能返回这些值，页面上会直接漏出英文原值（FR-UX-405「填了不显示」）`,
+      )
+    }
+    if (extra.length) {
+      errors.push(`枚举字典 ${name} 列了后端 ${cls} 没有的值：${extra.join('、')}；这条映射永远不会命中`)
+    }
+  }
+  for (const d of f.enumDuplicates?.dupes ?? []) {
+    errors.push(
+      `${d.where} 重复声明了 ${d.name} 的映射（${d.keys.join('、')}）；` +
+        `同一枚举两处文案必然漂移，请改为 import src/constants/enums.js（T02504 / FR-UX-405）`,
+    )
+  }
+  for (const p of f.enumDuplicates?.phantoms ?? []) {
+    errors.push(
+      `${p.where} 的映射含 ${p.name} 里不存在的值：${p.keys.join('、')}；` +
+        `后端不会返回它，这些分支永远走不到，而对应的真实值会漏出英文原值（T02504）`,
+    )
+  }
+  return { errors, skipped: false, backendSkipped: !backend }
+}
+
 export function checkFacts(f) {
   const errors = []
   const menuTitles = new Set(f.routes.map((r) => r.meta.title).filter(Boolean))
@@ -484,7 +713,16 @@ export function checkFacts(f) {
   const dep = checkDependencies(f)
   errors.push(...dep.errors)
 
-  return { errors, iconNames: [...iconNames], depsSkipped: !!dep.skipped }
+  const enumResult = checkEnums(f)
+  errors.push(...enumResult.errors)
+
+  return {
+    errors,
+    iconNames: [...iconNames],
+    depsSkipped: !!dep.skipped,
+    enumsSkipped: !!enumResult.skipped,
+    enumBackendSkipped: !!enumResult.backendSkipped,
+  }
 }
 
 /** Element Plus 图标名校验：包体积大（>1000 个组件），只在显式请求时加载 */
@@ -503,7 +741,7 @@ async function checkIconNames(iconNames) {
 
 export async function validate({ includeIcons = false } = {}) {
   const facts = await collectFacts()
-  const { errors, iconNames, depsSkipped } = checkFacts(facts)
+  const { errors, iconNames, depsSkipped, enumsSkipped, enumBackendSkipped } = checkFacts(facts)
   const iconResult = includeIcons ? await checkIconNames(iconNames) : { errors: [], skipped: true }
   return {
     facts,
@@ -511,23 +749,36 @@ export async function validate({ includeIcons = false } = {}) {
     iconErrors: iconResult.errors,
     iconsSkipped: iconResult.skipped,
     depsSkipped,
+    enumsSkipped,
+    enumBackendSkipped,
   }
 }
 
 const isCli = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 if (isCli) {
   const includeIcons = process.argv.includes('--icons')
-  const { errors, iconErrors, iconsSkipped, depsSkipped, facts } = await validate({ includeIcons })
+  const {
+    errors,
+    iconErrors,
+    iconsSkipped,
+    depsSkipped,
+    enumsSkipped,
+    enumBackendSkipped,
+    facts,
+  } = await validate({ includeIcons })
   const all = [...errors, ...iconErrors]
   const py = facts.pyManifest
+  const enumCount = facts.enumDictionary?.dicts.size ?? 0
   console.log(
     `[validate-nav] 路由 ${facts.routes.length} 条 · 引导 ${Object.keys(facts.guideSteps).length} 页 · ` +
       `aria-label ${facts.ariaLabels.size} 个 · 分组 ${facts.groups.length} 个 · 帮助章节 ${facts.helpIds.length} 篇 · ` +
       `开源清单 ${facts.dependencyTable.length} 项（npm ${Object.keys(facts.npmManifest).length} + ` +
-      `pip ${py ? py.size : '—'}）`,
+      `pip ${py ? py.size : '—'}）· 枚举字典 ${enumCount} 份`,
   )
   if (iconsSkipped && includeIcons) console.log('[validate-nav] 图标名单加载失败，已跳过该项')
   if (depsSkipped) console.log('[validate-nav] 未提供依赖清单，跳过开源清单对账')
+  if (enumsSkipped) console.log('[validate-nav] 未找到 src/constants/enums.js，跳过枚举对账')
+  else if (enumBackendSkipped) console.log('[validate-nav] 读不到 backend/app/models，跳过枚举值集比对')
   if (all.length) {
     for (const e of all) console.error(`  ✗ ${e}`)
     console.error(`[validate-nav] ${all.length} 项不一致`)
