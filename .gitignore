@@ -258,17 +258,7 @@ scripts/jmeter_test/admin_token.txt
 # ffmpeg concat 清单临时文件（如 backend/main.wav.list.txt）
 *.list.txt
 
-# _validate：文本证据与截图继续入库；音频与可重建大转储不入库
-# 用 ** 形式覆盖任意层级（t01922_pack 这类子目录里的试听样本同样不入库）
-_validate/**/*.mp3
-_validate/**/*.m4a
-_validate/**/*.wav
-_validate/**/*.aac
-_validate/**/*.mp4
-# 转储目录只忽略内容与生成产物，保留目录内手写说明（*.md）入库
-_validate/perf_results_*/*
-_validate/*_samples/*
-_validate/*_pack/*
-!_validate/perf_results_*/*.md
-!_validate/*_samples/*.md
-!_validate/*_pack/*.md
+# _validate：取证目录整体本地化（2026-10-20 用户决定）：证据仅本地保留，全部不入库
+# 注：2026-10-13 旧口径「文本证据与截图入库」已废止；目录内曾入库的 232 个文本/截图证据
+# 已随本次提交移出索引，需要时仍可从该提交之前的 git 历史找回
+_validate/
