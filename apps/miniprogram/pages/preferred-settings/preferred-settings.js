@@ -115,4 +115,20 @@ Page({
     trackEvent('preferred', 'skip_onboarding');
     wx.navigateBack();
   },
+
+  /**
+   * T02513 / J48：反向入口——从「偏爱」指回「频道订阅」，与 channels 页的 tip-link 成对。
+   * 已经是从频道页点进来的就直接退回，不再往页面栈里塞第二份频道页（小程序栈深 10 层，
+   * 两页来回点几次就会把栈占满，之后任何 navigateTo 都会静默失败）。
+   */
+  onGoChannels() {
+    const pages = getCurrentPages();
+    const prev = pages[pages.length - 2];
+    if (prev && prev.route === 'pages/channels/channels') {
+      wx.navigateBack();
+    } else {
+      wx.navigateTo({ url: '/pages/channels/channels' });
+    }
+    trackEvent('preferred', 'open_channels', 'channels');
+  },
 });

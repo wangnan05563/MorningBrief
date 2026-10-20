@@ -91,6 +91,19 @@ Page({
   },
 
   /**
+   * T02513 / J72：条目右上角「取消收藏」按钮。
+   * 为什么不加二次确认：收藏是可逆动作（详情页一键再加回来），而移除本身就是用户的明确意图；
+   * 弹确认框只会让「找不到入口 → 好不容易找到入口 → 还要再点一次」这条路径更长按。
+   * wxml 侧用 catchtap 阻断父级 bindtap，所以这里不需要再判 removing 之外的跳转兜底。
+   */
+  onUnfavoriteTap(e) {
+    const { id, title } = e.currentTarget.dataset;
+    if (!id) return;
+    if (this.data.removing) return;
+    this.removeFavorite(id, title);
+  },
+
+  /**
    * 调用接口移除收藏并更新本地列表（双写本地+后端）
    * 本地直接过滤掉目标项，避免再次全量拉取
    */

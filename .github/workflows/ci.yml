@@ -124,6 +124,13 @@ jobs:
         # 死入口 / 死路由键 / 合规入口是否藏在条件分支里
         run: node apps/miniprogram/scripts/validate-tabbar.mjs
 
+      - name: 页面职责与文案一致性门禁（FR-UX-604）
+        # T02513：校验「界面上的话」与「代码里做的事」是否还互相对应——
+        # 频道页页名与订阅/偏爱两页的对照说明、跨页切换契约的写侧与读侧、取消收藏可见入口、
+        # 清除缓存确认文案 ↔ KEEP_KEYS、隐私条款承诺 ↔ 真实开关三处接线、浮条纠偏的两个时机。
+        # 这类错在运行时全部静默，只能构建期拦。
+        run: node apps/miniprogram/scripts/validate-ux604.mjs
+
       - name: 运行小程序单元测试
         # 纯 node:test，零第三方依赖；含门禁自测（证明门禁真的会红）与 tab-badge 口径测试
         run: cd apps/miniprogram && node --test tests/*.test.js tests/*.test.mjs

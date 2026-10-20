@@ -85,6 +85,9 @@ Page({
     isPreferredMode: false,
     preferredIds: [],       // 用户偏爱的频道 ID 数组（本地存储镜像，便于快速过滤）
     preferredEmpty: false,  // 偏爱频道未设置时为 true，用于显示引导设置提示
+    // T02513 / J46：频道胶囊滚动定位目标（scroll-into-view 用的 DOM id，空串=不定位）。
+    // 用列表下标而不是频道 id 拼 id：「全部」胶囊的 item.id 是 null，拼出来的字符串无效。
+    scrollIntoViewId: '',
   },
 
   async onLoad() {
@@ -208,6 +211,10 @@ Page({
       this.loadPreferred();
     }
     this._lastPreferredTs = app.globalData.preferredChannelsChanged;
+    // T02513 / J46：最后消费跨页切换请求。放在末尾而不是开头，是为了让上面
+    // 「按旧模式刷新偏爱/播放器状态」先跑完 —— 否则切换会把刚写好的 todayList 又清一遍，
+    // 用户看到列表闪空。
+    this._consumePendingChannel();
   },
 
   /**
@@ -265,6 +272,9 @@ Page({
         items.forEach((c) => channels.push(c));
       });
       this.setData({ channels });
+      // T02513 / J46：首屏 onLoad 的 fetch 晚于别的页面写 pendingChannelId 时，
+      // onShow 那次消费会因「列表还空着」而保留请求；列表落地后再试一次，切换不丢。
+      this._consumePendingChannel();
     } catch (err) {
       console.warn('加载频道列表失败:', err.message);
     }
@@ -288,9 +298,22 @@ Page({
       return;
     }
     const channelId = (rawId !== undefined && rawId !== null && rawId !== '') ? rawId : null;
+    await this._applyChannel(channelId);
+  },
+
+  /**
+   * T02513 / J46：把「落到某个频道」的切换动作从点胶囊分支里抽出来复用。
+   * 需要复用的第二条路：频道页/深链只写了 globalData 就 switchTab 过来，
+   * 首页原先从不读取，于是「点了频道却没反应」——现在两条路走同一个 _applyChannel，
+   * 选中态、数据重取、globalData 镜像、胶囊定位四件事只有一份实现。
+   * （'preferred' 是特殊值，进入"我的偏爱"模式：拉全部 + 本地过滤）
+   */
+  async _applyChannel(channelId) {
     if (channelId === this.data.currentChannelId) return;
     trackEvent('index', 'switch_channel', '', String(channelId || ''));
     // 先立即清空旧数据和详情状态，避免上一频道的节目残留在 UI 上（用户反馈"全部和科技前沿内容一样"）
+    // scrollIntoViewId：把目标胶囊滚进可视区，选中态在屏幕外时用户会以为没切成功
+    const idx = this.data.channels.findIndex((c) => !c.isGroupLabel && c.id === channelId);
     this.setData({
       currentChannelId: channelId,
       // 'preferred' 模式标志：与 currentChannelId 并存，便于 initData/loadPreferred 判断
@@ -304,6 +327,7 @@ Page({
       segments: [],
       error: '',
       preferredEmpty: false,
+      scrollIntoViewId: idx >= 0 ? 'pill-' + idx : this.data.scrollIntoViewId,
     });
     app.globalData.currentChannelId = channelId === 'preferred' ? null : channelId;
     app.globalData.todayList = [];
@@ -312,6 +336,24 @@ Page({
     } else {
       await this.initData(true);
     }
+  },
+
+  /**
+   * T02513 / J46：消费跨页切换请求（一次性，读完即清零）。
+   * 调用点有两个：onShow（tab 已就绪的常见情况）与 loadChannels 之后
+   * （onLoad 首屏 fetch 还没回来时，胶囊列表是空的，此刻无法定位/校验目标）。
+   */
+  _consumePendingChannel() {
+    const pending = app.globalData.pendingChannelId;
+    if (pending === null || pending === undefined) return;
+    // 频道列表尚未加载：保留请求，等 loadChannels 落地后再消费（不能提前清零，否则切换丢失）
+    if (!this.data.channels.length) return;
+    app.globalData.pendingChannelId = null;
+    // 深链/查询参数里的 id 是字符串，频道列表里的 id 是数字 —— 按字符串比对，落地用列表里的真实对象
+    const target = this.data.channels.find((c) => !c.isGroupLabel && String(c.id) === String(pending));
+    if (!target) return; // 频道已退订/下架：不切，也不给误导性的「已切到」提示
+    this._applyChannel(target.id);
+    wx.showToast({ title: '已切到「' + target.name + '」', icon: 'none' });
   },
 
   /**

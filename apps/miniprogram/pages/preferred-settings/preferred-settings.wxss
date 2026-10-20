@@ -17,8 +17,19 @@
   border-radius: 16rpx;
 }
 .tip-text {
+  /* T02513 / J48：text 默认 inline，说明写成两句时必须逐块换行才读得清 */
+  display: block;
   font-size: 26rpx;
   color: var(--accent);
+}
+/* T02513 / J48：反向入口（去频道页管订阅），与 channels 页样式同款 */
+.tip-link {
+  margin-top: 12rpx;
+}
+.tip-link text {
+  font-size: 26rpx;
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 .channel-list {

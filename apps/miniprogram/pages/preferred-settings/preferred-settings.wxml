@@ -1,8 +1,14 @@
 <!-- 偏爱频道设置页：多选频道用于"我的偏爱"tab 筛选 -->
 <view class="page-preferred-settings">
   <!-- 顶部说明 -->
+  <!-- T02513 / J48：与 channels 页的说明条互为对照（两页布局几乎一致，用户分不清自己在改哪个开关）。
+       这里补的是反向那半句：本页只管「我的偏爱」筛选，推送提醒住在频道页的订阅开关。 -->
   <view class="tip-bar">
     <text class="tip-text">勾选你喜爱的频道，"我的偏爱"将只展示这些频道的节目</text>
+    <text class="tip-text">这里不影响新节目推送提醒，那是频道页的「订阅」开关</text>
+    <view class="tip-link" bindtap="onGoChannels" hover-class="none">
+      <text>去管理频道订阅 →</text>
+    </view>
   </view>
 
   <!-- 加载中 -->

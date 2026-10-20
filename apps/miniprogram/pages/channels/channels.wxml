@@ -1,5 +1,19 @@
 <!-- 频道管理页 -->
 <view class="page-channels">
+  <!-- T02513 / J48：本页列的是「全部频道 + 订阅态」，而「偏爱」是另一件事（只影响排序与筛选）。
+       两页卡片布局几乎一致，用户改完偏爱回首页发现列表没变，正是因为没有这句区分说明。
+       页名同时从「我的频道」改为「全部频道」（J45），说明与页名互为支撑。
+       文案按实现口径写实话：订阅在后端只落在 subscriptions 表、用于新节目订阅消息推送
+       （services/api.js 的 requestSubscribeMessageByType），不参与今日列表过滤 ——
+       原先写「订阅决定哪些频道出现在今日列表」是第二种撒谎，与 J80/J98 同类。 -->
+  <view class="tip-bar">
+    <text class="tip-text">订阅只用于「新节目提醒」推送，不改变首页内容</text>
+    <text class="tip-text">想让首页与历史只看某几个频道，请到偏爱频道设置</text>
+    <view class="tip-link" bindtap="onGoPreferred" hover-class="none">
+      <text>去设置偏爱频道 →</text>
+    </view>
+  </view>
+
   <!-- 加载中骨架屏（A8）：频道卡占位，避免弱网白屏 -->
   <view class="skeleton-wrap" wx:if="{{loading}}">
     <view class="skeleton-card" wx:for="{{[1,2,3,4]}}" wx:key="*this">

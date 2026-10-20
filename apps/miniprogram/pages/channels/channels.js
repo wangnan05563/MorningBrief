@@ -103,7 +103,28 @@ Page({
     }
     const app = getApp();
     app.globalData.currentChannelId = id;
+    // T02513 / J46：原先只写 currentChannelId 就 switchTab，首页从不读取该值 →
+    // 用户点完频道回到首页看到的还是原样（评审原话「在用户视角没反应」）。
+    // 现在再留一份一次性请求，由首页 onShow / loadChannels 消费并给出 toast 反馈。
+    app.globalData.pendingChannelId = id;
     wx.switchTab({ url: '/pages/index/index' });
     trackEvent('channels', 'switch', 'channel_' + id);
+  },
+
+  /**
+   * T02513 / J48：把「订阅」与「偏爱」两条路分开指清楚——本页只管订阅，
+   * 排序偏好在 preferred-settings 页，用户不必自己猜哪一页才是他要改的那个开关。
+   */
+  onGoPreferred() {
+    // T02513 / J48：与 preferred-settings 页的 onGoChannels 成对——
+    // 已经在偏爱页时（从那边点反向入口进来的）直接退回，避免同一页面在栈里叠两份。
+    const pages = getCurrentPages();
+    const prev = pages[pages.length - 2];
+    if (prev && prev.route === 'pages/preferred-settings/preferred-settings') {
+      wx.navigateBack();
+    } else {
+      wx.navigateTo({ url: '/pages/preferred-settings/preferred-settings' });
+    }
+    trackEvent('channels', 'open_preferred', 'preferred_settings');
   },
 });

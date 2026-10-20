@@ -44,6 +44,11 @@ App({
     buildDate: BUILD_DATE,  // 构建日期（about 页展示）
     privacyAuthorized: false, // 隐私协议是否已授权
     currentChannelId: null,   // 当前选中的频道 ID（多频道切换用，null 表示全部）
+    // T02513 / J46：跨页「请求首页切到某频道」的一次性信号（频道页点资讯频道、推送深链）。
+    // 为什么不能只靠 currentChannelId：它在「全部」态下同样是 null，首页分不清
+    // 「有人要求切换」和「没人要求」；且消费一次后必须清零，否则每次 onShow 都会重复切换+重复 toast。
+    // 语义：null/undefined = 无请求；具体频道 id = 请首页切过去（首页消费后置回 null）。
+    pendingChannelId: null,
     baseUrl: null,           // 自动发现的后端 API 基础地址（含 /api/v1 前缀）
     channelsMeta: {},         // 频道元信息缓存（id → 归一化频道对象，含 channel_type 等）
     // 偏爱频道首次引导标志：登录成功且未引导过时置 true，由首页 onShow 弹窗引导
@@ -193,6 +198,9 @@ App({
     };
     const routeToNews = () => {
       this.globalData.currentChannelId = channelId;
+      // T02513 / J46：深链落到首页时要留下「请切到这个频道」的信号，
+      // 否则首页 onLoad 早于 switchTab 完成、按原状态渲染，用户点完什么都没发生。
+      this.globalData.pendingChannelId = channelId;
       wx.switchTab({ url: '/pages/index/index' });
     };
 

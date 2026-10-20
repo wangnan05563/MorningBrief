@@ -5,11 +5,15 @@
     <view class="top-action" bindtap="onSearch">
       <image class="action-icon" lazy-load src="/images/icons/search.png" mode="aspectFit" />
     </view>
-    <scroll-view scroll-x enable-flex class="channel-bar" wx:if="{{channels.length > 0}}">
+    <!-- T02513 / J46：scroll-into-view 让「选中胶囊」一定在可视区内。
+         频道多于屏幕宽度时，从频道页/深链切过来的选中项可能正落在屏幕外，
+         用户读不到「已经切了」这个事实（评审 J46 的「没反应」一半来自这里）。 -->
+    <scroll-view scroll-x enable-flex scroll-with-animation scroll-into-view="{{scrollIntoViewId}}" class="channel-bar" wx:if="{{channels.length > 0}}">
       <block wx:for="{{channels}}" wx:key="id">
         <view wx:if="{{item.isGroupLabel}}" class="channel-group-label">{{item.label}}</view>
         <view
           wx:else
+          id="pill-{{index}}"
           class="channel-pill {{currentChannelId === item.id ? 'active' : ''}} {{item.channel_type !== 'news' ? 'course' : ''}}"
           data-id="{{item.id}}"
           bindtap="onSwitchChannel"

@@ -33,12 +33,33 @@
     </view>
   </view>
 
+  <!-- 数据与统计（T02513 / J99）：隐私政策第七条第 4 条原先承诺「关闭某些数据收集（在设置中操作）」，
+       但本页此前只有播放/通知/存储三组，那句承诺指向一个不存在的控件。这里把它补成真的。 -->
+  <view class="settings-section-title">数据与统计</view>
+  <view class="card list-card">
+    <view class="list-item list-item--captioned">
+      <text class="list-text">记录使用统计</text>
+      <switch checked="{{usageTracking}}" bindchange="onTrackingChange" color="#3F6C8F" />
+    </view>
+    <view class="list-caption">
+      <text>关闭后本机不再记录「看过哪一页、点了哪个按钮」这类操作事件。收藏与播放进度属于功能数据，断点续播必须用到，不受此开关影响。</text>
+    </view>
+    <view class="list-item" bindtap="onOpenPrivacy">
+      <text class="list-text">隐私政策</text>
+      <view class="list-extra"><image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" /></view>
+    </view>
+  </view>
+
   <!-- 存储管理 -->
   <view class="settings-section-title">存储管理</view>
   <view class="card list-card">
-    <view class="list-item" bindtap="onClearCache">
+    <view class="list-item list-item--captioned" bindtap="onClearCache">
       <text class="list-text">清除缓存</text>
       <view class="list-extra">{{cacheSize}} <image class="list-arrow" src="/images/icons/chevron-right.png" mode="aspectFit" /></view>
+    </view>
+    <!-- T02513 / J80：把「清掉的是哪些、留下的是哪些」提前写在行下，而不是等弹窗里才说 -->
+    <view class="list-caption">
+      <text>清除本机存的收藏、播放进度与历史、偏爱频道、下载/搜索/反馈记录；保留登录信息与本设置页的开关。只影响本机，不删除服务器数据。</text>
     </view>
   </view>
 

@@ -29,11 +29,33 @@
   opacity: 0.55;
 }
 
-/* 顶部：收藏时间 + 标签 */
+/* 顶部：收藏时间 + 取消收藏入口 */
 .item-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   margin-bottom: 16rpx;
+}
+
+/* T02513 / J72：条目级取消收藏按钮。
+   高度给到 64rpx（约 32px）+ 左右 20rpx 内边距，比纯文字行更容易点中；
+   用 danger-soft 底色而不是纯文字，是为了让它看起来确实是「可点的」而不是又一行说明。 */
+.unfav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64rpx;
+  padding: 0 20rpx;
+  border-radius: 32rpx;
+  background: var(--danger-soft);
+  flex-shrink: 0;
+}
+.unfav-btn text {
+  font-size: 24rpx;
+  color: var(--danger);
+}
+.unfav-btn-hover {
+  opacity: 0.7;
 }
 
 /* 收藏时间用薄荷青色，与历史页日期风格一致 */

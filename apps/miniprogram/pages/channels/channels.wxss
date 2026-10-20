@@ -94,3 +94,26 @@
   0% { background-position: 100% 0; }
   100% { background-position: -100% 0; }
 }
+
+/* T02513 / J48：顶部职责说明条（与 preferred-settings 页同款，两页互为对照）。
+   这里不用全局 .card 而用 accent-soft，是为了让「说明」和「可点的频道卡」在视觉上分层。 */
+.tip-bar {
+  margin: 24rpx;
+  padding: 20rpx 28rpx;
+  background: var(--accent-soft, #eef3f7);
+  border-radius: 16rpx;
+}
+.tip-text {
+  display: block;
+  font-size: 26rpx;
+  line-height: 1.5;
+  color: var(--accent, #3f6c8f);
+}
+.tip-link {
+  margin-top: 12rpx;
+}
+.tip-link text {
+  font-size: 26rpx;
+  color: var(--accent, #3f6c8f);
+  text-decoration: underline;
+}

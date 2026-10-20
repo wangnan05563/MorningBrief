@@ -6,9 +6,10 @@
  * - 通知设置触发订阅消息授权（一次性模板，用户每次需重新授权）
  * - 接入埋点
  */
-const STORAGE_KEY_SETTINGS = 'news_settings';
+// T02513 / J99：设置 key 收敛到 services/constants 单源（tracker.js 也按同一个 key 读开关）
+const { STORAGE_KEY_SETTINGS } = require('../../services/constants');
 const { setPlaybackRate, setAutoPlayNext, setWifiOnlyAutoPlay, setTransitionEnabled } = require('../../services/audio');
-const { trackPageView, trackEvent } = require('../../utils/tracker');
+const { trackPageView, trackEvent, setTrackingEnabled } = require('../../utils/tracker');
 const { requestSubscribeMessageByType } = require('../../services/api');
 
 // 默认设置：用户首次进入时使用，避免空值导致 switch 显示异常
@@ -18,9 +19,15 @@ const DEFAULT_SETTINGS = {
   wifiOnlyAutoPlay: false,
   transitionEnabled: false, // T00774：无缝过渡开关，默认关
   notifyNewEpisode: true,
+  // T02513 / J99：使用记录统计开关（隐私政策第七条第 4 条指向的就是它，默认开）
+  usageTracking: true,
 };
 
 // 清除缓存时保留的 key：登录态 + 用户设置
+// ⚠ 这里的每一项都必须在 onClearCache 的确认文案里被如实描述到——
+// 本单修掉的正是「文案说只留登录信息与设置，实际把收藏/进度/偏爱一起抹掉」的撒谎（J80）。
+// storage key 命名尚未收敛（downloadKey(openid)/preferredChannelsKey(openid) 等是按 openid 动态拼的，
+// 静态列不全），因此「只清缓存类、不动用户数据」的改造留给派生单，本单先把话说实话。
 const KEEP_KEYS = ['news_token', 'news_user', STORAGE_KEY_SETTINGS];
 
 Page({
@@ -30,6 +37,7 @@ Page({
     wifiOnlyAutoPlay: false,
     transitionEnabled: false,
     notifyNewEpisode: true,
+    usageTracking: true,
     rateOptions: [0.75, 1.0, 1.25, 1.5, 2.0],
     rateIndex: 1,
     cacheSize: '0 KB',
@@ -54,8 +62,12 @@ Page({
       wifiOnlyAutoPlay: settings.wifiOnlyAutoPlay,
       transitionEnabled: settings.transitionEnabled,
       notifyNewEpisode: settings.notifyNewEpisode,
+      usageTracking: settings.usageTracking,
       rateIndex: rateIndex >= 0 ? rateIndex : 1,
     });
+    // T02513 / J99：把设置里的开关同步给 tracker 单例——
+    // 冷启动后第一个页面可能在设置页从未渲染过，靠这里读一次才能让「已关闭」真正生效。
+    setTrackingEnabled(settings.usageTracking);
   },
 
   /**
@@ -127,6 +139,19 @@ Page({
   },
 
   /**
+   * T02513 / J99：使用记录统计开关。
+   * 顺序讲究：先落盘 + 先让 tracker 生效，再尝试记一条变更事件——
+   * 关掉统计时这条事件本身就不该被记（否则「关闭」这个动作反而产生了一条记录）。
+   */
+  onTrackingChange(e) {
+    const value = e.detail.value;
+    this.setData({ usageTracking: value });
+    this.saveSettings({ usageTracking: value });
+    setTrackingEnabled(value);
+    trackEvent('settings', 'change_usage_tracking', '', value ? 1 : 0);
+  },
+
+  /**
    * 读取当前缓存占用：currentSize 单位为 KB
    */
   updateCacheSize() {
@@ -140,11 +165,23 @@ Page({
 
   /**
    * 清除缓存：保留登录态与用户设置，移除其余缓存
+   *
+   * T02513 / J80：确认文案原先写「将清除本地缓存（保留登录信息与设置）」，
+   * 而 KEEP_KEYS 之外被抹掉的其实是收藏、播放进度、播放历史、偏爱频道、下载索引、
+   * 上次播放项、搜索历史、反馈历史 —— 用户以为清的是图片缓存，结果收藏清空、续听进度归零。
+   * 现在逐类如实列出，并把「哪些能自动回来、哪些回不来」说清楚（依据：
+   * 收藏与进度走 local-data 的双写，服务端有备份；偏爱频道只有本机一份）。
+   * 确认键改成「仍要清除」，让这个动作在视觉上不等同于普通的「确定」。
    */
   onClearCache() {
     wx.showModal({
       title: '清除缓存',
-      content: '将清除本地缓存（保留登录信息与设置），确定继续？',
+      content:
+        '会清掉本机存的：收藏、播放进度与历史、偏爱频道、下载/搜索/反馈记录。\n' +
+        '保留：登录信息、播放与通知设置。\n' +
+        '收藏和进度服务端有备份，会重新同步回来；偏爱频道只有本机一份，清掉不可恢复。\n' +
+        '只影响本机，不删除服务器数据。',
+      confirmText: '仍要清除',
       confirmColor: '#B0554A',
       success: (res) => {
         if (!res.confirm) return;
@@ -205,5 +242,14 @@ Page({
    */
   onOpenAbout() {
     wx.navigateTo({ url: '/pages/about/about' });
+  },
+
+  /**
+   * T02513 / J99：隐私政策在「设置」里也要有入口。
+   * 原先只有「我的 → 隐私政策」一条路，而隐私政策第七条第 4 条把用户往设置页指
+   * （「关闭某些数据收集（在设置中操作）」），设置页却回不到隐私政策——两头互相指认却没有链接。
+   */
+  onOpenPrivacy() {
+    wx.navigateTo({ url: '/pages/privacy/privacy' });
   },
 });

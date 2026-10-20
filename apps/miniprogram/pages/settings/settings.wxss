@@ -27,6 +27,27 @@
   border-bottom: none;
 }
 
+/* T02513 / J80/J99：行下方紧跟说明文字时，把分隔线让给说明块（否则分隔线夹在两者之间像断了） */
+.list-item--captioned {
+  border-bottom: none;
+  padding-bottom: 8rpx;
+}
+
+.list-caption {
+  padding: 0 0 24rpx;
+  border-bottom: 2rpx solid var(--bg-subtle);
+}
+
+.list-caption:last-child {
+  border-bottom: none;
+}
+
+.list-caption text {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
 .list-text {
   font-size: 30rpx;
   color: var(--text-primary);
