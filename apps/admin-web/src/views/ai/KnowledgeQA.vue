@@ -229,12 +229,29 @@
               :class="msg.role === 'user' ? 'as-msg-user' : 'as-msg-assistant'"
             >
               <div class="as-msg-role">{{ msg.role === 'user' ? '我' : 'AI' }}</div>
-              <div class="as-msg-content">{{ msg.content }}</div>
+              <div class="as-msg-content" :class="{ 'as-msg-content-failed': msg.failed }">
+                {{ msg.content }}
+                <!-- 超时才给「重试」：ACC-UX-701 要求超时提示可重试；
+                     其他失败（如 API Key 未配置）重试同一个错没有意义，只留文案引导去改配置 -->
+                <div v-if="msg.retryable" class="as-msg-actions">
+                  <IconButton
+                    type="warning"
+                    plain
+                    size="small"
+                    :icon="Refresh"
+                    inline-text="重试"
+                    label="重试这一问"
+                    desc="用同一份上下文重新提问（可先切换更快的模型再重试）"
+                    :disabled="replying || !currentModel"
+                    @click="retryMessage(idx)"
+                  />
+                </div>
+              </div>
             </div>
 
             <div v-if="replying" class="as-msg as-msg-assistant">
               <div class="as-msg-role">AI</div>
-              <div class="as-msg-content as-typing">正在思考…</div>
+              <div class="as-msg-content as-typing">正在思考…长回答可能要等 1-2 分钟，等不及可以点下方「停止生成」</div>
             </div>
           </div>
 
@@ -257,6 +274,19 @@
               desc="发送问题到知识库"
               @click="sendMessage"
             />
+            <!-- FR-UX-701「停止生成」：只在等待回答时出现。
+                 点它中止的是浏览器这条请求（上游模型任务不会因此停，见 api/aiChat.js），
+                 但界面必须立刻回到可输入状态——原来没有这个出口，长回答卡住时只能刷新整页。 -->
+            <IconButton
+              v-if="replying"
+              type="danger"
+              plain
+              :icon="Delete"
+              inline-text="停止生成"
+              label="停止生成"
+              desc="中止本次问答请求，界面立即可继续输入"
+              @click="stopGenerating"
+            />
           </div>
           <div v-if="!currentModel" class="as-input-hint">
             请先在上方选择模型后再提问。
@@ -273,6 +303,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, notifyErrorOnce } from '../../utils/message'
 import { Refresh, Promotion, ChatDotRound, MagicStick, Check, Delete, ArrowRight } from '@element-plus/icons-vue'
 import api from '../../api'
+import { callAiChat } from '../../api/aiChat'
 import { planAssistantAction, executeAssistantAction } from '../../api/assistant'
 
 const AUTO_REFRESH_MS = 90_000
@@ -401,6 +432,10 @@ const messagesRef = ref(null)
 tabRefs.qa = messagesRef
 
 let refreshTimer = null
+// 本轮问答的中止句柄（FR-UX-701「停止生成」）。
+// 用普通变量而不是 ref：AbortController 塞进响应式代理后，axios 取 signal 时拿到的是
+// Proxy，浏览器会抛 "signal is not an AbortSignal" 这类看不懂的错。
+let chatAbort = null
 
 // 从模型中挑一个适合对话的默认模型：排除 embedding/图像/语音等专用模型，
 // 否则会选到第一个模型导致问答报「Model does not exist」。
@@ -486,38 +521,82 @@ async function sendMessage() {
   const text = inputText.value.trim()
   if (!text || !currentModel.value || replying.value) return
 
-  // 组装对话历史（OpenAI 格式），追加当前问题
-  const history = messages.value.map((m) => ({ role: m.role, content: m.content }))
+  // 组装对话历史（OpenAI 格式），追加当前问题。
+  // 过滤掉失败气泡（msg.failed）：它们不该作为上下文喂回模型，
+  // 否则一次超时会把「⚠️ 生成超时…」这种系统话术当成 AI 的回答带进后续每一轮对话。
+  const history = messages.value
+    .filter((m) => !m.failed)
+    .map((m) => ({ role: m.role, content: m.content }))
   history.push({ role: 'user', content: text })
 
   messages.value.push({ role: 'user', content: text })
   inputText.value = ''
+  await runChat(history)
+}
+
+/**
+ * 真正发一轮问答（FR-UX-701 / T02515）。
+ * 三种收场各自有不同后续动作，所以单独成函数给「重试」复用：
+ * - ok        → 追加回复
+ * - aborted   → 用户点了「停止生成」：把问题放回输入框（他多半想改一改再问），不留 loading
+ * - timeout   → 超时：留一条带「重试」的气泡（ACC 要求「超时提示可重试」）
+ * - error     → 其他失败：同样留气泡 + toast，但不给重试按钮（重试同一个模型错误没意义，
+ *               例如 API Key 未配置——那种情况要的是去改配置，不是再点一次）
+ */
+async function runChat(history) {
   replying.value = true
+  chatAbort = new AbortController()
   await scrollQa()
 
+  const question = history[history.length - 1]?.content || ''
+  let res
   try {
-    const data = await api.post('/ai/chat', {
-      model: currentModel.value,
-      messages: history,
-    })
-    if (data?.success) {
-      messages.value.push({ role: 'assistant', content: data.reply || '(空回复)' })
-    } else {
-      modelError.value = ''
-      ElMessage.error(data?.message || '问答失败')
-      messages.value.push({
-        role: 'assistant',
-        content: `⚠️ ${data?.message || '问答失败'}`,
-      })
-    }
-  } catch (e) {
-    const msg = e?.message || '问答失败'
-    ElMessage.error(msg)
-    messages.value.push({ role: 'assistant', content: `⚠️ ${msg}` })
+    res = await callAiChat({ client: api, model: currentModel.value, messages: history, signal: chatAbort.signal })
   } finally {
+    // 放在 finally：任何异常路径都不能把 replying 留在 true——
+    // 这个页面是菜单 tab 常驻组件（tabRefs.qa），loading 卡住后切走再切回来还是卡着，
+    // 用户只能刷新整页（F19 原本「一直转圈」的观感就是这么来的）
     replying.value = false
-    await scrollQa()
+    chatAbort = null
   }
+
+  if (res.ok) {
+    messages.value.push({ role: 'assistant', content: res.data.reply || '(空回复)' })
+  } else if (res.kind === 'aborted') {
+    messages.value.push({ role: 'assistant', content: '⏹ 已停止生成', stopped: true })
+    if (!inputText.value) inputText.value = question
+  } else if (res.kind === 'timeout') {
+    messages.value.push({
+      role: 'assistant',
+      content: `⚠️ ${res.message || '生成超时'}`,
+      failed: true,
+      retryable: true,
+      retryHistory: history,
+    })
+  } else {
+    messages.value.push({
+      role: 'assistant',
+      content: `⚠️ ${res.message || '问答失败'}`,
+      failed: true,
+    })
+    notifyErrorOnce(new Error(res.message || '问答失败'))
+  }
+  await scrollQa()
+}
+
+/** 「停止生成」：中止浏览器侧请求。上游模型任务无法从客户端取消，详见 api/aiChat.js 注释 */
+function stopGenerating() {
+  if (!replying.value || !chatAbort) return
+  chatAbort.abort()
+}
+
+/** 点超时气泡里的「重试」：摘掉这条失败气泡，用同一份历史重发（模型按当前选择，方便换快的） */
+async function retryMessage(idx) {
+  if (replying.value) return
+  const msg = messages.value[idx]
+  if (!msg?.retryable || !Array.isArray(msg.retryHistory)) return
+  messages.value.splice(idx, 1)
+  await runChat(msg.retryHistory)
 }
 
 async function scrollQa() {
@@ -534,6 +613,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopAutoRefresh()
+  // 离开页面时中止在途问答：否则请求继续占着连接，而组件已销毁，
+  // 回来时（tab 常驻会被重建）既看不到结果也停不掉
+  if (chatAbort) chatAbort.abort()
 })
 </script>
 
@@ -666,6 +748,16 @@ onUnmounted(() => {
 }
 .as-typing {
   color: var(--el-text-color-secondary);
+}
+/* 失败/超时气泡（FR-UX-701）：用 danger 描边与正常回答区分，重试入口跟在气泡内右下 */
+.as-msg-content-failed {
+  border-color: var(--el-color-danger);
+  background: var(--el-color-danger-light-9);
+}
+.as-msg-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
 }
 /* 动作草稿卡片 */
 .as-action-card {

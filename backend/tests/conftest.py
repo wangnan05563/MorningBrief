@@ -103,8 +103,45 @@ sys.modules.setdefault("feedparser", _fp_mod)
 
 # ---- openai ----
 # rewriter.py 中 from openai import AsyncOpenAI；stub 占位
+# T02515 补异常类：ai_config_service 的问答超时归类要 import
+# APIConnectionError / APIStatusError（与 AsyncOpenAI 同一行导入）。stub 用
+# setdefault 抢先占位，缺这两个名字会让**整个测试会话**收集失败（与 T00921
+# 的 CosServiceError 缺失同一类坑：桩要跟着生产导入走）。
+# 层级对齐真实 SDK：APITimeoutError ⊂ APIConnectionError ⊂ APIError；
+# APIStatusError ⊂ APIError 且带 status_code —— 归类逻辑靠 isinstance 判定，
+# 层级错了「可重试」标记就会失真。
+class _StubAPIError(Exception):
+    def __init__(self, message="", *, request=None, response=None):
+        super().__init__(message)
+        self.request = request
+        self.response = response
+
+
+class APIConnectionError(_StubAPIError):
+    pass
+
+
+class APITimeoutError(APIConnectionError):
+    pass
+
+
+class APIStatusError(_StubAPIError):
+    def __init__(self, message="", *, request=None, response=None):
+        super().__init__(message, request=request, response=response)
+        self.status_code = getattr(response, "status_code", None)
+
+
+class AuthenticationError(APIStatusError):
+    pass
+
+
 _oai_mod = types.ModuleType("openai")
 _oai_mod.AsyncOpenAI = type("AsyncOpenAI", (), {"__init__": lambda self, *a, **k: None})
+_oai_mod.APIError = _StubAPIError
+_oai_mod.APIConnectionError = APIConnectionError
+_oai_mod.APITimeoutError = APITimeoutError
+_oai_mod.APIStatusError = APIStatusError
+_oai_mod.AuthenticationError = AuthenticationError
 sys.modules.setdefault("openai", _oai_mod)
 
 

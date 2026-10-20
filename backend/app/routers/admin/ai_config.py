@@ -47,6 +47,9 @@ class LLMConfigBody(BaseModel):
     base_url: str = ""
     model: str = ""
     timeout_sec: int = 30
+    # 知识库问答超时（FR-UX-701 / T02515）：必须在这里声明——本 body 是逐字段白名单，
+    # 没声明的键会被 pydantic 静默丢掉（T01729 的 llm_max_script_segments 就是这么坏的）。
+    chat_timeout_sec: int = 120
     retry_attempts: int = 3
     target_duration_sec: int = 600
     segment_gap_sec: float = 0.5
@@ -595,6 +598,15 @@ async def chat(
 
     支持在问答过程中随时切换 model 参数（前端每次请求传入当前选中模型），
     切换立即生效。返回模型回复与 token 用量。
+
+    超时口径（FR-UX-701 / T02515）：本接口在 LLM_CHAT_TIMEOUT_SEC（默认 120s）到点时
+    返回 success=false + timeout=true + 「可重试」文案，刻意早于前端的 130s，
+    这样用户看到的是一句能重试的业务提示，而不是浏览器层面的网络错误。
+
+    「停止生成」的真实边界：前端点停止只会中止浏览器侧请求，非流式调用无法从客户端
+    取消上游模型任务——服务端仍会把这一轮跑完并计入用量。要真正做到「停止即停止并
+    停止计费」，得改成 SSE 流式（属 FR-UX-702 的范围），此处如实注释以免后来者误以为
+    已经断开。
     """
     svc = AIConfigService(db)
     result = await svc.chat_with_model(

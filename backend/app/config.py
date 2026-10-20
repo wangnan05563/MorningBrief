@@ -215,6 +215,17 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "qwen-max"
     LLM_TIMEOUT_SEC: int = 30
     LLM_RETRY_ATTEMPTS: int = 3
+    # 知识库问答（POST /ai/chat）专用超时（FR-UX-701 / T02515）。
+    # 为什么不复用 LLM_TIMEOUT_SEC：那个值服务改写/合成等批量任务，30s 到点就按失败重试；
+    # 问答是「人坐在屏幕前等」的同步请求，ACC-UX-701 要求长回答（>60s）不被中断。
+    # 匹配口径（与 apps/admin-web/src/api/aiChat.js 的 AI_CHAT_TIMEOUT_MS=130s 成对）：
+    # 后端必须**先到点**（120 < 130），这样前端拿到的是可读的「超时可重试」业务错误，
+    # 而不是 axios 的 "timeout of 130000ms exceeded"；反过来前端先到点，服务端还在跑、
+    # 用量照样计费，用户看到的却是一个没有重试入口的网络错误。
+    # 可经 ai_config 键 llm_chat_timeout_sec 在管理端热调（改这里要同步改单测断言）。
+    # 问答路径的重试次数固定为 0（见 ai_config_service.chat_with_model 的注释）：
+    # openai SDK 默认 max_retries=2，120s × 3 次会跑到 360s，直接击穿前端 130s 契约。
+    LLM_CHAT_TIMEOUT_SEC: int = 120
     # 单期节目最大段数上限（T00584 得到式听书）：默认 10 段 ≈ 10-18 分钟；
     # 「一本书一条完整音频」需要 15-20 段（20-30 分钟），可经 ai_config 键
     # llm_max_script_segments 运行时调整（上限同时受素材数与目标时长约束）

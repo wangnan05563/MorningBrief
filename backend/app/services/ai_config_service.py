@@ -17,7 +17,13 @@ from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 import httpx
-from openai import AsyncOpenAI
+from openai import (
+    APIConnectionError,
+    APIError,
+    APIStatusError,
+    APITimeoutError,
+    AsyncOpenAI,
+)
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -99,6 +105,8 @@ CONFIG_KEY_MAP = {
     "llm_base_url": "LLM_BASE_URL",
     "llm_model": "LLM_MODEL",
     "llm_timeout_sec": "LLM_TIMEOUT_SEC",
+    # 知识库问答专用超时（FR-UX-701）：与批量任务超时解耦
+    "llm_chat_timeout_sec": "LLM_CHAT_TIMEOUT_SEC",
     "llm_retry_attempts": "LLM_RETRY_ATTEMPTS",
     # 单期节目最大段数上限（T00584 得到式听书：20-30 分钟需 15-20 段）
     "llm_max_script_segments": "LLM_MAX_SCRIPT_SEGMENTS",
@@ -167,6 +175,9 @@ LLM_RESET_KEYS = ["llm_api_key", "llm_base_url", "llm_model", PRESET_CONFIGS_KEY
 # 需要转为 int 类型的配置项
 INT_KEYS = {
     "llm_timeout_sec", "llm_retry_attempts",
+    # 问答超时（FR-UX-701）：漏进这个集合的话，保存时按字符串写、热更新时 setattr
+    # 出一个 str，chat_with_model 里 float(settings...) 当场炸（与 T01729 同一类「集合漏登记」）
+    "llm_chat_timeout_sec",
     # 单期节目最大段数上限（T01729：补齐写路径，管理端热调听书 30 分钟档段数）
     "llm_max_script_segments",
     "tts_sample_rate", "tts_timeout_sec", "tts_retry_attempts",
@@ -502,6 +513,11 @@ class AIConfigService:
             "base_url": llm_base_url,
             "model": _get("llm_model", "LLM_MODEL"),
             "timeout_sec": int(_get("llm_timeout_sec", "LLM_TIMEOUT_SEC", "30")),
+            # 知识库问答超时（FR-UX-701 / T02515）：与批量任务的 timeout_sec 分开，
+            # 管理端改这里就能让后端先到点（必须小于前端 130s，见 config.py 注释）
+            "chat_timeout_sec": _get_int(
+                "llm_chat_timeout_sec", "LLM_CHAT_TIMEOUT_SEC", 120
+            ),
             "retry_attempts": int(_get("llm_retry_attempts", "LLM_RETRY_ATTEMPTS", "3")),
             # 目标节目时长（秒）：控制 rewriter 字数与 stitch 范围
             # 默认 600s = 10 分钟，与稿件字数反向关联
@@ -674,6 +690,10 @@ class AIConfigService:
             result["llm_model"] = config["model"]
         if "timeout_sec" in config:
             result["llm_timeout_sec"] = str(config["timeout_sec"])
+        # 问答超时（FR-UX-701 / T02515）：读路径已返显 chat_timeout_sec，
+        # 写路径必须同键接住，否则管理端改了不生效（T01729 的「PUT 静默丢弃」复发口径）
+        if "chat_timeout_sec" in config:
+            result["llm_chat_timeout_sec"] = str(config["chat_timeout_sec"])
         if "retry_attempts" in config:
             result["llm_retry_attempts"] = str(config["retry_attempts"])
         # 目标节目时长（秒）：与稿件字数反向关联
@@ -1526,25 +1546,62 @@ class AIConfigService:
                 "message": "API Base URL 未配置",
             }
 
+        # 问答超时（FR-UX-701 / T02515）：用 LLM_CHAT_TIMEOUT_SEC（默认 120s）而不是
+        # LLM_TIMEOUT_SEC（默认 30s）。后者是给批量改写/合成用的，30s 到点即失败重试；
+        # 用在前端等结果的问答上，ACC-UX-701「长回答（>60s）不中断」直接不成立。
         try:
-            client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+            chat_timeout = float(settings.LLM_CHAT_TIMEOUT_SEC or 120)
+        except (TypeError, ValueError):
+            # 配置页历史脏值（例如热更新写进 Settings 的非数字）不应让问答整体不可用
+            chat_timeout = 120.0
+        try:
+            # max_retries=0：openai SDK 默认重试 2 次，120s 超时 × 3 次会跑到 360s，
+            # 而前端只等 130s（AI_CHAT_TIMEOUT_MS）——到点先断的是浏览器，用户既看不到
+            # 「超时可重试」也拿不到服务端那句可读的错误。问答是人在等的请求，
+            # 要不要重来由用户点「重试」决定，比在背后重复扣费更合理。
+            client = AsyncOpenAI(api_key=api_key, base_url=base_url, max_retries=0)
             resp = await client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=0.7,
-                timeout=float(settings.LLM_TIMEOUT_SEC or 30),
+                timeout=chat_timeout,
             )
         except Exception as e:
-            # openai 各类异常（鉴权/超时/限流等）统一兜底为可读提示；
-            # 非 openai 异常（如代码 bug）继续抛出，避免被静默吞掉
-            if "openai" not in type(e).__module__:
+            # 只兜底 openai SDK 的异常（鉴权/超时/限流/网络等），其余异常（代码 bug）
+            # 继续抛出，避免被静默吞掉。
+            # 为什么用 isinstance 而不是比对 type(e).__module__ 字符串：测试桩里的异常类
+            # __module__ 是 conftest（不是 openai），字符串判定会把真实的超时异常误判成
+            # 「代码 bug」直接抛出——用例会在自己的夹具里炸，而生产路径看不出来。
+            if not isinstance(e, APIError):
                 raise
+            # 超时要单独标出来：前端据此把「可重试」摆到用户面前，而不是只弹一条错误 toast
+            if isinstance(e, (APITimeoutError, TimeoutError)):
+                return {
+                    "success": False,
+                    "reply": "",
+                    "model": model,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "timeout": True,
+                    "retryable": True,
+                    "message": f"模型响应超时（>{int(chat_timeout)} 秒），可以重试或把问题问得更具体",
+                }
             return {
                 "success": False,
                 "reply": "",
                 "model": model,
                 "input_tokens": 0,
                 "output_tokens": 0,
+                "timeout": False,
+                # 「重试有没有意义」按 SDK 层级判定：
+                # - APIConnectionError（含超时）是网络层面的，再来一次可能就好 → 可重试；
+                # - APIStatusError 只有网关/服务端的暂时性状态码值得重试，
+                #   401/403/404 这类鉴权与参数错误重试没有意义，要去改 AI 配置。
+                "retryable": isinstance(e, APIConnectionError)
+                or (
+                    isinstance(e, APIStatusError)
+                    and getattr(e, "status_code", 0) in (429, 500, 502, 503, 504)
+                ),
                 "message": f"调用模型失败（{type(e).__name__}）：{e}",
             }
 

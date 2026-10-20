@@ -147,6 +147,15 @@
             </el-form-item>
             <el-form-item label="超时(秒)">
               <el-input-number v-model="llmForm.timeout_sec" :min="5" :max="120" />
+              <span class="field-tip">批量任务（改写/合成）的单次调用超时，到点按失败重试</span>
+            </el-form-item>
+            <!-- FR-UX-701 / T02515：知识库问答单独一个超时，不能复用上面那个 30s，
+                 否则 ACC-UX-701「长回答（>60s）不中断」必然失败。
+                 上限 125s 是硬约束：前端等 130s（api/aiChat.js 的 AI_CHAT_TIMEOUT_MS），
+                 后端必须先到点，用户才会看到「超时可重试」而不是一条网络错误。 -->
+            <el-form-item label="问答超时(秒)">
+              <el-input-number v-model="llmForm.chat_timeout_sec" :min="30" :max="125" />
+              <span class="field-tip">知识库问答（/ai/chat）的等待上限，最长 125 秒（前端 130 秒兜底）；经 Tailscale Funnel 访问时若网关更早断流，调大本值无效，需改流式</span>
             </el-form-item>
             <el-form-item label="重试次数">
               <el-input-number v-model="llmForm.retry_attempts" :min="0" :max="10" />
@@ -873,6 +882,9 @@ const llmForm = ref({
   base_url: '',
   model: '',
   timeout_sec: 30,
+  // 问答超时（FR-UX-701 / T02515）：与后端 LLM_CHAT_TIMEOUT_SEC 默认值保持一致。
+  // 必须在这里声明：llmForm 整体就是 PUT /ai/config 的 llm 段，缺键时后端按 body 默认值写库
+  chat_timeout_sec: 120,
   retry_attempts: 3,
   target_duration_sec: 600,
   segment_gap_sec: 0.5,

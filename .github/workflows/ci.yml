@@ -84,6 +84,13 @@ jobs:
       - name: 构建前端
         run: cd apps/admin-web && npm run build
 
+      - name: 运行管理端单元测试
+        # T02515：tests/unit/*.test.mjs 是 node --test 纯逻辑/契约用例（不依赖浏览器），
+        # 卡在 E2E 之前跑——E2E 要装 chromium、单测 2.5s 就能判红，先便宜后贵。
+        # 之前只有本地 `npm run test:unit` 手动跑，跨端超时契约（前端 130s / 后端 120s）
+        # 改值不会被 CI 拦住，等于门禁只存在于开发者机器上。
+        run: cd apps/admin-web && node --test tests/unit/*.test.mjs
+
       - name: 安装 Playwright 浏览器
         run: cd apps/admin-web && npx playwright install --with-deps chromium
 
