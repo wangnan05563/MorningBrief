@@ -83,6 +83,14 @@ describe('AI_CHAT_TIMEOUT_MS 契约常量', () => {
     // 兜底范围用 isinstance 而非 __module__ 字符串：测试桩异常类的 __module__ 不是 openai，
     // 字符串判定会把真实超时异常当代码 bug 抛出（生产看不出来，用例在自己的夹具里炸）
     assert.match(svc, /if not isinstance\(e, APIError\):\s*\n\s*raise/, '异常兜底范围没按 SDK 层级判定')
+    // 助理规划链（/assistant/plan）在服务层复用同一个 chat_with_model，
+    // 于是它的前端等待预算也必须 > 后端 120s；原来写死 120000 与后端相等，
+    // 两边同时到点时用户看到的到底是可重试提示还是网络错误并不确定。
+    const assistantSvc = repoFile('backend/app/services/assistant_service.py')
+    assert.match(assistantSvc, /await svc\.chat_with_model\(/, '助理规划链已不再复用 chat_with_model，本断言与前端超时需要重新对齐')
+    const assistantApi = repoFile('apps/admin-web/src/api/assistant.js')
+    assert.match(assistantApi, /import \{ AI_CHAT_TIMEOUT_MS \} from '\.\/aiChat'/, '助理链没复用问答超时常量，容易又写回 120s')
+    assert.ok((assistantApi.match(/timeout: AI_CHAT_TIMEOUT_MS/g) || []).length >= 2, 'plan/execute 两处超时都要跟上')
   })
 
   it('管理端把问答超时暴露成可热调字段，且上限不越过前端 130s', () => {
