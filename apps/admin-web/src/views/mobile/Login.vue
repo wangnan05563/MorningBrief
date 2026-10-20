@@ -32,12 +32,14 @@
 
 <script setup>
 import { nextTick, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../../stores/user'
 import { ElMessage } from '../../utils/message'
 import { describeLoginError } from '../../utils/loginError'
+import { sanitizeRedirect, isMobilePath } from '../../utils/urlState'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 
 const username = ref('')
@@ -55,7 +57,10 @@ async function onLogin() {
   loginError.value = ''
   try {
     await userStore.login(username.value, password.value)
-    router.replace('/m/home')
+    // 深链优先（T02511 / FR-UX-602）：只接受仍留在 /m 命名空间内的 redirect，
+    // 否则手机上会被送回 PC 页再由 App.vue 反弹回来，出现一次无谓的闪烁。
+    const back = sanitizeRedirect(route.query.redirect)
+    router.replace(back && isMobilePath(back) ? back : '/m/home')
   } catch (e) {
     // 保留已输入内容，把原因常驻显示并聚焦密码框（FR-UX-304）
     loginError.value = describeLoginError(e)

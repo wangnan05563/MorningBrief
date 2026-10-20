@@ -32,6 +32,12 @@
         title="请先选择频道：讲书稿模式按频道独立配置（素材池、排序与进度都属于所选频道）" />
     </el-card>
 
+    <!-- C68（FR-UX-602）：地址里的 channelId 查无此频道时显式说明「已回落到哪个频道」，
+         而不是静默换频道——否则用户以为看的是地址里那个频道的配置。 -->
+    <el-alert v-if="deadChannelId && channelId" data-guide="book-pool-dead-channel" type="warning"
+      :closable="false" show-icon style="margin-top: 12px"
+      :title="`地址中的频道 #${deadChannelId} 不存在或已删除，已切换到「${currentChannelName}」`" />
+
     <!-- 核心交互面板（与频道编辑弹窗内的素材池弹窗映射同一组件） -->
     <BookPoolPanel v-if="channelId" :channel-id="channelId" style="margin-top: 12px" />
   </div>
@@ -44,8 +50,8 @@
  * 薄壳：频道选择 + <BookPoolPanel>（讲书稿模式开关、书单/排序/进度/候选加入的
  * 核心交互封装在 BookPoolPanel，与频道编辑弹窗内的素材池弹窗**映射同一组件**，状态一致）。
  */
-import { onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { listChannels } from '../../api/channels'
 import BookPoolPanel from './BookPoolPanel.vue'
 import { CHANNEL_TYPE, enumLabel } from '../../constants/enums'
@@ -55,23 +61,55 @@ import { CHANNEL_TYPE, enumLabel } from '../../constants/enums'
 const typeLabel = (t) => enumLabel(CHANNEL_TYPE, t)
 
 const route = useRoute()
+const router = useRouter()
 const channels = ref([])
 const channelId = ref(null)
+// 地址里给了 channelId 但频道列表里查无此频道（C68：深链参数不校验存在性）
+const deadChannelId = ref('')
 
 async function loadChannels() {
-  channels.value = await listChannels()
-  const qid = Number(route.query.channelId)
-  if (qid) {
-    channelId.value = qid
-  } else {
-    const preferred = channels.value.find((c) => c.channel_type === 'audiobook') || channels.value[0]
-    channelId.value = preferred ? preferred.id : null
+  try {
+    channels.value = (await listChannels()) || []
+  } catch {
+    // 拦截器已提示；拿不到列表时**不要**把地址里的 channelId 当真值用——
+    // 那会让面板去打一个可能不存在的频道，退化成「未开启 + 空池」的误导画面
+    channels.value = []
+    return
+  }
+
+  const raw = route.query.channelId
+  const qid = Number(Array.isArray(raw) ? raw[0] : raw)
+  const hit = Number.isFinite(qid) && qid > 0 ? channels.value.find((c) => c.id === qid) : null
+  // 只在「地址确实写了 channelId 且查不到」时点名；没写 channelId 属正常进入
+  deadChannelId.value = raw && !hit ? String(Array.isArray(raw) ? raw[0] : raw) : ''
+
+  const preferred = hit || channels.value.find((c) => c.channel_type === 'audiobook') || channels.value[0]
+  channelId.value = preferred ? preferred.id : null
+
+  // 校正后的频道写回 URL：这一页的有效状态从此可以用地址表达（可分享、可收藏、刷新不回退）。
+  // 无效 channelId 也会被替换成真正生效的那个——地址栏不再撒谎。
+  if (channelId.value && String(channelId.value) !== String(raw ?? '')) {
+    router
+      .replace({ query: { ...route.query, channelId: String(channelId.value) } })
+      .catch((err) => console.warn('[book-pool] URL 回写被拒绝:', err?.message || err))
   }
 }
 
 function onChannelChange() {
-  // 切频道后面板经 props.channelId watch 自动重载
+  // 切频道后面板经 props.channelId watch 自动重载；同步把选择写回地址（FR-UX-602 状态保留）
+  if (channelId.value) {
+    router
+      .replace({ query: { ...route.query, channelId: String(channelId.value) } })
+      .catch((err) => console.warn('[book-pool] URL 回写被拒绝:', err?.message || err))
+  }
+  deadChannelId.value = ''
 }
+
+// 告警文案里显示回落到的频道名（比裸 ID 可读）
+const currentChannelName = computed(() => {
+  const hit = channels.value.find((c) => c.id === channelId.value)
+  return hit ? hit.name : `#${channelId.value}`
+})
 
 onMounted(loadChannels)
 </script>

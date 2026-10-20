@@ -1,6 +1,19 @@
 <template>
   <div class="m-app">
     <header class="m-appbar">
+      <!-- T02511（FR-UX-602）：hidden 子页（管理下的 7 个二级页）此前只有一枚底部 tab 条，
+           进来之后回不到上一级——ACC-UX-601#2 要求「从 /m/manage/users 可一键返回 /m/manage」。
+           返回目标按路由逐级上溯算出来，不写死：以后再加二级页自动就有返回键。 -->
+      <button
+        v-if="backTo"
+        type="button"
+        class="m-appbar__back"
+        data-guide="mobile-appbar-back"
+        :aria-label="`返回${backTo.label}`"
+        @click="goBack"
+      >
+        <el-icon><ArrowLeft /></el-icon>
+      </button>
       <span class="m-appbar__title">{{ title }}</span>
     </header>
 
@@ -33,12 +46,13 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { getDashboardSummary } from '../api/mobile'
 import { subscribe } from '../utils/sse'
 
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 
 // 基础底部标签；「管理」仅管理员可见（与路由 requireRole 一致）
@@ -124,6 +138,42 @@ const titleMap = {
   mine: '我的',
 }
 
+/**
+ * hidden 子页的返回目标（T02511）。
+ *
+ * 逐级砍掉路径最后一段，取**第一个真实存在的路由**作为上级：
+ * `/m/manage/users` → `/m/manage`；假以常日再加 `/m/manage/ads/edit` 也能自动上溯。
+ * 一路砍到只剩 `/m` 都找不到时兜底回首页——「没有返回键」和「返回键回到首页」
+ * 都比「点了没反应」好。底部 tab 上的页面（home/review/message/mine/manage）不显示返回键，
+ * 它们本来就在一级导航里。
+ */
+const backTo = computed(() => {
+  if (!route.meta.hidden) return null
+  const segs = route.path.split('/').filter(Boolean) // ['m','manage','users']
+  while (segs.length > 1) {
+    segs.pop()
+    const path = '/' + segs.join('/')
+    const resolved = safeResolve(path)
+    if (resolved) return { path, label: resolved.meta?.title || titleMap[resolved.name] || '上级' }
+  }
+  return { path: '/m/home', label: '首页' }
+})
+
+/** resolve 对未知路径会抛错；这里只关心「存不存在」，异常吞掉当作不存在 */
+function safeResolve(path) {
+  try {
+    const r = router.resolve(path)
+    return r.matched?.length ? r : null
+  } catch {
+    return null
+  }
+}
+
+function goBack() {
+  if (!backTo.value) return
+  router.push(backTo.value.path).catch((err) => console.warn('[mobile-back] 返回被拒绝:', err?.message || err))
+}
+
 // SSE：工作流完成 = 有新节目进入待审队列，是「停在审批 tab 也能感知新待办」的实时通道。
 // 这里不引入任何轮询——刷新全部由事件/交互触发（NFR-UX-03）
 let unsubscribeSse = null
@@ -179,6 +229,30 @@ watch(
 .m-appbar__title {
   font-size: 17px;
   font-weight: 600;
+}
+
+/* 返回键绝对定位在左侧：appbar 用 justify-content:center 居中标题，
+   直接把按钮塞进 flex 流会把标题顶偏 */
+.m-appbar__back {
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #1f2329;
+  font-size: 20px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.m-appbar__back:active {
+  opacity: 0.6;
 }
 
 .m-content {

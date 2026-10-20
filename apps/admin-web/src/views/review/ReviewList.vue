@@ -6,6 +6,18 @@
       <el-tab-pane label="已打回" name="rejected" />
     </el-tabs>
 
+    <!-- 地址栏带来的非法参数（如 ?tab=xxx / ?page=abc）已按默认值渲染，这里如实点名，
+         不静默吞掉——用户分享链接后看到的数据与链接写明的不一致，必须可见（T02511） -->
+    <el-alert
+      v-if="invalidParams.length"
+      data-guide="review-url-corrected"
+      type="warning"
+      :closable="false"
+      show-icon
+      :title="`链接里的参数已修正：${invalidParams.map((p) => p.key).join('、')}`"
+      :description="invalidParams.map((p) => `${p.key}=${p.raw}（${p.reason}）`).join('；')"
+    />
+
     <!-- 批量操作栏：仅在待审核 tab 显示，选中后才可操作 -->
     <div v-if="activeTab === 'pending'" class="batch-bar">
       <span class="batch-info" v-if="selectedRows.length > 0">
@@ -99,7 +111,7 @@
           <IconButton type="primary" size="small" :icon="View" label="审核" desc="进入该稿件的审核详情" @click="goReview(row.id)" />
         </template>
       </el-table-column>
-      <template #empty><el-empty description="暂无待审核稿件" :image-size="90" /></template>
+      <template #empty><el-empty :description="emptyText" :image-size="90" /></template>
     </el-table>
 
     <div class="pagination-wrap">
@@ -125,8 +137,11 @@
  * - 列表数据由后端按 status 过滤返回，前端不做本地过滤
  * - 批量审批仅在待审核 tab 启用：已通过/已打回的记录不允许批量操作
  * - 批量操作结果按 succeeded/failed/skipped 分类提示，便于用户识别
+ * - **tab/page/size 写入 URL**（T02511 / FR-UX-602 / ACC-UX-601#3）：刷新
+ *   `/review?tab=approved&page=3` 仍在原状态，链接可分享可收藏；等于默认值的
+ *   参数不写进 URL，非法参数回落默认值并在页内点名（见 composables/useUrlState.js）
  */
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { Select, Close, View } from '@element-plus/icons-vue'
 import api from '../../api'
@@ -134,6 +149,7 @@ import { batchHandleReviewAction } from '../../api/reviews'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { formatTime } from '../../utils/format'
 import { REVIEW_STATUS, enumLabel, enumTagType } from '../../constants/enums'
+import { useUrlState } from '../../composables/useUrlState'
 
 const router = useRouter()
 
@@ -144,20 +160,86 @@ const total = ref(0)
 const page = ref(1)
 const size = ref(10)
 
+// URL 参数规格。tab 的白名单**只放这三个**：el-tabs 只渲染三个 pane，
+// 把 enum 全量（含 replaced）放进去会让 `?tab=replaced` 通过校验却渲染出空表格。
+// page.max 在拿到 total 之后动态改写（深链 ?page=999 应落到最后一页，而不是空表）。
+const URL_SPECS = {
+  tab: { default: 'pending', enum: ['pending', 'approved', 'rejected'] },
+  page: { default: 1, type: 'int', min: 1 },
+  size: { default: 10, type: 'int', min: 1 },
+}
+const urlState = useUrlState(URL_SPECS, () => ({
+  tab: activeTab.value,
+  page: page.value,
+  size: size.value,
+}), { onExternalChange: applyFromUrl })
+
+/** 地址栏被外部改动（手改 URL / 前进后退）时：把校验后的值灌回状态并重载 */
+function applyFromUrl(values) {
+  const changed =
+    values.tab !== activeTab.value || values.page !== page.value || values.size !== size.value
+  activeTab.value = values.tab
+  page.value = values.page
+  size.value = values.size
+  if (changed) loadList()
+}
+
+/** 被回落过的非法参数（页内提示用；不打断操作，也不弹 toast） */
+// 页码越界的校正另存一份：`urlState.invalid` 由 useUrlState 在每次读 URL 时整体重写，
+// 而我们钳制完就会回写 URL —— 写进 invalid 的补记会当场被清掉，提示永远出不来。
+const pageClamp = ref(null)
+const invalidParams = computed(() =>
+  pageClamp.value ? [...urlState.invalid.value, pageClamp.value] : urlState.invalid.value,
+)
+
+// 空态文案跟着 tab 走：在「已通过」tab 下写「暂无待审核稿件」是自相矛盾的
+// （与移动端 I48 同源的那类错误——空态引错文案会让人以为系统没数据）。
+// 措辞直接取共享字典里的枚举标签，不再本地另写一份映射（FR-UX-405 / T02504）
+const emptyText = computed(() => `暂无${enumLabel(REVIEW_STATUS, activeTab.value)}的稿件`)
+
 // 批量操作状态
 const tableRef = ref(null)
 const selectedRows = ref([])
 const batchLoading = ref(false)
 const batchAction = ref('')
 
+/**
+ * 页码越界要等拿到 total 才知道上限，所以这条校正是加载后补记的（readUrlState 只能管
+ * 「是不是整数 / 有没有小于下限」）。不补记的话地址被悄悄改写，用户看到的仍是「我分享的那个 page」。
+ */
 async function loadList() {
   loading.value = true
   try {
-    const data = await api.get('/reviews', {
-      params: { status: activeTab.value, page: page.value, size: size.value },
-    })
-    list.value = data.list
-    total.value = data.total
+    // 最多两轮：第一轮拿到 total 后若发现深链页码越界，校正到最后一页再取一次。
+    // 用固定轮次而不是递归，`?page=999` 这种地址不会把请求打成无限循环。
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const data = await api.get('/reviews', {
+        params: { status: activeTab.value, page: page.value, size: size.value },
+      })
+      list.value = data.list
+      total.value = data.total
+      const maxPage = Math.max(1, Math.ceil((data.total || 0) / size.value))
+      // 动态上限：让 readUrlState 之后的校验也知道「这一页最多到几」
+      URL_SPECS.page.max = maxPage
+      // 深链可能指向一个不存在的页（`?page=999`，或别人分享后数据变少）。
+      // 落到**最后一页**而不是退回第 1 页——用户想看的是尾部数据，回到头部会让
+      // 「数据好像变少了」变成一次误导；同时把校正后的值写回 URL，地址栏不再撒谎。
+      if (page.value > maxPage && attempt === 0) {
+        pageClamp.value = {
+          key: 'page',
+          raw: String(page.value),
+          reason: `超过上限 ${maxPage}：已落到最后一页`,
+        }
+        page.value = maxPage
+        continue
+      }
+      // 页码本来就在范围内（只有第一轮能判定这件事）：清掉上一轮的越界提示，
+      // 否则用户点了正常页码后「参数已修正」的告警会一直挂着，变成新的误导。
+      // ⚠ 不能无条件清——钳制后的第二轮就在范围内，会把刚记下的这条当场抹掉（实测踩过）。
+      if (attempt === 0) pageClamp.value = null
+      break
+    }
+    urlState.pushToUrl()
   } catch {
     // 错误提示由拦截器统一处理
   } finally {
@@ -173,6 +255,15 @@ function handleTabChange() {
   tableRef.value?.clearSelection()
   loadList()
 }
+
+// 深链优先：URL 上有 tab/page/size 就按 URL 起（非法值由 readFromUrl 回落并记录）
+onMounted(() => {
+  const v = urlState.readFromUrl()
+  activeTab.value = v.tab
+  page.value = v.page
+  size.value = v.size
+  loadList()
+})
 
 function goReview(id) {
   router.push(`/review/${id}`)
@@ -288,8 +379,6 @@ async function handleBatchReject() {
     batchAction.value = ''
   }
 }
-
-onMounted(loadList)
 </script>
 
 <style scoped lang="scss">

@@ -155,19 +155,38 @@
       </div>
     </div>
 
-    <div v-if="!loading && !list.length" class="m-empty">暂无待审内容 🎉</div>
+    <!-- 作用域模式（从队列页「去审核」带 workflow_id 进来）的空态不能说「暂无待审内容 🎉」：
+         那会让值班同学以为整个队列干净了，而真实情况只是「这一条工作流没有待审稿件」
+         （它可能已通过、被打回，或 workflow_id 根本对不上）。I48 的残留危害就在这句文案。 -->
+    <div v-if="!loading && !list.length" class="m-empty" data-guide="m-review-empty">
+      <template v-if="scoped">
+        工作流「{{ scopedLabel }}」暂无待审稿件
+        <div class="m-empty__hint">可能已通过 / 已打回，或该任务尚未生成待审内容</div>
+        <button type="button" class="m-empty__back" data-guide="m-review-back-queue" @click="backToQueue">
+          返回队列
+        </button>
+      </template>
+      <template v-else>暂无待审内容 🎉</template>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { listReviews, getReview, handleReviewAction, batchHandleReviewAction } from '../../api/reviews'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import { formatTriggerReason } from '../../utils/autoReviewRules'
 
 const route = useRoute()
+const router = useRouter()
+
+/** 作用域空态的「返回队列」：显式回 /m/manage/queue，而不是 router.back()——
+ *  深链/新标签直接打开本页时没有历史栈，back() 会点了没反应（E12 同族问题） */
+function backToQueue() {
+  router.push('/m/manage/queue').catch((err) => console.warn('[m-review] 返回队列被拒绝:', err?.message || err))
+}
 
 // 作用域模式：从队列页带 workflow_id（+channel_name）进入，列表按工作流过滤
 const scoped = computed(() => !!route.query.workflow_id)
@@ -176,6 +195,11 @@ const channelName = computed(
 )
 const workflowName = computed(
   () => route.query.workflow_id || list.value[0]?.workflow_name || '—'
+)
+// 空态里点名「哪一条工作流」要用人能认的名字：频道名 +（工作流 ID），
+// 只显示一串数字 ID 的话，用户回来还是分不清是哪条任务
+const scopedLabel = computed(() =>
+  channelName.value !== '—' ? `${channelName.value}（#${workflowName.value}）` : workflowName.value,
 )
 
 const list = ref([])
@@ -706,5 +730,29 @@ onMounted(load)
   color: #b0b4bb;
   padding: 40px 0;
   font-size: 14px;
+}
+
+/* 作用域空态：说明文字小一号，返回按钮必须是真的能点的按钮样式（不是灰字） */
+.m-empty__hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #b0b4bb;
+}
+
+.m-empty__back {
+  margin-top: 14px;
+  min-height: 36px;
+  padding: 0 18px;
+  border: 1px solid #c9433b;
+  border-radius: 6px;
+  background: #fff;
+  color: #c9433b;
+  font-size: 14px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.m-empty__back:active {
+  background: rgba(201, 67, 59, 0.08);
 }
 </style>

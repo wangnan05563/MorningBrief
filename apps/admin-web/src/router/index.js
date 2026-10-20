@@ -20,6 +20,8 @@
  */
 import { createRouter, createWebHistory } from 'vue-router'
 import { ElMessage } from '../utils/message'
+import { crossEndTarget, isMobilePath } from '../utils/urlState'
+import { resolveMode } from '../composables/useIsMobile'
 
 const routes = [
   {
@@ -318,8 +320,14 @@ router.beforeEach((to, from, next) => {
 
   // 未登录跳转登录页（移动端走 /m/login，PC 走 /login，互不影响）
   // NFR-M103：token 存于 HttpOnly Cookie（JS 不可读），以 role 作为已登录代理态
+  //
+  // T02511（FR-UX-602）：带上 `?redirect=`，登录成功后回到用户原本要点开的那一页。
+  // 此前深链（如别人分享的 `/review?tab=approved&page=3`）在会话过期后一律被丢到首页，
+  // 「链接失效」的错觉就是这么来的。redirect 的合法性由登录页 sanitizeRedirect 收口。
   if (!role) {
-    next(to.path.startsWith('/m') ? '/m/login' : '/login')
+    const onMobile = isMobilePath(to.path)
+    const loginPath = onMobile ? '/m/login' : '/login'
+    next({ path: loginPath, query: { redirect: to.fullPath } })
     return
   }
 
@@ -328,6 +336,24 @@ router.beforeEach((to, from, next) => {
     ElMessage.error('仅管理员可访问')
     next(false)
     return
+  }
+
+  // T02511（FR-UX-602）：跨端深链在**导航阶段**就换到对面同名页。
+  // 这件事原来只在 App.vue 挂载后做，实测有两个坑：
+  // ① App.vue 挂载早于首次导航解析完，此时 route.path 还是 '/'，深链被算成根路径；
+  // ② 目标页自己也会 replace query（移动端审核列表就是），会把那次重定向**取消**，
+  //    于是桌面打开 `/m/review?workflow_id=9` 停在移动端外壳出不来。
+  // 守卫里 to.path 已经是解析完的目标，且早于任何组件挂载，两个坑都不存在。
+  // 登录页（meta.public）不在这里换端——它由 App.vue 按视口处理，避免与 redirect 参数互相打乱。
+  // 端归属走 isMobilePath：`startsWith('/m')` 会把 PC 的 `/materials`、`/maintenance` 误判成移动端。
+  const onMobileRoute = isMobilePath(to.path)
+  const wantMobile = resolveMode()
+  if (wantMobile !== onMobileRoute) {
+    const target = crossEndTarget(to.path, to.query, wantMobile ? 'mobile' : 'desktop')
+    if (target?.path && target.path !== to.path) {
+      next({ path: target.path, query: target.query })
+      return
+    }
   }
 
   next()

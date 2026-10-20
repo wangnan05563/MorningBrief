@@ -96,17 +96,19 @@
  * - 登录态由 useUserStore 管理，组件只负责表单与提交
  */
 import { ref, reactive, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from '../../utils/message'
 import { User, Lock, Check } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
 import { describeLoginError } from '../../utils/loginError'
+import { sanitizeRedirect } from '../../utils/urlState'
 
 // publicPath 跟随 Vite base：base='/news/' 时 publicPath='/news/'
 // public/ 目录的文件引用不会自动加 base 前缀，需手动拼接
 const publicPath = import.meta.env.BASE_URL
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 
 const formRef = ref()
@@ -159,8 +161,10 @@ async function handleLogin() {
   try {
     await userStore.login(form.username, form.password)
     ElMessage.success('登录成功')
-    // 登录后跳转到审核页（懒加载分块）；catch 避免分块瞬时拉取失败冒泡为 Uncaught
-    router.push('/review').catch((err) => console.warn('[Login] 跳转被拒绝（已静默处理）:', err?.message || err))
+    // 登录后优先回到深链真正指向的那一页（`?redirect=`，T02511 / FR-UX-602）；
+    // 参数缺失或不是站内路径才落到审核页。redirect 的开放重定向校验在 sanitizeRedirect 里。
+    const back = sanitizeRedirect(route.query.redirect) || '/review'
+    router.push(back).catch((err) => console.warn('[Login] 跳转被拒绝（已静默处理）:', err?.message || err))
   } catch (e) {
     // 失败原因常驻在表单上方，同时保留已输入的用户名、聚焦密码框方便改；
     // 登录请求走 silent，不再叠一条会消失的 toast（FR-UX-304）

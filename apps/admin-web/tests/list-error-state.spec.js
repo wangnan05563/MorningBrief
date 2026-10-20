@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import {
   setLoginState,
+  useMobileViewport,
   queueStatsResponse,
   queueConfigResponse,
   queueTasksResponse,
@@ -84,6 +85,8 @@ test.describe('列表错误态与重试', () => {
     await page.route('**/admin/api/v1/queue/stats', (route) => route.fulfill({ json: queueStatsResponse }))
     await page.route('**/admin/api/v1/queue/tasks*', (route) => route.abort())
 
+    // 移动端队列要在手机视口下测：桌面视口打开 /m/… 会被跨端策略换到 PC 队列页（T02511）
+    await useMobileViewport(page)
     await page.goto('/m/manage/queue')
     await expect(page.getByText(/加载失败/)).toBeVisible({ timeout: 30000 })
     await expect(page.getByText('队列为空')).toHaveCount(0)

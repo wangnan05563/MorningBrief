@@ -747,3 +747,18 @@ export async function setLoginState(page, role = 'admin') {
     window.localStorage.setItem('admin_role', role)
   }, [role])
 }
+
+/**
+ * 手机视口常量（T02511 / FR-UX-602 引入的用例口径）
+ *
+ * 移动端外壳（`/m` 与 `/m/…`）与 PC 外壳按**视口**分流：宽度 > 768 时打开 `/m/…`
+ * 会被跨端策略换到对面同名页（移动端适配需求 IDD-M104「>768 引导回 PC」）。
+ * 所以凡是断言移动端页面内容的用例，必须先把视口设成手机宽度——否则跑到的是
+ * 重定向之后的 PC 页，断言会以「元素不存在」的形式失败，看起来像移动端坏了。
+ */
+export const MOBILE_VIEWPORT = { width: 375, height: 667 }
+
+/** 在 `goto` 之前调用，把视口设成手机宽度 */
+export async function useMobileViewport(page) {
+  await page.setViewportSize(MOBILE_VIEWPORT)
+}

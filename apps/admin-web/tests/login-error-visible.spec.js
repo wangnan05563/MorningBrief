@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loginSuccessResponse } from './helpers/mock'
+import { loginSuccessResponse, useMobileViewport } from './helpers/mock'
 
 /**
  * 登录失败可见性（T02498：FR-UX-304）
@@ -110,6 +110,8 @@ test.describe('登录失败可见', () => {
   test('移动端登录页同样常驻原因并聚焦密码', async ({ page }) => {
     await mockLogin(page, (route) =>
       route.fulfill({ json: { code: 401, message: '用户名或密码错误', data: null } }))
+    // 移动端登录页按视口分流：手机视口才留在 /m/login（T02511 跨端口径）
+    await useMobileViewport(page)
     await page.goto('/m/login')
 
     await page.getByPlaceholder('账号').fill('admin')

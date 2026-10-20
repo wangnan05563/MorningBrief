@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { setLoginState } from './helpers/mock'
+import { setLoginState, useMobileViewport } from './helpers/mock'
 
 /**
  * 可见性感知的反馈队列（T02495 / FR-UX-301，来源建议 D78、A19、E1）
@@ -144,6 +144,7 @@ test.describe('可见性感知的反馈队列', () => {
     })
     await setLoginState(page, 'admin')
 
+    await useMobileViewport(page)
     await page.goto('/m/manage/alert')
     const stopBtn = page.getByRole('button', { name: '应急停服', exact: true })
     await expect(stopBtn).toBeVisible({ timeout: NAV_TIMEOUT })

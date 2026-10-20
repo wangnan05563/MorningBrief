@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { setLoginState, channelsListResponse } from './helpers/mock'
+import { setLoginState, channelsListResponse, useMobileViewport } from './helpers/mock'
 
 /**
  * T02490（FR-UX-202）破坏性操作确认规范 E2E
@@ -228,6 +228,8 @@ test.describe('破坏性操作确认', () => {
 
     test('跨频道一键通过前必须确认并列出频道分布', async ({ page }) => {
       await setLoginState(page, 'admin')
+      // 移动审批要在手机视口下测（桌面视口会被跨端策略换到 PC 审核页，T02511）
+      await useMobileViewport(page)
       await page.goto('/m/review')
       await expect(page.getByText('A 条').first()).toBeVisible({ timeout: NAV_TIMEOUT })
 

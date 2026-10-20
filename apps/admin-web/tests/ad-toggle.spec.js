@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import {
   setLoginState,
+  useMobileViewport,
   adPlacementsListResponse,
   adScheduleResponse,
 } from './helpers/mock'
@@ -118,6 +119,8 @@ test.describe('广告投放启停', () => {
         await route.continue()
       }
     })
+    // 移动端广告启停在手机视口下测（桌面视口会被换到 PC 投放页，T02511 跨端口径）
+    await useMobileViewport(page)
     await page.goto('/m/manage/ads')
     await expect(page.locator('.m-ads__item').first()).toBeVisible({ timeout: 30000 })
 

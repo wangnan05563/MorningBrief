@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { setLoginState } from './helpers/mock'
+import { setLoginState, MOBILE_VIEWPORT } from './helpers/mock'
 
 /**
  * 应急停服可用性与状态可信（T02489 / FR-UX-201，来源建议 I54、I55）
@@ -47,6 +47,10 @@ async function mockMobile(page, { status, stop, resume, requests }) {
 const btn = (page, name) => page.getByRole('button', { name, exact: true })
 
 test.describe('应急停服 · 状态可信与可用性', () => {
+  // 本组全部是移动端外壳页面（`/m/manage/alert`）：视口必须是手机宽度，
+  // 否则按 IDD-M104 的跨端策略会被换到 PC 侧，断言落在错误的页面上（T02511 口径）
+  test.use({ viewport: MOBILE_VIEWPORT })
+
   test.beforeEach(async ({ page }) => {
     // 页面隐藏时 axios 会静默丢弃 ElMessage，headless 下需覆盖
     await page.addInitScript(() => {

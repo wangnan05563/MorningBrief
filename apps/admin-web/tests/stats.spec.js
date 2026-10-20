@@ -1,6 +1,7 @@
 ﻿import { test, expect } from '@playwright/test'
 import {
   setLoginState,
+  useMobileViewport,
   statsOverviewResponse,
   statsTrendCompletionResponse,
   statsTrendResponse,
@@ -105,6 +106,9 @@ test.describe('统计页面', () => {
         },
       })
     })
+    // 移动端首页要与 PC 卡片同口径——但必须在手机视口下打开，
+    // 桌面视口访问 /m/home 会被跨端策略换到 PC 页（T02511 / IDD-M104）
+    await useMobileViewport(page)
     await page.goto('/m/home')
 
     const labels = page.locator('.m-card__label')

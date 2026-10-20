@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { setLoginState } from './helpers/mock'
+import { setLoginState, useMobileViewport } from './helpers/mock'
 
 /**
  * 枚举文案统一（T02504 / FR-UX-405）
@@ -78,6 +78,8 @@ test.describe('枚举文案统一', () => {
   test('移动端队列：后端状态值全部有中文徽章，统计卡不再有恒空的格子', async ({ page }) => {
     await setLoginState(page, 'admin')
     await mockQueue(page)
+    // 移动端页面要在手机视口下测：桌面视口打开 /m/… 会按跨端策略换到 PC 页（T02511）
+    await useMobileViewport(page)
     await page.goto('/m/manage/queue')
     await expect(page.locator('.m-q__item').first()).toBeVisible({ timeout: NAV_TIMEOUT })
 

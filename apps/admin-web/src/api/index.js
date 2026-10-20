@@ -84,7 +84,12 @@ api.interceptors.response.use(
       // 只看末段是否登录页：base 前缀在 dev / 生产下不同，按后缀判定两端一致
       const onLoginPage = pathname.endsWith(`${isMobile ? '/m' : ''}/login`)
       if (!document.hidden && !onLoginPage) {
-        globalThis.location.href = loginPath
+        // T02511（FR-UX-602）：401 也要把「用户原本在哪一页（含 query）」交给登录页，
+        // 否则会话过期中途掉线时，深链与筛选状态全丢，登录后回不到原来那一屏。
+        // redirect 用**去掉 vite base 前缀**的应用内路径，与 route.fullPath 同口径，
+        // 登录页侧再经 sanitizeRedirect 校验（只接受站内绝对路径）。
+        const appPath = (pathname.slice(base.length) || '/') + globalThis.location.search
+        globalThis.location.href = `${loginPath}?redirect=${encodeURIComponent(appPath)}`
       } else if (!error.config?.silent) {
         // 已经在登录页（或页面隐藏不便跳转）时，401 不能是静默失败：
         // 用户点了「登录」却毫无反应，只会反复重试同一个错密码（FR-UX-304）
