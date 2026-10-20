@@ -1,7 +1,0 @@
-BGM 文件不存在，降级为无 BGM 模式: assets/bgm.mp3
-时长不足兜底 workflow_id=t02028-smoke 时长=419s < 下限=480s，补足 63s（BGM=无（降级静音））
-[concat] -> {'final_audio_url': '/local-smoke/episodes/20261011/default_t02028-smoke.mp3', 'hls_url': None, 'duration': 482, 'original_duration': 419, 'supplement_sec': 63}
-[review #82] measured/original/supplement = (482, 419, 63)
-[episode #101] duration=482 supplement=63 original=419 (估算值 86 应被忽略)
-[ok] concat → review → episode 全链路时长留痕贯通（副本库，生产库未写）
-[copy db] review rows: 82 | episode rows: 96

@@ -1,9 +1,0 @@
-UA Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36
-A0_published_copy.mp3            http=206 ct=audio/mpeg ranges=None | started=True dur=60.029388 err=None seek=True adv=1035ms cpt=
-A_baseline_128k_44100.mp3        http=200 ct=audio/mpeg ranges=None | started=True dur=60 err=None seek=True adv=1445ms cpt=
-B_standard_64k_32000.mp3         http=200 ct=audio/mpeg ranges=None | started=True dur=60 err=None seek=True adv=1445ms cpt=
-C_quality_96k_44100.mp3          http=200 ct=audio/mpeg ranges=None | started=True dur=60 err=None seek=True adv=1443ms cpt=
-D_lean_48k_32000.mp3             http=200 ct=audio/mpeg ranges=None | started=True dur=60 err=None seek=True adv=1469ms cpt=
-E_lsf_64k_24000.mp3              http=200 ct=audio/mpeg ranges=None | started=True dur=60 err=None seek=True adv=1458ms cpt=
-F_aac_64k_32000.m4a              http=200 ct=audio/mp4 ranges=None | started=True dur=60 err=None seek=True adv=1445ms cpt=
-G_hls_aac_64k_32000/playlist.m3u8 http=200 ct=application/vnd.apple.mpegurl ranges=None | started=True dur=60.032 err=None seek=True adv=1437ms cpt=maybe
