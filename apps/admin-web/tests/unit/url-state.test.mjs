@@ -13,10 +13,14 @@ import { describe, it } from 'node:test'
 
 import {
   crossEndTarget,
+  detailLocation,
   isMobilePath,
   isQueryDirty,
+  parseFromQuery,
   readUrlState,
+  returnTarget,
   sanitizeRedirect,
+  splitAppUrl,
   stripModeQuery,
   writeUrlQuery,
 } from '../../src/utils/urlState.js'
@@ -241,5 +245,115 @@ describe('sanitizeRedirect：只认站内绝对路径', () => {
   it('数组形态取第一个，空值拒绝', () => {
     assert.equal(sanitizeRedirect(['/review', '/queue']), '/review')
     assert.equal(sanitizeRedirect(undefined), null)
+  })
+})
+
+// ============ T02512 / FR-UX-603：隐藏子页的来源地址与返回 ============
+
+describe('splitAppUrl：把应用内地址拆成 path + query', () => {
+  it('带 query 的地址拆干净', () => {
+    assert.deepEqual(splitAppUrl('/review?tab=approved&page=2'), {
+      path: '/review',
+      query: { tab: 'approved', page: '2' },
+    })
+  })
+
+  it('无 query 与只有 ? 的边界', () => {
+    assert.deepEqual(splitAppUrl('/workflows'), { path: '/workflows', query: {} })
+    assert.deepEqual(splitAppUrl('/workflows?'), { path: '/workflows', query: {} })
+    assert.deepEqual(splitAppUrl(''), { path: '/', query: {} })
+  })
+
+  it('空值参数与无等号参数保留为空串', () => {
+    assert.deepEqual(splitAppUrl('/queue?status=&x'), { path: '/queue', query: { status: '', x: '' } })
+  })
+
+  it('裸百分号不能把整条地址解析打挂（safeDecode 容错）', () => {
+    assert.deepEqual(splitAppUrl('/search?q=100%'), { path: '/search', query: { q: '100%' } })
+  })
+})
+
+describe('detailLocation：进详情时把来源地址挂到 ?from=', () => {
+  it('from 放原样地址，不预先百分号编码', () => {
+    const to = detailLocation('/review?tab=approved&page=2', '/review/9')
+    assert.equal(to.path, '/review/9')
+    // 交给 vue-router 序列化：它只会转义会破坏 query 分组的 & # + 空格，
+    // 预编码反而会让地址栏出现 %252F，且让 URLSearchParams.get('from') 读到编码串
+    assert.equal(to.query.from, '/review?tab=approved&page=2')
+  })
+
+  it('额外的详情参数与 from 共存', () => {
+    const to = detailLocation('/m/manage/queue', '/m/review', { workflow_id: '12', channel_name: '财经' })
+    assert.equal(to.query.workflow_id, '12')
+    assert.equal(to.query.channel_name, '财经')
+    assert.equal(to.query.from, '/m/manage/queue')
+  })
+
+  it('来源地址缺失时退化成空串，由 parseFromQuery 判为无来源', () => {
+    assert.equal(detailLocation(undefined, '/review/9').query.from, '')
+    assert.equal(parseFromQuery({ from: '' }), null)
+  })
+})
+
+describe('parseFromQuery / returnTarget：返回目标只认站内地址', () => {
+  it('还原来源筛选，且不会把 from 自己带回去', () => {
+    assert.deepEqual(parseFromQuery({ from: '/review?tab=approved&page=2' }), {
+      path: '/review',
+      query: { tab: 'approved', page: '2' },
+    })
+  })
+
+  it('整串百分号编码（手工粘贴的链接）也能解', () => {
+    assert.deepEqual(parseFromQuery({ from: '%2Freview%3Ftab%3Dapproved' }), {
+      path: '/review',
+      query: { tab: 'approved' },
+    })
+  })
+
+  it('嵌套的 from 被剥掉，避免地址越跳越长', () => {
+    const t = parseFromQuery({ from: '/review?from=%2Fqueue&tab=pending' })
+    assert.equal(t.path, '/review')
+    // 返回目标是「列表那一页」，它自己不该再带 from——否则每次进出详情都往地址上叠一层
+    assert.deepEqual(t.query, { tab: 'pending' })
+    assert.equal('from' in t.query, false)
+  })
+
+  it('站外与协议相对地址一律不接受', () => {
+    for (const raw of ['https://evil.com', '//evil.com', 'evil.com/x', 'javascript:alert(1)']) {
+      assert.equal(parseFromQuery({ from: raw }), null, raw)
+    }
+  })
+
+  it('指回登录页的来源不接受（与 sanitizeRedirect 同一道闸）', () => {
+    assert.equal(parseFromQuery({ from: '/login?redirect=/review' }), null)
+    assert.equal(parseFromQuery({ from: '/m/login' }), null)
+  })
+
+  it('数组形态取第一个', () => {
+    assert.deepEqual(parseFromQuery({ from: ['/review?tab=approved', '/queue'] }), {
+      path: '/review',
+      query: { tab: 'approved' },
+    })
+  })
+
+  it('没有 from 时兜到 fallback，query 为空', () => {
+    assert.deepEqual(returnTarget({}, '/workflows'), { path: '/workflows', query: {} })
+    assert.deepEqual(returnTarget({ tab: 'approved' }, '/review'), { path: '/review', query: {} })
+  })
+
+  it('有可信 from 时优先按 from 回', () => {
+    assert.deepEqual(returnTarget({ from: '/workflows?source=cron&status=failed' }, '/workflows'), {
+      path: '/workflows',
+      query: { source: 'cron', status: 'failed' },
+    })
+  })
+})
+
+describe('跨端 withFrom 与详情 from 同一口径（parseFromQuery 一个入口都能认）', () => {
+  it('桌面访问移动端独有页时挂的 from 能被解析回来', () => {
+    const t = crossEndTarget('/m/manage/users', {}, 'mobile') // 已在移动端命名空间：不挂 from
+    assert.equal(t.path, null)
+    const q = crossEndTarget('/message-center', {}, 'mobile') // 等价表对不上：from 记原路径
+    assert.deepEqual(parseFromQuery(q.query), { path: '/message-center', query: {} })
   })
 })

@@ -1,9 +1,10 @@
 <template>
   <div class="page-container workflow-detail">
-    <!-- 顶部：仅保留返回按钮，去掉页面标题（导航栏已显示页面名称）
+    <!-- 顶部：返回按钮 + 层级提示（T02512 / FR-UX-603：隐藏子页要看得出上级，返回要带回来源筛选）
          spacer 占位把后续可能新增的按钮推到右侧 -->
     <div class="top-bar">
-      <IconButton :icon="ArrowLeft" plain label="返回" desc="返回工作流列表" @click="router.back()" />
+      <IconButton :icon="ArrowLeft" plain label="返回列表" desc="返回进入本页时的那一页（保留筛选与分页）" @click="goBack" />
+      <PageBreadcrumb :items="breadcrumb" @back="goBack" />
       <span class="spacer" />
     </div>
 
@@ -454,9 +455,32 @@ import {
   enumStepStatus,
   enumOptions,
 } from '../../constants/enums'
+import { returnTarget } from '../../utils/urlState'
+import PageBreadcrumb from '../../components/PageBreadcrumb.vue'
 
 const route = useRoute()
 const router = useRouter()
+
+/**
+ * 返回目标（T02512 / FR-UX-603）：列表进本页时把当时的地址（含频道/日期/状态/来源与分页）
+ * 挂在 `?from=` 上，返回按它走。
+ *
+ * 这里刻意**不用 `router.back()`**：后退只回到那个 URL，而列表页的筛选活在组件内存里，
+ * 重新挂载即全部重置——从「来源=定时 / 状态=失败」的详情退回去看到的是全量列表，
+ * 正是本条需求要点名解决的「返回时来源筛选丢失」。
+ */
+const backTo = computed(() => returnTarget(route.query, '/workflows'))
+
+const breadcrumb = computed(() => [
+  { label: '工作流监控', to: backTo.value },
+  { label: route.meta?.title || '工作流详情' },
+])
+
+function goBack() {
+  router
+    .push(backTo.value)
+    .catch((err) => console.warn('[workflow-detail] 返回列表被拒绝（已静默处理）:', err?.message || err))
+}
 
 const loading = ref(false)
 const retrying = ref(false)

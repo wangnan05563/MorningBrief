@@ -13,6 +13,8 @@
         @click="goBack"
       >
         <el-icon><ArrowLeft /></el-icon>
+        <!-- T02512（FR-UX-603）：只有箭头时「回到哪一层」要靠猜，把上级名字写出来 -->
+        <span class="m-appbar__back-label">{{ backTo.label }}</span>
       </button>
       <span class="m-appbar__title">{{ title }}</span>
     </header>
@@ -238,17 +240,29 @@ watch(
   left: 4px;
   top: 50%;
   transform: translateY(-50%);
-  width: 40px;
+  min-width: 40px;
   height: 40px;
+  max-width: 40%;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 2px;
+  padding: 0 8px 0 4px;
   border: none;
   background: transparent;
   color: #1f2329;
   font-size: 20px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+/* 上级名称：小一号，超长直接截断——标题居中显示，返回区不能把它顶走（375px 下也稳） */
+.m-appbar__back-label {
+  font-size: 13px;
+  line-height: 1;
+  max-width: 8em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .m-appbar__back:active {

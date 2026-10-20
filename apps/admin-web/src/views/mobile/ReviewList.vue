@@ -178,14 +178,17 @@ import { listReviews, getReview, handleReviewAction, batchHandleReviewAction } f
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import { formatTriggerReason } from '../../utils/autoReviewRules'
+import { returnTarget } from '../../utils/urlState'
 
 const route = useRoute()
 const router = useRouter()
 
-/** 作用域空态的「返回队列」：显式回 /m/manage/queue，而不是 router.back()——
- *  深链/新标签直接打开本页时没有历史栈，back() 会点了没反应（E12 同族问题） */
+/** 作用域空态的「返回队列」：显式回来源页（`?from=`），而不是 router.back()——
+ *  深链/新标签直接打开本页时没有历史栈，back() 会点了没反应（E12 同族问题）。
+ *  T02512（FR-UX-603）：优先按 `from` 回，队列页以后带筛选/分页也不会被抹平 */
 function backToQueue() {
-  router.push('/m/manage/queue').catch((err) => console.warn('[m-review] 返回队列被拒绝:', err?.message || err))
+  const target = returnTarget(route.query, '/m/manage/queue')
+  router.push(target).catch((err) => console.warn('[m-review] 返回队列被拒绝:', err?.message || err))
 }
 
 // 作用域模式：从队列页带 workflow_id（+channel_name）进入，列表按工作流过滤

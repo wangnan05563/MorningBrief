@@ -142,7 +142,7 @@
  *   参数不写进 URL，非法参数回落默认值并在页内点名（见 composables/useUrlState.js）
  */
 import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Select, Close, View } from '@element-plus/icons-vue'
 import api from '../../api'
 import { batchHandleReviewAction } from '../../api/reviews'
@@ -150,7 +150,9 @@ import { ElMessage, ElMessageBox } from '../../utils/message'
 import { formatTime } from '../../utils/format'
 import { REVIEW_STATUS, enumLabel, enumTagType } from '../../constants/enums'
 import { useUrlState } from '../../composables/useUrlState'
+import { detailLocation } from '../../utils/urlState'
 
+const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
@@ -266,7 +268,9 @@ onMounted(() => {
 })
 
 function goReview(id) {
-  router.push(`/review/${id}`)
+  // T02512（FR-UX-603）：把「我来的这一页」（含 tab/分页）挂到 ?from= 交给详情页，
+  // 详情返回与操作成功后的回跳都按它还原，不再被写死的 /review 抹成第 1 页待审核。
+  router.push(detailLocation(route.fullPath, `/review/${id}`))
 }
 
 // 后端 review 有 4 态（见 backend/app/models/review.py ReviewStatus），

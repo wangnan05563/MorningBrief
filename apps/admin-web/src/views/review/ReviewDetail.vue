@@ -1,13 +1,18 @@
 <template>
   <div class="review-detail page-container" v-loading="loading">
     <div class="detail-header">
-      <IconButton :icon="ArrowLeft" plain label="返回" desc="返回审核列表" @click="goBack" />
-      <div class="header-info">
-        <span class="info-item">日期：<strong>{{ detail.episode_date }}</strong></span>
-        <span class="info-item">工作流ID：<strong>{{ detail.workflow_id }}</strong></span>
-        <el-tag :type="statusTagType(detail.status)" effect="light">
-          {{ statusText(detail.status) }}
-        </el-tag>
+      <div class="header-title">
+        <div class="header-row">
+          <IconButton :icon="ArrowLeft" plain label="返回列表" desc="返回进入本页时的那一页（保留审核状态与分页）" @click="goBack" />
+          <PageBreadcrumb :items="breadcrumb" @back="goBack" />
+        </div>
+        <div class="header-info">
+          <span class="info-item">日期：<strong>{{ detail.episode_date }}</strong></span>
+          <span class="info-item">工作流ID：<strong>{{ detail.workflow_id }}</strong></span>
+          <el-tag :type="statusTagType(detail.status)" effect="light">
+            {{ statusText(detail.status) }}
+          </el-tag>
+        </div>
       </div>
     </div>
 
@@ -143,13 +148,18 @@
  * - 三种操作共用一个表单，按 action 动态显示段落选择与理由输入
  * - 提交前用 ElMessageBox 二次确认，避免误操作（审核不可逆）
  * - 操作成功后返回列表页，让列表重新拉取最新待审核数据
+ * - **返回保留来源**（T02512 / FR-UX-603）：列表进本页时把当时地址（含 tab/分页）挂在 `?from=`，
+ *   返回与操作后回跳都按它走；深链直接打开（没有 from）时兜回 `/review` 首页，
+ *   绝不用 `router.back()`——操作成功后那次是前向导航，back() 会退回详情页自己
  */
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { ArrowLeft, Check, Close, ZoomIn } from '@element-plus/icons-vue'
 import api from '../../api'
 import { REVIEW_STATUS, enumLabel, enumTagType } from '../../constants/enums'
+import { returnTarget } from '../../utils/urlState'
+import PageBreadcrumb from '../../components/PageBreadcrumb.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -163,6 +173,15 @@ const galleryVisible = ref(false)
 const action = ref('approve')
 const segmentId = ref(null)
 const reason = ref('')
+
+/** 返回目标：`?from=` 里那条列表地址（含 tab/分页），没有就回 `/review` */
+const backTo = computed(() => returnTarget(route.query, '/review'))
+
+// 层级提示：上级用列表页的真名（与侧栏菜单一致），当前层用路由 meta 标题
+const breadcrumb = computed(() => [
+  { label: '内容审核', to: backTo.value },
+  { label: route.meta?.title || '审核详情' },
+])
 
 async function loadDetail() {
   loading.value = true
@@ -202,7 +221,9 @@ async function handleSubmit() {
     if (action.value === 'reject' || action.value === 'replace') payload.reason = reason.value
     await api.post(`/reviews/${route.params.id}/action`, payload)
     ElMessage.success('操作成功')
-    router.push('/review')
+    // 回来源那一页而不是写死 /review：在「已通过 第 3 页」里复核通过后应停回原处，
+    // 否则每次操作都被弹回待审核第 1 页，批量复核时得反复重新筛（T02512 / FR-UX-603）
+    goBack()
   } catch {
     // 错误提示由拦截器统一处理
   } finally {
@@ -223,8 +244,15 @@ function statusText(status) {
   return enumLabel(REVIEW_STATUS, status)
 }
 
+/**
+ * 回「进入本页时的那一页」：带 query 一起回，来源筛选与分页不丢（T02512）。
+ * 面包屑上级与「返回列表」按钮共用这一个出口（面包屑会带上被点的 item，参数忽略即可）。
+ */
 function goBack() {
-  router.push('/review')
+  const target = backTo.value
+  router
+    .push(target)
+    .catch((err) => console.warn('[review-detail] 返回列表被拒绝（已静默处理）:', err?.message || err))
 }
 
 onMounted(loadDetail)
@@ -238,6 +266,23 @@ onMounted(loadDetail)
   align-items: center;
   gap: 24px;
   margin-bottom: 16px;
+
+  // T02512：面包屑与「返回列表」并排，都在信息行之上，避免把日期/状态挤成一长条
+  .header-title {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+  }
+
+  :deep(.page-breadcrumb) {
+    margin-bottom: 0;
+  }
 
   .header-info {
     display: flex;

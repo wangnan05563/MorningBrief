@@ -121,7 +121,9 @@ test.describe('工作流监控', () => {
     await page.locator('.el-link').filter({ hasText: 'wf-001' }).click()
 
     // 应跳转到详情页
-    await expect(page).toHaveURL(/\/workflows\/wf-001$/, { timeout: 30000 })
+    // T02512 起进入详情会挂上来源地址 `?from=`，供详情页「返回列表」原路带回筛选（FR-UX-603）
+    await expect(page).toHaveURL(/\/workflows\/wf-001(\?|$)/, { timeout: 30000 })
+    expect(new URL(page.url()).searchParams.get('from')).toBe('/workflows')
   })
 
   test('工作流详情显示步骤', async ({ page }) => {

@@ -106,6 +106,18 @@
       </div>
     </div>
 
+    <!-- 地址栏带来的非法筛选参数（如 ?status=done / ?source=auto）已按「未筛选」渲染，
+         这里如实点名——列表数据与链接写明的条件不一致时必须让用户看见（T02512，与 T02511 同口径） -->
+    <el-alert
+      v-if="invalidParams.length"
+      data-guide="workflows-url-corrected"
+      type="warning"
+      :closable="false"
+      show-icon
+      :title="`链接里的参数已修正：${invalidParams.map((p) => p.key).join('、')}`"
+      :description="invalidParams.map((p) => `${p.key}=${p.raw}（${p.reason}）`).join('；')"
+    />
+
     <!-- 工作流列表 -->
     <el-card shadow="never">
       <!--
@@ -134,7 +146,7 @@
         <el-table-column type="selection" width="48" :reserve-selection="true" />
         <el-table-column label="工作流 ID" width="180">
           <template #default="{ row }">
-            <!-- 点击跳详情：使用 replace 避免列表页堆积历史 -->
+            <!-- 点击跳详情：push 进入并挂 ?from=（T02512），详情页返回时按它带回这里的筛选 -->
             <el-link type="primary" underline="hover" @click="goDetail(row.id)">{{ row.id }}</el-link>
           </template>
         </el-table-column>
@@ -181,14 +193,17 @@
 
       <!-- 分页 -->
       <div class="pagination">
+        <!-- 分页事件用箭头函数绑定：el-pagination 会把新的 size/page 作为实参传进来，
+             直接写 loadList 等于 loadList(20)——第一参是 silent，翻页/改页长会被当成
+             静默轮询（不显示遮罩、跳过页码修正，T02512 之后还会漏掉 URL 回写） -->
         <el-pagination
           v-model:current-page="page"
           v-model:page-size="size"
           :total="total"
           :page-sizes="[10, 20, 50]"
           layout="total, sizes, prev, pager, next"
-          @size-change="loadList"
-          @current-change="loadList"
+          @size-change="() => loadList()"
+          @current-change="() => loadList()"
         />
       </div>
     </el-card>
@@ -261,8 +276,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { VideoPlay, Delete, Refresh, RefreshLeft, Close } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
@@ -281,7 +296,10 @@ import {
 } from '../../constants/enums'
 import WorkflowProgressIndicator from './components/WorkflowProgressIndicator.vue'
 import ListLoadError from '../../components/ListLoadError.vue'
+import { useUrlState } from '../../composables/useUrlState'
+import { detailLocation } from '../../utils/urlState'
 
+const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 
@@ -313,6 +331,55 @@ const filterChannelId = ref(null)
 const filterEpisodeDate = ref(null)
 const filterStatus = ref(null)
 const filterSource = ref(null)
+
+/**
+ * 筛选与分页写入 URL（T02512 / FR-UX-603「返回时保留来源筛选」）
+ *
+ * 详情页的「返回」必须带着这里的筛选回去，而 `router.back()` 只能回到那个**地址**，
+ * 地址里没有筛选时列表一挂载就把四个下拉重置成空——用户从「来源=定时 / 状态=失败」的
+ * 详情返回，看到的却是全量列表。所以筛选先上地址栏，返回才谈得上"保留"。
+ *
+ * 键名与后端参数对齐（channel_id/episode_date/status/source/page/size 去掉前缀），
+ * 白名单从共享字典 `enumOptions(...)` 派生，本页不再另写一份枚举（FR-UX-405 / validate:nav 门禁）。
+ * 默认值取 `null`（= 未筛选），等于默认值不写地址，`/workflows` 仍然是干净可读的。
+ */
+const URL_SPECS = {
+  page: { default: 1, type: 'int', min: 1 },
+  size: { default: 20, type: 'int', min: 1 },
+  channel_id: { default: null, type: 'int', min: 1 },
+  episode_date: { default: null, type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+  status: { default: null, enum: enumOptions(WORKFLOW_STATUS).map((o) => o.value) },
+  source: { default: null, enum: enumOptions(WORKFLOW_SOURCE).map((o) => o.value) },
+}
+const urlState = useUrlState(URL_SPECS, () => ({
+  page: page.value,
+  size: size.value,
+  channel_id: filterChannelId.value,
+  episode_date: filterEpisodeDate.value,
+  status: filterStatus.value,
+  source: filterSource.value,
+}), { onExternalChange: applyFromUrl })
+
+/** 被回落的非法参数（如 `?status=done`）：页内点名，不静默按空值渲染 */
+const invalidParams = computed(() => urlState.invalid.value)
+
+/** 地址栏被外部改动（手改 / 前进后退 / 详情返回）时：灌回筛选并重载 */
+function applyFromUrl(values) {
+  const changed =
+    values.page !== page.value ||
+    values.size !== size.value ||
+    values.channel_id !== filterChannelId.value ||
+    values.episode_date !== filterEpisodeDate.value ||
+    values.status !== filterStatus.value ||
+    values.source !== filterSource.value
+  page.value = values.page
+  size.value = values.size
+  filterChannelId.value = values.channel_id
+  filterEpisodeDate.value = values.episode_date
+  filterStatus.value = values.status
+  filterSource.value = values.source
+  if (changed) loadList()
+}
 
 async function loadChannels() {
   try {
@@ -370,6 +437,8 @@ async function loadList(silent = false) {
     list.value = data.list || []
     total.value = data.total || 0
     listError.value = ''
+    // 地址栏跟着当前筛选走（等于默认值的参数会被省略，静默轮询时值没变也不会产生 replace）
+    if (!silent) urlState.pushToUrl()
 
     // 安全页码修正：删除后当前页可能变空（如第 3 页只剩 1 条被删），
     // 此时回退到上一页避免用户面对空白列表
@@ -549,7 +618,8 @@ async function handleBatchDelete() {
 }
 
 function goDetail(id) {
-  router.push(`/workflows/${id}`)
+  // T02512：把当前地址（含筛选/分页）挂到 ?from=，详情页返回时原样带回来
+  router.push(detailLocation(route.fullPath, `/workflows/${id}`))
 }
 
 let unsubscribeSse = null
@@ -637,6 +707,15 @@ function handleResize() {
 onMounted(() => {
   // 兜底：进入页面时清理可能的残留 mask（来自其他页面的最小化过程）
   cleanupLoadingMasks()
+  // 深链优先：地址上有筛选/分页就先按地址起（详情页返回、分享链接、刷新都走这条路），
+  // 非法值由 readUrlState 回落并记进 invalidParams
+  const v = urlState.readFromUrl()
+  page.value = v.page
+  size.value = v.size
+  filterChannelId.value = v.channel_id
+  filterEpisodeDate.value = v.episode_date
+  filterStatus.value = v.status
+  filterSource.value = v.source
   // loadList 内部会调用 startPollingIfNeeded，无需在此额外调用
   loadList()
   loadChannels()

@@ -97,7 +97,10 @@ test.describe('审核流程', () => {
     await page.getByRole('button', { name: '审核' }).first().click()
 
     // 应跳转到详情页
-    await expect(page).toHaveURL(/\/review\/1$/, { timeout: 30000 })
+    // T02512 起进入详情会挂上来源地址 `?from=`（返回时才能回到「我来的那一页」），
+    // 末尾不再要求严格对齐 —— 只保证落在 /review/<id>，来源参数另做断言
+    await expect(page).toHaveURL(/\/review\/1(\?|$)/, { timeout: 30000 })
+    expect(new URL(page.url()).searchParams.get('from')).toBe('/review')
   })
 
   test('审核详情页显示稿件和音频', async ({ page }) => {

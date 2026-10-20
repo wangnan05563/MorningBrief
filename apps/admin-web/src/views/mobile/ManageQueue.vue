@@ -58,10 +58,13 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { getQueueStats, listQueueTasks, cancelTask, retryTask } from '../../api/queue'
 import { ElMessage } from '../../utils/message'
 import { WORKFLOW_STATUS, enumLabel, enumBadge } from '../../constants/enums'
+import { detailLocation } from '../../utils/urlState'
+
+const route = useRoute()
 
 const router = useRouter()
 
@@ -73,11 +76,15 @@ const loadError = ref('')
 
 // 跳转至作用域审核页：携带 workflow_id 与频道名，
 // 供移动端审核页顶部上下文标题区展示「当前频道 + 工作流」
+// T02512（FR-UX-603）：再挂上 `from`（本页地址），审核页的「返回队列」按它回来，
+// 不再写死 /m/manage/queue——以后这一页带上筛选/滚动位置参数也能原样带回
 function goReview(t) {
-  router.push({
-    path: '/m/review',
-    query: { workflow_id: t.id, channel_name: t.channel_name || '' },
-  })
+  router.push(
+    detailLocation(route.fullPath, '/m/review', {
+      workflow_id: t.id,
+      channel_name: t.channel_name || '',
+    }),
+  )
 }
 
 // 状态文案/配色与 PC 队列页同源（src/constants/enums.js，FR-UX-405 / T02504）。

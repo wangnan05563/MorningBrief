@@ -202,7 +202,9 @@ function exactSegment(path) {
 
 /** 对不上等价表时把原路径留在 `from` 里：至少用户可以被告知/自己回到原来那一页 */
 function withFrom(query, path) {
-  return { ...query, from: path }
+  // 与 detailLocation 同一个键、同一种写法（原样放，编码交给 vue-router 的 query 序列化），
+  // 这样 parseFromQuery 一个入口就能解析两种来路
+  return { ...query, [FROM_QUERY_KEY]: path }
 }
 
 const PC_TO_MOBILE = {
@@ -218,6 +220,102 @@ const MOBILE_TO_PC = {
   message: '/review',
   mine: '/about',
   manage: '/queue',
+}
+
+/**
+ * 隐藏子页（详情/二级页）的「来源地址」参数名（T02512 / FR-UX-603）。
+ *
+ * 与 `crossEndTarget` 里 `withFrom` 挂的是同一个键：那里 `from` 记的是「原来想访问的路径」，
+ * 这里记的是「从哪一页进来的（含它的筛选）」。两者语义一致——都指回来路，共用一个解析入口。
+ */
+export const FROM_QUERY_KEY = 'from'
+
+/**
+ * 编码/解码来源地址（T02512）。
+ *
+ * **写入端刻意不做 `encodeURIComponent`**：vue-router 的 query 值编码走 `encodeURI`（不是
+ * `encodeURIComponent`），它会原样保留 `/ ? =`，只把会破坏 query 分组的 `& # + 空格` 转义掉，
+ * 所以 `?from=/review?tab=approved&page=2` 里那个 `&` 会被写成 `%26`，读取端再解回来——
+ * 地址既不会被拆成两个参数，也不会出现 `%252F` 这种双重编码（实测 `from=%2Fstats` 会让
+ * `URLSearchParams.get('from')` 读到 `%2Fstats` 而测试期望 `/stats`）。
+ *
+ * 读取端仍做一次 `decodeURIComponent`：手工粘贴/其他系统生成的链接常带整串百分号编码，
+ * 解一次就能认；解不动（裸 `%`）时按原文继续，绝不因此整条失效。
+ */
+function decodeFrom(raw) {
+  const text = String(raw ?? '')
+  try {
+    return decodeURIComponent(text)
+  } catch {
+    return text
+  }
+}
+
+/** 安全解码单个 query 片段（地址里带裸 `%` 时不能让整条 from 解析抛错） */
+function safeDecode(text) {
+  const t = String(text ?? '')
+  try {
+    return decodeURIComponent(t)
+  } catch {
+    return t
+  }
+}
+
+/** 把应用内地址拆成 `{path, query}`：`/review?tab=approved&page=2` → path + 两个参数 */
+export function splitAppUrl(fullPath) {
+  const text = String(fullPath || '')
+  const i = text.indexOf('?')
+  if (i < 0) return { path: text || '/', query: {} }
+  const path = text.slice(0, i) || '/'
+  const query = {}
+  for (const pair of text.slice(i + 1).split('&')) {
+    if (!pair) continue
+    const eq = pair.indexOf('=')
+    const key = eq < 0 ? pair : pair.slice(0, eq)
+    const val = eq < 0 ? '' : pair.slice(eq + 1)
+    if (!key) continue
+    query[safeDecode(key)] = safeDecode(val)
+  }
+  return { path, query }
+}
+
+/**
+ * 进详情页时的导航目标：把来源列表的完整地址（含 tab/筛选/分页）挂到 `?from=`（T02512）。
+ *
+ * 为什么挂在 URL 上而不是靠 `router.back()`：详情页里「通过/打回」之后也要回列表，
+ * 那是一次**前向**导航（历史栈里没有列表可退，退回去还会再落回详情），
+ * 而「回到我来的那一页、并且带着我来的那套筛选」正是 ACC-UX-601#2 要的东西。
+ * 深链直接打开详情（没有 from）时由 `returnTarget` 兜回列表首页。
+ */
+export function detailLocation(listFullPath, detailPath, extraQuery = {}) {
+  return {
+    path: detailPath,
+    query: { ...extraQuery, [FROM_QUERY_KEY]: String(listFullPath || '') },
+  }
+}
+
+/**
+ * 解析 `?from=`。只接受站内绝对路径（`sanitizeRedirect` 负责挡掉 `//evil.com` 这类开放重定向），
+ * 并且**永远不会**把 `from` 自己带进返回目标——否则列表页地址会越跳越长。
+ * @returns {{path:string, query:object}|null}
+ */
+export function parseFromQuery(query) {
+  const raw = query?.[FROM_QUERY_KEY]
+  const single = Array.isArray(raw) ? raw[0] : raw
+  if (single === undefined || single === null || single === '') return null
+  const safe = sanitizeRedirect(decodeFrom(single))
+  if (!safe) return null
+  const target = splitAppUrl(safe)
+  if (!target.path.startsWith('/')) return null
+  delete target.query[FROM_QUERY_KEY]
+  return target
+}
+
+/** 详情页「返回」的目标：有可信的 `?from=` 就按它（来源筛选跟着回去），否则回兜底列表页 */
+export function returnTarget(query, fallbackPath) {
+  const from = parseFromQuery(query)
+  if (from) return from
+  return { path: fallbackPath, query: {} }
 }
 
 /**
