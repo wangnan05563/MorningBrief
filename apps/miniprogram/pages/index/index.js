@@ -352,6 +352,14 @@ Page({
     // 深链/查询参数里的 id 是字符串，频道列表里的 id 是数字 —— 按字符串比对，落地用列表里的真实对象
     const target = this.data.channels.find((c) => !c.isGroupLabel && String(c.id) === String(pending));
     if (!target) return; // 频道已退订/下架：不切，也不给误导性的「已切到」提示
+    // 课程/有声书频道不能走今日列表：与点胶囊同一口径跳课程主页。
+    // 为什么会走到这里——app.js 的深链兜底在 fetchChannels 失败时会 routeToNews()，
+    // 类型判不出来，所以首页消费端必须自己再挡一次（用列表里自带的 channel_type，不依赖元信息缓存）。
+    if (skin.normalizeType(target.channel_type) !== 'news') {
+      wx.navigateTo({ url: '/pages/course/course?channelId=' + target.id });
+      trackEvent('index', 'open_course', '', String(target.id));
+      return;
+    }
     this._applyChannel(target.id);
     wx.showToast({ title: '已切到「' + target.name + '」', icon: 'none' });
   },

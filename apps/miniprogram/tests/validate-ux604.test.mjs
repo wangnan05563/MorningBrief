@@ -80,6 +80,15 @@ describe('J46 跨页切换契约：写侧、读侧、定位三处缺一不可', 
 
   test('锚点 id 换成频道 id（「全部」的 id 是 null，拼出无效锚点）被抓', () =>
     expectHit({ 'pages/index/index.wxml': read('pages/index/index.wxml').replace('id="pill-{{index}}"', 'id="pill-{{item.id}}"') }, 'J46'))
+
+  test('读侧不再拦截非 news 频道（课程/有声书被塞进今日列表）被抓', () => {
+    const src = read('pages/index/index.js').replace(
+      /if \(skin\.normalizeType\(target\.channel_type\) !== 'news'\) \{[\s\S]*?\n {4}\}/,
+      '',
+    )
+    assert.notEqual(src, read('pages/index/index.js'), '坏样本没构造成功：跨类型拦截块样式变了')
+    return expectHit({ 'pages/index/index.js': src }, 'J46')
+  })
 })
 
 describe('J72 取消收藏入口', () => {

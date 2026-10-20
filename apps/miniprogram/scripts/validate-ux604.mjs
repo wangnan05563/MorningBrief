@@ -9,7 +9,8 @@
  *  2. J46 跨页切换契约：写侧（pages/channels/channels.js 或 app.js）给 globalData.pendingChannelId
  *     赋值 ↔ 读侧 pages/index/index.js 定义 _consumePendingChannel 且被 onShow / loadChannels 调用。
  *     这条最容易在后续重构里单边丢失：删掉读侧代码，页面照样跑得起来，只是「点了没反应」回来了。
- *     另含 index.wxml 的胶囊定位（scroll-into-view）必须绑到 index.js 的 scrollIntoViewId。
+ *     另含 index.wxml 的胶囊定位（scroll-into-view）必须绑到 index.js 的 scrollIntoViewId，
+ *     以及读侧必须自己挡掉非 news 频道（app.js 深链兜底会把课程/有声书 id 也交给首页）。
  *  3. J72 取消收藏入口：favorites.wxml 必须有非长按手势的可见入口（catchtap/bindtap 到取消收藏方法），
  *     且该方法在 favorites.js 里存在并落到 removeFavorite。只有 bind/catch 名对上还不算，
  *     方法名里必须含 unFavorite/unfavorite/removeFavorite/cancelFavorite 之一，防止绑到别处。
@@ -186,6 +187,13 @@ export function checkFacts(facts) {
   }
   if (!/id="pill-\{\{index\}\}"/.test(wf('pages/index/index.wxml'))) {
     errors.push('index.wxml 胶囊没有 id="pill-{{index}}"，scroll-into-view 无锚点可用（J46）')
+  }
+  // 深链兜底会把课程/有声书频道 id 也交给首页消费端（app.js 判不出类型时 routeToNews()），
+  // 所以读侧必须自己挡一次。删掉这段不会报错，只会让课程频道被塞进今日列表里空跑一次 fetch。
+  const consumeBody = methodBody(stripComments(indexJs), '_consumePendingChannel')
+  if (!/normalizeType\s*\(/.test(consumeBody) || !/pages\/course\/course/.test(consumeBody)) {
+    errors.push('index.js 的 _consumePendingChannel 不再拦截非 news 频道：深链把课程/有声书频道交给今日列表，'
+      + '切过去只会空列表（J46 的跨类型兜底丢失）')
   }
 
   // —— 3. J72：取消收藏要有非长按的可见入口 ——
