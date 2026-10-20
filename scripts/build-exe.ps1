@@ -16,6 +16,9 @@
     跳过 pip 依赖安装（仅依赖无变更时用）。
 .PARAMETER SkipInstaller
     跳过 Inno Setup 安装包制作。
+.PARAMETER SkipPack
+    跳过 PyInstaller 打包（release\MorningBrief\MorningBrief.exe 已存在时用，
+    例如打包已在其他环境完成、只需补做资源复制/安装包的场景）。
 .PARAMETER Clean
     清理所有缓存重新构建（怀疑缓存损坏时用）。
 .EXAMPLE
@@ -33,6 +36,7 @@ param(
     [switch]$SkipSPA,
     [switch]$SkipDeps,
     [switch]$SkipInstaller,
+    [switch]$SkipPack,
     [switch]$Clean
 )
 
@@ -109,12 +113,14 @@ function Invoke-BuildPip {
         [Parameter(Mandatory)][string]$FailureMessage,
         [switch]$RetryAfterRebuild
     )
-    & $buildPython -m pip @PipArgs
+    # 2>&1：pip 的 warning 走 stderr，ErrorActionPreference=Stop 下不合并会触发
+    # NativeCommandError 终止性错误把构建杀掉；合并后退出码判定逻辑不变（仍看 $LASTEXITCODE）
+    & $buildPython -m pip @PipArgs 2>&1
     if ($LASTEXITCODE -eq 0) { return }
     if ($RetryAfterRebuild) {
         Write-Warn "pip 命令失败，重建 build venv 后重试..."
         New-BuildVenv
-        & $buildPython -m pip @PipArgs
+        & $buildPython -m pip @PipArgs 2>&1
         if ($LASTEXITCODE -eq 0) { return }
     }
     throw $FailureMessage
@@ -243,7 +249,8 @@ Write-Step "[3.5/6] 生成构建元信息（_build_info.py）"
 # 否则取最近 git tag，再否则兜底 1.0.0；SHA 取自 git rev-parse。
 $buildInfoScript = "$backendDir\build_info.py"
 if (Test-Path $buildInfoScript) {
-    & $buildPython $buildInfoScript
+    # 2>&1：python 脚本的 warning 走 stderr，Stop 首选项下不合并会被当终止错误
+    & $buildPython $buildInfoScript 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Warn "build_info.py 执行失败，继续使用 _build_info.py 默认值"
     } else {
@@ -277,29 +284,36 @@ if (-not (Test-Path $setupIconPath)) {
 
 # ============== 4. PyInstaller 打包 ==============
 
-Write-Step "[4/6] 执行 PyInstaller 打包"
-Write-Host "  预计耗时：约 2-5 分钟" -ForegroundColor DarkGray
+if ($SkipPack -and (Test-Path "$distDir\MorningBrief.exe")) {
+    Write-Step "[4/6] 跳过 PyInstaller 打包（-SkipPack，$distDir\MorningBrief.exe 已存在）"
+} else {
+    Write-Step "[4/6] 执行 PyInstaller 打包"
+    Write-Host "  预计耗时：约 2-5 分钟" -ForegroundColor DarkGray
 
-# 清理旧产物（dist 每次重建）
-if (Test-Path $distDir) {
-    Remove-Item -Recurse -Force $distDir -ErrorAction SilentlyContinue
-}
-if (Test-Path "build") {
-    Remove-Item -Recurse -Force "build" -ErrorAction SilentlyContinue
-}
-# 清理 PyInstaller 默认 dist/（历史构建残留）：spec 已改输出到 release/，
-# 旧默认 dist\MorningBrief 不再使用，避免与 release/ 混淆占用空间
-if (Test-Path "dist") {
-    Remove-Item -Recurse -Force "dist" -ErrorAction SilentlyContinue
-}
+    # 清理旧产物（dist 每次重建）
+    if (Test-Path $distDir) {
+        Remove-Item -Recurse -Force $distDir -ErrorAction SilentlyContinue
+    }
+    if (Test-Path "build") {
+        Remove-Item -Recurse -Force "build" -ErrorAction SilentlyContinue
+    }
+    # 清理 PyInstaller 默认 dist/（历史构建残留）：spec 已改输出到 release/，
+    # 旧默认 dist\MorningBrief 不再使用，避免与 release/ 混淆占用空间
+    if (Test-Path "dist") {
+        Remove-Item -Recurse -Force "dist" -ErrorAction SilentlyContinue
+    }
 
-# 执行 PyInstaller，使用 spec 文件
-# 关键：--distpath "release" 让 COLLECT 输出到 release/MorningBrief，
-# 与 $distDir / installer.iss / start.ps1 完全一致。PyInstaller 6.x 的 COLLECT 不接受
-# distpath 参数，输出目录只能由 --distpath 命令行参数（全局 CONF['distpath']）决定。
-& $buildPyInstaller $specFile --noconfirm --distpath "release"
-if ($LASTEXITCODE -ne 0) { throw "PyInstaller 打包失败" }
-Write-OK "PyInstaller 打包完成"
+    # 执行 PyInstaller，使用 spec 文件
+    # 关键：--distpath "release" 让 COLLECT 输出到 release/MorningBrief，
+    # 与 $distDir / installer.iss / start.ps1 完全一致。PyInstaller 6.x 的 COLLECT 不接受
+    # distpath 参数，输出目录只能由 --distpath 命令行参数（全局 CONF['distpath']）决定。
+    # 关键：PyInstaller 的全部 INFO/Warning 日志走 stderr，本脚本 ErrorActionPreference=Stop，
+    # 不合并流时第一条 stderr 就会触发 NativeCommandError 终止性错误把脚本杀掉（依赖安装/
+    # 第三方库的 SyntaxWarning 同样会中招）。2>&1 把 stderr 并入成功流才能安全跑完。
+    & $buildPyInstaller $specFile --noconfirm --distpath "release" 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "PyInstaller 打包失败" }
+    Write-OK "PyInstaller 打包完成"
+}
 
 # ============== 5. 复制外置资源 ==============
 
@@ -423,7 +437,8 @@ $seedScript = "$backendDir\seed_admin.py"
 if (Test-Path $seedScript) {
     # 必须用 build venv 的 python（bcrypt 等依赖仅装在 .venv-build），
     # 不能用裸 python（走系统 python，缺 bcrypt 会 ModuleNotFoundError）。
-    & $buildPython "$seedScript" "$dbPath"
+    # 2>&1：python seed 脚本的 stderr 合并，避免 Stop 首选项误杀
+    & $buildPython "$seedScript" "$dbPath" 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-OK "默认管理员已初始化（admin/admin123)"
     } else {
@@ -547,7 +562,8 @@ Filename: "{app}\MorningBrief.exe"; Description: "启动 MorningBrief"; Flags: n
         }
         Write-Host "  版本号: $version"
         Write-Host "  编译安装包..."
-        & $iscc /DMyAppVersion=$version installer.iss
+        # 2>&1：ISCC 的输出可能走 stderr，ErrorActionPreference=Stop 下不合并会被当终止错误
+        & $iscc /DMyAppVersion=$version installer.iss 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Warn "安装包编译失败"
         } else {

@@ -268,7 +268,7 @@ const licenses = [
   { name: 'bcrypt', version: '4.1.2', license: 'Apache-2.0', repo: 'https://github.com/pyca/bcrypt' },
   { name: 'openai', version: '1.12.0', license: 'MIT', repo: 'https://github.com/openai/openai-python' },
   { name: 'tenacity', version: '8.2.3', license: 'Apache-2.0', repo: 'https://github.com/jd/tenacity' },
-  { name: 'edge-tts', version: '7.2.8', license: 'MIT', repo: 'https://github.com/rany2/edge-tts' },
+  { name: 'edge-tts', version: '7.3.1', license: 'MIT', repo: 'https://github.com/rany2/edge-tts' },
   { name: 'httpx', version: '0.27.0', license: 'BSD-3-Clause', repo: 'https://github.com/encode/httpx' },
   { name: 'feedparser', version: '6.0.11', license: 'BSD-2-Clause', repo: 'https://github.com/kurtmckee/feedparser' },
   { name: 'selectolax', version: '0.4.10', license: 'MIT', repo: 'https://github.com/rushter/selectolax' },
