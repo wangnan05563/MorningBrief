@@ -56,6 +56,11 @@ api.interceptors.response.use(
     // code !== 0 表示业务错误（如参数校验失败），统一提示
     if (code !== 0) {
       const err = new Error(message)
+      err.code = code
+      // INT-UX-01：业务错误信封的 data 位带结构化明细（如敏感列哨兵被拒时的
+      // { errors: [{ field, message }] }）。原先这里只留 message 就把明细丢了，
+      // 页面拿不到「哪个字段错了」，只能把一句中文 toast 出来。
+      err.payload = data
       if (!response.config?.silent) {
         ElMessage.error(message || '请求失败')
         _markNotified(err)

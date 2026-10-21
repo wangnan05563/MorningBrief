@@ -231,6 +231,8 @@
               · 敏感字段{{ formMode === 'edit' ? '（编辑时只读，保持原值）' : '' }}
             </template>
           </span>
+          <!-- 后端字段级错误（INT-UX-01）落到出错那一栏，而不是只有一句 toast -->
+          <span v-if="fieldErrors[col.name]" class="field-error">{{ fieldErrors[col.name] }}</span>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -477,6 +479,8 @@ const formMode = ref('create')
 const formData = ref({})
 const originalForm = ref({})
 const editingPkValue = ref(null)
+// 提交被拒后的字段级错误：{ 列名: 说明 }，来自后端信封 data.errors
+const fieldErrors = ref({})
 
 const schemaDialogVisible = ref(false)
 const auditDialogVisible = ref(false)
@@ -593,6 +597,7 @@ function openCreateDialog() {
   formMode.value = 'create'
   formData.value = {}
   originalForm.value = {}
+  fieldErrors.value = {}
   formDialogVisible.value = true
 }
 
@@ -601,6 +606,7 @@ function openEditDialog(row) {
   // 深拷贝行数据，避免直接修改原数据
   formData.value = { ...row }
   originalForm.value = { ...row }
+  fieldErrors.value = {}
   // 记录主键值（用于更新接口）
   const pkCol = columns.value.find((c) => c.primary_key)
   editingPkValue.value = pkCol ? String(row[pkCol.name]) : null
@@ -643,6 +649,11 @@ async function submitForm() {
     formDialogVisible.value = false
     await loadRows()
   } catch (e) {
+    // 后端给出字段级明细时（INT-UX-01），逐栏标在输入框下方；只有一句中文时维持原状
+    const entries = e?.payload?.errors
+    fieldErrors.value = Array.isArray(entries)
+      ? Object.fromEntries(entries.filter((x) => x?.field).map((x) => [x.field, x.message || '该字段保存被拒绝']))
+      : {}
     console.warn('submitForm failed:', e)
   }
 }
@@ -978,6 +989,13 @@ onMounted(() => {
 .field-hint {
   font-size: 12px;
   color: $color-text-secondary;
+  margin-left: 8px;
+}
+
+.field-error {
+  display: block;
+  font-size: 12px;
+  color: $color-danger;
   margin-left: 8px;
 }
 

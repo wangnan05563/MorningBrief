@@ -4,6 +4,8 @@
 业务异常通过 BizError 抛出，全局处理器统一转换为 { code, message, data } 响应。
 避免在业务代码中到处处理错误响应格式。
 """
+from typing import Any
+
 from loguru import logger
 
 from fastapi import FastAPI, Request
@@ -16,12 +18,18 @@ from app.core.response import error
 
 
 class BizError(Exception):
-    """业务异常基类，携带错误码与消息。"""
+    """业务异常基类，携带错误码与消息。
 
-    def __init__(self, code: int, message: str, http_status: int = 200):
+    data 是可选的结构化明细：信封本来就有 data 位（response.error 收 data 参数），
+    只是处理器一直没往里放东西，所以任何「除了整句中文还得指出是哪个字段错了」的
+    场景都只能靠前端切字符串。INT-UX-01 的字段级错误走这个通道。
+    """
+
+    def __init__(self, code: int, message: str, http_status: int = 200, data: Any = None):
         self.code = code
         self.message = message
         self.http_status = http_status
+        self.data = data
         super().__init__(message)
 
 
@@ -66,7 +74,9 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(BizError)
     async def biz_error_handler(request: Request, exc: BizError):
-        return error(code=exc.code, message=exc.message, http_status=exc.http_status)
+        return error(
+            code=exc.code, message=exc.message, data=exc.data, http_status=exc.http_status
+        )
 
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(request: Request, exc: RequestValidationError):

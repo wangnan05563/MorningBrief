@@ -212,6 +212,28 @@ def _mask_writeback_message(cols: list[str]) -> str:
     )
 
 
+def _mask_field_message(col: str) -> str:
+    """单个字段的说明：前端直接把它挂到对应输入框上，不需要切整句中文。"""
+    return (
+        f"字段 {col} 传入的是脱敏占位值，保存会用 *** 覆盖真实凭据；"
+        "请留空保持原值，或通过对应的专用配置入口修改"
+    )
+
+
+def _mask_writeback_error(cols: list[str]) -> BizError:
+    """INT-UX-01：拒绝哨兵回写时同时给出字段级明细。
+
+    只有聚合中文时，运营端知道「这次保存会覆盖凭据」却不知道该清空哪个输入框——
+    而最常见的触发路径正是「把列表页看到的 *** 原样提交回来」，
+    于是提示变成一句无法据此行动的警告。明细走信封的 data 位。
+    """
+    return BizError(
+        code=400,
+        message=_mask_writeback_message(cols),
+        data={"errors": [{"field": col, "message": _mask_field_message(col)} for col in cols]},
+    )
+
+
 _SECRET_KEY_RE = re.compile(
     r"(password|passwd|secret|token|api_?key|access_?key|private_?key)", re.IGNORECASE
 )
@@ -386,7 +408,7 @@ class DbAdminService:
             if col in _row_sensitive_columns(table, filtered) and _is_mask_sentinel(filtered[col])
         )
         if blocked:
-            raise BizError(code=400, message=_mask_writeback_message(blocked))
+            raise _mask_writeback_error(blocked)
 
         cols = ", ".join(filtered.keys())
         placeholders = ", ".join(f":{k}" for k in filtered.keys())
@@ -438,7 +460,7 @@ class DbAdminService:
             if col in _row_sensitive_columns(table, probe) and _is_mask_sentinel(filtered[col])
         )
         if blocked:
-            raise BizError(code=400, message=_mask_writeback_message(blocked))
+            raise _mask_writeback_error(blocked)
 
         set_clause = ", ".join(f"{k} = :{k}" for k in filtered.keys())
         params = dict(filtered)
@@ -605,7 +627,11 @@ class DbAdminService:
                     and _is_mask_sentinel(filtered[col])
                 )
                 if blocked:
-                    errors.append({"row": i + 1, "error": _mask_writeback_message(blocked)})
+                    errors.append({
+                        "row": i + 1,
+                        "error": _mask_writeback_message(blocked),
+                        "fields": blocked,
+                    })
                     skipped += 1
                     continue
 
@@ -762,7 +788,11 @@ class DbAdminService:
                 and _is_mask_sentinel(filtered[col])
             )
             if blocked:
-                errors.append({"row": i + 1, "error": _mask_writeback_message(blocked)})
+                errors.append({
+                    "row": i + 1,
+                    "error": _mask_writeback_message(blocked),
+                    "fields": blocked,
+                })
                 continue
 
             unknown = sorted(set(row) - valid_cols)
