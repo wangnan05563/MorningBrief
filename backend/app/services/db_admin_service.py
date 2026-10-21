@@ -95,7 +95,11 @@ UNDECLARED_DOWNSTREAM: dict[str, str] = {
 # 1. 精确列名脱敏：列名完全匹配时脱敏
 SENSITIVE_COLUMNS: set[str] = {"password_hash", "token", "secret"}
 # 2. 模糊匹配脱敏：ai_config 表的 config_key 含这些子串时，config_value 脱敏
-SENSITIVE_KEY_PATTERNS: list[str] = ["key", "secret", "password", "token"]
+# NFR-UX-01（T02519）补 webhook：钉钉/企微机器人地址形如
+# `https://oapi.dingtalk.com/robot/send?access_token=<凭据>`，URL 本身就带凭据，
+# 通知配置又与 AI 服务配置同存 `ai_config` 表 ⇒ 数据库维护页浏览 ai_config 时
+# 会把机器人密钥原样列出（而它不在 key/secret/password/token 任一子串里）。
+SENSITIVE_KEY_PATTERNS: list[str] = ["key", "secret", "password", "token", "webhook"]
 
 # 标识符正则：仅允许字母/数字/下划线，防 SQL 注入
 _IDENT_RE = re.compile(r"^[A-Za-z_]\w*$", re.ASCII)

@@ -66,9 +66,50 @@ def test_save_config_persists_and_reloads(client, admin_token):
     assert data["global_enabled"] is True
     assert data["review_enabled"] is False
     assert data["published_enabled"] is True
-    assert data["dingtalk_webhook"] == "https://oapi.dingtalk.com/robot/send?access_token=test123"
+    # NFR-UX-01（T02519）：webhook URL 的 access_token 是凭据，GET 侧必须脱敏
+    assert data["dingtalk_webhook"] == "https://oapi.dingtalk.com/robot/send?access_token=****t123"
+    assert "test123" not in data["dingtalk_webhook"]
     assert data["dingtalk_secret"].startswith("****")
     assert data["admin_base_url"] == "https://news.example.com"
+
+
+@pytest.mark.asyncio
+async def test_save_config_webhook_masked_value_not_overwritten(db_session):
+    """NFR-UX-01（T02519）：GET 返回脱敏 webhook 后原样回传保存，真实凭据不能被覆盖。
+
+    这条链路是"用户只改了开关、没动 webhook"的正常操作路径——
+    若保存侧不做脱敏值识别，`****9999` 会写进库、通知静默失效。
+    API 层的脱敏出参由 test_save_config_persists_and_reloads 断言，
+    这里走服务层以便同时读到「脱敏视图」和「库内真实值」两种口径。
+    """
+    from app.services.notification.config_service import NotificationConfigService
+
+    real_dingtalk = "https://oapi.dingtalk.com/robot/send?access_token=realtoken9999"
+    real_wecom = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=wecomkey8888"
+
+    svc = NotificationConfigService(db_session)
+    await svc.save_config({"dingtalk_webhook": real_dingtalk, "wecom_webhook": real_wecom})
+
+    shown = await svc.get_config()
+    assert shown["dingtalk_webhook"] == "https://oapi.dingtalk.com/robot/send?access_token=****9999"
+    assert shown["wecom_webhook"].endswith("key=****8888")
+    assert "realtoken9999" not in shown["dingtalk_webhook"]
+
+    # 只改开关：webhook 字段按 GET 拿到的脱敏值原样回传
+    await svc.save_config({
+        "published_enabled": True,
+        "dingtalk_webhook": shown["dingtalk_webhook"],
+        "wecom_webhook": shown["wecom_webhook"],
+    })
+    assert await svc.get_raw_value("notify_dingtalk_webhook") == real_dingtalk
+    assert await svc.get_raw_value("notify_wecom_webhook") == real_wecom
+    assert (await svc.get_config())["published_enabled"] is True
+
+    # 用户显式清空仍然生效（脱敏跳过不能把"清空"也吞掉）
+    await svc.save_config({"dingtalk_webhook": ""})
+    assert await svc.get_raw_value("notify_dingtalk_webhook") == ""
+
+
 
 
 def test_save_config_secret_masked_value_ignored(client, admin_token):
