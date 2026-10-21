@@ -34,6 +34,57 @@ METRIC_META: dict[str, dict] = {
         "unit": "count",
         "display": {"unit": "次", "factor": 1, "precision": 0},
     },
+    # ---- INT-UX-03 / T02526：llm-metrics 与 rss-health ----
+    # 这四个计数与三条率同源于 rewriter._WORD_COUNT_RETRY_STATS（进程内累计，重启清零）。
+    "trigger_rate": {
+        "label": "触发率",
+        # 后端已经 ×100（rewriter.get_word_count_retry_stats），所以换算是 1 而不是 100。
+        # 与 completion_rate（unit=ratio、factor=100）刻意相反：两个都叫 rate，量级却不同，
+        # 只有 unit 能区分——页面自己写死 "%" 时看不出风险，接到共用格式化器上就会乘两次。
+        "unit": "percent",
+        "display": {"unit": "%", "factor": 1, "precision": 2},
+    },
+    "improve_rate": {
+        "label": "改善率",
+        "unit": "percent",
+        "display": {"unit": "%", "factor": 1, "precision": 2},
+    },
+    "not_improve_rate": {
+        "label": "未改善率",
+        "unit": "percent",
+        "display": {"unit": "%", "factor": 1, "precision": 2},
+    },
+    "total_calls": {
+        "label": "改写调用总数",
+        "unit": "count",
+        "display": {"unit": "次", "factor": 1, "precision": 0},
+    },
+    "triggered": {
+        "label": "触发重试",
+        "unit": "count",
+        "display": {"unit": "次", "factor": 1, "precision": 0},
+    },
+    "improved": {
+        "label": "重试有改善",
+        "unit": "count",
+        "display": {"unit": "次", "factor": 1, "precision": 0},
+    },
+    "not_improved": {
+        "label": "重试未改善",
+        "unit": "count",
+        "display": {"unit": "次", "factor": 1, "precision": 0},
+    },
+    # 表头原先写死「 ms」，属 PRD 点名要消掉的「页面自己标单位」
+    "latency_ms": {
+        "label": "响应延迟",
+        "unit": "millisecond",
+        "display": {"unit": "ms", "factor": 1, "precision": 0},
+    },
+    "consecutive_failures": {
+        "label": "连续失败",
+        "unit": "count",
+        "display": {"unit": "次", "factor": 1, "precision": 0},
+    },
 }
 
 # 概览卡片的固定顺序（展示端按此顺序渲染，避免各页面各自排一遍）
@@ -43,6 +94,23 @@ OVERVIEW_METRICS = [
     "completion_rate",
     "avg_listen_duration",
     "ad_impression",
+]
+
+# LLM 指标页：三条率 + 四个计数（累计起点由 started_at/pid 另行说明，FR-UX-503）
+LLM_METRICS = [
+    "total_calls",
+    "triggered",
+    "improved",
+    "not_improved",
+    "trigger_rate",
+    "improve_rate",
+    "not_improve_rate",
+]
+
+# RSS 健康度表格里带单位的列
+RSS_HEALTH_METRICS = [
+    "latency_ms",
+    "consecutive_failures",
 ]
 
 

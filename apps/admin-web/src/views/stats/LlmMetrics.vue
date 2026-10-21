@@ -47,7 +47,8 @@
             <el-card shadow="hover">
               <div class="rate-card" :class="r.cls">
                 <div class="rate-label">{{ r.label }}</div>
-                <div class="rate-value">{{ r.value }}%</div>
+                <!-- INT-UX-03 / T02526：单位随数据下发，页面不再写死 "%" -->
+                <div class="rate-value">{{ r.value }}</div>
                 <div class="rate-sub">{{ r.sub }}</div>
               </div>
             </el-card>
@@ -96,6 +97,7 @@ import dayjs from 'dayjs'
 import { Refresh } from '@element-plus/icons-vue'
 import api from '../../api'
 import { cumulativeScopeText, uptimeText as formatUptime } from '../../utils/scope'
+import { metricText } from '../../utils/format'
 
 const loading = ref(false)
 // 默认全 0，避免空态时 computed 除零报错
@@ -110,6 +112,8 @@ const metrics = ref({
   not_improve_rate: 0.0,
   started_at: null,
   pid: null,
+  // INT-UX-03 / T02526：单位与换算随数据下发；后端未升级时为空对象，页面显示 '-'
+  meta: {},
 })
 // 本次拉取时刻：用于算「已运行多久」，取到数就冻结，不做定时器（页面不需要秒级跳动）
 const fetchedAt = ref(null)
@@ -131,29 +135,25 @@ const uptimeNote = computed(() =>
 
 // 派生率卡片：trigger_rate 高表示 LLM 字数缩水严重，improve_rate 高表示硬约束有效
 // 颜色映射：触发率用 warning（黄），改善率用 success（绿），未改善率用 danger（红）
-const rateCards = computed(() => [
-  {
-    key: 'trigger_rate',
-    label: '触发率',
-    value: metrics.value.trigger_rate.toFixed(2),
-    sub: `${metrics.value.triggered} / ${metrics.value.total_calls} 次调用`,
-    cls: rateClass('trigger', metrics.value.trigger_rate),
-  },
-  {
-    key: 'improve_rate',
-    label: '改善率',
-    value: metrics.value.improve_rate.toFixed(2),
-    sub: `${metrics.value.improved} / ${metrics.value.triggered} 次触发`,
-    cls: rateClass('improve', metrics.value.improve_rate),
-  },
-  {
-    key: 'not_improve_rate',
-    label: '未改善率',
-    value: metrics.value.not_improve_rate.toFixed(2),
-    sub: `${metrics.value.not_improved} / ${metrics.value.triggered} 次触发`,
-    cls: rateClass('not_improve', metrics.value.not_improve_rate),
-  },
-])
+// 数值与单位一律走 meta（INT-UX-03 / T02526）：这三条率后端已是 0~100 的百分数
+// （unit=percent、factor=1），与 overview 的 completion_rate（ratio、要 ×100）同名不同量级，
+// 页面自己写死 "%" 时看不出风险；缺 meta 时显示 '-'，不猜单位。
+// 阈值判定仍用原始值：rateClass 的 50/30 分界是按百分数写的业务口径，与展示换算无关。
+const rateCards = computed(() => {
+  const meta = metrics.value.meta || {}
+  const rate = (key, label, subKey) => ({
+    key,
+    label,
+    value: metricText(metrics.value[key], meta[key]),
+    sub: metrics.value[subKey],
+    cls: rateClass(key.replace('_rate', ''), metrics.value[key]),
+  })
+  return [
+    rate('trigger_rate', '触发率', `${metrics.value.triggered} / ${metrics.value.total_calls} 次调用`),
+    rate('improve_rate', '改善率', `${metrics.value.improved} / ${metrics.value.triggered} 次触发`),
+    rate('not_improve_rate', '未改善率', `${metrics.value.not_improved} / ${metrics.value.triggered} 次触发`),
+  ]
+})
 
 // 原始计数卡：四项基础计数
 const countCards = computed(() => [

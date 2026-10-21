@@ -81,16 +81,17 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="延迟" prop="latency_ms" width="100" sortable>
+        <!-- INT-UX-03 / T02526：列名与数值单位都取自接口 meta，表头不再写死「 ms」 -->
+        <el-table-column :label="latencyLabel" prop="latency_ms" width="110" sortable>
           <template #default="{ row }">
             <span v-if="row.latency_ms > 0" :class="latencyClass(row.latency_ms)">
-              {{ row.latency_ms }} ms
+              {{ metricText(row.latency_ms, meta.latency_ms) }}
             </span>
             <span v-else class="muted">-</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="连续失败" prop="consecutive_failures" width="110" sortable>
+        <el-table-column :label="failuresLabel" prop="consecutive_failures" width="110" sortable>
           <template #default="{ row }">
             <el-badge
               v-if="row.consecutive_failures > 0"
@@ -147,10 +148,14 @@ import { Refresh, Search } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import api from '../../api'
 import { cumulativeScopeText, uptimeText as formatUptime } from '../../utils/scope'
+import { metricLabel, metricText } from '../../utils/format'
 
 const loading = ref(false)
 const refreshing = ref(false)
 const rawData = ref({ total: 0, ok: 0, fail: 0, unknown: 0, sources: [] })
+// INT-UX-03 / T02526：带单位的列（延迟、连续失败）的 unit/scale 由接口下发；
+// 后端未升级时为空，列名退回页面自己的「延迟」文案、数值不带猜测单位。
+const meta = ref({})
 const lastCheckedAt = ref(null)
 // 累计口径（T02508）：后端 /stats/rss-health 回传进程启动时刻与 PID，null 表示后端未升级
 const startedAt = ref(null)
@@ -173,6 +178,13 @@ const keyword = ref('')
 const filteredSources = ref([])
 
 const allCount = computed(() => rawData.value.total)
+// 列名跟着 meta 走（「响应延迟(ms)」），缺 meta 时退回不带单位的旧文案
+const latencyLabel = computed(() =>
+  meta.value.latency_ms ? metricLabel(meta.value.latency_ms) : '延迟',
+)
+const failuresLabel = computed(() =>
+  meta.value.consecutive_failures ? metricLabel(meta.value.consecutive_failures) : '连续失败',
+)
 const okCount = computed(() => rawData.value.ok)
 const failCount = computed(() => rawData.value.fail)
 const unknownCount = computed(() => rawData.value.unknown || 0)
@@ -234,6 +246,7 @@ function applyData(data) {
   }
   startedAt.value = data.started_at || null
   processPid.value = data.pid || null
+  meta.value = data.meta || {}
   // 推导最近巡检时间：所有源中最大的 last_check
   const checks = rawData.value.sources
     .map((s) => s.last_check)

@@ -43,5 +43,86 @@
       "factor": 1,
       "precision": 0
     }
+  },
+  "trigger_rate": {
+    "label": "触发率",
+    "unit": "percent",
+    "display": {
+      "unit": "%",
+      "factor": 1,
+      "precision": 2
+    }
+  },
+  "improve_rate": {
+    "label": "改善率",
+    "unit": "percent",
+    "display": {
+      "unit": "%",
+      "factor": 1,
+      "precision": 2
+    }
+  },
+  "not_improve_rate": {
+    "label": "未改善率",
+    "unit": "percent",
+    "display": {
+      "unit": "%",
+      "factor": 1,
+      "precision": 2
+    }
+  },
+  "total_calls": {
+    "label": "改写调用总数",
+    "unit": "count",
+    "display": {
+      "unit": "次",
+      "factor": 1,
+      "precision": 0
+    }
+  },
+  "triggered": {
+    "label": "触发重试",
+    "unit": "count",
+    "display": {
+      "unit": "次",
+      "factor": 1,
+      "precision": 0
+    }
+  },
+  "improved": {
+    "label": "重试有改善",
+    "unit": "count",
+    "display": {
+      "unit": "次",
+      "factor": 1,
+      "precision": 0
+    }
+  },
+  "not_improved": {
+    "label": "重试未改善",
+    "unit": "count",
+    "display": {
+      "unit": "次",
+      "factor": 1,
+      "precision": 0
+    }
+  },
+  "latency_ms": {
+    "label": "响应延迟",
+    "unit": "millisecond",
+    "display": {
+      "unit": "ms",
+      "factor": 1,
+      "precision": 0
+    }
+  },
+  "consecutive_failures": {
+    "label": "连续失败",
+    "unit": "count",
+    "display": {
+      "unit": "次",
+      "factor": 1,
+      "precision": 0
+    }
   }
 }

@@ -9,6 +9,7 @@ from app.core.exceptions import BizError
 from app.core.response import success
 from app.core.runtime import runtime_fields
 from app.database import get_db
+from app.services.stats_metrics import LLM_METRICS, RSS_HEALTH_METRICS, meta_for
 from app.services.stats_service import StatsService
 
 router = APIRouter(prefix="/admin/api/v1/stats", tags=["B端-统计"])
@@ -79,7 +80,9 @@ async def get_rss_health(
         data = await check_all_sources()
     else:
         data = get_source_status()
-    return success(data={**data, **runtime_fields()})
+    # INT-UX-03 / T02526：表格里带单位的列（延迟、连续失败）由这里下发单位，
+    # 表头不再写死「 ms」——页面自己标单位时，后端改口径（比如换算成秒）没人发现。
+    return success(data={**data, **runtime_fields(), "meta": meta_for(*RSS_HEALTH_METRICS)})
 
 
 @router.get("/llm-metrics")
@@ -106,4 +109,7 @@ async def get_llm_metrics(
     """
     from app.workflow.llm.rewriter import get_word_count_retry_stats
     data = get_word_count_retry_stats()
-    return success(data={**data, **runtime_fields()})
+    # INT-UX-03 / T02526：三条率是「已经乘过 100 的百分数」，与 overview 的
+    # completion_rate（0~1 比值）同名不同量级。单位必须随数据下发并标清 unit，
+    # 否则页面各自写死 "%"，谁把它们接到同一个格式化器上就把 47% 显示成 4700%。
+    return success(data={**data, **runtime_fields(), "meta": meta_for(*LLM_METRICS)})

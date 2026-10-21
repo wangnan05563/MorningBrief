@@ -51,10 +51,12 @@ def test_llm_metrics_endpoint_smoke():
     data = body["data"]
 
     # 校验字段集合：4 计数 + 3 派生率 + 2 累计口径字段（T02508 / FR-UX-503）
+    # + meta 单位元数据（INT-UX-03 / T02526）：页面写死 "%" 时后端改口径没人发现，
+    # 因此这个字段集合是逐字契约，新增字段必须在这里登记
     expected_fields = {
         "total_calls", "triggered", "improved", "not_improved",
         "trigger_rate", "improve_rate", "not_improve_rate",
-        "started_at", "pid",
+        "started_at", "pid", "meta",
     }
     assert set(data.keys()) == expected_fields, f"字段不匹配: {set(data.keys())}"
 
