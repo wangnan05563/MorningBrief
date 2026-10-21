@@ -152,10 +152,12 @@
             <!-- FR-UX-701 / T02515：知识库问答单独一个超时，不能复用上面那个 30s，
                  否则 ACC-UX-701「长回答（>60s）不中断」必然失败。
                  上限 125s 是硬约束：前端等 130s（api/aiChat.js 的 AI_CHAT_TIMEOUT_MS），
-                 后端必须先到点，用户才会看到「超时可重试」而不是一条网络错误。 -->
+                 后端必须先到点，用户才会看到「超时可重试」而不是一条网络错误。
+                 INT-UX-05 / T02528：这对区间现在由后端 PUT /ai/config 强制校验，
+                 页面上的 min/max 只是把同一对数字显示出来（越界时后端整份拒收）。 -->
             <el-form-item label="问答超时(秒)">
               <el-input-number v-model="llmForm.chat_timeout_sec" :min="30" :max="125" />
-              <span class="field-tip">知识库问答（/ai/chat）的等待上限，最长 125 秒（前端 130 秒兜底）；经 Tailscale Funnel 访问时若网关更早断流，调大本值无效，需改流式</span>
+              <span class="field-tip" data-guide="ai-chat-timeout-tip">知识库问答（/ai/chat）的等待上限，可配 30–125 秒（前端 130 秒兜底，后端必须先到点才给得出「超时可重试」）。网关不是约束：实测经 Tailscale Funnel 的长请求 300 秒不断流，要改的只有这两个数</span>
             </el-form-item>
             <el-form-item label="重试次数">
               <el-input-number v-model="llmForm.retry_attempts" :min="0" :max="10" />

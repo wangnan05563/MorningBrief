@@ -28,6 +28,7 @@ const repoFile = (rel) => readFileSync(new URL(`../../../../${rel}`, import.meta
  * 起一个可控的假后端：
  * - mode='hang'   永不响应（用来触发真实超时与真实中止）
  * - mode='reply'  按 payload 立刻返回 {code:0,message:'',data:payload}
+ * - mode='bad-gateway' 回 502 空响应体（复现网关实测到的上游断连形态）
  * 顺带记录「请求是否真的在网络上断了」（req 的 aborted/close 事件），
  * 这样「停止生成」不是只在 UI 上把 loading 关掉，而是确实中止了请求。
  */
@@ -38,6 +39,12 @@ function createFakeBackend(mode, payload) {
     req.on('aborted', () => { seen.aborted += 1 })
     res.on('close', () => { if (!res.writableEnded) seen.aborted += 1 })
     if (mode === 'hang') return // 故意不响应
+    if (mode === 'bad-gateway') {
+      // 网关实测（DEC-UX-003 / T02528）：origin 中途断连时 Funnel 回 502 且响应体为空
+      res.writeHead(502, { 'content-length': '0' })
+      res.end()
+      return
+    }
     res.writeHead(200, { 'content-type': 'application/json' })
     res.end(JSON.stringify({ code: 0, message: '', data: payload }))
   })
@@ -189,6 +196,27 @@ describe('callAiChat：后端业务结果的归类', () => {
       assert.equal(res.kind, 'error')
       assert.match(res.message, /API Key 未配置/)
     }))
+
+  it('上游中途断连（502 空响应体）说人话：网关实测到的就是这一种', async () => {
+    // DEC-UX-003 实测：origin 不回响应直接断开时，Tailscale Funnel 立刻给客户端
+    // HTTP 502、Content-Length: 0。axios 那句 "Request failed with status code 502"
+    // 既没说发生了什么也没说能做什么，而它恰恰是「稍后点重试」就能恢复的一类。
+    const fake = createFakeBackend('bad-gateway')
+    await new Promise((r) => fake.server.listen(0, '127.0.0.1', r))
+    try {
+      const res = await callAiChat({
+        client: makeClient(`http://127.0.0.1:${fake.server.address().port}`),
+        model: 'm',
+        messages: [],
+      })
+      assert.equal(res.kind, 'error')
+      assert.match(res.message, /网关到后端的连接中断（HTTP 502）/)
+      assert.match(res.message, /重试/)
+      assert.doesNotMatch(res.message, /Request failed with status code/)
+    } finally {
+      await new Promise((r) => fake.server.close(r))
+    }
+  })
 })
 
 describe('KnowledgeQA.vue：停止生成与不留 loading', () => {

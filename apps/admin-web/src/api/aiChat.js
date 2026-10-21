@@ -76,6 +76,13 @@ export async function callAiChat({
         message: `等待模型响应超时（>${sec} 秒），可以重试或把问题问得更具体`,
       }
     }
+    // 网关实测（DEC-UX-003 / T02528）：origin 在请求中途断连时，Tailscale Funnel 立刻
+    // 回 HTTP 502 且响应体为空——axios 那句 "Request failed with status code 502"
+    // 用户读不出该做什么，而这一类恰恰是「等一会儿点重试」就能恢复的。
+    const status = err?.response?.status
+    if (status === 502 || status === 503 || status === 504) {
+      return { ok: false, kind: 'error', message: `网关到后端的连接中断（HTTP ${status}），稍后可点重试` }
+    }
     // 业务/网络错误：拦截器已把 {code,message,data} 解包，非 0 code 时 err.message 就是后端文案
     return { ok: false, kind: 'error', message: err?.message || '问答请求失败' }
   }
