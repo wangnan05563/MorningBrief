@@ -227,7 +227,7 @@ const filters = reactive({ workflow_id: '' })
 // URL 参数规格。tab 的白名单**只放这三个**：el-tabs 只渲染三个 pane，
 // 把 enum 全量（含 replaced）放进去会让 `?tab=replaced` 通过校验却渲染出空表格。
 // page.max 在拿到 total 之后动态改写（深链 ?page=999 应落到最后一页，而不是空表）。
-// size.max 按 NFR-UX-03 收在 100（后端 reviews/materials 都是 le=100，给更大只会被静默钳回）。
+// size.max 按 NFR-UX-03 收在 100（后端 reviews/materials 都是 le=100；越界是 HTTP 400，不是被静默钳回）。
 const URL_SPECS = {
   tab: { default: 'pending', enum: ['pending', 'approved', 'rejected'] },
   page: { default: 1, type: 'int', min: 1 },

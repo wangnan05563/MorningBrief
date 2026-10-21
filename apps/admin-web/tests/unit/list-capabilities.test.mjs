@@ -161,7 +161,7 @@ describe('仓库级不变量：每个 el-pagination 都能选尺寸且不越上�
   })
 
   it('所有档位不超过 NFR-UX-03 的 100（后端 reviews/materials/inbox 都是 le=100）', () => {
-    assert.deepEqual(oversized, [], '以下分页档位越过 100，后端会静默钳回，界面与实际能力不一致')
+    assert.deepEqual(oversized, [], '以下分页档位越过 100，后端 le=100 会把它判成 400（不是静默钳回），列表直接进错误态')
   })
 })
 
@@ -232,6 +232,42 @@ describe('审核列表（B3 / B4 / B6）接线', () => {
 
   it('URL 上 size 的上限按 NFR-UX-03 收在 MAX_PAGE_SIZE', () => {
     assert.match(vue, /size:\s*\{\s*default:\s*10,\s*type:\s*'int',\s*min:\s*1,\s*max:\s*MAX_PAGE_SIZE/)
+  })
+})
+
+describe('工作流列表深链尺寸（T02521 / NFR-UX-03）', () => {
+  const vue = srcFile('views/workflow/WorkflowList.vue')
+
+  it('URL 规格给了 size 上限——后端是 le=100，越界判 400 而不是静默钳回', () => {
+    // 本单的缺陷就在这里少了一个 max：`/workflows?size=999` 会把 999 原样发出去，
+    // 拿到 HTTP 400 后落进错误态。静态门禁把它钉死，防止「只有审核列表收口」再次发生。
+    assert.match(vue, /size:\s*\{\s*default:\s*20,\s*type:\s*'int',\s*min:\s*1,\s*max:\s*MAX_PAGE_SIZE/)
+  })
+
+  it('档位取自共享常量（此前自己写 [10, 20, 50]，100 这一档根本选不到）', () => {
+    const block = tagBlocks(vue, 'el-pagination')[0]
+    assert.equal(attr(block, 'page-sizes'), 'PAGE_SIZE_OPTIONS')
+    assert.deepEqual(resolveSizes(block), PAGE_SIZE_OPTIONS)
+  })
+
+  it('两条入口（首屏 readFromUrl 与地址栏变更）都必须过 resolveSize', () => {
+    // 只在一处钳制等于没钳：深链进来走 onMounted，前进后退/详情返回走 applyFromUrl
+    assert.match(vue, /size\.value = resolveSize\(v\.size\)/)
+    assert.match(vue, /size\.value = nextSize/)
+    assert.match(vue, /const nextSize = resolveSize\(values\.size\)/)
+    assert.doesNotMatch(vue, /size\.value = (values|v)\.size/, '不能把地址栏的 size 原样灌进状态')
+    assert.match(vue, /clampPageSize\(n, PAGE_SIZE_OPTIONS/)
+  })
+
+  it('越界页码按 total 落到最后一页，不再「每退一页发一次请求」', () => {
+    // NFR-UX-03 的直接相关项：旧写法 `page.value -= 1` + 递归，配上 el-pagination
+    // 自己的钳位，实测产出 [999, 998, 5, 4] 四个请求还落在倒数第二页
+    assert.match(vue, /URL_SPECS\.page\.max = maxPage/)
+    // 只钉「独立成一句的自减语句」——源码里留着 `page.value -= 1` 的注释在解释旧写法，
+    // 宽松正则会把那条注释当成复活（实测踩过）。
+    assert.doesNotMatch(vue, /^\s*page\.value -= 1\s*$/m, '不许恢复逐页回退的修正方式')
+    assert.match(vue, /await loadList\(false, true\)/)
+    assert.match(vue, /if \(!silent && !isPageCorrection\) pageClamp\.value = null/)
   })
 })
 

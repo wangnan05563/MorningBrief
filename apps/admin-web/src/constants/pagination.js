@@ -10,9 +10,13 @@
  * 做仓库级不变量断言（每个 el-pagination 必须能选尺寸、尺寸不得超过上限），
  * 新增页面时不必再靠人记得抄一份。
  *
- * 上限 100 的依据：后端 `list_reviews`（`size: Query(20, ge=1, le=100)`）与
- * `m/inbox`（`page_size: Query(20, ge=1, le=100)`）都按 100 收口，前端给到 200
- * 只会被后端静默钳回 100，界面与实际能力不一致。
+ * 上限 100 的依据：后端列表接口一律写成 `Query(20, ge=1, le=100)`
+ * （`list_reviews` / `list_workflows` / `m/inbox` 等 19 个端点，见
+ * `backend/tests/test_nfr03_page_size_cap.py` 的逐端点断言）。
+ * ⚠ 越界**不会**被静默钳回：`core/exceptions.py:70` 把 `RequestValidationError`
+ * 统一转成 HTTP 400。前端给到 200 不是「反正会被钳」，而是**必定失败**——
+ * 本文件旧版本写着「给到 200 只会被后端静默钳回 100」（T02521 订正），
+ * 正是这个误解让 `WorkflowList` 觉得 URL 规格少个 `max` 无所谓。
  */
 
 /** NFR-UX-03：列表分页尺寸上限 */

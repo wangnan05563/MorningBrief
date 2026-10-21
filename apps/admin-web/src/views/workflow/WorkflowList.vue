@@ -203,7 +203,7 @@
           v-model:current-page="page"
           v-model:page-size="size"
           :total="total"
-          :page-sizes="[10, 20, 50]"
+          :page-sizes="PAGE_SIZE_OPTIONS"
           layout="total, sizes, prev, pager, next"
           @size-change="() => loadList()"
           @current-change="() => loadList()"
@@ -303,6 +303,7 @@ import FeedHealthBanner from '../../components/FeedHealthBanner.vue'
 import { useFeedHealth } from '../../composables/useFeedHealth'
 import { useUrlState } from '../../composables/useUrlState'
 import { detailLocation } from '../../utils/urlState'
+import { PAGE_SIZE_OPTIONS, MAX_PAGE_SIZE, clampPageSize } from '../../constants/pagination'
 
 const route = useRoute()
 const router = useRouter()
@@ -353,7 +354,10 @@ const filterSource = ref(null)
  */
 const URL_SPECS = {
   page: { default: 1, type: 'int', min: 1 },
-  size: { default: 20, type: 'int', min: 1 },
+  // size.max 收在 100（NFR-UX-03）：后端 list_workflows 是 `Query(20, ge=1, le=100)`，
+  // 越界不是「被静默钳回」而是 RequestValidationError → HTTP 400（core/exceptions.py:70），
+  // 少一个 max 就等于把深链变成必失败的请求
+  size: { default: 20, type: 'int', min: 1, max: MAX_PAGE_SIZE },
   channel_id: { default: null, type: 'int', min: 1 },
   episode_date: { default: null, type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
   status: { default: null, enum: enumOptions(WORKFLOW_STATUS).map((o) => o.value) },
@@ -369,19 +373,48 @@ const urlState = useUrlState(URL_SPECS, () => ({
 }), { onExternalChange: applyFromUrl })
 
 /** 被回落的非法参数（如 `?status=done`）：页内点名，不静默按空值渲染 */
-const invalidParams = computed(() => urlState.invalid.value)
+const sizeClamp = ref(null)
+const pageClamp = ref(null)
+const invalidParams = computed(() => {
+  const extra = [...urlState.invalid.value]
+  if (sizeClamp.value) extra.push(sizeClamp.value)
+  if (pageClamp.value) extra.push(pageClamp.value)
+  return extra
+})
+
+/**
+ * 把地址栏/内部 size 值收敛到本页可选档位（T02521 / NFR-UX-03，与 ReviewList 同一口径）。
+ *
+ * `?size=7` 过得了 `parseInteger`，但档位里没有 7：原样发请求就渲染出「7 行 +
+ * 一个显示不出当前值的尺寸选择器」；`?size=999` 更糟，后端 `le=100` 直接判 400。
+ * 这里就近取允许值并把校正记进 invalidParams，地址栏与界面最终一致。
+ */
+function resolveSize(raw) {
+  const n = Number(raw)
+  const clamped = clampPageSize(n, PAGE_SIZE_OPTIONS, 20)
+  sizeClamp.value =
+    Number.isFinite(n) && n > 0 && n !== clamped
+      ? {
+          key: 'size',
+          raw: String(raw),
+          reason: `不在可选尺寸 ${PAGE_SIZE_OPTIONS.join('/')} 中：已按 ${clamped} 处理`,
+        }
+      : null
+  return clamped
+}
 
 /** 地址栏被外部改动（手改 / 前进后退 / 详情返回）时：灌回筛选并重载 */
 function applyFromUrl(values) {
+  const nextSize = resolveSize(values.size)
   const changed =
     values.page !== page.value ||
-    values.size !== size.value ||
+    nextSize !== size.value ||
     values.channel_id !== filterChannelId.value ||
     values.episode_date !== filterEpisodeDate.value ||
     values.status !== filterStatus.value ||
     values.source !== filterSource.value
   page.value = values.page
-  size.value = values.size
+  size.value = nextSize
   filterChannelId.value = values.channel_id
   filterEpisodeDate.value = values.episode_date
   filterStatus.value = values.status
@@ -425,7 +458,9 @@ function statusLabel(s) {
 
 // silent=true 时为轮询调用：不显示整表遮罩、不弹错误提示
 // 实现进度字段局部刷新：仅更新数据，不触发 v-loading 整表卡死
-async function loadList(silent = false) {
+// isPageCorrection=true 表示这一趟是「越界页码落到最后一页」的修正请求，
+// 它必须**保留**上一趟记下的 pageClamp，否则告警会在修正成功后当场被抹掉
+async function loadList(silent = false, isPageCorrection = false) {
   if (!silent) loading.value = true
   try {
     const params = { page: page.value, size: size.value }
@@ -447,16 +482,31 @@ async function loadList(silent = false) {
     listError.value = ''
     // 刷新成功即「数据新鲜度」的锚点，同时清掉失败计数（健康度条随之收起）
     feed.markPollSuccess()
+
+    // 安全页码修正（T02521 / NFR-UX-03）：删除后当前页可能变空，深链 `?page=999`
+    // 更是指向一个不存在的页。旧写法是 `page.value -= 1` 然后递归——每退一页发一次请求，
+    // 而 el-pagination 会在这期间把 current-page 钳到 page-count 并触发 @current-change，
+    // 两条路径交错实测产出 [999, 998, 5, 4] 这种页码序列（4 个请求、还落在倒数第二页）。
+    // 现在按 total 一次落到**最后一页**：请求数从「页码差值」压到最多 1 次修正，
+    // 且落点是用户真正想看的尾部数据。
+    const maxPage = Math.max(1, Math.ceil((data.total || 0) / size.value))
+    URL_SPECS.page.max = maxPage
+    if (!silent && page.value > maxPage) {
+      pageClamp.value = {
+        key: 'page',
+        raw: String(page.value),
+        reason: `超过上限 ${maxPage}：已落到最后一页`,
+      }
+      page.value = maxPage
+      await loadList(false, true)
+      return
+    }
+    // 页码本来就在范围内（只有第一轮能判定）：清掉上一轮的越界提示，
+    // 否则正常翻页后「参数已修正」的告警会一直挂着。不能无条件清——钳制后的第二轮
+    // 就在范围内，会当场抹掉刚记下的那条（ReviewList 实测踩过）。
+    if (!silent && !isPageCorrection) pageClamp.value = null
     // 地址栏跟着当前筛选走（等于默认值的参数会被省略，静默轮询时值没变也不会产生 replace）
     if (!silent) urlState.pushToUrl()
-
-    // 安全页码修正：删除后当前页可能变空（如第 3 页只剩 1 条被删），
-    // 此时回退到上一页避免用户面对空白列表
-    // 仅在非 silent 模式下递归修正，避免轮询中递归 loadList(true)
-    if (!silent && list.value.length === 0 && page.value > 1) {
-      page.value -= 1
-      await loadList()
-    }
 
     // 根据最新列表状态启停轮询：有活跃工作流时启动，全部终态时停止
     startPollingIfNeeded()
@@ -724,7 +774,7 @@ onMounted(() => {
   // 非法值由 readUrlState 回落并记进 invalidParams
   const v = urlState.readFromUrl()
   page.value = v.page
-  size.value = v.size
+  size.value = resolveSize(v.size)
   filterChannelId.value = v.channel_id
   filterEpisodeDate.value = v.episode_date
   filterStatus.value = v.status
