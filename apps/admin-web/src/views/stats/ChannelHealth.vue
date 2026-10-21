@@ -77,7 +77,7 @@
                 <span>每日入库趋势</span>
                 <!-- D45：卡片间同标尺后，峰值数字让「看着高=真的多」可被核对 -->
                 <span class="trend-scope">
-                  峰值 {{ peakOf(ch) }} 条 · 各卡同标尺（上限 {{ sharedTrendMax }} 条）· 悬停看每日条数
+                  峰值 {{ peakOf(ch) }} {{ countUnit }} · 各卡同标尺（上限 {{ sharedTrendMax }} {{ countUnit }}）
                 </span>
               </div>
               <div class="trend-canvas">
@@ -117,6 +117,9 @@ const rangeDays = ref(7)
 const loading = ref(false)
 const summary = ref({ healthy: 0, warning: 0, critical: 0, total: 0 })
 const channels = ref([])
+// INT-UX-03 / T02526：折线没有坐标轴，单位字「条」由接口 meta 下发，页面不再自己写
+const meta = ref({})
+const countUnit = computed(() => meta.value.count?.display?.unit || '条')
 
 // 汇总卡片配置：cls 用于按状态染色，便于一眼识别整体健康度
 const summaryCards = computed(() => [
@@ -171,7 +174,7 @@ const trendOptions = computed(() => ({
       intersect: false,
       // 不画坐标轴就更要把单位说清：这里的数字是"条素材"，不是百分比也不是次数
       callbacks: {
-        label: (ctx) => `${ctx.parsed.y} 条`,
+        label: (ctx) => `${ctx.parsed.y} ${countUnit.value}`,
       },
     },
   },
@@ -229,6 +232,7 @@ async function loadData() {
     const data = await api.get('/stats/channel-health', { params: { range_days: rangeDays.value } })
     channels.value = data.channels || []
     summary.value = data.summary || { healthy: 0, warning: 0, critical: 0, total: 0 }
+    meta.value = data.meta || {}
   } finally {
     loading.value = false
   }

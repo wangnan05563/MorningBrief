@@ -85,6 +85,13 @@ METRIC_META: dict[str, dict] = {
         "unit": "count",
         "display": {"unit": "次", "factor": 1, "precision": 0},
     },
+    # channel-health 的 daily_trend[].count：卡片折线不画坐标轴，单位只能靠文案，
+    # 页面原先自己写死「条」——写「次」还是「条」没人会发现不一致
+    "count": {
+        "label": "每日入库",
+        "unit": "count",
+        "display": {"unit": "条", "factor": 1, "precision": 0},
+    },
 }
 
 # 概览卡片的固定顺序（展示端按此顺序渲染，避免各页面各自排一遍）
@@ -111,6 +118,11 @@ LLM_METRICS = [
 RSS_HEALTH_METRICS = [
     "latency_ms",
     "consecutive_failures",
+]
+
+# 频道健康度折线（daily_trend[].count）的计数单位
+CHANNEL_HEALTH_METRICS = [
+    "count",
 ]
 
 

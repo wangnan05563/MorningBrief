@@ -9,7 +9,12 @@ from app.core.exceptions import BizError
 from app.core.response import success
 from app.core.runtime import runtime_fields
 from app.database import get_db
-from app.services.stats_metrics import LLM_METRICS, RSS_HEALTH_METRICS, meta_for
+from app.services.stats_metrics import (
+    CHANNEL_HEALTH_METRICS,
+    LLM_METRICS,
+    RSS_HEALTH_METRICS,
+    meta_for,
+)
 from app.services.stats_service import StatsService
 
 router = APIRouter(prefix="/admin/api/v1/stats", tags=["B端-统计"])
@@ -58,7 +63,8 @@ async def get_channel_health(
     """
     svc = StatsService(db)
     data = await svc.get_channel_health(range_days=range_days)
-    return success(data=data)
+    # INT-UX-03 / T02526：折线卡片不画坐标轴，「条」这个单位字也必须由接口下发
+    return success(data={**data, "meta": meta_for(*CHANNEL_HEALTH_METRICS)})
 
 
 @router.get("/rss-health")

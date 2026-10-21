@@ -27,6 +27,10 @@ const RSS_VIEW = readFileSync(
   new URL('../../src/views/stats/RssHealth.vue', import.meta.url),
   'utf8',
 )
+const CHANNEL_VIEW = readFileSync(
+  new URL('../../src/views/stats/ChannelHealth.vue', import.meta.url),
+  'utf8',
+)
 
 const PERCENT = { label: '触发率', unit: 'percent', display: { unit: '%', factor: 1, precision: 2 } }
 const MS = { label: '响应延迟', unit: 'millisecond', display: { unit: 'ms', factor: 1, precision: 0 } }
@@ -65,20 +69,32 @@ describe('INT-UX-03 两个统计页接的是 meta，不是写死单位', () => {
 
   it('接口下发的每一条 meta，页面都得真接上', () => {
     // 连续失败列以前只有写死的表头：meta 下发了却没人接，等于没修。
-    // 这条按后端登记表里 RSS 侧的指标清单逐条核对，以后往清单里加字段不会漏掉接线。
+    // 这条按后端登记表的清单逐条核对，以后往清单里加字段不会漏掉接线。
     const registry = readFileSync(
       new URL('../../../../backend/app/services/stats_metrics.py', import.meta.url),
       'utf8',
     )
-    const listed = registry.match(/RSS_HEALTH_METRICS = \[([\s\S]*?)\]/)?.[1]
-    assert.ok(listed, '后端登记表里应能解析出 RSS_HEALTH_METRICS')
-    for (const field of listed.match(/"[a-z_]+"/g).map((s) => s.replaceAll('"', ''))) {
-      assert.match(
-        RSS_VIEW,
-        new RegExp(`meta(\\.value)?\\.${field}\\b`),
-        `${field} 下发了 meta 但页面没接`,
-      )
+    const pages = [
+      ['RSS_HEALTH_METRICS', RSS_VIEW],
+      ['CHANNEL_HEALTH_METRICS', CHANNEL_VIEW],
+    ]
+    for (const [listName, view] of pages) {
+      const listed = registry.match(new RegExp(`${listName} = \\[([\\s\\S]*?)\\]`))?.[1]
+      assert.ok(listed, `后端登记表里应能解析出 ${listName}`)
+      for (const field of listed.match(/"[a-z_]+"/g).map((s) => s.replaceAll('"', ''))) {
+        assert.match(
+          view,
+          new RegExp(`meta(\\.value)?\\.${field}\\b`),
+          `${field} 下发了 meta 但页面没接`,
+        )
+      }
     }
     assert.doesNotMatch(RSS_VIEW, /label="连续失败"/, '表头写死，meta.consecutive_failures 白下发')
+  })
+
+  it('频道健康页的单位字取自 meta，不再写死「条」', () => {
+    assert.match(CHANNEL_VIEW, /meta\.value\.count\?\.display\?\.unit/)
+    assert.match(CHANNEL_VIEW, /\$\{ctx\.parsed\.y\} \$\{countUnit\.value\}/)
+    assert.doesNotMatch(CHANNEL_VIEW, /峰值 \{\{ peakOf\(ch\) \}\} 条/, '文案写死单位')
   })
 })

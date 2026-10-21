@@ -8,6 +8,8 @@ FR-UX-501（T02506）已经把 overview / trend 的单位收进 `meta`，展示�
   `%` 时看不出来，一旦有人把 llm-metrics 也接到共用格式化器（`metricValue` 会乘
   `display.factor`）上，47% 就变成 4700%。
 - `/stats/rss-health` 的 `latency_ms` 表头写死「 ms」，是 PRD 点名要消掉的「页面自己标单位」。
+- `/stats/channel-health` 的折线不画坐标轴，峰值与悬停全靠「条」这个字，页面写「条」、
+  别处写「次」时没人会发现不一致。
 
 本文件钉三件事：响应带 meta、meta 与数值实际量级一致、换算规则全局统一
 （`unit == percent ⇒ factor == 1`，`unit == ratio ⇒ factor == 100`）。
@@ -118,6 +120,34 @@ async def test_rss_health_publishes_latency_unit(client, auth, monkeypatch):
     assert data["meta"]["latency_ms"]["unit"] == "millisecond"
     assert data["meta"]["latency_ms"]["display"]["factor"] == 1
     assert data["meta"]["consecutive_failures"]["unit"] == "count"
+
+
+async def test_channel_health_publishes_count_unit(client, auth):
+    """`/stats/*` 里最后一条：折线峰值/悬停写死「条」，单位同样要由接口下发。"""
+    data = client.get(
+        f"{BASE}/channel-health", params={"range_days": 7}, headers=auth
+    ).json()["data"]
+    assert data["meta"]["count"]["unit"] == "count"
+    assert data["meta"]["count"]["display"]["unit"] == "条"
+    assert data["meta"]["count"]["display"]["factor"] == 1
+
+
+async def test_every_stats_endpoint_carries_meta(client, auth):
+    """PRD 写的是 `/stats/*`，不是其中两条：漏一条就没人知道它漏了。
+
+    新增统计端点时这里会红，逼作者把单位登记进 stats_metrics 而不是页面里写死。
+    """
+    queries = {
+        "overview": {"date": "2026-01-05"},
+        "trend": {"metric": "dau", "range": "7d"},
+        "channel-health": {"range_days": 7},
+        "rss-health": {},
+        "llm-metrics": {},
+    }
+    for ep, params in queries.items():
+        body = client.get(f"{BASE}/{ep}", params=params, headers=auth).json()
+        assert body["code"] == 0, ep
+        assert body["data"].get("meta"), f"{ep} 未下发 unit/scale 元数据"
 
 
 async def test_existing_stats_endpoints_keep_their_meta(client, auth):

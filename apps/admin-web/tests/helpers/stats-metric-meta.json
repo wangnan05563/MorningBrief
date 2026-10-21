@@ -124,5 +124,14 @@
       "factor": 1,
       "precision": 0
     }
+  },
+  "count": {
+    "label": "每日入库",
+    "unit": "count",
+    "display": {
+      "unit": "条",
+      "factor": 1,
+      "precision": 0
+    }
   }
 }
