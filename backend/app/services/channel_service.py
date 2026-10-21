@@ -86,6 +86,9 @@ class ChannelService:
         type_label: Optional[str] = None,
         cover_url: Optional[str] = None,
         disclaimer_level: str = "none",
+        # C15（FR-UX-704）：新增频道时是否启用。默认 1 保持既有调用方行为不变，
+        # 但运营在弹窗里关掉「启用」开关时必须真的建出未启用频道
+        is_active: int = 1,
     ) -> Channel:
         """新增频道。name 唯一约束，冲突抛 ValueError。
 
@@ -94,7 +97,7 @@ class ChannelService:
         字段（channel_type/type_label/cover_url/disclaimer_level），均为可选。
         """
         channel = Channel(
-            name=name, description=description, is_active=1,
+            name=name, description=description, is_active=1 if is_active in (1, True) else 0,
             schedule_time=schedule_time,
             intro_prompt=intro_prompt,
             outro_prompt=outro_prompt,

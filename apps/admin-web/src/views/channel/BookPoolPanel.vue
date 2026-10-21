@@ -25,6 +25,22 @@
 
     <!-- 调度与进度 -->
     <el-form :inline="true" class="schedule-form" label-width="90px">
+      <!-- C27（FR-UX-704）：这里此前只有「模式状态」提示，开关却不在本组件里——
+           独立页 /channels/book-pool 根本没有开关可用，频道编辑弹窗内则只在另一个页签里有开关，
+           于是出现「同屏两处与模式相关的提示、只有一处能操作」。onToggleMode 早已写好并接了 API，
+           只是没有任何控件绑定它（死代码）。补上开关，两个使用方都可直接操作同一份后端状态。 -->
+      <el-form-item label="讲书稿模式">
+        <el-switch
+          v-model="scriptMode"
+          :loading="modeLoading"
+          active-text="开启"
+          inactive-text="关闭"
+          inline-prompt
+          data-guide="book-pool-mode-switch"
+          @change="onToggleMode"
+        />
+        <span class="unit-hint">开启后忽略书源、按下方书单顺序逐日取书</span>
+      </el-form-item>
       <el-form-item label="取书间隔">
         <el-input-number v-model="schedule.interval_days" :min="1" :max="365" controls-position="right" @change="onScheduleChange" />
         <span class="unit-hint">天（1 = 每日）</span>
@@ -236,6 +252,10 @@ async function loadPool() {
       Object.assign(state, data.state)
       scriptMode.value = !!state.enabled
     }
+    // C80（FR-UX-704）：池子内容一变，「预览下次生成」的结果就过期了。
+    // 此前预览是一次性 POST 且结果常驻显示，此后任何排序/加入/移出都不让它失效，
+    // 用户看到的「下次将生成《X》」可能早已不成立——属于典型的数据被误读。
+    preview.value = null
   } finally {
     loading.value = false
   }
@@ -261,6 +281,8 @@ async function onScheduleChange() {
     loop: schedule.loop,
   })
   Object.assign(state, res || {})
+  // C80：间隔/循环直接影响「下次是否取书、取哪本」，改完必须让旧预览作废
+  preview.value = null
   ElMessage.success('调度参数已保存')
 }
 
@@ -284,6 +306,8 @@ async function onResetProgress() {
 async function onMove(row, direction) {
   const data = await moveBookInPool(props.channelId, row.id, direction)
   items.value = data?.items || items.value
+  // C80：顺序即取书顺序，挪动一格就可能换一本「下次生成」
+  preview.value = null
 }
 
 async function onRemove(row) {
@@ -291,6 +315,8 @@ async function onRemove(row) {
   const data = await removeBookFromPool(props.channelId, row.id)
   items.value = data?.items || []
   await loadState()
+  // C80：移出后取书指针指向的书变了，旧预览不能继续挂着
+  preview.value = null
   ElMessage.success('已移出书单')
 }
 

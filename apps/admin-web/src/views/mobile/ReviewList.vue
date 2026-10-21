@@ -51,6 +51,19 @@
         <span v-if="!scoped" class="m-review__wf">{{ item.workflow_name || item.workflow_id }}</span>
         <span class="m-review__type">{{ item.channel_type || '—' }}</span>
         <span v-if="item.auto_approved" class="m-review__auto">系统</span>
+        <!-- I5（FR-UX-704）：PC 端早就有的两个质量信号，移动端此前一个都没有。
+             「成品时长」含 BGM/静音凑时，不代表真实内容长度；外勤在手机上审批时看不到「凑时」，
+             就会把靠凑时长达标、正文其实很短的节目判为合格。这里与 PC 同源字段、同口径文案。 -->
+        <span v-if="item.measured_duration_sec != null" class="m-review__dur">
+          成品 {{ formatDuration(item.measured_duration_sec) }}
+        </span>
+        <span
+          v-if="item.supplement_sec > 0"
+          class="m-review__supplement"
+          data-guide="m-review-supplement"
+        >
+          凑时 {{ item.supplement_sec }}s
+        </span>
       </div>
 
       <!-- 折叠态显示摘要，展开时由完整文本替代，避免重复 -->
@@ -89,6 +102,16 @@
             </div>
             <div class="m-detail__field">
               <dt>类型</dt><dd>{{ item.channel_type || '—' }}</dd>
+            </div>
+            <!-- I5（FR-UX-704）：与 PC 的 tooltip 同口径，展开即看到「成品时长含凑时」 -->
+            <div v-if="item.measured_duration_sec != null" class="m-detail__field">
+              <dt>成品时长</dt><dd>{{ formatDuration(item.measured_duration_sec) }}</dd>
+            </div>
+            <div v-if="item.supplement_sec > 0" class="m-detail__field" data-guide="m-review-duration-note">
+              <dt>凑时</dt>
+              <dd>
+                含 {{ item.supplement_sec }}s BGM/静音，内容实测 {{ formatDuration(item.original_duration_sec) }}
+              </dd>
             </div>
             <div v-if="item.auto_approved" class="m-detail__field">
               <dt>自动审批</dt>
@@ -178,6 +201,7 @@ import { listReviews, getReview, handleReviewAction, batchHandleReviewAction } f
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import { formatTriggerReason } from '../../utils/autoReviewRules'
+import { formatDuration } from '../../utils/format'
 import { returnTarget } from '../../utils/urlState'
 
 const route = useRoute()
@@ -538,6 +562,23 @@ onMounted(load)
 .m-review__auto {
   color: #e6a23c;
   background: #fdf6ec;
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+/* I5（FR-UX-704）：成品时长用中性色，凑时用与 PC `el-tag type=warning` 同系的琥珀色描边，
+   让外勤一眼能分辨「这条是靠凑时长达标的」 */
+.m-review__dur {
+  color: var(--el-text-color-regular, #606266);
+  background: var(--el-fill-color-light, #f5f7fa);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+.m-review__supplement {
+  color: #e6a23c;
+  background: #fdf6ec;
+  border: 1px solid #faecd8;
   border-radius: 4px;
   padding: 0 5px;
 }

@@ -75,7 +75,10 @@
                    否则"那条线翘起来了"会被读成有量，实际可能只是 0→1 条 -->
               <div class="trend-title" data-guide="channel-health-trend-caption">
                 <span>每日入库趋势</span>
-                <span class="trend-scope">仅趋势 · 未标刻度（悬停看条数）</span>
+                <!-- D45：卡片间同标尺后，峰值数字让「看着高=真的多」可被核对 -->
+                <span class="trend-scope">
+                  峰值 {{ peakOf(ch) }} 条 · 各卡同标尺（上限 {{ sharedTrendMax }} 条）· 悬停看每日条数
+                </span>
               </div>
               <div class="trend-canvas">
                 <Line
@@ -131,8 +134,34 @@ const trendWindow = computed(() => {
   return `${trend[0].date} ~ ${trend[trend.length - 1].date}`
 })
 
+// D45（FR-UX-704）：此前每张卡片的 mini 折线各自自适应 Y 轴且 x/y 全部 display:false，
+// 无刻度、无峰值标注 ⇒ 两条形状相似的曲线可能相差百倍量级，视觉斜率完全不可比，
+// 首次用户会据此判断「A 频道比 B 频道活跃」。
+// 修法是**统一标尺**而不是补坐标轴（缩略图放不下轴，且 T02508 已定「仅趋势」的定位）：
+// 1) 所有卡片共用同一个 Y 上限（全体频道峰值），高线即大量，卡片之间可以直接比；
+// 2) 卡片标题行显示本卡峰值与共用上限，读图时不必悬停也能校准视觉斜率。
+const sharedTrendMax = computed(() => {
+  let max = 0
+  for (const ch of channels.value || []) {
+    for (const point of ch.daily_trend || []) {
+      const n = Number(point.count)
+      if (Number.isFinite(n) && n > max) max = n
+    }
+  }
+  return max
+})
+
+function peakOf(ch) {
+  let max = 0
+  for (const point of ch.daily_trend || []) {
+    const n = Number(point.count)
+    if (Number.isFinite(n) && n > max) max = n
+  }
+  return max
+}
+
 // mini 折线图配置：隐藏图例和坐标轴标签，仅保留 tooltip，紧凑展示
-const trendOptions = {
+const trendOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
@@ -148,10 +177,15 @@ const trendOptions = {
   },
   scales: {
     x: { display: false },
-    y: { display: false, beginAtZero: true },
+    y: {
+      display: false,
+      beginAtZero: true,
+      // 全体为 0 时不给 max（否则会造出一条贴着零线的假平线刻度）
+      max: sharedTrendMax.value > 0 ? sharedTrendMax.value : undefined,
+    },
   },
   elements: { point: { radius: 2, hoverRadius: 4 } },
-}
+}))
 
 // 按健康状态映射折线颜色：与卡片徽章一致，方便视觉关联
 function buildTrendData(dailyTrend, status) {

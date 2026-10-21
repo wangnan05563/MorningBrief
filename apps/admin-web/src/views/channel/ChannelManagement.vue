@@ -514,7 +514,11 @@
         </el-tabs>
       </el-form>
       <template #footer>
-        <IconButton :icon="Close" label="取消" desc="关闭弹窗，放弃修改" @click="onCancelDialog" />
+        <!-- C18（FR-UX-704）：AI 推荐项即时落库，页脚把这件事直说，避免「取消=全部放弃」的错觉 -->
+        <span v-if="immediateSaved.length" class="immediate-saved-tip" data-guide="channel-immediate-saved">
+          已即时生效：{{ immediateSaved.join('、') }}
+        </span>
+        <IconButton :icon="Close" label="取消" desc="关闭弹窗；未保存的手动修改将丢弃，已即时生效的 AI 推荐不会被撤销" @click="onCancelDialog" />
         <IconButton type="primary" :loading="submitting" :icon="Check" label="确认" desc="保存频道配置" @click="handleSubmit" />
       </template>
 
@@ -611,6 +615,15 @@ const audioPlayerRef = ref(null)
 const recommendingBgm = ref(false)
 // AI 推荐理由（展示 LLM 选择依据）
 const bgmRecommendReason = ref('')
+
+// C18（FR-UX-704）：「AI 推荐 BGM」「AI 推荐 RSS 源与关键词」是**点一下就落库**的按钮
+// （即时保存是有意为之——防止用户忘点「确认」导致配置丢失），但底部「取消」写着「放弃修改」，
+// 两者互相矛盾：用户点取消后配置其实已经生效。保留即时保存，把「已生效」变成可见事实：
+// 记下即时落库的项，取消时如实告知，措辞不再承诺"全部放弃"。
+const immediateSaved = ref([])
+function markImmediateSaved(label) {
+  if (!immediateSaved.value.includes(label)) immediateSaved.value.push(label)
+}
 // 上传 BGM 状态
 const uploadingBgm = ref(false)
 const uploadProgress = ref(0)
@@ -684,10 +697,13 @@ const rules = {
   name: [{ required: true, message: '请输入频道名称', trigger: 'blur' }],
 }
 
-// BGM 试听 URL：后端 /bgm/ 静态目录直接访问，无需鉴权
+// BGM 试听 URL：后端 /bgm 静态目录（无需鉴权），但必须与图标/封面走同一条前缀约定。
+// C37（FR-UX-704）：此前拼裸 `/bgm/${path}`——dev 由 Vite 接管 5181，没有 /bgm 代理条目 ⇒ 404；
+// 生产经 Funnel 只路由 /news/*，裸路径同样 404。表现为「试听按钮点了没声音」，
+// 而 BGM 配置本身保存正常，运营以为是文件坏了。预制封面处（T00730）已修过同类问题并注明原因，BGM 漏改。
 const bgmPreviewUrl = computed(() => {
   if (!form.bgm_path) return ''
-  return `/bgm/${form.bgm_path}`
+  return assetPreviewUrl(`/bgm/${form.bgm_path}`)
 })
 
 async function loadList() {
@@ -788,6 +804,8 @@ function openCreate() {
   loadBgmList()
   loadRssSources()
   loadBookRssSources()
+  // C18（FR-UX-704）：每次开弹窗重新计「已即时生效」清单，避免把上一频道的推荐项带过来
+  immediateSaved.value = []
   // T00828：断点续录——同频道的未保存草稿恢复（不同频道/新增不套用）
   try {
     const draft = JSON.parse(localStorage.getItem('mb_channel_draft') || 'null')
@@ -982,6 +1000,8 @@ function openEdit(row) {
   loadBgmList()
   loadRssSources()
   loadBookRssSources()
+  // C18（FR-UX-704）：每次开弹窗重新计「已即时生效」清单，避免把上一频道的推荐项带过来
+  immediateSaved.value = []
   dialogVisible.value = true
 }
 
@@ -1049,9 +1069,12 @@ async function handleSubmit() {
     } else {
       // 新增：仅提交基本信息 + 定时 + AI生成标志 + BGM + 数据源配置 + 扩展字段，
       // 提示词由 AI 生成或留空
+      // C15（FR-UX-704）：新增同样提交「启用」开关——此前请求体没有 is_active，
+      // 后端只能无条件建已启用频道，关掉开关创建的频道当天就被调度抓稿。
       await createChannel({
         name: form.name,
         description: form.description,
+        is_active: form.is_active,
         display_order: form.display_order,
         schedule_time: form.schedule_time || null,
         auto_generate_prompts: form.auto_generate_prompts,
@@ -1073,6 +1096,7 @@ async function handleSubmit() {
     }
     // T00828：保存成功清除弹窗草稿
     localStorage.removeItem('mb_channel_draft')
+    immediateSaved.value = []
     dialogVisible.value = false
     await loadList()
   } finally {
@@ -1081,12 +1105,25 @@ async function handleSubmit() {
 }
 
 // T00828：取消关闭弹窗时保存未提交草稿（仅编辑态、有 id 时），供同频道重开恢复
-function onCancelDialog() {
+// C18：弹窗里若有「已即时生效」的 AI 推荐项，取消必须如实说明这些不会被撤销——
+// 旧文案承诺「放弃修改」，实际上一半配置已经写进库了。
+async function onCancelDialog() {
+  if (immediateSaved.value.length) {
+    const goOn = await ElMessageBox.confirm(
+      `以下配置已由 AI 推荐并即时保存到频道，点「仍要关闭」不会撤销它们：\n${immediateSaved.value
+        .map((s) => `· ${s}`)
+        .join('\n')}\n\n未保存的手动修改仍会被丢弃（编辑态会留本地草稿）。`,
+      '有配置已即时生效',
+      { type: 'warning', confirmButtonText: '仍要关闭', cancelButtonText: '继续编辑' },
+    ).then(() => true).catch(() => false)
+    if (!goOn) return
+  }
   if (editing.value && form.id) {
     try {
       localStorage.setItem('mb_channel_draft', JSON.stringify(form))
     } catch { /* localStorage 不可用时降级：不保存草稿 */ }
   }
+  immediateSaved.value = []
   dialogVisible.value = false
 }
 
@@ -1230,7 +1267,8 @@ async function handleRecommendBgm() {
         bgm_path: data.path,
         bgm_volume: form.bgm_volume,
       })
-      ElMessage.success('AI 已推荐 BGM 并已保存，可试听效果')
+      markImmediateSaved('BGM 配置（bgm_path / bgm_volume）')
+      ElMessage.success('AI 已推荐 BGM 并即时保存到频道（点「取消」不会撤销），可试听效果')
     } else {
       ElMessage.warning('AI 未能推荐合适的 BGM')
     }
@@ -1268,7 +1306,8 @@ async function handleRecommendSources() {
       rss_sources: JSON.stringify(recommendedSources),
       keywords: recommendedKeywords,
     })
-    ElMessage.success('AI 已推荐 RSS 源与关键词并已保存')
+    markImmediateSaved('RSS 源与关键词（rss_sources / keywords）')
+    ElMessage.success('AI 已推荐 RSS 源与关键词并即时保存到频道（点「取消」不会撤销）')
   } catch (e) {
     console.warn('RSS 源推荐失败:', e)
     // 失败时清空推荐理由，避免残留上次成功推荐的结果造成用户误解
@@ -1353,6 +1392,15 @@ onMounted(() => {
 </style>
 
 <style scoped>
+/* C18（FR-UX-704）：页脚左侧提示「AI 推荐已即时生效」——EP 的 footer 是右对齐 flex，
+   margin-right:auto 把它推到最左边，与「取消/确认」并排但不抢按钮位置 */
+.immediate-saved-tip {
+  margin-right: auto;
+  align-self: center;
+  font-size: 12px;
+  color: #e6a23c;
+}
+
 /*
  * T00730 频道图标编辑 + T00731 预制封面选择
  *

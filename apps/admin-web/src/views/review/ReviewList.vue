@@ -202,7 +202,7 @@ import { Select, Close, View, Search, RefreshLeft } from '@element-plus/icons-vu
 import api from '../../api'
 import { batchHandleReviewAction } from '../../api/reviews'
 import { ElMessage, ElMessageBox } from '../../utils/message'
-import { formatTime } from '../../utils/format'
+import { formatTime, formatDuration } from '../../utils/format'
 import { REVIEW_STATUS, enumLabel, enumTagType } from '../../constants/enums'
 import { PAGE_SIZE_OPTIONS, MAX_PAGE_SIZE, clampPageSize } from '../../constants/pagination'
 import { useUrlState } from '../../composables/useUrlState'
@@ -416,12 +416,8 @@ function statusText(status) {
   return enumLabel(REVIEW_STATUS, status)
 }
 
-function formatDuration(sec) {
-  if (sec == null) return '-'
-  if (sec < 60) return `${sec} 秒`
-  if (sec < 3600) return `${Math.floor(sec / 60)} 分 ${sec % 60} 秒`
-  return `${Math.floor(sec / 3600)} 时 ${Math.floor((sec % 3600) / 60)} 分`
-}
+// I5（T02518）：时长格式化移到 utils/format.js，与移动端审批卡片共用同一口径
+// （此前 PC 各页各写一份，正是「同一指标不同刻度」类缺陷的成因）
 
 function handleSelectionChange(rows) {
   selectedRows.value = rows

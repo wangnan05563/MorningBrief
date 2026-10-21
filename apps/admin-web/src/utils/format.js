@@ -20,6 +20,23 @@ export function formatTime(t) {
 }
 
 /**
+ * 秒 → 人读时长（I5 / T02518）。
+ *
+ * 原本只有 PC 审核列表 `views/review/ReviewList.vue` 里有一份同名局部函数。
+ * 移动端审批卡片要补「成品时长 / 凑时」信号（外勤看不到凑时标记会把凑时长的节目判为合格），
+ * 若再抄一份，两端口径就会像历史上那样分叉——所以提到公共工具里共用。
+ *
+ * @param {number|null|undefined} sec 秒数
+ * @returns {string} 如 `45 秒` / `3 分 12 秒` / `1 时 5 分`，无值返回 '-'
+ */
+export function formatDuration(sec) {
+  if (sec == null) return '-'
+  if (sec < 60) return `${sec} 秒`
+  if (sec < 3600) return `${Math.floor(sec / 60)} 分 ${sec % 60} 秒`
+  return `${Math.floor(sec / 3600)} 时 ${Math.floor((sec % 3600) / 60)} 分`
+}
+
+/**
  * 指标格式化（FR-UX-501 / T02506）。
  *
  * 数值与单位换算一律取自接口随数据下发的 `meta`

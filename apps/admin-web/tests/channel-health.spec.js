@@ -73,15 +73,36 @@ test.describe('频道健康度页面', () => {
   })
 
   // T02508（FR-UX-503）：卡片里的 mini 折线刻意不画坐标轴，那就必须
-  // ① 写明"仅趋势"，② 把"近 N 天"落到具体日期窗口，③ 悬停能读到带单位的准确值
-  test('折线口径：标注仅趋势并给出具体统计区间', async ({ page }) => {
+  // ① 写明"仅趋势"，② 把"近 N 天"落到具体日期窗口，③ 悬停能读到带单位的准确值。
+  // T02518（FR-UX-704 / D45）在此之上补第 ④ 条：**卡片之间可比**——
+  // 各卡 Y 轴原本独立自适应，形状相似的两条线可能相差百倍，用户会据此误判「A 比 B 活跃」。
+  // 现在所有卡片共用同一个上限（全体峰值），并把本卡峰值与共用上限写成数字。
+  test('折线口径：给出统计区间、本卡峰值与全体共用标尺', async ({ page }) => {
     await page.goto('/stats/channel-health')
 
     const caption = page.locator('[data-guide="channel-health-trend-caption"]').first()
-    await expect(caption).toContainText('仅趋势 · 未标刻度', { timeout: 30000 })
+    await expect(caption).toContainText('同标尺', { timeout: 30000 })
+    // 夹具：科技前沿峰值 7、财经观察峰值 10 ⇒ 共用上限取全体最大值 10
+    await expect(caption).toContainText('峰值 7 条')
+    await expect(caption).toContainText('上限 10 条')
+    await expect(page.locator('[data-guide="channel-health-trend-caption"]').nth(1)).toContainText('峰值 10 条')
 
     // 统计区间直接来自后端下发的 daily_trend 首尾日期，不是前端按"今天"倒推
     await expect(page.locator('.window-note')).toContainText('2026-07-15 ~ 2026-07-21')
+  })
+
+  // D45：标尺数字是算出来的（computed），不是写死在模板里。
+  // 全部频道无趋势时必须落到「上限 0 条」，既不能留上一次的 10，也不能显示 NaN。
+  test('全部频道无数据时不编造标尺上限', async ({ page }) => {
+    await page.route('**/admin/api/v1/stats/channel-health*', async (route) => {
+      const empty = JSON.parse(JSON.stringify(channelHealthResponse))
+      for (const ch of empty.data.channels) ch.daily_trend = []
+      await route.fulfill({ json: empty })
+    })
+    await page.goto('/stats/channel-health')
+    await expect(page.locator('[data-guide="channel-health-cards"]')).toBeVisible({ timeout: 30000 })
+    await expect(page.locator('[data-guide="channel-health-trend-caption"]').first())
+      .toContainText('上限 0 条')
   })
 })
 

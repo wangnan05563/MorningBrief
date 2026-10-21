@@ -11,11 +11,18 @@
  * 后端改单位、这里立刻跟着红（与 test_stats_metric_meta.py 的漂移守卫同一条链路）。
  */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { metricLabel, metricNumber, metricText, metricValue } from '../../src/utils/format.js'
+import {
+  formatDuration,
+  metricLabel,
+  metricNumber,
+  metricText,
+  metricValue,
+} from '../../src/utils/format.js'
 
 const meta = JSON.parse(
   readFileSync(fileURLToPath(new URL('../helpers/stats-metric-meta.json', import.meta.url)), 'utf8'),
@@ -74,5 +81,35 @@ describe('metricLabel：轴/卡片标题带单位', () => {
     assert.equal(metricLabel(meta.completion_rate), '完播率(%)')
     assert.equal(metricLabel(meta.avg_listen_duration), '平均收听(分钟)')
     assert.equal(metricLabel(undefined), '-')
+  })
+})
+
+describe('formatDuration：时长口径只有一份（I5 / T02518）', () => {
+  it('秒/分/时的分档与空值', () => {
+    assert.equal(formatDuration(45), '45 秒')
+    assert.equal(formatDuration(192), '3 分 12 秒')
+    assert.equal(formatDuration(3900), '1 时 5 分')
+    assert.equal(formatDuration(null), '-')
+    assert.equal(formatDuration(undefined), '-')
+  })
+
+  // 静态门禁：I5 的成因就是「PC 页里写了一份 formatDuration，移动端没有」。
+  // 任何视图再各写一份，两端口径就会重新分叉——公共出口只有一个，视图只许 import。
+  it('视图内不得再各写一份 formatDuration', () => {
+    const files = []
+    const walk = (dir) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, entry.name)
+        if (entry.isDirectory()) walk(p)
+        else if (/\.(vue|js)$/.test(entry.name)) files.push(p)
+      }
+    }
+    walk(fileURLToPath(new URL('../../src/views', import.meta.url)))
+    // 只拦「秒数 → 中文时长」这一种口径的副本（参数名 sec + 分钟/小时分档写法）。
+    // 同名但入参/语义不同的函数不算重复：QueueManagement.vue 与 WorkflowDetail.vue 算的是
+    // 「任务起止时间差」，ParamCalculator.vue 是「字数→时长预估」的紧凑写法，各属不同口径。
+    const pattern = /function\s+formatDuration\s*\(\s*sec\s*\)[\s\S]{0,200}?sec < 3600/
+    const offenders = files.filter((f) => pattern.test(readFileSync(f, 'utf8')))
+    assert.deepEqual(offenders, [], `以下页面自带 formatDuration 副本，应改用 utils/format.js：\n${offenders.join('\n')}`)
   })
 })

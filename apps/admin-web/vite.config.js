@@ -78,6 +78,17 @@ export default defineConfig(({ command }) => ({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      // C37（T02518 / FR-UX-704）：BGM 试听。前端预览统一带 /news 前缀
+      // （生产 Funnel 只路由 /news/*，裸 /bgm 会 404），dev 在此去前缀转发到后端静态挂载
+      '/news/bgm': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/news/, ''),
+      },
+      '/bgm': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
       // T00827：启动画面就绪探针（/news/api/health/ready）——与后端健康检查同路径约定，
       // 生产经 Funnel 路由 /news/* 到后端，dev 在此代理并去除 /news 前缀
       '/news/api': {

@@ -330,6 +330,7 @@ import {
   retryFailedAutoReview,
 } from '../../api/autoReview'
 import { ruleLabel, formatTriggerReason } from '../../utils/autoReviewRules'
+import { formatDuration } from '../../utils/format'
 
 // 配置数据
 const config = ref(null)
@@ -547,12 +548,7 @@ function formatPercent(rate) {
   return (rate * 100).toFixed(1) + '%'
 }
 
-function formatDuration(sec) {
-  if (sec == null) return '-'
-  if (sec < 60) return `${sec} 秒`
-  if (sec < 3600) return `${Math.floor(sec / 60)} 分 ${sec % 60} 秒`
-  return `${Math.floor(sec / 3600)} 时 ${Math.floor((sec % 3600) / 60)} 分`
-}
+// I5（T02518）：本秒→时长副本已删除，改用 utils/format.js 的 formatDuration（唯一出口）
 
 onMounted(async () => {
   await loadAll()

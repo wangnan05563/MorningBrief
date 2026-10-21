@@ -100,6 +100,16 @@ class ChannelCreateRequest(BaseModel):
     disclaimer_level: str = "none"
     # 频道创建时是否自动调用 AI 生成提示词
     auto_generate_prompts: bool = False
+    # C15（FR-UX-704）：新增模式的「启用」开关。此前请求体没有该字段，
+    # 运营把开关关掉再创建，拿到的却是已启用频道（且提示只说「已创建」）
+    is_active: int = 1
+
+    @field_validator("is_active")
+    @classmethod
+    def validate_is_active(cls, v: int) -> int:
+        if v not in (0, 1):
+            raise ValueError("is_active 仅支持 0 / 1")
+        return v
 
     @field_validator("name")
     @classmethod
@@ -356,6 +366,9 @@ def _channel_to_dict(ch) -> dict:
         "type_label": ch.type_label,
         "cover_url": ch.cover_url,
         "disclaimer_level": ch.disclaimer_level,
+        # C17（FR-UX-704）：图标 URL 此前不在序列化里，编辑弹窗回填 row.icon_url 恒为空
+        # → 图标区每次打开都显示「无图标」，运营以为图标丢失而重复上传/重复 AI 生成（每次生成有成本）
+        "icon_url": ch.icon_url,
         "created_at": ch.created_at.isoformat() if ch.created_at else None,
         "updated_at": ch.updated_at.isoformat() if ch.updated_at else None,
     }
@@ -420,6 +433,8 @@ async def create_channel(
             outro_prompt=req.outro_prompt,
             constraint_prompt=req.constraint_prompt,
             rewrite_template=req.rewrite_template,
+            # C15：新建时尊重「启用」开关，不再无条件 is_active=1
+            is_active=req.is_active,
         )
     except ValueError as e:
         return error(code=400, message=str(e))
