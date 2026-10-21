@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "validate:nav": "node scripts/validate-nav.mjs",
     "test:nav": "node --test scripts/validate-nav.test.mjs",
-    "test:unit": "node --test tests/unit/ai-chat.test.mjs tests/unit/format.test.mjs tests/unit/scope.test.mjs tests/unit/url-state.test.mjs",
+    "test:unit": "node --test tests/unit/ai-chat.test.mjs tests/unit/feed-health.test.mjs tests/unit/format.test.mjs tests/unit/scope.test.mjs tests/unit/url-state.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },

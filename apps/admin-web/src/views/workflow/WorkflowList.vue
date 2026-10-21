@@ -127,6 +127,9 @@
         - @selection-change 同步选中行到 selectedRows
         - ref 用于删除后调用 clearSelection() 重置选中状态
       -->
+      <!-- T02516（FR-UX-702）：SSE 断流与轮询失败是「持续性状态」，用健康度条常驻表达，
+           并给出「立即重连并刷新」入口；下面的 ListLoadError 只表达这一次请求失败 -->
+      <FeedHealthBanner :feed="feed" @refresh="feed.refreshNow()" />
       <!-- T02496（FR-UX-302 / E1）：请求失败必须显示错误态，不能落到「暂无工作流」空态 -->
       <ListLoadError
         v-if="listError"
@@ -296,6 +299,8 @@ import {
 } from '../../constants/enums'
 import WorkflowProgressIndicator from './components/WorkflowProgressIndicator.vue'
 import ListLoadError from '../../components/ListLoadError.vue'
+import FeedHealthBanner from '../../components/FeedHealthBanner.vue'
+import { useFeedHealth } from '../../composables/useFeedHealth'
 import { useUrlState } from '../../composables/useUrlState'
 import { detailLocation } from '../../utils/urlState'
 
@@ -318,6 +323,9 @@ const total = ref(0)
 // T02496（FR-UX-302）：非空即「这次请求没成功」，页面据此显示错误态而非空态
 const listError = ref('')
 const retryingList = ref(false)
+// T02516（FR-UX-702）：SSE 状态 + 轮询成败的统一记账。
+// onRefresh 复用 loadList()（非 silent、用户主动触发），不新增定时器——NFR-UX-03。
+const feed = useFeedHealth({ onRefresh: () => loadList() })
 const page = ref(1)
 const size = ref(20)
 
@@ -437,6 +445,8 @@ async function loadList(silent = false) {
     list.value = data.list || []
     total.value = data.total || 0
     listError.value = ''
+    // 刷新成功即「数据新鲜度」的锚点，同时清掉失败计数（健康度条随之收起）
+    feed.markPollSuccess()
     // 地址栏跟着当前筛选走（等于默认值的参数会被省略，静默轮询时值没变也不会产生 replace）
     if (!silent) urlState.pushToUrl()
 
@@ -455,6 +465,9 @@ async function loadList(silent = false) {
     // silent 轮询时打断轮询链，首屏时留下「暂无工作流」的空态误导。
     // 拦截器已弹过一次 toast，这里只落页内错误态，不重复弹。
     listError.value = e?.message || '工作流列表加载失败'
+    // silent 轮询失败时拦截器不弹 toast（silent 抑制一切提示），
+    // 失败只能由这里落到常驻的健康度条上——否则轮询整晚挂掉页面毫无痕迹。
+    feed.markPollFailure(e)
   } finally {
     if (!silent) loading.value = false
   }

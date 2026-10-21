@@ -8,6 +8,9 @@
       <span class="spacer" />
     </div>
 
+    <!-- T02516（FR-UX-702）：SSE 断流 / 轮询失败常驻提示 + 「立即重连并刷新」入口 -->
+    <FeedHealthBanner :feed="feed" @refresh="feed.refreshNow()" />
+
     <el-card v-loading="loading" shadow="never" class="info-card">
       <el-descriptions :column="3" border>
         <el-descriptions-item label="工作流 ID">{{ detail.workflow_id }}</el-descriptions-item>
@@ -457,6 +460,8 @@ import {
 } from '../../constants/enums'
 import { returnTarget } from '../../utils/urlState'
 import PageBreadcrumb from '../../components/PageBreadcrumb.vue'
+import FeedHealthBanner from '../../components/FeedHealthBanner.vue'
+import { useFeedHealth } from '../../composables/useFeedHealth'
 
 const route = useRoute()
 const router = useRouter()
@@ -485,6 +490,9 @@ function goBack() {
 const loading = ref(false)
 const retrying = ref(false)
 const detail = ref({})
+// T02516（FR-UX-702）：SSE 状态 + 刷新成败的统一记账；onRefresh 复用 loadDetail()
+// （用户主动触发的非 silent 刷新），不新增任何定时器——NFR-UX-03。
+const feed = useFeedHealth({ onRefresh: () => loadDetail() })
 const retryStep = ref('')
 
 // 详情页 6 阶段时间线只展示产出可见的 6 步（publish 不产素材，后端仍会返回其状态）；
@@ -542,9 +550,14 @@ async function loadDetail(silent = false) {
   if (!silent) loading.value = true
   try {
     detail.value = await api.get(`/workflows/${route.params.id}`, { silent })
+    feed.markPollSuccess()
     // 根据最新状态启停轮询：工作流非终态时启动，终态时停止
     startPollingIfNeeded()
-  } catch { /* 拦截器已提示 */ } finally {
+  } catch (e) {
+    // T02516（FR-UX-702）：silent 模式下拦截器把提示一并抑制了，
+    // 「轮询整晚挂掉、页面一直显示旧进度」此前零痕迹——失败只能在这里落到健康度条。
+    feed.markPollFailure(e)
+  } finally {
     if (!silent) loading.value = false
   }
 }

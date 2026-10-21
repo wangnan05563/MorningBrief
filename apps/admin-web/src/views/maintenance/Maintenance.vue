@@ -228,6 +228,7 @@ import {
 } from '@element-plus/icons-vue'
 import api from '../../api'
 import { dangerConfirm } from '../../utils/dangerConfirm'
+import { LONG_TASK_TIMEOUT_MS, isRequestTimeout, longTaskTimeoutText } from '../../utils/requestTimeout'
 
 // 确认文案要给出中文对象名，英文 target 值只用于请求参数（M59）
 const CATEGORY_NAMES = { cache: '缓存清理', database: '数据库清理', logs: '日志清理' }
@@ -363,7 +364,13 @@ async function handleCleanup(category) {
     if (category !== 'cache') {
       payload.days = form.days
     }
-    const data = await api.post(`/maintenance/${category}`, payload)
+    // 长任务专用超时（M62）：这一页的三个「立即执行」都是分钟级操作，
+    // 不能用 api/index.js 的 15s 全局值——否则后端在正常干活，前端先判死。
+    const data = await api.post(`/maintenance/${category}`, payload, {
+      timeout: LONG_TASK_TIMEOUT_MS,
+      // 超时提示由本页按「后端仍在执行」的口径自己给，拦截器再叠一条「timeout of ...」只会误导重复提交
+      silent: true,
+    })
     result.value = data
     const msg = form.dry_run ? '预览完成' : '清理完成'
     ElMessage.success(msg)
@@ -372,8 +379,14 @@ async function handleCleanup(category) {
       await loadStatus()
     }
   } catch (error) {
-    const resp = error?.response?.data || error
-    ElMessage.error(resp?.message || '清理失败')
+    if (isRequestTimeout(error)) {
+      // 关键区分：请求断开 ≠ 任务失败。VACUUM 仍在后端执行且占着写锁，
+      // 这里必须明确禁止重复提交，而不是给一个「重试」按钮。
+      ElMessage.error(longTaskTimeoutText())
+    } else {
+      const resp = error?.response?.data || error
+      ElMessage.error(resp?.message || '清理失败')
+    }
   } finally {
     loading.value = false
   }
