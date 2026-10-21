@@ -69,8 +69,47 @@
         </el-form-item>
       </el-form>
 
+      <!-- T02517（FR-UX-703 / C52）：两张表都补勾选列 + 批量删除。
+           此前只能一行一行点删除，清理一本误入库的书要重复几十次同样动作。
+           明细表按素材 ID 批删，聚合表按书名（含当前频道筛选）整本批删。 -->
+      <div v-if="selectedCount > 0" class="batch-bar">
+        <span class="batch-info">
+          已选 {{ selectedCount }} {{ viewMode === 'book' ? '本书' : '条素材' }}
+          <template v-if="viewMode === 'book' && selectedChapters">（共 {{ selectedChapters }} 章）</template>
+        </span>
+        <div class="batch-actions">
+          <IconButton
+            size="small"
+            type="danger"
+            plain
+            :icon="Delete"
+            :loading="batchDeleting"
+            label="批量删除"
+            desc="删除勾选的素材，需二次确认且不可恢复"
+            @click="onBatchDelete"
+          />
+          <IconButton
+            size="small"
+            link
+            :icon="Close"
+            label="取消选择"
+            desc="清空当前勾选"
+            @click="clearSelection"
+          />
+        </div>
+      </div>
+
       <!-- 明细视图：一条素材一行 -->
-      <el-table data-guide="material-library-table" v-if="viewMode === 'list'" :data="items" v-loading="loading" stripe style="width: 100%">
+      <el-table data-guide="material-library-table"
+        v-if="viewMode === 'list'"
+        ref="itemsTableRef"
+        :data="items"
+        v-loading="loading"
+        stripe
+        style="width: 100%"
+        @selection-change="onItemSelectionChange"
+      >
+        <el-table-column type="selection" width="44" />
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="title" label="标题" min-width="240" show-overflow-tooltip />
         <el-table-column label="来源" width="150" show-overflow-tooltip>
@@ -119,7 +158,17 @@
       </el-table>
 
       <!-- 按书聚合视图（T00775 遗留建议）：一行一本书，点书名下钻到该书全部章节 -->
-      <el-table v-else :data="books" v-loading="loading" stripe style="width: 100%">
+      <el-table
+        v-else
+        ref="booksTableRef"
+        :data="books"
+        v-loading="loading"
+        stripe
+        style="width: 100%"
+        @selection-change="onBookSelectionChange"
+      >
+        <!-- 勾选列与单条「删除整本书」同权限（仅 admin）：给不出删除的行就不给勾选 -->
+        <el-table-column v-if="canOperate" type="selection" width="44" />
         <el-table-column prop="source" label="书名" min-width="240" show-overflow-tooltip />
         <el-table-column prop="category" label="分类" width="120" />
         <el-table-column label="章节" width="150">
@@ -153,7 +202,7 @@
         v-model:current-page="page"
         v-model:page-size="size"
         :total="total"
-        :page-sizes="[20, 50, 100]"
+        :page-sizes="PANEL_PAGE_SIZE_OPTIONS"
         layout="total, sizes, prev, pager, next"
         style="margin-top: 12px; justify-content: flex-end"
         @current-change="load"
@@ -264,6 +313,10 @@
  * T00775：后端 list_materials 返回 { total, list }，本页曾按 `items` 取值 → 列表恒为空
  * （「从素材库加入」能看到书，点「管理素材」却查不到）。取值统一为 `list`，与
  * WorkflowDetail 保持一致；同时支持 ?keyword / ?materialId 深链定位。
+ *
+ * T02517（FR-UX-703 / C52）：明细表与按书聚合表都补上勾选列与「批量删除」，
+ * 清理误入库的一本书不再需要逐行点删除几十次；勾选按视图各自计数（切视图即清空），
+ * 批量删除走后端单事务接口 POST /materials/batch-delete（一次审计日志、一个事务）。
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
@@ -273,6 +326,7 @@ import { formatTime } from '../../utils/format'
 import { useUserStore } from '../../stores/user'
 import { listChannels } from '../../api/channels'
 import { aggregateMaterials } from '../../api/materialLibrary'
+import { PANEL_PAGE_SIZE_OPTIONS } from '../../constants/pagination'
 import {
   MATERIAL_STATUS,
   MATERIAL_MEDIA_TYPE,
@@ -282,6 +336,7 @@ import {
   enumOptions,
 } from '../../constants/enums'
 import {
+  batchDeleteMaterials,
   createMaterial,
   deleteMaterial,
   deleteMaterialsBySource,
@@ -325,6 +380,36 @@ const userStore = useUserStore()
 const canOperate = computed(() => userStore.role === 'admin')
 const deletingBook = ref('')
 
+// T02517（FR-UX-703 / C52）：勾选批量删除状态。两张表各自一份 selection，
+// 计数按「当前视图」取——聚合视图勾了 3 本书，明细表的历史勾选不该跟着冒出来。
+const itemsTableRef = ref(null)
+const booksTableRef = ref(null)
+const selectedItems = ref([])
+const selectedBooks = ref([])
+const batchDeleting = ref(false)
+const selectedCount = computed(() =>
+  viewMode.value === 'book' ? selectedBooks.value.length : selectedItems.value.length,
+)
+/** 勾选书的总章数（确认文案要写清「影响多少条数据」，见 PRD §6.3 确认规范） */
+const selectedChapters = computed(() =>
+  selectedBooks.value.reduce((n, b) => n + (b.chapters || 0), 0),
+)
+
+function onItemSelectionChange(rows) {
+  selectedItems.value = rows
+}
+
+function onBookSelectionChange(rows) {
+  selectedBooks.value = rows
+}
+
+function clearSelection() {
+  selectedItems.value = []
+  selectedBooks.value = []
+  itemsTableRef.value?.clearSelection()
+  booksTableRef.value?.clearSelection()
+}
+
 /** 当前生效的精确定位条件（展示为可清除的提示条） */
 const activeScopes = computed(() => {
   const scopes = []
@@ -341,6 +426,8 @@ function clearScope() {
 
 async function load() {
   loading.value = true
+  // 数据换了一茬，勾选随之作废（T02517）：留着会让「批量删除」删掉用户已经看不见的行
+  clearSelection()
   try {
     if (viewMode.value === 'book') {
       // 按书聚合：一行一本书（source＝书名），点书名下钻进明细视图
@@ -511,6 +598,78 @@ async function onDeleteBook(row) {
   }
 }
 
+/**
+ * T02517（FR-UX-703 / C52）：批量删除勾选的素材 / 整本书。
+ *
+ * 确认文案按 PRD §6.3「动作 + 对象 + 影响条数 + 不可逆声明」写全：明细视图给条数，
+ * 聚合视图给「几本书 / 共几章」——只说「删除 3 条」会让人低估影响。
+ * 未选频道时必须把「跨频道同名书也会被删」讲出来（与后端 sources 那一路的收窄口径一致），
+ * 不能让用户以为删的是当前列表里看到的那几行。
+ */
+async function onBatchDelete() {
+  if (viewMode.value === 'book') {
+    const sources = selectedBooks.value.map((b) => b.source).filter(Boolean)
+    if (!sources.length) return
+    const scopeNote = filters.channel_id ? '' : '（未选频道：各频道下同名书的素材都会被删）'
+    try {
+      await ElMessageBox.confirm(
+        `确定删除勾选的 ${sources.length} 本书（共 ${selectedChapters.value} 章）的全部章节素材？` +
+          `${scopeNote}删除后不可恢复。`,
+        '批量删除整本书',
+        { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
+      )
+    } catch {
+      return
+    }
+    batchDeleting.value = true
+    try {
+      const data = await batchDeleteMaterials({
+        sources,
+        channel_id: filters.channel_id || undefined,
+      })
+      reportBatchDelete(data, sources.length)
+      await load()
+    } finally {
+      batchDeleting.value = false
+    }
+    return
+  }
+
+  const ids = selectedItems.value.map((r) => r.id).filter(Boolean)
+  if (!ids.length) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除勾选的 ${ids.length} 条素材？删除后不可恢复；讲书稿书单中的对应条目取书时会提示书稿缺失。`,
+      '批量删除素材',
+      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  batchDeleting.value = true
+  try {
+    const data = await batchDeleteMaterials({ ids })
+    reportBatchDelete(data, ids.length)
+    await load()
+  } finally {
+    batchDeleting.value = false
+  }
+}
+
+/** 批量删除结果提示：deleted=0 要说「已无匹配素材」，而不是假装成功删了几条 */
+function reportBatchDelete(data, requested) {
+  const deleted = data?.deleted || 0
+  if (!deleted) {
+    ElMessage.info('所选素材已不存在（可能已被其他操作删除），列表已重新查询')
+    return
+  }
+  if (deleted < requested) {
+    ElMessage.warning(`已删除 ${deleted} 条，另有 ${requested - deleted} 条已不存在`)
+    return
+  }
+  ElMessage.success(`已删除 ${deleted} 条素材`)
+}
+
 onMounted(async () => {
   channels.value = await listChannels()
   const qid = Number(route.query.channelId)
@@ -551,6 +710,24 @@ function applyDeepLink() {
 }
 .page-title {
   font-weight: 600;
+}
+/* T02517（C52）：勾选后的批量操作条（仅在已选 > 0 时出现，避免常驻占位） */
+.batch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background: var(--el-fill-color-light);
+  border-radius: 8px;
+}
+.batch-info {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.batch-actions {
+  display: flex;
+  gap: 8px;
 }
 .filter-form {
   margin-bottom: 4px;

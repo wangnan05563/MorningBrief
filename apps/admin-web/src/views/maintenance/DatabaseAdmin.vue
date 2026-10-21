@@ -184,11 +184,14 @@
 
           <!-- 分页 -->
           <div class="pagination">
+            <!-- T02517（NFR-UX-03）：档位收到共享口径（原本自带一个 200 档）。
+                 后端 db_admin 的 limit 允许到 1000，但产品口径是「列表分页尺寸上限 100」——
+                 界面上给得出 200，实际是一次比 NFR 更重的全表读取，不该由一页表格顺手触发。 -->
             <el-pagination
               v-model:current-page="currentPage"
               v-model:page-size="pageSize"
               :total="total"
-              :page-sizes="[20, 50, 100, 200]"
+              :page-sizes="PANEL_PAGE_SIZE_OPTIONS"
               layout="total, sizes, prev, pager, next"
               background
               @size-change="loadRows"
@@ -422,6 +425,7 @@ import {
   cascadePreview, exportRows, importRows, listAuditLogs, previewImport,
 } from '../../api/dbAdmin'
 import { formatTime } from '../../utils/format'
+import { PANEL_PAGE_SIZE_OPTIONS } from '../../constants/pagination'
 import ListLoadError from '../../components/ListLoadError.vue'
 
 // ---- 表列表 ----

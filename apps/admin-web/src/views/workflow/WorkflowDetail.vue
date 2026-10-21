@@ -111,14 +111,19 @@
               </el-table-column>
               <template #empty><el-empty description="本工作流尚未关联素材" :image-size="80" /></template>
             </el-table>
+            <!-- T02517（FR-UX-703 / B3 同类）：面板分页同样给出尺寸选择器。
+                 此前 `:page-size="20"` 写死且 layout 里没有 sizes，
+                 长书稿动辄上百条素材只能 20 行一页翻到底。 -->
             <el-pagination
-              v-if="materials.total > 20"
+              v-if="materials.total > materialsSize"
               v-model:current-page="materialsPage"
+              v-model:page-size="materialsSize"
+              :page-sizes="PANEL_PAGE_SIZE_OPTIONS"
               :total="materials.total"
-              :page-size="20"
-              layout="total, prev, pager, next"
+              layout="total, sizes, prev, pager, next"
               small
               @current-change="loadMaterials"
+              @size-change="handleMaterialsSizeChange"
               class="panel-pagination"
             />
           </div>
@@ -459,6 +464,7 @@ import {
   enumOptions,
 } from '../../constants/enums'
 import { returnTarget } from '../../utils/urlState'
+import { PANEL_PAGE_SIZE_OPTIONS } from '../../constants/pagination'
 import PageBreadcrumb from '../../components/PageBreadcrumb.vue'
 import FeedHealthBanner from '../../components/FeedHealthBanner.vue'
 import { useFeedHealth } from '../../composables/useFeedHealth'
@@ -590,6 +596,14 @@ async function loadPanelData(panelName) {
 // ===== crawl 素材 =====
 const materials = ref({ list: [], total: 0, loading: false })
 const materialsPage = ref(1)
+// T02517（FR-UX-703）：面板分页尺寸改成可选状态（此前模板与请求里各写死一份 20）
+const materialsSize = ref(20)
+
+/** 换尺寸后回到第 1 页：第 5 页 × 20 行换成 100 行/页时第 5 页已不存在 */
+function handleMaterialsSizeChange() {
+  materialsPage.value = 1
+  loadMaterials()
+}
 
 async function loadMaterials() {
   materials.value.loading = true
@@ -599,7 +613,7 @@ async function loadMaterials() {
     const data = await listMaterials({
       channel_id: detail.value.channel_id,
       page: materialsPage.value,
-      size: 20,
+      size: materialsSize.value,
     })
     materials.value.list = data.list || []
     materials.value.total = data.total || 0

@@ -6,7 +6,7 @@
 - 新增/编辑/删除：手动维护素材，需 admin 权限
 """
 import json
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query, UploadFile, File, Form
 from pydantic import BaseModel
@@ -495,6 +495,86 @@ async def delete_material(
     ))
     await db.commit()
     return success(data={"deleted": material_id})
+
+
+# 单次批量删除的目标上限（条 / 本）：超过即拒绝，让调用方分批，
+# 而不是一次把整表行数级别的删除塞进一个事务里
+_BATCH_DELETE_MAX = 200
+
+
+class MaterialBatchDeleteRequest(BaseModel):
+    """批量删除请求体（T02517 / C52，素材库勾选批量删）。
+
+    ids：明细视图勾选的素材 ID；
+    sources：聚合视图勾选的书名（配 channel_id 收窄到当前筛选频道）；
+    两者至少提供一个。action=批量删除不可逆，故上限与审计明细都按「可回溯」口径写。
+    """
+    ids: List[int] = []
+    sources: List[str] = []
+    channel_id: Optional[int] = None
+
+
+@router.post("/batch-delete")
+async def batch_delete_materials(
+    req: MaterialBatchDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """按素材 ID / 书名批量删除素材（T02517，FR-UX-703 / C52）。
+
+    与单条 DELETE /{material_id}、按书名 DELETE /materials 一致采用硬删除
+    （Material 无被引用外键）；ids 与 sources 是**或**的关系——勾选可能横跨
+    明细视图与聚合视图，按书名那一路必须带 channel_id 才收窄（与
+    delete_materials_by_source 同口径），否则同名书会波及其他频道。
+    一条审计日志记录本次范围与总数（NFR-UX-05：关键失败/破坏性操作留结构化痕迹，不含正文）。
+    """
+    ids = [int(i) for i in (req.ids or []) if int(i) > 0]
+    sources = [s.strip() for s in (req.sources or []) if s and s.strip()]
+    if not ids and not sources:
+        raise BizError(code=400, message="ids 与 sources 至少提供一个")
+    if len(ids) + len(sources) > _BATCH_DELETE_MAX:
+        raise BizError(
+            code=400,
+            message=f"单次最多删除 {_BATCH_DELETE_MAX} 条/本，当前 {len(ids) + len(sources)}",
+        )
+
+    target_ids: set = set()
+    if ids:
+        rows = (await db.execute(select(Material.id).where(Material.id.in_(ids)))).scalars().all()
+        target_ids.update(rows)
+    if sources:
+        conds = [Material.source.in_(sources)]
+        if req.channel_id is not None:
+            conds.append(Material.channel_id == req.channel_id)
+        rows = (await db.execute(select(Material.id).where(*conds))).scalars().all()
+        target_ids.update(rows)
+
+    if not target_ids:
+        # 一条都没命中不报错：勾选后数据已被他人删除是正常并发场景，
+        # 前端按 deleted=0 提示「已无匹配素材」并刷新列表即可
+        return success(data={"deleted": 0, "requested": len(ids) + len(sources)})
+
+    for mid in sorted(target_ids):
+        obj = await db.get(Material, mid)
+        if obj is not None:
+            await db.delete(obj)
+    db.add(AuditLog(
+        category="material",
+        action="batch_delete",
+        target=f"count={len(target_ids)}",
+        operator=admin.username,
+        detail=json.dumps(
+            {
+                "ids": ids,
+                "sources": sources,
+                "channel_id": req.channel_id,
+                "deleted_count": len(target_ids),
+            },
+            ensure_ascii=False,
+        ),
+    ))
+    await db.commit()
+    return success(data={"deleted": len(target_ids), "requested": len(ids) + len(sources)})
 
 
 @router.post("/upload")

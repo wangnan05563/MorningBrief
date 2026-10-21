@@ -18,6 +18,53 @@
       :description="invalidParams.map((p) => `${p.key}=${p.raw}（${p.reason}）`).join('；')"
     />
 
+    <!-- T02517（FR-UX-703 / B4）：工作流 ID 筛选。后端 list_reviews 一直支持
+         `workflow_id` 精确过滤（reviews.py:44），但界面上没有任何入口，
+         定位某一条只能盲翻页。筛选条件跟着 URL 走（同 tab/page/size），
+         刷新与分享都不会丢。审核人/日期/频道筛选后端尚无参数，未在此假装有。 -->
+    <el-form :inline="true" class="filter-form" data-guide="review-filters">
+      <el-form-item label="工作流 ID">
+        <el-input
+          v-model="filters.workflow_id"
+          placeholder="按工作流 ID 精确定位"
+          clearable
+          style="width: 240px"
+          @keyup.enter="onFilterSearch"
+          @clear="onFilterSearch"
+        />
+      </el-form-item>
+      <el-form-item>
+        <IconButton
+          type="primary"
+          size="small"
+          :loading="loading"
+          :icon="Search"
+          label="搜索"
+          desc="按当前工作流 ID 查询审核记录"
+          @click="onFilterSearch"
+        />
+        <IconButton
+          size="small"
+          :icon="RefreshLeft"
+          label="重置"
+          desc="清空工作流 ID 筛选"
+          @click="onFilterReset"
+        />
+      </el-form-item>
+    </el-form>
+
+    <!-- T02517（B6）：加载失败必须上屏。此前空 catch 块只靠拦截器一条 toast，
+         list/total 保持旧值既不清空也不标注，用户分不清「刷新失败但残留旧数据」与「正常」。
+         已有旧数据时由 ListLoadError 的 stale 文案说明「下方是上次成功的数据」，
+         绝不把它渲染成「暂无待审核稿件」。 -->
+    <ListLoadError
+      v-if="listError"
+      :message="listError"
+      :stale="list.length > 0"
+      :retrying="loading"
+      @retry="loadList"
+    />
+
     <!-- 批量操作栏：仅在待审核 tab 显示，选中后才可操作 -->
     <div v-if="activeTab === 'pending'" class="batch-bar">
       <span class="batch-info" v-if="selectedRows.length > 0">
@@ -111,17 +158,23 @@
           <IconButton type="primary" size="small" :icon="View" label="审核" desc="进入该稿件的审核详情" @click="goReview(row.id)" />
         </template>
       </el-table-column>
-      <template #empty><el-empty :description="emptyText" :image-size="90" /></template>
+      <!-- 失败时不能再说「暂无…稿件」：那会把「接口挂了」伪装成「没有数据」（B6 / PRD §6.5），
+           与 ChannelManagement（T02496）同一口径：错误态存在就不渲染空态文案 -->
+      <template #empty><el-empty v-if="!listError" :description="emptyText" :image-size="90" /></template>
     </el-table>
 
     <div class="pagination-wrap">
+      <!-- T02517（B3）：补 sizes 选择器。此前 size 固定 10 且 layout 里没有 sizes，
+           每天几百条时只能 10 行一页反复翻；上限按 NFR-UX-03 收在 100（后端 le=100）。 -->
       <el-pagination data-guide="review-pagination"
         v-model:current-page="page"
-        :page-size="size"
+        v-model:page-size="size"
+        :page-sizes="PAGE_SIZE_OPTIONS"
         :total="total"
-        layout="prev, pager, next, total"
+        layout="total, sizes, prev, pager, next"
         background
         @current-change="loadList"
+        @size-change="handleSizeChange"
       />
     </div>
   </div>
@@ -140,17 +193,21 @@
  * - **tab/page/size 写入 URL**（T02511 / FR-UX-602 / ACC-UX-601#3）：刷新
  *   `/review?tab=approved&page=3` 仍在原状态，链接可分享可收藏；等于默认值的
  *   参数不写进 URL，非法参数回落默认值并在页内点名（见 composables/useUrlState.js）
+ * - T02517（FR-UX-703）：分页尺寸可选（B3，上限 100 见 NFR-UX-03）、工作流 ID 筛选
+ *   并同样持久化到 URL（B4）、加载失败上屏错误态 + 重试且保留旧数据标注（B6）
  */
-import { ref, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Select, Close, View } from '@element-plus/icons-vue'
+import { Select, Close, View, Search, RefreshLeft } from '@element-plus/icons-vue'
 import api from '../../api'
 import { batchHandleReviewAction } from '../../api/reviews'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { formatTime } from '../../utils/format'
 import { REVIEW_STATUS, enumLabel, enumTagType } from '../../constants/enums'
+import { PAGE_SIZE_OPTIONS, MAX_PAGE_SIZE, clampPageSize } from '../../constants/pagination'
 import { useUrlState } from '../../composables/useUrlState'
 import { detailLocation } from '../../utils/urlState'
+import ListLoadError from '../../components/ListLoadError.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -161,28 +218,63 @@ const list = ref([])
 const total = ref(0)
 const page = ref(1)
 const size = ref(10)
+// T02517（B6）：列表加载失败原因（空字符串=无失败）。失败时**保留** list 里的旧数据，
+// 由错误态组件注明「下方为上次成功加载的数据」，不谎报「暂无数据」。
+const listError = ref('')
+// T02517（B4）：筛选条件（后端 list_reviews 目前只支持 workflow_id，其余不假装有）
+const filters = reactive({ workflow_id: '' })
 
 // URL 参数规格。tab 的白名单**只放这三个**：el-tabs 只渲染三个 pane，
 // 把 enum 全量（含 replaced）放进去会让 `?tab=replaced` 通过校验却渲染出空表格。
 // page.max 在拿到 total 之后动态改写（深链 ?page=999 应落到最后一页，而不是空表）。
+// size.max 按 NFR-UX-03 收在 100（后端 reviews/materials 都是 le=100，给更大只会被静默钳回）。
 const URL_SPECS = {
   tab: { default: 'pending', enum: ['pending', 'approved', 'rejected'] },
   page: { default: 1, type: 'int', min: 1 },
-  size: { default: 10, type: 'int', min: 1 },
+  size: { default: 10, type: 'int', min: 1, max: MAX_PAGE_SIZE },
+  workflow_id: { default: '', maxLength: 64, pattern: '^[A-Za-z0-9_-]+$' },
 }
 const urlState = useUrlState(URL_SPECS, () => ({
   tab: activeTab.value,
   page: page.value,
   size: size.value,
+  workflow_id: filters.workflow_id,
 }), { onExternalChange: applyFromUrl })
+
+/**
+ * 把地址栏/内部 size 值收敛到可选尺寸（T02517）。
+ *
+ * `?size=7` 是合法整数（过得了 parseInteger），但选择器里没有 7 这一档：
+ * 原样发请求会渲染出「7 行 + 一个显示不出当前值的尺寸选择器」。
+ * 这里就近取允许值，并把校正过程记进 invalidParams，地址栏与界面最终一致。
+ */
+function resolveSize(raw) {
+  const n = Number(raw)
+  const clamped = clampPageSize(n)
+  sizeClamp.value =
+    Number.isFinite(n) && n > 0 && n !== clamped
+      ? {
+          key: 'size',
+          raw: String(raw),
+          reason: `不在可选尺寸 ${PAGE_SIZE_OPTIONS.join('/')} 中：已按 ${clamped} 处理`,
+        }
+      : null
+  return clamped
+}
 
 /** 地址栏被外部改动（手改 URL / 前进后退）时：把校验后的值灌回状态并重载 */
 function applyFromUrl(values) {
+  const nextSize = resolveSize(values.size)
+  const nextWorkflowId = values.workflow_id || ''
   const changed =
-    values.tab !== activeTab.value || values.page !== page.value || values.size !== size.value
+    values.tab !== activeTab.value ||
+    values.page !== page.value ||
+    nextSize !== size.value ||
+    nextWorkflowId !== filters.workflow_id
   activeTab.value = values.tab
   page.value = values.page
-  size.value = values.size
+  size.value = nextSize
+  filters.workflow_id = nextWorkflowId
   if (changed) loadList()
 }
 
@@ -190,9 +282,14 @@ function applyFromUrl(values) {
 // 页码越界的校正另存一份：`urlState.invalid` 由 useUrlState 在每次读 URL 时整体重写，
 // 而我们钳制完就会回写 URL —— 写进 invalid 的补记会当场被清掉，提示永远出不来。
 const pageClamp = ref(null)
-const invalidParams = computed(() =>
-  pageClamp.value ? [...urlState.invalid.value, pageClamp.value] : urlState.invalid.value,
-)
+// 同上：size 不在允许档位里的钳制补记（T02517）
+const sizeClamp = ref(null)
+const invalidParams = computed(() => {
+  const extra = []
+  if (pageClamp.value) extra.push(pageClamp.value)
+  if (sizeClamp.value) extra.push(sizeClamp.value)
+  return extra.length ? [...urlState.invalid.value, ...extra] : urlState.invalid.value
+})
 
 // 空态文案跟着 tab 走：在「已通过」tab 下写「暂无待审核稿件」是自相矛盾的
 // （与移动端 I48 同源的那类错误——空态引错文案会让人以为系统没数据）。
@@ -216,7 +313,13 @@ async function loadList() {
     // 用固定轮次而不是递归，`?page=999` 这种地址不会把请求打成无限循环。
     for (let attempt = 0; attempt < 2; attempt++) {
       const data = await api.get('/reviews', {
-        params: { status: activeTab.value, page: page.value, size: size.value },
+        params: {
+          status: activeTab.value,
+          page: page.value,
+          size: size.value,
+          // T02517（B4）：后端一直支持 workflow_id 精确过滤，界面此前没有入口
+          workflow_id: filters.workflow_id || undefined,
+        },
       })
       list.value = data.list
       total.value = data.total
@@ -241,12 +344,41 @@ async function loadList() {
       if (attempt === 0) pageClamp.value = null
       break
     }
+    listError.value = ''
     urlState.pushToUrl()
-  } catch {
-    // 错误提示由拦截器统一处理
+  } catch (e) {
+    // 错误三件套（PRD §6.1）：拦截器已经发过一次去重 toast，这里补「页内错误态 + 控制台留痕」。
+    // ⚠ 不清空 list：请求失败时表格里的仍是上次成功的数据，把它抹掉等于把
+    // 「刷新失败」伪装成「没有数据」（B6 的原始症状）。
+    listError.value = e?.response?.data?.message || e?.message || String(e) || '未知错误'
+    console.error('[review] 列表加载失败', {
+      status: e?.response?.status,
+      tab: activeTab.value,
+      page: page.value,
+      size: size.value,
+      workflow_id: filters.workflow_id || null,
+      message: listError.value,
+    })
   } finally {
     loading.value = false
   }
+}
+
+/** 改分页尺寸：回到第 1 页再取（第 8 页 × 10 行换成 100 行/页时，第 8 页已不存在） */
+function handleSizeChange() {
+  page.value = 1
+  loadList()
+}
+
+/** 筛选查询：条件变了必须回第 1 页，否则「筛完落在第 3 页」是个空表 */
+function onFilterSearch() {
+  page.value = 1
+  loadList()
+}
+
+function onFilterReset() {
+  filters.workflow_id = ''
+  onFilterSearch()
 }
 
 // 切换 tab 重置分页再加载
@@ -258,12 +390,13 @@ function handleTabChange() {
   loadList()
 }
 
-// 深链优先：URL 上有 tab/page/size 就按 URL 起（非法值由 readFromUrl 回落并记录）
+// 深链优先：URL 上有 tab/page/size/workflow_id 就按 URL 起（非法值由 readFromUrl 回落并记录）
 onMounted(() => {
   const v = urlState.readFromUrl()
   activeTab.value = v.tab
   page.value = v.page
-  size.value = v.size
+  size.value = resolveSize(v.size)
+  filters.workflow_id = v.workflow_id || ''
   loadList()
 })
 

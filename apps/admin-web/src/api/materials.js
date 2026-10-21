@@ -22,6 +22,10 @@ export const deleteMaterial = (id) => api.delete(`/materials/${id}`)
 export const deleteMaterialsBySource = (source, channelId) =>
   api.delete('/materials', { params: { source, channel_id: channelId } })
 
+// T02517（FR-UX-703 / C52）：一次事务内按素材 ID / 书名批量删除（素材库勾选批量删）
+// payload: { ids?: number[], sources?: string[], channel_id?: number|null }，两者至少给一个
+export const batchDeleteMaterials = (payload) => api.post('/materials/batch-delete', payload)
+
 // ===== 多输入渠道 =====
 
 // 本地文件上传：file 为 File 对象，channel_id / source / category 为表单字段
