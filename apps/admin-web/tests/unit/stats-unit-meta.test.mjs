@@ -92,6 +92,27 @@ describe('INT-UX-03 两个统计页接的是 meta，不是写死单位', () => {
     assert.doesNotMatch(RSS_VIEW, /label="连续失败"/, '表头写死，meta.consecutive_failures 白下发')
   })
 
+  it('LLM 页把登记表里的每个指标都渲染出来，单位字不再写死', () => {
+    const registry = readFileSync(
+      new URL('../../../../backend/app/services/stats_metrics.py', import.meta.url),
+      'utf8',
+    )
+    const listed = registry.match(/LLM_METRICS = \[([\s\S]*?)\]/)?.[1]
+    assert.ok(listed, '后端登记表里应能解析出 LLM_METRICS')
+    const expected = listed.match(/"[a-z_]+"/g).map((s) => s.replaceAll('"', '')).sort()
+
+    // 页面渲染的指标键 = 率卡的 rate('key'…) + 计数卡 legacy 里的键
+    const rates = [...LLM_VIEW.matchAll(/rate\('([a-z_]+)'/g)].map((m) => m[1])
+    const legacyBlock = LLM_VIEW.match(/const legacy = \{([\s\S]*?)\n  \}/)?.[1]
+    assert.ok(legacyBlock, 'LLM 页应保留计数卡字段清单（缺 meta 时的退回文案）')
+    const counts = [...legacyBlock.matchAll(/([a-z_]+):/g)].map((m) => m[1])
+    assert.deepEqual([...rates, ...counts].sort(), expected, '登记表加了指标但页面没渲染')
+
+    assert.doesNotMatch(LLM_VIEW, /\} 次调用/, '计数单位写死在页面里')
+    assert.match(LLM_VIEW, /metricLabel\(meta\[key\]\)/)
+    assert.match(LLM_VIEW, /metricValue\(metrics\.value\[key\], meta\[key\]\)/)
+  })
+
   it('频道健康页的单位字取自 meta，不再写死「条」', () => {
     assert.match(CHANNEL_VIEW, /meta\.value\.count\?\.display\?\.unit/)
     assert.match(CHANNEL_VIEW, /\$\{ctx\.parsed\.y\} \$\{countUnit\.value\}/)

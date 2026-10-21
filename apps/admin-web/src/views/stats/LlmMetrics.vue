@@ -97,7 +97,7 @@ import dayjs from 'dayjs'
 import { Refresh } from '@element-plus/icons-vue'
 import api from '../../api'
 import { cumulativeScopeText, uptimeText as formatUptime } from '../../utils/scope'
-import { metricText } from '../../utils/format'
+import { metricLabel, metricText, metricValue } from '../../utils/format'
 
 const loading = ref(false)
 // 默认全 0，避免空态时 computed 除零报错
@@ -141,6 +141,7 @@ const uptimeNote = computed(() =>
 // 阈值判定仍用原始值：rateClass 的 50/30 分界是按百分数写的业务口径，与展示换算无关。
 const rateCards = computed(() => {
   const meta = metrics.value.meta || {}
+  const countUnit = meta.total_calls?.display?.unit || '次'
   const rate = (key, label, subKey) => ({
     key,
     label,
@@ -149,19 +150,28 @@ const rateCards = computed(() => {
     cls: rateClass(key.replace('_rate', ''), metrics.value[key]),
   })
   return [
-    rate('trigger_rate', '触发率', `${metrics.value.triggered} / ${metrics.value.total_calls} 次调用`),
-    rate('improve_rate', '改善率', `${metrics.value.improved} / ${metrics.value.triggered} 次触发`),
-    rate('not_improve_rate', '未改善率', `${metrics.value.not_improved} / ${metrics.value.triggered} 次触发`),
+    rate('trigger_rate', '触发率', `${metrics.value.triggered} / ${metrics.value.total_calls} ${countUnit}调用`),
+    rate('improve_rate', '改善率', `${metrics.value.improved} / ${metrics.value.triggered} ${countUnit}触发`),
+    rate('not_improve_rate', '未改善率', `${metrics.value.not_improved} / ${metrics.value.triggered} ${countUnit}触发`),
   ]
 })
 
-// 原始计数卡：四项基础计数
-const countCards = computed(() => [
-  { key: 'total_calls', label: '总调用次数', value: metrics.value.total_calls },
-  { key: 'triggered', label: '触发重试次数', value: metrics.value.triggered },
-  { key: 'improved', label: '改善次数', value: metrics.value.improved },
-  { key: 'not_improved', label: '未改善次数', value: metrics.value.not_improved },
-])
+// 原始计数卡：4 项基础指标（标签与单位取自 meta，数值走千分位分组）
+const countCards = computed(() => {
+  const meta = metrics.value.meta || {}
+  // 缺 meta 时退回旧文案/裸数值：计数本身不含换算，不至于因为没单位就空着
+  const legacy = {
+    total_calls: '总调用次数',
+    triggered: '触发重试次数',
+    improved: '改善次数',
+    not_improved: '未改善次数',
+  }
+  return Object.entries(legacy).map(([key, label]) => ({
+    key,
+    label: meta[key] ? metricLabel(meta[key]) : label,
+    value: meta[key] ? metricValue(metrics.value[key], meta[key]) : metrics.value[key],
+  }))
+})
 
 // 漏斗可视化：按比例递减展示 total → triggered → improved
 // 宽度按相对 total 的占比计算，最小 20% 保证可读
