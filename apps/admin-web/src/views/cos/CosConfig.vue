@@ -16,7 +16,7 @@
       <IconButton
         type="primary"
         :loading="saving"
-        :disabled="!configReady"
+        :disabled="!configReady || valuesNotLoaded"
         label="保存配置"
         desc="保存并热更新 COS 配置"
         :icon="Check"
@@ -31,6 +31,24 @@
       :draft-blocked="draftBlocked"
       @retry="retryLoad"
     />
+
+    <!-- INT-UX-04 / T02527：接口成功也要说清值是从哪来的。
+         读表失败给禁存理由；库里没记录时说明屏上是 .env 回落值，保存会把它们固化进库。 -->
+    <el-alert
+      v-if="valuesNotLoaded"
+      data-guide="cos-config-load-error"
+      type="error"
+      :closable="false"
+      show-icon
+      style="margin-bottom: 16px"
+    >
+      配置表读取失败，已禁止保存：{{ provenance.load_error || '未返回原因' }}
+    </el-alert>
+    <div v-else-if="provenance.loaded === true" class="config-provenance" data-guide="cos-config-provenance">
+      <span v-if="updatedAtText">库里最后一次修改：{{ updatedAtText }}</span>
+      <span v-else>库里暂无记录</span>
+      <el-tag v-if="fallbackNote" type="warning" effect="light" size="small">{{ fallbackNote }}</el-tag>
+    </div>
 
     <!-- 连接测试结果 -->
     <el-alert
@@ -181,6 +199,29 @@ const enableDraft = trackDraft(form, { excludePaths: ['secret_id', 'secret_key']
 const status = ref({ configured: false, bucket: '', region: '', cdn_domain: '' })
 const testResult = ref(null)
 
+// INT-UX-04 / T02527：请求成功 ≠ 屏幕上这几个值是库里存的那份。
+// get_config_for_frontend 对取不到的字段回落到 Settings(.env)，旧响应里
+// 「表是空的」和「表里有五条」长得一模一样；管理员在这种页面上点保存，
+// 会把 .env 的旧值静默固化进库。loaded=false 时禁存，fallback_fields 负责说明来源。
+const provenance = ref({ loaded: null, load_error: null, updated_at: null, fallback_fields: [] })
+const valuesNotLoaded = computed(() => provenance.value.loaded === false)
+const fallbackLabels = {
+  secret_id: 'SecretId',
+  secret_key: 'SecretKey',
+  region: '地域',
+  bucket: '存储桶',
+  cdn_domain: 'CDN 域名',
+}
+const fallbackNote = computed(() => {
+  const fields = provenance.value.fallback_fields || []
+  if (!fields.length) return ''
+  return `以下值来自环境变量回落，库里并未保存：${fields.map((f) => fallbackLabels[f] || f).join('、')}`
+})
+const updatedAtText = computed(() => {
+  const at = provenance.value.updated_at
+  return at ? at.replace('T', ' ') : ''
+})
+
 // 腾讯云 COS 常见地域
 const regions = [
   { value: 'ap-guangzhou', label: 'ap-guangzhou（广州）' },
@@ -210,7 +251,17 @@ async function loadConfig() {
   loading.value = true
   try {
     const [cfg, st] = await Promise.all([getCosConfig(), getCosStatus()])
-    if (cfg) Object.assign(form.value, cfg)
+    if (cfg) {
+      // 来源信息不进 form：表单只放可编辑的五个字段，否则草稿/提交体会混入元数据
+      const { loaded, load_error, updated_at, fallback_fields, ...values } = cfg
+      Object.assign(form.value, values)
+      provenance.value = {
+        loaded: loaded ?? null,
+        load_error: load_error ?? null,
+        updated_at: updated_at ?? null,
+        fallback_fields: fallback_fields || [],
+      }
+    }
     if (st) status.value = st
     return cfg ?? null
   } finally {
@@ -244,6 +295,10 @@ async function retryLoad() {
 async function handleSave() {
   if (!configLoad.isReady.value) {
     ElMessage.error('配置未加载成功，已禁止保存（会用默认值覆盖线上配置）')
+    return
+  }
+  if (valuesNotLoaded.value) {
+    ElMessage.error(`配置表读取失败（${provenance.value.load_error || '原因未知'}），已禁止保存`)
     return
   }
   saving.value = true
@@ -295,6 +350,15 @@ onMounted(async () => {
     align-items: center;
     justify-content: flex-end;
     margin-bottom: 16px;
+  }
+
+  .config-provenance {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: $color-text-secondary;
   }
 
   .config-form {
