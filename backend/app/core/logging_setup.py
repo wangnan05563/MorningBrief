@@ -12,6 +12,7 @@
 """
 import logging
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -21,6 +22,41 @@ from loguru import logger
 from app.core.request_context import get_request_id
 
 _configured = False
+
+# ---- 第三方内部日志封顶 ----
+# 根因（NFR-UX-05 日志抽样，2026-10-08 那两天刷出 195MB）：本模块把 InterceptHandler
+# 挂在 root 上且 root.setLevel(0)，文件 sink 又固定 level="DEBUG"，于是所有第三方库的
+# DEBUG/INFO 内部日志都原样落盘。实测后果有两层：
+#   1. 凭据落盘 —— 抽样命中 2538 行 COS v5 签名字符串
+#      `q-sign-algorithm=sha1&q-ak=<SecretId>&...&q-signature=<签名>`，
+#      以及 18 行 SQLAlchemy 异常回显的 `[SQL: ...] [parameters: ...]`（绑定参数=真实写入值）。
+#   2. 磁盘被内部日志淹没，真正的关键失败行反而看不见。
+# 这些库的 DEBUG 不是本项目产生的，业务排障不依赖它们，故一律封到 WARNING；
+# 需要临时打开时按库名单调本表，不要改 root。
+NOISY_LOGGERS: tuple[str, ...] = (
+    "sqlalchemy",     # engine echo 会连 SQL 文本 + 绑定参数一起打 INFO/DEBUG
+    "sqlalchemy.engine",
+    "sqlalchemy.pool",
+    "aiosqlite",      # 驱动层 DEBUG 把 cursor.execute(sql, params) 整参回显（实测含明文配置值）
+    "cos",            # COS SDK 打整条 Authorization 签名
+    "qcloud",
+    "httpx",
+    "httpcore",
+    "urllib3",
+    "asyncio",
+    "watchfiles",
+    "multipart",
+)
+_NOISY_FLOOR = logging.WARNING
+
+
+def _cap_noisy_loggers() -> None:
+    """把第三方命名空间的标准库 logger 封到 WARNING（已更严格的保持不动）。"""
+    for name in NOISY_LOGGERS:
+        lg = logging.getLogger(name)
+        # max() 而非 getEffectiveLevel()：level=0 是 NOTSET（继承 root=0），
+        # 直接取 max 就把它抬到 WARNING；调用方已设得更严（如 ERROR）时保持不动。
+        lg.setLevel(max(lg.level, _NOISY_FLOOR))
 
 
 def _make_rotation(max_mb: int):
@@ -136,22 +172,116 @@ class InterceptHandler(logging.Handler):
         except ValueError:
             level = record.levelno
 
-        # 回溯到真正的调用栈帧，而非本 emit 方法
-        frame, depth = logging.currentframe(), 2
-        while frame and frame.f_code.co_filename == logging.__file__:
+        # 回溯到真正的调用栈帧，而非本 emit 方法（loguru 官方给的配方）。
+        # NFR-UX-05（T02523）修前的坑：循环判断的是「当前帧在不在 logging 里」，
+        # 而当前帧是本 emit（不在 logging.__file__）⇒ 一次都不前进，depth 恒为 2，
+        # 每条桥接日志的 {name}:{function}:{line} 全被写成 logging:callHandlers:1762。
+        # 上面那 2538 行明文凭据因此查不出是谁打的 —— 归属错乱本身就是可观测性缺陷。
+        # 首帧无条件前进（depth==0 分支）才是关键：emit 自己不在 logging 里，
+        # 少了这一步就永远停在标准库内部帧上。
+        frame, depth = logging.currentframe(), 0
+        while frame and (depth == 0 or frame.f_code.co_filename == logging.__file__):
             frame = frame.f_back
             depth += 1
 
-        logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
+        # 把标准库 logger 名带上，供下游按来源过滤/检索（loguru 的 {name} 是模块路径，
+        # 拿不到 `logging.getLogger("cos")` 这种自定义名字）。
+        # record.getMessage() 是 `msg % args`：占位符与参数不匹配时它会抛 TypeError。
+        # 桥接器一旦让它抛出，异常会沿 callHandlers 冒回**业务调用点** ——
+        # 抽到的真实样本正是这样：main 的 `[startup] 加载 AI 配置失败: not all arguments
+        # converted during string formatting`，一条写歪的日志把整段配置加载打回 .env 默认值。
+        # 标准库的契约是 handler 失败不外泄（handleError），这里照办。
+        try:
+            message = record.getMessage()
+        except Exception as exc:
+            self.handleError(record)
+            # 不回显 record.args —— 那正是可能躺着凭据的部分
+            message = f"[日志格式化失败 type={type(exc).__name__}] msg={record.msg!r}"
+
+        try:
+            logger.bind(stdlib_logger=record.name).opt(
+                depth=depth, exception=record.exc_info
+            ).log(level, message)
+        except Exception:
+            self.handleError(record)
+
+
+# ---- 落盘前凭据脱敏（兜底层）----
+# _cap_noisy_loggers 挡的是「第三方自己打的凭据」；这里挡的是「凭据从任何来源
+# 挤进一行日志」的路径 —— 例如 app/core/exceptions.py 把 SQLAlchemy 异常原样
+# `{exc}` 插进消息，异常文本自带 `[SQL: ...] [parameters: ...]` 绑定参数。
+# 按形状遮而不是按字段遮：日志到了这一层已经是一行字符串，无法再区分键值语义。
+_REDACT_TRIGGERS = (
+    "q-ak", "akid", "sk-", "key", "token", "secret", "password", "passwd",
+    "bearer", "signature", "parameters:", "$2a$", "$2b$", "$2y$",
+)
+
+_REDACT_RULES: tuple[tuple[re.Pattern, str], ...] = (
+    # COS SecretId 裸形态、私钥块
+    (re.compile(r"\bAKID[A-Za-z0-9]{8,}"), "AKID<已脱敏>"),
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), "<私钥块已脱敏>"),
+    # 通用 `key: value` / `key=value` 形态的凭据值
+    (
+        re.compile(
+            r"(?i)(api[_-]?key|apikey|access[_-]?key|secret[_-]?key|secret[_-]?id|"
+            r"password|passwd|token|authorization|q-ak|q-signature)"
+            r"""(["']?\s*[=:]\s*["']?)"""
+            r"""([^\s"',;&]{4,})"""
+        ),
+        r"\1\2<已脱敏>",
+    ),
+    # 裸形态
+    (re.compile(r"\bsk-[A-Za-z0-9_\-]{6,}"), "sk-<已脱敏>"),
+    (re.compile(r"(?i)\bBearer\s+[A-Za-z0-9\-._~+/]{8,}"), "Bearer <已脱敏>"),
+    (re.compile(r"\$2[aby]\$\d{2}\$[./A-Za-z0-9]{20,}"), "bcrypt<已脱敏>"),
+    # SQLAlchemy 异常回显：保留「有条 SQL 出错」这件事，丢掉绑定参数
+    (re.compile(r"\[parameters: .*?\](?=\s*(?:\n|$))", re.S), "[parameters: <已脱敏>]"),
+)
+
+
+def redact_credentials(message: str) -> str:
+    """把消息里长得像凭据的片段换成占位符。
+
+    先用一次子串预检再跑正则：日志量大时（单日曾达 68MB）逐条跑十条正则是纯浪费，
+    而绝大多数行本来就不含凭据形状。
+    """
+    low = message.lower()
+    if not any(t in low for t in _REDACT_TRIGGERS):
+        return message
+    for pattern, repl in _REDACT_RULES:
+        message = pattern.sub(repl, message)
+    return message
+
+
+def unwrap_echo_exception(exc: BaseException | None) -> BaseException | None:
+    """把 SQLAlchemy 的「回显型」包装异常换成底层 DBAPI 异常，供记日志用。
+
+    为什么单独处理：redact_credentials 只能遮 record["message"]，而 loguru 渲染堆栈时
+    用的是异常对象自己的字符串，绕不过去。SQLAlchemy 的 DBAPIError.__str__ 恰好把
+    `[SQL: ...] [parameters: ...]` 拼进去（抽样实测 18 行），等于堆栈一落盘就把本次写入
+    的绑定参数（含凭据列明文）抄进日志。底层 `exc.orig`（如 sqlite3.IntegrityError）
+    带同样的错误语义但不带参数，堆栈与局部变量信息也不受影响。
+    """
+    if exc is None:
+        return None
+    if not type(exc).__module__.startswith("sqlalchemy"):
+        return exc
+    return getattr(exc, "orig", None) or exc
 
 
 def _patcher(record) -> None:
-    """loguru patcher：每条日志记录前自动从 ContextVar 注入 request_id。
+    """loguru patcher：注入 request_id，并在写盘前遮掉凭据形状。
 
     业务代码只需 `from loguru import logger; logger.info("...")`，
     无需手动 bind request_id。
     """
     record["extra"]["request_id"] = get_request_id() or "-"
+    # 桥接记录由 InterceptHandler.bind() 带上标准库 logger 名；loguru 直发记录补个占位，
+    # 否则文件格式里的 {extra[stdlib_logger]} 会在第一条业务日志上 KeyError。
+    record["extra"].setdefault("stdlib_logger", "-")
+    msg = record["message"]
+    if isinstance(msg, str):
+        record["message"] = redact_credentials(msg)
 
 
 
@@ -231,7 +361,8 @@ def setup_logging(
                 "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
                 "{level: <8} | "
                 "[req={extra[request_id]}] | "
-                "{name}:{function}:{line} - {message}"
+                "{name}:{function}:{line} | src={extra[stdlib_logger]} - "
+                "{message}"
             ),
             rotation=_make_rotation(log_file_max_mb),
             retention=f"{max(1, int(retention_days))} days",
@@ -259,7 +390,59 @@ def setup_logging(
     root_logger.handlers = [InterceptHandler()]
     root_logger.setLevel(0)  # 不过滤，由 loguru sink 的 level 决定最终输出
 
+    # 第三方命名空间单独封顶 —— root.setLevel(0) + 文件 sink level="DEBUG" 的组合
+    # 会让 sqlalchemy/COS SDK 的内部日志（含签名字符串与 SQL 绑定参数）原样落盘。
+    _cap_noisy_loggers()
+
 
 def get_logger():
     """获取已配置的 loguru logger。"""
     return logger
+
+
+# ---- 关键失败的结构化日志出口（NFR-UX-05）----
+# PRD 点名的四类关键失败（配置加载 / 停服 / 导入 / 自动审批）原先各处写法不一：
+# 有的只有 `... 失败: {str(e)}` 一行（抽到的真实样本「加载 AI 配置失败: not all
+# arguments converted during string formatting」就是这样 —— 没有异常类型、没有堆栈，
+# 事后完全查不出抛点），有的干脆不落日志。统一走这里，日志里可按 `域=` 直接检索。
+KEY_FAILURE_DOMAINS = ("config_load", "shutdown", "import", "auto_approve")
+
+
+def log_key_failure(
+    *,
+    domain: str,
+    event: str,
+    exc: BaseException | None = None,
+    level: str = "error",
+    with_traceback: bool = True,
+    **fields,
+) -> None:
+    """写一条 `[关键失败] domain=… event=… k=v … exc_type=…` 的结构化日志。
+
+    Args:
+        domain: 关键失败域，取 KEY_FAILURE_DOMAINS 之一；写错不阻断业务，但会被断言测试挡住。
+        event: 具体事件（中文可读，如「加载 AI 配置」）。
+        exc: 触发的异常。给了就带上异常类型字段，并按需附堆栈。
+        level: loguru 级别名；启动期可降级的失败用 warning，真正失败用 error。
+        with_traceback: 只想要一行时（如逐行导入失败）可关掉，避免日志被堆栈淹没。
+        fields: 定位用的字段，**只放 id / 表名 / 行号这类坐标**，不要放值或凭据
+            （落盘前 redact_credentials 会兜一道，但兜底不是随便传的理由）。
+    """
+    parts = [f"[关键失败] domain={domain} event={event}"]
+    for key in sorted(fields):
+        parts.append(f"{key}={fields[key]}")
+    logged_exc = unwrap_echo_exception(exc)
+    if exc is not None:
+        parts.append(f"exc_type={type(logged_exc).__name__}")
+        parts.append(f"exc_msg={logged_exc}")
+    message = " ".join(parts)
+    # depth=1：不抬高栈帧的话，{name}:{function}:{line} 会全指向本模块的 log_key_failure，
+    # 等于把刚修好的调用点归属又弄丢一次。
+    # level 必须大写：loguru 校验的是 "WARNING"/"ERROR" 这类名字，传 "warning" 直接
+    # ValueError（第一版就栽在这里，被自己的断言测试抓到）。
+    log = logger.bind(domain=domain).opt(
+        depth=1,
+        exception=logged_exc if (logged_exc is not None and with_traceback) else None,
+    )
+    log.log(level.upper(), message)
+

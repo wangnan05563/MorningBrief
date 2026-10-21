@@ -140,7 +140,7 @@ _NO_CACHE_HEADERS = {"Cache-Control": "no-cache, must-revalidate"}
 
 from app.config import app_role, get_settings, runs_singleton_tasks
 from app.core.exceptions import register_exception_handlers
-from app.core.logging_setup import setup_logging
+from app.core.logging_setup import log_key_failure, setup_logging
 from app.middleware.path_prefix import PathPrefixMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.request_id import RequestIdMiddleware
@@ -244,7 +244,11 @@ async def _seed_default_admin() -> None:  # NOSONAR
             ('admin', hash_password('admin123'), 'admin', 'Admin'),
         )
         conn.commit()
-        logger.info("[startup] 默认 admin 用户已创建（admin/admin123）")
+        # NFR-UX-05：原先这行是「默认 admin 用户已创建（admin/admin123）」——
+        # 口令明文进日志文件，而日志默认留 7 天、还会被打包进诊断材料。
+        # 初始口令的告知归 config/文档，不归日志；ADMIN_INITIAL_PASSWORD 目前没接线
+        # 这件事另开单跟（见 T02523 派生）。
+        logger.info("[startup] 默认 admin 用户已创建 username=admin（初始口令见配置说明，不入日志）")
     finally:
         conn.close()
 
@@ -1098,6 +1102,23 @@ def _make_loop_exception_handler():
     return handler
 
 
+async def _shutdown_step(event: str, awaitable) -> bool:
+    """停服链路的每一步单独兜：一步抛错不能把后面的步骤一起带走。
+
+    NFR-UX-05 修前的两个坑（真实日志抽样里 [shutdown] 失败行数为 0 就是这么来的）：
+    1. 调度器 / 写缓冲 / engine.dispose 全是裸 await，抛错直接中断 lifespan，
+       既不留失败日志，也不再执行后续步骤（EventBus 任务与数据库引擎原地泄漏）；
+    2. 唯一有 try/except 的是隧道，但它只 `str(e)` 一行，看不出抛点。
+    做成模块级函数是为了能被单测直接驱动（lifespan 整体跑不起来于测试环境）。
+    """
+    try:
+        await awaitable
+        return True
+    except Exception as e:
+        log_key_failure(domain="shutdown", event=event, exc=e, level="warning")
+        return False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多步资源准备与异常兜底
     """应用生命周期：启动时初始化资源，关闭时清理。"""
@@ -1245,7 +1266,9 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
             svc = AIConfigService(session)
             await svc.apply_config_to_settings()
     except Exception as e:
-        logger.warning("[startup] 加载 AI 配置失败，使用 .env 默认值: {}", e)
+        log_key_failure(
+            domain="config_load", event="加载 AI 配置（已回退 .env 默认值）", exc=e, level="warning"
+        )
 
     # 从 SQLite 加载 COS 配置覆盖到 Settings 单例（前端「云端配置」页修改热生效）
     from app.services.cos_config_service import CosConfigService
@@ -1254,7 +1277,9 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
             cos_svc = CosConfigService(session)
             await cos_svc.apply_config_to_settings()
     except Exception as e:
-        logger.warning("[startup] 加载 COS 配置失败，使用 .env 默认值: {}", e)
+        log_key_failure(
+            domain="config_load", event="加载 COS 配置（已回退 .env 默认值）", exc=e, level="warning"
+        )
 
     # 以下三步都属「整个应用只需跑一次」：模板 seed 写库、APScheduler 定时任务、
     # 启动补跑清理（会真实删除文件）——api 进程跳过，避免重复执行与竞态
@@ -1328,7 +1353,9 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
 
                 threading.Thread(target=_auto_start_tunnel, daemon=True).start()
         except Exception as e:
-            logger.warning("[startup] 读取隧道配置失败，跳过自动启动: {}", e)
+            log_key_failure(
+                domain="config_load", event="读取隧道配置（跳过自动启动）", exc=e, level="warning"
+            )
 
     yield
 
@@ -1343,23 +1370,27 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
             logger.warning("[shutdown] 停止内网穿透隧道失败: {}", e)
 
         from app.services.workflow_scheduler import workflow_scheduler
-        await workflow_scheduler.stop()
+        await _shutdown_step("停止工作流调度器", workflow_scheduler.stop())
 
     # 停止播放进度写缓冲并执行最终 flush（先停，避免关闭后仍有事件入队）
     from app.services.play_write_buffer import play_write_buffer
-    await play_write_buffer.stop()
+    await _shutdown_step("停止播放进度写缓冲", play_write_buffer.stop())
 
     # 停止 EventBus：设置 _running=False，run_forever 下次轮询时退出
     from app.core.event_bus import get_event_bus
-    get_event_bus().stop()
-    event_bus_task = getattr(app.state, "event_bus_task", None)
-    if event_bus_task:
-        await asyncio.wait_for(event_bus_task, timeout=2.0)
-    logger.info("[shutdown] EventBus 已停止")
+
+    async def _drain_event_bus() -> None:
+        get_event_bus().stop()
+        event_bus_task = getattr(app.state, "event_bus_task", None)
+        if event_bus_task:
+            await asyncio.wait_for(event_bus_task, timeout=2.0)
+
+    if await _shutdown_step("停止 EventBus 并回收消费任务", _drain_event_bus()):
+        logger.info("[shutdown] EventBus 已停止")
 
     from app.database import engine
-    await engine.dispose()
-    logger.info("[shutdown] SQLite 引擎已释放")
+    if await _shutdown_step("释放 SQLite 引擎", engine.dispose()):
+        logger.info("[shutdown] SQLite 引擎已释放")
 
 
 def create_app() -> FastAPI:  # NOSONAR

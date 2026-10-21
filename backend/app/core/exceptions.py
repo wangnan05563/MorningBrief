@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.core.logging_setup import unwrap_echo_exception
 from app.core.response import error
 
 
@@ -74,12 +75,25 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(SQLAlchemyError)
     async def db_error_handler(request: Request, exc: SQLAlchemyError):
-        # 数据库异常不暴露详情给前端，但完整堆栈记录到日志便于排障
-        logger.exception("数据库异常: {exc}", exc=exc)
+        # 数据库异常不暴露详情给前端，但完整堆栈记录到日志便于排障。
+        # 消息里只写异常类型，不写 str(exc)：SQLAlchemyError 的字符串自带
+        # `[SQL: ...] [parameters: ...]`，等于把本次写入的绑定参数（含凭据列的明文值）
+        # 贴进日志文件；NFR-UX-05 的日志抽样在真实日志里查到 18 行这种回显。
+        # 堆栈本身带完整的异常链与原因（opt(exception=...) 会渲染 __cause__），
+        # 排障信息不减。
+        # unwrap_echo_exception：loguru 渲染堆栈取的是异常对象自身的字符串，
+        # 消息层的脱敏管不到它，所以这里先把 SQLAlchemy 的「带 SQL + 绑定参数」包装
+        # 换成底层 DBAPI 异常。
+        logger.opt(exception=unwrap_echo_exception(exc)).error(
+            "数据库异常 type={}", type(exc).__name__
+        )
         return error(code=500, message="数据库错误", http_status=500)
 
     @app.exception_handler(Exception)
     async def global_error_handler(request: Request, exc: Exception):
-        # 兜底：未捕获的异常统一返回 500，完整堆栈记录到日志
-        logger.exception("未捕获异常: {exc}", exc=exc)
+        # 兜底：未捕获的异常统一返回 500，完整堆栈记录到日志。
+        # 同样只记类型不记 str(exc) —— 第三方库的异常文本常把请求参数回显出来。
+        logger.opt(exception=unwrap_echo_exception(exc)).error(
+            "未捕获异常 type={}", type(exc).__name__
+        )
         return error(code=500, message="服务内部错误", http_status=500)

@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.exceptions import BizError, NotFoundError, ParamError
+from app.core.logging_setup import log_key_failure, redact_credentials, unwrap_echo_exception
 from app.models.audit_log import AuditLog
 
 logger = logging.getLogger(__name__)
@@ -641,10 +642,39 @@ class DbAdminService:
                     await self.db.execute(text(sql), filtered)
                     inserted += 1
             except Exception as e:
-                errors.append({"row": i + 1, "error": str(e)})
+                # NFR-UX-05（T02523）：这里原先只把错误塞进返回值给前端，日志文件里
+                # 一行都没有 —— 「导入」是 PRD 点名的四类关键失败之一，事后翻日志
+                # 完全看不到发生过什么（抽样实测：导入失败行数 0）。
+                # 记的是坐标（表/模式/行号）+ 异常类型 + 底层错误消息；
+                # str(SQLAlchemyError) 自带 `[SQL: ...] [parameters: ...]`，
+                # unwrap + 脱敏两层都挡一遍，绑定参数（可能就是刚写入的凭据明文）不落盘。
+                clean = unwrap_echo_exception(e)
+                log_key_failure(
+                    domain="import",
+                    event="逐行写入失败",
+                    exc=clean,
+                    level="error",
+                    with_traceback=False,
+                    table=table,
+                    mode=mode,
+                    row=i + 1,
+                )
+                errors.append({"row": i + 1, "error": redact_credentials(str(clean))})
                 skipped += 1
 
         await self.db.flush()
+        if errors:
+            # 汇总行：给「这次导入到底坏在哪一类」一个可检索的落点
+            log_key_failure(
+                domain="import",
+                event="导入结束（存在失败行）",
+                level="warning",
+                with_traceback=False,
+                table=table,
+                mode=mode,
+                failed=len(errors),
+                total=len(rows),
+            )
         return {
             "ok": True,
             "total": len(rows),
