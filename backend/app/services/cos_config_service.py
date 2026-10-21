@@ -17,11 +17,12 @@ POST 回传脱敏值（**** 开头）视为未修改，保留库中既有明文�
 import logging
 from typing import Optional
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.exceptions import BizError
+from app.core.logging_setup import redact_credentials
 from app.models.cos_config import CosConfig
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,7 @@ class CosConfigService:
         return result.scalar_one_or_none()
 
     async def get_config_for_frontend(self) -> dict:
-        """获取配置（前端展示用，SecretId/SecretKey 脱敏）。
+        """获取配置（前端展示用，SecretId/SecretKey 脱敏）并说明值从哪来。
 
         返回结构：
         {
@@ -92,22 +93,41 @@ class CosConfigService:
             "region": "ap-guangzhou",
             "bucket": "",
             "cdn_domain": "",
+            # ---- INT-UX-04 / T02527 ----
+            "loaded": bool,               # 本次是否真的读到了配置表
+            "load_error": str | None,     # 读表失败原因（已脱敏，不含配置值）
+            "updated_at": str | None,     # 表内最后一次入库修改时间；库里没记录就是 None
+            "fallback_fields": [str],     # 这些字段的值是 .env 回落来的，不是库里存的
         }
-        """
-        raw = await self.get_all_config()
-        settings = get_settings()
 
-        def _get(key: str, settings_attr: str, default: str = "") -> str:
+        为什么要单独说来源：取不到库值时回落到 Settings 是有意为之（让 .env 配置可用），
+        但「表是空的」与「表里有五个值」在旧响应里长得一模一样。管理员在第二种情况下
+        点保存，会把 .env 的旧值静默固化进库；页面无从判定该不该禁存。
+        """
+        try:
+            raw = await self.get_all_config()
+            load_error = None
+        except Exception as exc:
+            # 完整异常只进日志；响应里给一个可读且已脱敏的原因（NFR-01 / NFR-05）
+            logger.exception("COS 配置读取失败，前端将据 loaded=false 禁止保存")
+            raw = {}
+            load_error = f"{type(exc).__name__}: {redact_credentials(str(exc))[:200]}"
+
+        settings = get_settings()
+        fallback: list[str] = []
+
+        def _get(name: str, key: str, settings_attr: str, default: str = "") -> str:
             val = raw.get(key)
             if val is not None:
                 return val
+            fallback.append(name)
             return str(getattr(settings, settings_attr, default))
 
-        secret_id = _get("cos_secret_id", "COS_SECRET_ID")
-        secret_key = _get("cos_secret_key", "COS_SECRET_KEY")
-        region = _get("cos_region", "COS_REGION", "ap-guangzhou")
-        bucket = _get("cos_bucket", "COS_BUCKET")
-        cdn_domain = _get("cos_cdn_domain", "COS_CDN_DOMAIN")
+        secret_id = _get("secret_id", "cos_secret_id", "COS_SECRET_ID")
+        secret_key = _get("secret_key", "cos_secret_key", "COS_SECRET_KEY")
+        region = _get("region", "cos_region", "COS_REGION", "ap-guangzhou")
+        bucket = _get("bucket", "cos_bucket", "COS_BUCKET")
+        cdn_domain = _get("cdn_domain", "cos_cdn_domain", "COS_CDN_DOMAIN")
 
         # 配置就绪口径与 is_cos_configured 保持一致：ID/KEY/BUCKET 三项齐全
         configured = bool(secret_id and secret_key and bucket)
@@ -119,7 +139,24 @@ class CosConfigService:
             "region": region,
             "bucket": bucket,
             "cdn_domain": cdn_domain,
+            "loaded": load_error is None,
+            "load_error": load_error,
+            "updated_at": await self._latest_updated_at(only_if_loaded=load_error is None),
+            "fallback_fields": fallback,
         }
+
+    async def _latest_updated_at(self, only_if_loaded: bool) -> Optional[str]:
+        """表内最后一次修改时间（本地 naive，与项目其余时间口径一致）。"""
+        if not only_if_loaded:
+            return None
+        try:
+            latest = (
+                await self.db.execute(select(func.max(CosConfig.updated_at)))
+            ).scalar_one_or_none()
+        except Exception:
+            logger.exception("COS 配置 updated_at 读取失败，按无修改时间处理")
+            return None
+        return latest.isoformat(timespec="seconds") if latest else None
 
     # ---- 配置更新 ----
 
