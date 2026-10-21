@@ -117,6 +117,68 @@ def test_row_sensitive_columns_recognizes_webhook_key():
     )
 
 
+def test_row_sensitive_columns_recognizes_credential_blob():
+    """NFR-UX-01（T02519）配置包行：config_key 不含凭据子串，但值里逐个预设存明文 Key。
+
+    `llm_preset_configs` = `{"deepseek": {"api_key": "sk-xxx", ...}}`——
+    只看 config_key 的旧判定认为它不敏感，数据库维护页浏览即一次泄露所有预设凭据。
+    """
+    blob = json.dumps({"deepseek": {"api_key": LLM_API_KEY, "base_url": "https://api.deepseek.com"}})
+    assert "config_value" in _row_sensitive_columns(
+        "ai_config", {"config_key": "llm_preset_configs", "config_value": blob}
+    )
+    # 反例：不含凭据的普通 JSON 配置必须保持可读可编辑，否则通用表浏览失去意义
+    assert "config_value" not in _row_sensitive_columns(
+        "ai_config", {"config_key": "ui_prefs", "config_value": json.dumps({"theme": "dark"})}
+    )
+    # 非 JSON 值不因"看起来像大括号"而误判
+    assert "config_value" not in _row_sensitive_columns(
+        "ai_config", {"config_key": "note", "config_value": "{not json"}
+    )
+
+
+async def test_db_admin_masks_preset_blob_row(db_session):
+    """数据库维护页浏览与导出：预设配置包行的明文 API Key 不得出现在出参里。"""
+    db_session.add(
+        AIConfig(
+            config_key="llm_preset_configs",
+            config_value=json.dumps({"deepseek": {"api_key": LLM_API_KEY}}),
+        )
+    )
+    db_session.add(AIConfig(config_key="ui_prefs", config_value=json.dumps({"theme": "dark"})))
+    await db_session.commit()
+
+    svc = DbAdminService(db_session)
+    data = await svc.list_rows("ai_config", limit=200)
+    _assert_no_plaintext(data, "数据库维护预设配置包行浏览")
+    rows = {r["config_key"]: r["config_value"] for r in data["rows"]}
+    assert rows["llm_preset_configs"] == "***"
+    assert json.loads(rows["ui_prefs"]) == {"theme": "dark"}, "非凭据 JSON 被误脱敏"
+
+    exported_rows, _cols, _label = await svc.export_rows("ai_config", "json")
+    _assert_no_plaintext(exported_rows, "数据库维护预设配置包导出")
+
+
+async def test_audit_detail_masks_preset_blob_value(db_session):
+    """把配置包整行的 *** 或明文写回时的审计口径：明文不落 audit_log，哨兵回写被拒。"""
+    blob = json.dumps({"deepseek": {"api_key": LLM_API_KEY}})
+    db_session.add(AIConfig(config_key="llm_preset_configs", config_value=blob))
+    await db_session.commit()
+    row = (
+        await db_session.execute(select(AIConfig).filter_by(config_key="llm_preset_configs"))
+    ).scalar_one()
+
+    svc = DbAdminService(db_session)
+    with pytest.raises(BizError):
+        await svc.update_row("ai_config", str(row.id), {"config_value": "***"})
+    await db_session.rollback()
+    await db_session.refresh(row)
+    assert row.config_value == blob
+
+    masked = _mask_audit_detail({"values": {"config_value": blob}}, "ai_config")
+    _assert_no_plaintext(masked, "配置包审计明细")
+
+
 async def test_db_admin_rejects_mask_sentinel_writeback_for_webhook(db_session):
     """在数据库维护页把看到的 *** 原样存回去，必须被拒且不改写真实凭据。"""
     await _seed_notify_config(db_session)

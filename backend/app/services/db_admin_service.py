@@ -160,9 +160,48 @@ def _row_sensitive_columns(table: str, row: dict) -> set[str]:
     sensitive = {col for col in row if col in SENSITIVE_COLUMNS}
     if table == "ai_config" and "config_value" in row:
         key_val = str(row.get("config_key", "")).lower()
-        if any(p in key_val for p in SENSITIVE_KEY_PATTERNS):
+        if any(p in key_val for p in SENSITIVE_KEY_PATTERNS) or _value_is_credential_blob(
+            row.get("config_value")
+        ):
             sensitive.add("config_value")
     return sensitive
+
+
+def _blob_has_credential_key(node: Any, depth: int = 0) -> bool:
+    """递归看 JSON 结构里是否存在"键名带凭据语义且值非空"的叶子。"""
+    if depth > 6:
+        return False
+    if isinstance(node, dict):
+        for key, value in node.items():
+            name = str(key).lower()
+            if _SECRET_KEY_RE.search(name) or any(p in name for p in SENSITIVE_KEY_PATTERNS):
+                if value not in (None, "", "***"):
+                    return True
+            elif _blob_has_credential_key(value, depth + 1):
+                return True
+        return False
+    if isinstance(node, list):
+        return any(_blob_has_credential_key(item, depth + 1) for item in node[:50])
+    return False
+
+
+def _value_is_credential_blob(val: Any) -> bool:
+    """config_value 自身是"配置包"JSON 且内含凭据字段时，整行按敏感处理。
+
+    NFR-UX-01（T02519）：`llm_preset_configs` 这类行的 config_key 不含
+    key/secret/token 子串 ⇒ 原行级判定认为它不敏感，但值里逐个预设存着明文 API Key，
+    数据库维护页浏览/导出即把全部预设凭据一次列出。
+    """
+    if not isinstance(val, str):
+        return False
+    text = val.strip()
+    if not text.startswith(("{", "[")) or len(text) > 200_000:
+        return False
+    try:
+        parsed = json.loads(text)
+    except (ValueError, TypeError):
+        return False
+    return _blob_has_credential_key(parsed)
 
 
 def _mask_writeback_message(cols: list[str]) -> str:
@@ -379,15 +418,19 @@ class DbAdminService:
 
         probe = dict(filtered)
         if table == "ai_config" and "config_value" in filtered and "config_key" not in filtered:
-            pk_col = self._get_single_pk_column(schema)
             current = (
                 await self.db.execute(
-                    text(f"SELECT config_key FROM {table} WHERE {pk_col} = :pk"),
+                    text(f"SELECT config_key, config_value FROM {table} WHERE {pk_col} = :pk"),
                     {"pk": self._coerce_pk(pk_value, schema)},
                 )
             ).mappings().first()
             if current:
                 probe["config_key"] = current["config_key"]
+                # 敏感性判定用「库内旧值」补位：配置包行（如 llm_preset_configs）的
+                # config_key 不含凭据子串，只有读旧值才知道它内部存着明文 API Key——
+                # 列表页看到的是 ***，把它原样存回去必须同样被拦，否则真实凭据被哨兵覆盖。
+                if not _value_is_credential_blob(probe.get("config_value")):
+                    probe["config_value"] = current["config_value"]
         blocked = sorted(
             col
             for col in filtered
