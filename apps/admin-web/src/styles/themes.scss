@@ -500,6 +500,25 @@
   .el-tabs__active-bar {
     background-color: var(--color-primary) !important;
   }
+
+  /* 压在主色实底上的文字：Element Plus 把头像与单选按钮选中态的字色写死为白，
+     而 showcase 的 primary 是亮青 #00E5FF —— 白字实测只有 1.54:1（NFR-UX-04 暗色截图验收，
+     头像在壳层右上角，每一页都中招）。改吃 --on-primary，与上面日期格 #0A0A0F 同一口径。 */
+  .el-avatar {
+    color: var(--on-primary) !important;
+  }
+  .el-radio-button__original-radio:checked + .el-radio-button__inner {
+    color: var(--on-primary) !important;
+  }
+
+  /* 空状态插画：Element Plus 默认那幅纸盒 SVG 是白底灰面，暗色下就是一块白斑。
+     它既没有 background-color 也没有文字，前面两类指标（白底孤岛 / 文字对比度）都抓不到它，
+     是 375+暗色整页截图肉眼看出来的（T02522 / NFR-UX-04 的「截图验收」真正补上的那一块）。
+     压暗而不是换图：换 SVG 要动每个调用点的 :image 传参。 */
+  .el-empty__image svg,
+  .el-empty__image img {
+    opacity: 0.22;
+  }
 }
 
 /* === macaron 主题：薄荷青按钮较浅，按钮文字改用 primary-dark 确保可读 === */
