@@ -57,18 +57,46 @@ async def test_replace_import_requires_primary_key(db_session):
 
 
 async def test_preview_counts_without_writing(db_session):
+    """INT-UX-02：预览按「这行真能写进去吗」计数。
+
+    原先这里断言 `{"id": 902, "nickname": "b"}` 算一次新增，而实测同一条载荷
+    走真实导入是 `inserted=0, skipped=1, NOT NULL constraint failed: admin_user.username`
+    ——预览报的行数比实际多，正是 dry-run 最该避免的误导。
+    """
     svc = DbAdminService(db_session)
     preview = await svc.preview_import(
         "admin_user",
-        [{"id": 901, "nickname": "a"}, {"id": 902, "nickname": "b"}],
+        [
+            {"id": 901, "nickname": "a"},  # 命中已有主键 → 走 UPDATE，缺必填列不影响
+            {"id": 902, "nickname": "b"},  # 新行缺 username/password_hash/role → 拦下
+        ],
         "replace",
     )
     assert preview["to_update"] == 1
-    assert preview["to_insert"] == 1
+    assert preview["to_insert"] == 0
     assert preview["conflicts"] == 1
+    assert preview["error_rows"] == 1
+    assert "username" in preview["errors"][0]["error"]
     await db_session.commit()
     others = (await db_session.execute(select(AdminUser).filter_by(id=902))).scalar()
     assert others is None
+
+
+async def test_preview_counts_complete_new_row_as_insert(db_session):
+    """把必填列带齐，同一行就恢复成一次新增——拦截是按缺失判定的，不是一刀切。"""
+    svc = DbAdminService(db_session)
+    preview = await svc.preview_import(
+        "admin_user",
+        [{"id": 902, "username": "u902", "password_hash": REAL_HASH, "role": "operator"}],
+        "replace",
+    )
+    assert (preview["to_insert"], preview["error_rows"]) == (1, 0)
+    result = await svc.import_rows(
+        "admin_user",
+        [{"id": 902, "username": "u902", "password_hash": REAL_HASH, "role": "operator"}],
+        "replace",
+    )
+    assert result["inserted"] == preview["to_insert"]
 
 
 async def test_parse_csv_handles_quotes_crlf_bom():
@@ -88,14 +116,27 @@ async def test_parse_json_requires_array():
 
 
 def test_import_preview_endpoint(client, admin_token):
-    """INT-UX-02：dry-run 预览接口只读，返回预计新增/更新行数。"""
+    """INT-UX-02：dry-run 预览接口只读，返回预计新增/更新行数。
+
+    载荷把必填列带齐（原先只带 id+nickname 的新行其实写不进去，
+    预览却按新增计数——见 test_preview_counts_without_writing）。
+    """
     resp = client.post(
         "/admin/api/v1/db-admin/tables/admin_user/import/preview",
         headers={"Authorization": f"Bearer {admin_token['token']}"},
-        json={"content": "id,nickname\n901,a\n902,b\n", "format": "csv", "mode": "replace"},
+        json={
+            "content": (
+                "id,username,password_hash,role,nickname\n"
+                f"901,ux102,{REAL_HASH},admin,a\n"
+                f"902,u902,{REAL_HASH},operator,b\n"
+            ),
+            "format": "csv",
+            "mode": "replace",
+        },
     )
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert data["to_update"] == 1
     assert data["to_insert"] == 1
     assert data["conflicts"] == 1
+    assert data["error_rows"] == 0

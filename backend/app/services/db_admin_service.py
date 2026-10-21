@@ -769,11 +769,19 @@ class DbAdminService:
         schema = await self.get_table_schema(table)
         valid_cols = {c["name"] for c in schema["columns"]}
         pk_col = self._get_single_pk_column(schema)
+        # 真正会卡住 INSERT 的列：NOT NULL、表上没有 DEFAULT、且不是自增主键。
+        # 主键排除在外：insert 模式允许省略自增主键让 SQLite 自己填。
+        required_cols = sorted(
+            c["name"]
+            for c in schema["columns"]
+            if not c["nullable"] and c["default"] is None and not c["primary_key"]
+        )
 
         to_insert = 0
         to_update = 0
         conflicts = 0
         errors = []
+        notices = []
 
         for i, row in enumerate(rows):
             filtered = {k: v for k, v in row.items() if k in valid_cols}
@@ -797,24 +805,50 @@ class DbAdminService:
 
             unknown = sorted(set(row) - valid_cols)
             if unknown:
-                errors.append({"row": i + 1, "error": f"列不在表结构内，将被忽略: {', '.join(unknown)}"})
+                # INT-UX-02：这一行仍然会被写进去（只是丢掉多余的列），所以它是提示，
+                # 不是错误。原先塞进 errors 里，预览说「错误 1 行」而导入实际「新增 1 行、
+                # 0 错误」——两本账对不上，运营照着预览的 error_rows 决定要不要提交就被误导。
+                notices.append({
+                    "row": i + 1,
+                    "columns": unknown,
+                    "message": f"列不在表结构内，导入时将忽略: {', '.join(unknown)}",
+                })
+
             if mode == "replace":
                 if pk_col not in filtered:
                     errors.append({"row": i + 1, "error": f"replace 模式缺少主键列 {pk_col}"})
                     continue
-                if await self._pk_exists(table, pk_col, filtered[pk_col]):
-                    to_update += 1
-                    conflicts += 1
-                else:
-                    to_insert += 1
+                is_update = await self._pk_exists(table, pk_col, filtered[pk_col])
+                if is_update and set(filtered) == {pk_col}:
+                    # 与 import_rows 同一道闸门：只给主键的 UPDATE 无列可写，实际会被拒
+                    errors.append({"row": i + 1, "error": f"仅含主键列 {pk_col}，无可更新字段"})
+                    continue
             else:
                 if pk_col in filtered and await self._pk_exists(table, pk_col, filtered[pk_col]):
                     conflicts += 1
                     errors.append(
                         {"row": i + 1, "error": f"主键 {filtered[pk_col]} 已存在，insert 模式将跳过"}
                     )
-                else:
-                    to_insert += 1
+                    continue
+                is_update = False
+
+            if not is_update:
+                # 只有真正走 INSERT 的行才要检查：走 UPDATE 时未提供的列保持原值，
+                # 不会因为这次没带上而被 NOT NULL 卡住。
+                missing = [c for c in required_cols if filtered.get(c) is None]
+                if missing:
+                    errors.append({
+                        "row": i + 1,
+                        "error": f"缺少必填列（NOT NULL 且无默认值），导入会失败: {', '.join(missing)}",
+                        "fields": missing,
+                    })
+                    continue
+
+            if is_update:
+                to_update += 1
+                conflicts += 1
+            else:
+                to_insert += 1
 
         return {
             "table": table,
@@ -826,6 +860,8 @@ class DbAdminService:
             "conflicts": conflicts,
             "error_rows": len(errors),
             "errors": errors[:50],
+            "notice_rows": len(notices),
+            "notices": notices[:50],
             "columns": sorted(valid_cols),
         }
 

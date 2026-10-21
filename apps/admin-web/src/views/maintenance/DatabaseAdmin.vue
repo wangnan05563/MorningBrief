@@ -330,6 +330,12 @@
             第 {{ err.row }} 行：{{ err.error }}
           </li>
         </ul>
+        <!-- INT-UX-02：被忽略的列不算错误行（那一行照样会写），但仍要提示，否则警告就丢了 -->
+        <ul v-if="importPreview.notices?.length" class="import-preview-notices">
+          <li v-for="n in importPreview.notices.slice(0, 10)" :key="n.row">
+            第 {{ n.row }} 行：{{ n.message }}
+          </li>
+        </ul>
       </div>
       <template #footer>
         <IconButton

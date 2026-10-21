@@ -58,6 +58,7 @@ class ImportRequest(BaseModel):
     confirm_text: str = "IMPORT"  # 危险操作确认文本
     content: str | None = None  # 原始 CSV/JSON 文本，由后端统一解析
     format: str = "csv"
+    dry_run: bool = False  # INT-UX-02：只算不写，走同一套解析与预览算法
 
 
 class ImportPreviewRequest(BaseModel):
@@ -261,14 +262,25 @@ async def preview_import(
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
-    """导入前 dry-run 预览：返回预计新增/更新/冲突行数与错误明细，不写库。"""
-    svc = DbAdminService(db)
-    rows = (
-        svc.parse_import_payload(body.content, body.format)
-        if body.content is not None
-        else body.rows
+    """导入前 dry-run 预览：返回预计新增/更新/冲突行数与错误明细，不写库。
+
+    INT-UX-02：这里不再自己算一套，而是直接借道 `dry_run=true` 的导入接口，
+    好让两个入口共用同一份解析与同一份预览算法——否则哪天只改了其中一条路径，
+    运营拿 A 口的估计值去按 B 口提交，预览就成了骗人的。
+    """
+    resp = await import_rows(
+        table,
+        ImportRequest(
+            rows=body.rows,
+            mode=body.mode,
+            content=body.content,
+            format=body.format,
+            dry_run=True,
+        ),
+        db=db,
+        admin=admin,
     )
-    return success(data=await svc.preview_import(table, rows, body.mode))
+    return success(data={k: v for k, v in resp["data"].items() if k != "dry_run"})
 
 
 @router.post("/tables/{table}/import")
@@ -278,14 +290,17 @@ async def import_rows(
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
-    """导入数据（insert 或 replace 模式）。"""
-    _validate_danger_op(body.confirm_text, "IMPORT")
+    """导入数据（insert 或 replace 模式）；`dry_run=true` 只返回预览计数。"""
     svc = DbAdminService(db)
     rows = (
         svc.parse_import_payload(body.content, body.format)
         if body.content is not None
         else body.rows
     )
+    if body.dry_run:
+        # 预览不写库、不落审计，因此也不要求确认令牌——危险操作的闸门只管真正会改数据的那条路径
+        return success(data={**(await svc.preview_import(table, rows, body.mode)), "dry_run": True})
+    _validate_danger_op(body.confirm_text, "IMPORT")
     result = await svc.import_rows(table, rows, body.mode)
     await svc.write_audit(
         action="import", target=table, operator=admin.username,
