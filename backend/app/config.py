@@ -226,6 +226,16 @@ class Settings(BaseSettings):
     # 问答路径的重试次数固定为 0（见 ai_config_service.chat_with_model 的注释）：
     # openai SDK 默认 max_retries=2，120s × 3 次会跑到 360s，直接击穿前端 130s 契约。
     LLM_CHAT_TIMEOUT_SEC: int = 120
+    # 问答超时的可配区间（INT-UX-05 / T02528）。上限原先只存在于管理端输入框
+    # （AIConfig.vue 的 :max="125"），接口层照单全收：直接 PUT 600 会热更进 Settings，
+    # 于是「后端先到点、返回可重试提示」这条契约反转为「浏览器 130s 先到点」，
+    # 用户又看到没有重试入口的网络错误。区间由后端强制执行，页面只管显示。
+    # 上限 125 = 前端 130s 兜底再留 5s 回传余量；网关侧已实测不是约束：Tailscale Funnel
+    # 对「origin 300s 不返回任何字节」的 GET 与 200s 的 POST 都原样透传到 200
+    # （实测记录见 docs/需求规格说明书-UX优化.md §9 DEC-UX-003）。
+    # 下限 30：再小就让 ACC-UX-701「长回答（>60s）不中断」当场不成立。
+    LLM_CHAT_TIMEOUT_MIN_SEC: int = 30
+    LLM_CHAT_TIMEOUT_MAX_SEC: int = 125
     # 单期节目最大段数上限（T00584 得到式听书）：默认 10 段 ≈ 10-18 分钟；
     # 「一本书一条完整音频」需要 15-20 段（20-30 分钟），可经 ai_config 键
     # llm_max_script_segments 运行时调整（上限同时受素材数与目标时长约束）

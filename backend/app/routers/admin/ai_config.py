@@ -257,7 +257,23 @@ async def save_config(
 
     当 selected_preset 非空时，同步将当前 LLM 配置保存到预设配置 JSON，
     实现切换预设时返显之前保存的 API Key/Base URL/Model。
+
+    问答超时先校验再落库（INT-UX-05 / T02528）：原先区间只写在管理端输入框上，
+    直接调接口写 600 会热更进 Settings，之后每次问答先到点的是浏览器 130s，
+    用户拿回一句没有重试入口的网络错误。校验放在整份配置写入之前，越界时
+    tts/image 等其余字段也一并不写，避免「半份新配置生效」。
     """
+    settings = get_settings()
+    lo = settings.LLM_CHAT_TIMEOUT_MIN_SEC
+    hi = settings.LLM_CHAT_TIMEOUT_MAX_SEC
+    if not lo <= body.llm.chat_timeout_sec <= hi:
+        return error(
+            400,
+            f"问答超时需在 {lo}–{hi} 秒之间：前端最多等 130 秒，"
+            f"后端必须先到点才能返回「超时可重试」提示",
+            data={"fields": ["llm.chat_timeout_sec"], "min": lo, "max": hi},
+            http_status=400,
+        )
     svc = AIConfigService(db)
     await svc.update_config(
         llm_config=body.llm.model_dump(),
