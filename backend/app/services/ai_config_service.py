@@ -606,8 +606,9 @@ class AIConfigService:
     ) -> None:
         """保存配置到 SQLite 并热更新 Settings 单例。
 
-        API Key 脱敏值（****开头）视为未修改，跳过；
-        空字符串视为清除 Key。
+        API Key 的口径：脱敏值（****开头）与空串**都表示「不修改」**，跳过写入；
+        留空不等于删除密钥（前端把脱敏值折算成空串回传，当成清除会在只改 base_url 时抹掉线上凭据）。
+        清除通道是 `POST /ai/reset-config`（界面「恢复初始配置」）。
 
         当 selected_preset 非空时，同步将当前 LLM 配置（api_key/base_url/model）
         保存到预设配置 JSON 中，实现切换预设时返显之前保存的配置。
@@ -677,7 +678,10 @@ class AIConfigService:
     def _normalize_llm(self, config: dict) -> dict[str, str]:
         """将前端 LLM 配置转为 config_key -> value 映射。
 
-        API Key 脱敏值跳过（未修改），空字符串清除。
+        API Key 的口径：脱敏值（`****…`）与留空**都表示「不修改」**。
+        前端本来就把脱敏值折算成空串回传（`key.startsWith('****') ? '' : key`），
+        这里若把留空当成清除，用户只改 base_url 也会顺带抹掉线上密钥。
+        清除密钥另有通道：`POST /ai/reset-config`（界面文案「恢复初始配置」）。
         """
         result: dict[str, str] = {}
         api_key = config.get("api_key", "")
@@ -711,7 +715,10 @@ class AIConfigService:
     def _normalize_image(self, config: dict) -> dict[str, str]:
         """将前端图片生成配置转为 config_key -> value 映射（T00730）。
 
-        API Key 脱敏值跳过（未修改），空字符串清除。
+        API Key 的口径：脱敏值（`****…`）与留空**都表示「不修改」**。
+        前端本来就把脱敏值折算成空串回传（`key.startsWith('****') ? '' : key`），
+        这里若把留空当成清除，用户只改 base_url 也会顺带抹掉线上密钥。
+        清除密钥另有通道：`POST /ai/reset-config`（界面文案「恢复初始配置」）。
         """
         result: dict[str, str] = {}
         api_key = config.get("api_key", "")
@@ -728,7 +735,8 @@ class AIConfigService:
 
         覆盖三套 Provider 字段：阿里云（api_key/appkey/voice/...）、
         Edge-TTS（edge_voice/edge_rate/...）、腾讯云（tencent_secret_id/...）。
-        脱敏值跳过，空字符串清除。
+        密钥类字段留空或回传脱敏值都表示「不修改」；清除请走
+        `POST /ai/reset-config`（界面文案「恢复初始配置」）。
         """
         result: dict[str, str] = {}
 

@@ -102,7 +102,7 @@
               <el-input
                 v-model="llmForm.api_key"
                 :type="showLlmKey ? 'text' : 'password'"
-                placeholder="输入 LLM API Key"
+                placeholder="输入 LLM API Key（留空表示沿用已保存的 Key）"
               >
                 <template #append>
                   <IconButton
@@ -113,6 +113,9 @@
                   />
                 </template>
               </el-input>
+              <div class="field-tip">
+                清空这一栏并保存不会删除已保存的 Key（留空＝不修改）；要清除请点右上角「恢复初始配置」
+              </div>
             </el-form-item>
             <el-form-item label="Base URL">
               <el-input v-model="llmForm.base_url" placeholder="OpenAI 兼容 API 地址" />
@@ -338,7 +341,8 @@
                 </template>
               </el-input>
               <div class="field-tip">
-                NLS 控制台「获取 Token」生成的访问令牌，不要填 AccessKey Secret
+                NLS 控制台「获取 Token」生成的访问令牌，不要填 AccessKey Secret；
+                清空这一栏并保存不会删除已保存的凭证（留空＝不修改）
               </div>
             </el-form-item>
             <el-form-item label="App Key">
@@ -788,6 +792,9 @@
                 show-password
                 placeholder="图像生成服务 API Key（留空沿用已保存值）"
               />
+              <div class="field-tip">
+                清空这一栏并保存不会删除已保存的 Key（留空＝不修改）
+              </div>
             </el-form-item>
             <el-form-item label="API Base URL">
               <el-input v-model="imageForm.base_url" placeholder="OpenAI 兼容 API 地址（如 https://apihub.agnes-ai.com/v1）" />
