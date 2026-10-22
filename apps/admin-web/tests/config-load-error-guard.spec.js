@@ -78,6 +78,38 @@ for (const tc of [
     ],
     loaded: { data: { llm: { base_url: 'https://api.example.com', model: 'gpt-4o' }, tts: { provider: 'aliyun' }, image: {} } },
   },
+  {
+    name: '队列管理',
+    path: '/queue',
+    configKey: 'queue/config',
+    extra: [
+      ['queue/stats', { data: { queued: 0, running: 0, success: 0, failed: 0 } }],
+      ['queue/tasks*', { data: { items: [], total: 0 } }],
+      ['channels*', { data: [] }],
+    ],
+    loaded: { data: { execution_mode: 'parallel', max_concurrent: 3 } },
+  },
+  {
+    name: '自动审批配置',
+    path: '/auto-review',
+    configKey: 'auto-review/config',
+    extra: [
+      ['auto-review/stats', {
+        data: {
+          total: 0, success_count: 0, failed_count: 0, success_rate: 0,
+          avg_time_saved_sec: 0, total_time_saved_sec: 0, fail_distribution: [],
+        },
+      }],
+      ['auto-review/history*', { data: { list: [], total: 0 } }],
+    ],
+    loaded: {
+      data: {
+        enabled: false, require_content_safe: true, require_steps_first_success: true,
+        keyword_whitelist: [], risk_acknowledged: false, skipped_rules: ['keyword_whitelist'],
+        updated_at: '2026-10-18T10:00:00', updated_by: 'admin',
+      },
+    },
+  },
 ]) {
   test.describe(`配置加载失败禁存 · ${tc.name}`, () => {
     /** 每个路由键的当前响应；测试内可翻转 fail -> loaded 模拟重试成功 */
@@ -91,6 +123,10 @@ for (const tc of [
       })
       responses = new Map([[tc.configKey, { fail: FAIL }], ...tc.extra])
       await mockRoutes(page, [tc.configKey, ...tc.extra.map(([k]) => k)], responses)
+      // 队列页会订阅 SSE；mock 成空事件流，避免连接真实后端
+      await page.route('**/admin/api/v1/events/stream**', (route) =>
+        route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
+      )
       await setLoginState(page, 'admin')
     })
 
@@ -121,3 +157,57 @@ for (const tc of [
     })
   })
 }
+
+test.describe('配置加载失败不恢复草稿 · 自动审批配置（T02594）', () => {
+  const configKey = 'auto-review/config'
+  let responses
+
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(document, 'hidden', { get: () => false, configurable: true })
+      Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true })
+      try {
+        // 草稿与服务端不同：若加载失败仍 apply，开关会显示为关闭
+        localStorage.setItem('mb_draft_auto-review-config', JSON.stringify({ require_content_safe: false }))
+      } catch {
+        // about:blank 无 localStorage，正式页面加载时脚本会再执行
+      }
+    })
+    responses = new Map([
+      [configKey, { fail: FAIL }],
+      ['auto-review/stats', {
+        data: {
+          total: 0, success_count: 0, failed_count: 0, success_rate: 0,
+          avg_time_saved_sec: 0, total_time_saved_sec: 0, fail_distribution: [],
+        },
+      }],
+      ['auto-review/history*', { data: { list: [], total: 0 } }],
+    ])
+    await mockRoutes(page, [configKey, 'auto-review/stats', 'auto-review/history*'], responses)
+    await setLoginState(page, 'admin')
+  })
+
+  test('失败时草稿只提示不恢复；重试成功后才带出', async ({ page }) => {
+    await page.goto('/auto-review')
+
+    const banner = page.locator('.config-load-error')
+    await expect(banner).toBeVisible({ timeout: NAV_TIMEOUT })
+    await expect(banner).toContainText('本地草稿已保留但未恢复')
+
+    // 服务端 require_content_safe=true，草稿是 false：失败时表单必须仍是服务端值
+    const contentSafe = page.locator('.config-form .el-switch').nth(1)
+    await expect(contentSafe).toHaveClass(/is-checked/)
+
+    responses.set(configKey, {
+      data: {
+        enabled: false, require_content_safe: true, require_steps_first_success: true,
+        keyword_whitelist: [], risk_acknowledged: false, skipped_rules: ['keyword_whitelist'],
+      },
+    })
+    await banner.getByRole('button', { name: '重新加载' }).click()
+
+    await expect(banner).toHaveCount(0)
+    // 加载成功后才恢复草稿
+    await expect(contentSafe).not.toHaveClass(/is-checked/)
+  })
+})

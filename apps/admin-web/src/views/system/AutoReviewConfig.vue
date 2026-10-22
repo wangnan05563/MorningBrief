@@ -21,6 +21,15 @@
         </el-tag>
       </div>
 
+      <!-- T02594（FR-UX-104）：加载失败必须说出来，保存禁用，草稿不恢复 -->
+      <ConfigLoadError
+        :visible="configError"
+        :message="configErrorMsg"
+        :retrying="configRetrying"
+        :draft-blocked="draftBlocked"
+        @retry="retryLoad"
+      />
+
       <el-form
         :model="form"
         label-position="top"
@@ -154,6 +163,7 @@
           <IconButton
             type="primary"
             :loading="saving"
+            :disabled="!configReady"
             label="保存配置"
             desc="保存自动审批规则配置"
             :icon="Check"
@@ -318,6 +328,8 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useDraft } from '../../composables/useDraft'
+import { useConfigLoad } from '../../composables/useConfigLoad'
+import ConfigLoadError from '../../components/ConfigLoadError.vue'
 import { Refresh, Setting, Plus, DataLine, CircleCheck, CircleClose, Timer, List, WarningFilled, Check } from '@element-plus/icons-vue'
 // 提示必须走统一出口：直接从 element-plus 取 ElMessage 会绕过 2 秒去重与
 // 「隐藏期间不入 DOM」的窗口守卫（FR-UX-301/303）
@@ -345,7 +357,7 @@ const form = reactive({
   keyword_whitelist: [],
 })
 // T00828：断点续录——表单变化自动持久化，重新进入恢复
-const { apply: applyDraft, track: trackDraft, commit: commitDraft } = useDraft('auto-review-config')
+const { apply: applyDraft, peek: peekDraft, track: trackDraft, commit: commitDraft } = useDraft('auto-review-config')
 const enableDraft = trackDraft(form)
 const keywordInput = ref('')
 
@@ -397,24 +409,62 @@ watch(
 )
 
 // 加载配置
+// 加载失败必须让异常冒泡：本表单默认值是「关闭自动审批 + 两条校验开启」，
+// 吞掉异常后保存会把默认值当已加载配置覆盖线上规则。
 async function loadConfig() {
   loadingConfig.value = true
   try {
     const res = await getAutoReviewConfig()
-    config.value = res
-    form.enabled = res.enabled
-    form.require_content_safe = res.require_content_safe
-    form.require_steps_first_success = res.require_steps_first_success
-    form.keyword_whitelist = res.keyword_whitelist || []
-  } catch (err) {
-    ElMessage.error('加载配置失败：' + (err.message || '未知错误'))
+    if (res) {
+      config.value = res
+      form.enabled = res.enabled
+      form.require_content_safe = res.require_content_safe
+      form.require_steps_first_success = res.require_steps_first_success
+      form.keyword_whitelist = res.keyword_whitelist || []
+    }
+    return res ?? null
   } finally {
     loadingConfig.value = false
   }
 }
 
+// T02594（FR-UX-104）：加载失败 → 页内错误态 + 重试 + 禁用保存，草稿默认不恢复
+const configLoad = useConfigLoad(loadConfig)
+const configReady = configLoad.isReady
+const configError = configLoad.isError
+const configErrorMsg = configLoad.errorMessage
+const configRetrying = configLoad.retrying
+const draftBlocked = ref(false)
+
+function restoreDraft() {
+  applyDraft(form)
+  enableDraft()
+}
+
+// 只有首次成功加载才恢复草稿：之后的刷新不能把旧草稿重新叠加到用户当前输入上
+let draftRestored = false
+function handleConfigLoad(ok) {
+  if (ok) {
+    if (!draftRestored) {
+      restoreDraft()
+      draftRestored = true
+    }
+    draftBlocked.value = false
+  } else {
+    draftBlocked.value = peekDraft()
+  }
+}
+
+async function retryLoad() {
+  handleConfigLoad(await configLoad.retry())
+}
+
 // 保存配置
 async function saveConfig() {
+  if (!configLoad.isReady.value) {
+    ElMessage.error('配置未加载成功，已禁止保存（会用默认值覆盖线上配置）')
+    return
+  }
   // 前端预拦截与服务端护栏同口径：全关、未确认风险都不放行，
   // 让用户在当前界面就看到原因，而不是等一个 400 弹窗
   if (form.enabled && !enforcedNow.value.length) {
@@ -532,8 +582,12 @@ async function retryStat(row) {
 // 加载全部
 async function loadAll() {
   loadingAll.value = true
-  await Promise.all([loadConfig(), loadStats(), loadHistory()])
-  loadingAll.value = false
+  try {
+    handleConfigLoad(await configLoad.load())
+    await Promise.all([loadStats(), loadHistory()])
+  } finally {
+    loadingAll.value = false
+  }
 }
 
 // 格式化辅助函数
@@ -550,11 +604,10 @@ function formatPercent(rate) {
 
 // I5（T02518）：本秒→时长副本已删除，改用 utils/format.js 的 formatDuration（唯一出口）
 
-onMounted(async () => {
-  await loadAll()
-  // T00828：加载完成后恢复草稿再启用持久化
-  applyDraft(form)
-  enableDraft()
+onMounted(() => {
+  // T00828：配置加载成功后才恢复草稿并启用持久化
+  // T02594：加载失败时草稿默认不恢复，只提示「配置未加载，保存会覆盖」
+  loadAll()
 })
 </script>
 

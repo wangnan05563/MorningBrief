@@ -12,6 +12,13 @@
 
     <!-- 配置面板：模式 + 并发数（仅并行模式显示） -->
     <el-card shadow="never" class="config-panel glass">
+      <!-- T02594（FR-UX-104）：加载失败必须说出来，不能让默认值冒充已加载配置 -->
+      <ConfigLoadError
+        :visible="configError"
+        :message="configErrorMsg"
+        :retrying="configRetrying"
+        @retry="retryLoad"
+      />
       <div class="config-row">
         <span class="config-label">执行模式</span>
         <el-radio-group v-model="config.mode">
@@ -23,7 +30,7 @@
           <el-slider v-model="config.concurrency" :min="1" :max="5" class="concurrency-slider" />
           <span class="config-value">{{ config.concurrency }}</span>
         </template>
-        <IconButton type="primary" :loading="savingConfig" :icon="Check" label="保存配置" desc="保存执行模式与并发数配置" @click="saveConfig" />
+        <IconButton type="primary" :loading="savingConfig" :disabled="!configReady" :icon="Check" label="保存配置" desc="保存执行模式与并发数配置" @click="saveConfig" />
       </div>
     </el-card>
 
@@ -232,7 +239,9 @@ import {
 import { listChannels } from '../../api/channels'
 import { subscribe } from '../../utils/sse'
 import { formatTime } from '../../utils/format'
+import { useConfigLoad } from '../../composables/useConfigLoad'
 import ListLoadError from '../../components/ListLoadError.vue'
+import ConfigLoadError from '../../components/ConfigLoadError.vue'
 import {
   WORKFLOW_STATUS,
   WORKFLOW_STEP_STATUS,
@@ -348,18 +357,33 @@ async function loadStats() {
   }
 }
 
+// 加载失败必须让异常冒泡：本页默认值是「串行 + 并发 1」，
+// 吞掉异常后保存会把默认值当已加载配置覆盖线上队列设置。
 async function loadConfig() {
-  try {
-    const data = await getQueueConfig()
-    // 后端字段为 execution_mode / max_concurrent，对齐 SRS 5.1 API 规范
-    config.mode = data.execution_mode || 'serial'
-    config.concurrency = data.max_concurrent || 1
-  } catch {
-    // 配置加载失败时使用默认值，不阻塞页面
-  }
+  const data = await getQueueConfig()
+  if (!data) return null
+  // 后端字段为 execution_mode / max_concurrent，对齐 SRS 5.1 API 规范
+  config.mode = data.execution_mode || 'serial'
+  config.concurrency = data.max_concurrent || 1
+  return data
+}
+
+// T02594（FR-UX-104）：加载失败 → 页内错误态 + 重试，保存禁用
+const configLoad = useConfigLoad(loadConfig)
+const configReady = configLoad.isReady
+const configError = configLoad.isError
+const configErrorMsg = configLoad.errorMessage
+const configRetrying = configLoad.retrying
+
+function retryLoad() {
+  return configLoad.retry()
 }
 
 async function saveConfig() {
+  if (!configLoad.isReady.value) {
+    ElMessage.error('配置未加载成功，已禁止保存（会用默认值覆盖线上配置）')
+    return
+  }
   savingConfig.value = true
   try {
     // 后端字段为 execution_mode / max_concurrent，串行模式并发数无意义统一传 1
@@ -604,7 +628,7 @@ function handleVisibilityChange() {
 
 onMounted(() => {
   loadStats()
-  loadConfig()
+  configLoad.load()
   loadChannels()
   loadTasks()
   setupSSE()
