@@ -69,6 +69,41 @@ class RateLimitError(BizError):
         super().__init__(code=429, message=message, http_status=429)
 
 
+def _loc_path(loc: Any) -> str:
+    """把 pydantic 的 loc 元组拼成可定位的字段路径（body.password / body.items.0.name）。"""
+    parts = [str(p) for p in (loc or ())]
+    return ".".join(parts) if parts else "body"
+
+
+def _sanitize_validation_errors(errors: Any) -> list[dict]:
+    """只保留 type / loc / msg，丢掉 input 与 ctx。
+
+    pydantic 的 errors() 默认带 input（本次提交的原值）与 ctx（可能含原值的异常对象），
+    密码、API key、webhook URL 写错类型时会被原样回显给客户端；NFR-UX-05 的口径是
+    错误响应不得回显用户提交的敏感值。type/loc/msg 已足够前端定位字段与展示原因。
+    """
+    details: list[dict] = []
+    seen: set[tuple] = set()
+    for err in errors or ():
+        if not isinstance(err, dict):
+            continue
+        loc = list(err.get("loc") or ())
+        kind = str(err.get("type") or "value_error")
+        msg = str(err.get("msg") or "参数不合法").strip() or "参数不合法"
+        key = (tuple(loc), kind, msg)
+        if key in seen:
+            continue
+        seen.add(key)
+        details.append({"loc": loc, "type": kind, "msg": msg})
+    return details
+
+
+def _validation_summary(details: list[dict]) -> str:
+    """人读摘要：`参数错误: body.password: <msg>; …`，前端 toast 靠字段路径定位。"""
+    summary = "; ".join(f"{_loc_path(d['loc'])}: {d['msg']}" for d in details)
+    return f"参数错误: {summary}"[:500] if summary else "参数错误"
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """注册全局异常处理器。"""
 
@@ -80,8 +115,9 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(request: Request, exc: RequestValidationError):
-        # 参数校验失败，返回具体错误明细便于前端调试
-        return error(code=400, message=f"参数错误: {exc.errors()}", http_status=400)
+        # 只回显 type/loc/msg，不回显 input/ctx 原值（NFR-UX-05）
+        details = _sanitize_validation_errors(exc.errors())
+        return error(code=400, message=_validation_summary(details), data={"errors": details}, http_status=400)
 
     @app.exception_handler(SQLAlchemyError)
     async def db_error_handler(request: Request, exc: SQLAlchemyError):
