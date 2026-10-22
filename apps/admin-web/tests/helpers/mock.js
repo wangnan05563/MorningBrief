@@ -235,6 +235,8 @@ export const adPlacementsListResponse = {
         start_date: '2026-07-01',
         end_date: '2026-07-31',
         enabled: 1,
+        // T02602：开关开着但区间已结束——状态必须如实显示「已过期」
+        status: 'expired',
       },
       {
         id: 2,
@@ -244,6 +246,7 @@ export const adPlacementsListResponse = {
         start_date: '2026-07-05',
         end_date: '2026-07-10',
         enabled: 0,
+        status: 'disabled',
       },
     ],
   },
@@ -266,6 +269,7 @@ export const adScheduleResponse = {
         start_date: monthStart,
         end_date: monthEnd,
         enabled: 1,
+        status: 'active',
       },
       {
         material_name: '促销广告B',
@@ -273,6 +277,7 @@ export const adScheduleResponse = {
         start_date: `${_y}-${_m}-05`,
         end_date: `${_y}-${_m}-10`,
         enabled: 0,
+        status: 'disabled',
       },
     ],
   },

@@ -14,8 +14,8 @@ import assert from 'node:assert/strict'
 
 import { buildScheduleMap, pickPrimary } from '../../src/utils/scheduleMap.js'
 
-function placement(material_name, position, start_date, end_date, enabled = 1) {
-  return { material_name, position, start_date, end_date, enabled }
+function placement(material_name, position, start_date, end_date, enabled = 1, status = enabled === 0 ? 'disabled' : 'active') {
+  return { material_name, position, start_date, end_date, enabled, status }
 }
 
 test('同位同日重叠：两条投放都要留下，不能后写覆盖前写', () => {
@@ -49,7 +49,24 @@ test('主显优先给启用中的投放：停用那条不该挤掉启用的', ()
   ])
   assert.equal(map['2026-03-05'].tail.material_name, '在投广告E')
   assert.equal(map['2026-03-05'].tail.enabled, 1)
-  assert.deepEqual(map['2026-03-05'].tail.conflicts, [{ material_name: '过期广告D', enabled: 0 }])
+  assert.deepEqual(map['2026-03-05'].tail.conflicts, [{ material_name: '过期广告D', enabled: 0, status: 'disabled' }])
+})
+
+test('主显优先给今天真正在播的（status=active），待投放/已过期让位', () => {
+  // 三条开关都开着，但只有 status=active 的那条此刻真的会播（T02602）
+  const map = buildScheduleMap([
+    placement('待投放H', 'head', '2026-03-05', '2026-03-05', 1, 'pending'),
+    placement('已过期I', 'head', '2026-03-05', '2026-03-05', 1, 'expired'),
+    placement('生效中J', 'head', '2026-03-05', '2026-03-05', 1, 'active'),
+  ])
+  const slot = map['2026-03-05'].head
+  assert.equal(slot.material_name, '生效中J')
+  assert.equal(slot.status, 'active')
+  assert.equal(slot.conflicts.length, 2)
+  assert.deepEqual(
+    slot.conflicts.map((c) => c.status).sort(),
+    ['expired', 'pending']
+  )
 })
 
 test('全部停用：仍保留主显与折叠，冲突数不丢', () => {

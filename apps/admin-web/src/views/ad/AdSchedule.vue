@@ -40,14 +40,21 @@
                 v-for="pos in positionValues"
                 :key="pos"
                 class="slot"
-                :class="[`slot-${pos}`, { 'slot-off': isSlotDisabled(data.day, pos) }]"
+                :class="[`slot-${pos}`, slotStateClass(data.day, pos)]"
               >
                 <span class="slot-label">{{ enumLabel(AD_POSITION, pos) }}</span>
                 <span v-if="getSlotMaterial(data.day, pos)" class="slot-name">
                   {{ getSlotMaterial(data.day, pos).material_name }}
                 </span>
                 <span v-else class="slot-empty">—</span>
-                <span v-if="isSlotDisabled(data.day, pos)" class="slot-off-tag">已停用</span>
+                <!-- T02602：四态由服务端派生，待投放/已过期也要与「今天在播」区分开 -->
+                <span
+                  v-if="slotStatusTag(data.day, pos)"
+                  class="slot-status-tag"
+                  :class="`slot-status-tag--${slotStatusTag(data.day, pos).tone}`"
+                >
+                  {{ slotStatusTag(data.day, pos).label }}
+                </span>
                 <el-tooltip
                   v-if="slotConflicts(data.day, pos).length > 0"
                   :content="slotConflictText(data.day, pos)"
@@ -71,6 +78,7 @@ import api from '../../api'
 import ListLoadError from '../../components/ListLoadError.vue'
 import { AD_POSITION, enumLabel, enumOptions } from '../../constants/enums'
 import { buildScheduleMap } from '../../utils/scheduleMap'
+import { placementStatusMeta } from '../../utils/placementStatus'
 
 const loading = ref(false)
 // D25（FR-UX-302）：页内错误态。与拦截器 toast 并存但不依赖它——toast 会消失，
@@ -92,9 +100,22 @@ function getSlotMaterial(dayStr, pos) {
   return scheduleMap.value[dayStr]?.[pos] || null
 }
 
-// 停用状态在排期上必须可见：否则日历与投放规则页两处口径不一致（T02491 / D14）
-function isSlotDisabled(dayStr, pos) {
-  return getSlotMaterial(dayStr, pos)?.enabled === 0
+// 停用/待投放/已过期状态在排期上必须可见：否则日历与投放规则页两处口径不一致
+// （T02491 / D14，T02602 把后两态补齐）。status 由服务端派生，日历不再按 enabled 猜。
+function slotStatus(dayStr, pos) {
+  return getSlotMaterial(dayStr, pos)?.status
+}
+
+// 「生效中」不额外加标签，其余三态各自带文字与色调
+function slotStatusTag(dayStr, pos) {
+  const status = slotStatus(dayStr, pos)
+  if (!status || status === 'active') return null
+  return placementStatusMeta(status)
+}
+
+function slotStateClass(dayStr, pos) {
+  const tag = slotStatusTag(dayStr, pos)
+  return tag ? `slot-${tag.tone}` : ''
 }
 
 // D24：同位同日重叠的其他投放。日历只能主显一条，其余折叠进角标 + tooltip，
@@ -106,7 +127,7 @@ function slotConflicts(dayStr, pos) {
 function slotConflictText(dayStr, pos) {
   const list = slotConflicts(dayStr, pos)
   const detail = list
-    .map((c) => `${c.material_name}${c.enabled === 0 ? '（已停用）' : ''}`)
+    .map((c) => `${c.material_name}${c.status === 'active' ? '' : `（${placementStatusMeta(c.status).label}）`}`)
     .join('、')
   return `${enumLabel(AD_POSITION, pos)} 位当天有 ${list.length + 1} 条投放重叠，另有：${detail}`
 }
@@ -275,12 +296,34 @@ watch(
         }
       }
 
-      .slot-off-tag {
+      // 待投放：开关是开的，但与今天无关（T02602）
+      &.slot-pending {
+        .slot-name {
+          opacity: 0.7;
+        }
+      }
+
+      // 已过期：区间已结束，同样不是「今天在播」
+      &.slot-expired {
+        .slot-name {
+          opacity: 0.55;
+        }
+      }
+
+      .slot-status-tag {
         flex-shrink: 0;
         margin-left: auto;
         font-size: 10px;
         line-height: 1.2;
         color: $color-danger;
+
+        &--pending {
+          color: #b88230;
+        }
+
+        &--expired {
+          color: $color-text-secondary;
+        }
       }
 
       // D24：重叠角标。不能只在 hover Tooltip 里说——不悬停就看不见，等于没说

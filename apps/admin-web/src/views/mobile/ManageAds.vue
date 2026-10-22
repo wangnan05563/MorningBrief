@@ -7,8 +7,9 @@
       <div class="m-ads__info">
         <div class="m-ads__name">
           {{ p.material_name || ('素材 #' + p.material_id) }}
-          <span class="m-badge" :class="p.enabled ? 'm-badge--on' : 'm-badge--off'">
-            {{ p.enabled ? '投放中' : '已停用' }}
+          <!-- T02602：四态由服务端派生，启用但未开始/已结束不能再显示成「投放中」 -->
+          <span class="m-badge" :class="`m-badge--${statusTone(p.status)}`">
+            {{ statusLabel(p.status) }}
           </span>
         </div>
         <div class="m-ads__meta" v-if="p.position">位置：{{ p.position }}</div>
@@ -32,9 +33,13 @@ import { ref, onMounted } from 'vue'
 import { listPlacements, updatePlacement } from '../../api/ads'
 import { ElMessage } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
+import { placementStatusMeta } from '../../utils/placementStatus'
 
 const list = ref([])
 const loading = ref(false)
+
+const statusLabel = (status) => placementStatusMeta(status).label
+const statusTone = (status) => placementStatusMeta(status).tone
 
 async function reload() {
   loading.value = true
@@ -62,8 +67,10 @@ async function toggle(p) {
   })
   if (!ok) return
   try {
-    await updatePlacement(p.id, next)
-    p.enabled = next
+    const data = await updatePlacement(p.id, next)
+    p.enabled = data.enabled
+    // 服务端派生状态直接落位：重新启用已过期的投放应显示「已过期」而非「投放中」（T02602）
+    p.status = data.status
     ElMessage.success(next ? '已启用投放' : '已停用投放')
   } catch {
     // 拦截器已提示
@@ -119,6 +126,8 @@ onMounted(reload)
 
 .m-badge--on { color: #67c23a; background: #f0f9eb; }
 .m-badge--off { color: #f56c6c; background: #fef0f0; }
+.m-badge--pending { color: #b88230; background: #fdf6ec; }
+.m-badge--expired { color: #8a8f99; background: #f4f4f5; }
 
 .m-btn {
   height: 46px;

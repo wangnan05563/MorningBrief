@@ -127,8 +127,10 @@ test('D23：停用的投放仍会出现在日历上，但必须标明「已停�
   // 排期视图不过滤 enabled：停用规则也要可见（否则运营以为它被删了/照播了）
   assert.doesNotMatch(schedule, /AdPlacement\.enabled/, '排期按 enabled 过滤会让停用规则凭空消失')
   assert.match(schedule, /"enabled":\s*p\.enabled/, '必须下发 enabled，前端才能标灰')
-  assert.match(AD_SCHEDULE_VIEW, /isSlotDisabled/)
-  assert.match(AD_SCHEDULE_VIEW, /已停用/)
+  // T02602 起状态改由服务端派生，四态文案收敛在 utils/placementStatus.js；
+  // 日历仍须对非生效态加标签，「已停用」不能只剩一个灰色格子
+  assert.match(AD_SCHEDULE_VIEW, /slotStatusTag/)
+  assert.match(read(`${SRC}utils/placementStatus.js`), /disabled: \{ label: '已停用'/)
 })
 
 test('D46：频道卡片数的是本频道配置，RSS 页数的是全局清单', () => {

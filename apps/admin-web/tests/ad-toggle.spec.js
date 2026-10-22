@@ -30,7 +30,7 @@ test.describe('广告投放启停', () => {
         })
         if (putStatus === 200) {
           await route.fulfill({
-            json: { code: 0, message: 'success', data: { id: 1, enabled: 0 } },
+            json: { code: 0, message: 'success', data: { id: 1, enabled: 0, status: 'disabled' } },
           })
         } else {
           await route.fulfill({ status: putStatus, body: 'boom' })
@@ -114,7 +114,7 @@ test.describe('广告投放启停', () => {
         await route.fulfill({ json: adPlacementsListResponse })
       } else if (route.request().method() === 'PUT') {
         calls.push(JSON.parse(route.request().postData() || '{}'))
-        await route.fulfill({ json: { code: 0, message: 'success', data: { id: 1, enabled: 0 } } })
+        await route.fulfill({ json: { code: 0, message: 'success', data: { id: 1, enabled: 0, status: 'disabled' } } })
       } else {
         await route.continue()
       }

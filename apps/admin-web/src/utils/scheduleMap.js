@@ -12,8 +12,8 @@
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 
 /**
- * @param {Array<{material_name: string, position: string, start_date: string, end_date: string, enabled: number}>} placements
- * @returns {Record<string, Record<string, {material_name: string, enabled: number, conflicts: Array}>>}
+ * @param {Array<{material_name: string, position: string, start_date: string, end_date: string, enabled: number, status: string}>} placements
+ * @returns {Record<string, Record<string, {material_name: string, enabled: number, status: string, conflicts: Array}>>}
  */
 export function buildScheduleMap(placements = []) {
   // 第一步：按 (日期, 广告位) 收集**全部**投放，不在这里挑一条
@@ -28,7 +28,8 @@ export function buildScheduleMap(placements = []) {
       const dateKey = d.toISOString().slice(0, 10)
       const list = (buckets[dateKey] ||= {})
       const byPos = (list[p.position] ||= [])
-      byPos.push({ material_name: p.material_name, enabled: p.enabled })
+      // status 由服务端派生（T02602），随格子带到视图，前端不再按 enabled 猜
+      byPos.push({ material_name: p.material_name, enabled: p.enabled, status: p.status })
     }
   }
 
@@ -44,16 +45,22 @@ export function buildScheduleMap(placements = []) {
 }
 
 /**
- * 主显优先给启用中的投放：停用的那条不该把启用的挤进折叠列表，
- * 否则「日历显示已停用」会和投放规则页对不上（T02491 / D14 的同一口径）。
+ * 主显优先给**今天真正在播**的投放（status=active），其次给启用中的，
+ * 停用的那条不该把启用的挤进折叠列表，否则「日历显示已停用」会和投放规则页
+ * 对不上（T02491 / D14 的同一口径）。待投放/已过期都还没在播，排在停用之前
+ * 只因开关仍是启用态（T02602）。
  */
 export function pickPrimary(list) {
-  const idx = list.findIndex((x) => x.enabled !== 0)
-  const primaryIndex = idx === -1 ? 0 : idx
+  const rank = (x) => (x.status === 'active' ? 0 : x.enabled !== 0 ? 1 : 2)
+  let primaryIndex = 0
+  for (let i = 1; i < list.length; i += 1) {
+    if (rank(list[i]) < rank(list[primaryIndex])) primaryIndex = i
+  }
   const primary = list[primaryIndex]
   return {
     material_name: primary.material_name,
     enabled: primary.enabled,
+    status: primary.status,
     conflicts: list.filter((_, i) => i !== primaryIndex),
   }
 }

@@ -32,8 +32,8 @@ test.describe('排期日历的投放重叠（D24）', () => {
   test('同位同日两条投放：第二条不能被覆盖掉，必须出现重叠角标', async ({ page }) => {
     const ym = new Date().toISOString().slice(0, 7)
     await openSchedule(page, [
-      { material_name: '品牌广告A', position: 'head', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1 },
-      { material_name: '竞品广告B', position: 'head', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1 },
+      { material_name: '品牌广告A', position: 'head', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
+      { material_name: '竞品广告B', position: 'head', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
     ])
 
     const badge = page.locator('.slot-conflict').first()
@@ -50,8 +50,8 @@ test.describe('排期日历的投放重叠（D24）', () => {
   test('无重叠时不出现角标（避免把正常排期渲染成冲突）', async ({ page }) => {
     const ym = new Date().toISOString().slice(0, 7)
     await openSchedule(page, [
-      { material_name: '品牌广告A', position: 'head', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1 },
-      { material_name: '中部广告C', position: 'mid', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1 },
+      { material_name: '品牌广告A', position: 'head', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
+      { material_name: '中部广告C', position: 'mid', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
     ])
     await expect(page.locator('.slot-conflict')).toHaveCount(0)
   })
@@ -60,8 +60,8 @@ test.describe('排期日历的投放重叠（D24）', () => {
     const ym = new Date().toISOString().slice(0, 7)
     await openSchedule(page, [
       // 先给一条已停用的，再给一条启用中的：主显必须是启用中的那条
-      { material_name: '过期广告D', position: 'tail', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 0 },
-      { material_name: '在投广告E', position: 'tail', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1 },
+      { material_name: '过期广告D', position: 'tail', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 0, status: 'disabled' },
+      { material_name: '在投广告E', position: 'tail', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
     ])
 
     // 日历网格里前面还有上个月的空格子，断言只看真有数据的那些

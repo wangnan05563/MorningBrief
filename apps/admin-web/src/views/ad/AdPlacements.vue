@@ -37,7 +37,7 @@
         <el-table-column prop="end_date" label="结束日期" width="140" align="center" />
         <!-- D13/D14：状态列同时给出文字与开关——只看开关分不清左右哪边是「启用」，
              移动端停用的规则此前在 PC 里与生效规则完全同貌 -->
-        <el-table-column label="状态" width="150" align="center">
+        <el-table-column label="状态" width="170" align="center">
           <template #default="{ row }">
             <div class="status-cell">
               <el-switch
@@ -45,8 +45,10 @@
                 :loading="togglingIds.includes(row.id)"
                 @update:model-value="(v) => handleToggle(row, v)"
               />
-              <span class="status-text" :class="{ 'status-text--off': row.enabled !== 1 }">
-                {{ row.enabled === 1 ? '已启用' : '已停用' }}
+              <!-- T02602：状态由服务端按「开关 + 今天是否落在区间」派生，
+                   待投放/已过期不再显示成「已启用」 -->
+              <span class="status-text" :class="`status-text--${statusTone(row.status)}`">
+                {{ statusLabel(row.status) }}
               </span>
             </div>
           </template>
@@ -160,6 +162,7 @@ import { Plus, Delete, Close, Check } from '@element-plus/icons-vue'
 
 import api from '../../api'
 import { AD_POSITION, enumLabel, enumTagType, enumOptions } from '../../constants/enums'
+import { placementStatusMeta } from '../../utils/placementStatus'
 
 const positionOptions = enumOptions(AD_POSITION)
 
@@ -205,6 +208,10 @@ const rules = {
 // 广告位文案/标签色取自 src/constants/enums.js，与排期日历同源（FR-UX-405 / T02504）
 const positionLabel = (p) => enumLabel(AD_POSITION, p)
 const positionTagType = (p) => enumTagType(AD_POSITION, p)
+
+// T02602：四态文案与色调统一走 utils/placementStatus，与移动端/排期日历同源
+const statusLabel = (status) => placementStatusMeta(status).label
+const statusTone = (status) => placementStatusMeta(status).tone
 
 async function fetchList() {
   loading.value = true
@@ -272,8 +279,10 @@ async function handleToggle(row, next) {
   if (!ok) return
   togglingIds.value = [...togglingIds.value, row.id]
   try {
-    await api.put(`/ads/placements/${row.id}`, { enabled })
-    row.enabled = enabled
+    const data = await api.put(`/ads/placements/${row.id}`, { enabled })
+    row.enabled = data.enabled
+    // 状态由服务端派生后回传：重新启用一条「已过期」的投放不应显示成「生效中」（T02602）
+    row.status = data.status
     ElMessage.success(enabled === 0 ? '已停用' : '已启用')
   } catch {
     // 请求失败保持原状态：开关由 :model-value 驱动，不写 row.enabled 即自动回弹
@@ -351,7 +360,13 @@ onMounted(fetchList)
     color: var(--el-color-success-dark, #529b2e);
   }
 
-  .status-text--off {
+  // T02602：四态各自有色调——「待投放/已过期」不能和「生效中」同色
+  .status-text--pending {
+    color: #b88230;
+  }
+
+  .status-text--off,
+  .status-text--expired {
     color: $color-text-secondary;
   }
 

@@ -17,6 +17,39 @@ ACTIVE_PLACEMENT_TTL = 25 * 3600
 # 合法广告位枚举值，用于入参校验
 VALID_POSITIONS = {p.value for p in AdPosition}
 
+# 投放展示状态（T02602）：只有「启用 + 今天落在闭区间内」才与真实播放一致
+PLACEMENT_DISABLED = "disabled"
+PLACEMENT_PENDING = "pending"
+PLACEMENT_ACTIVE = "active"
+PLACEMENT_EXPIRED = "expired"
+
+
+def derive_placement_status(
+    enabled: Optional[int],
+    start_date: Optional[date],
+    end_date: Optional[date],
+    today: Optional[date] = None,
+) -> str:
+    """按开关与日期闭区间派生投放状态，口径与 get_active_placements 一致。
+
+    停用优先于日期态：开关是运营的显式干预，先显示这一个；重新启用后
+    日期派生的「待投放 / 生效中 / 已过期」才接管。服务端统一给字段，
+    避免 PC、移动端、排期日历各算一遍（T02602）。
+    """
+    if enabled == 0:
+        return PLACEMENT_DISABLED
+    ref = today or date.today()
+    if start_date and ref < start_date:
+        return PLACEMENT_PENDING
+    if end_date and ref > end_date:
+        return PLACEMENT_EXPIRED
+    return PLACEMENT_ACTIVE
+
+
+def _placement_status(p: "AdPlacement", today: date) -> str:
+    enabled = p.enabled if p.enabled is not None else 1
+    return derive_placement_status(enabled, p.start_date, p.end_date, today)
+
 
 class AdService:
     def __init__(self, db: AsyncSession):
@@ -139,6 +172,7 @@ class AdService:
             list_stmt = list_stmt.where(cond)
         result = await self.db.execute(list_stmt)
         rows = result.all()
+        today = date.today()
 
         list_data = [
             {
@@ -149,6 +183,9 @@ class AdService:
                 "start_date": p.start_date.isoformat() if p.start_date else None,
                 "end_date": p.end_date.isoformat() if p.end_date else None,
                 "enabled": p.enabled if p.enabled is not None else 1,
+                # 状态由服务端派生（T02602）：只看 enabled 会把 12 月排期和过期投放
+                # 都显示成「投放中」，与 C 端真实播放不一致
+                "status": _placement_status(p, today),
             }
             for p, m_name in rows
         ]
@@ -165,7 +202,12 @@ class AdService:
             raise ValueError(f"投放不存在: {placement_id}")
         p.enabled = enabled
         await self.db.flush()
-        return {"id": p.id, "enabled": p.enabled}
+        # 启停后回传由服务端派生的状态：前端不做二次推算，切换即落位（T02602）
+        return {
+            "id": p.id,
+            "enabled": p.enabled,
+            "status": _placement_status(p, date.today()),
+        }
 
     async def create_placement(
         self,
@@ -248,6 +290,7 @@ class AdService:
             .order_by(AdPlacement.start_date)
         )
         rows = result.all()
+        today = date.today()
 
         placements = [
             {
@@ -259,6 +302,9 @@ class AdService:
                 "end_date": p.end_date.isoformat() if p.end_date else None,
                 # 排期视图要能看出「已停用」，否则停用的投放看着照播（T02491 / D14）
                 "enabled": p.enabled,
+                # 待投放/已过期同样要可见（T02602）：日历不能把未来或已结束的排期
+                # 读成今天在播
+                "status": _placement_status(p, today),
             }
             for p, m_name in rows
         ]
