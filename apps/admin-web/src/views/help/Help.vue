@@ -283,8 +283,9 @@ const docSections = [
           '点击稿件标题进入审核详情页',
           '对比原文与改写稿，查看 LLM 改写质量',
           '查看热力评分（关键词密度、可读性、敏感词检测）',
-          '通过：点击「审核通过」，进入 TTS 合成队列',
-          '驳回：点击「驳回」，填写驳回原因',
+          '通过：在「审核操作」里选 通过，点「提交」，进入 TTS 合成队列',
+          '打回：选 打回 并填写理由，点「提交」；界面动作名是「打回」而非「驳回」',
+          '替换段落：选 替换段落 → 选择段落 → 填写理由 → 点「提交」（该记录状态变为 replaced）',
         ],
       },
       {
@@ -411,7 +412,7 @@ const docSections = [
           '按状态、频道、日期筛选',
           '点击工作流 ID 进入详情页',
           '查看步骤进度条与每步日志',
-          '失败工作流可点击「重试」从失败步骤恢复',
+          '失败工作流可在详情页底部「从指定步骤重跑」里选步骤后点「重跑」断点续跑（界面无「重试」按钮）',
         ],
       },
       {
@@ -575,8 +576,8 @@ const docSections = [
         content: [
           '编辑 backend/.env：填入上述 5 个 COS 参数（COS_CDN_DOMAIN 留空即可）',
           '安装 COS SDK：pip install cos-python-sdk-v5',
-          '验证凭证：python jmeter_test/verify_cos.py（自动上传测试文件 → 公网访问 → 清理）',
-          '迁移历史音频：python jmeter_test/migrate_audio_to_cos.py（自动扫描 /audio/ 路径的 episode 并上传 COS）',
+          '验证凭证：python scripts/jmeter_test/verify_cos.py（自动上传测试文件 → 公网访问 → 清理）',
+          '迁移历史音频：python scripts/jmeter_test/migrate_audio_to_cos.py（自动扫描 /audio/ 路径的 episode 并上传 COS）',
           '重启后端服务：执行 stop.ps1 → start.ps1',
           '配置小程序域名白名单：mp.weixin.qq.com → 开发管理 → 服务器域名 → downloadFile 合法域名 → 添加 https://<bucket>.cos.<region>.myqcloud.com',
           '真机验证：小程序播放任意节目，观察首字播放延迟应显著降低',

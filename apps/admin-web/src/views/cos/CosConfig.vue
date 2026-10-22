@@ -126,9 +126,23 @@
         <el-form-item label="存储桶 Bucket" prop="bucket">
           <el-input
             v-model="form.bucket"
-            placeholder="如 news-1250000000（不含 -{appid} 后缀亦可，系统按 SecretId APPID 拼接）"
+            placeholder="如 news-1250000000（完整桶名，必须带 -{APPID} 数字后缀）"
           />
-          <div class="field-tip">桶名称，需与 SecretId 归属的 APPID 匹配</div>
+          <!-- H2：原文案承诺「不含 -{appid} 后缀亦可，系统按 SecretId APPID 拼接」，
+               但后端把 COS_BUCKET 原样交给 SDK，全仓没有任何拼接逻辑（且 APPID 也无法从
+               SecretId 推出）。首装用户按文案省略后缀，保存后所有操作报「存储桶不存在」。
+               文案改成如实描述，并在界面直接校验后缀。 -->
+          <div class="field-tip">
+            必须填完整桶名（含 -{APPID} 数字后缀）；系统不会自动拼接后缀，缺失时所有操作报「存储桶不存在」
+          </div>
+          <el-alert
+            v-if="bucketSuffixError"
+            type="error"
+            :closable="false"
+            show-icon
+            class="bucket-suffix-alert"
+            >{{ bucketSuffixError }}</el-alert
+          >
         </el-form-item>
 
         <el-form-item label="CDN 加速域名" prop="cdn_domain">
@@ -191,6 +205,16 @@ const form = ref({
   bucket: '',
   cdn_domain: '',
 })
+// H2：桶名必须带 -{APPID} 数字后缀——后端把 COS_BUCKET 原样交给 SDK，全仓没有拼接逻辑，
+// 缺后缀保存后所有 COS 操作报「存储桶不存在」。这里在保存前就拦住并说明原因。
+const BUCKET_WITH_APPID = /^[a-z0-9][a-z0-9-]*-\d+$/
+const bucketSuffixError = computed(() => {
+  const bucket = (form.value.bucket || '').trim()
+  if (!bucket) return ''
+  if (BUCKET_WITH_APPID.test(bucket)) return ''
+  return `「${bucket}」缺少 -{APPID} 数字后缀（完整桶名形如 news-1250000000）。系统不会自动拼接后缀，保存后所有 COS 操作都会报「存储桶不存在」。`
+})
+
 // T00828：断点续录（SecretId/SecretKey 敏感字段不落盘）
 const { apply: applyDraft, peek: peekDraft, track: trackDraft, commit: commitDraft } = useDraft('cos-config')
 const enableDraft = trackDraft(form, { excludePaths: ['secret_id', 'secret_key'] })
@@ -301,6 +325,10 @@ async function handleSave() {
     ElMessage.error(`配置表读取失败（${provenance.value.load_error || '原因未知'}），已禁止保存`)
     return
   }
+  if (bucketSuffixError.value) {
+    ElMessage.error('桶名不完整，已禁止保存：' + bucketSuffixError.value)
+    return
+  }
   saving.value = true
   try {
     await saveCosConfig({
@@ -369,6 +397,10 @@ onMounted(async () => {
       color: $color-text-secondary;
       line-height: 1.5;
       margin-top: 4px;
+    }
+
+    .bucket-suffix-alert {
+      margin-top: 8px;
     }
   }
 }

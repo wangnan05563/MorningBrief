@@ -38,6 +38,7 @@ class MaterialCreateRequest(BaseModel):
     - cos：云端对象存储导入
     - api：API / 网页 URL 拉取
     - qrcode：二维码 / 链接分享进入的手动录入门户
+    - book_plan：找书工具「加入待讲书单」写入的占位素材（无正文，不进讲书稿生成链路）
     """
     workflow_id: str
     channel_id: Optional[int] = None
@@ -204,7 +205,7 @@ async def list_materials(
     # T00775：精确过滤（绕开 keyword 的 LIKE 语义，避免标题含 % / _ 时被当作通配符）
     material_id: int = Query(None, description="按素材 ID 精确过滤（讲书稿书单「素材 ID」深链定位用）"),
     source: str = Query(None, description="按来源（书名）精确过滤（按书聚合视图点书名进明细用）"),
-    source_type: str = Query(None, description="按录入渠道过滤（list/cos=书稿文档，rss/book_rss=资讯与书评源，api/qrcode=外部拉取）"),
+    source_type: str = Query(None, description="按录入渠道过滤（list/cos=书稿文档，rss/book_rss=资讯与书评源，api/qrcode=外部拉取，book_plan=待讲书单占位）"),
     media_type: str = Query(None, description="按素材媒体类型过滤（text/image/video，T00716）"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),

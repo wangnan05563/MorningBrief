@@ -103,6 +103,22 @@
 
     <!-- 结果表 -->
     <el-card shadow="never" class="result-card">
+      <!-- C103：加入待讲书单前先定归属频道。占位素材不带 channel_id 会落在所有频道视图之外，
+           而按钮此前照样说「已加入」——链路断在无人可见的地方。 -->
+      <div class="result-meta">
+        <span>加入待讲书单时归属频道：</span>
+        <el-select
+          v-model="planChannelId"
+          placeholder="请选择频道（必选）"
+          filterable
+          style="width: 220px"
+        >
+          <el-option v-for="c in channels" :key="c.id" :label="c.name" :value="c.id" />
+        </el-select>
+        <span class="meta-hint">
+          未选频道时「加入书单」不会提交；书稿仍需到「素材录入」上传后才会进入该频道的讲书稿书单。
+        </span>
+      </div>
       <el-table data-guide="ebooks-results" :data="hits" v-loading="searching" stripe style="width: 100%">
         <el-table-column type="index" width="56" label="#" />
         <el-table-column prop="title" label="书名" min-width="240" show-overflow-tooltip />
@@ -123,7 +139,9 @@
               :loading="draftingUrl === row.url"
               :icon="Check"
               label="加入书单"
-              desc="把该书加入待讲书单"
+              :desc="planChannelId
+                ? `把该书加入「${channelName(planChannelId)}」的待讲书单（素材库占位，书稿另需上传）`
+                : '先在上方选择归属频道'"
               @click="onAddToBookList(row)"
             />
           </template>
@@ -158,10 +176,17 @@ import {
   rebuildEbookIndex,
   searchEbooks,
 } from '../../api/ebooks'
+import { listChannels } from '../../api/channels'
 
 const keyword = ref('')
 const category = ref('')
 const limit = ref(20)
+
+// C103：加入待讲书单前必须选归属频道。占位素材不带 channel_id 时落库为 NULL——
+// 既不在该频道的讲书稿候选里（候选按频道过滤），也不在任何频道视图的素材库里，
+// 而按钮却写着「已加入书单」，链路就断在这里。
+const channels = ref([])
+const planChannelId = ref(null)
 
 const categories = ref([])
 const categoryLoading = ref(false)
@@ -185,6 +210,9 @@ let pollTimer = null
 
 const building = computed(() => !!(indexInfo.value.build && indexInfo.value.build.running))
 
+// C103：按钮 tooltip 里点名要加入哪个频道，让「加入待讲书单」和落库位置对得上
+const channelName = (id) => channels.value.find((c) => c.id === id)?.name || ''
+
 async function loadCategories(force = false) {
   categoryLoading.value = true
   try {
@@ -207,6 +235,12 @@ function onRefreshCategories() {
  * 取件仍人工：下载 EPUB/DOCX 后到「素材录入」上传，素材占位随之被替换/补齐。
  */
 async function onAddToBookList(row) {
+  // C103：归属频道必选。没有频道，这条占位素材在任何频道视图里都不存在，
+  // 点完按钮却收到「已加入待讲书单」，等于界面声称了一件没有发生的事。
+  if (!planChannelId.value) {
+    ElMessage.warning('请先在结果表上方选择归属频道，再加入待讲书单')
+    return
+  }
   draftingUrl.value = row.url
   try {
     const data = await createDraftMaterial({
@@ -214,6 +248,7 @@ async function onAddToBookList(row) {
       author: row.author,
       category: row.category,
       url: row.url,
+      channel_id: planChannelId.value,
     })
     if (data?.created === false) {
       ElMessage.info(data?.message || '该书已在素材库中')
@@ -320,9 +355,15 @@ async function onRebuildIndex() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadCategories()
   loadIndexStatus()
+  // C103：频道列表拉不到时下拉会是空的——必须可见，否则用户以为「没有频道可归属」
+  try {
+    channels.value = (await listChannels()) || []
+  } catch (e) {
+    ElMessage.warning('频道列表加载失败，加入待讲书单前需先点「刷新分类」旁的重试入口，或稍后重试')
+  }
 })
 
 onUnmounted(() => {

@@ -121,11 +121,11 @@
             placeholder="按书名搜索"
             clearable
             style="width: 240px"
-            @keyup.enter="loadCandidates"
+            @keyup.enter="onCandidateSearch"
           />
         </el-form-item>
         <el-form-item>
-          <IconButton type="primary" :loading="candidatesLoading" :icon="Search" label="搜索" desc="按书名搜索可加入的书籍" @click="loadCandidates" />
+          <IconButton type="primary" :loading="candidatesLoading" :icon="Search" label="搜索" desc="按书名搜索可加入的书籍" @click="onCandidateSearch" />
           <!-- T00716：素材库管理入口（增删改查在「素材库管理」页） -->
           <el-link type="primary" style="margin-left: 12px" @click="goLibrary">管理素材 ↗</el-link>
         </el-form-item>
@@ -156,6 +156,22 @@
           />
         </template>
       </el-table>
+      <!-- C84：候选此前固定 page:1、size:50，后端返回的 total 被丢弃，界面既无翻页控件
+           也不显示总数——本频道书多于 50 本时，第 51 本起「不存在」，运营会判定素材库里没有这本书。 -->
+      <div class="candidate-pager">
+        <span class="candidate-total">本频道共 {{ candidateTotal }} 本书可加入</span>
+        <el-pagination
+          v-model:current-page="candidatePage"
+          v-model:page-size="candidateSize"
+          :total="candidateTotal"
+          :page-sizes="PANEL_PAGE_SIZE_OPTIONS"
+          layout="sizes, prev, pager, next"
+          size="small"
+          background
+          @current-change="loadCandidates"
+          @size-change="onCandidateSizeChange"
+        />
+      </div>
       <template #footer>
         <div class="dialog-footer">
           <span>已选 {{ selectedCandidates.length }} 本</span>
@@ -184,6 +200,8 @@ import { useRouter } from 'vue-router'
 import { View, RefreshLeft, Plus, ArrowUp, ArrowDown, Delete, Search, Close, Check } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import ListLoadError from '../../components/ListLoadError.vue'
+// C84：候选分页页长档位与素材库面板共用同一常量
+import { PANEL_PAGE_SIZE_OPTIONS } from '../../constants/pagination'
 import {
   addBooksToPool,
   getScriptMode,
@@ -223,6 +241,10 @@ const candidatesVisible = ref(false)
 const candidates = ref([])
 const candidatesLoading = ref(false)
 const candidateKeyword = ref('')
+// C84：候选分页态（此前固定 page:1/size:50，第 51 本起在界面上「不存在」）
+const candidatePage = ref(1)
+const candidateSize = ref(20)
+const candidateTotal = ref(0)
 const selectedCandidates = ref([])
 const adding = ref(false)
 
@@ -372,21 +394,36 @@ async function onRemove(row) {
 function openCandidates() {
   candidatesVisible.value = true
   candidateKeyword.value = ''
+  candidatePage.value = 1
   loadCandidates()
 }
 
+// C84：带上页码/页长，并把后端返回的 total 显示出来
+// （此前固定 page:1、size:50，第 51 本起在界面上「不存在」）
 async function loadCandidates() {
   candidatesLoading.value = true
   try {
     const data = await listBookCandidates(props.channelId, {
       keyword: candidateKeyword.value || undefined,
-      page: 1,
-      size: 50,
+      page: candidatePage.value,
+      size: candidateSize.value,
     })
     candidates.value = data?.items || []
+    candidateTotal.value = data?.total || 0
   } finally {
     candidatesLoading.value = false
   }
+}
+
+// 换页长或按关键词重新搜索都要回到第 1 页，否则会停在越界的旧页码上看到空列表
+function onCandidateSearch() {
+  candidatePage.value = 1
+  loadCandidates()
+}
+
+function onCandidateSizeChange() {
+  candidatePage.value = 1
+  loadCandidates()
 }
 
 function onCandidateSelect(rows) {
@@ -428,6 +465,18 @@ async function onAddSelected() {
 </script>
 
 <style scoped>
+/* C84：候选分页条（页长档位 + 总数） */
+.candidate-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+.candidate-total {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
 .alert-body {
   margin-top: 4px;
   font-size: 13px;

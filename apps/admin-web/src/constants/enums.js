@@ -74,6 +74,10 @@ export const MATERIAL_SOURCE_TYPE = {
   book_rss: { label: '书籍 RSS', long: '书籍 RSS 预制源', type: 'success' },
   api: { label: 'URL / API', long: 'URL / API 拉取', type: 'warning' },
   qrcode: { label: '二维码 / 链接', long: '二维码 / 链接分享', type: 'warning' },
+  // C103：找书工具「加入待讲书单」的占位素材。此前后端写了 source_type='book_plan'
+  // 但两侧枚举都没登记，素材库里这条记录显示成裸英文枚举、也无法按「待讲书单」筛选。
+  // 它是系统生成的占位项，不作为录入渠道出现在上传表单里（录入渠道见 CourseMaterials）。
+  book_plan: { label: '待讲书单', long: '待讲书单（找书工具占位，待上传书稿）', type: 'info' },
 }
 
 export const AD_POSITION = {

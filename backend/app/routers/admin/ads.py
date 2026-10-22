@@ -35,11 +35,12 @@ class PlacementCreateRequest(BaseModel):
 async def list_materials(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    keyword: str = Query(None, description="按素材名称模糊搜索（D16）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(get_current_admin),
 ):
     svc = AdService(db)
-    data = await svc.list_materials(page=page, size=size)
+    data = await svc.list_materials(page=page, size=size, keyword=keyword)
     return success(data=data)
 
 

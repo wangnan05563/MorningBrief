@@ -23,6 +23,10 @@ class MaterialSourceType(str, Enum):
     api = "api"
     # qrcode：二维码 / 链接分享进入的手动录入门户（来源标记为 qrcode）
     qrcode = "qrcode"
+    # book_plan：找书工具「加入待讲书单」写入的占位素材（T00626 / C103）——只有书名与书源链接，
+    # 没有正文，等运营在「素材录入」上传 EPUB/DOCX 后由 list 渠道补齐。
+    # 它绝不能进讲书稿生成链路（book_pool_service 的候选/入池/取章三处按此排除）。
+    book_plan = "book_plan"
 
 
 class MaterialStatus(str, Enum):

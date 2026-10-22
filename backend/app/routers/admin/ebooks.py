@@ -30,7 +30,7 @@ from app.core.exceptions import BizError
 from app.core.response import success
 from app.core.timeutil import localnow_naive
 from app.database import get_db
-from app.models import Material
+from app.models import Channel, Material, MaterialSourceType
 from app.models.material import MaterialStatus
 from app.services import ebook_index_service, ebook_source_service as svc
 
@@ -162,16 +162,33 @@ async def create_draft_material(
     if not title:
         raise BizError(code=400, message="书名必填")
 
+    # C103：channel_id 决定这本书落在哪个频道的讲书稿书单/素材库筛选里。此前前端不传、
+    # 后端不校验，NULL 直接落库，界面却宣称「已加入待讲书单」——记录既不在任何频道视图，
+    # 也不在讲书稿候选里，链路断在这里。现在非法频道明确拒绝，归属频道随响应回传给界面点名。
+    channel_name = None
+    if req.channel_id is not None:
+        ch_row = (await db.execute(
+            select(Channel.id, Channel.name).where(Channel.id == req.channel_id)
+        )).first()
+        if ch_row is None:
+            raise BizError(
+                code=400,
+                message="归属频道不存在，请重新选择频道后再加入待讲书单",
+                data={"errors": [{"field": "channel_id", "message": "频道 ID 无效"}]},
+            )
+        channel_name = ch_row[1]
+
     existing = (await db.execute(select(Material).where(Material.url == url))).scalar_one_or_none()
     if existing:
         return success(data={
             "created": False, "material_id": existing.id,
+            "channel_id": existing.channel_id,
             "message": f"《{title}》已在素材库（第 {existing.id} 条），无需重复加入",
         })
 
     material = Material(
         source=title[:64],
-        source_type="book_plan",
+        source_type=MaterialSourceType.book_plan.value,
         title=(f"《{title}》" + (f" {req.author}" if req.author else ""))[:256],
         content=(
             f"【待上传书稿】书名：{title}；作者：{req.author or '未标注'}；分类：{req.category or '未分类'}。\n"
@@ -190,7 +207,16 @@ async def create_draft_material(
     await db.commit()
     await db.refresh(material)
     logger.info("[ebooks] 已加入待讲书单：%s（material_id=%s）", title, material.id)
-    return success(data={"created": True, "material_id": material.id, "message": f"《{title}》已加入待讲书单"})
+    where = f"「{channel_name}」频道" if channel_name else "未归属频道"
+    return success(data={
+        "created": True,
+        "material_id": material.id,
+        "channel_id": material.channel_id,
+        "message": (
+            f"《{title}》已加入待讲书单（{where}，素材库第 {material.id} 条）；"
+            "书稿需在「素材录入」上传后才会进入讲书稿书单"
+        ),
+    })
 
 
 @router.get("/index/status")

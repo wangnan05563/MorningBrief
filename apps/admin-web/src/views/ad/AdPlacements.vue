@@ -66,10 +66,16 @@
     <el-dialog v-model="dialogVisible" title="新建投放" width="500px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
         <el-form-item label="素材" prop="material_id">
+          <!-- D16：改为服务端搜索（remote），并在下方如实显示「共 N 条」，
+               避免「前 100 条之外不存在」被误读成「素材没上传成功」 -->
           <el-select
             v-model="form.material_id"
-            placeholder="请选择素材"
+            placeholder="输入素材名称搜索（服务端检索）"
             filterable
+            remote
+            :remote-method="searchMaterials"
+            :remote-show-suffix="true"
+            :loading="materialSearching"
             style="width: 100%"
           >
             <el-option
@@ -79,6 +85,12 @@
               :value="m.id"
             />
           </el-select>
+          <div class="material-count-hint">
+            <template v-if="materialTotal > materialOptions.length">
+              已显示 {{ materialOptions.length }} 条 / 素材库共 {{ materialTotal }} 条——请按名称搜索，或到「广告素材」页确认素材是否已上传
+            </template>
+            <template v-else>素材库共 {{ materialTotal }} 条</template>
+          </div>
         </el-form-item>
         <el-form-item label="广告位" prop="position">
           <el-select
@@ -98,6 +110,8 @@
             end-placeholder="结束日期"
             style="width: 100%"
           />
+          <!-- D15：把闭区间与单日投放口径写在界面上，否则运营只能靠试错猜规则 -->
+          <div class="field-hint">区间含首尾（结束日当天仍会播放）；只投一天可让两个日期相同</div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -152,7 +166,20 @@ const form = reactive({
 const rules = {
   material_id: [{ required: true, message: '请选择素材', trigger: 'change' }],
   position: [{ required: true, message: '请选择广告位', trigger: 'change' }],
-  dateRange: [{ required: true, message: '请选择日期范围', trigger: 'change' }],
+  dateRange: [
+    { required: true, message: '请选择日期范围', trigger: 'change' },
+    // D15：日期区间是闭区间（结束日当天仍播放），允许同一天=单日投放。
+    // 真正的错只有倒序，且必须用中文说清，不能把 start_date/end_date 原样弹给运营。
+    {
+      validator: (_rule, value, callback) => {
+        const [start, end] = value || []
+        if (!start || !end) return callback()
+        if (start > end) return callback(new Error('结束日期不能早于开始日期；只投一天可让两者相同'))
+        callback()
+      },
+      trigger: 'change',
+    },
+  ],
 }
 
 // 广告位文案/标签色取自 src/constants/enums.js，与排期日历同源（FR-UX-405 / T02504）
@@ -172,12 +199,28 @@ async function fetchList() {
   }
 }
 
+// D16：素材下拉此前硬截断 page=1&size=100，第 101 条起的素材在列表里根本不存在，
+// `filterable` 只能在已加载的 100 条内搜索，且没有任何提示 → 运营判定「素材没上传成功」。
+// 改为服务端关键词搜索 + 回显总数，让「搜不到」和「没上传」可区分。
+const materialTotal = ref(0)
+const materialSearching = ref(false)
+
+async function searchMaterials(keyword = '') {
+  materialSearching.value = true
+  try {
+    const data = await api.get('/ads/materials', {
+      params: { page: 1, size: 100, keyword: keyword || undefined },
+    })
+    materialOptions.value = data.list || []
+    materialTotal.value = data.total || 0
+  } finally {
+    materialSearching.value = false
+  }
+}
+
 // 加载素材选项：每次打开对话框都拉取，确保使用最新素材列表
 async function fetchMaterials() {
-  const data = await api.get('/ads/materials', {
-    params: { page: 1, size: 100 },
-  })
-  materialOptions.value = data.list || []
+  await searchMaterials('')
 }
 
 // 启停切换：先确认再发请求，失败回滚开关（后端提交后会清「生效投放」缓存，停用即时生效）

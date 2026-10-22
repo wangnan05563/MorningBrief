@@ -364,6 +364,7 @@ import {
   MagicStick, Key, Loading, Plus, ArrowRight,
 } from '@element-plus/icons-vue'
 import api from '../../api'
+import { readBizError } from '../../api/bizError'
 
 // 隧道状态
 const status = ref(null)
@@ -511,13 +512,18 @@ async function handleStart() {
   downloadError.value = null
   tailscaleAuthError.value = null
   try {
-    const data = await api.post('/tunnel/start', {}, { timeout: 120000 })
+    // silent：5001/5003 由页内引导块承载（手动放置路径、授权链接），
+    // 拦截器再弹一句泛化 toast 只会把关键指引淹没掉（G1 / FR-UX-303 同一口径）
+    const data = await api.post('/tunnel/start', {}, { timeout: 120000, silent: true })
     status.value = data
     ElMessage.success('隧道已启动')
   } catch (error) {
     // 后端下载失败返回 code=5001 + data.error_type=binary_download_failed
     // Tailscale 授权返回 code=5003 + data.error_type=tailscale_funnel_auth
-    const resp = error?.response?.data || error
+    // G1：业务错误（HTTP 200 + code!==0）经拦截器 reject 出来是纯 Error，
+    // error.response.data 恒为 undefined；必须按拦截器契约读 code/payload，
+    // 否则下面两块引导（手动放置 / 授权链接）永不渲染。
+    const resp = readBizError(error)
     if (resp?.code === 5001 && resp?.data?.error_type === 'binary_download_failed') {
       downloadError.value = resp
       ElMessage.error('二进制下载失败，请按提示手动放置')
@@ -540,7 +546,7 @@ async function handleStop() {
     status.value = data
     ElMessage.success('隧道已关闭')
   } catch (error) {
-    const resp = error?.response?.data || error
+    const resp = readBizError(error)
     ElMessage.error(resp?.message || '停止失败')
   } finally {
     stopping.value = false
@@ -573,7 +579,7 @@ async function handleSaveConfig() {
     commitDraft()
     await configLoad.load()
   } catch (error) {
-    const resp = error?.response?.data || error
+    const resp = readBizError(error)
     ElMessage.error(resp?.message || '配置保存失败')
   } finally {
     savingConfig.value = false
@@ -596,7 +602,7 @@ async function handleCloudflareLogin() {
       ElMessage.error(data.message || '授权启动失败')
     }
   } catch (error) {
-    const resp = error?.response?.data || error
+    const resp = readBizError(error)
     ElMessage.error(resp?.message || '授权启动失败')
   } finally {
     loginLoading.value = false
@@ -645,7 +651,7 @@ async function handleCloudflareCreate() {
     await configLoad.load()
     wizardStep.value = 2
   } catch (error) {
-    const resp = error?.response?.data || error
+    const resp = readBizError(error)
     ElMessage.error(resp?.message || '创建隧道失败')
   } finally {
     createLoading.value = false
@@ -668,7 +674,7 @@ async function handleCloudflareRouteDns() {
     await configLoad.load()
     wizardStep.value = 3
   } catch (error) {
-    const resp = error?.response?.data || error
+    const resp = readBizError(error)
     ElMessage.error(resp?.message || 'DNS 配置失败')
   } finally {
     routeLoading.value = false

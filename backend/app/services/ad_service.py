@@ -34,16 +34,27 @@ class AdService:
 
     # ---- 素材管理 ----
 
-    async def list_materials(self, page: int, size: int) -> dict:
-        """广告素材分页列表。"""
+    async def list_materials(self, page: int, size: int, keyword: str | None = None) -> dict:
+        """广告素材分页列表。
+
+        keyword 按素材名称模糊搜索（D16）：投放对话框的素材下拉原先硬截断在前 100 条，
+        `filterable` 只能在已加载的 100 条里找，第 101 条起的素材「在列表里根本不存在」。
+        有了服务端搜索，前端才能把「搜不到」和「没上传」区分开。
+        """
+        conds = []
+        kw = (keyword or "").strip()
+        if kw:
+            conds.append(AdMaterial.name.like(f"%{kw}%"))
+
         count_result = await self.db.execute(
-            select(func.count(AdMaterial.id))
+            select(func.count(AdMaterial.id)).where(*conds)
         )
         total = count_result.scalar() or 0
 
         offset = (page - 1) * size
         result = await self.db.execute(
             select(AdMaterial)
+            .where(*conds)
             .order_by(AdMaterial.created_at.desc())
             .offset(offset)
             .limit(size)
@@ -166,9 +177,22 @@ class AdService:
         if position not in VALID_POSITIONS:
             raise BizError(code=400, message=f"非法广告位: {position}")
 
-        # 起止日期校验：end 必须晚于 start
-        if start_date >= end_date:
-            raise BizError(code=400, message="start_date 必须早于 end_date")
+        # 起止日期校验：区间是**闭区间**（get_active_placements 用 end_date >= 目标日），
+        # 所以 start == end 是合法的「只投一天」；旧写法 `start >= end` 把单日投放一并拒掉，
+        # 还把英文字段名原样弹给运营（D15）。只有倒序才是真的错。
+        if start_date > end_date:
+            raise BizError(
+                code=400,
+                message="结束日期不能早于开始日期；只投一天可让开始与结束为同一天",
+                data={
+                    "errors": [
+                        {
+                            "field": "dateRange",
+                            "message": "日期区间倒序：结束日期早于开始日期（含首尾，同一天可投）",
+                        }
+                    ]
+                },
+            )
 
         placement = AdPlacement(
             material_id=material_id,

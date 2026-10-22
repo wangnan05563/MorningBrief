@@ -122,17 +122,58 @@ async def test_create_placement_invalid_position(db_session):
 
 
 @pytest.mark.asyncio
-async def test_create_placement_invalid_date_range(db_session):
-    """start_date >= end_date 时抛 BizError。"""
+async def test_create_placement_rejects_reversed_range_in_chinese(db_session):
+    """D15：只有倒序才是错，且文案必须是中文 + 字段级明细，不能把英文字段名弹给运营。"""
     m = await _create_material(db_session)
     svc = AdService(db_session)
-    with pytest.raises(BizError):
+    with pytest.raises(BizError) as ei:
         await svc.create_placement(
             material_id=m.id,
             position="head",
             start_date=date(2026, 7, 31),
             end_date=date(2026, 7, 1),
         )
+    assert "start_date" not in ei.value.message
+    assert "结束日期不能早于开始日期" in ei.value.message
+    assert ei.value.data["errors"][0]["field"] == "dateRange"
+
+
+@pytest.mark.asyncio
+async def test_create_placement_allows_single_day(db_session):
+    """D15：区间是闭区间（end_date >= 目标日），所以 start == end 是合法的「只投一天」。
+
+    修复前用 `start_date >= end_date` 拒绝，单日投放根本建不出来，
+    而界面上的日期范围允许选同一天——用户只能看到一句英文字段名报错。
+    """
+    m = await _create_material(db_session)
+    svc = AdService(db_session)
+    pid = await svc.create_placement(
+        material_id=m.id, position="head",
+        start_date=date(2026, 7, 15), end_date=date(2026, 7, 15),
+    )
+    assert pid > 0
+    # 当天生效、次日不生效——闭区间口径与界面提示一致
+    on_day = await svc.get_active_placements(date(2026, 7, 15))
+    assert on_day["head"] is not None and on_day["head"]["material_id"] == m.id
+    next_day = await svc.get_active_placements(date(2026, 7, 16))
+    assert next_day["head"] is None
+
+
+@pytest.mark.asyncio
+async def test_list_materials_keyword_search(db_session):
+    """D16：素材下拉要能在服务端按名称搜索，否则第 101 条之后的素材「不存在」。"""
+    for i in range(101):
+        await _create_material(db_session, name=f"素材{i}")
+    await _create_material(db_session, name="双十一活动音频")
+
+    svc = AdService(db_session)
+    hit = await svc.list_materials(page=1, size=100, keyword="双十一")
+    assert hit["total"] == 1
+    assert hit["list"][0]["name"] == "双十一活动音频"
+
+    # 无关键词时仍回全量 total（前端据此提示「已显示 100 / 共 102 条」）
+    allm = await svc.list_materials(page=1, size=100)
+    assert allm["total"] == 102 and len(allm["list"]) == 100
 
 
 @pytest.mark.asyncio

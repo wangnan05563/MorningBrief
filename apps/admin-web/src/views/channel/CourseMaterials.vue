@@ -91,7 +91,7 @@
         <el-tab-pane label="云端存储导入" name="cos">
           <div class="hint">
             适用场景：团队素材已存对象存储（COS）。<br />
-            数据格式：COS 对象（.txt / .md 等），按 key 取回后解析为章节素材（source_type=cos）。
+            数据格式：COS 对象（.txt / .md 等），按 key 取回后解析为章节素材（来源类型=COS 导入）。
           </div>
           <el-form label-width="90px" style="max-width: 560px">
             <el-form-item label="对象 Key">
@@ -132,6 +132,21 @@
             <el-form-item label="URL"
               ><el-input v-model="manual.url" placeholder="可选（留空则按内容去重）"
             /></el-form-item>
+            <el-form-item label="来源类型">
+              <el-tag :type="manualSourceType === 'qrcode' ? 'warning' : 'info'" disable-transitions>
+                {{ manualSourceLabel }}
+              </el-tag>
+              <IconButton
+                v-if="manualSourceType !== 'list'"
+                link
+                type="primary"
+                :icon="RefreshLeft"
+                label="改回手动录入"
+                desc="撤销分享链接带来的来源类型标记"
+                @click="manualSourceType = 'list'"
+              />
+              <span class="source-type-hint">该标记即入库后素材库「来源类型」列显示的值（C92）</span>
+            </el-form-item>
             <IconButton type="primary" :disabled="!canManual" :loading="manualLoading" :icon="Check" label="保存到素材池" desc="将手动录入内容保存为素材" @click="doManual" />
           </el-form>
         </el-tab-pane>
@@ -140,7 +155,7 @@
         <el-tab-pane label="API / URL 拉取" name="url">
           <div class="hint">
             适用场景：对接 CMS / 知识库 / 第三方接口。<br />
-            数据格式：HTTP GET 返回 JSON 或 HTML，复用正文解析器提取内容（source_type=api）。
+            数据格式：HTTP GET 返回 JSON 或 HTML，复用正文解析器提取内容（来源类型=API 拉取）。
           </div>
           <el-form label-width="90px" style="max-width: 640px">
             <el-form-item label="URL" required
@@ -170,7 +185,8 @@
         <el-tab-pane label="二维码 / 链接分享" name="share">
           <div class="hint">
             适用场景：运营从微信 / 网页分享的链接。<br />
-            先拉取预览，复核后转「手动录入」正式入库（source_type=qrcode），避免自动入库脏数据。
+            先拉取预览，复核后转「手动录入」正式入库（来源类型标记为「二维码 / 链接分享」，
+            入库后可在素材库按该来源筛到；改回「手动录入」请按表单里的来源类型标记），避免自动入库脏数据。
           </div>
           <el-form label-width="90px" style="max-width: 640px">
             <el-form-item label="分享链接" required
@@ -198,7 +214,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from '../../utils/message'
-import { UploadFilled, Plus, Upload, Check, View } from '@element-plus/icons-vue'
+import { UploadFilled, Plus, Upload, Check, View, RefreshLeft } from '@element-plus/icons-vue'
 import { listChannels } from '../../api/channels'
 import {
   uploadMaterialFile,
@@ -207,7 +223,7 @@ import {
   importFromUrl,
   sharePreview,
 } from '../../api/materials'
-import { CHANNEL_TYPE, enumLabel } from '../../constants/enums'
+import { CHANNEL_TYPE, MATERIAL_SOURCE_TYPE, enumLabel } from '../../constants/enums'
 
 // 频道类型文案取自 src/constants/enums.js（FR-UX-405 / T02504）；类型为空不再显示「资讯」
 const typeLabel = (t) => enumLabel(CHANNEL_TYPE, t)
@@ -294,6 +310,11 @@ async function doCos() {
 // 手动录入
 const manual = reactive({ title: '', content: '', source: '手动录入', category: '', url: '' })
 const manualLoading = ref(false)
+// C92：这一路径此前固定提交 source_type='list'，但页面文案承诺「转手动录入正式入库
+// （source_type=qrcode）」，素材库「来源类型=二维码/链接分享」筛选因此恒为空。
+// 现在由分享预填写入 qrcode，并把它显示出来让运营可确认/改回。
+const manualSourceType = ref('list')
+const manualSourceLabel = computed(() => enumLabel(MATERIAL_SOURCE_TYPE, manualSourceType.value))
 const canManual = computed(() => !!manual.title && !!manual.content && !!targetChannelId.value)
 async function doManual() {
   manualLoading.value = true
@@ -306,13 +327,15 @@ async function doManual() {
       content: manual.content,
       url: manual.url || '',
       category: manual.category || '',
-      source_type: 'list',
+      source_type: manualSourceType.value,
     })
-    ElMessage.success('已保存到素材池')
+    ElMessage.success(`已保存到素材池（来源类型：${manualSourceLabel.value}）`)
     manual.title = ''
     manual.content = ''
     manual.url = ''
     manual.category = ''
+    manual.source = '手动录入'
+    manualSourceType.value = 'list'
   } catch (e) {
     /* 拦截器已提示 */
   } finally {
@@ -372,7 +395,8 @@ function fillManualFromShare() {
   manual.source = '分享导入'
   manual.url = shareData.value.url || ''
   manual.category = ''
-  ElMessage.info('已预填到「手动录入」，复核后保存（source_type=qrcode）')
+  manualSourceType.value = 'qrcode'
+  ElMessage.info('已预填到「手动录入」，复核后保存（来源类型：二维码 / 链接分享）')
 }
 
 function onChannelChange() {
@@ -398,6 +422,13 @@ onMounted(async () => {
 /* T00621：tooltip 需要块级包裹元素，禁用按钮的悬停提示才能命中 */
 .upload-btn-wrap {
   display: inline-block;
+}
+
+/* C92：来源类型标记说明 */
+.source-type-hint {
+  margin-left: 10px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 .page-header {

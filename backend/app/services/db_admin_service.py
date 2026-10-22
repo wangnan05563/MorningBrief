@@ -120,6 +120,23 @@ def _validate_identifier(name: str) -> str:
     return name
 
 
+# M20：由数据库自动维护的时间戳列。业务日期列（如 ad_placement.start_date）不在其中，
+# 仍归运营手工填写——只锁「行创建/更新时间」这一族固定列名，避免误伤可编辑字段。
+_AUTO_MAINTAINED_TIME_COLUMNS = {"created_at", "updated_at", "create_time", "update_time"}
+
+
+def _is_auto_maintained_time_column(column: str, col_type: str) -> bool:
+    """M20：识别由数据库自动维护的时间戳列（界面应只读、提交时剔除）。
+
+    只认「行创建/更新时间」这一族固定列名，且必须是日期时间类型——
+    业务日期列（如 ad_placement.start_date）仍归运营手工维护，不能顺手锁掉。
+    """
+    if column not in _AUTO_MAINTAINED_TIME_COLUMNS:
+        return False
+    t = (col_type or "").upper()
+    return "DATE" in t or "TIMESTAMP" in t
+
+
 def _is_sensitive_column(table: str, column: str) -> bool:
     """判断某列是否为敏感字段（需脱敏）。"""
     if column in SENSITIVE_COLUMNS:
@@ -310,6 +327,11 @@ class DbAdminService:
                 "primary_key": col_name in pk_names,
                 # 敏感列标记，前端可据此隐藏或脱敏显示
                 "sensitive": _is_sensitive_column(table, col_name),
+                # M20：时间戳列由 server_default / onupdate 维护。界面此前当普通文本可编辑，
+                # 保存时把 isoformat() 的 `2026-10-17T22:01:00` 原样回写，与库内空格分隔格式
+                # 不一致；「保留天数」清理与排序直接对该列做字符串/时间比较，格式漂移即失效。
+                # 判定放在后端（权威来源：列类型 + 列名），前端据此只读并跳过提交。
+                "auto_maintained": _is_auto_maintained_time_column(col_name, str(col["type"])),
             })
 
         if not pk_names:

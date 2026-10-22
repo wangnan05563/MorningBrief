@@ -5,7 +5,17 @@
       <template #header>
         <div class="page-header">
           <!-- T00811：移除与导航栏重复的页面标题，仅保留操作按钮 -->
-          <IconButton type="primary" size="small" :icon="Plus" label="手动录入素材" desc="手动新增一条素材" @click="openCreate" />
+          <!-- C45：这颗按钮和菜单「素材录入」是两个不同对象——这里是在库里直接补一条记录，
+               「素材录入」是按渠道（上传书稿 / URL / 二维码）入库。两处此前都叫「手动录入」，
+               首次用户无法判断「库 / 池 / 录入」到底是几个东西。 -->
+          <IconButton
+            type="primary"
+            size="small"
+            :icon="Plus"
+            label="库内手工新增素材"
+            desc="在素材库里直接补一条记录；上传书稿/文档请走菜单「素材录入」"
+            @click="openCreate"
+          />
         </div>
       </template>
 
@@ -259,8 +269,8 @@
       </template>
     </el-dialog>
 
-    <!-- 新增弹窗（手动录入） -->
-    <el-dialog v-model="createVisible" title="手动录入素材" width="640px">
+    <!-- 新增弹窗（库内手工补一条记录；渠道入库见菜单「素材录入」，C45 术语分工） -->
+    <el-dialog v-model="createVisible" title="库内手工新增素材" width="640px">
       <el-form label-width="80px">
         <el-form-item label="频道">
           <el-select v-model="createForm.channel_id" filterable style="width: 100%">
@@ -290,8 +300,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <IconButton :icon="Close" label="取消" desc="关闭弹窗，放弃录入" @click="createVisible = false" />
-        <IconButton type="primary" :loading="saving" :icon="Check" label="保存" desc="保存素材录入" @click="onSaveCreate" />
+        <IconButton :icon="Close" label="取消" desc="关闭弹窗，放弃新增" @click="createVisible = false" />
+        <IconButton type="primary" :loading="saving" :icon="Check" label="保存" desc="保存这条素材（C45：这是库内补录，渠道入库见菜单「素材录入」）" @click="onSaveCreate" />
       </template>
     </el-dialog>
   </div>

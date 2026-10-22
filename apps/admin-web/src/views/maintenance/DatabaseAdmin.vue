@@ -97,7 +97,7 @@
                 desc="从 CSV/JSON 导入数据"
                 :icon="Upload"
                 :disabled="loadFailed"
-                @click="importDialogVisible = true"
+                @click="openImportDialog"
               />
               <IconButton
                 size="small"
@@ -221,7 +221,7 @@
             :is="getFormComponent(col)"
             v-model="formData[col.name]"
             :placeholder="col.type"
-            :disabled="formMode === 'edit' && (col.primary_key || col.sensitive)"
+            :disabled="(formMode === 'edit' && (col.primary_key || col.sensitive)) || isAutoMaintained(col)"
             type="primary"
             clearable
           />
@@ -229,6 +229,10 @@
             {{ col.type }}{{ col.nullable ? '' : ' (必填)' }}
             <template v-if="col.sensitive">
               · 敏感字段{{ formMode === 'edit' ? '（编辑时只读，保持原值）' : '' }}
+            </template>
+            <!-- M20：时间戳列必须显式声明「界面不改它」，否则运营会以为改了生效 -->
+            <template v-if="isAutoMaintained(col)">
+              · 时间戳由系统自动写入，界面只读（{{ formMode === 'create' ? '新增时留空由数据库填充' : '编辑时不会回写，保持原值' }}）
             </template>
           </span>
           <!-- 后端字段级错误（INT-UX-01）落到出错那一栏，而不是只有一句 toast -->
@@ -336,6 +340,22 @@
             第 {{ n.row }} 行：{{ n.message }}
           </li>
         </ul>
+      </div>
+      <!-- M49：执行导入后的逐行失败明细。此前 errors 被整个丢弃、界面只说一句「导入完成」，
+           坏行就这么无声地没进库 -->
+      <div v-if="importResult && importResult.errors && importResult.errors.length" class="import-preview">
+        <div>
+          本次实际写入：新增 {{ importResult.inserted }}、更新 {{ importResult.updated ?? 0 }}；
+          未写入 {{ importResult.skipped || 0 }} 行，其中 {{ importResult.errors.length }} 行给出了原因：
+        </div>
+        <ul class="import-preview-errors">
+          <li v-for="err in importResult.errors.slice(0, 20)" :key="err.row">
+            第 {{ err.row }} 行：{{ err.error }}
+          </li>
+        </ul>
+        <div v-if="importResult.errors.length > 20">
+          仅显示前 20 行，共 {{ importResult.errors.length }} 行有错误
+        </div>
       </div>
       <template #footer>
         <IconButton
@@ -456,6 +476,11 @@ const currentTableLabel = computed(() => {
 
 // ---- 表结构 ----
 const columns = ref([])
+// M20：时间戳列（后端 auto_maintained）由 server_default / onupdate 维护。
+// 它们在表单里保留可见，但一律禁用输入并在提交时整列剔除——
+// 编辑回写会把 isoformat() 的 `T` 分隔串写进库里，破坏按字符串比较的保留天数清理与排序；
+// 新增时把未填的空串写进 DATETIME 列同样是坏数据。
+const isAutoMaintained = (col) => !!col.auto_maintained
 const editableColumns = computed(() => columns.value)
 
 // ---- 行数据 ----
@@ -621,13 +646,19 @@ function openEditDialog(row) {
 
 const MASK_SENTINEL_RE = /^\*{2,}$/
 
-// 编辑时只提交变化过的字段：整行回传会把后端下发的 *** 脱敏值写回真实凭据列
-function buildDirtyValues() {
-  const skip = new Set(
+// 界面不提交的列：主键（用 WHERE 定位）、敏感列（脱敏值回写会覆盖真实凭据）、
+// 以及系统维护的时间戳列（M20：isoformat() 的 `T` 分隔串回写会破坏按字符串比较的清理与排序）
+function nonSubmitColumns() {
+  return new Set(
     columns.value
-      .filter((c) => c.primary_key || c.sensitive)
+      .filter((c) => c.primary_key || c.sensitive || c.auto_maintained)
       .map((c) => c.name),
   )
+}
+
+// 编辑时只提交变化过的字段：整行回传会把后端下发的 *** 脱敏值写回真实凭据列
+function buildDirtyValues() {
+  const skip = nonSubmitColumns()
   const payload = {}
   for (const [name, value] of Object.entries(formData.value)) {
     if (skip.has(name)) continue
@@ -638,10 +669,22 @@ function buildDirtyValues() {
   return payload
 }
 
+// M20：新增同样剔除时间戳列——没填就是空串，把空串写进 DATETIME 列同样是坏数据，
+// 该由 server_default 负责填「当下」
+function buildCreateValues() {
+  const skip = nonSubmitColumns()
+  const payload = {}
+  for (const [name, value] of Object.entries(formData.value)) {
+    if (skip.has(name)) continue
+    payload[name] = value
+  }
+  return payload
+}
+
 async function submitForm() {
   try {
     if (formMode.value === 'create') {
-      await createRow(selectedTable.value, formData.value)
+      await createRow(selectedTable.value, buildCreateValues())
       ElMessage.success('新增成功')
     } else {
       const values = buildDirtyValues()
@@ -759,6 +802,8 @@ async function handleExport(format) {
 // ---- 导入 ----
 // CSV/JSON 解析统一交给后端标准库（引号内逗号、CRLF、BOM 前端手拆会出错）
 const importPreview = ref(null)
+// M49：执行导入后保留后端返回的逐行失败明细（此前只拼一句 toast 就丢弃）
+const importResult = ref(null)
 const importPreviewing = ref(false)
 
 async function handlePreviewImport() {
@@ -782,6 +827,13 @@ async function handlePreviewImport() {
   }
 }
 
+// M49：重新打开导入弹窗要先清掉上一次的失败明细，
+// 否则这次的「未写入 N 行」说的其实是上一批粘贴内容
+function openImportDialog() {
+  importResult.value = null
+  importDialogVisible.value = true
+}
+
 async function handleImport() {
   if (!importContent.value.trim()) {
     ElMessage.warning('请粘贴导入内容')
@@ -798,13 +850,23 @@ async function handleImport() {
       importFormat.value,
       importMode.value,
     )
-    ElMessage.success(
-      `导入完成：新增 ${result.inserted}，更新 ${result.updated ?? 0}，跳过 ${result.skipped}`,
-    )
+    // M49：后端逐行返回 errors:[{row,error}]，此前只取 inserted/skipped 拼一句「导入完成」，
+    // 用户永远看不到哪一行因何失败；skipped 还混装了「主键冲突跳过 / 非法行 / 列名不匹配」
+    // 三种语义。有行没写进去时不再声称导入完成，明细留在面板里，粘贴内容也不清空。
+    importResult.value = result
+    await loadRows()
+    const dropped = (result.skipped || 0) + (result.errors?.length || 0)
+    if (dropped) {
+      ElMessage.warning(
+        `导入未全部成功：新增 ${result.inserted}，未写入 ${dropped} 行，明细见下方`,
+      )
+      return
+    }
+    ElMessage.success(`导入完成：新增 ${result.inserted}，更新 ${result.updated ?? 0}`)
     importDialogVisible.value = false
     importContent.value = ''
     importPreview.value = null
-    await loadRows()
+    importResult.value = null
   } catch (e) {
     console.warn('handleImport failed:', e)
   }

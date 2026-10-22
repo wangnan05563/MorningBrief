@@ -24,7 +24,7 @@ from datetime import date
 from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Channel, Material, MaterialMediaType
+from app.models import Channel, Material, MaterialMediaType, MaterialSourceType
 from app.models.book_pool import BookPoolItem
 from app.models.material import MaterialStatus
 
@@ -148,9 +148,14 @@ async def add_books(db: AsyncSession, channel_id: int, book_keys: list[str]) -> 
     )).scalars().all())
 
     # 每个书键的代表素材（任一素材即可，按 id 取最早）
+    # C103：同样排除「待讲书单」占位素材——否则入池项会绑定到那条没有正文的占位记录上。
     reps = (await db.execute(
         select(Material.source, func.min(Material.id))
-        .where(Material.channel_id == channel_id, Material.source.in_(keys))
+        .where(
+            Material.channel_id == channel_id,
+            Material.source.in_(keys),
+            Material.source_type != MaterialSourceType.book_plan.value,
+        )
         .group_by(Material.source)
     )).all()
     rep_map = dict(reps)
@@ -347,7 +352,10 @@ async def list_candidates(
     返回每本书的：书名（book_key）、总章节数、待讲（pending）章节数、分类、
     代表素材 id（sample_material_id，展示引用）、是否已在池（in_pool，前端禁用重复选择）。
     """
-    conds = []
+    # C103：找书工具的「待讲书单」占位素材只有书名和书源链接，没有正文。
+    # 它们和真书稿同为 material 行、同样按 source 聚合，不排除的话会被当可讲的书进候选/入池，
+    # 结果系统把「【待上传书稿】请在找书工具下载 EPUB 后…」生成讲书稿念出去。
+    conds = [Material.source_type != MaterialSourceType.book_plan.value]
     if channel_id is not None:
         conds.append(Material.channel_id == channel_id)
     if keyword and keyword.strip():
@@ -442,6 +450,9 @@ async def collect_book_materials(db: AsyncSession, channel_id: int, item: dict) 
         select(Material).where(
             Material.channel_id == channel_id,
             Material.status == MaterialStatus.pending.value,
+            # C103：占位素材没有正文，取章时必须排除——否则「待上传书稿」那段说明会被
+            # 当成讲书稿改写并念出去
+            Material.source_type != MaterialSourceType.book_plan.value,
             # T00716：仅文本素材可作讲书稿章节，媒体素材（图片/视频）不进语音链路
             Material.media_type == MaterialMediaType.text.value,
             or_(*conds),
