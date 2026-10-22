@@ -1,6 +1,7 @@
 """B 端广告路由。"""
 import json
 from datetime import date
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, field_validator
@@ -84,11 +85,12 @@ async def delete_material(
 async def list_placements(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    enabled: Optional[int] = Query(None, ge=0, le=1, description="按启停状态筛选：1=启用，0=停用，不传=全部"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(get_current_admin),
 ):
     svc = AdService(db)
-    data = await svc.list_placements(page=page, size=size)
+    data = await svc.list_placements(page=page, size=size, enabled=enabled)
     return success(data=data)
 
 

@@ -1,5 +1,14 @@
 <!-- 历史列表页 -->
 <view class="container">
+  <!-- J14：底部「历史」tab 进来看的是各频道更新的节目（节目库），与「最近播放」（本机播放记录）
+       是两份数据。此前两页都叫"过去"，用户在这里找不到「昨天听的那一集」。
+       用可见的分段入口把两份数据分开，并给出直达另一页的出口。 -->
+  <view class="view-switch">
+    <view class="view-switch-item active">频道更新</view>
+    <view class="view-switch-item" bindtap="onOpenRecent" aria-label="查看我的播放记录">我的播放记录 ›</view>
+  </view>
+  <view class="view-switch-hint">本页按频道列出往期节目；找刚听过的节目请点「我的播放记录」</view>
+
   <!-- 顶部工具栏：搜索 + 频道切换 -->
   <view class="top-bar">
     <view class="top-action" bindtap="onSearch">
@@ -37,8 +46,10 @@
       >
         <image class="tool-icon" lazy-load src="/images/icons/arrows-sort.png" mode="aspectFit" />
       </view>
-      <view class="tool-chip" bindtap="onOpenQueue" aria-label="打开播放队列">
+      <view class="tool-chip queue-chip" bindtap="onOpenQueue" aria-label="打开播放队列">
         <image class="tool-icon" lazy-load src="/images/icons/list.png" mode="aspectFit" />
+        <!-- J12：全站队列入口此前只有一枚无文字图标，多数用户不知道有「播放队列」页 -->
+        <text class="queue-chip-label">队列</text>
       </view>
       <!-- T00767：过滤按钮——单按钮循环 全部→未播→已播；Feather 线框图标随态切换+旋转入场 -->
       <view

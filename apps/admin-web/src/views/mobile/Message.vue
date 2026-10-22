@@ -20,7 +20,7 @@
       v-for="m in list"
       :key="m.id"
       class="m-msg__item"
-      :class="{ 'm-msg__item--unread': !m.read }"
+      :class="{ 'm-msg__item--unread': !m.read, 'm-msg__item--link': !!messageTarget(m) }"
       @click="open(m)"
     >
       <span class="m-msg__dot" :class="'m-msg__dot--' + m.level"></span>
@@ -32,6 +32,8 @@
         <div v-if="m.body" class="m-msg__text">{{ m.body }}</div>
         <div class="m-msg__time">{{ formatTime(m.created_at) }}</div>
       </div>
+      <!-- I19：带可跳转目标的消息给出明确入口，否则用户点了不知道会发生什么 -->
+      <span v-if="messageTarget(m)" class="m-msg__go" aria-label="查看详情">›</span>
     </div>
 
     <!-- T02517（FR-UX-703 / I21）：真正的分页出口。后端 m/inbox 一直支持
@@ -64,6 +66,7 @@
  * 不引入自动轮询（NFR-UX-03）：增量只由用户点击驱动，页面自己不会定时请求。
  */
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { getInbox, markRead } from '../../api/mobile'
 import { ElMessage } from '../../utils/message'
 
@@ -78,6 +81,7 @@ const page = ref(1)
 const loading = ref(false)
 const loadingMore = ref(false)
 const error = ref('')
+const router = useRouter()
 
 const typeLabel = { review: '审批', alert: '告警', system: '系统' }
 
@@ -147,13 +151,37 @@ async function markAll() {
 }
 
 async function open(m) {
-  if (m.read) {
-    // 已读项若带深链可跳转（如审批详情）
-    return
+  // I19：注释一直写着「已读项若带深链可跳转」，但实现直接 return，审批提醒点开毫无反应。
+  // 现在按 payload 解析目标：显式 path 优先；审批类消息带 workflow_id 时进作用域审核页。
+  const target = messageTarget(m)
+  if (!m.read) {
+    try {
+      await markRead({ message_ids: [m.id] })
+      m.read = true
+      unreadCount.value = Math.max(0, unreadCount.value - 1)
+    } catch {
+      // 标记已读失败不影响跳转；拦截器已提示
+    }
   }
-  await markRead({ message_ids: [m.id] })
-  m.read = true
-  unreadCount.value = Math.max(0, unreadCount.value - 1)
+  if (target) {
+    router.push(target).catch((err) => console.warn('[m/message] 跳转被拒绝:', err?.message || err))
+  }
+}
+
+/**
+ * 从消息 payload 解析可跳转目标（I19）。
+ * 后端 push_admin_message 的 payload 由调用方决定：这里只认显式契约，
+ * 不按标题/类型猜地址——猜错会把用户带到无关页面。
+ */
+function messageTarget(m) {
+  const payload = m?.payload
+  if (!payload || typeof payload !== 'object') return ''
+  if (typeof payload.path === 'string' && payload.path.startsWith('/')) return payload.path
+  const workflowId = payload.workflow_id
+  if (workflowId !== undefined && workflowId !== null && workflowId !== '') {
+    return { path: '/m/review', query: { workflow_id: String(workflowId) } }
+  }
+  return ''
 }
 
 function formatTime(iso) {
@@ -246,6 +274,18 @@ onMounted(refresh)
 
 .m-msg__item--unread {
   border-left: 3px solid var(--el-color-primary, #409eff);
+}
+
+.m-msg__item--link {
+  cursor: pointer;
+}
+
+.m-msg__go {
+  align-self: center;
+  font-size: 20px;
+  line-height: 1;
+  color: #b0b4bb;
+  flex: 0 0 auto;
 }
 
 .m-msg__dot {

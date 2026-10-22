@@ -25,6 +25,7 @@ const {
   playEpisode, playNext, playPrev, playQueueAt, getQueue, getQueueIndex, getCurrentEpisode, setQueue,
   getPlaybackRate, setPlaybackRate, resumePlay, setPendingSeek, seek,
   getSleepStatus, startSleepTimer, stopSleepTimer, onSleepChange, onError, clearQueue,
+  removeQueueAt, moveQueueItem,
   onPlaybackChange,
   onWaitingChange, offWaitingChange,
   onTimeUpdateChange, offTimeUpdateChange,
@@ -1126,6 +1127,38 @@ Page({
     clearQueue();
     trackEvent('queue', 'clear');
     this.setData({ queue: [], currentIndex: -1 });
+  },
+
+  /**
+   * 移除单项（J77）：与队列页同一份服务层实现，两处行为一致
+   */
+  onQueueRemove(e) {
+    const idx = Number(e.currentTarget.dataset.index);
+    const episode = this.data.queue[idx];
+    if (!episode) return;
+    wx.showModal({
+      title: '移出队列',
+      content: `确定把「${episode.title || '该节目'}」移出播放队列？`,
+      confirmColor: '#B0554A',
+      success: (res) => {
+        if (!res.confirm) return;
+        const result = removeQueueAt(idx);
+        trackEvent('queue', 'remove_item', 'episode_' + episode.id);
+        if (result && result.removedCurrent) {
+          wx.showToast({ title: '已移出队列，当前音频继续播放', icon: 'none' });
+        }
+      },
+    });
+  },
+
+  /**
+   * 上移/下移（J77）
+   */
+  onQueueMove(e) {
+    const { index, dir } = e.currentTarget.dataset;
+    if (moveQueueItem(Number(index), Number(index) + Number(dir))) {
+      trackEvent('queue', 'move_item');
+    }
   },
 
   onShareAppMessage() {

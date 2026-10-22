@@ -27,6 +27,20 @@
  *  7. 通用防「绑了个不存在的方法」：本轮涉及的 wxml 里字面量写法的 bind / catch 事件处理器名，
  *     必须能在同页 js 里找到定义（`bindtap="{{ x ? 'a' : 'b' }}"` 这类动态值跳过，与 validate-tabbar 同口径）。
  *
+ *  T02540（M6 信息架构与深链）追加：
+ *  8. J21 退出登录文案 ↔ 真实行为：弹窗必须说明「只清本机、云端收藏/进度/记录仍在」，
+ *     并给出删除服务端数据的真实通道（意见反馈）；不得回到「确定要退出登录吗？」。
+ *  9. J24 登录与编辑资料按钮必须有可见文字，不得再是 btn-icon-only（仅 aria-label）。
+ * 10. J66 偏爱设置自述作用面：说明必须点名「首页」「历史」「我的偏爱」，
+ *     并注明与频道页「订阅」互不同步（两页同形卡片，不说清就会互相误解）。
+ * 11. J105 webview 失败兜底：两个按钮必须有「复制链接」「返回」可见文字，
+ *     URL 展示区必须有高度上限 + 滚动（超长链接不挤走按钮、也不截断到无法核对）。
+ * 12. J69 最近播放 onShow 只能首次加载：无保护地重载会重置分页与滚动位置。
+ * 13. J77 队列单项管理单源：services/audio.js 提供 removeQueueAt/moveQueueItem，
+ *     队列页与详情页 modal 各自绑定移出/上移下移（此前两处都只能整表清空）。
+ * 14. J14/J12 历史的两个出口：页内分段入口直达「我的播放记录」，队列 chip 带可见「队列」文字。
+ * 15. J20 个人中心第二层只做入口：不得再出现 secondList 内嵌列表（与整页重复取数/渲染）。
+ *
  * 局限（如实声明，不假装查过）：只做文本抽取与配对，不解析 WXML/JS 语法树；
  * 动态方法名、运行时拼出的 storage key、跨页 getCurrentPages() 跳转不在能力范围内。
  *
@@ -57,6 +71,19 @@ const FILES = [
   'utils/tracker.js',
   'components/floating-player/floating-player.js',
   'services/constants.js',
+  // T02540 / M6
+  'pages/profile/profile.js',
+  'pages/profile/profile.wxml',
+  'pages/webview/webview.wxml',
+  'pages/webview/webview.wxss',
+  'pages/history/history.js',
+  'pages/history/history.wxml',
+  'pages/recent/recent.js',
+  'pages/queue/queue.js',
+  'pages/queue/queue.wxml',
+  'pages/detail/detail.js',
+  'pages/detail/detail.wxml',
+  'services/audio.js',
 ]
 
 /** wxml 里绑定 → 同页 js 方法必须存在（跳过动态绑定值） */
@@ -290,6 +317,113 @@ export function checkFacts(facts) {
         errors.push(`${rel}: 绑定了 ${handler}，但 ${jsRel} 里没有这个方法定义——运行时静默「点了没反应」（与 validate-tabbar 的死入口互为反向）`)
       }
     }
+  }
+
+  // —— 8. J21：退出登录文案 ↔ 真实行为 ——
+  const logoutBody = methodBody(stripComments(f('pages/profile/profile.js')), 'onLogout')
+  if (!logoutBody) {
+    errors.push('profile.js 找不到 onLogout：退出登录文案无法定位（J21）')
+  } else {
+    if (/确定要退出登录吗/.test(logoutBody)) {
+      errors.push('profile.js 的退出登录弹窗仍是「确定要退出登录吗？」——用户会以为退出即删除云端数据（J21）')
+    }
+    for (const word of ['本机', '保留', '意见反馈']) {
+      if (!logoutBody.includes(word)) {
+        errors.push(`退出登录弹窗没有点明「${word}」：只清本机、云端收藏/进度/记录仍保留，删除需走意见反馈（J21/J98）`)
+      }
+    }
+  }
+
+  // —— 9. J24：登录与编辑资料按钮必须有可见文字 ——
+  const profileWxml = wf('pages/profile/profile.wxml')
+  if (/btn-icon-only[^>]*login-btn|login-btn[^>]*btn-icon-only/.test(profileWxml)) {
+    errors.push('profile 登录按钮仍是纯图标 btn-icon-only：登录是唯一转化动作却没有文字（J24）')
+  }
+  if (!/<view class="[^"]*login-btn[^"]*"[\s\S]{0,400}?<text[^>]*>\s*[^<\s][^<]*<\/text>/.test(profileWxml)) {
+    errors.push('profile 登录按钮内没有可见文案（J24）')
+  }
+  for (const [cls, label] of [
+    ['edit-btn-cancel', '取消'],
+    ['edit-btn-confirm', '保存'],
+  ]) {
+    const re = new RegExp(`class="[^"]*${cls}[^"]*"[\\s\\S]{0,400}?<text[^>]*>\\s*${label}\\s*</text>`)
+    if (!re.test(profileWxml)) {
+      errors.push(`编辑资料弹窗的「${label}」按钮没有可见文案——两颗纯图标按钮，用户分不清哪颗是保存（J24）`)
+    }
+  }
+
+  // —— 10. J66：偏爱设置要自述作用面与同步关系 ——
+  const prefWxml = wf('pages/preferred-settings/preferred-settings.wxml')
+  for (const word of ['首页', '历史', '我的偏爱', '不同步']) {
+    if (!prefWxml.includes(word)) {
+      errors.push(`preferred-settings.wxml 的说明没有点明「${word}」：偏爱作用于首页/历史的筛选入口，` +
+        '且与频道页「订阅」两处勾选各自独立（J66）')
+    }
+  }
+
+  // —— 11. J105：webview 失败兜底的可见指令与 URL 可核对 ——
+  const webWxml = wf('pages/webview/webview.wxml')
+  for (const label of ['复制链接', '返回']) {
+    if (!webWxml.includes(label)) {
+      errors.push(`webview 兜底按钮缺少可见文案「${label}」：失败场景最需要明确指令（J105）`)
+    }
+  }
+  if (/btn-icon-only/.test(webWxml)) {
+    errors.push('webview 兜底按钮退回纯图标（btn-icon-only）：用户在两颗无字按钮前无从选择（J105）')
+  }
+  const urlBlock = /\.fallback-url\s*\{([\s\S]*?)\}/.exec(f('pages/webview/webview.wxss'))
+  if (!urlBlock || !/max-height/.test(urlBlock[1]) || !/overflow-y/.test(urlBlock[1])) {
+    errors.push('webview 的 .fallback-url 没有高度上限 + 滚动：超长链接会把按钮挤出屏幕，或截断后无法核对（J105）')
+  }
+
+  // —— 12. J69：最近播放只首次加载 ——
+  const recentShow = methodBody(stripComments(f('pages/recent/recent.js')), 'onShow')
+  if (!recentShow || !/_loaded/.test(recentShow) || !/return/.test(recentShow)) {
+    errors.push('recent.js 的 onShow 没有首次加载保护：每次从详情返回都会重置分页与滚动位置（J69）')
+  }
+
+  // —— 13. J77：队列单项管理单源 + 两个出口都接线 ——
+  const audioSvc = f('services/audio.js')
+  for (const fn of ['removeQueueAt', 'moveQueueItem']) {
+    if (!new RegExp(`function ${fn}\\s*\\(`).test(audioSvc)) {
+      errors.push(`services/audio.js 缺少 ${fn}：队列单项管理没有单源实现（J77）`)
+    }
+    if (!new RegExp(`module\\.exports[\\s\\S]*\\b${fn}\\b`).test(audioSvc)) {
+      errors.push(`services/audio.js 未导出 ${fn}：队列页与详情页只能各写一套（J77）`)
+    }
+  }
+  for (const [rel, names] of [
+    ['pages/queue/queue.wxml', ['onMoveItem', 'onRemoveItem']],
+    ['pages/detail/detail.wxml', ['onQueueMove', 'onQueueRemove']],
+  ]) {
+    for (const name of names) {
+      if (!new RegExp(`catchtap="${name}"`).test(wf(rel))) {
+        errors.push(`${rel} 的队列项没有 ${name} 入口：单项移出/排序仍然只能整表清空（J77）`)
+      }
+    }
+  }
+
+  // —— 14. J14/J12：历史的两个出口 ——
+  const historyWxml = wf('pages/history/history.wxml')
+  if (!/我的播放记录/.test(historyWxml) || !/bindtap="onOpenRecent"/.test(historyWxml)) {
+    errors.push('history.wxml 没有直达「我的播放记录」的可见入口：两份"过去"数据仍然分不清（J14）')
+  }
+  if (!/pages\/recent\/recent/.test(f('pages/history/history.js'))) {
+    errors.push('history.js 的「我的播放记录」入口没有指向 recent 页（J14）')
+  }
+  if (!/class="[^"]*queue-chip[^"]*"[\s\S]{0,300}?<text[^>]*>\s*队列\s*<\/text>/.test(historyWxml)) {
+    errors.push('history.wxml 的队列入口仍是纯图标 chip：全站唯一队列整页入口没有文字（J12）')
+  }
+  if (!/pages\/queue\/queue/.test(f('pages/history/history.js'))) {
+    errors.push('history.js 的队列入口没有指向 queue 页（J12）')
+  }
+
+  // —— 15. J20：个人中心第二层只做入口 ——
+  if (!/second-entry-card/.test(profileWxml) || !/bindtap="goSecondPage"/.test(profileWxml)) {
+    errors.push('profile 第二层没有收敛为单入口 second-entry-card → goSecondPage（J20）')
+  }
+  if (/secondList/.test(profileWxml) || /secondList/.test(f('pages/profile/profile.js'))) {
+    errors.push('profile 仍保留 secondList 内嵌列表：与 recent/favorites/channels/download/preferred 整页形成第二套取数与渲染（J20）')
   }
 
   return { errors, facts }

@@ -99,9 +99,45 @@
       <el-col :span="10">
         <el-card class="audio-card">
           <template #header>
-            <span class="card-title">音频试听</span>
+            <div class="card-header-row">
+              <span class="card-title">音频试听</span>
+              <!-- B12：加载成功后才有时长可比对——审核员要确认「听到的是不是这一期」 -->
+              <span v-if="audioDuration" class="audio-duration">时长 {{ audioDuration }}</span>
+            </div>
           </template>
-          <audio v-if="detail.audio_url" :src="detail.audio_url" controls class="audio-player"></audio>
+          <div v-if="detail.audio_url" class="audio-wrap">
+            <el-skeleton v-if="audioLoading" :rows="2" animated />
+            <el-alert
+              v-else-if="audioError"
+              data-guide="review-audio-error"
+              type="error"
+              :closable="false"
+              show-icon
+              :title="`试听音频加载失败：${audioError}`"
+              description="成品音频在私有桶/COS 时直连会被拒绝（403/CORS），必须经后端代理与登录态拉取。请重试；若持续失败，请检查音频代理接口与存储配置。"
+            />
+            <audio
+              v-else
+              ref="audioEl"
+              :src="audioSrc"
+              controls
+              class="audio-player"
+              @loadedmetadata="onAudioMeta"
+              @error="onAudioElementError"
+            ></audio>
+            <div v-if="audioSrc" class="audio-actions">
+              <IconButton link :icon="RefreshLeft" label="重听" desc="从头播放这段试听音频" @click="replayAudio" />
+            </div>
+            <IconButton
+              v-if="audioError"
+              class="audio-retry"
+              :icon="Refresh"
+              label="重试加载"
+              desc="重新经代理拉取试听音频"
+              :loading="audioLoading"
+              @click="loadAudio"
+            />
+          </div>
           <el-empty v-else description="暂无音频" />
         </el-card>
 
@@ -152,11 +188,12 @@
  *   返回与操作后回跳都按它走；深链直接打开（没有 from）时兜回 `/review` 首页，
  *   绝不用 `router.back()`——操作成功后那次是前向导航，back() 会退回详情页自己
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
-import { ArrowLeft, Check, Close, ZoomIn } from '@element-plus/icons-vue'
+import { ArrowLeft, Check, Close, ZoomIn, Refresh, RefreshLeft } from '@element-plus/icons-vue'
 import api from '../../api'
+import { getEpisodeAudioUrl } from '../../api/audio'
 import { REVIEW_STATUS, enumLabel, enumTagType } from '../../constants/enums'
 import { returnTarget } from '../../utils/urlState'
 import PageBreadcrumb from '../../components/PageBreadcrumb.vue'
@@ -174,6 +211,79 @@ const action = ref('approve')
 const segmentId = ref(null)
 const reason = ref('')
 
+// B12（FR-UX-602）：试听音频必须走 /audio/proxy（JWT + 私有桶），不能把远端 URL 直接塞进 <audio>。
+// 直连时 403/CORS 在界面上没有任何反馈，审核员会「没听到就盲批」。
+const audioEl = ref(null)
+const audioSrc = ref('')
+const audioLoading = ref(false)
+const audioError = ref('')
+const audioDuration = ref('')
+// 并发/重试令牌：旧请求晚回来时不能覆盖新一轮的状态
+let audioToken = 0
+
+function releaseAudio() {
+  if (audioSrc.value) {
+    URL.revokeObjectURL(audioSrc.value)
+    audioSrc.value = ''
+  }
+}
+
+async function loadAudio() {
+  const remoteUrl = detail.value.audio_url
+  if (!remoteUrl) {
+    releaseAudio()
+    audioError.value = ''
+    audioDuration.value = ''
+    return
+  }
+  const workflowId = detail.value.workflow_id
+  if (!workflowId) {
+    audioError.value = '详情缺少工作流 ID，无法经代理加载音频'
+    return
+  }
+  const token = ++audioToken
+  audioLoading.value = true
+  audioError.value = ''
+  audioDuration.value = ''
+  releaseAudio()
+  try {
+    const blobUrl = await getEpisodeAudioUrl(workflowId, remoteUrl)
+    if (token !== audioToken) {
+      URL.revokeObjectURL(blobUrl)
+      return
+    }
+    audioSrc.value = blobUrl
+  } catch (e) {
+    if (token === audioToken) audioError.value = e?.message || '未知错误'
+  } finally {
+    if (token === audioToken) audioLoading.value = false
+  }
+}
+
+function formatClock(sec) {
+  if (!Number.isFinite(sec) || sec <= 0) return ''
+  const total = Math.round(sec)
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+function onAudioMeta() {
+  audioDuration.value = formatClock(audioEl.value?.duration)
+}
+
+function onAudioElementError() {
+  // 元素自身的解码/网络错误也要落成页面文字：blob 拉取成功但内容不是音频时同样不能静默
+  audioError.value = '浏览器无法解码该音频（文件可能损坏或格式不支持）'
+  releaseAudio()
+}
+
+function replayAudio() {
+  if (!audioEl.value) return
+  audioEl.value.currentTime = 0
+  audioEl.value.play().catch(() => {})
+}
+
 /** 返回目标：`?from=` 里那条列表地址（含 tab/分页），没有就回 `/review` */
 const backTo = computed(() => returnTarget(route.query, '/review'))
 
@@ -187,6 +297,7 @@ async function loadDetail() {
   loading.value = true
   try {
     detail.value = await api.get(`/reviews/${route.params.id}`)
+    await loadAudio()
   } catch {
     // 错误提示由拦截器统一处理
   } finally {
@@ -256,6 +367,10 @@ function goBack() {
 }
 
 onMounted(loadDetail)
+onBeforeUnmount(() => {
+  audioToken += 1
+  releaseAudio()
+})
 </script>
 
 <style scoped lang="scss">
@@ -398,6 +513,21 @@ onMounted(loadDetail)
 .audio-player {
   width: 100%;
   outline: none;
+}
+
+.audio-duration {
+  font-size: 12px;
+  color: $color-text-secondary;
+}
+
+.audio-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.audio-retry {
+  margin-top: 8px;
 }
 
 .action-card {

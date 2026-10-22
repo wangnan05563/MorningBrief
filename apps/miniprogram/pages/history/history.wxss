@@ -391,6 +391,33 @@
   margin-bottom: 8rpx;
 }
 
+/* J14：历史页与「最近播放」的数据来源不同，分段入口常驻顶部说明分工 */
+.view-switch {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 16rpx 32rpx 0;
+}
+
+.view-switch-item {
+  padding: 10rpx 20rpx;
+  border-radius: 32rpx;
+  font-size: 26rpx;
+  color: var(--text-muted);
+}
+
+.view-switch-item.active {
+  background: var(--accent-soft, rgba(63, 108, 143, 0.12));
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.view-switch-hint {
+  padding: 8rpx 32rpx 0;
+  font-size: 22rpx;
+  color: var(--border-strong);
+}
+
 /* 工具按钮（排序 / 播放列表）：T00753 反馈——去边框与背景，纯图标简洁风格 */
 .tool-chip {
   display: flex;
@@ -422,6 +449,22 @@
 /* 排序方向：升序时把图标上下翻转，"最早优先"无需文字即可辨识 */
 .tool-chip.asc .tool-icon {
   transform: rotate(180deg);
+}
+
+/* J12：队列入口改成「图标 + 队列」胶囊，与过滤按钮同款形态，不再是一枚猜不出用途的图标 */
+.queue-chip {
+  width: auto;
+  min-width: 88rpx;
+  padding: 0 20rpx;
+  border-radius: 44rpx;
+  gap: 6rpx;
+  flex-direction: row;
+}
+
+.queue-chip-label {
+  font-size: 22rpx;
+  color: var(--accent);
+  line-height: 1;
 }
 
 /* === 骨架屏：与节目行布局对齐（封面 + 标题 + 副标题 + 播放按钮占位） === */

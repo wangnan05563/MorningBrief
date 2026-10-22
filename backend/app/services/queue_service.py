@@ -104,7 +104,11 @@ class QueueService:
         items = []
         for wf in workflows:
             items.append({
+                # id 是 Workflow 主键，与 workflow_id 同值；显式下发后前端不必再靠约定推断
+                # 「队列编号」就是「工作流 ID」（I48：去审核曾把任务 id 当 workflow_id 传，
+                # 虽在当下取值相同，但字段语义靠猜，后续换序列/包装就会静默过滤为空）
                 "id": wf.id,
+                "workflow_id": wf.id,
                 "episode_date": wf.episode_date.isoformat(),
                 "source": wf.source,
                 "status": wf.status,

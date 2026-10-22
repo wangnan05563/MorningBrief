@@ -10,9 +10,6 @@ const { logout, getUser, login, getToken, setToken, isLoginCoolingDown } = requi
 const { fetchUserStats, updateUserProfile, uploadAvatar, fetchMySubscriptions, computeCourseLocalProgress } = require('../../services/api');
 // 离线下载存储（FR-MC-09）：退出登录时一并清理该用户下载
 const downloadStore = require('../../services/download');
-// 本地进度/收藏聚合（FR-MC-10 修复 GAP-11 统计恒为 0 的离线兜底）
-const { fetchRecentPlaylogs, getFavorites } = require('../../services/api');
-const { fetchChannels } = require('../../services/api');
 const localData = require('../../services/local-data');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 // T00593：从相册/相机自选头像（chooseAvatar 被隐私声明拦截时的降级路径）
@@ -33,10 +30,7 @@ Page({
     // T00726 双层 Tab：第一层＝频道类型过滤；第二层＝功能入口选中态
     firstTab: "audiobook",
     secondTab: "recent",
-    secondList: [],        // T00726 反馈：第二层内嵌列表（最近/收藏）
-    secondLoading: false,
-    secondEmpty: "",
-    secondEntry: null,     // 频道/下载/偏爱：跳转卡 {text, url}
+    secondEntry: null,     // J20：第二层只做入口 {text, url}
     secondPage: "",
     filteredCourses: [],
     firstTabLabel: "有声读物",
@@ -543,113 +537,28 @@ Page({
     if (!tab || tab === this.data.firstTab) return;
     this.setData({ firstTab: tab });
     this.updateFilteredCourses();
-    // T00726 反馈：首层切换后二层内容必须按新类型重新查询（此前不重载 → 内容看起来一样）
-    this.setData({ secondList: [], secondEmpty: "", secondEntry: null });
-    this.loadSecondContent(this.data.secondTab);
   },
 
   onSecondTab(e) {
     const tab = e.currentTarget.dataset.tab;
     if (!tab || tab === this.data.secondTab) return;
-    this.setData({ secondTab: tab, secondList: [], secondEmpty: "", secondEntry: null });
+    this.setData({ secondTab: tab, secondEntry: null });
     this.loadSecondContent(tab);
   },
 
-  /** T00726 反馈：第二层内容真切换——最近/收藏内嵌列表，其余为跳转卡 */
-  async loadSecondContent(tab) {
+  /** J20：第二层只做入口，最近/收藏/频道/下载/偏爱各自只有整页一份实现 */
+  loadSecondContent(tab) {
     const SECOND_PAGES = {
-      recent: "/pages/recent/recent",
-      favorites: "/pages/favorites/favorites",
-      channels: "/pages/channels/channels",
-      downloads: "/pages/download/download",
-      preferred: "/pages/preferred-settings/preferred-settings",
+      recent: { url: "/pages/recent/recent", text: "前往最近播放，找刚听过的节目 ↗" },
+      favorites: { url: "/pages/favorites/favorites", text: "前往我的收藏，查看收藏的节目 ↗" },
+      channels: { url: "/pages/channels/channels", text: "前往全部频道，管理订阅与偏爱 ↗" },
+      downloads: { url: "/pages/download/download", text: "前往我的下载，查看已缓存节目 ↗" },
+      preferred: { url: "/pages/preferred-settings/preferred-settings", text: "前往偏爱频道设置，定制首页关注列表 ↗" },
     };
-    this.setData({ secondPage: SECOND_PAGES[tab] || "" });
-    if (tab === "recent") {
-      this.setData({ secondLoading: true });
-      try {
-        const type = this.data.firstTab;
-        const res = await fetchRecentPlaylogs(1, 10, type);
-        const list = (res && res.list) || [];
-        this.setData({
-          secondList: list.map((it, i) => ({
-            key: "r" + (it.episode_id || i),
-            id: it.episode_id,
-            title: it.title || "节目",
-            meta: [
-              it.channel_name || "",
-              it.played_at ? "播放于 " + it.played_at.slice(0, 10) : "已播放",
-            ].filter(Boolean).join(" · "),
-          })),
-          secondEmpty: list.length ? "" : "该类型暂无播放记录，去首页挑一集听听吧",
-        });
-      } finally {
-        this.setData({ secondLoading: false });
-      }
-      return;
-    }
-    if (tab === "favorites") {
-      this.setData({ secondLoading: true });
-      try {
-        const type = this.data.firstTab;
-        const res = await getFavorites(type);
-        const list = Array.isArray(res) ? res : (res && res.list) || [];
-        this.setData({
-          secondList: list.map((it, i) => ({
-            key: "f" + (it.episode_id || i),
-            id: it.episode_id,
-            title: it.title || ("收藏的节目 #" + it.episode_id),
-            meta: it.favorited_at ? "收藏于 " + String(it.favorited_at).slice(0, 10) : "",
-          })),
-          secondEmpty: list.length ? "" : "该类型暂无收藏，播放页点❤即可收藏",
-        });
-      } finally {
-        this.setData({ secondLoading: false });
-      }
-      return;
-    }
-    if (tab === "channels") {
-      // T00726：频道列表按首层类型过滤后内嵌展示（频道数据含 channel_type）
-      this.setData({ secondLoading: true });
-      try {
-        const res = await fetchChannels();
-        const list = (res && res.list) || (Array.isArray(res) ? res : []);
-        const type = this.data.firstTab;
-        const filtered = list.filter((c) => !type || c.channel_type === type);
-        this.setData({
-          secondList: filtered.map((c) => ({
-            key: "c" + c.id,
-            id: c.id,
-            title: c.name || ("频道 #" + c.id),
-            meta: c.type_label || c.channel_type || "",
-            isChannel: true,
-          })),
-          secondEmpty: filtered.length ? "" : "该类型暂无频道，去首页发现更多频道吧",
-        });
-      } finally {
-        this.setData({ secondLoading: false });
-      }
-      return;
-    }
-
-    // 下载 / 偏爱：无轻量列表数据源，展示跳转卡
-    const entries = {
-      downloads: { text: "前往我的下载，查看已缓存节目 ↗", url: SECOND_PAGES.downloads },
-      preferred: { text: "前往偏爱频道设置，定制首页关注列表 ↗", url: SECOND_PAGES.preferred },
-    };
-    this.setData({ secondEntry: entries[tab] || null });
-  },
-
-  onTapSecondItem(e) {
-    const item = this.data.secondList[Number(e.currentTarget.dataset.index)];
-    if (!item || !item.id) return;
-    // 频道项进频道内容页，节目项进详情页
-    const url = item.isChannel
-      ? "/pages/course/course?channelId=" + item.id
-      : "/pages/detail/detail?id=" + item.id;
-    wx.navigateTo({
-      url,
-      fail: () => wx.reLaunch({ url }),
+    const entry = SECOND_PAGES[tab];
+    this.setData({
+      secondPage: entry ? entry.url : "",
+      secondEntry: entry ? { text: entry.text, url: entry.url } : null,
     });
   },
 
@@ -694,9 +603,12 @@ Page({
   },
 
   onLogout() {
+    // J21 / J98：退出登录只清本机缓存，服务端收藏/进度/记录仍在。
+    // 此前弹窗写「确定要退出登录吗？」，配合隐私页「要求删除个人信息（退出登录即可）」
+    // 构成一个不可兑现的承诺——按提示操作的人以为删掉了云端数据。
     wx.showModal({
       title: '退出登录',
-      content: '确定要退出登录吗？',
+      content: '退出只清除本机缓存与下载，云端收藏、播放进度和播放记录仍会保留。如需删除云端数据，请通过「意见反馈」联系我们处理。',
       confirmColor: '#B0554A',
       success: async (res) => {
         if (!res.confirm) return;

@@ -1,6 +1,7 @@
 """广告服务：素材管理、投放规则、排期与生效投放。"""
 from calendar import monthrange
 from datetime import date, datetime
+from typing import Optional
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -113,22 +114,30 @@ class AdService:
 
     # ---- 投放规则 ----
 
-    async def list_placements(self, page: int, size: int) -> dict:
-        """投放规则分页列表，带素材名称。"""
-        count_result = await self.db.execute(
-            select(func.count(AdPlacement.id))
-        )
+    async def list_placements(self, page: int, size: int, enabled: Optional[int] = None) -> dict:
+        """投放规则分页列表，带素材名称；enabled 可筛选启用/停用（D13）。"""
+        conditions = []
+        if enabled is not None:
+            conditions.append(AdPlacement.enabled == enabled)
+
+        count_stmt = select(func.count(AdPlacement.id))
+        for cond in conditions:
+            count_stmt = count_stmt.where(cond)
+        count_result = await self.db.execute(count_stmt)
         total = count_result.scalar() or 0
 
         offset = (page - 1) * size
         # join 素材表取名称，避免列表项二次查询
-        result = await self.db.execute(
+        list_stmt = (
             select(AdPlacement, AdMaterial.name)
             .join(AdMaterial, AdPlacement.material_id == AdMaterial.id)
             .order_by(AdPlacement.start_date.desc())
             .offset(offset)
             .limit(size)
         )
+        for cond in conditions:
+            list_stmt = list_stmt.where(cond)
+        result = await self.db.execute(list_stmt)
         rows = result.all()
 
         list_data = [

@@ -76,12 +76,14 @@ const loadError = ref('')
 
 // 跳转至作用域审核页：携带 workflow_id 与频道名，
 // 供移动端审核页顶部上下文标题区展示「当前频道 + 工作流」
+// I48：队列接口现在显式下发 workflow_id；此前靠「任务 id 恰好等于工作流 id」的隐含约定，
+// 一旦取值的口径变化，审核页会静默过滤为空并显示「暂无待审内容」——先取显式字段，兼容旧响应
 // T02512（FR-UX-603）：再挂上 `from`（本页地址），审核页的「返回队列」按它回来，
 // 不再写死 /m/manage/queue——以后这一页带上筛选/滚动位置参数也能原样带回
 function goReview(t) {
   router.push(
     detailLocation(route.fullPath, '/m/review', {
-      workflow_id: t.id,
+      workflow_id: t.workflow_id ?? t.id,
       channel_name: t.channel_name || '',
     }),
   )

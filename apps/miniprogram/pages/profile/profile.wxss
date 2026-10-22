@@ -27,11 +27,24 @@
   margin-bottom: 48rpx;
 }
 
-/* T00384：图标即按钮，方形触控区 */
+/* J24：登录是本页唯一转化动作，恢复「图标 + 文字」的常规按钮形态 */
 .login-btn {
-  width: 96rpx;
-  height: 96rpx;
-  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 96rpx;
+  padding: 0 48rpx;
+}
+
+.login-btn .btn-icon {
+  margin-right: 12rpx;
+  width: 44rpx;
+  height: 44rpx;
+}
+
+.login-btn .btn-label {
+  font-size: 30rpx;
+  font-weight: 600;
 }
 
 /* 用户信息卡片：T00430 头像区背景图（AI 生成商务蓝声波主题）
@@ -312,9 +325,23 @@
 /* 两个按钮内的图标 PNG 已按底色烘焙好颜色：
    btn-x-mint.png = 商务蓝（浅底），btn-check.png = 白色（深底），无需再叠 filter */
 .edit-btn .btn-icon {
-  margin-right: 0;
-  width: 44rpx;
-  height: 44rpx;
+  margin-right: 10rpx;
+  width: 40rpx;
+  height: 40rpx;
+}
+
+/* J24：恢复可见文案，颜色随各自底色（取消=浅底蓝字，保存=深底白字） */
+.edit-btn .btn-label {
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.btn-label--cancel {
+  color: var(--accent);
+}
+
+.btn-label--confirm {
+  color: var(--text-inverse);
 }
 
 /* 我的课程（FR-MC-05）：已订阅课程/有声读物 + 本地学习进度 */

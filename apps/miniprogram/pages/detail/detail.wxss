@@ -1004,6 +1004,37 @@
   color: var(--border-strong);
 }
 
+/* J77：队列单项管理（上移/下移/移出），与队列页同款 */
+.qm-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  flex-shrink: 0;
+  margin-left: 12rpx;
+}
+
+.qm-act {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: var(--radius-btn);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: 32rpx;
+  line-height: 1;
+}
+
+.qm-act--danger {
+  color: var(--danger, #B0554A);
+  background: var(--danger-soft);
+}
+
+.qm-act:active {
+  opacity: 0.7;
+}
+
 /* 防止点击弹窗内部时冒泡到遮罩层关闭 */
 
 /* ===== T00753 页面右上角：分享 / 首页（简化图标，无边框） ===== */

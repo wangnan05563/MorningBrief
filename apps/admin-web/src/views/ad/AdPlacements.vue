@@ -2,6 +2,18 @@
   <div data-guide="ads-placements-page" class="page-container ad-placements">
     <div class="toolbar">
       <!-- T00811：移除与导航栏重复的页面标题，仅保留操作按钮 -->
+      <!-- D13：后端一直下发 enabled，但列表既无状态列也无筛选——移动端停用的规则
+           在 PC 列表里与生效规则完全同貌，运营据此判断「这条还在投」。 -->
+      <el-select
+        v-model="enabledFilter"
+        data-guide="ads-enabled-filter"
+        style="width: 140px"
+        @change="onFilterChange"
+      >
+        <el-option label="全部状态" :value="''" />
+        <el-option label="仅启用" :value="1" />
+        <el-option label="仅停用" :value="0" />
+      </el-select>
       <IconButton
         type="primary"
         label="新建投放"
@@ -23,14 +35,20 @@
         </el-table-column>
         <el-table-column prop="start_date" label="开始日期" width="140" align="center" />
         <el-table-column prop="end_date" label="结束日期" width="140" align="center" />
-        <!-- D14：停用此前只在移动端可用，PC 端唯一的可逆干预路径缺失，只能删除 -->
-        <el-table-column label="状态" width="110" align="center">
+        <!-- D13/D14：状态列同时给出文字与开关——只看开关分不清左右哪边是「启用」，
+             移动端停用的规则此前在 PC 里与生效规则完全同貌 -->
+        <el-table-column label="状态" width="150" align="center">
           <template #default="{ row }">
-            <el-switch
-              :model-value="row.enabled === 1"
-              :loading="togglingIds.includes(row.id)"
-              @update:model-value="(v) => handleToggle(row, v)"
-            />
+            <div class="status-cell">
+              <el-switch
+                :model-value="row.enabled === 1"
+                :loading="togglingIds.includes(row.id)"
+                @update:model-value="(v) => handleToggle(row, v)"
+              />
+              <span class="status-text" :class="{ 'status-text--off': row.enabled !== 1 }">
+                {{ row.enabled === 1 ? '已启用' : '已停用' }}
+              </span>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="120" align="center" fixed="right">
@@ -150,6 +168,8 @@ const loading = ref(false)
 const page = ref(1)
 const size = ref(20)
 const total = ref(0)
+// D13：'' = 全部状态，1 = 仅启用，0 = 仅停用
+const enabledFilter = ref('')
 
 const materialOptions = ref([])
 const togglingIds = ref([])
@@ -190,13 +210,23 @@ async function fetchList() {
   loading.value = true
   try {
     const data = await api.get('/ads/placements', {
-      params: { page: page.value, size: size.value },
+      params: {
+        page: page.value,
+        size: size.value,
+        enabled: enabledFilter.value === '' ? undefined : enabledFilter.value,
+      },
     })
     tableData.value = data.list || []
     total.value = data.total || 0
   } finally {
     loading.value = false
   }
+}
+
+// 换筛选条件回到第 1 页，否则第 3 页筛完可能一条都没有（空页≠没有匹配项）
+function onFilterChange() {
+  page.value = 1
+  fetchList()
 }
 
 // D16：素材下拉此前硬截断 page=1&size=100，第 101 条起的素材在列表里根本不存在，
@@ -307,6 +337,22 @@ onMounted(fetchList)
 
   .table-card {
     padding: 16px;
+  }
+
+  .status-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .status-text {
+    font-size: 12px;
+    color: var(--el-color-success-dark, #529b2e);
+  }
+
+  .status-text--off {
+    color: $color-text-secondary;
   }
 
   .pagination-wrap {

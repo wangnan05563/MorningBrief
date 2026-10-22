@@ -2,60 +2,60 @@
  * 音频文件管理 API 封装
  *
  * 对应后端 /admin/api/v1/workflows/{id}/audio/* 路由
- * 音频流式播放需 JWT，用 axios 下载 blob 后创建 ObjectURL 供 <audio> 使用
+ * 音频流式播放需 JWT，下载 blob 后创建 ObjectURL 供 <audio> 使用
  *
- * blob 请求需独立超时配置：音频文件较大（成品可达 10MB+），
- * 全局 15s timeout 对大文件下载不够，改为 60s
- *
- * blob 错误处理：后端返回 404/500 时 response.data 也是 Blob，
- * 需读取 Blob 文本解析 JSON 错误消息，否则前端只能显示 "Network Error"
- *
- * Network Error 处理：当 err.response 为 undefined（连接被重置/传输中断）时，
- * 浏览器 XHR onerror 返回固定文案 "Network Error"，需给出友好提示并自动重试一次
+ * 为什么用 fetch 而不是 axios：Chromium 把网络响应直接物化为 Blob 时（XHR blob /
+ * res.blob()）有 10MB 内存缓冲上限，超出部分被截断并在恰好 10MiB 处报 net::ERR_FAILED，
+ * axios 底层是 XHR，成品音频（10MB+）必现「Network Error」；
+ * 因此这里读成 ArrayBuffer 再手动 new Blob()（内存构造不受此限，实测 14.4MB 完整）。
+ * 同源请求 fetch 默认携带 HttpOnly Cookie（admin_token），鉴权行为与 axios 一致。
  */
 import api from '../api'
 
-// blob 请求专用配置：长超时 + 静默错误（由调用方处理）
-const BLOB_CONFIG = {
-  responseType: 'blob',
-  timeout: 60000,
-  silent: true,
-}
+// blob 下载超时：音频文件较大（成品可达 10MB+），全局 15s 不够，放宽到 60s
+const BLOB_TIMEOUT_MS = 60000
 
-// 从 Blob 错误响应中解析 JSON 错误消息
-// 后端返回 { code, message, data } 但 responseType='blob' 时 data 是 Blob
-async function parseBlobError(blob) {
-  try {
-    const text = await blob.text()
-    const json = JSON.parse(text)
-    return json.message || '请求失败'
-  } catch {
-    return '音频文件请求失败'
-  }
-}
+const ERROR_NETWORK = '音频加载失败，请检查网络或服务状态后重试'
+const ERROR_TIMEOUT = '音频下载超时，请重试'
 
 /**
- * 统一处理 blob 请求错误
- * - err.response.data 是 Blob：解析 JSON 错误消息（后端返回 404/500 等）
- * - err.response 为 undefined：网络层错误（连接重置/传输中断），自动重试一次
- * - 其他：透传原始错误
+ * 下载音频并返回 blob URL
+ * 网络层错误自动重试一次（重试仍失败给出友好提示）；
+ * HTTP 错误响应解析后端 JSON 的 message 抛出（如 404「成品音频尚未生成」）
  */
-async function handleBlobError(err, retryFn) {
-  const blob = err.response?.data
-  if (blob instanceof Blob) {
-    const msg = await parseBlobError(blob)
-    throw new Error(msg)
+async function fetchBlobUrl(path, params = null) {
+  let url = `${api.defaults.baseURL}${path}`
+  if (params) {
+    url += `?${new URLSearchParams(params).toString()}`
   }
-  // err.response 为 undefined 表示网络层错误（未收到 HTTP 响应）
-  // 浏览器 XHR onerror 固定返回 "Network Error"，需重试或给出友好提示
-  if (!err.response) {
-    if (retryFn) {
-      // 自动重试一次：BaseHTTPMiddleware 对 FileResponse 的缓冲冲突可能导致连接重置
-      return await retryFn()
+
+  const doFetch = () => fetch(url, { signal: AbortSignal.timeout(BLOB_TIMEOUT_MS) })
+
+  let res
+  try {
+    res = await doFetch()
+  } catch (e) {
+    if (e.name === 'TimeoutError') throw new Error(ERROR_TIMEOUT)
+    try {
+      res = await doFetch()
+    } catch {
+      throw new Error(ERROR_NETWORK)
     }
-    throw new Error('音频加载失败，请检查网络或服务状态后重试')
   }
-  throw err
+
+  if (!res.ok) {
+    let message = '音频文件请求失败'
+    try {
+      message = (await res.json()).message || message
+    } catch { /* 非 JSON 错误体，保留默认提示 */ }
+    throw new Error(message)
+  }
+
+  // 不用 res.blob()：网络响应直转 Blob 同样命中 Chromium 的 10MB 上限，
+  // 需先读入内存再手动构造，并带上原响应的 Content-Type 供 <audio> 识别
+  const contentType = res.headers.get('content-type') || 'audio/mpeg'
+  const blob = new Blob([await res.arrayBuffer()], { type: contentType })
+  return URL.createObjectURL(blob)
 }
 
 // 列出工作流的音频文件（TTS 片段 + 成品）
@@ -64,57 +64,24 @@ export const listAudioFiles = (workflowId) =>
 
 // 代理播放远端（COS / CDN）音频：后端鉴权拉取后以 blob 回传，规避浏览器 CORS / 私有桶问题
 // 打包态（COS 已配置）下 TTS 片段 / 成品仅存云端，本地 audio_cache 为空，必须走代理
-export async function getAudioProxyUrl(workflowId, remoteUrl) {
-  const fetch = () => api.get(
-    `/workflows/${workflowId}/audio/proxy`,
-    { ...BLOB_CONFIG, params: { url: remoteUrl } },
-  )
-  try {
-    const res = await fetch()
-    return URL.createObjectURL(res)
-  } catch (err) {
-    return await handleBlobError(err, async () => {
-      const res = await fetch()
-      return URL.createObjectURL(res)
-    })
-  }
+export function getAudioProxyUrl(workflowId, remoteUrl) {
+  return fetchBlobUrl(`/workflows/${workflowId}/audio/proxy`, { url: remoteUrl })
 }
 
 // 获取 TTS 音频 blob URL（供 <audio src> 播放）
-// remote=true 时走代理（COS 远端对象），否则走本地 audio_cache 端点
-export async function getTtsAudioUrl(workflowId, filename, remoteUrl = null) {
-  const fetch = () => remoteUrl
-    ? api.get(`/workflows/${workflowId}/audio/proxy`, { ...BLOB_CONFIG, params: { url: remoteUrl } })
-    : api.get(`/workflows/${workflowId}/audio/tts/${filename}`, BLOB_CONFIG)
-  try {
-    const res = await fetch()
-    return URL.createObjectURL(res)
-  } catch (err) {
-    // 网络层错误时重试一次，重试仍失败则由 handleBlobError 抛出友好提示
-    return await handleBlobError(err, async () => {
-      const res = await fetch()
-      return URL.createObjectURL(res)
-    })
-  }
+// remoteUrl 非空时（打包态 COS 对象）走代理，否则走本地 audio_cache 端点
+export function getTtsAudioUrl(workflowId, filename, remoteUrl = null) {
+  return remoteUrl
+    ? fetchBlobUrl(`/workflows/${workflowId}/audio/proxy`, { url: remoteUrl })
+    : fetchBlobUrl(`/workflows/${workflowId}/audio/tts/${filename}`)
 }
 
 // 获取成品音频 blob URL
 // 传入 remoteUrl 时（打包态 COS 对象）走代理，否则走本地 endpoint
-export async function getEpisodeAudioUrl(workflowId, remoteUrl = null) {
-  const fetch = () => remoteUrl
-    ? api.get(`/workflows/${workflowId}/audio/proxy`, { ...BLOB_CONFIG, params: { url: remoteUrl } })
-    : api.get(`/workflows/${workflowId}/audio/episode`, BLOB_CONFIG)
-  try {
-    const res = await fetch()
-    return URL.createObjectURL(res)
-  } catch (err) {
-    // 成品音频较大（10MB+），BaseHTTPMiddleware 缓冲更易导致连接重置
-    // 网络层错误时重试一次，重试仍失败则由 handleBlobError 抛出友好提示
-    return await handleBlobError(err, async () => {
-      const res = await fetch()
-      return URL.createObjectURL(res)
-    })
-  }
+export function getEpisodeAudioUrl(workflowId, remoteUrl = null) {
+  return remoteUrl
+    ? fetchBlobUrl(`/workflows/${workflowId}/audio/proxy`, { url: remoteUrl })
+    : fetchBlobUrl(`/workflows/${workflowId}/audio/episode`)
 }
 
 // 删除单个 TTS 音频

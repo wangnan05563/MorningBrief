@@ -1024,6 +1024,53 @@ function playQueueAt(index) {
 }
 
 /**
+ * 从队列移除指定项（J77：此前两处队列都只能「整表清空」）
+ *
+ * 正在播放的那一项被移除时不打断当前音频（已经加载/缓冲的内容继续播），
+ * 队列索引顺延到下一项，避免「删掉当前项后 onEnded 不知道放哪首」。
+ * @param {number} index - 要移除的队列索引
+ * @returns {{queue: Array, index: number, removedCurrent: boolean}|null}
+ */
+function removeQueueAt(index) {
+  if (index < 0 || index >= playQueue.length) return null;
+  const removedCurrent = index === queueIndex;
+  playQueue.splice(index, 1);
+  if (playQueue.length === 0) {
+    queueIndex = -1;
+  } else if (index < queueIndex) {
+    queueIndex -= 1;
+  } else if (removedCurrent) {
+    // 当前项已不在队列：索引顺延到原位置的下一项（越界时取最后一项）
+    queueIndex = Math.min(index, playQueue.length - 1);
+  }
+  notifyQueueListeners();
+  return { queue: playQueue.slice(), index: queueIndex, removedCurrent };
+}
+
+/**
+ * 调整队列项顺序（J77：补上「上移/下移」，不改播放中的那一项）
+ * @param {number} from - 原索引
+ * @param {number} to - 目标索引
+ * @returns {boolean} 是否移动成功
+ */
+function moveQueueItem(from, to) {
+  if (from === to) return false;
+  if (from < 0 || from >= playQueue.length) return false;
+  if (to < 0 || to >= playQueue.length) return false;
+  const [item] = playQueue.splice(from, 1);
+  playQueue.splice(to, 0, item);
+  if (queueIndex === from) {
+    queueIndex = to;
+  } else if (from < queueIndex && to >= queueIndex) {
+    queueIndex -= 1;
+  } else if (from > queueIndex && to <= queueIndex) {
+    queueIndex += 1;
+  }
+  notifyQueueListeners();
+  return true;
+}
+
+/**
  * 播放队列上一首
  */
 function playPrev() {
@@ -1435,6 +1482,8 @@ module.exports = {
   playNext,
   playPrev,
   playQueueAt,
+  removeQueueAt,
+  moveQueueItem,
   onQueueChange,
   // 离线下载（FR-MC-09）
   downloadEpisode,

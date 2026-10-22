@@ -42,6 +42,10 @@ web-view {
   word-break: break-all;
   margin-bottom: 48rpx;
   user-select: text;
+  /* J105：链接可能很长，给一个有上限的可滚动区域——既不把按钮挤出屏幕，
+     也不截断内容，用户仍能逐字核对复制到的是哪条链接 */
+  max-height: 240rpx;
+  overflow-y: auto;
 }
 
 .fallback-actions {

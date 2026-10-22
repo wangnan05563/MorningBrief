@@ -177,6 +177,38 @@ async def test_list_materials_keyword_search(db_session):
 
 
 @pytest.mark.asyncio
+async def test_list_placements_enabled_filter(db_session):
+    """D13：PC 列表要能按启用/停用筛选。
+
+    修复前列表没有 enabled 条件，移动端停用的规则在 PC 上仍以同样形态出现，
+    运营据此判断「这条还在投」。
+    """
+    m = await _create_material(db_session)
+    db_session.add_all([
+        AdPlacement(material_id=m.id, position="head",
+                    start_date=date(2026, 7, 1), end_date=date(2026, 7, 31), enabled=1),
+        AdPlacement(material_id=m.id, position="mid",
+                    start_date=date(2026, 7, 2), end_date=date(2026, 7, 31), enabled=0),
+        AdPlacement(material_id=m.id, position="tail",
+                    start_date=date(2026, 7, 3), end_date=date(2026, 7, 31), enabled=0),
+    ])
+    await db_session.commit()
+
+    svc = AdService(db_session)
+    assert (await svc.list_placements(page=1, size=20))["total"] == 3
+
+    on = await svc.list_placements(page=1, size=20, enabled=1)
+    assert on["total"] == 1
+    assert [r["enabled"] for r in on["list"]] == [1]
+
+    off = await svc.list_placements(page=1, size=20, enabled=0)
+    assert off["total"] == 2
+    assert {r["enabled"] for r in off["list"]} == {0}
+    # total 与 list 必须走同一组筛选条件：不能出现「共 3 条 / 只显示 2 条」的口径漂移
+    assert len(off["list"]) == 2
+
+
+@pytest.mark.asyncio
 async def test_get_active_placements(db_session):
     """查询某天生效的投放：只返回区间覆盖目标日期的投放。"""
     m = await _create_material(db_session)

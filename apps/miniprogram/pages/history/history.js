@@ -427,6 +427,12 @@ Page({
     wx.navigateTo({ url: '/pages/queue/queue' });
   },
 
+  /** J14：本页是「频道更新」，播放记录在「最近播放」——顶部入口直达，不再要求回"我的"绕路 */
+  onOpenRecent() {
+    trackEvent('history', 'open_recent');
+    wx.navigateTo({ url: '/pages/recent/recent' });
+  },
+
   /**
    * 任务6：加载上次播放进度（用于"继续播放"按钮）
    * 优先用本地缓存（含 currentTime），缺失时从后端读取

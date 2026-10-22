@@ -634,13 +634,32 @@ const docSections = [
   },
 ]
 
-// 搜索过滤：标题或简介包含关键词的章节保留
+// M88：搜索此前只匹配 title/intro，正文里的「CONFIRM_DELETE」「VACUUM」「COS」「密钥」
+// 一律搜不到，用户会以为文档没写。现在把章节的块内容（含步骤数组、表格行、注意事项）
+// 一并纳入匹配，命中正文仍返回整章。
+function collectSectionText(value, out = []) {
+  if (typeof value === 'string') {
+    out.push(value)
+  } else if (Array.isArray(value)) {
+    value.forEach((v) => collectSectionText(v, out))
+  } else if (value && typeof value === 'object') {
+    Object.entries(value).forEach(([key, v]) => {
+      // 图标组件、样式枚举不是文档内容
+      if (key === 'icon' || key === 'noteType' || key === 'type' || key === 'id') return
+      collectSectionText(v, out)
+    })
+  }
+  return out
+}
+
+// 搜索过滤：标题、简介或正文任一命中即保留
 const filteredSections = computed(() => {
   if (!search.value.trim()) return docSections
-  const kw = search.value.toLowerCase()
-  return docSections.filter(
-    (s) => s.title.toLowerCase().includes(kw) || s.intro.toLowerCase().includes(kw)
-  )
+  const kw = search.value.trim().toLowerCase()
+  return docSections.filter((s) => {
+    const haystack = collectSectionText([s.title, s.intro, s.blocks]).join('\n').toLowerCase()
+    return haystack.includes(kw)
+  })
 })
 
 async function openApiDocs() {

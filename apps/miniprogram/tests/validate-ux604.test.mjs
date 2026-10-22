@@ -166,6 +166,105 @@ describe('J5 浮条纠偏的两个时机', () => {
     ))
 })
 
+describe('T02540 / M6 信息架构：文案与入口的回归锁', () => {
+  test('J21 退出弹窗写回「确定要退出登录吗？」被抓', () => {
+    const src = read('pages/profile/profile.js').replace(
+      /content: '退出只清除本机缓存与下载[\s\S]*?处理。'/,
+      "content: '确定要退出登录吗？'",
+    )
+    assert.notEqual(src, read('pages/profile/profile.js'), '坏样本没构造成功：退出弹窗文案已变化，请同步这条证伪用例')
+    return expectHit({ 'pages/profile/profile.js': src }, 'J21')
+  })
+
+  test('J21 删掉删除通道「意见反馈」被抓', () =>
+    expectHit(
+      { 'pages/profile/profile.js': read('pages/profile/profile.js').replace('请通过「意见反馈」联系我们处理', '请等待我们后续提供自助入口') },
+      'J21',
+    ))
+
+  test('J24 登录按钮退回纯图标被抓', () =>
+    expectHit(
+      {
+        'pages/profile/profile.wxml': read('pages/profile/profile.wxml')
+          .replace('class="btn-primary login-btn"', 'class="btn-primary btn-icon-only login-btn"')
+          .replace('<text class="btn-label">微信一键登录</text>', ''),
+      },
+      'J24',
+    ))
+
+  test('J24 保存按钮删掉文字被抓', () =>
+    expectHit(
+      { 'pages/profile/profile.wxml': read('pages/profile/profile.wxml').replace('<text class="btn-label btn-label--confirm">保存</text>', '') },
+      'J24',
+    ))
+
+  test('J66 偏爱说明不写作用面（首页/历史）被抓', () =>
+    expectHit(
+      { 'pages/preferred-settings/preferred-settings.wxml': read('pages/preferred-settings/preferred-settings.wxml').replace('首页与历史的频道栏末尾', '频道栏末尾') },
+      'J66',
+    ))
+
+  test('J105 webview 兜底按钮退回纯图标被抓', () =>
+    expectHit(
+      { 'pages/webview/webview.wxml': read('pages/webview/webview.wxml').replace('class="btn-primary"', 'class="btn-primary btn-icon-only"') },
+      'J105',
+    ))
+
+  test('J105 删掉「返回」可见文案被抓', () =>
+    expectHit(
+      { 'pages/webview/webview.wxml': read('pages/webview/webview.wxml').replace('<text>返回</text>', '') },
+      'J105',
+    ))
+
+  test('J105 URL 展示区去掉高度上限/滚动被抓', () => {
+    const src = read('pages/webview/webview.wxss').replace(/max-height: 240rpx;\s*overflow-y: auto;/, '')
+    assert.notEqual(src, read('pages/webview/webview.wxss'), '坏样本没构造成功：.fallback-url 的限高样式已变化')
+    return expectHit({ 'pages/webview/webview.wxss': src }, 'J105')
+  })
+
+  test('J69 onShow 退回每次重载被抓', () => {
+    const src = read('pages/recent/recent.js').replace(/  onShow\(\) \{[\s\S]*?\n  \},/, '  onShow() {\n    this.loadRecent(true);\n  },')
+    assert.notEqual(src, read('pages/recent/recent.js'), '坏样本没构造成功：recent.js 的 onShow 结构已变化')
+    return expectHit({ 'pages/recent/recent.js': src }, 'J69')
+  })
+
+  test('J77 队列页删掉单项移出入口被抓', () =>
+    expectHit(
+      { 'pages/queue/queue.wxml': read('pages/queue/queue.wxml').replace(/catchtap="onRemoveItem"/g, '') },
+      'J77',
+    ))
+
+  test('J77 详情 modal 删掉单项移出入口被抓', () =>
+    expectHit(
+      { 'pages/detail/detail.wxml': read('pages/detail/detail.wxml').replace(/catchtap="onQueueRemove"/g, '') },
+      'J77',
+    ))
+
+  test('J77 services/audio.js 不再导出 removeQueueAt（两页只能各写一套）被抓', () =>
+    expectHit(
+      { 'services/audio.js': read('services/audio.js').replace(/\n  removeQueueAt,/, '') },
+      'J77',
+    ))
+
+  test('J14 历史页删掉「我的播放记录」出口被抓', () =>
+    expectHit(
+      { 'pages/history/history.wxml': read('pages/history/history.wxml').replace(/我的播放记录/g, '最近') },
+      'J14',
+    ))
+
+  test('J12 队列 chip 退回纯图标被抓', () =>
+    expectHit(
+      { 'pages/history/history.wxml': read('pages/history/history.wxml').replace('<text class="queue-chip-label">队列</text>', '') },
+      'J12',
+    ))
+
+  test('J20 个人中心第二层退回 secondList 内嵌列表被抓', () =>
+    expectHit(
+      { 'pages/profile/profile.wxml': read('pages/profile/profile.wxml').replace('<view class="card second-panel">', '<view class="card second-panel" wx:for="{{secondList}}">') },
+      'J20',
+    ))
+})
+
 describe('防误报：门禁不能红在自家注释与动态绑定上', () => {
   test('被禁句子写在注释里不算违规', async () => {
     const src = read('pages/privacy/privacy.js').replace(

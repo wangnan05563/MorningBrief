@@ -34,6 +34,31 @@
         <text class="qm-item-title">{{item.title}}</text>
         <text class="qm-item-date">{{item.date}}</text>
       </view>
+      <!-- J77：单项管理（上移/下移/移出）。catchtap 阻止冒泡，避免点按钮时误触播放 -->
+      <view class="qm-item-actions">
+        <view
+          wx:if="{{index > 0}}"
+          class="qm-act"
+          catchtap="onMoveItem"
+          data-index="{{index}}"
+          data-dir="-1"
+          aria-label="上移"
+        >↑</view>
+        <view
+          wx:if="{{index < queue.length - 1}}"
+          class="qm-act"
+          catchtap="onMoveItem"
+          data-index="{{index}}"
+          data-dir="1"
+          aria-label="下移"
+        >↓</view>
+        <view
+          class="qm-act qm-act--danger"
+          catchtap="onRemoveItem"
+          data-index="{{index}}"
+          aria-label="移出队列"
+        >×</view>
+      </view>
     </view>
   </scroll-view>
 </view>

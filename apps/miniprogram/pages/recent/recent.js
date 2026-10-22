@@ -20,11 +20,14 @@ Page({
 
   onLoad() {
     trackPageView('pages/recent/recent');
-    this.loadRecent(true);
   },
 
   onShow() {
-    // 从详情页返回时静默刷新最近播放列表（与 favorites 对齐），反映新播放记录
+    // J69：此前每次 onShow 都 loadRecent(true)，从详情返回就清空已翻页数据并把滚动位置
+    // 拉回顶部——「听完一集回去找刚才那集」要重新下滑。现在只在首次展示时加载；
+    // 之后返回保留列表与位置，需要最新记录时用下拉刷新（onPullDownRefresh）。
+    if (this._loaded) return;
+    this._loaded = true;
     this.loadRecent(true);
   },
 

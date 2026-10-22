@@ -573,3 +573,18 @@ async def test_batch_delete_tasks(db_session):
     assert await db_session.get(Workflow, "wf-qdel-2") is None
     # queued 任务未被波及
     assert await db_session.get(Workflow, "wf-qdel-3") is not None
+
+
+@pytest.mark.asyncio
+async def test_list_queue_tasks_exposes_workflow_id(db_session):
+    """I48：队列项必须显式下发 workflow_id。
+
+    移动端「去审核」拿它拼 query。修复前只能把 `id` 当 workflow_id 用
+    （当下两者同值），字段语义靠猜——换序列或包装后就会静默过滤为空。
+    """
+    await _create_queued_workflow(db_session, "wf-m6-1")
+
+    items, total = await QueueService(db_session).list_queue_tasks(page=1, size=20)
+    assert total == 1
+    assert items[0]["workflow_id"] == "wf-m6-1"
+    assert items[0]["id"] == items[0]["workflow_id"]
