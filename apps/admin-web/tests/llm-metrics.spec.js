@@ -42,11 +42,11 @@ test.describe('LLM 重试指标页面', () => {
   test('原始计数卡显示', async ({ page }) => {
     await page.goto('/stats/llm-metrics')
 
-    // 4 个原始计数卡：总调用 / 触发重试 / 改善 / 未改善
-    await expect(page.getByText('总调用次数').first()).toBeVisible({ timeout: 30000 })
-    await expect(page.getByText('触发重试次数').first()).toBeVisible({ timeout: 30000 })
-    await expect(page.getByText('改善次数').first()).toBeVisible({ timeout: 30000 })
-    await expect(page.getByText('未改善次数').first()).toBeVisible({ timeout: 30000 })
+    // 4 个原始计数卡：标签与单位取自后端 meta（INT-UX-03：页面不再自带第二套文案）
+    await expect(page.getByText('改写调用总数(次)').first()).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('触发重试(次)').first()).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('重试有改善(次)').first()).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('重试未改善(次)').first()).toBeVisible({ timeout: 30000 })
 
     // 计数数值：mock 数据 100/30/20/10
     await expect(page.locator('.count-value').filter({ hasText: '100' })).toBeVisible({ timeout: 30000 })

@@ -458,6 +458,16 @@ export const llmMetricsResponse = {
     // T02508（FR-UX-503）：以上计数全部是进程内累计，接口用 started_at / pid 标注起点
     started_at: '2026-07-18T09:30:00',
     pid: 4321,
+    // INT-UX-03 / T02526：率与计数的单位随接口下发，与后端 meta_for 同一份真源
+    meta: {
+      trigger_rate: statsMetricMeta.trigger_rate,
+      improve_rate: statsMetricMeta.improve_rate,
+      not_improve_rate: statsMetricMeta.not_improve_rate,
+      total_calls: statsMetricMeta.total_calls,
+      triggered: statsMetricMeta.triggered,
+      improved: statsMetricMeta.improved,
+      not_improved: statsMetricMeta.not_improved,
+    },
   },
 }
 

@@ -28,8 +28,10 @@ test.describe('RSS 源状态页面', () => {
     // T00811：内容区标题已移除，标题改由导航栏展示（meta.title=RSS 源状态）
     await expect(page.getByText('RSS 源状态').first()).toBeVisible({ timeout: 30000 })
 
-    // 4 个汇总卡片：源总数/正常/失败/未巡检
-    await expect(page.getByText('源总数').first()).toBeVisible({ timeout: 30000 })
+    // 4 个汇总卡片：全局源清单总数/正常/失败/未巡检
+    // D46：这张卡数的是后端 rss.yaml 全局清单，标签必须自证归属，
+    // 与频道健康度卡片的「本频道已配源」区分开
+    await expect(page.getByText('全局源清单总数').first()).toBeVisible({ timeout: 30000 })
     await expect(page.getByText('正常').first()).toBeVisible({ timeout: 30000 })
     await expect(page.getByText('失败').first()).toBeVisible({ timeout: 30000 })
     await expect(page.getByText('未巡检').first()).toBeVisible({ timeout: 30000 })
