@@ -13,15 +13,25 @@
     </div>
 
     <div class="card-soft calendar-card">
+      <!-- D25（FR-UX-302）：拉取失败时日历整块撤下。留着它只会满屏「—」，
+           而「—」在本页的意思恰恰是「该日无排期」——把接口故障说成没排期，
+           正是这一批缺陷的母题。错误态自带重试，不依赖会被 document.hidden 吞掉的 toast。 -->
+      <ListLoadError
+        v-if="loadError"
+        :message="loadError"
+        :retrying="retrying"
+        @retry="retryLoadSchedule"
+      />
+
       <!-- 图例：帮助用户快速识别三个广告位的颜色含义（文案取自枚举字典，T02504） -->
-      <div class="legend">
+      <div v-else class="legend">
         <div v-for="p in positionOptions" :key="p.value" class="legend-item">
           <span class="legend-dot" :class="`dot-${p.value}`"></span>
           <span>{{ p.label }}（{{ p.value }}）</span>
         </div>
       </div>
 
-      <el-calendar data-guide="ads-schedule-calendar" v-model="calendarDate" v-loading="loading">
+      <el-calendar v-if="!loadError" data-guide="ads-schedule-calendar" v-model="calendarDate" v-loading="loading">
         <template #date-cell="{ data }">
           <div class="date-cell" :class="{ 'other-month': data.type !== 'current-month' }">
             <div class="date-num">{{ data.day.split('-').slice(2).join('') }}</div>
@@ -58,10 +68,15 @@
 import { ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import api from '../../api'
+import ListLoadError from '../../components/ListLoadError.vue'
 import { AD_POSITION, enumLabel, enumOptions } from '../../constants/enums'
 import { buildScheduleMap } from '../../utils/scheduleMap'
 
 const loading = ref(false)
+// D25（FR-UX-302）：页内错误态。与拦截器 toast 并存但不依赖它——toast 会消失，
+// 而且页面 hidden 时会被反馈队列延后，用户回到页面时看不到「这次没加载成功」。
+const loadError = ref('')
+const retrying = ref(false)
 // 月份选择器的值（YYYY-MM 字符串），作为月份切换的数据源
 const selectedMonth = ref(dayjs().format('YYYY-MM'))
 // el-calendar 的 v-model 需要 Date 对象，用当月1号作为锚点
@@ -105,9 +120,22 @@ async function fetchSchedule(monthStr) {
     // 后端返回 { placements: [{material_name, position, start_date, end_date, enabled}] }
     // 整形逻辑在 utils/scheduleMap（D24：重叠投放必须可见，不能后写覆盖前写）
     scheduleMap.value = buildScheduleMap(data.placements)
+    loadError.value = ''
+  } catch (e) {
+    // D25：失败时**必须清掉上月数据**。此前 catch 都不写，scheduleMap 保留上一月份，
+    // 切到新月份后满屏「—」＝「本月无排期」的误读；清掉之后再由错误态接管渲染。
+    scheduleMap.value = {}
+    loadError.value = e?.message || '排期接口请求失败'
   } finally {
     loading.value = false
+    retrying.value = false
   }
+}
+
+// D25：重试按「当前所选月份」重新发起，而不是让用户自己去切一次月份
+function retryLoadSchedule() {
+  retrying.value = true
+  return fetchSchedule(selectedMonth.value)
 }
 
 // 月份选择器变化时：同步日历到所选月份，并触发 watch 重新加载

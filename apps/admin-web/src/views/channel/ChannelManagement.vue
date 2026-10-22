@@ -779,6 +779,12 @@ function resetForm() {
   form.inherit_bgm_gap = true
   form.enable_thinking_question = 1
   form.rss_sources = []
+  // C16：这两个字段此前**不在 resetForm 里**，于是编辑过「有声读物」频道 A 之后点
+  // 「新增频道」，A 的书籍 RSS 源与图标会被静默带进新频道并提交（图标连预览都显示 A 的）。
+  // icon_url 尤其隐蔽：它不在 form 的初始声明里，只在打开编辑时被动态写入，
+  // 所以从不复位——声明里缺一个字段，resetForm 就得自己认账。
+  form.book_rss_sources = []
+  form.icon_url = ''
   form.keywords = ''
   // 素材回溯：默认不勾选自定义，material_lookback_days 置 null 表示继承动态回溯
   form.material_lookback_days = null

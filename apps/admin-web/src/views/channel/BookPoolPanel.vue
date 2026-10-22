@@ -1,8 +1,18 @@
 <template>
   <div class="book-pool-panel">
+    <!-- C73（FR-UX-302）：加载失败时页内错误态优先展示。同时把下面所有「会声称一件事实」的块
+         撤下——失败态里它们只会显示复位后的 false / 0，等于把「接口挂了」说成
+         「模式未开启、共 0 本」，正是本批缺陷的母题。 -->
+    <ListLoadError
+      v-if="poolError"
+      :message="poolError"
+      :retrying="poolRetrying"
+      @retry="retryLoadAll"
+    />
+
     <!-- 讲书稿模式开关 + 状态提示 -->
     <el-alert
-      v-if="state.enabled"
+      v-if="!poolError && state.enabled"
       type="success"
       :closable="false"
       show-icon
@@ -16,7 +26,7 @@
       </template>
     </el-alert>
     <el-alert
-      v-else
+      v-else-if="!poolError"
       type="info"
       :closable="false"
       show-icon
@@ -24,7 +34,7 @@
     />
 
     <!-- 调度与进度 -->
-    <el-form :inline="true" class="schedule-form" label-width="90px">
+    <el-form v-if="!poolError" :inline="true" class="schedule-form" label-width="90px">
       <!-- C27（FR-UX-704）：这里此前只有「模式状态」提示，开关却不在本组件里——
            独立页 /channels/book-pool 根本没有开关可用，频道编辑弹窗内则只在另一个页签里有开关，
            于是出现「同屏两处与模式相关的提示、只有一处能操作」。onToggleMode 早已写好并接了 API，
@@ -173,6 +183,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { View, RefreshLeft, Plus, ArrowUp, ArrowDown, Delete, Search, Close, Check } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
+import ListLoadError from '../../components/ListLoadError.vue'
 import {
   addBooksToPool,
   getScriptMode,
@@ -193,6 +204,9 @@ const props = defineProps({
 })
 
 const loading = ref(false)
+// C73（FR-UX-302）：两个 loader 的失败聚合进同一条页内错误态，重试走完整 loadAll。
+const poolError = ref('')
+const poolRetrying = ref(false)
 const items = ref([])
 const state = reactive({
   enabled: false, cursor: 0, pool_total: 0, interval_days: 1, loop: false,
@@ -232,18 +246,43 @@ watch(() => props.channelId, () => loadAll(), { immediate: true })
 
 async function loadAll() {
   if (!props.channelId) return
-  await Promise.all([loadState(), loadPool()])
+  // C73（FR-UX-302）：切频道**先清残留再拉**。此前两个 loader 一个连 try 都没有、
+  // 一个只 try/finally 无 catch，请求失败时 state/items 原样保留上一个频道的值，
+  // 界面继续显示「已取 X / 共 Y 本 · 上次《Z》」——那是**别的频道**的进度，
+  // 比显示空态更危险（空态至少不会让人把 A 频道当成 B 频道）。
+  resetPoolView()
+  const errors = []
+  await Promise.all([loadState(errors), loadPool(errors)])
+  poolError.value = errors.length ? `讲书稿书单/进度未能加载：${errors.join('；')}` : ''
 }
 
-async function loadState() {
-  const data = await getScriptMode(props.channelId)
-  Object.assign(state, data || {})
-  scriptMode.value = !!state.enabled
-  schedule.interval_days = state.interval_days || 1
-  schedule.loop = !!state.loop
+// C73：失败态复位。只清「会被误读成当前频道数据」的展示字段，不动弹窗一类的交互态。
+function resetPoolView() {
+  Object.assign(state, {
+    enabled: false, cursor: 0, pool_total: 0, interval_days: 1, loop: false,
+    last_run_date: null, last_title: null, rss_sources: [], book_rss_sources: [],
+  })
+  items.value = []
+  scriptMode.value = false
+  schedule.interval_days = 1
+  schedule.loop = false
+  preview.value = null
 }
 
-async function loadPool() {
+async function loadState(errors) {
+  try {
+    const data = await getScriptMode(props.channelId)
+    Object.assign(state, data || {})
+    scriptMode.value = !!state.enabled
+    schedule.interval_days = state.interval_days || 1
+    schedule.loop = !!state.loop
+  } catch (e) {
+    // 交给 loadAll 聚合到页内错误态；单个 loader 不各自弹 toast（FR-UX-303 单一出口）
+    errors?.push(e?.message || '取书状态接口失败')
+  }
+}
+
+async function loadPool(errors) {
   loading.value = true
   try {
     const data = await listBookPool(props.channelId)
@@ -256,9 +295,19 @@ async function loadPool() {
     // 此前预览是一次性 POST 且结果常驻显示，此后任何排序/加入/移出都不让它失效，
     // 用户看到的「下次将生成《X》」可能早已不成立——属于典型的数据被误读。
     preview.value = null
+  } catch (e) {
+    errors?.push(e?.message || '书单接口失败')
   } finally {
     loading.value = false
   }
+}
+
+// C73：重试重新拉「取书状态 + 书单」两份数据——只补其中一个，另一个还是旧的
+function retryLoadAll() {
+  poolRetrying.value = true
+  return loadAll().finally(() => {
+    poolRetrying.value = false
+  })
 }
 
 async function onToggleMode(val) {

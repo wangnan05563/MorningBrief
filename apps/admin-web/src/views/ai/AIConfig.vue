@@ -875,6 +875,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { Check, Refresh, RefreshLeft, Hide, View, Connection, Download, ArrowRight, VideoPlay } from '@element-plus/icons-vue'
 import api from '../../api'
+import { buildSyncNotices, parseDuration, parseRate } from '../../utils/calculatorSync'
 // T00388：TTS 音色官方同步按钮（音色组合 + 各引擎音色下拉右侧）
 import VoiceSyncButton from '../../components/VoiceSyncButton.vue'
 
@@ -1618,29 +1619,31 @@ function handleTabChange(tab) {
 // 从参数计算器同步配置：读取 query 中的 duration 和 rate，映射到表单字段
 function applyCalculatorParams() {
   const { duration, rate } = route.query
-  let applied = []
+  const applied = []
 
-  if (duration !== undefined) {
-    const sec = parseInt(duration, 10)
-    if (!isNaN(sec)) {
-      // clamp 到滑块范围 180-1200
-      llmForm.value.target_duration_sec = Math.max(180, Math.min(1200, sec))
-      applied.push('目标时长')
-    }
+  // M2：区间与夹取判定收在 utils/calculatorSync（本页面滑杆范围是后端可存范围的子集，
+  // 夹取本身没错，错的是过去**只报「已同步」而不说被夹取了**，用户以为按自己填的值带过去了）
+  const d = duration !== undefined ? parseDuration(duration) : null
+  if (d) {
+    llmForm.value.target_duration_sec = d.value
+    applied.push('目标时长')
   }
 
-  if (rate !== undefined) {
-    const rateVal = parseFloat(rate)
-    if (!isNaN(rateVal)) {
-      // rateMultiplier → edge_rate 字符串：1.5 → "+50%", 0.8 → "-20%", 1.0 → ""
-      const percent = Math.round((rateVal - 1) * 100)
-      ttsForm.value.edge_rate = percent === 0 ? '' : (percent > 0 ? `+${percent}%` : `${percent}%`)
-      applied.push('语速倍率')
-    }
+  const r = rate !== undefined ? parseRate(rate) : null
+  if (r) {
+    ttsForm.value.edge_rate = r.edge_rate
+    applied.push('语速倍率')
   }
 
+  const notices = buildSyncNotices(d, r)
   if (applied.length > 0) {
-    ElMessage.info(`已从参数计算器同步：${applied.join('、')}，请点击保存配置持久化`)
+    ElMessage({
+      type: notices.length ? 'warning' : 'info',
+      duration: notices.length ? 8000 : 3000,
+      message: notices.length
+        ? `已从参数计算器同步，但有 ${notices.length} 项落在本页面可设范围之外，已调整：${notices.join('；')}。请点击保存配置持久化`
+        : `已从参数计算器同步：${applied.join('、')}，请点击保存配置持久化`,
+    })
   }
 
   // 清除 query 参数，避免刷新页面时重复应用

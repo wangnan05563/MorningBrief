@@ -11,8 +11,24 @@
       />
     </div>
 
+    <!-- M71（FR-UX-302）：status 已有旧值时不能声称「数据未加载」，
+         要靠 stale 把口径改成「下方为上次成功加载的数据，可能已过期」。 -->
+    <ListLoadError
+      v-if="statusError"
+      :message="statusError"
+      :retrying="retryingStatus"
+      :stale="!!status"
+      @retry="retryLoadStatus"
+    />
+    <p v-if="statusError && status && lastSuccessAt" class="status-stamp">
+      上次成功获取：{{ lastSuccessAt.toLocaleTimeString() }}
+    </p>
+
     <!-- 存储状态卡片 -->
-    <div class="status-section" v-loading="loadingStatus">
+    <!-- M71：只在真的拿到过 status 时才渲染。首次加载失败时 status 为 null，卡片会用
+         `?? 0` 把「不知道」写成「数据库 0 条日志、无需清理」——错误态与假干净同时在场，
+         用户读到的仍是那句断言。二次失败时 status 有旧值，卡片保留、由 stale 错误态说明过期。 -->
+    <div v-if="status" class="status-section" v-loading="loadingStatus">
       <el-row :gutter="16">
         <el-col :span="8">
           <div class="card-soft stat-card">
@@ -227,6 +243,7 @@ import {
   Refresh, Coin, Document, Cpu, Delete,
 } from '@element-plus/icons-vue'
 import api from '../../api'
+import ListLoadError from '../../components/ListLoadError.vue'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import { LONG_TASK_TIMEOUT_MS, isRequestTimeout, longTaskTimeoutText } from '../../utils/requestTimeout'
 
@@ -283,6 +300,12 @@ const CleanupResult = {
 // 存储状态
 const status = ref(null)
 const loadingStatus = ref(true)
+// M71（FR-UX-302）：状态接口失败要能在页内看见。此前 catch 只 console.error，
+// status 为 null 时三卡显示 `-` 与「0 条 / 0 个」＝「数据库很干净、无需清理」；
+// 二次刷新失败时更糟：旧数值继续挂着且没有任何过期标记。
+const statusError = ref('')
+const retryingStatus = ref(false)
+const lastSuccessAt = ref(null)
 
 // 三个表单状态（互不干扰）
 const cacheForm = ref({ target: 'all', dry_run: true })
@@ -318,11 +341,24 @@ async function loadStatus() {
   loadingStatus.value = true
   try {
     status.value = await api.get('/maintenance/status')
+    statusError.value = ''
+    lastSuccessAt.value = new Date()
   } catch (error) {
-    console.error('加载存储状态失败', error)
+    // M71（FR-UX-302）：此前这里只 console.error —— status 为 null 时三卡显示 `-` 与
+    // 「0 条 / 0 个」，运维读成「数据库 0 条日志、无需清理」；若是二次刷新失败，
+    // 更糟的是继续展示上一次的旧数值且没有任何过期标记。
+    // 现在：失败即置错误态，旧值保留但由 stale 标记说明「可能是过期的」。
+    statusError.value = error?.message || '存储状态接口请求失败'
   } finally {
     loadingStatus.value = false
+    retryingStatus.value = false
   }
+}
+
+// M71：重试按钮走同一条 loadStatus；成功后错误态与 spinner 一起清掉
+function retryLoadStatus() {
+  retryingStatus.value = true
+  return loadStatus()
 }
 
 // 执行清理

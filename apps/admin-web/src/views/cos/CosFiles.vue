@@ -177,6 +177,7 @@ import {
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
+import { buildDestKey, validateSegment } from '../../utils/cosPath'
 import {
   getCosStatus,
   listCosObjects,
@@ -213,9 +214,12 @@ const pathSegments = computed(() => {
 
 // 表格数据：文件夹在前，文件在后
 const tableData = computed(() => {
-  const f = folders.value.map((name) => ({
-    key: currentPrefix.value + name,
-    name,
+  const f = folders.value.map((raw) => ({
+    key: currentPrefix.value + raw,
+    // H8（FR-UX-202 同族的静默破坏）：后端 folders 自带结尾斜杠（"sub1/"）。
+    // 显示与重命名预填都用**剥掉尾斜杠**的名字——key 保持原样（进入该目录仍要靠
+    // prefix + "sub1/"），否则「看起来是名字的东西」会把斜杠带进下一条编辑路径。
+    name: raw.replace(/\/+$/, ''),
     isFolder: true,
     sizeText: '-',
     last_modified: '',
@@ -363,19 +367,26 @@ async function confirmNewFolder() {
 // 重命名 / 移动
 function openRename(row) {
   renameTarget.value = row
-  renameNewName.value = row.name
+  // H8：预填一律剥掉尾斜杠。此前把后端原样的 "sub1/" 填进「新名称」，
+  // 用户不改动直接点确定就得到 "sub1//"（详见 confirmRename）。
+  renameNewName.value = (row.name || '').replace(/\/+$/, '')
   renameVisible.value = true
 }
 async function confirmRename() {
   const row = renameTarget.value
   if (!row) return
-  const newName = (renameNewName.value || '').trim()
-  if (!newName) {
-    ElMessage.warning('新名称不能为空')
+  // H8：判定收在 utils/cosPath（行为可断言）。要点有两个——
+  // ① 名称段一律剥首尾斜杠（尾斜杠来自后端 folders 的 "sub1/" 口径），
+  //    否则此前那句「无条件补 /」会产出 destKey="sub1//"；
+  // ② 段内不允许再带斜杠：本弹窗只做同级重命名，带斜杠等于把对象甩进另一层前缀，
+  //    而列表按 prefix 过滤，用户只会看到「它莫名其妙不见了」。
+  const check = validateSegment(renameNewName.value)
+  if (!check.ok) {
+    ElMessage.warning(check.reason)
     return
   }
   // 仅支持同级重命名（文件名/文件夹名变更），保持前缀不变
-  const destKey = currentPrefix.value + newName + (row.isFolder ? '/' : '')
+  const destKey = buildDestKey(currentPrefix.value, renameNewName.value, row.isFolder)
   if (destKey === row.key) {
     renameVisible.value = false
     return

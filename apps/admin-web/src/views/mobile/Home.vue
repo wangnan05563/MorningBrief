@@ -1,6 +1,16 @@
 <template>
   <div class="m-home">
-    <section class="m-section">
+    <!-- I15（FR-UX-302）：外勤首屏。此前 `.catch(() => ({today:{},pending_review:0,unread_message:0}))`
+         把「取不到」直接铺成「DAU -、待审 0、未读 0」的正常空态，网断时外勤会误判
+         「今天没有要审的」。失败时两块都撤下（0 本身就是一种声称），换成带重试的页内错误态。 -->
+    <ListLoadError
+      v-if="loadError"
+      :message="loadError"
+      :retrying="retrying"
+      @retry="retryLoad"
+    />
+
+    <section v-if="!loadError" class="m-section">
       <h3 class="m-section__title">今日关键指标</h3>
       <div class="m-grid">
         <div v-for="c in cards" :key="c.label" class="m-card">
@@ -10,7 +20,7 @@
       </div>
     </section>
 
-    <section class="m-section">
+    <section v-if="!loadError" class="m-section">
       <div class="m-row" @click="goReview">
         <span class="m-row__label">待我审批</span>
         <span class="m-row__value">{{ pendingCount }} <span class="m-arrow">›</span></span>
@@ -33,6 +43,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getDashboardSummary } from '../../api/mobile'
+import ListLoadError from '../../components/ListLoadError.vue'
 import { metricLabel, metricValue } from '../../utils/format'
 
 const router = useRouter()
@@ -40,6 +51,10 @@ const router = useRouter()
 const metrics = ref({})
 const pendingCount = ref(0)
 const unreadCount = ref(0)
+// I15（FR-UX-302）：失败与「今天真的没有数据」必须可区分——外勤首屏此前用
+// `.catch(() => ({...0}))` 把接口故障铺成正常空态。
+const loadError = ref('')
+const retrying = ref(false)
 // 后端运营收件箱接口（INT-M101）已实现，首页未读走聚合接口
 const msgReady = ref(true)
 
@@ -56,14 +71,28 @@ const cards = computed(() =>
 )
 
 async function load() {
-  const data = await getDashboardSummary().catch(() => ({
-    today: {},
-    pending_review: 0,
-    unread_message: 0,
-  }))
-  metrics.value = data.today || {}
-  pendingCount.value = data.pending_review ?? 0
-  unreadCount.value = data.unread_message ?? 0
+  try {
+    // I15：失败**不再**回落成 `{today:{}, pending_review:0, unread_message:0}`。
+    // 那个兜底把接口故障渲染成「今天 DAU 没有、待审 0、未读 0」的正常空态，
+    // 外勤在地铁里网断时会直接判成「今天没有要审的」——恰好漏掉最该处理的队列。
+    const data = await getDashboardSummary()
+    metrics.value = data.today || {}
+    pendingCount.value = data.pending_review ?? 0
+    unreadCount.value = data.unread_message ?? 0
+    loadError.value = ''
+  } catch (e) {
+    metrics.value = {}
+    pendingCount.value = 0
+    unreadCount.value = 0
+    loadError.value = e?.message || '首页聚合接口请求失败'
+  } finally {
+    retrying.value = false
+  }
+}
+
+function retryLoad() {
+  retrying.value = true
+  return load()
 }
 
 function goReview() {

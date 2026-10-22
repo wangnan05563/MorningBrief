@@ -62,7 +62,7 @@
           <IconButton :icon="RefreshLeft" label="重置" desc="重置筛选条件" @click="onReset" />
         </el-form-item>
         <el-form-item label="视图">
-          <el-radio-group v-model="viewMode" size="small" @change="onSearch">
+          <el-radio-group v-model="viewMode" size="small" @change="onViewModeChange">
             <el-radio-button value="list">明细</el-radio-button>
             <el-radio-button value="book">按书聚合</el-radio-button>
           </el-radio-group>
@@ -369,6 +369,24 @@ const viewMode = ref('list')
 // T00775：精确过滤（后端 material_id / source 精确等值，不走 keyword 的 LIKE 模糊匹配）
 const materialIdFilter = ref(null)
 const sourceFilter = ref('')
+
+// C43（界面不能撒谎）：material_id / source 是**明细视图专有**的精确过滤，
+// 聚合接口 /materials/aggregate 只接受 channel_id / keyword / status（外加 page/size），
+// 多传的参数 pydantic/Query 根本不认。此前从讲书稿书单点「素材 ID」进来后
+// 提示条显示「已按素材 ID 123 定位」，用户切到「按书聚合」，结果已不再过滤，
+// 而提示条原样挂着——运营据此判定「这本书只有这些章节」。
+// 切视图即作废精确过滤并说明原因，而不是留着一条已经不成立的承诺。
+function onViewModeChange(mode) {
+  if (mode === 'book' && (materialIdFilter.value || sourceFilter.value)) {
+    materialIdFilter.value = null
+    sourceFilter.value = ''
+    ElMessage.info(
+      '「按书聚合」视图不支持按素材 ID / 来源精确定位（聚合接口只按频道、关键词、状态汇总），已清除该定位条件',
+    )
+  }
+  page.value = 1
+  onSearch()
+}
 
 const editVisible = ref(false)
 const editForm = reactive({ id: null, title: '', source: '', category: '', status: 'pending', content: '', media_type: 'text', media_url: '', media_thumb_url: '' })
