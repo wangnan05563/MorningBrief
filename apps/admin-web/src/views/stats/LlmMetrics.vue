@@ -95,7 +95,7 @@
 import { ref, computed, onMounted } from 'vue'
 import dayjs from 'dayjs'
 import { Refresh } from '@element-plus/icons-vue'
-import api from '../../api'
+import { getLlmMetrics } from '../../api/stats'
 import { cumulativeScopeText, uptimeText as formatUptime } from '../../utils/scope'
 import { metricLabel, metricText, metricValue } from '../../utils/format'
 
@@ -229,7 +229,7 @@ function rateClass(kind, rate) {
 async function loadData() {
   loading.value = true
   try {
-    const data = await api.get('/stats/llm-metrics')
+    const data = await getLlmMetrics()
     // 合并而非整体替换：避免后端缺字段时丢失前端默认值（如 not_improve_rate）
     if (data && typeof data === 'object') {
       metrics.value = { ...metrics.value, ...data }

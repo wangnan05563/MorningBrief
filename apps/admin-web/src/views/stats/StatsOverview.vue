@@ -111,7 +111,7 @@ import {
   Filler,
 } from 'chart.js'
 import dayjs from 'dayjs'
-import api from '../../api'
+import { getOverview, getTrend } from '../../api/stats'
 import ListLoadError from '../../components/ListLoadError.vue'
 import { metricLabel, metricNumber, metricText, metricValue } from '../../utils/format'
 
@@ -275,7 +275,7 @@ const retryingTrend = ref(false)
 async function loadOverview() {
   loading.value = true
   try {
-    overview.value = await api.get('/stats/overview', { params: { date: selectedDate.value } })
+    overview.value = await getOverview(selectedDate.value)
     overviewError.value = ''
   } catch (e) {
     // 拦截器已弹 toast，这里补页内错误态：5 张卡片全是「-」不叫失败告知
@@ -288,7 +288,7 @@ async function loadOverview() {
 async function loadTrend() {
   try {
     // 失败时保留上一份数据（图上仍是旧曲线），但错误态必须显示出来
-    trend.value = await api.get('/stats/trend', { params: { metric: metric.value, range: range.value } })
+    trend.value = await getTrend(metric.value, range.value)
     trendError.value = ''
   } catch (e) {
     trendError.value = e?.message || '趋势数据加载失败'

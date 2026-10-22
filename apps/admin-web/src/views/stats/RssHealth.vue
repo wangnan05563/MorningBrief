@@ -154,7 +154,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
-import api from '../../api'
+import { getRssHealth } from '../../api/stats'
 import { cumulativeScopeText, uptimeText as formatUptime } from '../../utils/scope'
 import { metricLabel, metricText } from '../../utils/format'
 
@@ -292,7 +292,7 @@ function applyData(data) {
 async function loadData() {
   loading.value = true
   try {
-    const data = await api.get('/stats/rss-health')
+    const data = await getRssHealth()
     applyData(data)
     fetchedAt.value = dayjs()
   } finally {
@@ -304,7 +304,7 @@ async function loadData() {
 async function refresh() {
   refreshing.value = true
   try {
-    const data = await api.get('/stats/rss-health', { params: { refresh: true }, timeout: 60000 })
+    const data = await getRssHealth({ params: { refresh: true }, timeout: 60000 })
     applyData(data)
     fetchedAt.value = dayjs()
   } finally {

@@ -117,7 +117,7 @@ import {
   Filler,
   Tooltip,
 } from 'chart.js'
-import api from '../../api'
+import { getChannelHealth } from '../../api/stats'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip)
 
@@ -237,7 +237,7 @@ function statusLabel(status) {
 async function loadData() {
   loading.value = true
   try {
-    const data = await api.get('/stats/channel-health', { params: { range_days: rangeDays.value } })
+    const data = await getChannelHealth(rangeDays.value)
     channels.value = data.channels || []
     summary.value = data.summary || { healthy: 0, warning: 0, critical: 0, total: 0 }
     meta.value = data.meta || {}
