@@ -218,8 +218,31 @@ test('E11：WorkflowDetail 用了 h() 就必须显式导入 h', () => {
   assert.doesNotMatch(cfg, /imports:\s*\[[^\]]*'vue'/, 'AutoImport 若已配 vue，本条门与显式 import 需要重新裁决')
 })
 
-// -------------------------------------------------------------- PRD 追溯
+/**
+ * 「接错对象」门：错误态的形对了不算修好，重试必须接回**本页自己的加载函数**。
+ * 覆盖率式断言（「四个页面都有重试入口」）会把 A 页的 @retry 接到 B 页的函数上照样全绿，
+ * 所以这里逐页做「声明位 ↔ 实际调用位」配对：@retry 的处理函数名 + 该函数体内调用的加载器。
+ */
+const RETRY_WIRING = [
+  { file: 'views/ad/AdSchedule.vue', handler: 'retryLoadSchedule', loads: 'fetchSchedule', errorRef: 'loadError' },
+  { file: 'views/mobile/Home.vue', handler: 'retryLoad', loads: 'load()', errorRef: 'loadError' },
+  { file: 'views/maintenance/Maintenance.vue', handler: 'retryLoadStatus', loads: 'loadStatus()', errorRef: 'statusError' },
+  { file: 'views/channel/BookPoolPanel.vue', handler: 'retryLoadAll', loads: 'loadAll()', errorRef: 'poolError' },
+]
+for (const w of RETRY_WIRING) {
+  test(`${w.file}：重试入口接回本页加载函数，且失败标志与错误态是同一个`, () => {
+    const vue = read(`${SRC}${w.file}`)
+    assert.match(vue, new RegExp(`@retry="${w.handler}"`), '重试没接到本页处理函数')
+    const start = vue.indexOf(`function ${w.handler}`)
+    assert.ok(start > 0, `${w.handler} 未定义`)
+    const body = vue.slice(start, start + 260)
+    assert.match(body, new RegExp(w.loads.replace(/[()]/g, (c) => `\\${c}`)), `${w.handler} 没有重新调用本页加载器`)
+    // 声明位与实际调用位必须同一个 ref：@retry 复位 A、错误态读 B，等于点了没反应
+    assert.match(vue, new RegExp(`${w.errorRef}\\.value = `), `${w.errorRef} 未被写入`)
+  })
+}
 
+// -------------------------------------------------------------- PRD 追溯
 test('PRD：M3 的 25 条覆盖清单与本批交付点对得上', () => {
   const prd = read('../../../../docs/需求规格说明书-UX优化.md')
   const row = prd.split('\n').find((l) => l.startsWith('| M3 | 25 |'))
