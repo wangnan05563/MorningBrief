@@ -30,10 +30,14 @@ export function formatTime(t) {
  * @returns {string} 如 `45 秒` / `3 分 12 秒` / `1 时 5 分`，无值返回 '-'
  */
 export function formatDuration(sec) {
-  if (sec == null) return '-'
-  if (sec < 60) return `${sec} 秒`
-  if (sec < 3600) return `${Math.floor(sec / 60)} 分 ${sec % 60} 秒`
-  return `${Math.floor(sec / 3600)} 时 ${Math.floor((sec % 3600) / 60)} 分`
+  if (sec == null || sec === '') return '-'
+  // 接口把秒数下发成字符串或脏值时不能让页面出现「NaN 时 NaN 分」：
+  // 无法转成有限数一律按无值处理（D69 / T02759）。
+  const n = Number(sec)
+  if (!Number.isFinite(n) || n < 0) return '-'
+  if (n < 60) return `${n} 秒`
+  if (n < 3600) return `${Math.floor(n / 60)} 分 ${n % 60} 秒`
+  return `${Math.floor(n / 3600)} 时 ${Math.floor((n % 3600) / 60)} 分`
 }
 
 /**

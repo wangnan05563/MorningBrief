@@ -84,6 +84,23 @@ describe('metricLabel：轴/卡片标题带单位', () => {
   })
 })
 
+describe('D69：非数值入参不炸、单位不缺失（T02759）', () => {
+  it('formatDuration 对非数/负值按无值处理，不对 NaN 做分档', () => {
+    assert.equal(formatDuration('abc'), '-')
+    assert.equal(formatDuration(NaN), '-')
+    assert.equal(formatDuration(Infinity), '-')
+    assert.equal(formatDuration(-5), '-')
+    assert.equal(formatDuration('192'), '3 分 12 秒')
+  })
+
+  it('统计指标遇到非数值一律 -，不显示 NaN/Infinity', () => {
+    for (const raw of ['abc', NaN, Infinity, {}]) {
+      assert.equal(metricValue(raw, meta.dau), '-')
+      assert.equal(metricText(raw, meta.dau), '-')
+    }
+  })
+})
+
 describe('formatDuration：时长口径只有一份（I5 / T02518）', () => {
   it('秒/分/时的分档与空值', () => {
     assert.equal(formatDuration(45), '45 秒')
