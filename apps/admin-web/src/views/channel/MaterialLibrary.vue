@@ -323,6 +323,7 @@ import { useRoute } from 'vue-router'
 import { Plus, Close, Search, RefreshLeft, Edit, Delete, View, Check, Picture } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { formatTime } from '../../utils/format'
+import { blankedFieldMessage, findBlankedCriticalField } from '../../utils/blankGuard'
 import { useUserStore } from '../../stores/user'
 import { listChannels } from '../../api/channels'
 import { aggregateMaterials } from '../../api/materialLibrary'
@@ -371,6 +372,8 @@ const sourceFilter = ref('')
 
 const editVisible = ref(false)
 const editForm = reactive({ id: null, title: '', source: '', category: '', status: 'pending', content: '', media_type: 'text', media_url: '', media_thumb_url: '' })
+// C56：弹窗打开时的原值，用于识别「删光已有内容」而不是「没填」
+const editOriginal = ref({ content: '', source: '' })
 const createVisible = ref(false)
 const createForm = reactive({ channel_id: null, source: '', title: '', category: '', content: '', media_type: 'text', media_url: '', media_thumb_url: '' })
 const saving = ref(false)
@@ -498,12 +501,24 @@ async function openEdit(row) {
   editForm.media_type = detail?.media_type || 'text'
   editForm.media_url = detail?.media_url || ''
   editForm.media_thumb_url = detail?.media_thumb_url || ''
+  // C56：记住打开弹窗时的原值，用来区分「没填」和「把已有内容删光了」
+  editOriginal.value = { content: editForm.content, source: editForm.source }
   editVisible.value = true
+}
+
+// C56：关键列清空预检（口径与后端 PUT 的同名护栏一致，见 utils/blankGuard）
+function blankedCriticalField() {
+  return findBlankedCriticalField(editOriginal.value, editForm)
 }
 
 async function onSaveEdit() {
   if (!editForm.title.trim()) {
     ElMessage.warning('标题不能为空')
+    return
+  }
+  const blanked = blankedCriticalField()
+  if (blanked) {
+    ElMessage.warning(blankedFieldMessage(blanked))
     return
   }
   saving.value = true

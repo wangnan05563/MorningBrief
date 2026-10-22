@@ -59,8 +59,14 @@ class MaterialUpdateRequest(BaseModel):
     """编辑素材请求体，所有字段可选。
 
     仅更新请求中显式提供的字段，避免误清空未传字段。
+
+    `source` 此前不在模型字段里：编辑弹窗有「来源」输入框、提交也带上它，
+    但 pydantic 默认 `extra='ignore'` 直接丢掉，接口回 success、前端提示「已保存」，
+    书名却从来没改过（C56 的另一半——虚报成功的静默失效）。
+    既然界面提供这个入口，就把它变成真能写的字段，并由下面的清空护栏一起管住。
     """
     title: Optional[str] = None
+    source: Optional[str] = None
     content: Optional[str] = None
     summary: Optional[str] = None
     category: Optional[str] = None
@@ -419,6 +425,11 @@ async def update_material(
 
     status 仅允许 pending/selected/skipped（与模型 CheckConstraint 对齐），
     违反返回 BizError 而非等到数据库报错。
+
+    content / source 不允许从非空改成空白（C56 / FR-UX-202）：`source` 就是讲书稿的
+    按书聚合键（`book_pool_service.list_candidates`），清空它等于把这本书从书单候选里
+    抹掉；`content` 清空则让已选素材再也进不了改写。两者都不是「字段没填」而是
+    「用户把内容删光了」，所以前端挡一次、这里再挡一次——绕过界面直接调接口也一样拒。
     """
     result = await db.execute(select(Material).where(Material.id == material_id))
     m = result.scalar_one_or_none()
@@ -429,12 +440,46 @@ async def update_material(
         raise BizError(code=400, message="status 仅允许 pending/selected/skipped")
 
     # exclude_unset 确保 PATCH 语义：仅更新请求中显式提供的字段
-    for field, value in req.model_dump(exclude_unset=True).items():
+    updates = req.model_dump(exclude_unset=True)
+    _reject_blanking_critical_field(m, updates)
+
+    for field, value in updates.items():
         setattr(m, field, value)
 
     await db.commit()
     await db.refresh(m)
     return success(data=_material_to_dict(m))
+
+
+# C56：清空即破坏下游的列，以及各自的后果文案（写进错误明细，前端不必切字符串）
+_BLANK_CRITICAL_REASONS = {
+    "title": "标题是素材列表与讲书稿章节的展示名",
+    "content": "正文被清空后该素材无法进入改写流程",
+    "source": "来源（书名）是讲书稿的按书聚合键，清空后整本书会从书单候选中消失",
+}
+
+
+def _reject_blanking_critical_field(m: Material, updates: dict) -> None:
+    """把「非空 → 空白」的提交拦在写库之前（原值本来就是空的行不受影响）。"""
+    errors = []
+    for field, reason in _BLANK_CRITICAL_REASONS.items():
+        if field not in updates:
+            continue
+        new_value = updates[field]
+        if new_value is not None and str(new_value).strip():
+            continue
+        if not str(getattr(m, field, "") or "").strip():
+            continue
+        errors.append(
+            {"field": field, "message": f"{field} 不能清空：{reason}；请保留原值或填入新内容"}
+        )
+    if errors:
+        fields = "、".join(e["field"] for e in errors)
+        raise BizError(
+            code=400,
+            message=f"素材 {fields} 被清空，已拒绝保存",
+            data={"errors": errors},
+        )
 
 
 @router.delete("")

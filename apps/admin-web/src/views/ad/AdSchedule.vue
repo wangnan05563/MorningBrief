@@ -38,6 +38,13 @@
                 </span>
                 <span v-else class="slot-empty">—</span>
                 <span v-if="isSlotDisabled(data.day, pos)" class="slot-off-tag">已停用</span>
+                <el-tooltip
+                  v-if="slotConflicts(data.day, pos).length > 0"
+                  :content="slotConflictText(data.day, pos)"
+                  placement="top"
+                >
+                  <span class="slot-conflict">+{{ slotConflicts(data.day, pos).length }} 条重叠</span>
+                </el-tooltip>
               </div>
             </div>
           </div>
@@ -52,6 +59,7 @@ import { ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import api from '../../api'
 import { AD_POSITION, enumLabel, enumOptions } from '../../constants/enums'
+import { buildScheduleMap } from '../../utils/scheduleMap'
 
 const loading = ref(false)
 // 月份选择器的值（YYYY-MM 字符串），作为月份切换的数据源
@@ -74,6 +82,20 @@ function isSlotDisabled(dayStr, pos) {
   return getSlotMaterial(dayStr, pos)?.enabled === 0
 }
 
+// D24：同位同日重叠的其他投放。日历只能主显一条，其余折叠进角标 + tooltip，
+// 否则「看不见的冲突」会被读成「这个位子很干净」。
+function slotConflicts(dayStr, pos) {
+  return getSlotMaterial(dayStr, pos)?.conflicts || []
+}
+
+function slotConflictText(dayStr, pos) {
+  const list = slotConflicts(dayStr, pos)
+  const detail = list
+    .map((c) => `${c.material_name}${c.enabled === 0 ? '（已停用）' : ''}`)
+    .join('、')
+  return `${enumLabel(AD_POSITION, pos)} 位当天有 ${list.length + 1} 条投放重叠，另有：${detail}`
+}
+
 async function fetchSchedule(monthStr) {
   loading.value = true
   try {
@@ -81,23 +103,8 @@ async function fetchSchedule(monthStr) {
       params: { month: monthStr },
     })
     // 后端返回 { placements: [{material_name, position, start_date, end_date, enabled}] }
-    // 转换为前端所需 { "YYYY-MM-DD": { head: {material_name, enabled}, mid:..., tail:... } }
-    const map = {}
-    if (data.placements) {
-      for (const p of data.placements) {
-        const start = new Date(p.start_date)
-        const end = new Date(p.end_date)
-        // 投放区间内每一天都填入该广告位素材
-        // 用显式重新赋值更新 d：SonarQube S2189 无法识别 d.setDate() 这类原地方法调用为循环变量被修改
-        const ONE_DAY_MS = 24 * 60 * 60 * 1000
-        for (let d = new Date(start); d <= end; d = new Date(d.getTime() + ONE_DAY_MS)) {
-          const dateKey = d.toISOString().slice(0, 10)
-          if (!map[dateKey]) map[dateKey] = {}
-          map[dateKey][p.position] = { material_name: p.material_name, enabled: p.enabled }
-        }
-      }
-    }
-    scheduleMap.value = map
+    // 整形逻辑在 utils/scheduleMap（D24：重叠投放必须可见，不能后写覆盖前写）
+    scheduleMap.value = buildScheduleMap(data.placements)
   } finally {
     loading.value = false
   }
@@ -246,6 +253,20 @@ watch(
         font-size: 10px;
         line-height: 1.2;
         color: $color-danger;
+      }
+
+      // D24：重叠角标。不能只在 hover Tooltip 里说——不悬停就看不见，等于没说
+      .slot-conflict {
+        flex-shrink: 0;
+        margin-left: 4px;
+        padding: 0 4px;
+        font-size: 10px;
+        line-height: 1.4;
+        border-radius: 6px;
+        // $color-warning 是 var() 不是色值，rgba() 编译不过，与 DatabaseAdmin 同法直接用作底色
+        color: #5b3d00;
+        background: $color-warning;
+        cursor: help;
       }
 
       // 三个广告位用马卡龙色系小标签区分，与图例颜色对应
