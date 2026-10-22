@@ -10,6 +10,29 @@ import {
 } from './helpers/mock'
 
 /**
+ * 0.1s 8kHz 8-bit 单声道静音 WAV：详情页音频已改为经 `/audio/proxy` 拉 blob（B12），
+ * 兜底 mock 回的是 JSON，`<audio>` 解码失败会被错误态顶掉——这里给一条真的能解码的字节流。
+ */
+function silentWav() {
+  const samples = 800
+  const buf = Buffer.alloc(44 + samples, 0x80)
+  buf.write('RIFF', 0)
+  buf.writeUInt32LE(36 + samples, 4)
+  buf.write('WAVE', 8)
+  buf.write('fmt ', 12)
+  buf.writeUInt32LE(16, 16)
+  buf.writeUInt16LE(1, 20)
+  buf.writeUInt16LE(1, 22)
+  buf.writeUInt32LE(8000, 24)
+  buf.writeUInt32LE(8000, 28)
+  buf.writeUInt16LE(1, 32)
+  buf.writeUInt16LE(8, 34)
+  buf.write('data', 36)
+  buf.writeUInt32LE(samples, 40)
+  return buf
+}
+
+/**
  * 审核流程 E2E 测试
  *
  * 覆盖：
@@ -61,6 +84,11 @@ test.describe('审核流程', () => {
     await page.route('**/admin/api/v1/reviews/batch-action', async (route) => {
       await route.fulfill({ json: reviewBatchActionSuccessResponse })
     })
+
+    // 详情页音频代理：B12 起试听走鉴权代理拉 blob，不 mock 会被上面的兜底 JSON 顶成解码失败
+    await page.route('**/admin/api/v1/workflows/*/audio/proxy**', (route) =>
+      route.fulfill({ status: 200, contentType: 'audio/wav', body: silentWav() }),
+    )
   })
 
   test('审核列表页加载', async ({ page }) => {
@@ -137,8 +165,9 @@ test.describe('审核流程', () => {
           data: {
             ...reviewDetailResponse.data,
           // 用同源真实存在的静态图片（favicon），保证 el-image 加载成功、点击能打开预览层；
-          // 外网假图会走 error 分支，点击不触发预览
-          images: ['/news/favicon-16x16.png', '/news/favicon-32x32.png'],
+          // 外网假图会走 error 分支，点击不触发预览。
+          // dev 态 vite base 是 '/'（build 才是 '/news/'），这里跑的是 dev server，路径不能带 /news
+          images: ['/favicon-16x16.png', '/favicon-32x32.png'],
           image_total: 11,
           },
         },
@@ -177,8 +206,8 @@ test.describe('审核流程', () => {
     // 点击提交，触发确认弹窗
     await page.getByRole('button', { name: '提交' }).click()
 
-    // ElMessageBox 二次确认（项目未配置中文 locale，默认按钮文本为 OK）
-    await page.getByRole('button', { name: 'OK' }).click()
+    // ElMessageBox 二次确认（main.js 加载 zh-cn 语言包，按钮文案为「确定」）
+    await page.getByRole('button', { name: '确定' }).click()
 
     // 操作成功后应跳回列表页
     await expect(page).toHaveURL(/\/review$/, { timeout: 30000 })
@@ -198,8 +227,8 @@ test.describe('审核流程', () => {
 
     await page.getByRole('button', { name: '提交' }).click()
 
-    // ElMessageBox 二次确认（项目未配置中文 locale，默认按钮文本为 OK）
-    await page.getByRole('button', { name: 'OK' }).click()
+    // ElMessageBox 二次确认（main.js 加载 zh-cn 语言包，按钮文案为「确定」）
+    await page.getByRole('button', { name: '确定' }).click()
 
     // 操作成功跳回列表
     await expect(page).toHaveURL(/\/review$/, { timeout: 30000 })

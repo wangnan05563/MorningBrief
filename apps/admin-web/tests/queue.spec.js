@@ -129,7 +129,7 @@ test.describe('队列管理', () => {
     // 第一行是 queued 状态，应有取消按钮
     await page.getByRole('button', { name: '取消' }).first().click()
     // ElMessageBox 确认
-    await page.getByRole('button', { name: 'OK' }).click()
+    await page.getByRole('button', { name: '确定' }).click()
 
     // 成功提示
     await expect(page.locator('.el-message').getByText('已取消')).toBeVisible({ timeout: 30000 })
@@ -155,7 +155,7 @@ test.describe('队列管理', () => {
     // 第二行是 failed 状态，重试按钮
     await page.getByRole('button', { name: '重试' }).click()
     // ElMessageBox 确认
-    await page.getByRole('button', { name: 'OK' }).click()
+    await page.getByRole('button', { name: '确定' }).click()
 
     // 成功提示：QueueManagement.vue handleRetry 实际文案
     await expect(page.locator('.el-message').getByText('已从失败步骤断点续跑，原工作流已重新入队')).toBeVisible({ timeout: 30000 })

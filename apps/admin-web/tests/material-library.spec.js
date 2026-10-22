@@ -122,7 +122,8 @@ test.describe('素材库管理', () => {
     // 书稿保留，RSS 资讯被排除（请求带 source_type=list）
     await expect(page.getByText('一条文化资讯')).toHaveCount(0, { timeout: 30000 })
     await expect(page.getByText(`${BOOK} · 第一章`)).toBeVisible({ timeout: 30000 })
-    await expect(page.getByText('Total 2')).toBeVisible({ timeout: 30000 })
+    // zh-cn 语言包下分页总数是「共 2 条」（Element Plus 英文包才显示 Total 2，T02806）
+    await expect(page.getByText('共 2 条')).toBeVisible({ timeout: 30000 })
   })
 
   test('明细表点「来源」按书名精确下钻', async ({ page }) => {

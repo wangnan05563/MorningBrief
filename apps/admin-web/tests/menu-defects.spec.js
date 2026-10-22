@@ -279,9 +279,9 @@ test.describe('讲书稿素材池面板：模式开关可用 + 预览失效', ()
     await previewBtn.click()
     await expect(page.locator('.book-pool-panel .el-alert').filter({ hasText: '下次将生成：《B 书》' })).toBeVisible()
     // 移出《A 书》后预览失效，再点一次拿到新结果
-    // EP 语言包未配置 ⇒ 内置确认按钮文案是英文 OK（main.js 不设 locale，见 T02518 观察项）
+    // main.js 显式加载 zh-cn 语言包，确认按钮文案是「确定」（T02806）
     await page.getByRole('button', { name: '移出' }).first().click()
-    await page.locator('.el-message-box').getByRole('button', { name: 'OK' }).click()
+    await page.locator('.el-message-box').getByRole('button', { name: '确定' }).click()
     await expect(page.locator('.book-pool-panel .el-alert').filter({ hasText: '下次将生成' })).toHaveCount(0)
     await previewBtn.click()
     await expect(page.locator('.book-pool-panel .el-alert').filter({ hasText: '下次将生成：《B 书》' })).toBeVisible()

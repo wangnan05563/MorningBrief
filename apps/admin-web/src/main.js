@@ -35,6 +35,7 @@ window.addEventListener('error', (event) => {
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import 'element-plus/dist/index.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
@@ -87,7 +88,9 @@ app.use(createPinia())
 app.use(router)
 // ElementPlus 插件内部会注册 $message 全局属性（指向原始版本），
 // 必须在 app.use(ElementPlus) 之后再覆盖为安全版本，否则会被插件覆盖
-app.use(ElementPlus, { locale: undefined })
+// 显式加载 zh-cn 语言包：不传 locale 时内置文案退回英文（分页「50/page」、弹窗「OK」），
+// 与全站中文界面不一致（T02806）
+app.use(ElementPlus, { locale: zhCn })
 
 // 覆盖 ElementPlus 注入的原始 $message，使 this.$message 走安全包装器
 app.config.globalProperties.$message = ElMessage

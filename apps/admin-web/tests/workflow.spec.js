@@ -105,8 +105,8 @@ test.describe('工作流监控', () => {
 
     // 点击触发
     await page.getByRole('button', { name: '手动触发' }).click()
-    // ElMessageBox 二次确认（项目未配置中文 locale，默认按钮文本为 OK）
-    await page.getByRole('button', { name: 'OK' }).click()
+    // ElMessageBox 二次确认（main.js 加载 zh-cn 语言包，按钮文案为「确定」）
+    await page.getByRole('button', { name: '确定' }).click()
 
     // 应显示成功提示，包含新工作流 ID
     await expect(page.locator('.el-message').getByText('已触发，工作流 ID: wf-003')).toBeVisible({ timeout: 30000 })

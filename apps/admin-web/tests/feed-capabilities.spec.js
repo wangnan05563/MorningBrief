@@ -69,17 +69,18 @@ const reviewTableRows = (page) => page.locator('[data-guide="review-table"] tbod
 const sizesLabel = (page) => page.locator('[data-guide="review-pagination"] .el-pagination__sizes')
 
 /**
- * 档位文案按 Element Plus 当前 locale 渲染（本项目 main.js 传的是 `locale: undefined`，
- * 内置文案仍是英文「50/page」），所以断言只认**数字**，选择器只按 PAGE_SIZE_OPTIONS 的下标点。
- * 「中英混排」是另一件事，已建派生单（见 T02517 回传文档），不在此处将就成中文断言。
+ * 档位文案由 main.js 加载的 zh-cn 语言包渲染成「N条/页」（T02806），
+ * 断言与选择都按用户看得见的中文文案走，不再按下标 / 纯数字迁就英文包。
+ * 重试按钮仍是 IconButton（纯图标，可访问名才是「重试」），按可访问名选不是 locale 迁就。
  */
 const SIZE_TIERS = [10, 20, 50, 100]
+const sizeLabel = (n) => new RegExp(`${n}\\s*条/页`)
 
 async function chooseSize(page, n) {
   await sizesLabel(page).locator('.el-select').click()
   const options = page.locator('.el-select-dropdown:visible .el-select-dropdown__item')
   await expect(options).toHaveCount(SIZE_TIERS.length)
-  await options.nth(SIZE_TIERS.indexOf(n)).click()
+  await options.filter({ hasText: `${n}条/页` }).click()
 }
 
 test.describe('审核列表：分页档位 + 筛选持久化 + 失败可见（B3/B4/B6）', () => {
@@ -93,7 +94,7 @@ test.describe('审核列表：分页档位 + 筛选持久化 + 失败可见（B3
   test('档位选择器可见，选 50 后请求带 size=50 且行数跟着变', async ({ page }) => {
     const calls = await mockReviews(page)
     await page.goto('/news/review')
-    await expect(sizesLabel(page)).toContainText(/\b10\b/)
+    await expect(sizesLabel(page)).toContainText(sizeLabel(10))
     await expect(reviewTableRows(page)).toHaveCount(10)
 
     await chooseSize(page, 50)
@@ -105,7 +106,7 @@ test.describe('审核列表：分页档位 + 筛选持久化 + 失败可见（B3
   test('深链 ?size=100 直接按 100 起（分享出去的地址打开就是那个视图）', async ({ page }) => {
     const calls = await mockReviews(page)
     await page.goto('/news/review?size=100')
-    await expect(sizesLabel(page)).toContainText(/\b100\b/)
+    await expect(sizesLabel(page)).toContainText(sizeLabel(100))
     await expect.poll(() => calls.at(-1).size).toBe(100)
     await expect(reviewTableRows(page)).toHaveCount(100)
   })
@@ -113,7 +114,7 @@ test.describe('审核列表：分页档位 + 筛选持久化 + 失败可见（B3
   test('非法 ?size=999 钳到上限 100 并在页内点名（不静默按 999 请求）', async ({ page }) => {
     const calls = await mockReviews(page)
     await page.goto('/news/review?size=999')
-    await expect(sizesLabel(page)).toContainText(/\b100\b/)
+    await expect(sizesLabel(page)).toContainText(sizeLabel(100))
     await expect.poll(() => calls.at(-1).size).toBe(100)
     await expect(page.locator('[data-guide="review-url-corrected"]')).toContainText('size=999')
     // 校正后的值写回地址：分享出去的地址不再撒谎。
