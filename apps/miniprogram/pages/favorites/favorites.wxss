@@ -29,6 +29,17 @@
   opacity: 0.55;
 }
 
+/* J73：下架原因必须可见，不能只靠降透明度表达 */
+.item-offline-tag {
+  display: inline-block;
+  margin-top: 8rpx;
+  padding: 2rpx 12rpx;
+  border-radius: 999rpx;
+  background: rgba(176, 85, 74, 0.12);
+  color: #B0554A;
+  font-size: 22rpx;
+}
+
 /* 顶部：收藏时间 + 取消收藏入口 */
 .item-header {
   display: flex;

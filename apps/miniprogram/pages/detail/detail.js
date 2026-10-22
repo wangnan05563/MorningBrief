@@ -111,6 +111,8 @@ Page({
     downloadState: '',
     downloadProgress: 0,
     isDownloaded: false,
+    // J59（FR-UX-704）：网络失败但本机有下载时，用下载记录兜底播放并明确告知
+    offlinePlayback: false,
   },
 
   onLoad(options) {
@@ -258,6 +260,7 @@ Page({
         episode,
         loading: false,
         error: '',
+        offlinePlayback: false,
         durationLabel: this.formatDuration(episode.duration),
         // 任务10：先用 episode 自带的 cover_url 作为背景，避免等 loadScript 才显示
         // 后续 onLoadScript 加载完后会用 segments 第一张 cover 覆盖（更精确）
@@ -266,7 +269,33 @@ Page({
       this.syncPlayingState();
       this.refreshDownloadState();
     } catch (err) {
-      this.setData({ loading: false, error: err.message || '加载失败' });
+      // J59（FR-UX-704）：「已下载」必须真的能离线播。下载记录里已有标题/时长/封面，
+      // 音频用本机 localPath 起播；失败时不能只留一句错误文案。
+      const rec = downloadStore.getDownload(id);
+      if (rec && rec.localPath) {
+        const offlineEpisode = {
+          id: rec.episodeId,
+          title: rec.title,
+          audio_url: rec.localPath,
+          cover_url: rec.cover_url,
+          duration: rec.duration,
+          channel_id: rec.channelId,
+          channel_name: rec.channelName,
+        };
+        this.setData({
+          episode: offlineEpisode,
+          loading: false,
+          error: '',
+          offlinePlayback: true,
+          durationLabel: this.formatDuration(rec.duration),
+          bgCoverUrl: rec.cover_url || '',
+        });
+        this.syncPlayingState();
+        this.refreshDownloadState();
+        wx.showToast({ title: '网络不可用，已切换本机下载', icon: 'none' });
+        return;
+      }
+      this.setData({ loading: false, error: err.message || '加载失败', offlinePlayback: false });
     }
   },
 

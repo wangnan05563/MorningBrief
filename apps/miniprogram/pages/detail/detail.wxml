@@ -39,6 +39,10 @@
       </view>
     </view>
 
+    <view class="offline-note" wx:if="{{offlinePlayback}}" data-guide="detail-offline-note">
+      当前网络不可用，正在使用本机已下载的音频；文稿与评论暂不可用
+    </view>
+
     <view class="card carousel-card" wx:if="{{carouselImages.length > 0}}">
       <!-- T00724：顶部流光动画——柔和光带沿播放框上边缘往复扫过 -->
       <view class="light-sweep" aria-hidden="true"></view>
@@ -86,6 +90,12 @@
         <text class="episode-date">{{episode.date}}</text>
         <text class="tag tag-pink" wx:if="{{episode.categories}}">{{episode.categories[0]}}</text>
       </view>
+      <!-- J28（FR-UX-704）：课程章节坐标此前只在分享标题里用到，界面不显示，
+           从课程页点进某一章后用户不知道自己在整门课的哪个位置 -->
+      <view class="episode-course" wx:if="{{isCourse}}">
+        <text class="episode-course__name">{{courseName || '课程'}}</text>
+        <text class="episode-course__chapter" wx:if="{{chapterLabel}}">{{chapterLabel}}</text>
+      </view>
       <view class="episode-title">{{episode.title}}</view>
       <view class="episode-duration">
         <image class="duration-icon" lazy-load src="/images/icons/duration.png" mode="aspectFit" />
@@ -127,6 +137,9 @@
           <image class="nav-icon" lazy-load src="/images/icons/skip-forward.png" mode="aspectFit" />
         </view>
         <view class="play-info">
+          <!-- J27（FR-UX-704）：isWaiting 早就算出来了却没节点引用，弱网起播时
+               界面与正常播放完全同貌，用户只能反复点播放键 -->
+          <view class="waiting-tip" wx:if="{{isWaiting}}" data-guide="detail-buffering">缓冲中…</view>
           <slider
             class="progress"
             min="0"

@@ -153,6 +153,45 @@
   color: var(--accent-light);
 }
 
+/* J28：课程语境（课程名 + 章节坐标），只在 course/audiobook 频道出现 */
+.episode-course {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: var(--text-muted);
+}
+
+.episode-course__name {
+  margin-right: 12rpx;
+}
+
+.episode-course__chapter {
+  padding: 2rpx 12rpx;
+  border-radius: 999rpx;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* J59：离线兜底提示——明确告诉用户播的是本机下载，而不是网络数据 */
+.offline-note {
+  margin: 24rpx 32rpx 0;
+  padding: 16rpx 20rpx;
+  border-radius: 16rpx;
+  background: var(--accent-soft);
+  font-size: 24rpx;
+  color: var(--accent);
+  line-height: 1.5;
+}
+
+/* J27：缓冲中提示，弱网起播时与「正常播放」区分开 */
+.waiting-tip {
+  font-size: 22rpx;
+  color: var(--accent);
+  margin-bottom: 6rpx;
+}
+
 .duration-icon {
   width: 28rpx;
   height: 28rpx;

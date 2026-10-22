@@ -82,6 +82,28 @@ test.describe('RSS 源状态页面', () => {
     await expect(page.locator('.el-table__row').first()).toContainText('rsshub 失效源')
   })
 
+  // D56（FR-UX-704）：搜索生效后，radio 计数与汇总卡仍显示全量数字，
+  // 表格却只剩几行——用户会以为筛选坏了；无匹配时还写「暂无 RSS 源」。
+  test('搜索时计数跟着命中走，无匹配说明是「没有匹配」', async ({ page }) => {
+    await page.goto('/stats/rss-health')
+    await expect(page.getByText('人民网-国内').first()).toBeVisible({ timeout: 30000 })
+
+    await page.getByPlaceholder('按源名/URL/品类搜索').fill('科技')
+    // 夹具里「科技」命中 rsshub 失效源 + 未巡检源
+    await expect(page.locator('.el-table__row')).toHaveCount(2)
+    await expect(page.locator('.el-radio-button').filter({ hasText: '全部（2）' })).toHaveCount(1)
+    await expect(page.locator('.el-radio-button').filter({ hasText: '失败（1）' })).toHaveCount(1)
+    await expect(page.locator('.el-radio-button').filter({ hasText: '未巡检（1）' })).toHaveCount(1)
+    await expect(page.locator('.el-radio-button').filter({ hasText: '正常（0）' })).toHaveCount(1)
+    // 汇总卡改口「搜索命中」，不再冒充全局总数
+    await expect(page.getByText('搜索命中').first()).toBeVisible()
+
+    await page.getByPlaceholder('按源名/URL/品类搜索').fill('不存在的源')
+    await expect(page.locator('.el-table__row')).toHaveCount(0)
+    await expect(page.getByText('没有匹配「不存在的源」的 RSS 源')).toBeVisible()
+    await expect(page.getByText('暂无 RSS 源')).toHaveCount(0)
+  })
+
   // T02508（FR-UX-503）：巡检状态与「连续失败次数」存在进程内存里，重启归零。
   // 页面必须写出累计起点，否则"刚重启所以全绿"会被读成"源一直正常"
   test('累计口径标注：写明巡检状态的累计起点与重启清零', async ({ page }) => {

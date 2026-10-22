@@ -209,14 +209,23 @@ Page({
    */
   onCheckUpdate() {
     const updateManager = wx.getUpdateManager();
+    // J81（FR-UX-704）：反馈必须等真实回调。此前固定 2s 后无条件 toast「已是最新版本」，
+    // 弱网下真有更新也先报最新，用户会以为功能坏了。
+    let settled = false;
     wx.showLoading({ title: '检查中...' });
     updateManager.onCheckForUpdate((res) => {
+      if (settled) return;
+      settled = true;
       wx.hideLoading();
       if (res.hasUpdate) {
+        wx.showToast({ title: '发现新版本，正在下载…', icon: 'none' });
         trackEvent('settings', 'check_update', 'has_update');
+      } else {
+        wx.showToast({ title: '已是最新版本', icon: 'none' });
       }
     });
     updateManager.onUpdateReady(() => {
+      wx.hideLoading();
       wx.showModal({
         title: '更新提示',
         content: '新版本已就绪，是否重启应用？',
@@ -227,14 +236,17 @@ Page({
       });
     });
     updateManager.onUpdateFailed(() => {
+      settled = true;
       wx.hideLoading();
       wx.showToast({ title: '更新失败，请稍后重试', icon: 'none' });
     });
-    // 兜底：若干时间内无任何回调（如已是最新且 onCheckForUpdate 未触发），给出明确反馈
+    // 仅当检查回调迟迟不来时兜底，并且如实说「超时」，不再冒充「已是最新」
     setTimeout(() => {
+      if (settled) return;
+      settled = true;
       wx.hideLoading();
-      wx.showToast({ title: '已是最新版本', icon: 'none' });
-    }, 2000);
+      wx.showToast({ title: '检查超时，请稍后重试', icon: 'none' });
+    }, 8000);
   },
 
   /**

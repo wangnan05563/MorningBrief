@@ -47,7 +47,7 @@
 
     <!-- 筛选区：状态筛选 + 品类筛选 + 搜索 -->
     <div class="filter-bar">
-      <el-radio-group v-model="statusFilter" @change="applyFilter">
+      <el-radio-group v-model="statusFilter">
         <el-radio-button value="all">全部（{{ allCount }}）</el-radio-button>
         <el-radio-button value="ok">正常（{{ okCount }}）</el-radio-button>
         <el-radio-button value="fail">失败（{{ failCount }}）</el-radio-button>
@@ -59,7 +59,6 @@
         clearable
         :prefix-icon="Search"
         class="filter-input"
-        @input="applyFilter"
       />
     </div>
 
@@ -145,7 +144,7 @@
             <span v-else class="muted">-</span>
           </template>
         </el-table-column>
-        <template #empty><el-empty description="暂无 RSS 源" :image-size="90" /></template>
+        <template #empty><el-empty :description="emptyText" :image-size="90" /></template>
       </el-table>
     </el-card>
   </div>
@@ -184,9 +183,27 @@ const uptimeNote = computed(() => formatUptime({ startedAt: startedAt.value, now
 // 筛选状态：statusFilter 多状态单选 + keyword 模糊搜索
 const statusFilter = ref('all')
 const keyword = ref('')
-const filteredSources = ref([])
 
-const allCount = computed(() => rawData.value.total)
+// D56（FR-UX-704）：计数必须跟着搜索走。此前搜索后表格只剩 2 行，
+// 汇总卡与 4 个 radio 仍显示全量数字，看起来像「筛选失效」。
+const keywordActive = computed(() => !!keyword.value.trim())
+const keywordMatched = computed(() => {
+  const kw = keyword.value.trim().toLowerCase()
+  if (!kw) return rawData.value.sources
+  return rawData.value.sources.filter((s) => {
+    const hay = `${s.name || ''} ${s.url || ''} ${s.category_hint || ''}`.toLowerCase()
+    return hay.includes(kw)
+  })
+})
+const filteredSources = computed(() =>
+  keywordMatched.value.filter((s) => statusFilter.value === 'all' || s.status === statusFilter.value),
+)
+const countBy = (status) =>
+  keywordActive.value
+    ? keywordMatched.value.filter((s) => s.status === status).length
+    : rawData.value[status] || 0
+
+const allCount = computed(() => (keywordActive.value ? keywordMatched.value.length : rawData.value.total))
 // 列名跟着 meta 走（「响应延迟(ms)」），缺 meta 时退回不带单位的旧文案
 const latencyLabel = computed(() =>
   meta.value.latency_ms ? metricLabel(meta.value.latency_ms) : '延迟',
@@ -194,17 +211,38 @@ const latencyLabel = computed(() =>
 const failuresLabel = computed(() =>
   meta.value.consecutive_failures ? metricLabel(meta.value.consecutive_failures) : '连续失败',
 )
-const okCount = computed(() => rawData.value.ok)
-const failCount = computed(() => rawData.value.fail)
-const unknownCount = computed(() => rawData.value.unknown || 0)
+const okCount = computed(() => countBy('ok'))
+const failCount = computed(() => countBy('fail'))
+const unknownCount = computed(() => countBy('unknown'))
 
-// 汇总卡片：4 个数字染色区分，便于快速识别整体可达性
-const summaryCards = computed(() => [
-  { key: 'total', label: '全局源清单总数', value: rawData.value.total, cls: 'is-total' },
-  { key: 'ok', label: '正常', value: rawData.value.ok, cls: 'is-ok' },
-  { key: 'fail', label: '失败', value: rawData.value.fail, cls: 'is-fail' },
-  { key: 'unknown', label: '未巡检', value: rawData.value.unknown || 0, cls: 'is-unknown' },
-])
+const emptyText = computed(() => {
+  if (keywordActive.value) return `没有匹配「${keyword.value.trim()}」的 RSS 源`
+  if (statusFilter.value === 'fail') return '当前没有失败的 RSS 源'
+  if (statusFilter.value === 'ok') return '当前没有正常的 RSS 源'
+  if (statusFilter.value === 'unknown') return '当前没有未巡检的 RSS 源'
+  return '暂无 RSS 源'
+})
+
+// 汇总卡片：4 个数字染色区分，便于快速识别整体可达性；
+// 搜索时改口为「搜索命中」，避免与全局清单数字混读（D56）
+const summaryCards = computed(() => {
+  const matched = keywordActive.value
+  const of = (status) =>
+    matched
+      ? keywordMatched.value.filter((s) => s.status === status).length
+      : rawData.value[status] || 0
+  return [
+    {
+      key: 'total',
+      label: matched ? '搜索命中' : '全局源清单总数',
+      value: matched ? keywordMatched.value.length : rawData.value.total,
+      cls: 'is-total',
+    },
+    { key: 'ok', label: '正常', value: of('ok'), cls: 'is-ok' },
+    { key: 'fail', label: '失败', value: of('fail'), cls: 'is-fail' },
+    { key: 'unknown', label: '未巡检', value: of('unknown'), cls: 'is-unknown' },
+  ]
+})
 
 function statusTagType(status) {
   if (status === 'ok') return 'success'
@@ -230,19 +268,6 @@ function formatTime(iso) {
   return dayjs(iso).format('YYYY-MM-DD HH:mm')
 }
 
-// 本地筛选：避免每次筛选都打后端
-function applyFilter() {
-  const kw = keyword.value.trim().toLowerCase()
-  filteredSources.value = rawData.value.sources.filter((s) => {
-    if (statusFilter.value !== 'all' && s.status !== statusFilter.value) return false
-    if (kw) {
-      const hay = `${s.name || ''} ${s.url || ''} ${s.category_hint || ''}`.toLowerCase()
-      if (!hay.includes(kw)) return false
-    }
-    return true
-  })
-}
-
 // 两个入口（普通读取 / 立即巡检）返回体结构一致，统一在这里落数据，
 // 避免以后加字段时只改了一条路径（T02508 的口径字段就是这么差点漏掉）
 function applyData(data) {
@@ -262,7 +287,6 @@ function applyData(data) {
     .filter(Boolean)
     .sort()
   lastCheckedAt.value = checks.length ? checks[checks.length - 1] : null
-  applyFilter()
 }
 
 async function loadData() {

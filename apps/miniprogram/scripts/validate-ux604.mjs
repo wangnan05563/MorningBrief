@@ -84,6 +84,8 @@ const FILES = [
   'pages/detail/detail.js',
   'pages/detail/detail.wxml',
   'services/audio.js',
+  // T02542 / M7
+  'services/download.js',
 ]
 
 /** wxml 里绑定 → 同页 js 方法必须存在（跳过动态绑定值） */
@@ -424,6 +426,55 @@ export function checkFacts(facts) {
   }
   if (/secondList/.test(profileWxml) || /secondList/.test(f('pages/profile/profile.js'))) {
     errors.push('profile 仍保留 secondList 内嵌列表：与 recent/favorites/channels/download/preferred 整页形成第二套取数与渲染（J20）')
+  }
+
+  // —— 16. J27：缓冲态必须真的呈现 ——
+  const detailWxml = wf('pages/detail/detail.wxml')
+  if (!/wx:if="\{\{isWaiting\}\}"/.test(detailWxml) || !/缓冲中/.test(detailWxml)) {
+    errors.push('detail.wxml 没有绑定 isWaiting 的「缓冲中」节点：弱网起播与正常播放同貌（J27）')
+  }
+
+  // —— 17. J28：课程语境字段必须显示 ——
+  if (!/wx:if="\{\{isCourse\}\}"/.test(detailWxml) || !/courseName/.test(detailWxml) || !/chapterLabel/.test(detailWxml)) {
+    errors.push('detail.wxml 不显示课程名/章节坐标：从课程页进入后用户失去位置感（J28）')
+  }
+
+  // —— 18. J32/J59：失败可重试，已下载条目断网可播 ——
+  if (!/bindtap="onRetryLoad"/.test(detailWxml) || !/onRetryLoad\s*\(/.test(f('pages/detail/detail.js'))) {
+    errors.push('detail 失败态缺「重试」入口或 onRetryLoad 实现：断网进页只能退回去（J32）')
+  }
+  const loadDetailBody = methodBody(stripComments(f('pages/detail/detail.js')), 'loadDetail')
+  if (!/downloadStore\.getDownload\(/.test(loadDetailBody) ||
+      !/audio_url:\s*rec\.localPath/.test(loadDetailBody) ||
+      !/offlinePlayback:\s*true/.test(loadDetailBody)) {
+    errors.push('detail.loadDetail 失败时不再用下载记录的 localPath 兜底：已下载条目断网仍落到失败页（J59）')
+  }
+  if (!/data-guide="detail-offline-note"/.test(detailWxml) || !/本机已下载/.test(detailWxml)) {
+    errors.push('离线兜底没有可见说明：用户分不清播的是网络数据还是本机下载（J59）')
+  }
+  if (!/function getDownload\s*\(/.test(f('services/download.js'))) {
+    errors.push('services/download.js 缺少 getDownload：详情页拿不到 localPath 做离线兜底（J59）')
+  }
+
+  // —— 19. J73：已下架要有文字标签，点击行为要说清 ——
+  if (!/已下架/.test(wf('pages/favorites/favorites.wxml')) || !/data-available="\{\{item\.available\}\}"/.test(wf('pages/favorites/favorites.wxml'))) {
+    errors.push('favorites.wxml 的已下架条目没有「已下架」文字标签或未把 available 传给点击逻辑（J73）')
+  }
+  if (!/available === false/.test(f('pages/favorites/favorites.js')) ||
+      !/isDownloaded\(/.test(f('pages/favorites/favorites.js'))) {
+    errors.push('favorites.js 未区分「下架且本机无下载」：点击要么静默失败，要么把已下载条目也挡掉（J73）')
+  }
+
+  // —— 20. J81：检查更新必须等真实回调 ——
+  const checkUpdateBody = methodBody(stripComments(settingsJs), 'onCheckUpdate')
+  if (!/onCheckForUpdate\(\(res\)/.test(checkUpdateBody)) {
+    errors.push('settings.js 的检查更新不再读 onCheckForUpdate 回调结果（J81）')
+  }
+  if (!/if\s*\(res\.hasUpdate\)[\s\S]{0,400}else\s*\{[\s\S]{0,120}已是最新版本/.test(checkUpdateBody)) {
+    errors.push('「已是最新版本」不在 res.hasUpdate 的 else 分支里：仍会在真有更新时先报最新（J81）')
+  }
+  if (!/检查超时/.test(checkUpdateBody) || /\},\s*2000\)/.test(checkUpdateBody)) {
+    errors.push('检查更新仍用 2s 固定兜底并冒充「已是最新」：应等回调，超时如实说「检查超时」（J81）')
   }
 
   return { errors, facts }

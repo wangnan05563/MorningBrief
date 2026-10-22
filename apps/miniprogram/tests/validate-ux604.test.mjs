@@ -265,6 +265,46 @@ describe('T02540 / M6 信息架构：文案与入口的回归锁', () => {
     ))
 })
 
+describe('T02542 / M7：长任务收尾与逐菜单缺陷', () => {
+  test('J27 删掉缓冲中节点被抓', () =>
+    expectHit(
+      { 'pages/detail/detail.wxml': read('pages/detail/detail.wxml').replace(/<view class="waiting-tip"[\s\S]*?缓冲中…<\/view>/, '') },
+      'J27',
+    ))
+
+  test('J28 删掉课程章节坐标被抓', () =>
+    expectHit(
+      { 'pages/detail/detail.wxml': read('pages/detail/detail.wxml').replace(/\{\{chapterLabel\}\}/g, '') },
+      'J28',
+    ))
+
+  test('J32 删掉失败态重试入口被抓', () =>
+    expectHit(
+      { 'pages/detail/detail.wxml': read('pages/detail/detail.wxml').replace('bindtap="onRetryLoad"', '') },
+      'J32',
+    ))
+
+  test('J59 离线兜底接回远端 URL（断网仍失败）被抓', () =>
+    expectHit(
+      { 'pages/detail/detail.js': read('pages/detail/detail.js').replace('audio_url: rec.localPath', 'audio_url: rec.audio_url') },
+      'J59',
+    ))
+
+  test('J73 已下架退回纯降透明度被抓', () =>
+    expectHit(
+      { 'pages/favorites/favorites.wxml': read('pages/favorites/favorites.wxml').replace('>已下架</text>', '></text>') },
+      'J73',
+    ))
+
+  test('J81 检查更新退回固定 2s「已是最新」被抓', () => {
+    const src = read('pages/settings/settings.js')
+      .replace('检查超时，请稍后重试', '已是最新版本')
+      .replace('}, 8000)', '}, 2000)')
+    assert.notEqual(src, read('pages/settings/settings.js'), '坏样本没构造成功：onCheckUpdate 的兜底文案/时长已变化')
+    return expectHit({ 'pages/settings/settings.js': src }, 'J81')
+  })
+})
+
 describe('防误报：门禁不能红在自家注释与动态绑定上', () => {
   test('被禁句子写在注释里不算违规', async () => {
     const src = read('pages/privacy/privacy.js').replace(

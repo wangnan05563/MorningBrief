@@ -23,6 +23,7 @@
         wx:key="episode_id"
         data-id="{{item.episode_id}}"
         data-title="{{item.title}}"
+        data-available="{{item.available}}"
         bindtap="onTapItem"
         bindlongpress="onLongPressItem"
       >
@@ -47,6 +48,8 @@
 
         <!-- 标题 -->
         <text class="item-title">{{item.title || '节目信息加载失败'}}</text>
+        <!-- J73（FR-UX-704）：已下架此前只降透明度，用户会当成加载失败/卡死 -->
+        <text class="item-offline-tag" wx:if="{{!item.available}}">已下架</text>
 
         <!-- 底部：时长 + 播放图标 -->
         <view class="item-footer">

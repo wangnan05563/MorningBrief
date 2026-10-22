@@ -8,6 +8,8 @@
  */
 // localData 封装收藏的双写（本地+后端），按 openid 隔离，读取优先本地
 const localData = require('../../services/local-data');
+// J73：已下架但本机有下载的条目仍可离线播，不能一刀切挡住
+const downloadStore = require('../../services/download');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 
 Page({
@@ -67,8 +69,14 @@ Page({
    * 点击列表项跳转详情页
    */
   onTapItem(e) {
-    const { id } = e.currentTarget.dataset;
+    const { id, available } = e.currentTarget.dataset;
     if (!id) return;
+    // J73：下架条目不再「点了没反应/直接掉进加载失败」。本机有下载的仍可播，
+    // 没有下载的明确说明原因，并指出取消收藏这条真实出路。
+    if ((available === false || available === 'false') && !downloadStore.isDownloaded(id)) {
+      wx.showToast({ title: '节目已下架，无法播放；可取消收藏移除', icon: 'none' });
+      return;
+    }
     trackEvent('favorites', 'tap_item', 'episode_' + id);
     wx.navigateTo({ url: `/pages/detail/detail?id=${id}` });
   },
