@@ -276,6 +276,49 @@ T02323 对全部菜单做了只读源码走查，产出 634 条带 `file:line` �
 
 ---
 
+### 9.2 INT-UX-06 应急停服并发判重实测记录（T02529，2026-10-22）
+
+取证环境：文件型 SQLite + 与生产一致的连接参数（`check_same_thread=False`）和 PRAGMA
+（WAL、`busy_timeout`、`synchronous`），每请求独立 session，经 `httpx.ASGITransport` 打真实路由。
+**必须打在 HTTP 层**：缺陷正好落在「请求 A 的读」与「请求 A 的写」之间，服务层单连接串不起来。
+
+| 场景（改前） | 实测结果 | 结论 |
+|---|---|---|
+| 两击 `POST /m/emergency/stop` 同时在飞 | 两次都 `code=0`、两次都 `already=false`，审计表 2 条 | 「先读状态再判重」只在请求不重叠时成立，连点等于没判重 |
+| 同上，第二次停服的原因与首次不同 | 标志被第二次覆盖，首次停服的原因/时间从此查不到 | 高危操作的时间线会被一次误点抹掉 |
+| 两击同时在飞（读事务升成写事务） | 后到的写**立即** `sqlite3.OperationalError: database is locked`，`busy_timeout` 不生效 | 连点换来的不只是重复审计，还有一个 500 |
+| 三击同时在飞 | 3 条审计，1 条成功语义、2 条覆盖 | 重复量随连点次数线性增长 |
+
+改法：判重下沉到**一条带条件的写语句**（compare-and-swap）——停服用
+`WHERE key='maintenance_mode' AND json_extract(value,'$.on') IS NULL OR <> 1` 抢，行还不存在时再用
+`INSERT … ON CONFLICT(key) DO NOTHING` 的 `rowcount` 定输赢；只有 `rowcount` 命中的那一击写审计，
+`already` 由「抢没抢到」给，回给前端的状态是写完再读的那一份。恢复方向对称（只能从 `on=1` 抢），
+行不存在时不补一行垃圾数据。
+
+曾试过用项目的全局写锁 `app/core/write_gate.write_lock()` 把「判重读 + 写 + 提交」圈进同一个临界区，
+**已放弃**：`asyncio.Lock` 会被第一个争用到它的事件循环钉死，而 TestClient 每个测试一个新循环，
+结果是两个与本单无关的用例直接 `RuntimeError: … bound to a different event loop`。
+原子性放在数据库层，既没有跨循环问题，也不依赖「单进程 workers=1」这个部署约束。
+
+顺带查出的一个真实缺口（已在本单内补）：停服/恢复审计一直有写，但全站唯一的审计读接口
+`GET /db-admin/audit-log` 硬过滤 `category='db_admin'`，而停服写的是 `category='mobile'` ——
+**写了等于没写**，值班在外面停完服回头查不到是谁、因为什么。现在补了
+`GET /m/emergency/audit`（`category='mobile'` + 动作白名单 `emergency_stop|emergency_resume`、
+倒序、`limit` 1–100、要登录），移动端 `/m/manage/alert` 页面就地展示「谁 / 何时 / 因为什么」。
+
+> 这个过滤缺口是系统性的：`backend/app` 下 34 处审计写入分布在 13 个 `category`，而读口只有
+> `db_admin_service.py:897` 那条原生 SQL（`WHERE category = 'db_admin'`）和本单新增的那一条 ——
+> 另外 11 个类别（ad/audio/backup/channel/maintenance/material/queue/review/script/user/workflow）
+> 的审计在任何界面都读不到。复核命令：
+> `grep -rn 'category="' app --include=*.py | wc -l`（34）与
+> `grep -rhoE 'category="[a-z_]+"' app --include=*.py | sort -u | wc -l`（13）。
+> 已另派生条目跟踪，不在本单范围内扩权（移动端只读自己的两个动作）。
+
+**仍未决**：DEC-UX-002（停服权限模型）——本单沿用现状「仅超级管理员可调 + 原因必填」，幂等与审计口径不依赖该决策。
+
+---
+
+
 ## 10. 需求追溯
 
 ### 10.1 高危条目 → 里程碑（每条唯一主归属，合计 142）

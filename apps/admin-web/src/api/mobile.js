@@ -29,3 +29,8 @@ export const getMaintenanceStatus = () => api.get('/m/maintenance-status', { sil
 
 // 解除应急停服（仅超级管理员）
 export const emergencyResume = () => api.post('/m/emergency/resume')
+
+// 停服 / 恢复操作记录（INT-UX-06：审计里的操作者与原因要在移动端读得到）
+// silent：读失败只在这一小块列表里降级，不叠加 toast 打扰主操作
+export const getEmergencyAudit = (limit = 10) =>
+  api.get('/m/emergency/audit', { params: { limit }, silent: true })

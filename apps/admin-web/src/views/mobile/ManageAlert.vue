@@ -45,13 +45,36 @@
           @click="resume"
         >{{ submitting ? '提交中…' : '解除应急停服' }}</button>
       </template>
+
+      <!-- INT-UX-06：审计一直有写（操作者 + 原因），但唯一的审计接口按 category='db_admin'
+           过滤，停服写的是 category='mobile'，值班在外面停完服回头查不到是谁、因为什么。
+           这条列表把「谁 / 何时 / 因为什么」就地读出来。 -->
+      <section class="m-alert__audit" data-guide="emergency-audit">
+        <div class="m-alert__audit-title">停服 / 恢复记录</div>
+        <div v-if="auditError" class="m-alert__audit-empty">记录读取失败：{{ auditError }}</div>
+        <div v-else-if="!audit.length" class="m-alert__audit-empty">暂无记录</div>
+        <ol v-else class="m-alert__audit-list" data-guide="emergency-audit-list">
+          <li v-for="it in audit" :key="it.key" class="m-alert__audit-item">
+            <span :class="['m-alert__audit-action', `m-alert__audit-action--${it.action}`]">
+              {{ it.action === 'emergency_stop' ? '停服' : '恢复' }}
+            </span>
+            <span class="m-alert__audit-who">{{ it.operator || '未知操作人' }} · {{ fmtDate(it.at) }}</span>
+            <div v-if="it.reason" class="m-alert__audit-reason">原因：{{ it.reason }}</div>
+          </li>
+        </ol>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { getMaintenanceStatus, emergencyStop, emergencyResume } from '../../api/mobile'
+import {
+  getMaintenanceStatus,
+  emergencyStop,
+  emergencyResume,
+  getEmergencyAudit,
+} from '../../api/mobile'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 
 // null = 状态未知（读失败），绝不能退化成 { enabled: false }
@@ -59,6 +82,8 @@ const m = ref(null)
 const loading = ref(false)
 const submitting = ref(false)
 const loadError = ref('')
+const audit = ref([])
+const auditError = ref('')
 
 const state = computed(() => (m.value === null ? 'unknown' : m.value.enabled ? 'on' : 'off'))
 const bannerTitle = computed(() =>
@@ -135,6 +160,19 @@ async function reload() {
   } finally {
     loading.value = false
   }
+  await loadAudit()
+}
+
+// 记录列表读失败不拖累主状态：横幅讲「现在」，列表讲「历史上谁动的」
+async function loadAudit() {
+  try {
+    const data = await getEmergencyAudit(10)
+    audit.value = (data?.items || []).map((it, i) => ({ ...it, key: `${it.at || ''}-${it.action}-${i}` }))
+    auditError.value = ''
+  } catch (e) {
+    audit.value = []
+    auditError.value = e?.message || '接口调用失败'
+  }
 }
 
 async function stop() {
@@ -166,6 +204,7 @@ async function stop() {
   } finally {
     submitting.value = false
   }
+  await loadAudit()
 }
 
 async function resume() {
@@ -182,13 +221,17 @@ async function resume() {
   }
   submitting.value = true
   try {
-    m.value = normalize(await emergencyResume())
-    ElMessage.success('已恢复生产')
+    const data = await emergencyResume()
+    m.value = normalize(data)
+    ElMessage.success(
+      data?.already ? '系统本就是运行态，本次未重复记录' : '已恢复生产',
+    )
   } catch {
     // 拦截器已提示
   } finally {
     submitting.value = false
   }
+  await loadAudit()
 }
 
 onMounted(reload)
@@ -270,5 +313,54 @@ onMounted(reload)
   color: #b0b4bb;
   padding: 40px 0;
   font-size: 14px;
+}
+
+/* 记录列表走主题变量，别再往暗色主题上贴一块不透明底色（NFR-UX-04 的坑） */
+.m-alert__audit {
+  border-top: 1px solid var(--el-border-color-lighter, #ebeef5);
+  padding-top: 12px;
+}
+
+.m-alert__audit-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary, #303133);
+}
+
+.m-alert__audit-empty {
+  font-size: 12px;
+  color: var(--el-text-color-secondary, #909399);
+  margin-top: 8px;
+}
+
+.m-alert__audit-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.m-alert__audit-item {
+  font-size: 12px;
+  color: var(--el-text-color-secondary, #909399);
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--el-border-color-lighter, #ebeef5);
+}
+
+.m-alert__audit-item:last-child {
+  border-bottom: none;
+}
+
+.m-alert__audit-action {
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.m-alert__audit-action--emergency_stop { color: #f56c6c; }
+.m-alert__audit-action--emergency_resume { color: #67c23a; }
+
+.m-alert__audit-reason {
+  margin-top: 2px;
+  color: var(--el-text-color-regular, #606266);
+  word-break: break-all;
 }
 </style>

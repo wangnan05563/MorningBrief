@@ -18,7 +18,8 @@ import time
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from app.models.audit_log import AuditLog
 from app.models.mobile import AdminDevice, AdminInbox
@@ -291,22 +292,51 @@ async def dashboard_summary(db, admin_id: int) -> dict:
 
 # ---- 维护态 / 应急停服 ----
 
-async def _upsert_flag(db, key: str, value_dict: dict, admin_name: str) -> None:
-    """写入 / 更新系统标志（JSON 值）。"""
+# json_extract 取出的 on：1=停服中，0=运行中，NULL=行不存在或 value 为空
+_MAINT_ON = func.json_extract(SystemFlag.value, "$.on")
+
+
+async def _claim_maintenance(db, target_on: bool, admin_name: str, value_dict: dict) -> bool:
+    """原子地把维护态翻到 target_on；没抢下来返回 False（并发的另一击已经翻了）。
+
+    为什么不写成「先 select 判断、再写」：移动端连点是两个同时在飞的请求，各自都读到
+    旧状态，判重形同虚设（实测两击都返回 already=False、审计 2 条）；而且 SQLite 下
+    读事务再升成写事务、撞上并发写时是**立刻** SQLITE_BUSY（busy_timeout 也不等），
+    第二击直接变成 500。这里让事务以一条带条件的写语句开场：赢家 rowcount=1，
+    输家要么 rowcount=0（行已在且状态不符），要么被主键挡回（行还不存在时）。
+    """
     payload = json.dumps(value_dict, ensure_ascii=False)
-    row = (
-        await db.execute(select(SystemFlag).where(SystemFlag.key == key))
-    ).scalars().first()
-    if row is None:
-        row = SystemFlag(key=key)
-        db.add(row)
-    row.value = payload
-    row.updated_by = admin_name
-    await db.flush()
+    if target_on:
+        cond = or_(_MAINT_ON.is_(None), _MAINT_ON != 1)
+    else:
+        cond = _MAINT_ON == 1
+    res = await db.execute(
+        update(SystemFlag)
+        .where(SystemFlag.key == MAINTENANCE_KEY, cond)
+        .values(value=payload, updated_by=admin_name)
+    )
+    if res.rowcount:
+        return True
+    if not target_on:
+        # 解除：行不存在或本来就是运行态，本来就是目标态，不补一行垃圾数据
+        return False
+    ins = (
+        sqlite_insert(SystemFlag)
+        .values(key=MAINTENANCE_KEY, value=payload, updated_by=admin_name)
+        .on_conflict_do_nothing(index_elements=["key"])
+    )
+    return (await db.execute(ins)).rowcount == 1
 
 
 async def get_maintenance(db) -> dict:
-    """读取维护态（结构化）。"""
+    """读取维护态（结构化）。
+
+    不需要 populate_existing：写路径用的是 ORM-enabled UPDATE/INSERT，
+    AsyncSession 执行后会把该映射类的实例在身份图里过期，所以「写完立刻读」拿到的
+    就是新值（这一点由 test_same_session_read_after_core_write_sees_new_state 钉住——
+    探针实测：把 populate_existing 删掉、用例仍然全绿，说明这个执行选项在此并无用，
+    留着只会让下一个人以为「不加就会读到脏的」，而事实不是）。
+    """
     row = (
         await db.execute(select(SystemFlag).where(SystemFlag.key == MAINTENANCE_KEY))
     ).scalars().first()
@@ -352,70 +382,117 @@ async def emergency_stop(db, admin, reason: str) -> dict:
     高危操作——路由层已用 require_admin 限定超级管理员，并强制 reason 必填。
     维护态由 workflow_scheduler.trigger_workflow 守卫拒绝新任务触发（FR-M902）。
 
-    幂等（FR-UX-201）：已是停服态时直接返回当前状态（``already=True``），既不重写标志
-    也不追加审计——否则连点会把首次停服时间/原因覆盖掉，审计里全是同名重复条目。
-    """
-    current = await get_maintenance(db)
-    if current.get("enabled"):
-        with _maint_cache_lock:
-            _maint_cache["value"] = True
-            _maint_cache["ts"] = time.time()
-        return {**current, "already": True}
+    幂等（FR-UX-201）：已是停服态时返回当前状态（``already=True``），既不重写标志也不
+    追加审计——否则连点会把首次停服时间/原因覆盖掉，审计里全是同名重复条目。
 
-    await _upsert_flag(
+    INT-UX-06：判重不能靠「先读再写」，那只在两个请求不重叠时成立。真正的判定发生在
+    ``_claim_maintenance`` 的那条条件写语句里：抢到了才写审计，抢不到就如实回 already。
+    """
+    claimed = await _claim_maintenance(
         db,
-        MAINTENANCE_KEY,
+        True,
+        admin.username,
         {
             "on": True,
             "reason": reason,
             "by": admin.username,
             "at": datetime.now().isoformat(),
         },
-        admin.username,
     )
-    db.add(
-        AuditLog(
-            category="mobile",
-            action="emergency_stop",
-            operator=admin.username,
-            detail=json.dumps(
-                {"reason": reason, "note": "emergency stop via mobile"}, ensure_ascii=False
-            ),
+    if claimed:
+        db.add(
+            AuditLog(
+                category="mobile",
+                action="emergency_stop",
+                # target 留空时这条审计既按对象检索不到、也和状态里的原因对不上号（INT-UX-06）
+                target=MAINTENANCE_KEY,
+                operator=admin.username,
+                detail=json.dumps(
+                    {"reason": reason, "note": "emergency stop via mobile"}, ensure_ascii=False
+                ),
+            )
         )
-    )
-    await db.flush()
-    # 立即刷新进程内缓存，避免最长 5s 的守卫延迟
+        await db.flush()
+    state = await get_maintenance(db)
+    # 立即刷新进程内缓存，避免最长 5s 的守卫延迟；输家也按赢家落库后的真实状态刷
     with _maint_cache_lock:
-        _maint_cache["value"] = True
+        _maint_cache["value"] = state["enabled"]
         _maint_cache["ts"] = time.time()
-    return {**await get_maintenance(db), "already": False}
+    return {**state, "already": not claimed}
 
 
 async def resume_maintenance(db, admin, reason: str = "") -> dict:
-    """解除应急停服：关闭维护态标志 + 审计落库。"""
-    await _upsert_flag(
+    """解除应急停服：关闭维护态标志 + 审计落库。
+
+    与停服同一套判重（INT-UX-06）：本来就是运行态时不重写标志、也不堆审计，
+    否则连点恢复会把「谁在何时恢复的」埋进一串重复条目里。
+    """
+    claimed = await _claim_maintenance(
         db,
-        MAINTENANCE_KEY,
+        False,
+        admin.username,
         {
             "on": False,
             "reason": reason or None,
             "by": admin.username,
             "at": datetime.now().isoformat(),
         },
-        admin.username,
     )
-    db.add(
-        AuditLog(
-            category="mobile",
-            action="emergency_resume",
-            operator=admin.username,
-            detail=json.dumps(
-                {"reason": reason, "note": "resume production via mobile"}, ensure_ascii=False
-            ),
+    if claimed:
+        db.add(
+            AuditLog(
+                category="mobile",
+                action="emergency_resume",
+                target=MAINTENANCE_KEY,
+                operator=admin.username,
+                detail=json.dumps(
+                    {"reason": reason, "note": "resume production via mobile"}, ensure_ascii=False
+                ),
+            )
         )
-    )
-    await db.flush()
+        await db.flush()
+    state = await get_maintenance(db)
     with _maint_cache_lock:
-        _maint_cache["value"] = False
+        _maint_cache["value"] = state["enabled"]
         _maint_cache["ts"] = time.time()
-    return await get_maintenance(db)
+    return {**state, "already": not claimed}
+
+
+EMERGENCY_ACTIONS = ("emergency_stop", "emergency_resume")
+
+
+async def emergency_audit(db, limit: int = 20) -> list[dict]:
+    """停服 / 恢复操作记录（倒序）：值班要的是「谁、什么时候、因为什么」三列。
+
+    这些数据一直有写，但唯一的审计接口 GET /db-admin/audit-log 硬过滤
+    ``category='db_admin'``，停服写的是 ``category='mobile'``，任何界面都读不到
+    ——写了等于没写（INT-UX-06）。这里按动作白名单取，不给越读他模块审计的口子。
+    """
+    limit = max(1, min(int(limit or 20), 100))
+    rows = (
+        (
+            await db.execute(
+                select(AuditLog)
+                .where(AuditLog.category == "mobile", AuditLog.action.in_(EMERGENCY_ACTIONS))
+                .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    items = []
+    for r in rows:
+        try:
+            detail = json.loads(r.detail) if r.detail else {}
+        except (json.JSONDecodeError, TypeError):
+            detail = {}
+        items.append(
+            {
+                "action": r.action,
+                "operator": r.operator,
+                "reason": detail.get("reason"),
+                "at": r.created_at.isoformat() if r.created_at else None,
+            }
+        )
+    return items

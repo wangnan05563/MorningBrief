@@ -15,6 +15,7 @@ const NAV_TIMEOUT = 30000
 const STATUS = '**/admin/api/v1/m/maintenance-status**'
 const STOP = '**/admin/api/v1/m/emergency/stop**'
 const RESUME = '**/admin/api/v1/m/emergency/resume**'
+const AUDIT = '**/admin/api/v1/m/emergency/audit**'
 
 const ok = (data) => ({ code: 0, message: 'ok', data })
 const FAIL = { code: 500, message: '后端服务不可用（测试注入）', data: null }
@@ -27,7 +28,7 @@ function localIso(d) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
-async function mockMobile(page, { status, stop, resume, requests }) {
+async function mockMobile(page, { status, stop, resume, audit = { items: [] }, requests }) {
   await page.route(STATUS, (route) =>
     status.fail
       ? route.fulfill({ status: 200, json: FAIL })
@@ -41,6 +42,12 @@ async function mockMobile(page, { status, stop, resume, requests }) {
     requests.push({ url: route.request().url(), body: null })
     return route.fulfill({ status: 200, json: ok(resume.data) })
   })
+  // INT-UX-06 的记录列表：单独计数，别混进 requests（存量用例按 requests.length 断言动作次数）
+  await page.route(AUDIT, (route) =>
+    audit.fail
+      ? route.fulfill({ status: 200, json: FAIL })
+      : route.fulfill({ status: 200, json: ok({ items: audit.items, total: audit.items.length }) }),
+  )
 }
 
 // getByRole 的 name 默认按子串匹配，'应急停服' 会命中 '解除应急停服'，故一律 exact
@@ -165,5 +172,96 @@ test.describe('应急停服 · 状态可信与可用性', () => {
     await expect.poll(() => requests.length).toBe(1)
     expect(requests[0].url).toContain('/m/emergency/resume')
     await expect(page.locator('.m-alert__banner')).toContainText('生产运行正常')
+  })
+
+  // ---- INT-UX-06：审计里的「操作者 + 原因」要就地读得到 ----
+
+  test('停服记录列表渲染操作者、原因与时间', async ({ page }) => {
+    const stopped = { enabled: true, reason: '磁盘写满', by: 'admin', at: localIso(new Date()), already: false }
+    const items = [
+      { action: 'emergency_resume', operator: 'ops_a', reason: '', at: localIso(new Date()) },
+      { action: 'emergency_stop', operator: 'admin', reason: '磁盘写满', at: localIso(new Date(Date.now() - 60_000)) },
+    ]
+    const requests = []
+    await mockMobile(page, { status: { data: stopped }, stop: { data: stopped }, resume: { data: OFF }, audit: { items }, requests })
+    await page.goto('/m/manage/alert')
+
+    const list = page.locator('[data-guide="emergency-audit-list"]')
+    await expect(list.locator('li')).toHaveCount(2, { timeout: NAV_TIMEOUT })
+    await expect(list.locator('li').nth(1)).toContainText('停服')
+    await expect(list.locator('li').nth(1)).toContainText('admin')
+    await expect(list.locator('li').nth(1)).toContainText('原因：磁盘写满')
+    // 恢复那一条没有原因，但操作者必须在（谁放开的服也是追责信息）
+    await expect(list.locator('li').nth(0)).toContainText('恢复')
+    await expect(list.locator('li').nth(0)).toContainText('ops_a')
+  })
+
+  test('停完服当场重读记录，不用刷新页面', async ({ page }) => {
+    const stopped = { enabled: true, reason: '上游异常', by: 'admin', at: localIso(new Date()), already: false }
+    const requests = []
+    const auditCalls = []
+    await mockMobile(page, { status: { data: OFF }, stop: { data: stopped }, resume: { data: OFF }, audit: { items: [] }, requests })
+    // 后注册的 route 优先：用它数审计调用次数
+    await page.route(AUDIT, (route) => {
+      auditCalls.push(route.request().url())
+      return route.fulfill({ status: 200, json: ok({ items: [], total: 0 }) })
+    })
+    await page.goto('/m/manage/alert')
+    await expect(btn(page, '应急停服')).toBeVisible({ timeout: NAV_TIMEOUT })
+    await expect.poll(() => auditCalls.length).toBe(1)
+
+    await btn(page, '应急停服').click()
+    const box = page.locator('.el-message-box')
+    await box.locator('textarea').fill('上游异常')
+    await box.getByRole('button', { name: '确认停服' }).click()
+
+    await expect.poll(() => auditCalls.length).toBe(2)
+  })
+
+  test('重复停服：already=true 给「本次未重复记录」而不是谎报新停服', async ({ page }) => {
+    const stopped = { enabled: true, reason: '第一次的原因', by: 'admin', at: localIso(new Date()), already: true }
+    const requests = []
+    await mockMobile(page, { status: { data: OFF }, stop: { data: stopped }, resume: { data: OFF }, requests })
+    await page.goto('/m/manage/alert')
+    await expect(btn(page, '应急停服')).toBeVisible({ timeout: NAV_TIMEOUT })
+
+    await btn(page, '应急停服').click()
+    const box = page.locator('.el-message-box')
+    await box.locator('textarea').fill('第二次点错了')
+    await box.getByRole('button', { name: '确认停服' }).click()
+
+    await expect(page.locator('.el-message', { hasText: '本次未重复记录' })).toBeVisible()
+    // 回显沿用后端给的当前状态：原因仍是第一次那条，没被第二次覆盖
+    await expect(page.locator('.m-alert__banner')).toContainText('原因：第一次的原因')
+  })
+
+  test('重复恢复：already=true 同样说「本次未重复记录」', async ({ page }) => {
+    const stopped = { enabled: true, reason: '磁盘写满', by: 'admin', at: localIso(new Date()), already: false }
+    const resumed = { enabled: false, reason: null, by: 'admin', at: localIso(new Date()), already: true }
+    const requests = []
+    await mockMobile(page, { status: { data: stopped }, stop: { data: stopped }, resume: { data: resumed }, requests })
+    await page.goto('/m/manage/alert')
+    await expect(btn(page, '解除应急停服')).toBeVisible({ timeout: NAV_TIMEOUT })
+
+    await btn(page, '解除应急停服').click()
+    await page.locator('.el-message-box').getByRole('button', { name: '确认恢复' }).click()
+
+    await expect(page.locator('.el-message', { hasText: '本次未重复记录' })).toBeVisible()
+  })
+
+  test('记录读失败只在列表里降级，横幅与操作不受牵连', async ({ page }) => {
+    const requests = []
+    await mockMobile(page, {
+      status: { data: OFF },
+      stop: { data: OFF },
+      resume: { data: OFF },
+      audit: { fail: true },
+      requests,
+    })
+    await page.goto('/m/manage/alert')
+
+    await expect(page.locator('.m-alert__banner')).toContainText('生产运行正常', { timeout: NAV_TIMEOUT })
+    await expect(page.locator('[data-guide="emergency-audit"]')).toContainText('记录读取失败')
+    await expect(btn(page, '应急停服')).toBeVisible()
   })
 })

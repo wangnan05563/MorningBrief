@@ -135,6 +135,8 @@ async def emergency_stop(
     reason = (body.reason or "").strip()
     if not reason:
         raise BizError(code=400, message="应急停服必须填写原因")
+    # INT-UX-06：判重不能靠「先读再写」，两个同时在飞的连点会各自读到旧状态。
+    # 原子性由服务层的一条条件写语句（app/services/mobile_service._claim_maintenance）保证。
     result = await mobile_service.emergency_stop(db, admin, reason)
     await db.commit()
     return success(data=result)
@@ -148,6 +150,17 @@ async def maintenance_status(
 ):
     data = await mobile_service.get_maintenance(db)
     return success(data=data)
+
+
+# ---- 停服 / 恢复操作记录（INT-UX-06：审计里的操作者与原因要有人能读到） ----
+@router.get("/emergency/audit")
+async def emergency_audit(
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(get_current_admin),
+):
+    items = await mobile_service.emergency_audit(db, limit)
+    return success(data={"items": items, "total": len(items)})
 
 
 # ---- 解除应急停服（仅超级管理员） ----
