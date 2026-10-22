@@ -140,11 +140,9 @@ test.describe('错误态与重试不引入额外轮询（NFR-UX-03）', () => {
       emptySelector: 'text=暂无队列任务',
       // loadTasks 只打 /queue/tasks 一个接口
       retryBudget: 1,
-      // 实测（本用例第一次跑出来的）：队列页 8s 窗口内**一个轮询都没有**。
-      // 根因在 onMounted 的顺序——loadTasks() 还没回来就调了 scheduleNextPoll()，
-      // 那一刻 tasks 是空的，hasActiveTasks() 为假 → 间隔定成 30s，之后不再按数据重算。
-      // 这里不设 minHealthy 自检：0 才是这一页的正确基线，写个 >=2 反而是在断言一个不存在的行为；
-      // 「窗口看得见轮询」的自检交给工作流列表（它在每次 loadList 末尾重算，5s 真的会发）。
+      // T02837 修复后：首轮数据落定再排定时器，活跃队列在 8s 窗口里会出现一次 5s 轮询。
+      // 这里仍不设 minHealthy——本计数含壳层请求，无法证明「轮询真的发生」；
+      // 队列页的 5s/30s 节奏由 queue-polling-cadence.spec.js 直接盯 /queue/tasks 证明。
     })
   })
 

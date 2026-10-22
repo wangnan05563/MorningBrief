@@ -626,14 +626,14 @@ function handleVisibilityChange() {
   }
 }
 
-onMounted(() => {
-  loadStats()
-  configLoad.load()
+onMounted(async () => {
   loadChannels()
-  loadTasks()
   setupSSE()
-  scheduleNextPoll()
   document.addEventListener('visibilitychange', handleVisibilityChange)
+  // 首轮数据落定后再排轮询：提前排定会在 tasks 仍为空时把间隔定成 30s，
+  // 活跃队列要等半分钟才刷新（T02837）
+  await Promise.all([configLoad.load(), loadTasks(), loadStats()])
+  scheduleNextPoll()
 })
 
 // keep-alive 缓存时暂停轮询，恢复时重启轮询
