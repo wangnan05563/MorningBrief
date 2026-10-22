@@ -19,7 +19,8 @@ from app.core.response import success, error
 from app.database import get_db
 from app.models import AuditLog, Channel
 from app.paths import resolve_bgm_dir, resolve_channel_asset_dir
-from app.services.channel_service import ChannelService, _TTL_CHANNELS
+from app.services.channel_service import ChannelService, _TTL_CHANNELS, _UNSET
+from app.workflow.duration import MAX_CHANNEL_DURATION_SEC, MIN_CHANNEL_DURATION_SEC
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ class ChannelCreateRequest(BaseModel):
     book_rss_sources: str | None = None
     # 频道关键词过滤（逗号分隔，如 "游戏,主机,PS5"），为空表示不过滤
     keywords: str | None = None
+    # 频道级最短时长（秒）：驱动自动扩稿与拼接下限；为空按频道类型动态默认
     min_duration_sec: int | None = None
     # 展示排序权重：值越小越靠前；相等时按 id 兜底。运营可调整以控制小程序 tab 顺序
     display_order: int = 0
@@ -162,6 +164,18 @@ class ChannelCreateRequest(BaseModel):
             raise ValueError("material_lookback_days 超出上限 90 天")
         return v
 
+    @field_validator("min_duration_sec")
+    @classmethod
+    def validate_min_duration_sec(cls, v: int | None) -> int | None:
+        if v is None:
+            return None
+        if v < MIN_CHANNEL_DURATION_SEC or v > MAX_CHANNEL_DURATION_SEC:
+            raise ValueError(
+                f"min_duration_sec 必须在 {MIN_CHANNEL_DURATION_SEC}-"
+                f"{MAX_CHANNEL_DURATION_SEC} 秒之间"
+            )
+        return v
+
     @field_validator("selection_strategy")
     @classmethod
     def validate_selection_strategy(cls, v: str | None) -> str | None:
@@ -227,6 +241,8 @@ class ChannelUpdateRequest(BaseModel):
     rss_sources: str | None = None
     book_rss_sources: str | None = None
     keywords: str | None = None
+    # 频道级最短时长（秒）：驱动自动扩稿与拼接下限；显式 null 清除覆盖、回落动态默认
+    min_duration_sec: int | None = None
     # 展示排序权重：值越小越靠前；相等时按 id 兜底。运营可调整以控制小程序 tab 顺序
     display_order: int | None = None
     # 频道级素材周期回溯天数：当日素材不足时自动放宽到最近 N 天选材；为空回退动态值
@@ -284,6 +300,18 @@ class ChannelUpdateRequest(BaseModel):
             raise ValueError("material_lookback_days 必须为正整数（≥1）")
         if v > 90:
             raise ValueError("material_lookback_days 超出上限 90 天")
+        return v
+
+    @field_validator("min_duration_sec")
+    @classmethod
+    def validate_min_duration_sec(cls, v: int | None) -> int | None:
+        if v is None:
+            return None
+        if v < MIN_CHANNEL_DURATION_SEC or v > MAX_CHANNEL_DURATION_SEC:
+            raise ValueError(
+                f"min_duration_sec 必须在 {MIN_CHANNEL_DURATION_SEC}-"
+                f"{MAX_CHANNEL_DURATION_SEC} 秒之间"
+            )
         return v
 
     @field_validator("selection_strategy")
@@ -487,6 +515,10 @@ async def update_channel(
             rss_sources=req.rss_sources,
             book_rss_sources=req.book_rss_sources,
             keywords=req.keywords,
+            # 未传该字段保持原值；显式 null 才清除频道级覆盖（回落动态默认）
+            min_duration_sec=(
+                req.min_duration_sec if "min_duration_sec" in req.model_fields_set else _UNSET
+            ),
             display_order=req.display_order,
             material_lookback_days=req.material_lookback_days,
             selection_strategy=req.selection_strategy,

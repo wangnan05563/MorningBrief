@@ -149,7 +149,7 @@ class ChannelService:
         rss_sources: Optional[str] = None,
         book_rss_sources: Optional[str] = None,
         keywords: Optional[str] = None,
-        min_duration_sec: Optional[int] = None,
+        min_duration_sec: Optional[int] = _UNSET,
         display_order: Optional[int] = None,
         material_lookback_days: Optional[int] = _UNSET,
         selection_strategy: Optional[str] = None,
@@ -207,7 +207,8 @@ class ChannelService:
             channel.book_rss_sources = book_rss_sources
         if keywords is not None:
             channel.keywords = keywords
-        if min_duration_sec is not None:
+        # 与 material_lookback_days 同口径：未传(_UNSET)保持原值；显式传 None 清空覆盖
+        if min_duration_sec is not _UNSET:
             channel.min_duration_sec = min_duration_sec
         if display_order is not None:
             channel.display_order = display_order

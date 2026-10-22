@@ -502,6 +502,28 @@
           </div>
           <span class="form-tip">段间处理方式：连续衔接=段间交叉淡化无空档且 BGM 全程连续；真实静音=段间停顿可感知；BGM 桥接=旧版 BGM 铺满</span>
         </el-form-item>
+        <el-form-item label="最短时长（秒）">
+          <div class="gap-controls">
+            <el-checkbox v-model="form.minDurationEnabled" style="margin-right: 12px">
+              自定义最短时长
+            </el-checkbox>
+            <!-- 按勾选状态挂载：Element Plus 从 disabled 切回可用后会在内部输入框残留
+                 aria-disabled=true（实际可编辑），读屏与自动化都会把它当成禁用 -->
+            <el-input-number
+              v-if="form.minDurationEnabled"
+              v-model="form.min_duration_sec"
+              :min="180"
+              :max="1800"
+              :step="30"
+              controls-position="right"
+              style="width: 160px"
+            />
+          </div>
+          <span class="form-tip">
+            范围 180-1800 秒；留空/取消勾选 = 按频道类型动态默认（有声读物 1800 秒，其余沿用全局目标时长）。
+            配置后驱动自动扩稿与拼接下限
+          </span>
+        </el-form-item>
         <el-form-item label="结尾思考">
           <el-switch
             v-model="form.enable_thinking_question"
@@ -676,6 +698,10 @@ const form = reactive({
   // 勾选自定义后由 el-input-number 写入 1-90，提交时透传给后端 material_lookback_days
   material_lookback_days: null,
   lookbackEnabled: false,
+  // 频道级最短时长（秒）：null（配合 minDurationEnabled=false）表示按频道类型动态默认；
+  // 勾选自定义后由 el-input-number 写入 180-1800，提交时透传给后端 min_duration_sec
+  min_duration_sec: null,
+  minDurationEnabled: false,
   // ===== 扩展 / 学习频道字段（多频道适配 M2 / 业务范围扩展 MVP） =====
   // 频道类型：news(默认)/course/audiobook，驱动小程序皮肤与课程链路
   channel_type: 'news',
@@ -789,6 +815,9 @@ function resetForm() {
   // 素材回溯：默认不勾选自定义，material_lookback_days 置 null 表示继承动态回溯
   form.material_lookback_days = null
   form.lookbackEnabled = false
+  // 最短时长：默认不勾选自定义，null 表示按频道类型动态默认
+  form.min_duration_sec = null
+  form.minDurationEnabled = false
   // 扩展 / 学习频道字段重置为默认
   form.channel_type = 'news'
   form.type_label = ''
@@ -983,6 +1012,11 @@ function openEdit(row) {
     ? row.material_lookback_days
     : null
   form.lookbackEnabled = form.material_lookback_days !== null
+  // 最短时长：后端返回 null 表示未配置（按频道类型动态默认），对应不勾选自定义
+  form.min_duration_sec = (row.min_duration_sec !== null && row.min_duration_sec !== undefined)
+    ? row.min_duration_sec
+    : null
+  form.minDurationEnabled = form.min_duration_sec !== null
   // 扩展 / 学习频道字段回填
   form.channel_type = row.channel_type || 'news'
   form.type_label = row.type_label || ''
@@ -1069,6 +1103,8 @@ async function handleSubmit() {
         keywords: form.keywords || '',
         // 素材回溯：未勾选自定义则提交 null 继承动态；勾选则用 el-input-number 的值
         material_lookback_days: form.lookbackEnabled ? form.material_lookback_days : null,
+        // 最短时长：未勾选自定义则显式提交 null，清除频道级覆盖并回落动态默认
+        min_duration_sec: form.minDurationEnabled ? form.min_duration_sec : null,
         ...extPayload,
       })
       ElMessage.success('已更新')
@@ -1096,6 +1132,8 @@ async function handleSubmit() {
         keywords: form.keywords || '',
         // 素材回溯：未勾选自定义则提交 null 继承动态；勾选则用填写的天数
         material_lookback_days: form.lookbackEnabled ? form.material_lookback_days : null,
+        // 最短时长：未勾选自定义则提交 null，按频道类型动态默认
+        min_duration_sec: form.minDurationEnabled ? form.min_duration_sec : null,
         ...extPayload,
       })
       ElMessage.success('已创建')
