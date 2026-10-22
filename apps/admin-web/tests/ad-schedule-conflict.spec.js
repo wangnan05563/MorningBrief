@@ -32,26 +32,27 @@ test.describe('排期日历的投放重叠（D24）', () => {
   test('同位同日两条投放：第二条不能被覆盖掉，必须出现重叠角标', async ({ page }) => {
     const ym = new Date().toISOString().slice(0, 7)
     await openSchedule(page, [
-      { material_name: '品牌广告A', position: 'head', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
-      { material_name: '竞品广告B', position: 'head', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
+      { id: 11, material_name: '品牌广告A', position: 'head', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
+      { id: 12, material_name: '竞品广告B', position: 'head', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
     ])
 
     const badge = page.locator('.slot-conflict').first()
     await expect(badge).toBeVisible()
     await expect(badge).toContainText('+1 条重叠')
 
-    // 主显的那条 + 被折叠的那条都要能在 tooltip 里找到
-    await badge.hover()
+    // T02927：角标点开后列出全部重叠投放（含素材名与区间），可直接处置
+    await badge.click()
     const tip = page.locator('.el-popper:visible')
     await expect(tip).toContainText('竞品广告B')
     await expect(tip).toContainText('2 条投放重叠')
+    await expect(tip).toContainText(`${ym}-01`)
   })
 
   test('无重叠时不出现角标（避免把正常排期渲染成冲突）', async ({ page }) => {
     const ym = new Date().toISOString().slice(0, 7)
     await openSchedule(page, [
-      { material_name: '品牌广告A', position: 'head', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
-      { material_name: '中部广告C', position: 'mid', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
+      { id: 21, material_name: '品牌广告A', position: 'head', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
+      { id: 22, material_name: '中部广告C', position: 'mid', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
     ])
     await expect(page.locator('.slot-conflict')).toHaveCount(0)
   })
@@ -60,8 +61,8 @@ test.describe('排期日历的投放重叠（D24）', () => {
     const ym = new Date().toISOString().slice(0, 7)
     await openSchedule(page, [
       // 先给一条已停用的，再给一条启用中的：主显必须是启用中的那条
-      { material_name: '过期广告D', position: 'tail', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 0, status: 'disabled' },
-      { material_name: '在投广告E', position: 'tail', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
+      { id: 31, material_name: '过期广告D', position: 'tail', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 0, status: 'disabled' },
+      { id: 32, material_name: '在投广告E', position: 'tail', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
     ])
 
     // 日历网格里前面还有上个月的空格子，断言只看真有数据的那些
@@ -71,5 +72,63 @@ test.describe('排期日历的投放重叠（D24）', () => {
     expect(await tails.filter({ hasText: '过期广告D' }).count()).toBe(0)
     // 角标挂在主显（启用中）那条上
     await expect(tails.filter({ has: page.locator('.slot-conflict') }).first()).toContainText('在投广告E')
+  })
+
+  test('角标点开后就地停用其中一条：PUT enabled=0 并重新拉取排期', async ({ page }) => {
+    const ym = new Date().toISOString().slice(0, 7)
+    const conflicting = [
+      { id: 101, material_name: '品牌广告A', position: 'head', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
+      { id: 102, material_name: '竞品广告B', position: 'head', start_date: `${ym}-01`, end_date: `${ym}-28`, enabled: 1, status: 'active' },
+    ]
+
+    await setLoginState(page)
+    let scheduleCalls = 0
+    // 停用成功前，无论挂载时拉几次都返回两条重叠；PUT 之后才返回单条。
+    // （按调用次数切换会被 el-calendar 挂载期的重复请求提前消费掉，导致角标闪没）
+    let disabled = false
+    await page.route('**/admin/api/v1/ads/schedule**', (route) => {
+      scheduleCalls += 1
+      route.fulfill({ json: scheduleOf(disabled ? [conflicting[0]] : conflicting) })
+    })
+    const puts = []
+    await page.route('**/admin/api/v1/ads/placements/**', (route) => {
+      if (route.request().method() === 'PUT') {
+        puts.push({
+          url: route.request().url(),
+          body: JSON.parse(route.request().postData() || '{}'),
+        })
+        disabled = true
+        return route.fulfill({
+          json: { code: 0, message: 'success', data: { id: 102, enabled: 0, status: 'disabled' } },
+        })
+      }
+      return route.continue()
+    })
+
+    await page.goto('/ads/schedule', { waitUntil: 'networkidle' })
+    await page.waitForSelector('[data-guide="ads-schedule-calendar"]', { timeout: 30000 })
+    await expect(page.locator('.slot-conflict').first()).toBeVisible()
+
+    await page.locator('.slot-conflict').first().click()
+    // 每个有冲突的日期都会预渲染一份 popover 内容，只有点开的那个是可见的
+    const panel = page.locator('.el-popper:visible .conflict-panel')
+    await expect(panel).toBeVisible()
+    // 两条都在清单里，带各自的区间——运营能定位到底是谁和谁重叠
+    await expect(panel).toContainText('品牌广告A')
+    await expect(panel).toContainText('竞品广告B')
+    await expect(panel).toContainText(`${ym}-01`)
+
+    await panel
+      .locator('.conflict-panel__row')
+      .filter({ hasText: '竞品广告B' })
+      .getByRole('button', { name: '停用' })
+      .click()
+    await page.getByRole('dialog').getByRole('button', { name: '确认停用' }).click()
+
+    await expect.poll(() => puts.length, { timeout: 30000 }).toBe(1)
+    expect(puts[0].url).toContain('/ads/placements/102')
+    expect(puts[0].body).toEqual({ enabled: 0 })
+    await expect.poll(() => scheduleCalls, { timeout: 30000 }).toBeGreaterThanOrEqual(2)
+    await expect(page.locator('.slot-conflict')).toHaveCount(0)
   })
 })

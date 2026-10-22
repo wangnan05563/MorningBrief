@@ -12,8 +12,8 @@
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 
 /**
- * @param {Array<{material_name: string, position: string, start_date: string, end_date: string, enabled: number, status: string}>} placements
- * @returns {Record<string, Record<string, {material_name: string, enabled: number, status: string, conflicts: Array}>>}
+ * @param {Array<{id: number, material_name: string, position: string, start_date: string, end_date: string, enabled: number, status: string}>} placements
+ * @returns {Record<string, Record<string, {id: number, material_name: string, enabled: number, status: string, start_date: string, end_date: string, conflicts: Array}>>}
  */
 export function buildScheduleMap(placements = []) {
   // 第一步：按 (日期, 广告位) 收集**全部**投放，不在这里挑一条
@@ -28,8 +28,16 @@ export function buildScheduleMap(placements = []) {
       const dateKey = d.toISOString().slice(0, 10)
       const list = (buckets[dateKey] ||= {})
       const byPos = (list[p.position] ||= [])
-      // status 由服务端派生（T02602），随格子带到视图，前端不再按 enabled 猜
-      byPos.push({ material_name: p.material_name, enabled: p.enabled, status: p.status })
+      // status 由服务端派生（T02602），随格子带到视图，前端不再按 enabled 猜。
+      // id / 区间也带上：冲突面板要能定位到具体投放并直接停用其一（T02927）
+      byPos.push({
+        id: p.id,
+        material_name: p.material_name,
+        enabled: p.enabled,
+        status: p.status,
+        start_date: p.start_date,
+        end_date: p.end_date,
+      })
     }
   }
 
@@ -58,9 +66,12 @@ export function pickPrimary(list) {
   }
   const primary = list[primaryIndex]
   return {
+    id: primary.id,
     material_name: primary.material_name,
     enabled: primary.enabled,
     status: primary.status,
+    start_date: primary.start_date,
+    end_date: primary.end_date,
     conflicts: list.filter((_, i) => i !== primaryIndex),
   }
 }

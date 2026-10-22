@@ -84,6 +84,26 @@
 
     <!-- 新建投放对话框：日期范围选择后需拆分为 start_date / end_date 提交 -->
     <el-dialog v-model="dialogVisible" title="新建投放" width="500px">
+      <!-- T02927：后端拒绝同位重叠时点名冲突对象，不能只留一句「保存失败」。
+           拦截器已弹过 toast，这里把结构化 conflicts 落回表单内部，方便对照修改 -->
+      <el-alert
+        v-if="submitError"
+        data-guide="ads-placement-conflict"
+        class="submit-error"
+        type="error"
+        :closable="false"
+        show-icon
+      >
+        <template #title>{{ submitError.title }}</template>
+        <ul v-if="submitError.conflicts.length" class="conflict-list">
+          <li v-for="c in submitError.conflicts" :key="c.id">
+            素材「{{ c.material_name }}」（投放 #{{ c.id }}）{{ c.start_date }} ~ {{ c.end_date }}
+          </li>
+        </ul>
+        <div v-if="submitError.conflicts.length" class="conflict-hint">
+          请先停用或删除冲突投放，或调整本次日期区间
+        </div>
+      </el-alert>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
         <el-form-item label="素材" prop="material_id">
           <!-- D16：改为服务端搜索（remote），并在下方如实显示「共 N 条」，
@@ -161,6 +181,7 @@ import { dangerConfirm } from '../../utils/dangerConfirm'
 import { Plus, Delete, Close, Check } from '@element-plus/icons-vue'
 
 import api from '../../api'
+import { readBizError } from '../../api/bizError'
 import { AD_POSITION, enumLabel, enumTagType, enumOptions } from '../../constants/enums'
 import { placementStatusMeta } from '../../utils/placementStatus'
 
@@ -179,6 +200,8 @@ const togglingIds = ref([])
 const dialogVisible = ref(false)
 const submitting = ref(false)
 const formRef = ref()
+// T02927：保存被拒时在对话框内展示后端点名的冲突投放（null = 无错误）
+const submitError = ref(null)
 
 const form = reactive({
   material_id: null,
@@ -293,6 +316,7 @@ async function handleToggle(row, next) {
 
 async function openCreateDialog() {
   Object.assign(form, { material_id: null, position: '', dateRange: [] })
+  submitError.value = null
   await fetchMaterials()
   dialogVisible.value = true
 }
@@ -312,6 +336,17 @@ async function handleSubmit() {
     ElMessage.success('创建成功')
     dialogVisible.value = false
     fetchList()
+  } catch (error) {
+    // 后端按 INT-UX-01 回传 data.conflicts：在表单里点名「哪条投放占了同一广告位」，
+    // 而不是把一句通用报错丢给运营去猜
+    const biz = readBizError(error)
+    const conflicts = biz?.data?.conflicts || []
+    submitError.value = {
+      title: conflicts.length
+        ? '无法保存：该广告位在所选区间内已有启用中的投放'
+        : biz?.message || '保存失败',
+      conflicts,
+    }
   } finally {
     submitting.value = false
   }
@@ -374,6 +409,21 @@ onMounted(fetchList)
     display: flex;
     justify-content: flex-end;
     margin-top: 16px;
+  }
+
+  .submit-error {
+    margin-bottom: 16px;
+  }
+
+  .conflict-list {
+    margin: 6px 0 0;
+    padding-left: 18px;
+    line-height: 1.8;
+  }
+
+  .conflict-hint {
+    margin-top: 4px;
+    font-size: 12px;
   }
 }
 </style>

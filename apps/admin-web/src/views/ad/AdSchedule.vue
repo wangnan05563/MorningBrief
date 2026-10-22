@@ -55,13 +55,55 @@
                 >
                   {{ slotStatusTag(data.day, pos).label }}
                 </span>
-                <el-tooltip
+                <!-- T02927：角标可点开冲突清单，列出全部重叠投放并支持就地停用其一。
+                     重叠已不允许新建，能出现在这里的多半是历史数据——光「看见」
+                     不够，还要能当场处置，否则运营只能去投放规则页逐条比对。 -->
+                <el-popover
                   v-if="slotConflicts(data.day, pos).length > 0"
-                  :content="slotConflictText(data.day, pos)"
+                  trigger="click"
                   placement="top"
+                  :width="320"
+                  popper-class="slot-conflict-popover"
                 >
-                  <span class="slot-conflict">+{{ slotConflicts(data.day, pos).length }} 条重叠</span>
-                </el-tooltip>
+                  <template #reference>
+                    <span
+                      class="slot-conflict"
+                      :data-guide="`ads-conflict-${data.day}-${pos}`"
+                    >+{{ slotConflicts(data.day, pos).length }} 条重叠</span>
+                  </template>
+                  <div class="conflict-panel">
+                    <div class="conflict-panel__title">
+                      {{ enumLabel(AD_POSITION, pos) }}位 · {{ data.day }} 当天有
+                      {{ slotEntries(data.day, pos).length }} 条投放重叠
+                    </div>
+                    <div
+                      v-for="item in slotEntries(data.day, pos)"
+                      :key="item.id"
+                      class="conflict-panel__row"
+                      :data-placement-id="item.id"
+                    >
+                      <div class="conflict-panel__meta">
+                        <span class="conflict-panel__name">{{ item.material_name }}</span>
+                        <span class="conflict-panel__range">{{ item.start_date }} ~ {{ item.end_date }}</span>
+                      </div>
+                      <span
+                        class="conflict-panel__status"
+                        :class="`conflict-panel__status--${placementStatusMeta(item.status).tone}`"
+                      >{{ placementStatusMeta(item.status).label }}</span>
+                      <el-button
+                        v-if="item.enabled === 1"
+                        link
+                        type="danger"
+                        size="small"
+                        :loading="disablingIds.includes(item.id)"
+                        @click="disableFromConflict(item)"
+                      >停用</el-button>
+                    </div>
+                    <div class="conflict-panel__hint">
+                      同一广告位当天只应有一条启用中的投放；停用后该投放不再播出
+                    </div>
+                  </div>
+                </el-popover>
               </div>
             </div>
           </div>
@@ -75,6 +117,8 @@
 import { ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import api from '../../api'
+import { ElMessage } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 import ListLoadError from '../../components/ListLoadError.vue'
 import { AD_POSITION, enumLabel, enumOptions } from '../../constants/enums'
 import { buildScheduleMap } from '../../utils/scheduleMap'
@@ -124,12 +168,41 @@ function slotConflicts(dayStr, pos) {
   return getSlotMaterial(dayStr, pos)?.conflicts || []
 }
 
-function slotConflictText(dayStr, pos) {
-  const list = slotConflicts(dayStr, pos)
-  const detail = list
-    .map((c) => `${c.material_name}${c.status === 'active' ? '' : `（${placementStatusMeta(c.status).label}）`}`)
-    .join('、')
-  return `${enumLabel(AD_POSITION, pos)} 位当天有 ${list.length + 1} 条投放重叠，另有：${detail}`
+// 冲突面板要列出「主显那条 + 被折叠的其余投放」，并带上 id / 区间以便停用其一
+function slotEntries(dayStr, pos) {
+  const primary = getSlotMaterial(dayStr, pos)
+  if (!primary) return []
+  return [primary, ...(primary.conflicts || [])]
+}
+
+const disablingIds = ref([])
+
+// 历史重叠数据的就地处置：复用的正是投放规则页那条 enabled 开关（T02491 / D14），
+// 停用后后端会失效生效投放缓存，C 端下一期起不再播出。
+async function disableFromConflict(item) {
+  const ok = await dangerConfirm({
+    action: '停用投放',
+    target: `素材「${item.material_name}」`,
+    scope: `生效区间 ${item.start_date} ~ ${item.end_date}`,
+    lines: [
+      '停用后，之后新生成的节目不再插入该广告；生效投放缓存同步失效。',
+      '已经生成好的节目里广告是拼在音频里的，停用不会把它们里面的广告去掉。',
+    ],
+    irreversible: '启停可随时回退，不影响已生成的节目数据。',
+    confirmLabel: '确认停用',
+  })
+  if (!ok) return
+  disablingIds.value = [...disablingIds.value, item.id]
+  try {
+    await api.put(`/ads/placements/${item.id}`, { enabled: 0 })
+    ElMessage.success('已停用该投放')
+    // 重新拉取排期：冲突角标与主显要随停用一起消失，不能留在界面上说「还在重叠」
+    await fetchSchedule(selectedMonth.value)
+  } catch {
+    // 失败提示由拦截器负责；界面保持原样，不假装已停用
+  } finally {
+    disablingIds.value = disablingIds.value.filter((id) => id !== item.id)
+  }
 }
 
 async function fetchSchedule(monthStr) {
@@ -337,7 +410,7 @@ watch(
         // $color-warning 是 var() 不是色值，rgba() 编译不过，与 DatabaseAdmin 同法直接用作底色
         color: #5b3d00;
         background: $color-warning;
-        cursor: help;
+        cursor: pointer;
       }
 
       // 三个广告位用马卡龙色系小标签区分，与图例颜色对应
@@ -393,6 +466,64 @@ watch(
   :deep(.el-calendar__title) {
     color: $color-text-primary;
     font-weight: 600;
+  }
+}
+
+// 冲突面板内容被 Teleport 到 body，不能挂在 .ad-schedule 下面；
+// scoped 属性仍随父组件编译，样式照常生效
+.conflict-panel {
+  font-size: 12px;
+
+  &__title {
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: $color-text-primary;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-top: 1px solid var(--el-border-color-lighter);
+  }
+
+  &__meta {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__name {
+    color: $color-text-primary;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__range {
+    font-size: 11px;
+    color: $color-text-secondary;
+  }
+
+  &__status {
+    flex-shrink: 0;
+    color: var(--el-color-success-dark, #529b2e);
+
+    &--pending {
+      color: #b88230;
+    }
+
+    &--off,
+    &--expired {
+      color: $color-text-secondary;
+    }
+  }
+
+  &__hint {
+    margin-top: 6px;
+    color: $color-text-secondary;
   }
 }
 </style>

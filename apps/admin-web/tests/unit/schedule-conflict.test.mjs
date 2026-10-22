@@ -49,7 +49,28 @@ test('主显优先给启用中的投放：停用那条不该挤掉启用的', ()
   ])
   assert.equal(map['2026-03-05'].tail.material_name, '在投广告E')
   assert.equal(map['2026-03-05'].tail.enabled, 1)
-  assert.deepEqual(map['2026-03-05'].tail.conflicts, [{ material_name: '过期广告D', enabled: 0, status: 'disabled' }])
+  assert.deepEqual(
+    map['2026-03-05'].tail.conflicts.map(({ material_name, enabled, status }) => ({
+      material_name,
+      enabled,
+      status,
+    })),
+    [{ material_name: '过期广告D', enabled: 0, status: 'disabled' }]
+  )
+})
+
+test('冲突条目带 id 与区间：面板要能定位到具体投放并停用其一（T02927）', () => {
+  const map = buildScheduleMap([
+    { id: 7, material_name: '主显广告', position: 'head', start_date: '2026-03-05', end_date: '2026-03-06', enabled: 1, status: 'active' },
+    { id: 8, material_name: '折叠广告', position: 'head', start_date: '2026-03-05', end_date: '2026-03-05', enabled: 1, status: 'active' },
+  ])
+  const slot = map['2026-03-05'].head
+  assert.equal(slot.id, 7)
+  const [conflict] = slot.conflicts
+  // 没有 id 就没法发 PUT /ads/placements/{id}，冲突面板只能看不能处置
+  assert.equal(conflict.id, 8)
+  assert.equal(conflict.start_date, '2026-03-05')
+  assert.equal(conflict.end_date, '2026-03-05')
 })
 
 test('主显优先给今天真正在播的（status=active），待投放/已过期让位', () => {

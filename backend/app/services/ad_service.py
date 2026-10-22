@@ -200,6 +200,16 @@ class AdService:
         p = await self.db.get(AdPlacement, placement_id)
         if p is None:
             raise ValueError(f"投放不存在: {placement_id}")
+        if enabled == 1:
+            # T02927 / D24：重新启用同样要查冲突。只拦新建的话，
+            # 「两条都停用、再依次启用」就能绕过，护栏等于不存在。
+            await self._assert_no_enabled_overlap(
+                p.position,
+                p.start_date,
+                p.end_date,
+                exclude_id=p.id,
+                field="enabled",
+            )
         p.enabled = enabled
         await self.db.flush()
         # 启停后回传由服务端派生的状态：前端不做二次推算，切换即落位（T02602）
@@ -208,6 +218,85 @@ class AdService:
             "enabled": p.enabled,
             "status": _placement_status(p, date.today()),
         }
+
+    async def _find_enabled_overlaps(
+        self,
+        position: str,
+        start_date: date,
+        end_date: date,
+        exclude_id: Optional[int] = None,
+    ) -> list:
+        """查同广告位、启用中、与给定闭区间相交的投放（含素材名）。"""
+        conditions = [
+            AdPlacement.position == position,
+            AdPlacement.enabled == 1,
+            # 闭区间相交：两段 [s1,e1]、[s2,e2] 有交集 ⇔ s1<=e2 且 e1>=s2
+            AdPlacement.start_date <= end_date,
+            AdPlacement.end_date >= start_date,
+        ]
+        if exclude_id is not None:
+            # 重新启用时排除自己，否则「启用」永远和自身冲突
+            conditions.append(AdPlacement.id != exclude_id)
+        result = await self.db.execute(
+            select(AdPlacement, AdMaterial.name)
+            .join(AdMaterial, AdPlacement.material_id == AdMaterial.id)
+            .where(*conditions)
+            .order_by(AdPlacement.id)
+        )
+        return result.all()
+
+    async def _assert_no_enabled_overlap(
+        self,
+        position: str,
+        start_date: date,
+        end_date: date,
+        exclude_id: Optional[int] = None,
+        field: str = "dateRange",
+    ) -> None:
+        """同一广告位同一时段只允许一条启用中的投放（T02927 / D24）。
+
+        裁决：不允许重叠。C 端每个广告位每期只播一条（get_active_placements
+        每个 position 只留一个结果），重叠入库等于让「播哪条」由数据库返回顺序
+        决定。停用的投放不参与冲突判定——「先停用旧的再建新的」是运营唯一的
+        可逆替换路径，停用记录本身也要留作追溯；但之后想把旧的重启同样会被
+        拦下，否则只校验新建就是可以绕过的假护栏。
+        """
+        rows = await self._find_enabled_overlaps(
+            position, start_date, end_date, exclude_id
+        )
+        if not rows:
+            return
+
+        conflicts = [
+            {
+                "id": p.id,
+                "material_id": p.material_id,
+                "material_name": name,
+                "position": p.position,
+                "start_date": p.start_date.isoformat(),
+                "end_date": p.end_date.isoformat(),
+            }
+            for p, name in rows
+        ]
+        shown = "、".join(
+            f"「{c['material_name']}」（#{c['id']}，"
+            f"{c['start_date']} ~ {c['end_date']}）"
+            for c in conflicts[:3]
+        )
+        more = f" 等 {len(conflicts)} 条" if len(conflicts) > 3 else ""
+        message = (
+            f"该广告位在所选区间内已有启用中的投放：{shown}{more}；"
+            "请先停用或调整日期区间"
+        )
+        # INT-UX-01：字段级明细 + 结构化冲突列表，界面不用再去切字符串
+        raise BizError(
+            code=400,
+            message=message,
+            data={
+                "errors": [{"field": field, "message": message}],
+                "conflicts": conflicts,
+            },
+        )
 
     async def create_placement(
         self,
@@ -244,6 +333,10 @@ class AdService:
                     ]
                 },
             )
+
+        # T02927 / D24：同位区间重叠不再入库。重叠时 C 端每个广告位只能挑一条播，
+        # 挑哪条由数据库返回顺序决定，排期页看到两条、实际只播一条。
+        await self._assert_no_enabled_overlap(position, start_date, end_date)
 
         placement = AdPlacement(
             material_id=material_id,
@@ -332,6 +425,12 @@ class AdService:
                 AdPlacement.end_date >= target_date,
                 AdPlacement.enabled == 1,
             )
+            # T02927：稳定排序。新建/重启已禁止重叠，但历史脏数据里可能仍有同
+            # 广告位同日多条；没有 ORDER BY 时返回顺序由执行计划决定，而下面的
+            # dict 赋值是「后写覆盖」——同一日期两次查询可能给出不同素材，且
+            # 不确定结果还会被缓存 25h。按 id 升序后固定为「最新创建的那条生效」，
+            # 行为可预期（探针无法模拟执行计划差异，排序本身由源码 grep 验收）。
+            .order_by(AdPlacement.id)
         )
         rows = result.all()
 
