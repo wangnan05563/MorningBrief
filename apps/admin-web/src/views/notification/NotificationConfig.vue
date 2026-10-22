@@ -60,11 +60,13 @@
             <el-form-item label="Webhook 地址">
               <el-input
                 v-model="configForm.dingtalk_webhook"
-                :type="showWebhook ? 'text' : 'password'"
+                :type="dingtalkMasked || showWebhook ? 'text' : 'password'"
                 placeholder="https://oapi.dingtalk.com/robot/send?access_token=xxx"
               >
                 <template #append>
+                  <span v-if="dingtalkMasked" class="masked-hint">已脱敏</span>
                   <IconButton
+                    v-else
                     :icon="showWebhook ? Hide : View"
                     :label="showWebhook ? '隐藏' : '显示'"
                     desc="切换密钥可见性"
@@ -73,7 +75,12 @@
                 </template>
               </el-input>
               <div class="field-tip">
-                钉钉群机器人 → 安全设置 → 自定义 → Webhook 地址
+                <template v-if="dingtalkMasked">
+                  当前显示为脱敏值（****尾4）：保持原样即不修改；换机器人请粘贴完整地址；清空即删除配置。
+                </template>
+                <template v-else>
+                  钉钉群机器人 → 安全设置 → 自定义 → Webhook 地址；清空即删除配置。
+                </template>
               </div>
             </el-form-item>
             <el-form-item label="加签密钥">
@@ -103,11 +110,13 @@
             <el-form-item label="Webhook 地址">
               <el-input
                 v-model="configForm.wecom_webhook"
-                :type="showWecomWebhook ? 'text' : 'password'"
+                :type="wecomMasked || showWecomWebhook ? 'text' : 'password'"
                 placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
               >
                 <template #append>
+                  <span v-if="wecomMasked" class="masked-hint">已脱敏</span>
                   <IconButton
+                    v-else
                     :icon="showWecomWebhook ? Hide : View"
                     :label="showWecomWebhook ? '隐藏' : '显示'"
                     desc="切换密钥可见性"
@@ -116,7 +125,12 @@
                 </template>
               </el-input>
               <div class="field-tip">
-                企业微信群机器人 → 添加机器人 → 复制 Webhook 地址
+                <template v-if="wecomMasked">
+                  当前显示为脱敏值（****尾4）：保持原样即不修改；换机器人请粘贴完整地址；清空即删除配置。
+                </template>
+                <template v-else>
+                  企业微信群机器人 → 添加机器人 → 复制 Webhook 地址；清空即删除配置。
+                </template>
               </div>
             </el-form-item>
           </el-form>
@@ -496,7 +510,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useDraft } from '../../composables/useDraft'
 import { useConfigLoad } from '../../composables/useConfigLoad'
 import { Check, View, Refresh, Hide, Connection, Close } from '@element-plus/icons-vue'
@@ -549,6 +563,12 @@ const configForm = reactive({
   email_to: '',
   admin_base_url: '',
 })
+
+// 后端对 webhook 的凭据参数做「****尾4」脱敏；看到 **** 说明手里是脱敏值，
+// 保持原样回传 = 未修改，界面的眼睛切换与「值已脱敏」提示都以此为准。
+const MASKED_VALUE = /\*{4}/
+const dingtalkMasked = computed(() => MASKED_VALUE.test(configForm.dingtalk_webhook))
+const wecomMasked = computed(() => MASKED_VALUE.test(configForm.wecom_webhook))
 // T00828：断点续录——表单变化自动持久化，重新进入页面恢复未提交输入（密钥字段不落盘）
 // T01834：钉钉/企微 webhook URL 含 access_token 等密钥参数，一并排除不落盘
 const { apply: applyDraft, peek: peekDraft, track: trackDraft, commit: commitDraft } = useDraft('notification-config')
@@ -615,8 +635,15 @@ async function handleSaveConfig() {
   }
   saving.value = true
   try {
+    const retained = []
+    if (dingtalkMasked.value) retained.push('钉钉')
+    if (wecomMasked.value) retained.push('企业微信')
     await saveNotificationConfig({ ...configForm })
-    ElMessage.success('配置已保存')
+    ElMessage.success(
+      retained.length
+        ? `配置已保存，已保留原有${retained.join('/')}机器人配置`
+        : '配置已保存',
+    )
     commitDraft()
     // 重新加载以刷新脱敏显示与 detected_base_url
     await cfgLoad.load()
@@ -878,6 +905,13 @@ onMounted(async () => {
       font-size: 12px;
       color: $color-text-secondary;
       margin-top: 4px;
+    }
+
+    .masked-hint {
+      font-size: 12px;
+      color: $color-text-secondary;
+      padding: 0 8px;
+      white-space: nowrap;
     }
   }
 
