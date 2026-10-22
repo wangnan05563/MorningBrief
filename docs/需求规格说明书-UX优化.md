@@ -232,8 +232,8 @@ T02323 对全部菜单做了只读源码走查，产出 634 条带 `file:line` �
 
 | 编号 | 变更 | 说明 |
 |---|---|---|
-| INT-UX-01 | `PUT /admin/api/v1/db/tables/{t}/rows/{pk}` | 拒绝敏感列哨兵；返回字段级错误 |
-| INT-UX-02 | `POST /admin/api/v1/db/tables/{t}/import` | replace 改 `ON CONFLICT DO UPDATE`；新增 `dry_run=true` |
+| INT-UX-01 | `PATCH /admin/api/v1/db-admin/tables/{t}/rows/{pk}` | 拒绝敏感列哨兵；返回字段级错误 |
+| INT-UX-02 | `POST /admin/api/v1/db-admin/tables/{t}/import` | replace 改 `ON CONFLICT DO UPDATE`；新增 `dry_run=true` |
 | INT-UX-03 | `GET /admin/api/v1/stats/*` | 返回 `unit`/`scale` 元数据（或 OpenAPI 扩展） |
 | INT-UX-04 | `GET /admin/api/v1/cos/config` | 增加 `loaded`/`updated_at` 以支持「加载失败禁存」判定（或前端仅用请求成功与否） |
 | INT-UX-05 | `POST /admin/api/v1/ai/chat` | 前端超时覆盖；后端超时与网关实测对齐 |
