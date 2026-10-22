@@ -36,13 +36,14 @@
     }
   },
   "ad_impression": {
-    "label": "广告曝光",
+    "label": "推算广告曝光",
     "unit": "count",
     "display": {
       "unit": "次",
       "factor": 1,
       "precision": 0
-    }
+    },
+    "note": "按每期 3 段推算（播放数 × 3），不是真实曝光埋点，不能用来算点击率/完播率"
   },
   "trigger_rate": {
     "label": "触发率",

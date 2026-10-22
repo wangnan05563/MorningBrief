@@ -29,10 +29,14 @@ METRIC_META: dict[str, dict] = {
         "unit": "second",
         "display": {"unit": "分钟", "factor": 1 / 60, "precision": 1},
     },
+    # D39：值是播放数 × 3 的推算（每期固定三段广告），不是曝光埋点。
+    # label 直接写「推算」，note 随 meta 下发到卡片脚注——只在文档或 tooltip 里
+    # 说明，截图传播时仍会被读成真实曝光。
     "ad_impression": {
-        "label": "广告曝光",
+        "label": "推算广告曝光",
         "unit": "count",
         "display": {"unit": "次", "factor": 1, "precision": 0},
+        "note": "按每期 3 段推算（播放数 × 3），不是真实曝光埋点，不能用来算点击率/完播率",
     },
     # ---- INT-UX-03 / T02526：llm-metrics 与 rss-health ----
     # 这四个计数与三条率同源于 rewriter._WORD_COUNT_RETRY_STATS（进程内累计，重启清零）。

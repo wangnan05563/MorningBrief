@@ -58,8 +58,16 @@
                 <div class="metric-label">区间入库</div>
                 <div class="metric-value">{{ ch.range_total }}</div>
               </div>
+              <!-- D46：这个数字只数本频道配置里的源（channel.rss_sources），
+                   与「RSS 源状态」页的全局清单（rss.yaml）不是同一份口径。
+                   标签写清归属，tooltip 指出去哪儿看全局可达性 -->
               <div class="metric-item">
-                <div class="metric-label">RSS 源</div>
+                <el-tooltip
+                  content="本频道配置的 RSS 源条数（channel.rss_sources）；全局源清单与可达性请看「数据分析 → RSS 源状态」"
+                  placement="top"
+                >
+                  <div class="metric-label metric-label--hint">本频道已配源（个）</div>
+                </el-tooltip>
                 <div class="metric-value">{{ ch.rss_source_count }}</div>
               </div>
               <div class="metric-item">
@@ -343,6 +351,13 @@ onMounted(loadData)
           font-size: 11px;
           color: $color-text-secondary;
           margin-bottom: 2px;
+
+          /* 可悬停取口径的标签给一个虚线提示，否则没人知道这里能 hover */
+          &.metric-label--hint {
+            display: inline-block;
+            border-bottom: 1px dashed $color-border;
+            cursor: help;
+          }
         }
 
         .metric-value {

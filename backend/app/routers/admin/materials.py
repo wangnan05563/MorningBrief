@@ -199,7 +199,7 @@ def _ensure_media_type_supported(media_type: str) -> None:
 @router.get("")
 async def list_materials(
     workflow_id: str = Query(None, description="按工作流 ID 过滤（运行期临时关联，终态后释放，详情页改用 channel_id）"),
-    channel_id: int = Query(None, description="按频道 ID 过滤（素材本质是频道级素材池，详情页用此查询）"),
+    channel_id: int = Query(None, description="按频道 ID 过滤（素材本质是频道级素材库，详情页用此查询）"),
     keyword: str = Query(None, description="按标题/来源模糊搜索（素材库管理页用）"),
     status: str = Query(None, description="按状态过滤（pending/selected/skipped）"),
     # T00775：精确过滤（绕开 keyword 的 LIKE 语义，避免标题含 % / _ 时被当作通配符）
@@ -216,9 +216,9 @@ async def list_materials(
 
     列表仅返回摘要字段，content 全文走详情接口获取，避免单次响应过大。
 
-    过滤策略：素材属于「频道级素材池」（channel_id 始终有值，workflow_id 仅为
+    过滤策略：素材属于「频道级素材库」（channel_id 始终有值，workflow_id 仅为
     运行期临时关联，工作流终态后由调度器重置为 NULL）。详情页展示某工作流的
-    爬虫素材时，应传 channel_id 查询该频道素材池，而非 workflow_id——否则已完成
+    爬虫素材时，应传 channel_id 查询该频道素材库，而非 workflow_id——否则已完成
     工作流的素材因 workflow_id 被释放而全部落空，导致面板空白。
     """
     # 基础查询条件：workflow_id / channel_id 可选过滤（AND）

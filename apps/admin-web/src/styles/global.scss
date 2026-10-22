@@ -49,6 +49,15 @@ html, body {
     font-weight: 700;
     color: $color-primary-dark;
   }
+
+  /* 口径脚注（D39 推算曝光等）：跟着数字走，截图转发也不丢 */
+  .metric-note {
+    margin-top: 6px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: $color-text-secondary;
+    text-align: left;
+  }
 }
 
 /* === 页面容器 === */

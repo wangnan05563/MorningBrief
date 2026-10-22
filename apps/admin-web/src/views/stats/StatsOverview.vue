@@ -37,6 +37,9 @@
           <div data-guide="stats-metric-card" class="metric-card">
             <div class="metric-label">{{ m.label }}</div>
             <div class="metric-value">{{ m.value }}</div>
+            <!-- D39：推算值必须在卡片上自证，不能只在文档里说明——
+                 截图转发出去时，脚注是唯一还跟着数字走的口径 -->
+            <div v-if="m.note" class="metric-note">{{ m.note }}</div>
           </div>
         </el-card>
       </el-col>
@@ -127,7 +130,13 @@ const metrics = computed(() =>
     .filter((key) => key !== 'meta')
     .map((key) => {
       const meta = overview.value.meta?.[key]
-      return { key, label: metricLabel(meta), value: metricValue(overview.value[key], meta) }
+      return {
+        key,
+        label: metricLabel(meta),
+        value: metricValue(overview.value[key], meta),
+        // D39：口径说明随 meta 下发（如推算曝光），不在页面里认 key 写死
+        note: meta?.note || '',
+      }
     }),
 )
 

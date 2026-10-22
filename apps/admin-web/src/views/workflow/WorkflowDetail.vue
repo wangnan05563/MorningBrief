@@ -85,10 +85,15 @@
         <!-- crawl 素材 -->
         <el-collapse-item name="crawl">
           <template #title>
-            <span class="panel-title">爬虫采集 · 素材</span>
+            <span class="panel-title">爬虫采集 · 素材库</span>
             <el-badge :value="materials.total" :hidden="materials.total === 0" class="panel-badge" />
           </template>
           <div class="panel-content">
+            <!-- C114：这里与菜单「素材库管理」是同一份频道级素材库，不是另一套「爬虫素材」。
+                 跨页写操作不会自动互相刷新，各页都有自己的「刷新」 -->
+            <div class="panel-scope-note">
+              与菜单「素材库管理」同一份数据（按本频道查询）；在另一页增删改后，回到这里请点「刷新」。
+            </div>
             <div class="panel-toolbar">
               <IconButton size="small" type="primary" :icon="Plus" label="新增素材" desc="新增一条素材" @click="openMaterialDialog()" />
               <IconButton size="small" :icon="Refresh" label="刷新" desc="重新加载素材列表" @click="loadMaterials" />
@@ -96,7 +101,8 @@
             <el-table :data="materials.list" v-loading="materials.loading" size="small" stripe>
               <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
               <el-table-column prop="source" label="来源" width="100" />
-              <el-table-column prop="category" label="品类" width="80" />
+              <!-- C114：字段名与「素材库管理」统一为「分类」（同一列 category） -->
+              <el-table-column prop="category" label="分类" width="80" />
               <el-table-column label="状态" width="90">
                 <template #default="{ row }">
                   <el-tag size="small" :type="materialStatusType(row.status)">{{ materialStatusLabel(row.status) }}</el-tag>
@@ -363,10 +369,14 @@
         <el-form-item label="来源" required>
           <el-input v-model="materialDialog.form.source" />
         </el-form-item>
-        <el-form-item label="URL" required>
-          <el-input v-model="materialDialog.form.url" />
+        <!-- C114：旧表单要求必填 URL，但这里新增的素材走 list 录入，后端按正文
+             content_hash 合成去重 URL，填了也会被丢弃（假必填）。改成只读展示：
+             URL 是去重键，本页不提供修改；素材库管理页同样不编辑它。 -->
+        <el-form-item v-if="materialDialog.id" label="URL">
+          <el-input :model-value="materialDialog.form.url" disabled />
+          <span class="form-tip">URL 是去重键，仅展示，不可修改</span>
         </el-form-item>
-        <el-form-item label="品类">
+        <el-form-item label="分类">
           <el-input v-model="materialDialog.form.category" />
         </el-form-item>
         <el-form-item label="状态" v-if="materialDialog.id">
@@ -667,18 +677,30 @@ function openMaterialDialog(material = null) {
 
 async function saveMaterial() {
   const f = materialDialog.value.form
-  if (!f.title || !f.source || !f.url || !f.content) {
-    ElMessage.warning('请填写标题、来源、URL 和正文')
+  if (!f.title || !f.source || !f.content) {
+    ElMessage.warning('请填写标题、来源和正文')
     return
   }
   materialDialog.value.saving = true
   try {
     if (materialDialog.value.id) {
-      await updateMaterial(materialDialog.value.id, f)
+      // url 不在 MaterialUpdateRequest 里（它是去重键），带上也会被静默丢弃
+      await updateMaterial(materialDialog.value.id, {
+        title: f.title,
+        source: f.source,
+        category: f.category,
+        status: f.status,
+        content: f.content,
+      })
       ElMessage.success('素材已更新')
     } else {
+      // 不传 url / status：list 录入的 url 由后端按 content_hash 合成，
+      // status 由后端默认 pending——传了也是被 pydantic 静默忽略
       await createMaterial({
-        ...f,
+        title: f.title,
+        source: f.source,
+        category: f.category,
+        content: f.content,
         workflow_id: route.params.id,
         channel_id: detail.value.channel_id,
       })
@@ -1064,6 +1086,24 @@ onUnmounted(() => {
 
   .panel-content {
     padding: 12px 0;
+  }
+
+  // C114：跨页同一份数据的说明；只在这一处写，不必给每个字段都加注释
+  .panel-scope-note {
+    margin-bottom: 10px;
+    padding: 6px 10px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: $color-text-secondary;
+    background: $color-bg;
+    border-radius: $radius-sm;
+  }
+
+  // 表单字段旁的补充说明（URL 为去重键、只读）
+  .form-tip {
+    margin-left: 8px;
+    font-size: 12px;
+    color: $color-text-secondary;
   }
 
   // 质量审核报告（T01712 P1）：标题行 + issue 明细表

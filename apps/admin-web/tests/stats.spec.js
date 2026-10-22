@@ -78,7 +78,9 @@ test.describe('统计页面', () => {
     await expect(page.getByText('播放量').first()).toBeVisible({ timeout: 30000 })
     await expect(page.getByText('完播率(%)').first()).toBeVisible({ timeout: 30000 })
     await expect(page.getByText('平均收听(分钟)')).toBeVisible({ timeout: 30000 })
-    await expect(page.getByText('广告曝光').first()).toBeVisible({ timeout: 30000 })
+    // D39：推算值必须自证——标签带「推算」，卡片脚注写明算法与不可用途
+    await expect(page.getByText('推算广告曝光(次)').first()).toBeVisible({ timeout: 30000 })
+    await expect(page.locator('.metric-note').filter({ hasText: '按每期 3 段推算' })).toBeVisible({ timeout: 30000 })
 
     // 概览数值应被渲染（千分位后的 12345）
     await expect(page.locator('.metric-value').filter({ hasText: '12,345' })).toBeVisible({ timeout: 30000 })

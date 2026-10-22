@@ -16,6 +16,11 @@
             desc="在素材库里直接补一条记录；上传书稿/文档请走菜单「素材录入」"
             @click="openCreate"
           />
+          <!-- C114：这里与工作流详情「爬虫采集 · 素材库」是同一份频道级素材，
+               跨页写入不会自动推送，各自刷新即可看到对方改动 -->
+          <span class="page-scope-note">
+            与工作流详情「爬虫采集 · 素材库」是同一份数据；在另一页增删改后，请点「刷新」。
+          </span>
         </div>
       </template>
 
@@ -43,9 +48,7 @@
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="filters.status" placeholder="全部状态" clearable style="width: 140px" @change="onSearch">
-            <el-option label="待消费" value="pending" />
-            <el-option label="已选题" value="selected" />
-            <el-option label="已跳过" value="skipped" />
+            <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="来源类型">
@@ -69,6 +72,7 @@
         </el-form-item>
         <el-form-item>
           <IconButton type="primary" :loading="loading" :icon="Search" label="搜索" desc="按当前条件查询素材" @click="onSearch" />
+          <IconButton :loading="loading" :icon="Refresh" label="刷新" desc="重新加载当前条件下的素材（跨页改动需手动刷新）" @click="load" />
           <IconButton :icon="RefreshLeft" label="重置" desc="重置筛选条件" @click="onReset" />
         </el-form-item>
         <el-form-item label="视图">
@@ -235,9 +239,7 @@
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="editForm.status" style="width: 160px">
-            <el-option label="待消费" value="pending" />
-            <el-option label="已选题" value="selected" />
-            <el-option label="已跳过" value="skipped" />
+            <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
         <!-- T00716：媒体类型 + 媒体 URL（text 素材隐藏媒体输入） -->
@@ -330,7 +332,7 @@
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Plus, Close, Search, RefreshLeft, Edit, Delete, View, Check, Picture } from '@element-plus/icons-vue'
+import { Plus, Close, Search, Refresh, RefreshLeft, Edit, Delete, View, Check, Picture } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { formatTime } from '../../utils/format'
 import { blankedFieldMessage, findBlankedCriticalField } from '../../utils/blankGuard'
@@ -359,6 +361,8 @@ import {
 /** 录入渠道 / 媒体类型选项与展示文案统一取自 src/constants/enums.js（FR-UX-405 / T02504） */
 const SOURCE_TYPE_OPTIONS = enumOptions(MATERIAL_SOURCE_TYPE)
 const MEDIA_TYPE_OPTIONS = enumOptions(MATERIAL_MEDIA_TYPE)
+// C114：筛选与编辑弹窗共用同一份状态字典，页面不再自带第二套「待消费/已选题/已跳过」
+const statusOptions = enumOptions(MATERIAL_STATUS)
 
 const route = useRoute()
 const statusLabel = (s) => enumLabel(MATERIAL_STATUS, s)
@@ -750,6 +754,12 @@ function applyDeepLink() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+/* C114：与工作流详情同一份数据的提示，弱化到不抢按钮的注意力 */
+.page-scope-note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
 }
 .page-title {
   font-weight: 600;

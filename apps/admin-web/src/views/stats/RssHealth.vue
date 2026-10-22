@@ -29,6 +29,15 @@
       </el-col>
     </el-row>
 
+    <!-- D46：本页「源总数」数的是 rss.yaml 全局清单，频道健康度卡片上的
+         「本频道已配源」数的是各频道自己的配置——两个数字本来就不必相等。
+         不写明，运营会拿它们互相当校验，然后报「数据不一致」 -->
+    <div data-guide="rss-source-scope" class="scope-note">
+      <span class="scope-note__text">
+        本页源清单来自后端 rss.yaml（全局）；频道健康度卡片里的「本频道已配源」是各频道自己的配置，两处数字不必相等。
+      </span>
+    </div>
+
     <!-- T02508（FR-UX-503）：巡检状态与「连续失败」次数保存在服务进程内存里，重启即归零。
          不标起点，运维会把"刚重启所以全是正常"当成持续结论 -->
     <div data-guide="rss-health-scope" class="scope-note">
@@ -191,7 +200,7 @@ const unknownCount = computed(() => rawData.value.unknown || 0)
 
 // 汇总卡片：4 个数字染色区分，便于快速识别整体可达性
 const summaryCards = computed(() => [
-  { key: 'total', label: '源总数', value: rawData.value.total, cls: 'is-total' },
+  { key: 'total', label: '全局源清单总数', value: rawData.value.total, cls: 'is-total' },
   { key: 'ok', label: '正常', value: rawData.value.ok, cls: 'is-ok' },
   { key: 'fail', label: '失败', value: rawData.value.fail, cls: 'is-fail' },
   { key: 'unknown', label: '未巡检', value: rawData.value.unknown || 0, cls: 'is-unknown' },
