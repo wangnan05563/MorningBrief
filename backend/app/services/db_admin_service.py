@@ -432,10 +432,10 @@ class DbAdminService:
         pk_col = self._get_single_pk_column(schema)
         valid_cols = {c["name"] for c in schema["columns"] if not c["primary_key"]}
 
-        # 过滤：仅保留有效且非主键且非空的字段
+        # 只按「列存在且非主键」过滤。空串/None 是用户把字段清空后的真实值，不是「没填」：
+        # 前端按脏字段提交，出现在 payload 里就意味着要改。这里再把它们丢掉，被清空的列会
+        # 从 SET 子句里消失，接口照样返回成功，用户看到的是「改了没生效」。
         filtered = {k: v for k, v in values.items() if k in valid_cols}
-        # 空字符串视为不更新（避免误清空），但显式 None 表示置空
-        filtered = {k: v for k, v in filtered.items() if v is not None and v != ""}
         if not filtered:
             raise ParamError("无有效更新字段")
 

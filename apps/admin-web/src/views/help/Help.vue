@@ -507,7 +507,7 @@ const docSections = [
       {
         type: 'feature',
         title: '核心功能',
-        content: '提供 20+ 业务表的在线 CRUD 操作，支持表结构查看、记录编辑、SQL 查询、CSV 导入导出；敏感字段（password/secret/token/key）在列表、编辑与审计日志中均自动脱敏；危险操作需手输确认文本（删除输入表名、导入输入 IMPORT），且仅在服务端配置了确认开关时才放行。',
+        content: '提供白名单内 16 张业务表的在线浏览与增删改（搜索、排序、分页、表结构查看），支持 CSV/JSON 导入导出，导入前有 dry-run 预览（预计插入/更新/错误行，预览不写库）。页面不提供 SQL 查询或 SQL 执行入口。敏感字段（password/secret/token/key）在列表、编辑与审计日志中均自动脱敏，且保存时不会把脱敏占位值写回真实凭据。危险操作需手输确认文本（删除输入表名、导入输入 IMPORT），且仅在服务端配置了 DB_ADMIN_CONFIRM_TOKEN 时才放行。',
       },
       {
         type: 'note',
