@@ -26,7 +26,7 @@
 """
 from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,35 +43,41 @@ router = APIRouter(prefix="/admin/api/v1/ai", tags=["B端-AI服务"])
 
 
 class LLMConfigBody(BaseModel):
+    """LLM 配置。数值区间与 AIConfig.vue 的 :min/:max 逐项对齐（T02902）：
+    页面能改的字段接口也必须校验，脏值不得直接热更进 Settings。"""
+
     api_key: str = ""
     base_url: str = ""
     model: str = ""
-    timeout_sec: int = 30
+    timeout_sec: int = Field(30, ge=5, le=120)
     # 知识库问答超时（FR-UX-701 / T02515）：必须在这里声明——本 body 是逐字段白名单，
     # 没声明的键会被 pydantic 静默丢掉（T01729 的 llm_max_script_segments 就是这么坏的）。
+    # 区间在 save_config 里单独校验以给出跨端解释（前端 130s 兜底）。
     chat_timeout_sec: int = 120
-    retry_attempts: int = 3
-    target_duration_sec: int = 600
-    segment_gap_sec: float = 0.5
+    retry_attempts: int = Field(3, ge=0, le=10)
+    target_duration_sec: int = Field(600, ge=180, le=1200)
+    segment_gap_sec: float = Field(0.5, ge=0, le=3)
     # 单期节目最大段数上限（T01729：30 分钟听书档热调 18~20，默认 10）
-    llm_max_script_segments: int = 10
+    llm_max_script_segments: int = Field(10, ge=3, le=40)
 
 
 class TTSConfigBody(BaseModel):
+    """TTS 配置。数值区间同样与 AIConfig.vue 的输入控件对齐（T02902）。"""
+
     # Provider 选择（aliyun/edge/tencent）
     provider: str = "aliyun"
     # 阿里云 NLS 字段
     api_key: str = ""
     appkey: str = ""
     voice: str = "xiaoyun"
-    sample_rate: int = 44100
+    sample_rate: int = Field(44100, ge=8000, le=48000)
     format: str = "mp3"
-    timeout_sec: int = 60
-    retry_attempts: int = 3
+    timeout_sec: int = Field(60, ge=10, le=300)
+    retry_attempts: int = Field(3, ge=0, le=10)
     # 阿里云 TTS 音量/语速/基频（NLS tts_request 参数）
-    aliyun_volume: int = 50
-    aliyun_speech_rate: int = 0
-    aliyun_pitch_rate: int = 0
+    aliyun_volume: int = Field(50, ge=0, le=100)
+    aliyun_speech_rate: int = Field(0, ge=-500, le=500)
+    aliyun_pitch_rate: int = Field(0, ge=-500, le=500)
     # Edge-TTS 字段
     edge_voice: str = "zh-CN-XiaoxiaoNeural"
     edge_rate: str = ""
@@ -82,8 +88,8 @@ class TTSConfigBody(BaseModel):
     tencent_secret_key: str = ""
     tencent_region: str = "ap-guangzhou"
     tencent_voice_type: int = 101011
-    tencent_volume: int = 0
-    tencent_speed: int = 0
+    tencent_volume: int = Field(0, ge=-10, le=10)
+    tencent_speed: int = Field(0, ge=-2, le=6)
     # Kokoro TTS 字段（本地离线，免费高质量）
     kokoro_lang: str = "z"
     kokoro_voice: str = "zf_xiaoxiao"
@@ -98,6 +104,20 @@ class TTSConfigBody(BaseModel):
     # 结构：{"enabled": bool, "strategy": "round_robin"|"random"|"interval",
     # "interval": int, "voices": {provider: [voice_key, ...]}}
     cross_voice: Optional[dict] = None
+
+    @field_validator("cross_voice")
+    @classmethod
+    def _check_cross_voice_interval(cls, value):
+        """interval 的 1–20 只写在前端输入框上（T02902），接口层同样要拦。"""
+        if value is None or value.get("interval") is None:
+            return value
+        try:
+            interval = int(value["interval"])
+        except (TypeError, ValueError):
+            raise ValueError("交叉音色间隔必须是 1–20 的整数")
+        if not 1 <= interval <= 20:
+            raise ValueError("交叉音色间隔需在 1–20 段之间")
+        return value
 
 
 class ImageConfigBody(BaseModel):
