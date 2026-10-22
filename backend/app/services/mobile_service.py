@@ -11,6 +11,7 @@
 
 约定：服务层只做 ORM 操作（含 flush），由路由层统一 await db.commit()。
 """
+import asyncio
 import json
 import logging
 import threading
@@ -35,6 +36,39 @@ MAINTENANCE_KEY = "maintenance_mode"
 _maint_cache_lock = threading.Lock()
 _maint_cache: dict = {"value": None, "ts": 0.0}
 _MAINT_CACHE_TTL = 5  # 秒
+# 降级告警只在「健康 → 读失败」的跃迁发一次，恢复后重置（见 is_maintenance_enabled）
+_maint_degraded = False
+
+
+def _notify_maintenance_check_failed(error_type: str) -> None:
+    """维护态检查降级告警（critical，走 NotifierHub 已配置渠道）。
+
+    与内网穿透启动失败同法：守护线程里 asyncio.run，不阻塞 trigger_workflow；
+    渠道未配置时 hub 内部 no-op。仅首次降级调用，避免数据库持续故障时刷屏。
+    """
+    def _send() -> None:
+        try:
+            from app.services.notifier.base import NotificationEvent
+            from app.services.notifier.hub import get_notifier_hub
+
+            event = NotificationEvent(
+                title="维护态检查失败，新任务已按停服处理",
+                message=(
+                    f"读取维护态标志失败（{error_type}）。\n"
+                    "数据库恢复前，新工作流触发会被拒绝（fail-closed）；"
+                    "若这并非预期停服，请检查数据库连通性。"
+                ),
+                severity="critical",
+                source="workflow_scheduler",
+                extra={"error_type": error_type},
+            )
+            asyncio.run(get_notifier_hub().send(event))
+        except Exception:
+            logger.exception("发送维护态降级告警失败")
+
+    threading.Thread(
+        target=_send, daemon=True, name="maintenance-degrade-alert"
+    ).start()
 
 
 def _serialize_message(row: AdminInbox) -> dict:
@@ -357,22 +391,42 @@ async def get_maintenance(db) -> dict:
 async def is_maintenance_enabled(db) -> bool:
     """维护态判定（进程内缓存 TTL 5s，避免每次 trigger_workflow 都查库）。
 
-    缓存未命中 / 过期时查库并回填；任何异常按"非维护态"处理，保证安全默认。
+    读库异常时不再放行（T02612）：先沿用最后一次已知值（即使缓存已过期），
+    从未成功读到过就按维护态处理（fail-closed）——数据库超时往往正是故障现场，
+    此时放行新任务等于把刚下的应急停服指令静默绕过。首次降级发 critical 告警。
     """
+    global _maint_degraded
     now = time.time()
     with _maint_cache_lock:
         cached = _maint_cache["value"]
         if cached is not None and now - _maint_cache["ts"] < _MAINT_CACHE_TTL:
             return cached
-    on = False
+        # ts>0 才代表「曾经读到过真实值」；reset 后的 0.0 是未知态
+        known = cached is not None and _maint_cache["ts"] > 0
+
     try:
         on = (await get_maintenance(db)).get("enabled", False)
     except Exception as e:
-        logger.warning("读取维护态失败，按非维护态处理: %s", e)
-        on = False
+        with _maint_cache_lock:
+            on = cached if known else True
+            _maint_cache["value"] = on
+            _maint_cache["ts"] = now
+            first_degrade = not _maint_degraded
+            _maint_degraded = True
+        logger.error(
+            "读取维护态失败 type=%s，%s",
+            type(e).__name__,
+            "沿用最后已知值 %s" % on if known else "无已知值，按维护态拒绝新任务（fail-closed）",
+            exc_info=e,
+        )
+        if first_degrade:
+            _notify_maintenance_check_failed(type(e).__name__)
+        return on
+
     with _maint_cache_lock:
         _maint_cache["value"] = on
         _maint_cache["ts"] = now
+        _maint_degraded = False
     return on
 
 

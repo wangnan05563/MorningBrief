@@ -25,7 +25,7 @@ from sqlalchemy import select, delete, or_
 from app.cache.manager import cache
 from app.config import get_settings
 from app.core.event_bus import Event, get_event_bus
-from app.core.exceptions import ParamError
+from app.core.exceptions import BizError, ParamError
 from app.core.timeutil import localnow_naive
 from app.database import AsyncSessionLocal
 from app.models import Episode, EpisodeStatus, Review, ReviewStatus, Script, Workflow, WorkflowStep
@@ -608,20 +608,25 @@ class WorkflowScheduler:
             raise ParamError("优先级范围 0-10")
 
         # 应急停服 / 维护态守卫（FR-M902）：维护态开启时拒绝新任务触发。
-        # 缓存化读取（TTL 5s），检查异常一律放行，绝不因维护检查失败而阻断正常生产。
+        # 缓存化读取（TTL 5s）。读取降级由 is_maintenance_enabled 内部处理
+        # （沿用最后已知值 / 无已知值即 fail-closed）；这里兜住「连 session 都建不起来」
+        # 的情况，同样按停服处理——数据库不可用的时刻正是最需要停住新任务的时刻（T02612）。
         try:
-            from app.core.exceptions import BizError
             from app.services import mobile_service
             async with AsyncSessionLocal() as _mdb:
-                if await mobile_service.is_maintenance_enabled(_mdb):
-                    raise BizError(
-                        code=409,
-                        message="系统处于维护/应急停服态，已暂停新任务触发",
-                    )
-        except BizError:
-            raise
-        except Exception as _maint_err:  # 维护态检查异常不阻塞正常触发
-            logger.warning("维护态检查失败，放行触发: %s", _maint_err)
+                maintenance_on = await mobile_service.is_maintenance_enabled(_mdb)
+        except Exception as _maint_err:
+            logger.error(
+                "维护态检查失败 type=%s，按停服处理以阻止新任务",
+                type(_maint_err).__name__,
+                exc_info=_maint_err,
+            )
+            maintenance_on = True
+        if maintenance_on:
+            raise BizError(
+                code=409,
+                message="系统处于维护/应急停服态，已暂停新任务触发",
+            )
 
         # trigger_lock 串行化序号生成与入队，避免并发触发产生重复 ID
         async with self._trigger_lock:
