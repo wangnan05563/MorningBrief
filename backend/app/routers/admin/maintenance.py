@@ -6,7 +6,7 @@
 import logging
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AdminPayload, require_admin
@@ -20,10 +20,28 @@ router = APIRouter(prefix="/admin/api/v1/maintenance", tags=["B端-系统清理"
 
 
 class CleanupRequest(BaseModel):
-    """清理请求体。"""
+    """数据库/日志清理请求体：都按天数窗口执行，所以 days 是本端点的契约字段。
+
+    T02926 起 `extra="forbid"`：曾经这里和缓存清理共用一个模型，`days` 对缓存端点
+    毫无意义却被照单全收（返回成功、按天数保留却没发生）。未知字段一律拒，不再静默吞。
+    """
+    model_config = ConfigDict(extra="forbid")
+
     target: str = "blacklist"       # 清理目标
-    days: int = 0                   # 保留天数（0 用配置默认值）
+    days: int = Field(0, ge=0, le=3650)  # 保留天数（0 用配置默认值）
     dry_run: bool = False           # 预览模式
+
+
+class CacheCleanupRequest(BaseModel):
+    """缓存清理请求体。
+
+    TTLCache 条目、`__pycache__` 与临时文件都没有「保留 N 天」语义，因此本端点
+    **不声明 days**——多传一个生效不了的参数，比少一个参数更坏（T02926 灰度第一批）。
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    target: str = "pycache"         # ttlcache | pycache | temp | all
+    dry_run: bool = False
 
 
 # ---- 存储状态查询 ----
@@ -80,7 +98,7 @@ async def cleanup_logs(
 
 @router.post("/cache")
 async def cleanup_cache(
-    body: CleanupRequest,
+    body: CacheCleanupRequest,
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):

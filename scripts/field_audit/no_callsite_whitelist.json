@@ -1,0 +1,33 @@
+{
+  "_comment": "在 admin-web 里找不到调用点的写端点，逐条给理由（T02926 验收①：差集命中与断链都要能指到依据）。门禁会双向核对：这里没有的端点若也找不到调用点 → 红；这里写了但登记表里其实找得到调用点 → 红（防止条目过期还留着）。",
+  "entries": [
+    {
+      "endpoint": "POST /maintenance/cache",
+      "reason": "Maintenance.vue 用模板串拼路径（apps/admin-web/src/views/maintenance/Maintenance.vue:405 `api.post(`/maintenance/${category}`, ...)`），抽取器按字面 URL 匹配不到；该端点属于本单 forbid 灰度第一批，行为由 backend/tests/test_t02926_maintenance_field_contract.py 直接打接口验证。"
+    },
+    {
+      "endpoint": "POST /maintenance/database",
+      "reason": "同上：动态路径 /maintenance/${category}（apps/admin-web/src/views/maintenance/Maintenance.vue:405），并非无人调用。"
+    },
+    {
+      "endpoint": "POST /maintenance/logs",
+      "reason": "同上：动态路径 /maintenance/${category}（apps/admin-web/src/views/maintenance/Maintenance.vue:405）。"
+    },
+    {
+      "endpoint": "POST /m/device/register",
+      "reason": "api/mobile.js:18 定义了包装函数但没有任何视图调用它；小程序设备注册走 apps/miniprogram 自己的请求层，不在 admin-web 的抽取范围内。"
+    },
+    {
+      "endpoint": "POST /m/push/register",
+      "reason": "同上（apps/admin-web/src/api/mobile.js:21 只有定义，无调用点）。"
+    },
+    {
+      "endpoint": "POST /backups/restore",
+      "reason": "管理端界面没有「还原备份」入口：还原只能由运维在服务器上执行 scripts/ 下的备份脚本，端点保留给脚本与将来的一键还原；已在登记表标注为界面不可达。"
+    },
+    {
+      "endpoint": "PUT /channels/*/book-pool/order",
+      "reason": "apps/admin-web/src/api/bookPool.js:35-36 定义了 reorderBookPool(channelId, item_ids)，但全仓没有任何视图引用它——书池顺序只能靠后端 sort_index，前端拖拽排序未接线。本单只登记不断链修复（工单明确「不要在本单实现频道最短时长 UI」同类的前端入口工作另单处理）。"
+    }
+  ]
+}

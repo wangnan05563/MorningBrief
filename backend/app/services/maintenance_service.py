@@ -268,7 +268,7 @@ class MaintenanceService:
         if target in ("vacuum", "all"):
             await self._db_step_vacuum(dry_run, cleaned, errors)
 
-        await self._write_audit("cleanup_database", target, admin_name, dry_run, cleaned, errors)
+        await self._write_audit("cleanup_database", target, admin_name, dry_run, cleaned, errors, days=days)
         return {
             "target": target,
             "days": days,
@@ -350,7 +350,7 @@ class MaintenanceService:
         errors = result["errors"]
         total_freed_mb = result["total_freed_mb"]
 
-        await self._write_audit("cleanup_logs", target, admin_name, dry_run, cleaned, errors)
+        await self._write_audit("cleanup_logs", target, admin_name, dry_run, cleaned, errors, days=days)
         return {
             "target": target,
             "days": days,
@@ -796,7 +796,7 @@ class MaintenanceService:
 
     async def _write_audit(
         self, action: str, target: str, operator: str,
-        dry_run: bool, cleaned: list, errors: list,
+        dry_run: bool, cleaned: list, errors: list, days: int | None = None,
     ) -> None:
         """写入审计日志到 audit_log 表（持久化，便于事后追溯）。
 
@@ -805,6 +805,9 @@ class MaintenanceService:
         try:
             detail = {
                 "dry_run": dry_run,
+                # T02926：按天数执行的清理必须把窗口本身落进审计列，
+                # 否则事后只看得到「清过了」，看不到「按几天清的」
+                **({"days": days} if days is not None else {}),
                 "cleaned_count": len(cleaned),
                 "error_count": len(errors),
                 "cleaned_items": cleaned[:20],

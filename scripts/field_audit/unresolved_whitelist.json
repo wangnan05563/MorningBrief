@@ -1,0 +1,119 @@
+{
+  "_comment": "载荷字段静态不可定的调用点逐条登记（T02926）。门禁要求登记表里每一个 unresolved 都能在这里找到条目，反过来也要求这里的端点必须真实存在于登记表——防止「登记了个不存在的站点」蒙过门禁。",
+  "entries": [
+    {
+      "endpoint": "PATCH /db-admin/tables/*/rows/*",
+      "site": "views/maintenance/DatabaseAdmin.vue:695",
+      "reason_key": "dynamic-columns",
+      "note": "values 是通用表编辑器的「列名→值」映射，键集合由所选表的列决定，静态不可定；后端用 ALLOWED_TABLES/列白名单校验，越界列直接拒（M16 家族已钉）。"
+    },
+    {
+      "endpoint": "POST /db-admin/tables/*/rows/batch-delete",
+      "site": "views/maintenance/DatabaseAdmin.vue:763",
+      "reason_key": "value-scalar",
+      "note": "confirmText 是用户手打的确认字符串，键名来自包装体字面量；ids 与 confirm_text 均在 BatchDeleteRequest 声明内。"
+    },
+    {
+      "endpoint": "POST /assistant/plan",
+      "site": "views/ai/KnowledgeQA.vue:349",
+      "reason_key": "value-scalar",
+      "note": "text 是问答输入框的字符串值，键名由 api 包装体的对象字面量 {message: text} 给出，字段集合可静态确定，只是值不可定。"
+    },
+    {
+      "endpoint": "POST /channels",
+      "site": "views/channel/ChannelManagement.vue:1116",
+      "reason_key": "spread-manually-verified",
+      "note": "...extPayload 的键已在 apps/admin-web/src/views/channel/ChannelManagement.vue:1064-1080 逐条核对：channel_type/type_label/selection_strategy/manual_material_ids/enable_ad/disclaimer_level/cover_url，全部在 ChannelCreateRequest 声明内。"
+    },
+    {
+      "endpoint": "PUT /channels/*",
+      "site": "views/channel/ChannelManagement.vue:1083",
+      "reason_key": "spread-manually-verified",
+      "note": "同一份 extPayload（apps/admin-web/src/views/channel/ChannelManagement.vue:1064-1080），全部落在 ChannelUpdateRequest 声明内。"
+    },
+    {
+      "endpoint": "PUT /notification/config",
+      "site": "views/notification/NotificationConfig.vue:641",
+      "reason_key": "spread-manually-verified",
+      "note": "...configForm 的键集合在 apps/admin-web/src/views/notification/NotificationConfig.vue:551-565 声明，13 项与 SaveConfigBody 逐一对应，无多余键。"
+    },
+    {
+      "endpoint": "PUT /notification/config",
+      "site": "views/notification/NotificationConfig.vue:667",
+      "reason_key": "spread-manually-verified",
+      "note": "同上：另一条保存路径（测试发送前落盘）复用同一个 configForm。"
+    },
+    {
+      "endpoint": "POST /cos/move",
+      "site": "views/cos/CosFiles.vue:396",
+      "reason_key": "value-scalar",
+      "note": "destKey 是目标对象键字符串，键名由 api 包装体给出；source_key/dest_key 均在 CosMoveBody 声明内。"
+    },
+    {
+      "endpoint": "POST /queue/tasks/batch-delete",
+      "site": "views/queue/QueueManagement.vue:559",
+      "reason_key": "value-scalar",
+      "note": "ids 是表格选中行的 id 数组，键名 workflow_ids 由包装体字面量给出，在 BatchDeleteTasksRequest 声明内。"
+    },
+    {
+      "endpoint": "POST /reviews/*/action",
+      "site": "views/mobile/ReviewList.vue:332",
+      "reason_key": "value-scalar",
+      "note": "action 取 approve/reject 字面量之一，来自移动端审批按钮的入参；键名与 segment_id 均在 ActionRequest 声明内。"
+    },
+    {
+      "endpoint": "POST /reviews/*/action",
+      "site": "views/workflow/WorkflowDetail.vue:938",
+      "reason_key": "value-scalar",
+      "note": "action 取 approve/reject 字面量之一，键名由 api 包装体 {action, segment_id} 给出，均在 ActionRequest 声明内。"
+    },
+    {
+      "endpoint": "POST /reviews/batch-action",
+      "site": "views/mobile/ReviewList.vue:379",
+      "reason_key": "value-scalar",
+      "note": "ids 是移动端批量选中的 review_id 数组，键名 review_ids 由包装体给出，在 BatchActionRequest 声明内。"
+    },
+    {
+      "endpoint": "POST /reviews/batch-action",
+      "site": "views/review/ReviewList.vue:456",
+      "reason_key": "value-scalar",
+      "note": "ids 是批量通过所选的 review_id 数组（apps/admin-web/src/views/review/ReviewList.vue:456），键名 review_ids 在 BatchActionRequest 声明内。"
+    },
+    {
+      "endpoint": "POST /reviews/batch-action",
+      "site": "views/review/ReviewList.vue:500",
+      "reason_key": "value-scalar",
+      "note": "ids 是批量打回所选的 review_id 数组（apps/admin-web/src/views/review/ReviewList.vue:500），与批量通过共用 BatchActionRequest。"
+    },
+    {
+      "endpoint": "POST /users/*/toggle-status",
+      "site": "views/mobile/ManageUsers.vue:85",
+      "reason_key": "value-scalar",
+      "note": "next 是 0/1 状态开关值，由 row.status 取反得到；键名 status 由 api 包装体给出并在 UserToggleBody 声明内。"
+    },
+    {
+      "endpoint": "PUT /ads/placements/*",
+      "site": "views/mobile/ManageAds.vue:70",
+      "reason_key": "value-scalar",
+      "note": "next 是 enabled 的 0/1 取反值；apps/admin-web/src/api/ads.js 的包装体只提交 {enabled}，与 PlacementUpdateRequest 声明一致。"
+    },
+    {
+      "endpoint": "PUT /channels/*/script-mode",
+      "site": "views/channel/BookPoolPanel.vue:338",
+      "reason_key": "value-scalar",
+      "note": "val 是讲书稿模式开关的布尔值；api/bookPool.js 的包装体提交 {enabled}，在 ScriptModeRequest 声明内。"
+    },
+    {
+      "endpoint": "PUT /channels/*/script-mode",
+      "site": "views/channel/ChannelManagement.vue:960",
+      "reason_key": "value-scalar",
+      "note": "val 是同一个模式布尔开关，来自频道管理页的开关入口；包装体键名 enabled 在 ScriptModeRequest 声明内。"
+    },
+    {
+      "endpoint": "PUT /feedbacks/*/status",
+      "site": "views/mobile/ManageFeedback.vue:88",
+      "reason_key": "value-scalar",
+      "note": "next 取的是 row 上的状态值（成员表达式，值不可静态定），键名 status 由 api 包装体给出并在 FeedbackStatusUpdateRequest 声明内。"
+    }
+  ]
+}

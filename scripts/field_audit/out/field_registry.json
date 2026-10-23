@@ -1,0 +1,3942 @@
+{
+  "rows": [
+    {
+      "endpoint": "PATCH /db-admin/tables/*/rows/*",
+      "model": "RowUpdateRequest",
+      "modelSource": "backend/app/routers/admin/db_admin.py:38",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:146",
+      "declared": [
+        "values"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/maintenance/DatabaseAdmin.vue",
+            "line": 695,
+            "fn": "updateRow",
+            "fieldCount": 1,
+            "unresolved": [
+              "变量 values 无可解析的声明"
+            ]
+          }
+        ],
+        "fields": [
+          "values"
+        ],
+        "unresolved": [
+          "变量 values 无可解析的声明"
+        ],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "values"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /ads/materials",
+      "model": "MaterialCreateRequest",
+      "modelSource": "backend/app/routers/admin/ads.py:19",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/ads.py:48",
+      "declared": [
+        "description",
+        "duration",
+        "file_url",
+        "name"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/ad/AdMaterials.vue",
+            "line": 178,
+            "fn": "api.post",
+            "fieldCount": 4,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "description",
+          "duration",
+          "file_url",
+          "name"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": "AdMaterial",
+      "ormScore": 1.0,
+      "ormTied": [
+        "AdMaterial"
+      ],
+      "ormColumns": [
+        "created_at",
+        "description",
+        "duration",
+        "file_url",
+        "id",
+        "is_default",
+        "name"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [],
+        "columnNotInModel": [
+          "is_default"
+        ]
+      },
+      "verdict": "列不可达：AdMaterial.is_default 有列、有索引、列表接口会读，但全仓没有任何写入点（create/update 请求体都不声明），前端也无法提交。属「前端未提交导致列不可达」，需补默认素材设置入口或确认废弃，本单只登记不实现（backend/app/routers/admin/ads.py:19 backend/app/services/ad_service.py:105 backend/app/models/ad_material.py:24）"
+    },
+    {
+      "endpoint": "POST /ads/placements",
+      "model": "PlacementCreateRequest",
+      "modelSource": "backend/app/routers/admin/ads.py:27",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/ads.py:135",
+      "declared": [
+        "end_date",
+        "material_id",
+        "position",
+        "start_date"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/ad/AdPlacements.vue",
+            "line": 330,
+            "fn": "api.post",
+            "fieldCount": 4,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "end_date",
+          "material_id",
+          "position",
+          "start_date"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": "AdPlacement",
+      "ormScore": 1.0,
+      "ormTied": [
+        "AdPlacement"
+      ],
+      "ormColumns": [
+        "created_at",
+        "enabled",
+        "end_date",
+        "id",
+        "material_id",
+        "position",
+        "start_date"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [],
+        "columnNotInModel": [
+          "enabled"
+        ]
+      },
+      "verdict": "设计如此：enabled 列有数据库默认值 1，启停只通过 PUT /ads/placements/* 的安全开关改（创建时不允许预选停用状态），所以创建请求体不声明它不是缺陷（backend/app/models/ad_placement.py:37 backend/app/routers/admin/ads.py:98）"
+    },
+    {
+      "endpoint": "POST /ai/chat",
+      "model": "ChatBody",
+      "modelSource": "backend/app/routers/admin/ai_config.py:241",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:646",
+      "declared": [
+        "api_key",
+        "base_url",
+        "messages",
+        "model"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/ai/KnowledgeQA.vue",
+            "line": 554,
+            "fn": "callAiChat",
+            "fieldCount": 2,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "messages",
+          "model"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [
+          "api_key",
+          "base_url"
+        ],
+        "modelNotInColumn": [
+          "api_key",
+          "base_url",
+          "messages",
+          "model"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /ai/download-tts-models",
+      "model": "DownloadTTSModelsBody",
+      "modelSource": "backend/app/routers/admin/ai_config.py:216",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:450",
+      "declared": [
+        "kokoro_lang",
+        "kokoro_voice",
+        "piper_voice",
+        "piper_voice_dir",
+        "provider"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/ai/AIConfig.vue",
+            "line": 1175,
+            "fn": "api.post",
+            "fieldCount": 5,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "kokoro_lang",
+          "kokoro_voice",
+          "piper_voice",
+          "piper_voice_dir",
+          "provider"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "kokoro_lang",
+          "kokoro_voice",
+          "piper_voice",
+          "piper_voice_dir",
+          "provider"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /ai/models",
+      "model": "FetchModelsBody",
+      "modelSource": "backend/app/routers/admin/ai_config.py:231",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:627",
+      "declared": [
+        "api_key",
+        "base_url"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/ai/AIConfig.vue",
+            "line": 1486,
+            "fn": "api.post",
+            "fieldCount": 2,
+            "unresolved": []
+          },
+          {
+            "file": "views/ai/KnowledgeQA.vue",
+            "line": 455,
+            "fn": "api.post",
+            "fieldCount": 0,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "api_key",
+          "base_url"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "api_key",
+          "base_url"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /ai/preview-tts",
+      "model": "PreviewTTSBody",
+      "modelSource": "backend/app/routers/admin/ai_config.py:181",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:401",
+      "declared": [
+        "aliyun_api_key",
+        "aliyun_appkey",
+        "aliyun_pitch_rate",
+        "aliyun_speech_rate",
+        "aliyun_voice",
+        "aliyun_volume",
+        "edge_pitch",
+        "edge_rate",
+        "edge_voice",
+        "edge_volume",
+        "kokoro_lang",
+        "kokoro_speed",
+        "kokoro_voice",
+        "piper_length_scale",
+        "piper_noise_scale",
+        "piper_voice",
+        "piper_voice_dir",
+        "piper_volume",
+        "provider",
+        "tencent_region",
+        "tencent_secret_id",
+        "tencent_secret_key",
+        "tencent_speed",
+        "tencent_voice_type",
+        "tencent_volume",
+        "text"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/ai/AIConfig.vue",
+            "line": 1631,
+            "fn": "api.post",
+            "fieldCount": 26,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "aliyun_api_key",
+          "aliyun_appkey",
+          "aliyun_pitch_rate",
+          "aliyun_speech_rate",
+          "aliyun_voice",
+          "aliyun_volume",
+          "edge_pitch",
+          "edge_rate",
+          "edge_voice",
+          "edge_volume",
+          "kokoro_lang",
+          "kokoro_speed",
+          "kokoro_voice",
+          "piper_length_scale",
+          "piper_noise_scale",
+          "piper_voice",
+          "piper_voice_dir",
+          "piper_volume",
+          "provider",
+          "tencent_region",
+          "tencent_secret_id",
+          "tencent_secret_key",
+          "tencent_speed",
+          "tencent_voice_type",
+          "tencent_volume",
+          "text"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "aliyun_api_key",
+          "aliyun_appkey",
+          "aliyun_pitch_rate",
+          "aliyun_speech_rate",
+          "aliyun_voice",
+          "aliyun_volume",
+          "edge_pitch",
+          "edge_rate",
+          "edge_voice",
+          "edge_volume",
+          "kokoro_lang",
+          "kokoro_speed",
+          "kokoro_voice",
+          "piper_length_scale",
+          "piper_noise_scale",
+          "piper_voice",
+          "piper_voice_dir",
+          "piper_volume",
+          "provider",
+          "tencent_region",
+          "tencent_secret_id",
+          "tencent_secret_key",
+          "tencent_speed",
+          "tencent_voice_type",
+          "tencent_volume",
+          "text"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /ai/selected-model",
+      "model": "SelectedModelBody",
+      "modelSource": "backend/app/routers/admin/ai_config.py:253",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:686",
+      "declared": [
+        "model"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/ai/KnowledgeQA.vue",
+            "line": 496,
+            "fn": "api.post",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "model"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "model"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /ai/test-image",
+      "model": "TestImageBody",
+      "modelSource": "backend/app/routers/admin/ai_config.py:154",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:361",
+      "declared": [
+        "api_key",
+        "base_url",
+        "model"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/ai/AIConfig.vue",
+            "line": 1399,
+            "fn": "api.post",
+            "fieldCount": 3,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "api_key",
+          "base_url",
+          "model"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "api_key",
+          "base_url",
+          "model"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /ai/test-llm",
+      "model": "TestLLMBody",
+      "modelSource": "backend/app/routers/admin/ai_config.py:148",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:345",
+      "declared": [
+        "api_key",
+        "base_url",
+        "model"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/ai/AIConfig.vue",
+            "line": 1511,
+            "fn": "api.post",
+            "fieldCount": 3,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "api_key",
+          "base_url",
+          "model"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "api_key",
+          "base_url",
+          "model"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /ai/test-tts",
+      "model": "TestTTSBody",
+      "modelSource": "backend/app/routers/admin/ai_config.py:161",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:376",
+      "declared": [
+        "api_key",
+        "appkey",
+        "edge_voice",
+        "kokoro_lang",
+        "kokoro_voice",
+        "piper_voice",
+        "piper_voice_dir",
+        "provider",
+        "tencent_region",
+        "tencent_secret_id",
+        "tencent_secret_key",
+        "tencent_voice_type"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/ai/AIConfig.vue",
+            "line": 1548,
+            "fn": "api.post",
+            "fieldCount": 12,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "api_key",
+          "appkey",
+          "edge_voice",
+          "kokoro_lang",
+          "kokoro_voice",
+          "piper_voice",
+          "piper_voice_dir",
+          "provider",
+          "tencent_region",
+          "tencent_secret_id",
+          "tencent_secret_key",
+          "tencent_voice_type"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "api_key",
+          "appkey",
+          "edge_voice",
+          "kokoro_lang",
+          "kokoro_voice",
+          "piper_voice",
+          "piper_voice_dir",
+          "provider",
+          "tencent_region",
+          "tencent_secret_id",
+          "tencent_secret_key",
+          "tencent_voice_type"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /ai/voices/sync",
+      "model": "VoiceSyncBody",
+      "modelSource": "backend/app/routers/admin/ai_config.py:142",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:600",
+      "declared": [
+        "provider"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "components/VoiceSyncButton.vue",
+            "line": 103,
+            "fn": "api.post",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "provider"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "provider"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /assistant/execute",
+      "model": "ExecuteBody",
+      "modelSource": "backend/app/routers/admin/assistant.py:40",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/assistant.py:69",
+      "declared": [
+        "action_id",
+        "fields"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/ai/KnowledgeQA.vue",
+            "line": 400,
+            "fn": "executeAssistantAction",
+            "fieldCount": 2,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "action_id",
+          "fields"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "action_id",
+          "fields"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /assistant/plan",
+      "model": "PlanBody",
+      "modelSource": "backend/app/routers/admin/assistant.py:32",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/assistant.py:53",
+      "declared": [
+        "message",
+        "model"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/ai/KnowledgeQA.vue",
+            "line": 349,
+            "fn": "planAssistantAction",
+            "fieldCount": 2,
+            "unresolved": [
+              "变量 text 无可解析的声明"
+            ]
+          }
+        ],
+        "fields": [
+          "message",
+          "model"
+        ],
+        "unresolved": [
+          "变量 text 无可解析的声明"
+        ],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "message",
+          "model"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /auth/login",
+      "model": "LoginRequest",
+      "modelSource": "backend/app/routers/admin/auth.py:20",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/auth.py:26",
+      "declared": [
+        "password",
+        "username"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "stores/user.js",
+            "line": 24,
+            "fn": "api.post",
+            "fieldCount": 2,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "password",
+          "username"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "password",
+          "username"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": "设计如此：password 只用于校验，落库列是 password_hash；last_login_at/nickname/role/status 由注册与管理端点写，登录请求体不声明它们是正确的窄接口（backend/app/models/admin_user.py:27 backend/app/models/admin_user.py:33）"
+    },
+    {
+      "endpoint": "POST /backups/restore",
+      "model": "RestoreRequest",
+      "modelSource": "backend/app/routers/admin/backup.py:30",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/backup.py:95",
+      "declared": [
+        "backup_path",
+        "confirm_token"
+      ],
+      "frontend": {
+        "callSites": [],
+        "fields": [],
+        "unresolved": [],
+        "hasCallSite": false
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "backup_path",
+          "confirm_token"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /channels",
+      "model": "ChannelCreateRequest",
+      "modelSource": "backend/app/routers/admin/channels.py:59",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/channels.py:427",
+      "declared": [
+        "auto_generate_prompts",
+        "bgm_gap_mode",
+        "bgm_path",
+        "bgm_volume",
+        "book_rss_sources",
+        "channel_type",
+        "constraint_prompt",
+        "cover_url",
+        "description",
+        "disclaimer_level",
+        "display_order",
+        "enable_ad",
+        "enable_thinking_question",
+        "intro_prompt",
+        "is_active",
+        "keywords",
+        "manual_material_ids",
+        "material_lookback_days",
+        "min_duration_sec",
+        "name",
+        "outro_prompt",
+        "rewrite_template",
+        "rss_sources",
+        "schedule_time",
+        "segment_gap_sec",
+        "selection_strategy",
+        "type_label"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/channel/ChannelManagement.vue",
+            "line": 1116,
+            "fn": "createChannel",
+            "fieldCount": 23,
+            "unresolved": [
+              "展开 extPayload（静态不可定）"
+            ]
+          }
+        ],
+        "fields": [
+          "auto_generate_prompts",
+          "bgm_gap_mode",
+          "bgm_path",
+          "bgm_volume",
+          "book_rss_sources",
+          "channel_type",
+          "cover_url",
+          "description",
+          "disclaimer_level",
+          "display_order",
+          "enable_ad",
+          "enable_thinking_question",
+          "is_active",
+          "keywords",
+          "manual_material_ids",
+          "material_lookback_days",
+          "min_duration_sec",
+          "name",
+          "rss_sources",
+          "schedule_time",
+          "segment_gap_sec",
+          "selection_strategy",
+          "type_label"
+        ],
+        "unresolved": [
+          "展开 extPayload（静态不可定）"
+        ],
+        "hasCallSite": true
+      },
+      "ormTable": "Channel",
+      "ormScore": 0.963,
+      "ormTied": [
+        "Channel"
+      ],
+      "ormColumns": [
+        "bgm_gap_mode",
+        "bgm_path",
+        "bgm_volume",
+        "book_pool_cursor",
+        "book_pool_interval_days",
+        "book_pool_last_run_date",
+        "book_pool_last_title",
+        "book_pool_loop",
+        "book_rss_sources",
+        "book_rss_sources_snapshot",
+        "channel_type",
+        "constraint_prompt",
+        "cover_url",
+        "created_at",
+        "description",
+        "disclaimer_level",
+        "display_order",
+        "enable_ad",
+        "enable_thinking_question",
+        "icon_url",
+        "id",
+        "intro_prompt",
+        "is_active",
+        "keywords",
+        "manual_material_ids",
+        "material_lookback_days",
+        "min_duration_sec",
+        "name",
+        "outro_prompt",
+        "rewrite_template",
+        "rss_sources",
+        "rss_sources_snapshot",
+        "schedule_time",
+        "script_mode",
+        "segment_gap_sec",
+        "selection_strategy",
+        "type_label",
+        "updated_at"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [
+          "constraint_prompt",
+          "intro_prompt",
+          "outro_prompt",
+          "rewrite_template"
+        ],
+        "modelNotInColumn": [
+          "auto_generate_prompts"
+        ],
+        "columnNotInModel": [
+          "book_pool_cursor",
+          "book_pool_interval_days",
+          "book_pool_last_run_date",
+          "book_pool_last_title",
+          "book_pool_loop",
+          "book_rss_sources_snapshot",
+          "icon_url",
+          "rss_sources_snapshot",
+          "script_mode"
+        ]
+      },
+      "verdict": "设计如此：auto_generate_prompts 是请求语义开关（触发服务端生成提示词），不是列；constraint/intro/outro_prompt 与 rewrite_template 由新建流程在服务端生成或随后在编辑表单补写，新建表单不采集（backend/app/routers/admin/channels.py:460 backend/app/routers/admin/channels.py:477 apps/admin-web/src/views/channel/ChannelManagement.vue:1116）"
+    },
+    {
+      "endpoint": "POST /channels/*/book-pool/items",
+      "model": "AddBooksRequest",
+      "modelSource": "backend/app/routers/admin/book_pool.py:41",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/book_pool.py:106",
+      "declared": [
+        "book_sources"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/channel/BookPoolPanel.vue",
+            "line": 457,
+            "fn": "addBooksToPool",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "book_sources"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "book_sources"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /channels/*/icon/ai-generate",
+      "model": "ChannelIconAIRequest",
+      "modelSource": "backend/app/routers/admin/channels.py:943",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/channels.py:947",
+      "declared": [
+        "prompt"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/channel/ChannelManagement.vue",
+            "line": 925,
+            "fn": "generateChannelIcon",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "prompt"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "prompt"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /cos/folder",
+      "model": "CosFolderBody",
+      "modelSource": "backend/app/routers/admin/cos.py:49",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/cos.py:226",
+      "declared": [
+        "prefix"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/cos/CosFiles.vue",
+            "line": 358,
+            "fn": "createCosFolder",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "prefix"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "prefix"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /cos/move",
+      "model": "CosMoveBody",
+      "modelSource": "backend/app/routers/admin/cos.py:54",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/cos.py:248",
+      "declared": [
+        "dest_key",
+        "source_key"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/cos/CosFiles.vue",
+            "line": 396,
+            "fn": "moveCosObject",
+            "fieldCount": 2,
+            "unresolved": [
+              "变量 destKey 无可解析的声明"
+            ]
+          }
+        ],
+        "fields": [
+          "dest_key",
+          "source_key"
+        ],
+        "unresolved": [
+          "变量 destKey 无可解析的声明"
+        ],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "dest_key",
+          "source_key"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /db-admin/tables/*/cascade-preview",
+      "model": "CascadePreviewRequest",
+      "modelSource": "backend/app/routers/admin/db_admin.py:49",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:206",
+      "declared": [
+        "ids"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/maintenance/DatabaseAdmin.vue",
+            "line": 723,
+            "fn": "cascadePreview",
+            "fieldCount": 1,
+            "unresolved": []
+          },
+          {
+            "file": "views/maintenance/DatabaseAdmin.vue",
+            "line": 743,
+            "fn": "cascadePreview",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "ids"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "ids"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /db-admin/tables/*/import",
+      "model": "ImportRequest",
+      "modelSource": "backend/app/routers/admin/db_admin.py:54",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:286",
+      "declared": [
+        "confirm_text",
+        "content",
+        "dry_run",
+        "format",
+        "mode",
+        "rows"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/maintenance/DatabaseAdmin.vue",
+            "line": 847,
+            "fn": "importRows",
+            "fieldCount": 4,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "confirm_text",
+          "content",
+          "format",
+          "mode"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [
+          "dry_run",
+          "rows"
+        ],
+        "modelNotInColumn": [
+          "content",
+          "format",
+          "mode",
+          "rows"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /db-admin/tables/*/import/preview",
+      "model": "ImportPreviewRequest",
+      "modelSource": "backend/app/routers/admin/db_admin.py:64",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:258",
+      "declared": [
+        "content",
+        "format",
+        "mode",
+        "rows"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/maintenance/DatabaseAdmin.vue",
+            "line": 816,
+            "fn": "previewImport",
+            "fieldCount": 3,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "content",
+          "format",
+          "mode"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [
+          "rows"
+        ],
+        "modelNotInColumn": [
+          "content",
+          "format",
+          "mode",
+          "rows"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /db-admin/tables/*/rows",
+      "model": "RowCreateRequest",
+      "modelSource": "backend/app/routers/admin/db_admin.py:33",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:131",
+      "declared": [
+        "values"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/maintenance/DatabaseAdmin.vue",
+            "line": 687,
+            "fn": "createRow",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "values"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "values"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /db-admin/tables/*/rows/batch-delete",
+      "model": "BatchDeleteRequest",
+      "modelSource": "backend/app/routers/admin/db_admin.py:43",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:185",
+      "declared": [
+        "confirm_text",
+        "ids"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/maintenance/DatabaseAdmin.vue",
+            "line": 763,
+            "fn": "batchDelete",
+            "fieldCount": 2,
+            "unresolved": [
+              "变量 confirmText 无可解析的声明"
+            ]
+          }
+        ],
+        "fields": [
+          "confirm_text",
+          "ids"
+        ],
+        "unresolved": [
+          "变量 confirmText 无可解析的声明"
+        ],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "ids"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /ebooks/draft-material",
+      "model": "DraftMaterialRequest",
+      "modelSource": "backend/app/routers/admin/ebooks.py:40",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/ebooks.py:145",
+      "declared": [
+        "author",
+        "category",
+        "channel_id",
+        "title",
+        "url"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/ebooks/BookFinder.vue",
+            "line": 246,
+            "fn": "createDraftMaterial",
+            "fieldCount": 5,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "author",
+          "category",
+          "channel_id",
+          "title",
+          "url"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": "BookPoolItem",
+      "ormScore": 0.8,
+      "ormTied": [
+        "BookPoolItem",
+        "Material"
+      ],
+      "ormColumns": [
+        "author",
+        "book_key",
+        "category",
+        "channel_id",
+        "cover_url",
+        "created_at",
+        "id",
+        "material_id",
+        "sort_index",
+        "title"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "url"
+        ],
+        "columnNotInModel": [
+          "book_key",
+          "cover_url",
+          "material_id",
+          "sort_index"
+        ]
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /m/device/register",
+      "model": "DeviceRegisterBody",
+      "modelSource": "backend/app/routers/admin/mobile.py:29",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/mobile.py:81",
+      "declared": [
+        "device_fingerprint",
+        "platform",
+        "push_token"
+      ],
+      "frontend": {
+        "callSites": [],
+        "fields": [],
+        "unresolved": [],
+        "hasCallSite": false
+      },
+      "ormTable": "AdminDevice",
+      "ormScore": 1.0,
+      "ormTied": [
+        "AdminDevice"
+      ],
+      "ormColumns": [
+        "admin_id",
+        "bound_at",
+        "device_fingerprint",
+        "id",
+        "platform",
+        "push_token"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [],
+        "columnNotInModel": [
+          "admin_id",
+          "bound_at"
+        ]
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /m/emergency/stop",
+      "model": "EmergencyStopBody",
+      "modelSource": "backend/app/routers/admin/mobile.py:41",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/mobile.py:129",
+      "declared": [
+        "reason"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/mobile/ManageAlert.vue",
+            "line": 197,
+            "fn": "emergencyStop",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "reason"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /m/inbox/mark-read",
+      "model": "MarkReadBody",
+      "modelSource": "backend/app/routers/admin/mobile.py:24",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/mobile.py:65",
+      "declared": [
+        "mark_all",
+        "message_ids"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/mobile/Message.vue",
+            "line": 148,
+            "fn": "markRead",
+            "fieldCount": 1,
+            "unresolved": []
+          },
+          {
+            "file": "views/mobile/Message.vue",
+            "line": 159,
+            "fn": "markRead",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "mark_all",
+          "message_ids"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "mark_all",
+          "message_ids"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /m/push/register",
+      "model": "PushRegisterBody",
+      "modelSource": "backend/app/routers/admin/mobile.py:35",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/mobile.py:100",
+      "declared": [
+        "device_fingerprint",
+        "platform",
+        "push_token"
+      ],
+      "frontend": {
+        "callSites": [],
+        "fields": [],
+        "unresolved": [],
+        "hasCallSite": false
+      },
+      "ormTable": "AdminDevice",
+      "ormScore": 1.0,
+      "ormTied": [
+        "AdminDevice"
+      ],
+      "ormColumns": [
+        "admin_id",
+        "bound_at",
+        "device_fingerprint",
+        "id",
+        "platform",
+        "push_token"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [],
+        "columnNotInModel": [
+          "admin_id",
+          "bound_at"
+        ]
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /maintenance/cache",
+      "model": "CacheCleanupRequest",
+      "modelSource": "backend/app/routers/admin/maintenance.py:35",
+      "modelExtra": "forbid",
+      "handlerSource": "backend/app/routers/admin/maintenance.py:99",
+      "declared": [
+        "dry_run",
+        "target"
+      ],
+      "frontend": {
+        "callSites": [],
+        "fields": [],
+        "unresolved": [],
+        "hasCallSite": false
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "target"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": "真缺陷（已修）：两处一起修：①`audit_log.detail` 从不记录保留窗口，事后只看得到「清过了」看不到「按几天清的」；②三个清理端点共用 CleanupRequest，缓存端点因此接收它根本无法兑现的 days（TTLCache/__pycache__/临时文件没有「保留 N 天」语义）。现在拆出 CacheCleanupRequest（不声明 days）并给两个请求体加 extra=forbid，数据库/日志清理把 days 写进审计 detail。前端本就只在非缓存分类提交 days（apps/admin-web/src/views/maintenance/Maintenance.vue:400 的 category !== 'cache' 判断），所以这不是线上错数据，而是把潜在的契约漏洞关死（backend/app/routers/admin/maintenance.py:22 backend/app/routers/admin/maintenance.py:35 apps/admin-web/src/views/maintenance/Maintenance.vue:400 backend/app/services/maintenance_service.py:271）"
+    },
+    {
+      "endpoint": "POST /maintenance/database",
+      "model": "CleanupRequest",
+      "modelSource": "backend/app/routers/admin/maintenance.py:22",
+      "modelExtra": "forbid",
+      "handlerSource": "backend/app/routers/admin/maintenance.py:62",
+      "declared": [
+        "days",
+        "dry_run",
+        "target"
+      ],
+      "frontend": {
+        "callSites": [],
+        "fields": [],
+        "unresolved": [],
+        "hasCallSite": false
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "days",
+          "target"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": "真缺陷（已修）：两处一起修：①`audit_log.detail` 从不记录保留窗口，事后只看得到「清过了」看不到「按几天清的」；②三个清理端点共用 CleanupRequest，缓存端点因此接收它根本无法兑现的 days（TTLCache/__pycache__/临时文件没有「保留 N 天」语义）。现在拆出 CacheCleanupRequest（不声明 days）并给两个请求体加 extra=forbid，数据库/日志清理把 days 写进审计 detail。前端本就只在非缓存分类提交 days（apps/admin-web/src/views/maintenance/Maintenance.vue:400 的 category !== 'cache' 判断），所以这不是线上错数据，而是把潜在的契约漏洞关死（backend/app/routers/admin/maintenance.py:22 backend/app/routers/admin/maintenance.py:35 apps/admin-web/src/views/maintenance/Maintenance.vue:400 backend/app/services/maintenance_service.py:271）"
+    },
+    {
+      "endpoint": "POST /maintenance/logs",
+      "model": "CleanupRequest",
+      "modelSource": "backend/app/routers/admin/maintenance.py:22",
+      "modelExtra": "forbid",
+      "handlerSource": "backend/app/routers/admin/maintenance.py:82",
+      "declared": [
+        "days",
+        "dry_run",
+        "target"
+      ],
+      "frontend": {
+        "callSites": [],
+        "fields": [],
+        "unresolved": [],
+        "hasCallSite": false
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "days",
+          "target"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": "真缺陷（已修）：两处一起修：①`audit_log.detail` 从不记录保留窗口，事后只看得到「清过了」看不到「按几天清的」；②三个清理端点共用 CleanupRequest，缓存端点因此接收它根本无法兑现的 days（TTLCache/__pycache__/临时文件没有「保留 N 天」语义）。现在拆出 CacheCleanupRequest（不声明 days）并给两个请求体加 extra=forbid，数据库/日志清理把 days 写进审计 detail。前端本就只在非缓存分类提交 days（apps/admin-web/src/views/maintenance/Maintenance.vue:400 的 category !== 'cache' 判断），所以这不是线上错数据，而是把潜在的契约漏洞关死（backend/app/routers/admin/maintenance.py:22 backend/app/routers/admin/maintenance.py:35 apps/admin-web/src/views/maintenance/Maintenance.vue:400 backend/app/services/maintenance_service.py:271）"
+    },
+    {
+      "endpoint": "POST /materials",
+      "model": "MaterialCreateRequest",
+      "modelSource": "backend/app/routers/admin/materials.py:31",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/materials.py:368",
+      "declared": [
+        "category",
+        "channel_id",
+        "content",
+        "media_thumb_url",
+        "media_type",
+        "media_url",
+        "source",
+        "source_type",
+        "title",
+        "url",
+        "workflow_id"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/channel/CourseMaterials.vue",
+            "line": 322,
+            "fn": "createMaterial",
+            "fieldCount": 8,
+            "unresolved": []
+          },
+          {
+            "file": "views/channel/MaterialLibrary.vue",
+            "line": 595,
+            "fn": "createMaterial",
+            "fieldCount": 10,
+            "unresolved": []
+          },
+          {
+            "file": "views/workflow/WorkflowDetail.vue",
+            "line": 699,
+            "fn": "createMaterial",
+            "fieldCount": 6,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "category",
+          "channel_id",
+          "content",
+          "media_thumb_url",
+          "media_type",
+          "media_url",
+          "source",
+          "source_type",
+          "title",
+          "url",
+          "workflow_id"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": "Material",
+      "ormScore": 1.0,
+      "ormTied": [
+        "Material"
+      ],
+      "ormColumns": [
+        "category",
+        "channel_id",
+        "content",
+        "cover_url",
+        "crawled_at",
+        "dedup_key",
+        "id",
+        "images_json",
+        "media_thumb_url",
+        "media_type",
+        "media_url",
+        "published_at",
+        "simhash",
+        "source",
+        "source_type",
+        "status",
+        "summary",
+        "title",
+        "url",
+        "workflow_id"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [],
+        "columnNotInModel": [
+          "cover_url",
+          "crawled_at",
+          "dedup_key",
+          "images_json",
+          "published_at",
+          "simhash",
+          "status",
+          "summary"
+        ]
+      },
+      "verdict": "设计如此：cover_url/crawled_at/dedup_key/images_json/published_at/simhash/status/summary 是抓取与去重链路生成的内部列，手动录入端点刻意不接收，由导入/爬虫路径写入（backend/app/routers/admin/materials.py:405 backend/app/routers/admin/materials.py:665 backend/app/routers/admin/materials.py:771）"
+    },
+    {
+      "endpoint": "POST /materials/batch-delete",
+      "model": "MaterialBatchDeleteRequest",
+      "modelSource": "backend/app/routers/admin/materials.py:551",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/materials.py:563",
+      "declared": [
+        "channel_id",
+        "ids",
+        "sources"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/channel/MaterialLibrary.vue",
+            "line": 673,
+            "fn": "batchDeleteMaterials",
+            "fieldCount": 2,
+            "unresolved": []
+          },
+          {
+            "file": "views/channel/MaterialLibrary.vue",
+            "line": 698,
+            "fn": "batchDeleteMaterials",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "channel_id",
+          "ids",
+          "sources"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "channel_id",
+          "ids",
+          "sources"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /materials/import-cos",
+      "model": "ImportCosRequest",
+      "modelSource": "backend/app/routers/admin/materials.py:722",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/materials.py:733",
+      "declared": [
+        "category",
+        "channel_id",
+        "key",
+        "source"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/channel/CourseMaterials.vue",
+            "line": 294,
+            "fn": "importFromCos",
+            "fieldCount": 4,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "category",
+          "channel_id",
+          "key",
+          "source"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": "Material",
+      "ormScore": 0.75,
+      "ormTied": [
+        "Material"
+      ],
+      "ormColumns": [
+        "category",
+        "channel_id",
+        "content",
+        "cover_url",
+        "crawled_at",
+        "dedup_key",
+        "id",
+        "images_json",
+        "media_thumb_url",
+        "media_type",
+        "media_url",
+        "published_at",
+        "simhash",
+        "source",
+        "source_type",
+        "status",
+        "summary",
+        "title",
+        "url",
+        "workflow_id"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "key"
+        ],
+        "columnNotInModel": [
+          "content",
+          "cover_url",
+          "crawled_at",
+          "dedup_key",
+          "images_json",
+          "media_thumb_url",
+          "media_type",
+          "media_url",
+          "published_at",
+          "simhash",
+          "source_type",
+          "status",
+          "summary",
+          "title",
+          "url",
+          "workflow_id"
+        ]
+      },
+      "verdict": "设计如此：key 是 COS 对象键（导入入参），落库时转成 url/content 等列，本身不是列；正文、去重、抓取时间等列由导入链路生成，与手动录入端点同口径（backend/app/routers/admin/materials.py:722 backend/app/routers/admin/materials.py:733 apps/admin-web/src/views/channel/CourseMaterials.vue:294）"
+    },
+    {
+      "endpoint": "POST /materials/import-url",
+      "model": "ImportUrlRequest",
+      "modelSource": "backend/app/routers/admin/materials.py:671",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/materials.py:685",
+      "declared": [
+        "category",
+        "channel_id",
+        "source",
+        "source_type",
+        "url"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/channel/CourseMaterials.vue",
+            "line": 355,
+            "fn": "importFromUrl",
+            "fieldCount": 5,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "category",
+          "channel_id",
+          "source",
+          "source_type",
+          "url"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": "Material",
+      "ormScore": 1.0,
+      "ormTied": [
+        "Material"
+      ],
+      "ormColumns": [
+        "category",
+        "channel_id",
+        "content",
+        "cover_url",
+        "crawled_at",
+        "dedup_key",
+        "id",
+        "images_json",
+        "media_thumb_url",
+        "media_type",
+        "media_url",
+        "published_at",
+        "simhash",
+        "source",
+        "source_type",
+        "status",
+        "summary",
+        "title",
+        "url",
+        "workflow_id"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [],
+        "columnNotInModel": [
+          "content",
+          "cover_url",
+          "crawled_at",
+          "dedup_key",
+          "images_json",
+          "media_thumb_url",
+          "media_type",
+          "media_url",
+          "published_at",
+          "simhash",
+          "status",
+          "summary",
+          "title",
+          "workflow_id"
+        ]
+      },
+      "verdict": "设计如此：同 POST /materials：导入请求只带 url/channel_id/source 等输入项，正文与去重列由抓取结果写入（backend/app/routers/admin/materials.py:665 apps/admin-web/src/views/channel/CourseMaterials.vue:355）"
+    },
+    {
+      "endpoint": "POST /materials/share",
+      "model": "SharePreviewRequest",
+      "modelSource": "backend/app/routers/admin/materials.py:777",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/materials.py:786",
+      "declared": [
+        "channel_id",
+        "url"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/channel/CourseMaterials.vue",
+            "line": 379,
+            "fn": "sharePreview",
+            "fieldCount": 2,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "channel_id",
+          "url"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [
+          "channel_id"
+        ],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "channel_id",
+          "url"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": "设计如此：分享预览不落库（只返回 title/content 供预填），channel_id 由前端用于决定预填进哪个频道，服务端不消费它。声明但不用属可接受的请求语义，不是死字段（backend/app/routers/admin/materials.py:777 backend/app/routers/admin/materials.py:786 apps/admin-web/src/views/channel/CourseMaterials.vue:379）"
+    },
+    {
+      "endpoint": "POST /notification/templates/*/preview",
+      "model": "PreviewTemplateBody",
+      "modelSource": "backend/app/routers/admin/notification.py:57",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/notification.py:144",
+      "declared": [
+        "variables"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/notification/NotificationConfig.vue",
+            "line": 745,
+            "fn": "previewNotificationTemplate",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "variables"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "variables"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /queue/tasks/batch-delete",
+      "model": "BatchDeleteTasksRequest",
+      "modelSource": "backend/app/routers/admin/queue.py:28",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/queue.py:92",
+      "declared": [
+        "workflow_ids"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/queue/QueueManagement.vue",
+            "line": 559,
+            "fn": "batchDeleteTasks",
+            "fieldCount": 1,
+            "unresolved": [
+              "变量 ids 无可解析的声明"
+            ]
+          }
+        ],
+        "fields": [
+          "workflow_ids"
+        ],
+        "unresolved": [
+          "变量 ids 无可解析的声明"
+        ],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "workflow_ids"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /reviews/*/action",
+      "model": "ActionRequest",
+      "modelSource": "backend/app/routers/admin/reviews.py:19",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/reviews.py:127",
+      "declared": [
+        "action",
+        "reason",
+        "segment_id"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/mobile/ReviewList.vue",
+            "line": 332,
+            "fn": "handleReviewAction",
+            "fieldCount": 3,
+            "unresolved": [
+              "变量 action 无可解析的声明"
+            ]
+          },
+          {
+            "file": "views/review/ReviewDetail.vue",
+            "line": 333,
+            "fn": "api.post",
+            "fieldCount": 3,
+            "unresolved": []
+          },
+          {
+            "file": "views/workflow/WorkflowDetail.vue",
+            "line": 938,
+            "fn": "handleReviewAction",
+            "fieldCount": 3,
+            "unresolved": [
+              "变量 action 无可解析的声明"
+            ]
+          }
+        ],
+        "fields": [
+          "action",
+          "reason",
+          "segment_id"
+        ],
+        "unresolved": [
+          "变量 action 无可解析的声明"
+        ],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "action",
+          "segment_id"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /reviews/batch-action",
+      "model": "BatchActionRequest",
+      "modelSource": "backend/app/routers/admin/reviews.py:30",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/reviews.py:68",
+      "declared": [
+        "action",
+        "reason",
+        "review_ids"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/mobile/ReviewList.vue",
+            "line": 379,
+            "fn": "batchHandleReviewAction",
+            "fieldCount": 3,
+            "unresolved": [
+              "变量 ids 无可解析的声明"
+            ]
+          },
+          {
+            "file": "views/review/ReviewList.vue",
+            "line": 456,
+            "fn": "batchHandleReviewAction",
+            "fieldCount": 3,
+            "unresolved": [
+              "变量 ids 无可解析的声明"
+            ]
+          },
+          {
+            "file": "views/review/ReviewList.vue",
+            "line": 500,
+            "fn": "batchHandleReviewAction",
+            "fieldCount": 3,
+            "unresolved": [
+              "变量 ids 无可解析的声明"
+            ]
+          }
+        ],
+        "fields": [
+          "action",
+          "reason",
+          "review_ids"
+        ],
+        "unresolved": [
+          "变量 ids 无可解析的声明"
+        ],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "action",
+          "review_ids"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /tunnel/cloudflare/create",
+      "model": "CloudflareCreateBody",
+      "modelSource": "backend/app/routers/admin/tunnel.py:54",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/tunnel.py:251",
+      "declared": [
+        "cert_file",
+        "tunnel_name"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/tunnel/Tunnel.vue",
+            "line": 645,
+            "fn": "api.post",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "tunnel_name"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [
+          "cert_file"
+        ],
+        "modelNotInColumn": [
+          "cert_file",
+          "tunnel_name"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /tunnel/cloudflare/route-dns",
+      "model": "CloudflareRouteDnsBody",
+      "modelSource": "backend/app/routers/admin/tunnel.py:60",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/tunnel.py:296",
+      "declared": [
+        "cert_file",
+        "hostname",
+        "tunnel_name_or_id"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/tunnel/Tunnel.vue",
+            "line": 665,
+            "fn": "api.post",
+            "fieldCount": 2,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "hostname",
+          "tunnel_name_or_id"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [
+          "cert_file"
+        ],
+        "modelNotInColumn": [
+          "cert_file",
+          "hostname",
+          "tunnel_name_or_id"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /tunnel/config",
+      "model": "TunnelConfigBody",
+      "modelSource": "backend/app/routers/admin/tunnel.py:34",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/tunnel.py:183",
+      "declared": [
+        "auto_start",
+        "binary_path",
+        "cert_file",
+        "cpolar_authtoken",
+        "credentials_file",
+        "hostname",
+        "local_port",
+        "provider",
+        "tunnel_id",
+        "tunnel_mode",
+        "tunnel_name"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/tunnel/Tunnel.vue",
+            "line": 564,
+            "fn": "api.post",
+            "fieldCount": 11,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "auto_start",
+          "binary_path",
+          "cert_file",
+          "cpolar_authtoken",
+          "credentials_file",
+          "hostname",
+          "local_port",
+          "provider",
+          "tunnel_id",
+          "tunnel_mode",
+          "tunnel_name"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [
+          "auto_start",
+          "binary_path",
+          "cert_file",
+          "cpolar_authtoken",
+          "credentials_file",
+          "hostname",
+          "local_port",
+          "provider",
+          "tunnel_id",
+          "tunnel_mode",
+          "tunnel_name"
+        ],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "auto_start",
+          "binary_path",
+          "cert_file",
+          "cpolar_authtoken",
+          "credentials_file",
+          "hostname",
+          "local_port",
+          "provider",
+          "tunnel_id",
+          "tunnel_mode",
+          "tunnel_name"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": "设计如此：隧道配置落 JSON 文件而非数据库表，handler 走 svc.save_config(body.model_dump()) 全量透传，AST 反射看不到逐字段赋值；无表可连属正常（backend/app/routers/admin/tunnel.py:183 backend/app/routers/admin/tunnel.py:194）"
+    },
+    {
+      "endpoint": "POST /users/*/toggle-status",
+      "model": "UserToggleBody",
+      "modelSource": "backend/app/routers/admin/users.py:22",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/users.py:75",
+      "declared": [
+        "disabled"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/mobile/ManageUsers.vue",
+            "line": 85,
+            "fn": "toggleUserStatus",
+            "fieldCount": 1,
+            "unresolved": [
+              "变量 next 无可解析的声明"
+            ]
+          }
+        ],
+        "fields": [
+          "disabled"
+        ],
+        "unresolved": [
+          "变量 next 无可解析的声明"
+        ],
+        "hasCallSite": true
+      },
+      "ormTable": "User",
+      "ormScore": 1.0,
+      "ormTied": [
+        "User"
+      ],
+      "ormColumns": [
+        "avatar",
+        "created_at",
+        "disabled",
+        "id",
+        "nickname",
+        "openid",
+        "total_listen_count",
+        "total_listen_duration",
+        "unionid",
+        "updated_at"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [],
+        "columnNotInModel": [
+          "avatar",
+          "nickname",
+          "openid",
+          "total_listen_count",
+          "total_listen_duration",
+          "unionid"
+        ]
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /workflows/*/retry",
+      "model": "RetryRequest",
+      "modelSource": "backend/app/routers/admin/workflows.py:23",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/workflows.py:276",
+      "declared": [
+        "step"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/workflow/WorkflowDetail.vue",
+            "line": 955,
+            "fn": "api.post",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "step"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "step"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /workflows/batch-delete",
+      "model": "BatchDeleteRequest",
+      "modelSource": "backend/app/routers/admin/workflows.py:39",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/workflows.py:94",
+      "declared": [
+        "workflow_ids"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/workflow/WorkflowList.vue",
+            "line": 668,
+            "fn": "api.post",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "workflow_ids"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "workflow_ids"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /workflows/trigger",
+      "model": "TriggerRequest",
+      "modelSource": "backend/app/routers/admin/workflows.py:28",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/workflows.py:130",
+      "declared": [
+        "channel_id",
+        "episode_date",
+        "skip_crawl"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/workflow/WorkflowList.vue",
+            "line": 554,
+            "fn": "triggerWorkflow",
+            "fieldCount": 3,
+            "unresolved": []
+          },
+          {
+            "file": "views/workflow/WorkflowList.vue",
+            "line": 607,
+            "fn": "triggerWorkflow",
+            "fieldCount": 3,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "channel_id",
+          "episode_date",
+          "skip_crawl"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": "Workflow",
+      "ormScore": 0.667,
+      "ormTied": [
+        "Workflow"
+      ],
+      "ormColumns": [
+        "channel_id",
+        "episode_date",
+        "error",
+        "finished_at",
+        "id",
+        "priority",
+        "source",
+        "started_at",
+        "status"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "skip_crawl"
+        ],
+        "columnNotInModel": [
+          "error",
+          "finished_at",
+          "priority",
+          "source",
+          "started_at",
+          "status"
+        ]
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "PUT /ads/placements/*",
+      "model": "PlacementUpdateRequest",
+      "modelSource": "backend/app/routers/admin/ads.py:97",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/ads.py:109",
+      "declared": [
+        "enabled"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/ad/AdPlacements.vue",
+            "line": 305,
+            "fn": "api.put",
+            "fieldCount": 1,
+            "unresolved": []
+          },
+          {
+            "file": "views/ad/AdSchedule.vue",
+            "line": 197,
+            "fn": "api.put",
+            "fieldCount": 1,
+            "unresolved": []
+          },
+          {
+            "file": "views/mobile/ManageAds.vue",
+            "line": 70,
+            "fn": "updatePlacement",
+            "fieldCount": 1,
+            "unresolved": [
+              "变量 next 无可解析的声明"
+            ]
+          }
+        ],
+        "fields": [
+          "enabled"
+        ],
+        "unresolved": [
+          "变量 next 无可解析的声明"
+        ],
+        "hasCallSite": true
+      },
+      "ormTable": "AdPlacement",
+      "ormScore": 1.0,
+      "ormTied": [
+        "AdPlacement"
+      ],
+      "ormColumns": [
+        "created_at",
+        "enabled",
+        "end_date",
+        "id",
+        "material_id",
+        "position",
+        "start_date"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [],
+        "columnNotInModel": [
+          "end_date",
+          "material_id",
+          "position",
+          "start_date"
+        ]
+      },
+      "verdict": "设计如此：FR-M702 明确把该端点收窄为「仅暴露 enabled 安全开关」，material_id/position/start_date/end_date 只能在创建时设定，属于刻意的窄接口而非漏字段（backend/app/routers/admin/ads.py:98 backend/app/routers/admin/ads.py:99 backend/app/models/ad_placement.py:30）"
+    },
+    {
+      "endpoint": "PUT /ai/config",
+      "model": "SaveConfigBody",
+      "modelSource": "backend/app/routers/admin/ai_config.py:133",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:273",
+      "declared": [
+        "image",
+        "image.api_key",
+        "image.base_url",
+        "image.model",
+        "llm",
+        "llm.api_key",
+        "llm.base_url",
+        "llm.chat_timeout_sec",
+        "llm.llm_max_script_segments",
+        "llm.model",
+        "llm.retry_attempts",
+        "llm.segment_gap_sec",
+        "llm.target_duration_sec",
+        "llm.timeout_sec",
+        "selected_preset",
+        "tts",
+        "tts.aliyun_pitch_rate",
+        "tts.aliyun_speech_rate",
+        "tts.aliyun_volume",
+        "tts.api_key",
+        "tts.appkey",
+        "tts.cross_voice",
+        "tts.edge_pitch",
+        "tts.edge_rate",
+        "tts.edge_voice",
+        "tts.edge_volume",
+        "tts.format",
+        "tts.kokoro_lang",
+        "tts.kokoro_speed",
+        "tts.kokoro_voice",
+        "tts.piper_length_scale",
+        "tts.piper_noise_scale",
+        "tts.piper_voice",
+        "tts.piper_voice_dir",
+        "tts.piper_volume",
+        "tts.provider",
+        "tts.retry_attempts",
+        "tts.sample_rate",
+        "tts.tencent_region",
+        "tts.tencent_secret_id",
+        "tts.tencent_secret_key",
+        "tts.tencent_speed",
+        "tts.tencent_voice_type",
+        "tts.tencent_volume",
+        "tts.timeout_sec",
+        "tts.voice"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/ai/AIConfig.vue",
+            "line": 1372,
+            "fn": "api.put",
+            "fieldCount": 4,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "image",
+          "llm",
+          "selected_preset",
+          "tts"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [
+          "image.api_key",
+          "image.base_url",
+          "image.model",
+          "llm.api_key",
+          "llm.base_url",
+          "llm.chat_timeout_sec",
+          "llm.llm_max_script_segments",
+          "llm.model",
+          "llm.retry_attempts",
+          "llm.segment_gap_sec",
+          "llm.target_duration_sec",
+          "llm.timeout_sec",
+          "tts.aliyun_pitch_rate",
+          "tts.aliyun_speech_rate",
+          "tts.aliyun_volume",
+          "tts.api_key",
+          "tts.appkey",
+          "tts.cross_voice",
+          "tts.edge_pitch",
+          "tts.edge_rate",
+          "tts.edge_voice",
+          "tts.edge_volume",
+          "tts.format",
+          "tts.kokoro_lang",
+          "tts.kokoro_speed",
+          "tts.kokoro_voice",
+          "tts.piper_length_scale",
+          "tts.piper_noise_scale",
+          "tts.piper_voice",
+          "tts.piper_voice_dir",
+          "tts.piper_volume",
+          "tts.provider",
+          "tts.retry_attempts",
+          "tts.sample_rate",
+          "tts.tencent_region",
+          "tts.tencent_secret_id",
+          "tts.tencent_secret_key",
+          "tts.tencent_speed",
+          "tts.tencent_voice_type",
+          "tts.tencent_volume",
+          "tts.timeout_sec",
+          "tts.voice"
+        ],
+        "modelNotInColumn": [
+          "image",
+          "image.api_key",
+          "image.base_url",
+          "image.model",
+          "llm",
+          "llm.api_key",
+          "llm.base_url",
+          "llm.chat_timeout_sec",
+          "llm.llm_max_script_segments",
+          "llm.model",
+          "llm.retry_attempts",
+          "llm.segment_gap_sec",
+          "llm.target_duration_sec",
+          "llm.timeout_sec",
+          "selected_preset",
+          "tts",
+          "tts.aliyun_pitch_rate",
+          "tts.aliyun_speech_rate",
+          "tts.aliyun_volume",
+          "tts.api_key",
+          "tts.appkey",
+          "tts.cross_voice",
+          "tts.edge_pitch",
+          "tts.edge_rate",
+          "tts.edge_voice",
+          "tts.edge_volume",
+          "tts.format",
+          "tts.kokoro_lang",
+          "tts.kokoro_speed",
+          "tts.kokoro_voice",
+          "tts.piper_length_scale",
+          "tts.piper_noise_scale",
+          "tts.piper_voice",
+          "tts.piper_voice_dir",
+          "tts.piper_volume",
+          "tts.provider",
+          "tts.retry_attempts",
+          "tts.sample_rate",
+          "tts.tencent_region",
+          "tts.tencent_secret_id",
+          "tts.tencent_secret_key",
+          "tts.tencent_speed",
+          "tts.tencent_voice_type",
+          "tts.tencent_volume",
+          "tts.timeout_sec",
+          "tts.voice"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": "设计如此：PUT /ai/config 的字段是嵌套结构（llm./tts./image.），前端按子表单展开提交，落库到按 provider 分组的配置行；顶层字段名与列名天然不同，(a)−(c) 命中为结构差异不是漏字段（apps/admin-web/src/views/ai/AIConfig.vue:1595 apps/admin-web/src/views/ai/AIConfig.vue:1660）"
+    },
+    {
+      "endpoint": "PUT /auto-review/config",
+      "model": "ConfigUpdateRequest",
+      "modelSource": "backend/app/routers/admin/auto_review.py:27",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/auto_review.py:79",
+      "declared": [
+        "enabled",
+        "keyword_whitelist",
+        "require_content_safe",
+        "require_steps_first_success",
+        "risk_acknowledged"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/system/AutoReviewConfig.vue",
+            "line": 480,
+            "fn": "updateAutoReviewConfig",
+            "fieldCount": 5,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "enabled",
+          "keyword_whitelist",
+          "require_content_safe",
+          "require_steps_first_success",
+          "risk_acknowledged"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": "AutoReviewConfig",
+      "ormScore": 1.0,
+      "ormTied": [
+        "AutoReviewConfig"
+      ],
+      "ormColumns": [
+        "enabled",
+        "id",
+        "keyword_whitelist",
+        "require_content_safe",
+        "require_steps_first_success",
+        "risk_acknowledged",
+        "risk_acknowledged_at",
+        "risk_acknowledged_by",
+        "updated_at",
+        "updated_by"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [],
+        "columnNotInModel": [
+          "risk_acknowledged_at",
+          "risk_acknowledged_by",
+          "updated_by"
+        ]
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "PUT /channels/*",
+      "model": "ChannelUpdateRequest",
+      "modelSource": "backend/app/routers/admin/channels.py:225",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/channels.py:490",
+      "declared": [
+        "bgm_gap_mode",
+        "bgm_path",
+        "bgm_volume",
+        "book_rss_sources",
+        "channel_type",
+        "constraint_prompt",
+        "cover_url",
+        "description",
+        "disclaimer_level",
+        "display_order",
+        "enable_ad",
+        "enable_thinking_question",
+        "intro_prompt",
+        "is_active",
+        "keywords",
+        "manual_material_ids",
+        "material_lookback_days",
+        "min_duration_sec",
+        "name",
+        "outro_prompt",
+        "rewrite_template",
+        "rss_sources",
+        "schedule_time",
+        "segment_gap_sec",
+        "selection_strategy",
+        "type_label"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/channel/ChannelManagement.vue",
+            "line": 1083,
+            "fn": "updateChannel",
+            "fieldCount": 26,
+            "unresolved": [
+              "展开 extPayload（静态不可定）"
+            ]
+          },
+          {
+            "file": "views/channel/ChannelManagement.vue",
+            "line": 1177,
+            "fn": "updateChannel",
+            "fieldCount": 1,
+            "unresolved": []
+          },
+          {
+            "file": "views/channel/ChannelManagement.vue",
+            "line": 1310,
+            "fn": "updateChannel",
+            "fieldCount": 2,
+            "unresolved": []
+          },
+          {
+            "file": "views/channel/ChannelManagement.vue",
+            "line": 1349,
+            "fn": "updateChannel",
+            "fieldCount": 2,
+            "unresolved": []
+          },
+          {
+            "file": "views/mobile/ManageChannels.vue",
+            "line": 64,
+            "fn": "updateChannel",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "bgm_gap_mode",
+          "bgm_path",
+          "bgm_volume",
+          "book_rss_sources",
+          "channel_type",
+          "constraint_prompt",
+          "cover_url",
+          "description",
+          "disclaimer_level",
+          "display_order",
+          "enable_ad",
+          "enable_thinking_question",
+          "intro_prompt",
+          "is_active",
+          "keywords",
+          "manual_material_ids",
+          "material_lookback_days",
+          "min_duration_sec",
+          "name",
+          "outro_prompt",
+          "rewrite_template",
+          "rss_sources",
+          "schedule_time",
+          "segment_gap_sec",
+          "selection_strategy",
+          "type_label"
+        ],
+        "unresolved": [
+          "展开 extPayload（静态不可定）"
+        ],
+        "hasCallSite": true
+      },
+      "ormTable": "Channel",
+      "ormScore": 1.0,
+      "ormTied": [
+        "Channel"
+      ],
+      "ormColumns": [
+        "bgm_gap_mode",
+        "bgm_path",
+        "bgm_volume",
+        "book_pool_cursor",
+        "book_pool_interval_days",
+        "book_pool_last_run_date",
+        "book_pool_last_title",
+        "book_pool_loop",
+        "book_rss_sources",
+        "book_rss_sources_snapshot",
+        "channel_type",
+        "constraint_prompt",
+        "cover_url",
+        "created_at",
+        "description",
+        "disclaimer_level",
+        "display_order",
+        "enable_ad",
+        "enable_thinking_question",
+        "icon_url",
+        "id",
+        "intro_prompt",
+        "is_active",
+        "keywords",
+        "manual_material_ids",
+        "material_lookback_days",
+        "min_duration_sec",
+        "name",
+        "outro_prompt",
+        "rewrite_template",
+        "rss_sources",
+        "rss_sources_snapshot",
+        "schedule_time",
+        "script_mode",
+        "segment_gap_sec",
+        "selection_strategy",
+        "type_label",
+        "updated_at"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [],
+        "columnNotInModel": [
+          "book_pool_cursor",
+          "book_pool_interval_days",
+          "book_pool_last_run_date",
+          "book_pool_last_title",
+          "book_pool_loop",
+          "book_rss_sources_snapshot",
+          "icon_url",
+          "rss_sources_snapshot",
+          "script_mode"
+        ]
+      },
+      "verdict": "设计如此：icon_url 由上传/AI 生成两个专用端点写，script_mode 与 book_pool_* 由讲书稿模式/排期端点写，都不应通过通用编辑接口提交（避免绕过校验）；但 rss_sources_snapshot / book_rss_sources_snapshot 两列经全仓检索只有建表与读取、没有任何写入点，属列不可达，本单登记不实现（backend/app/routers/admin/channels.py:937 backend/app/routers/admin/channels.py:981 backend/app/services/book_pool_service.py:88 backend/app/services/book_pool_service.py:325 backend/app/models/channel.py:65 backend/app/main.py:314）"
+    },
+    {
+      "endpoint": "PUT /channels/*/book-pool/order",
+      "model": "ReorderRequest",
+      "modelSource": "backend/app/routers/admin/book_pool.py:48",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/book_pool.py:146",
+      "declared": [
+        "item_ids"
+      ],
+      "frontend": {
+        "callSites": [],
+        "fields": [],
+        "unresolved": [],
+        "hasCallSite": false
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "item_ids"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": "真缺陷（登记，未修）：前端 api 层定义了 reorderBookPool 却没有任何视图导入调用它，功能断链（拖拽排序入口缺失）。补齐 UI 明确不在本单范围（本单「不要做」清单），故只登记并保持可见（apps/admin-web/src/api/bookPool.js:35 apps/admin-web/src/views/channel/ChannelManagement.vue:910）"
+    },
+    {
+      "endpoint": "PUT /channels/*/script-mode",
+      "model": "ScriptModeRequest",
+      "modelSource": "backend/app/routers/admin/book_pool.py:32",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/book_pool.py:65",
+      "declared": [
+        "enabled"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/channel/BookPoolPanel.vue",
+            "line": 338,
+            "fn": "setScriptMode",
+            "fieldCount": 1,
+            "unresolved": [
+              "变量 val 无可解析的声明"
+            ]
+          },
+          {
+            "file": "views/channel/ChannelManagement.vue",
+            "line": 960,
+            "fn": "setScriptMode",
+            "fieldCount": 1,
+            "unresolved": [
+              "变量 val 无可解析的声明"
+            ]
+          }
+        ],
+        "fields": [
+          "enabled"
+        ],
+        "unresolved": [
+          "变量 val 无可解析的声明"
+        ],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "enabled"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "PUT /channels/*/script-mode/schedule",
+      "model": "ScheduleRequest",
+      "modelSource": "backend/app/routers/admin/book_pool.py:36",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/book_pool.py:80",
+      "declared": [
+        "interval_days",
+        "loop"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/channel/BookPoolPanel.vue",
+            "line": 350,
+            "fn": "updateBookPoolSchedule",
+            "fieldCount": 2,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "interval_days",
+          "loop"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "interval_days",
+          "loop"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "PUT /cos/config",
+      "model": "CosConfigBody",
+      "modelSource": "backend/app/routers/admin/cos.py:40",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/cos.py:71",
+      "declared": [
+        "bucket",
+        "cdn_domain",
+        "region",
+        "secret_id",
+        "secret_key"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/cos/CosConfig.vue",
+            "line": 349,
+            "fn": "saveCosConfig",
+            "fieldCount": 5,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "bucket",
+          "cdn_domain",
+          "region",
+          "secret_id",
+          "secret_key"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "bucket",
+          "cdn_domain",
+          "region",
+          "secret_id",
+          "secret_key"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "PUT /feedbacks/*/status",
+      "model": "FeedbackStatusUpdateRequest",
+      "modelSource": "backend/app/routers/admin/feedbacks.py:28",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/feedbacks.py:82",
+      "declared": [
+        "status"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/mobile/ManageFeedback.vue",
+            "line": 88,
+            "fn": "updateFeedbackStatus",
+            "fieldCount": 1,
+            "unresolved": [
+              "变量 next 指向 MemberExpression"
+            ]
+          }
+        ],
+        "fields": [
+          "status"
+        ],
+        "unresolved": [
+          "变量 next 指向 MemberExpression"
+        ],
+        "hasCallSite": true
+      },
+      "ormTable": "Feedback",
+      "ormScore": 1.0,
+      "ormTied": [
+        "Feedback"
+      ],
+      "ormColumns": [
+        "category",
+        "contact",
+        "content",
+        "created_at",
+        "id",
+        "status",
+        "synced_at",
+        "user_id"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [],
+        "columnNotInModel": [
+          "category",
+          "contact",
+          "content",
+          "synced_at",
+          "user_id"
+        ]
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "PUT /materials/*",
+      "model": "MaterialUpdateRequest",
+      "modelSource": "backend/app/routers/admin/materials.py:59",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/materials.py:418",
+      "declared": [
+        "category",
+        "content",
+        "media_thumb_url",
+        "media_type",
+        "media_url",
+        "source",
+        "status",
+        "summary",
+        "title"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/channel/MaterialLibrary.vue",
+            "line": 558,
+            "fn": "updateMaterial",
+            "fieldCount": 8,
+            "unresolved": []
+          },
+          {
+            "file": "views/workflow/WorkflowDetail.vue",
+            "line": 688,
+            "fn": "updateMaterial",
+            "fieldCount": 5,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "category",
+          "content",
+          "media_thumb_url",
+          "media_type",
+          "media_url",
+          "source",
+          "status",
+          "title"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": "Material",
+      "ormScore": 1.0,
+      "ormTied": [
+        "Material"
+      ],
+      "ormColumns": [
+        "category",
+        "channel_id",
+        "content",
+        "cover_url",
+        "crawled_at",
+        "dedup_key",
+        "id",
+        "images_json",
+        "media_thumb_url",
+        "media_type",
+        "media_url",
+        "published_at",
+        "simhash",
+        "source",
+        "source_type",
+        "status",
+        "summary",
+        "title",
+        "url",
+        "workflow_id"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [
+          "category",
+          "content",
+          "media_thumb_url",
+          "media_type",
+          "media_url",
+          "source",
+          "summary",
+          "title"
+        ],
+        "modelNotSubmitted": [
+          "summary"
+        ],
+        "modelNotInColumn": [],
+        "columnNotInModel": [
+          "channel_id",
+          "cover_url",
+          "crawled_at",
+          "dedup_key",
+          "images_json",
+          "published_at",
+          "simhash",
+          "source_type",
+          "url",
+          "workflow_id"
+        ]
+      },
+      "verdict": "列不可达：summary 在模型与列里都在、写穿实测也确实落库，但管理端没有任何输入框提交它（编辑表单只提交 title/content/source/category/status/media_*），所以运营无法维护摘要；属「前端未提交导致列不可达」，本单登记不实现（backend/app/models/material.py:68 apps/admin-web/src/views/channel/MaterialLibrary.vue:558 apps/admin-web/src/views/workflow/WorkflowDetail.vue:688）"
+    },
+    {
+      "endpoint": "PUT /notification/config",
+      "model": "SaveConfigBody",
+      "modelSource": "backend/app/routers/admin/notification.py:34",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/notification.py:73",
+      "declared": [
+        "admin_base_url",
+        "dingtalk_secret",
+        "dingtalk_webhook",
+        "email_smtp_host",
+        "email_smtp_password",
+        "email_smtp_port",
+        "email_smtp_user",
+        "email_to",
+        "failed_enabled",
+        "global_enabled",
+        "published_enabled",
+        "review_enabled",
+        "wecom_webhook"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/notification/NotificationConfig.vue",
+            "line": 641,
+            "fn": "saveNotificationConfig",
+            "fieldCount": 13,
+            "unresolved": [
+              "展开 configForm（静态不可定）"
+            ]
+          },
+          {
+            "file": "views/notification/NotificationConfig.vue",
+            "line": 667,
+            "fn": "saveNotificationConfig",
+            "fieldCount": 13,
+            "unresolved": [
+              "展开 configForm（静态不可定）"
+            ]
+          }
+        ],
+        "fields": [
+          "admin_base_url",
+          "dingtalk_secret",
+          "dingtalk_webhook",
+          "email_smtp_host",
+          "email_smtp_password",
+          "email_smtp_port",
+          "email_smtp_user",
+          "email_to",
+          "failed_enabled",
+          "global_enabled",
+          "published_enabled",
+          "review_enabled",
+          "wecom_webhook"
+        ],
+        "unresolved": [
+          "展开 configForm（静态不可定）"
+        ],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [
+          "admin_base_url",
+          "dingtalk_secret",
+          "dingtalk_webhook",
+          "email_smtp_host",
+          "email_smtp_password",
+          "email_smtp_port",
+          "email_smtp_user",
+          "email_to",
+          "failed_enabled",
+          "global_enabled",
+          "published_enabled",
+          "review_enabled",
+          "wecom_webhook"
+        ],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "admin_base_url",
+          "dingtalk_secret",
+          "dingtalk_webhook",
+          "email_smtp_host",
+          "email_smtp_password",
+          "email_smtp_port",
+          "email_smtp_user",
+          "email_to",
+          "failed_enabled",
+          "global_enabled",
+          "published_enabled",
+          "review_enabled",
+          "wecom_webhook"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": "设计如此：handler 走 config_service 的 key→列 upsert（逐字段显式写入并做脱敏跳过），因此 AST 反射看不到与请求字段同名的赋值；13 个字段已逐个验证确实落到 notify_* 配置项，写穿断言在通知配置服务里（backend/app/services/notification/config_service.py:169 backend/app/routers/admin/notification.py:73）"
+    },
+    {
+      "endpoint": "PUT /notification/templates/*",
+      "model": "UpdateTemplateBody",
+      "modelSource": "backend/app/routers/admin/notification.py:50",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/notification.py:120",
+      "declared": [
+        "body_template",
+        "enabled",
+        "name",
+        "title_template"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/notification/NotificationConfig.vue",
+            "line": 708,
+            "fn": "updateNotificationTemplate",
+            "fieldCount": 4,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "body_template",
+          "enabled",
+          "name",
+          "title_template"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": "NotificationTemplate",
+      "ormScore": 1.0,
+      "ormTied": [
+        "NotificationTemplate"
+      ],
+      "ormColumns": [
+        "body_template",
+        "enabled",
+        "event_type",
+        "id",
+        "is_preset",
+        "name",
+        "title_template",
+        "updated_at"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [],
+        "columnNotInModel": [
+          "event_type",
+          "is_preset"
+        ]
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "PUT /queue/config",
+      "model": "ConfigUpdateRequest",
+      "modelSource": "backend/app/routers/admin/queue.py:22",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/queue.py:211",
+      "declared": [
+        "execution_mode",
+        "max_concurrent"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/queue/QueueManagement.vue",
+            "line": 390,
+            "fn": "updateQueueConfig",
+            "fieldCount": 2,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "execution_mode",
+          "max_concurrent"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": "QueueConfig",
+      "ormScore": 1.0,
+      "ormTied": [
+        "QueueConfig"
+      ],
+      "ormColumns": [
+        "execution_mode",
+        "id",
+        "max_concurrent",
+        "updated_at"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "PUT /queue/tasks/*/priority",
+      "model": "PriorityUpdateRequest",
+      "modelSource": "backend/app/routers/admin/queue.py:17",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/queue.py:145",
+      "declared": [
+        "priority"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/queue/QueueManagement.vue",
+            "line": 498,
+            "fn": "updatePriority",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "priority"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "priority"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "PUT /scripts/*/segments",
+      "model": "UpdateSegmentsRequest",
+      "modelSource": "backend/app/routers/admin/scripts.py:96",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/scripts.py:101",
+      "declared": [
+        "segments",
+        "segments.content",
+        "segments.material_ids",
+        "segments.title"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/workflow/WorkflowDetail.vue",
+            "line": 796,
+            "fn": "updateSegments",
+            "fieldCount": 1,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "segments"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [
+          "segments.content",
+          "segments.material_ids",
+          "segments.title"
+        ],
+        "modelNotInColumn": [
+          "segments",
+          "segments.content",
+          "segments.material_ids",
+          "segments.title"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    }
+  ],
+  "totals": {
+    "endpointsWithBodyModel": 65,
+    "forbidCount": 3,
+    "withFrontendCallSite": 58,
+    "noFrontendCallSite": [
+      "POST /backups/restore",
+      "POST /m/device/register",
+      "POST /m/push/register",
+      "POST /maintenance/cache",
+      "POST /maintenance/database",
+      "POST /maintenance/logs",
+      "PUT /channels/*/book-pool/order"
+    ],
+    "frontendNotInModel": [],
+    "declaredButNotHandled": {
+      "POST /materials/share": [
+        "channel_id"
+      ],
+      "POST /tunnel/config": [
+        "auto_start",
+        "binary_path",
+        "cert_file",
+        "cpolar_authtoken",
+        "credentials_file",
+        "hostname",
+        "local_port",
+        "provider",
+        "tunnel_id",
+        "tunnel_mode",
+        "tunnel_name"
+      ],
+      "PUT /materials/*": [
+        "category",
+        "content",
+        "media_thumb_url",
+        "media_type",
+        "media_url",
+        "source",
+        "summary",
+        "title"
+      ],
+      "PUT /notification/config": [
+        "admin_base_url",
+        "dingtalk_secret",
+        "dingtalk_webhook",
+        "email_smtp_host",
+        "email_smtp_password",
+        "email_smtp_port",
+        "email_smtp_user",
+        "email_to",
+        "failed_enabled",
+        "global_enabled",
+        "published_enabled",
+        "review_enabled",
+        "wecom_webhook"
+      ]
+    },
+    "unresolvedSites": [
+      "PATCH /db-admin/tables/*/rows/*",
+      "POST /assistant/plan",
+      "POST /channels",
+      "POST /cos/move",
+      "POST /db-admin/tables/*/rows/batch-delete",
+      "POST /queue/tasks/batch-delete",
+      "POST /reviews/*/action",
+      "POST /reviews/batch-action",
+      "POST /users/*/toggle-status",
+      "PUT /ads/placements/*",
+      "PUT /channels/*",
+      "PUT /channels/*/script-mode",
+      "PUT /feedbacks/*/status",
+      "PUT /notification/config"
+    ],
+    "tableUnmatched": [
+      "PATCH /db-admin/tables/*/rows/*",
+      "POST /ai/chat",
+      "POST /ai/download-tts-models",
+      "POST /ai/models",
+      "POST /ai/preview-tts",
+      "POST /ai/selected-model",
+      "POST /ai/test-image",
+      "POST /ai/test-llm",
+      "POST /ai/test-tts",
+      "POST /ai/voices/sync",
+      "POST /assistant/execute",
+      "POST /assistant/plan",
+      "POST /auth/login",
+      "POST /backups/restore",
+      "POST /channels/*/book-pool/items",
+      "POST /channels/*/icon/ai-generate",
+      "POST /cos/folder",
+      "POST /cos/move",
+      "POST /db-admin/tables/*/cascade-preview",
+      "POST /db-admin/tables/*/import",
+      "POST /db-admin/tables/*/import/preview",
+      "POST /db-admin/tables/*/rows",
+      "POST /db-admin/tables/*/rows/batch-delete",
+      "POST /m/emergency/stop",
+      "POST /m/inbox/mark-read",
+      "POST /maintenance/cache",
+      "POST /maintenance/database",
+      "POST /maintenance/logs",
+      "POST /materials/batch-delete",
+      "POST /materials/share",
+      "POST /notification/templates/*/preview",
+      "POST /queue/tasks/batch-delete",
+      "POST /reviews/*/action",
+      "POST /reviews/batch-action",
+      "POST /tunnel/cloudflare/create",
+      "POST /tunnel/cloudflare/route-dns",
+      "POST /tunnel/config",
+      "POST /workflows/*/retry",
+      "POST /workflows/batch-delete",
+      "PUT /ai/config",
+      "PUT /channels/*/book-pool/order",
+      "PUT /channels/*/script-mode",
+      "PUT /channels/*/script-mode/schedule",
+      "PUT /cos/config",
+      "PUT /notification/config",
+      "PUT /queue/tasks/*/priority",
+      "PUT /scripts/*/segments"
+    ]
+  }
+}

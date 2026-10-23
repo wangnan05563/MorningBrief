@@ -1,0 +1,219 @@
+{
+  "rows": [
+    {
+      "file": "views/ad/AdPlacements.vue",
+      "object": "form",
+      "endpoints": [
+        "POST /ads/placements",
+        "PUT /ads/placements/*"
+      ],
+      "boundCount": 3,
+      "missing": [
+        "dateRange"
+      ]
+    },
+    {
+      "file": "views/ai/AIConfig.vue",
+      "object": "llmForm",
+      "endpoints": [
+        "POST /ai/download-tts-models",
+        "POST /ai/models",
+        "POST /ai/preview-tts",
+        "POST /ai/reset-config?scope=*",
+        "POST /ai/test-image",
+        "POST /ai/test-llm",
+        "POST /ai/test-tts",
+        "PUT /ai/config"
+      ],
+      "boundCount": 9,
+      "missing": [
+        "chat_timeout_sec",
+        "llm_max_script_segments",
+        "retry_attempts",
+        "segment_gap_sec",
+        "target_duration_sec",
+        "timeout_sec"
+      ]
+    },
+    {
+      "file": "views/ai/AIConfig.vue",
+      "object": "ttsForm",
+      "endpoints": [
+        "POST /ai/download-tts-models",
+        "POST /ai/models",
+        "POST /ai/preview-tts",
+        "POST /ai/reset-config?scope=*",
+        "POST /ai/test-image",
+        "POST /ai/test-llm",
+        "POST /ai/test-tts",
+        "PUT /ai/config"
+      ],
+      "boundCount": 31,
+      "missing": [
+        "cross_voice.enabled",
+        "cross_voice.interval",
+        "cross_voice.strategy",
+        "format",
+        "retry_attempts",
+        "sample_rate",
+        "timeout_sec",
+        "voice"
+      ]
+    },
+    {
+      "file": "views/ai/KnowledgeQA.vue",
+      "object": "f",
+      "endpoints": [
+        "POST /ai/chat",
+        "POST /ai/models",
+        "POST /ai/selected-model",
+        "POST /assistant/execute",
+        "POST /assistant/plan"
+      ],
+      "boundCount": 1,
+      "missing": [
+        "value"
+      ]
+    },
+    {
+      "file": "views/channel/ChannelManagement.vue",
+      "object": "form",
+      "endpoints": [
+        "POST /channels",
+        "POST /channels/*/generate-prompts",
+        "POST /channels/*/icon",
+        "POST /channels/*/icon/ai-generate",
+        "POST /channels/*/recommend-bgm",
+        "POST /channels/*/recommend-sources",
+        "POST /channels/bgm/upload",
+        "PUT /channels/*",
+        "PUT /channels/*/script-mode"
+      ],
+      "boundCount": 31,
+      "missing": [
+        "inherit_bgm_gap",
+        "inherit_segment_gap",
+        "lookbackEnabled",
+        "manual_material_ids_text",
+        "minDurationEnabled"
+      ]
+    },
+    {
+      "file": "views/channel/MaterialLibrary.vue",
+      "object": "filters",
+      "endpoints": [
+        "POST /materials",
+        "POST /materials/batch-delete",
+        "PUT /materials/*"
+      ],
+      "boundCount": 5,
+      "missing": [
+        "keyword"
+      ]
+    },
+    {
+      "file": "views/login/Login.vue",
+      "object": "form",
+      "endpoints": [],
+      "boundCount": 2,
+      "missing": [
+        "password",
+        "username"
+      ]
+    },
+    {
+      "file": "views/notification/NotificationConfig.vue",
+      "object": "logFilter",
+      "endpoints": [
+        "POST /notification/logs/*/resend",
+        "POST /notification/templates/*/preview",
+        "POST /notification/test",
+        "PUT /notification/config",
+        "PUT /notification/templates/*"
+      ],
+      "boundCount": 2,
+      "missing": [
+        "event_type",
+        "status"
+      ]
+    },
+    {
+      "file": "views/queue/QueueManagement.vue",
+      "object": "config",
+      "endpoints": [
+        "POST /queue/tasks/*/cancel",
+        "POST /queue/tasks/*/retry",
+        "POST /queue/tasks/batch-delete",
+        "PUT /queue/config",
+        "PUT /queue/tasks/*/priority"
+      ],
+      "boundCount": 2,
+      "missing": [
+        "concurrency",
+        "mode"
+      ]
+    },
+    {
+      "file": "views/queue/QueueManagement.vue",
+      "object": "filter",
+      "endpoints": [
+        "POST /queue/tasks/*/cancel",
+        "POST /queue/tasks/*/retry",
+        "POST /queue/tasks/batch-delete",
+        "PUT /queue/config",
+        "PUT /queue/tasks/*/priority"
+      ],
+      "boundCount": 3,
+      "missing": [
+        "channel_id",
+        "status"
+      ]
+    },
+    {
+      "file": "views/review/ReviewList.vue",
+      "object": "filters",
+      "endpoints": [
+        "POST /reviews/batch-action"
+      ],
+      "boundCount": 1,
+      "missing": [
+        "workflow_id"
+      ]
+    },
+    {
+      "file": "views/workflow/WorkflowDetail.vue",
+      "object": "materialDialog",
+      "endpoints": [
+        "POST /materials",
+        "POST /reviews/*/action",
+        "POST /workflows/*/retry",
+        "PUT /materials/*",
+        "PUT /scripts/*/segments"
+      ],
+      "boundCount": 6,
+      "missing": [
+        "form.category",
+        "form.content",
+        "form.source",
+        "form.status",
+        "form.title",
+        "visible"
+      ]
+    },
+    {
+      "file": "views/workflow/WorkflowDetail.vue",
+      "object": "segmentsEditor",
+      "endpoints": [
+        "POST /materials",
+        "POST /reviews/*/action",
+        "POST /workflows/*/retry",
+        "PUT /materials/*",
+        "PUT /scripts/*/segments"
+      ],
+      "boundCount": 1,
+      "missing": [
+        "visible"
+      ]
+    }
+  ]
+}

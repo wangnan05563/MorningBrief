@@ -1,0 +1,102 @@
+[
+  {
+    "endpoint": "POST /maintenance/cache",
+    "kind": "真缺陷（已修）",
+    "note": "两处一起修：①`audit_log.detail` 从不记录保留窗口，事后只看得到「清过了」看不到「按几天清的」；②三个清理端点共用 CleanupRequest，缓存端点因此接收它根本无法兑现的 days（TTLCache/__pycache__/临时文件没有「保留 N 天」语义）。现在拆出 CacheCleanupRequest（不声明 days）并给两个请求体加 extra=forbid，数据库/日志清理把 days 写进审计 detail。前端本就只在非缓存分类提交 days（apps/admin-web/src/views/maintenance/Maintenance.vue:400 的 category !== 'cache' 判断），所以这不是线上错数据，而是把潜在的契约漏洞关死",
+    "evidence": "backend/app/routers/admin/maintenance.py:22 backend/app/routers/admin/maintenance.py:35 apps/admin-web/src/views/maintenance/Maintenance.vue:400 backend/app/services/maintenance_service.py:271",
+    "also": [
+      "POST /maintenance/database",
+      "POST /maintenance/logs"
+    ]
+  },
+  {
+    "endpoint": "POST /ads/materials",
+    "kind": "列不可达",
+    "note": "AdMaterial.is_default 有列、有索引、列表接口会读，但全仓没有任何写入点（create/update 请求体都不声明），前端也无法提交。属「前端未提交导致列不可达」，需补默认素材设置入口或确认废弃，本单只登记不实现",
+    "evidence": "backend/app/routers/admin/ads.py:19 backend/app/services/ad_service.py:105 backend/app/models/ad_material.py:24"
+  },
+  {
+    "endpoint": "POST /ads/placements",
+    "kind": "设计如此",
+    "note": "enabled 列有数据库默认值 1，启停只通过 PUT /ads/placements/* 的安全开关改（创建时不允许预选停用状态），所以创建请求体不声明它不是缺陷",
+    "evidence": "backend/app/models/ad_placement.py:37 backend/app/routers/admin/ads.py:98"
+  },
+  {
+    "endpoint": "PUT /ads/placements/*",
+    "kind": "设计如此",
+    "note": "FR-M702 明确把该端点收窄为「仅暴露 enabled 安全开关」，material_id/position/start_date/end_date 只能在创建时设定，属于刻意的窄接口而非漏字段",
+    "evidence": "backend/app/routers/admin/ads.py:98 backend/app/routers/admin/ads.py:99 backend/app/models/ad_placement.py:30"
+  },
+  {
+    "endpoint": "POST /channels",
+    "kind": "设计如此",
+    "note": "auto_generate_prompts 是请求语义开关（触发服务端生成提示词），不是列；constraint/intro/outro_prompt 与 rewrite_template 由新建流程在服务端生成或随后在编辑表单补写，新建表单不采集",
+    "evidence": "backend/app/routers/admin/channels.py:460 backend/app/routers/admin/channels.py:477 apps/admin-web/src/views/channel/ChannelManagement.vue:1116"
+  },
+  {
+    "endpoint": "PUT /channels/*",
+    "kind": "设计如此",
+    "note": "icon_url 由上传/AI 生成两个专用端点写，script_mode 与 book_pool_* 由讲书稿模式/排期端点写，都不应通过通用编辑接口提交（避免绕过校验）；但 rss_sources_snapshot / book_rss_sources_snapshot 两列经全仓检索只有建表与读取、没有任何写入点，属列不可达，本单登记不实现",
+    "evidence": "backend/app/routers/admin/channels.py:937 backend/app/routers/admin/channels.py:981 backend/app/services/book_pool_service.py:88 backend/app/services/book_pool_service.py:325 backend/app/models/channel.py:65 backend/app/main.py:314"
+  },
+  {
+    "endpoint": "PUT /channels/*/book-pool/order",
+    "kind": "真缺陷（登记，未修）",
+    "note": "前端 api 层定义了 reorderBookPool 却没有任何视图导入调用它，功能断链（拖拽排序入口缺失）。补齐 UI 明确不在本单范围（本单「不要做」清单），故只登记并保持可见",
+    "evidence": "apps/admin-web/src/api/bookPool.js:35 apps/admin-web/src/views/channel/ChannelManagement.vue:910"
+  },
+  {
+    "endpoint": "POST /materials",
+    "kind": "设计如此",
+    "note": "cover_url/crawled_at/dedup_key/images_json/published_at/simhash/status/summary 是抓取与去重链路生成的内部列，手动录入端点刻意不接收，由导入/爬虫路径写入",
+    "evidence": "backend/app/routers/admin/materials.py:405 backend/app/routers/admin/materials.py:665 backend/app/routers/admin/materials.py:771"
+  },
+  {
+    "endpoint": "POST /materials/import-url",
+    "kind": "设计如此",
+    "note": "同 POST /materials：导入请求只带 url/channel_id/source 等输入项，正文与去重列由抓取结果写入",
+    "evidence": "backend/app/routers/admin/materials.py:665 apps/admin-web/src/views/channel/CourseMaterials.vue:355"
+  },
+  {
+    "endpoint": "POST /materials/share",
+    "kind": "设计如此",
+    "note": "分享预览不落库（只返回 title/content 供预填），channel_id 由前端用于决定预填进哪个频道，服务端不消费它。声明但不用属可接受的请求语义，不是死字段",
+    "evidence": "backend/app/routers/admin/materials.py:777 backend/app/routers/admin/materials.py:786 apps/admin-web/src/views/channel/CourseMaterials.vue:379"
+  },
+  {
+    "endpoint": "PUT /materials/*",
+    "kind": "列不可达",
+    "note": "summary 在模型与列里都在、写穿实测也确实落库，但管理端没有任何输入框提交它（编辑表单只提交 title/content/source/category/status/media_*），所以运营无法维护摘要；属「前端未提交导致列不可达」，本单登记不实现",
+    "evidence": "backend/app/models/material.py:68 apps/admin-web/src/views/channel/MaterialLibrary.vue:558 apps/admin-web/src/views/workflow/WorkflowDetail.vue:688"
+  },
+  {
+    "endpoint": "PUT /notification/config",
+    "kind": "设计如此",
+    "note": "handler 走 config_service 的 key→列 upsert（逐字段显式写入并做脱敏跳过），因此 AST 反射看不到与请求字段同名的赋值；13 个字段已逐个验证确实落到 notify_* 配置项，写穿断言在通知配置服务里",
+    "evidence": "backend/app/services/notification/config_service.py:169 backend/app/routers/admin/notification.py:73"
+  },
+  {
+    "endpoint": "PUT /ai/config",
+    "kind": "设计如此",
+    "note": "PUT /ai/config 的字段是嵌套结构（llm./tts./image.），前端按子表单展开提交，落库到按 provider 分组的配置行；顶层字段名与列名天然不同，(a)−(c) 命中为结构差异不是漏字段",
+    "evidence": "apps/admin-web/src/views/ai/AIConfig.vue:1595 apps/admin-web/src/views/ai/AIConfig.vue:1660"
+  },
+  {
+    "endpoint": "POST /auth/login",
+    "kind": "设计如此",
+    "note": "password 只用于校验，落库列是 password_hash；last_login_at/nickname/role/status 由注册与管理端点写，登录请求体不声明它们是正确的窄接口",
+    "evidence": "backend/app/models/admin_user.py:27 backend/app/models/admin_user.py:33"
+  },
+  {
+    "endpoint": "POST /materials/import-cos",
+    "kind": "设计如此",
+    "note": "key 是 COS 对象键（导入入参），落库时转成 url/content 等列，本身不是列；正文、去重、抓取时间等列由导入链路生成，与手动录入端点同口径",
+    "evidence": "backend/app/routers/admin/materials.py:722 backend/app/routers/admin/materials.py:733 apps/admin-web/src/views/channel/CourseMaterials.vue:294"
+  },
+  {
+    "endpoint": "POST /tunnel/config",
+    "kind": "设计如此",
+    "note": "隧道配置落 JSON 文件而非数据库表，handler 走 svc.save_config(body.model_dump()) 全量透传，AST 反射看不到逐字段赋值；无表可连属正常",
+    "evidence": "backend/app/routers/admin/tunnel.py:183 backend/app/routers/admin/tunnel.py:194"
+  }
+]

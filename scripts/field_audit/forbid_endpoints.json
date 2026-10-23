@@ -1,0 +1,27 @@
+{
+  "_comment": "未知字段拒绝（extra=forbid）灰度登记表。分步放开，不一刀切：只有列在这里的端点要求「提交未声明字段必须被拒」。backend/tests/test_t02926_maintenance_field_contract.py 逐条参数化断言，并把它与运行时反射出的 forbid 端点集合做双向比对；apps/admin-web/tests/unit/field-alignment.test.mjs 再把它与登记表 forbid 行数比对。任何一端漏配即红。",
+  "rollout_rule": "先补一条「提交未声明字段 → 4xx 且点名该字段」的断言，暴露真实调用点，再把该端点的请求模型改为 extra=forbid 并登记于此",
+  "endpoints": [
+    {
+      "key": "POST /maintenance/cache",
+      "model": "CacheCleanupRequest",
+      "probe_field": "days",
+      "why": "缓存清理（TTLCache / __pycache__ / 临时文件）没有「保留 N 天」语义，却共用带 days 的请求体： extra=ignore 下任何误发的 days 都会被静默接受。前端目前只在非缓存分类提交 days（Maintenance.vue:400），所以这是契约收紧而不是线上故障",
+      "evidence": "backend/app/routers/admin/maintenance.py:35 apps/admin-web/src/views/maintenance/Maintenance.vue:400"
+    },
+    {
+      "key": "POST /maintenance/database",
+      "model": "CleanupRequest",
+      "probe_field": "t02926_undeclared_probe",
+      "why": "本单真缺陷在这里：按天数窗口清理，但 audit_log.detail 里从来没有 days，事后无法判断那次清理保留了几天。forbid 之后新增参数也不会再被静默丢弃",
+      "evidence": "backend/app/routers/admin/maintenance.py:22 backend/app/services/maintenance_service.py:271"
+    },
+    {
+      "key": "POST /maintenance/logs",
+      "model": "CleanupRequest",
+      "probe_field": "t02926_undeclared_probe",
+      "why": "同 database：日志按天数清理，字段契约与审计口径要一起钉住",
+      "evidence": "backend/app/routers/admin/maintenance.py:22 backend/app/services/maintenance_service.py:353"
+    }
+  ]
+}
