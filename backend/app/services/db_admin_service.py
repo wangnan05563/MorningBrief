@@ -738,6 +738,150 @@ class DbAdminService:
         )
         return result.first() is not None
 
+    async def _import_constraints(self, table: str, columns: set[str]) -> dict:
+        """反射唯一/CHECK/外键约束，供 dry-run 静态预判。
+
+        T02894：预览此前只算 NOT NULL 与主键冲突，UNIQUE/CHECK/FK 要到真写才炸，
+        于是「预览 0 错误」而「导入报错」——两本账对不上。
+        """
+        def _reflect(sync_session):
+            conn = sync_session.connection()
+            insp = inspect(conn)
+            uniques: list[tuple[str, ...]] = []
+            seen: set[tuple[str, ...]] = set()
+
+            def _add(cols):
+                key = tuple(c for c in (cols or []) if c)
+                if key and key not in seen and set(key) <= columns:
+                    seen.add(key)
+                    uniques.append(key)
+
+            for uc in insp.get_unique_constraints(table):
+                _add(uc.get("column_names"))
+            for ix in insp.get_indexes(table):
+                if ix.get("unique"):
+                    _add(ix.get("column_names"))
+            checks = [
+                c["sqltext"] for c in insp.get_check_constraints(table)
+                if c.get("sqltext")
+            ]
+            fks = [
+                {
+                    "columns": fk.get("constrained_columns") or [],
+                    "referred_table": fk.get("referred_table"),
+                    "referred_columns": fk.get("referred_columns") or [],
+                }
+                for fk in insp.get_foreign_keys(table)
+            ]
+            return {"unique": uniques, "checks": checks, "foreign_keys": fks}
+
+        try:
+            return await self.db.run_sync(_reflect)
+        except Exception:
+            # 反射失败时退回旧能力（NOT NULL/主键），不能让预览整体不可用
+            logger.warning("导入预览：约束反射失败，退化为仅检查 NOT NULL/主键", exc_info=True)
+            return {"unique": [], "checks": [], "foreign_keys": []}
+
+    async def _constraint_error(
+        self,
+        table: str,
+        row: dict,
+        *,
+        col_types: dict[str, str],
+        constraints: dict,
+        pk_col: Optional[str],
+        is_update: bool,
+        seen_uniques: dict,
+        row_no: int,
+        fk_enforced: bool = True,
+    ) -> Optional[str]:
+        """按表约束判断这一行真写时会不会失败；返回首条可读原因。"""
+        for cols in constraints["unique"]:
+            if not set(cols) <= set(row):
+                continue
+            values = tuple(row[c] for c in cols)
+            if any(v is None for v in values):
+                continue  # SQLite 唯一索引对 NULL 不去重
+            key = (cols, values)
+            first = seen_uniques.get(key)
+            if first and not (is_update and first[1] == row.get(pk_col)):
+                return f"违反唯一约束 ({', '.join(cols)})：与第 {first[0]} 行重复，导入会失败"
+            where = " AND ".join(f"{c} = :u{i}" for i, c in enumerate(cols))
+            params = {f"u{i}": v for i, v in enumerate(values)}
+            sql = f"SELECT 1 FROM {table} WHERE {where}"
+            if is_update and pk_col and pk_col in row:
+                sql += f" AND {pk_col} != :pk"
+                params["pk"] = row[pk_col]
+            if (await self.db.execute(text(sql), params)).first() is not None:
+                return f"违反唯一约束 ({', '.join(cols)})：值与库内已有记录重复，导入会失败"
+            seen_uniques[key] = (row_no, row.get(pk_col))
+
+        for sqltext in constraints["checks"]:
+            why = await self._check_violation(sqltext, row, col_types)
+            if why:
+                return why
+
+        for fk in constraints["foreign_keys"]:
+            if not fk_enforced:
+                # SQLite 默认关闭外键；开关没开时真写不会失败，预览也不该报错
+                break
+            cols, ref_cols = fk["columns"], fk["referred_columns"]
+            ref_table = fk["referred_table"]
+            if len(cols) != len(ref_cols) or not cols or not ref_table:
+                continue
+            if not set(cols) <= set(row) or any(row[c] is None for c in cols):
+                continue
+            where = " AND ".join(f"{c} = :f{i}" for i, c in enumerate(ref_cols))
+            params = {f"f{i}": row[c] for i, c in enumerate(cols)}
+            exists = await self.db.execute(
+                text(f"SELECT 1 FROM {_validate_identifier(ref_table)} WHERE {where}"), params
+            )
+            if exists.first() is None:
+                shown = ", ".join(f"{c}={row[c]}" for c in cols)
+                return f"违反外键约束：{ref_table} 中没有匹配记录（{shown}），导入会失败"
+        return None
+
+    async def _check_violation(
+        self, sqltext: str, row: dict, col_types: dict[str, str]
+    ) -> Optional[str]:
+        """把 CHECK 表达式交给数据库求值（只读 SELECT），避免自己写 SQL 解析器。
+
+        SQLite 的 CHECK 为 NULL 时视为通过，故用 `(expr) IS NOT 0` 区分「不满足」。
+        表达式引用多列且本行缺列（会由默认值补齐）时无法静态判定，跳过。
+        """
+        ref_cols = [
+            c for c in col_types
+            if re.search(rf"(?<![A-Za-z0-9_]){re.escape(c)}(?![A-Za-z0-9_])", sqltext)
+        ]
+        if not ref_cols or any(c not in row for c in ref_cols):
+            return None
+        expr = sqltext
+        params: dict[str, Any] = {}
+        for i, col in enumerate(ref_cols):
+            value = row[col]
+            col_type = col_types[col].upper()
+            if isinstance(value, str):
+                try:
+                    if "INT" in col_type and value.strip().lstrip("-").isdigit():
+                        value = int(value)
+                    elif any(t in col_type for t in ("REAL", "FLOAT", "NUMERIC", "DECIMAL")):
+                        value = float(value)
+                except ValueError:
+                    pass
+            params[f"c{i}"] = value
+            expr = re.sub(
+                rf'"?\b{re.escape(col)}\b"?', f":c{i}", expr
+            )
+        try:
+            result = await self.db.execute(text(f"SELECT ({expr}) IS NOT 0 AS ok"), params)
+            ok = result.scalar_one()
+        except Exception:
+            # 表达式超出可静态判定范围（函数/子查询等）：宁可漏报也不误报
+            logger.info("导入预览：CHECK 约束无法静态求值，跳过：%s", sqltext)
+            return None
+        return None if ok else f"违反 CHECK 约束（{sqltext}），导入会失败"
+
+
     @staticmethod
     def parse_import_payload(content: str, fmt: str = "csv") -> list[dict]:
         """用标准 csv/json 解析导入文本，正确处理引号内逗号、CRLF、BOM。"""
@@ -790,6 +934,7 @@ class DbAdminService:
 
         schema = await self.get_table_schema(table)
         valid_cols = {c["name"] for c in schema["columns"]}
+        col_types = {c["name"]: c["type"] for c in schema["columns"]}
         pk_col = self._get_single_pk_column(schema)
         # 真正会卡住 INSERT 的列：NOT NULL、表上没有 DEFAULT、且不是自增主键。
         # 主键排除在外：insert 模式允许省略自增主键让 SQLite 自己填。
@@ -798,6 +943,12 @@ class DbAdminService:
             for c in schema["columns"]
             if not c["nullable"] and c["default"] is None and not c["primary_key"]
         )
+        constraints = await self._import_constraints(table, valid_cols)
+        try:
+            fk_enforced = bool((await self.db.execute(text("PRAGMA foreign_keys"))).scalar())
+        except Exception:
+            fk_enforced = True  # 非 SQLite 后端按「外键总是生效」处理
+        seen_uniques: dict = {}
 
         to_insert = 0
         to_update = 0
@@ -865,6 +1016,23 @@ class DbAdminService:
                         "fields": missing,
                     })
                     continue
+
+            # T02894：唯一/CHECK/外键约束此前只在真写时才炸，预览却算作可写。
+            # 这里与 import_rows 的失败面逐项对齐，避免 error_rows 少报。
+            constraint_error = await self._constraint_error(
+                table,
+                filtered,
+                col_types=col_types,
+                constraints=constraints,
+                pk_col=pk_col,
+                is_update=is_update,
+                seen_uniques=seen_uniques,
+                row_no=i + 1,
+                fk_enforced=fk_enforced,
+            )
+            if constraint_error:
+                errors.append({"row": i + 1, "error": constraint_error})
+                continue
 
             if is_update:
                 to_update += 1
