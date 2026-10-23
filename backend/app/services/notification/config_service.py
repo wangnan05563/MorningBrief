@@ -12,14 +12,18 @@ NFR-UX-01（T02519）：webhook 不再算"非敏感"——钉钉/企微机器人
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.logging_setup import redact_credentials
 from app.models.ai_config import AIConfig
+
+logger = logging.getLogger(__name__)
 
 # 通知配置 key 与默认值
 # 含三类渠道：钉钉（dingtalk）、企业微信（wecom）、邮件（email）
@@ -103,14 +107,16 @@ class NotificationConfigService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def _read_all(self) -> dict[str, str]:
-        """读取所有通知配置项（含默认值兜底）。"""
+    async def _read_stored(self) -> dict[str, str]:
+        """只读库里实际存在的通知配置项（不做默认值合并）。"""
         result = await self.db.execute(
             select(AIConfig).where(AIConfig.config_key.in_(NOTIFY_CONFIG_KEYS.keys()))
         )
-        rows = result.scalars().all()
-        stored = {row.config_key: row.config_value for row in rows}
+        return {row.config_key: row.config_value for row in result.scalars().all()}
 
+    async def _read_all(self) -> dict[str, str]:
+        """读取所有通知配置项（含默认值兜底）。"""
+        stored = await self._read_stored()
         # 合并默认值：未存储的 key 用默认值
         return {key: stored.get(key, default) for key, default in NOTIFY_CONFIG_KEYS.items()}
 
@@ -143,8 +149,28 @@ class NotificationConfigService:
         return value
 
     async def get_config(self) -> dict[str, Any]:
-        """获取通知配置（敏感字段脱敏）+ 自动检测的 base_url。"""
-        raw = await self._read_all()
+        """获取通知配置（敏感字段脱敏）+ 自动检测的 base_url + 来源信息。
+
+        除业务字段外返回 T02898 口径（与 INT-UX-04 同一契约）：
+        - loaded: 本次是否真的读到了配置表；
+        - load_error: 读表失败原因（已脱敏，长度有上界）；
+        - updated_at: 通知类 key 的最后入库修改时间；读失败恒为 None；
+        - fallback_fields: 库中未保存、屏上用的是默认值的字段名。
+
+        通知配置的回落来源是 `NOTIFY_CONFIG_KEYS` 默认值（不是 .env），
+        因此字段名按响应字段口径（去掉 `notify_` 前缀）给出，前端据此写清来源。
+        """
+        load_error: str | None = None
+        try:
+            stored = await self._read_stored()
+        except Exception as exc:
+            # 完整异常只进日志；响应里给可读且已脱敏的原因（NFR-01 / NFR-05）
+            logger.exception("通知配置读取失败，前端将据 loaded=false 禁止保存")
+            stored = {}
+            load_error = f"{type(exc).__name__}: {redact_credentials(str(exc))[:200]}"
+
+        raw = {key: stored.get(key, default) for key, default in NOTIFY_CONFIG_KEYS.items()}
+        fallback_fields = [key.removeprefix("notify_") for key in NOTIFY_CONFIG_KEYS if key not in stored]
 
         # 自动检测 base_url：优先 tunnel_service.public_url，其次 localhost
         auto_url = self._detect_base_url()
@@ -164,7 +190,32 @@ class NotificationConfigService:
             "email_to": raw["notify_email_to"],
             "admin_base_url": raw["notify_admin_base_url"],
             "auto_detected_base_url": auto_url,
+            "loaded": load_error is None,
+            "load_error": load_error,
+            "updated_at": await self._latest_updated_at(only_if_loaded=load_error is None),
+            "fallback_fields": fallback_fields,
         }
+
+    async def _latest_updated_at(self, only_if_loaded: bool) -> str | None:
+        """通知配置最后一次入库修改时间（本地 naive）。
+
+        只统计通知类 key：ai_config 与 AI 配置共用一张表，不过滤的话
+        改一次 AI 配置就会刷新「通知配置最后修改时间」。
+        """
+        if not only_if_loaded:
+            return None
+        try:
+            latest = (
+                await self.db.execute(
+                    select(func.max(AIConfig.updated_at)).where(
+                        AIConfig.config_key.in_(NOTIFY_CONFIG_KEYS.keys())
+                    )
+                )
+            ).scalar_one_or_none()
+        except Exception:
+            logger.exception("通知配置 updated_at 读取失败，按无修改时间处理")
+            return None
+        return latest.isoformat(timespec="seconds") if latest else None
 
     async def save_config(self, data: dict[str, Any]) -> None:  # NOSONAR S3776: 配置保存含脱敏值识别与多端同步，结构清晰
         """保存通知配置。

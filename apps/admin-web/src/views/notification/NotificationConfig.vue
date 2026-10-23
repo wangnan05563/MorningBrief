@@ -6,7 +6,7 @@
         type="primary"
         :icon="Check"
         :loading="saving"
-        :disabled="!configReady"
+        :disabled="!configReady || valuesNotLoaded"
         label="保存配置"
         desc="保存当前通知配置"
         @click="handleSaveConfig"
@@ -20,6 +20,27 @@
       :draft-blocked="draftBlocked"
       @retry="retryLoad"
     />
+
+    <!-- T02898：请求成功但读表失败 → 禁存；请求成功且读表成功 → 说明来源 -->
+    <el-alert
+      v-if="valuesNotLoaded"
+      data-guide="notification-load-error"
+      type="error"
+      title="通知配置表读取失败"
+      :description="'已禁止保存：' + (provenance.load_error || '未返回原因')"
+      :closable="false"
+      show-icon
+      style="margin-bottom: 16px"
+    />
+    <div
+      v-else-if="provenance.loaded === true"
+      class="config-provenance"
+      data-guide="notification-provenance"
+    >
+      <span v-if="updatedAtText">库里最后一次修改：{{ updatedAtText }}</span>
+      <span v-else>库里暂无记录</span>
+      <el-tag v-if="fallbackNote" class="provenance-tag" type="warning" effect="light" size="small">{{ fallbackNote }}</el-tag>
+    </div>
 
     <el-tabs v-model="activeTab" class="config-tabs">
       <!-- 基础配置 -->
@@ -198,7 +219,7 @@
                 plain
                 :icon="Connection"
                 :loading="testing"
-                :disabled="!configReady"
+                :disabled="!configReady || valuesNotLoaded"
                 label="测试发送"
                 desc="向所有已配置渠道发送测试通知"
                 @click="handleTestSend"
@@ -584,6 +605,36 @@ const configErrorMsg = cfgLoad.errorMessage
 const configRetrying = cfgLoad.retrying
 const draftBlocked = ref(false)
 
+// T02898（复用 INT-UX-04 口径）：请求成功 ≠ 屏上这些值是库里存的。
+// 旧响应里「表是空的（用的是默认值）」与「表里有记录」长得一模一样；
+// 管理员在这种页面上点保存，会把默认值静默固化进库。loaded=false 禁存。
+const provenance = ref({ loaded: null, load_error: null, updated_at: null, fallback_fields: [] })
+const valuesNotLoaded = computed(() => provenance.value.loaded === false)
+const updatedAtText = computed(() => (provenance.value.updated_at || '').replace('T', ' '))
+const fallbackLabels = {
+  global_enabled: '全局总开关',
+  failed_enabled: '工作流失败通知',
+  review_enabled: '待审核通知',
+  published_enabled: '发布成功通知',
+  dingtalk_webhook: '钉钉 Webhook',
+  dingtalk_secret: '钉钉加签密钥',
+  wecom_webhook: '企业微信 Webhook',
+  email_smtp_host: 'SMTP 服务器',
+  email_smtp_port: 'SMTP 端口',
+  email_smtp_user: 'SMTP 用户',
+  email_smtp_password: 'SMTP 密码',
+  email_to: '收件人',
+  admin_base_url: 'Admin Web 地址',
+}
+const fallbackNote = computed(() => {
+  const fields = provenance.value.fallback_fields || []
+  if (!fields.length) return ''
+  // 通知配置的回落源是代码默认值（不是 .env），文案不能照抄 COS 页
+  return `以下字段库里未保存，当前使用的是默认值：${fields
+    .map((f) => fallbackLabels[f] || f)
+    .join('、')}`
+})
+
 function restoreDraft() {
   applyDraft(configForm)
   enableDraft()
@@ -605,23 +656,31 @@ async function loadConfig() {
   configLoading.value = true
   try {
     const data = await getNotificationConfig()
+    // 来源信息不进 form：只取业务字段，元数据单独留在 provenance
+    const { loaded, load_error, updated_at, fallback_fields, ...values } = data || {}
+    provenance.value = {
+      loaded: loaded ?? null,
+      load_error: load_error ?? null,
+      updated_at: updated_at ?? null,
+      fallback_fields: fallback_fields || [],
+    }
     // 后端返回脱敏值 "****" 时直接显示，保存时后端会忽略该值
     Object.assign(configForm, {
-      global_enabled: data.global_enabled ?? true,
-      failed_enabled: data.failed_enabled ?? true,
-      review_enabled: data.review_enabled ?? true,
-      published_enabled: data.published_enabled ?? false,
-      dingtalk_webhook: data.dingtalk_webhook || '',
-      dingtalk_secret: data.dingtalk_secret || '',
-      wecom_webhook: data.wecom_webhook || '',
-      email_smtp_host: data.email_smtp_host || '',
-      email_smtp_port: data.email_smtp_port ?? 587,
-      email_smtp_user: data.email_smtp_user || '',
-      email_smtp_password: data.email_smtp_password || '',
-      email_to: data.email_to || '',
-      admin_base_url: data.admin_base_url || '',
+      global_enabled: values.global_enabled ?? true,
+      failed_enabled: values.failed_enabled ?? true,
+      review_enabled: values.review_enabled ?? true,
+      published_enabled: values.published_enabled ?? false,
+      dingtalk_webhook: values.dingtalk_webhook || '',
+      dingtalk_secret: values.dingtalk_secret || '',
+      wecom_webhook: values.wecom_webhook || '',
+      email_smtp_host: values.email_smtp_host || '',
+      email_smtp_port: values.email_smtp_port ?? 587,
+      email_smtp_user: values.email_smtp_user || '',
+      email_smtp_password: values.email_smtp_password || '',
+      email_to: values.email_to || '',
+      admin_base_url: values.admin_base_url || '',
     })
-    detectedBaseUrl.value = data.auto_detected_base_url || ''
+    detectedBaseUrl.value = values.auto_detected_base_url || ''
     return data ?? null
   } finally {
     configLoading.value = false
@@ -631,6 +690,10 @@ async function loadConfig() {
 async function handleSaveConfig() {
   if (!configReady.value) {
     ElMessage.error('通知配置未加载成功，已禁止保存（会用默认值覆盖线上配置）')
+    return
+  }
+  if (valuesNotLoaded.value) {
+    ElMessage.error(`通知配置表读取失败（${provenance.value.load_error || '原因未知'}），已禁止保存`)
     return
   }
   saving.value = true
@@ -657,6 +720,10 @@ async function handleSaveConfig() {
 async function handleTestSend() {
   if (!configReady.value) {
     ElMessage.error('通知配置未加载成功，已禁止测试（测试前会先保存配置）')
+    return
+  }
+  if (valuesNotLoaded.value) {
+    ElMessage.error(`通知配置表读取失败（${provenance.value.load_error || '原因未知'}），已禁止测试`)
     return
   }
   testing.value = true
@@ -896,6 +963,20 @@ onMounted(async () => {
     display: flex;
     justify-content: flex-end;
     margin-bottom: 16px;
+  }
+
+  .config-provenance {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: $color-text-secondary;
+  }
+
+  // 主题的 warning 是粉彩底色，默认 tag 文字也是浅色；来源提示信息量大，必须读得清
+  :deep(.provenance-tag) {
+    --el-tag-text-color: #{$color-text-primary};
   }
 
   .config-form {

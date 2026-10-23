@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.exceptions import BizError, ParamError
+from app.core.logging_setup import redact_credentials
 from app.core.tc3_sign import TencentAPIError, utc_now_iso
 from app.core.timeutil import localnow_naive
 from app.models.ai_config import AIConfig, AIUsageLog
@@ -490,133 +491,215 @@ class AIConfigService:
         return await self.get_config_for_frontend()
 
     async def get_config_for_frontend(self) -> dict:
-        """获取配置（前端展示用，API Key 脱敏）。
+        """获取配置（前端展示用，API Key 脱敏），并说明每个值从哪来。
 
-        返回结构：
+        返回结构（T02898，复用 INT-UX-04 四字段契约）：
         {
-            "llm": {
-                "api_key": "****xxxx", "base_url": "...", "model": "...",
-                "timeout_sec": N, "retry_attempts": N,
-                "preset_configs": {preset_key: {"api_key": "****xxxx", "base_url": "...", "model": "..."}},
-                "selected_preset": "qwen|openai|...",
-            },
+            "llm": {...},
             "tts": {...},
+            "image": {...},
+            "loaded": bool,            # 本次是否真的读到了配置表
+            "load_error": str | None,  # 读表失败原因（已脱敏，长度有上界）
+            "updated_at": str | None,  # AI 相关 key 的最后入库修改时间；读失败恒为 None
+            "fallback_fields": [str],  # 值来自 Settings(.env) 的字段，按 llm./tts./image. 路径点名
         }
-        """
-        raw = await self.get_all_config()
-        settings = get_settings()
 
-        # 合并：SQLite 优先，fallback 到 Settings 默认值
-        def _get(key: str, settings_attr: str, default: str = "") -> str:
+        为什么要单说来源：`_get*` 取不到库值就回落 Settings（也就是 .env），
+        「表是空的」与「表里有记录」在旧响应里长得一模一样。管理员在第二种情况下
+        点保存，会把 .env 的旧值静默固化进库，且没有 updated_at 可回溯。
+        """
+        raw: dict[str, str] = {}
+        load_error: str | None = None
+        try:
+            raw = await self.get_all_config()
+        except Exception as exc:
+            # 完整异常只进日志；响应里给可读且已脱敏的原因（NFR-01 / NFR-05）
+            logger.exception("AI 配置读取失败，前端将据 loaded=false 禁止保存")
+            load_error = f"{type(exc).__name__}: {redact_credentials(str(exc))[:200]}"
+
+        settings = get_settings()
+        fallback: list[str] = []
+
+        # 合并：SQLite 优先，fallback 到 Settings 默认值；回落时按响应路径点名
+        def _get(path: str, key: str, settings_attr: str, default: str = "") -> str:
             val = raw.get(key)
             if val is not None:
                 return val
+            fallback.append(path)
             return str(getattr(settings, settings_attr, default))
 
-        def _get_int(key: str, settings_attr: str, default: int) -> int:
+        def _get_int(path: str, key: str, settings_attr: str, default: int) -> int:
             val = raw.get(key)
             if val is not None:
                 try:
                     return int(val)
                 except (ValueError, TypeError):
-                    pass
+                    pass  # 库里存了非数值：屏上的数只能来自 Settings，照实点名
+            fallback.append(path)
             return getattr(settings, settings_attr, default)
 
-        def _get_float(key: str, settings_attr: str, default: float) -> float:
+        def _get_float(path: str, key: str, settings_attr: str, default: float) -> float:
             val = raw.get(key)
             if val is not None:
                 try:
                     return float(val)
                 except (ValueError, TypeError):
                     pass
+            fallback.append(path)
             return getattr(settings, settings_attr, default)
 
-        llm_base_url = _get("llm_base_url", "LLM_BASE_URL")
+        # 预设配置是另一条读库路径：它失败时同样不能假装「读到了一份可信配置」
+        preset_configs: dict = {}
+        try:
+            preset_configs = await self.get_preset_configs()
+        except Exception as exc:
+            logger.exception("AI 预设配置读取失败，前端将据 loaded=false 禁止保存")
+            if load_error is None:
+                load_error = f"{type(exc).__name__}: {redact_credentials(str(exc))[:200]}"
+
+        llm_base_url = _get("llm.base_url", "llm_base_url", "LLM_BASE_URL")
         llm_config = {
-            "api_key": _mask_key(_get("llm_api_key", "LLM_API_KEY")),
+            "api_key": _mask_key(_get("llm.api_key", "llm_api_key", "LLM_API_KEY")),
             "base_url": llm_base_url,
-            "model": _get("llm_model", "LLM_MODEL"),
-            "timeout_sec": int(_get("llm_timeout_sec", "LLM_TIMEOUT_SEC", "30")),
+            "model": _get("llm.model", "llm_model", "LLM_MODEL"),
+            "timeout_sec": _get_int("llm.timeout_sec", "llm_timeout_sec", "LLM_TIMEOUT_SEC", 30),
             # 知识库问答超时（FR-UX-701 / T02515）：与批量任务的 timeout_sec 分开，
             # 管理端改这里就能让后端先到点（必须小于前端 130s，见 config.py 注释）
             "chat_timeout_sec": _get_int(
-                "llm_chat_timeout_sec", "LLM_CHAT_TIMEOUT_SEC", 120
+                "llm.chat_timeout_sec", "llm_chat_timeout_sec", "LLM_CHAT_TIMEOUT_SEC", 120
             ),
-            "retry_attempts": int(_get("llm_retry_attempts", "LLM_RETRY_ATTEMPTS", "3")),
+            "retry_attempts": _get_int(
+                "llm.retry_attempts", "llm_retry_attempts", "LLM_RETRY_ATTEMPTS", 3
+            ),
             # 目标节目时长（秒）：控制 rewriter 字数与 stitch 范围
             # 默认 600s = 10 分钟，与稿件字数反向关联
-            "target_duration_sec": _get_int("target_duration_sec", "TARGET_DURATION_SEC", 600),
+            "target_duration_sec": _get_int(
+                "llm.target_duration_sec", "target_duration_sec", "TARGET_DURATION_SEC", 600
+            ),
             # 单期节目最大段数上限（T01729：读路径补返显，30 分钟听书档调 18~20）
             "llm_max_script_segments": _get_int(
-                "llm_max_script_segments", "LLM_MAX_SCRIPT_SEGMENTS", 10
+                "llm.llm_max_script_segments",
+                "llm_max_script_segments",
+                "LLM_MAX_SCRIPT_SEGMENTS",
+                10,
             ),
             # TTS 段间静音时长（秒）：拼接时每段新闻之间的留白
             # 默认 0.5s，过大影响节奏紧凑度，过小衔接生硬且 BGM 无浮现空间
-            "segment_gap_sec": _get_float("segment_gap_sec", "SEGMENT_GAP_SEC", 0.5),
+            "segment_gap_sec": _get_float(
+                "llm.segment_gap_sec", "segment_gap_sec", "SEGMENT_GAP_SEC", 0.5
+            ),
             # 预设配置（每个 provider 独立保存的 API Key/Base URL/Model，API Key 脱敏）
-            "preset_configs": await self.get_preset_configs(),
-            # 当前选中预设（根据 base_url 反向匹配）
+            "preset_configs": preset_configs,
+            # 当前选中预设（根据 base_url 反向匹配；派生值，不是独立配置项）
             "selected_preset": self._match_preset_by_base_url(llm_base_url),
         }
         tts_config = {
             # Provider 选择（前端切换热生效）
-            "provider": _get("tts_provider", "TTS_PROVIDER", "aliyun"),
+            "provider": _get("tts.provider", "tts_provider", "TTS_PROVIDER", "aliyun"),
             # 阿里云 NLS 字段（保留原 key 兼容）
-            "api_key": _mask_key(_get("tts_api_key", "ALIYUN_TTS_API_KEY")),
-            "appkey": _mask_key(_get("tts_appkey", "ALIYUN_TTS_APPKEY", "")),
-            "voice": _get("tts_voice", "ALIYUN_TTS_VOICE"),
-            "sample_rate": _get_int("tts_sample_rate", "ALIYUN_TTS_SAMPLE_RATE", 44100),
-            "format": _get("tts_format", "ALIYUN_TTS_FORMAT", "mp3"),
-            "timeout_sec": _get_int("tts_timeout_sec", "ALIYUN_TTS_TIMEOUT_SEC", 60),
-            "retry_attempts": _get_int("tts_retry_attempts", "TTS_RETRY_ATTEMPTS", 3),
+            "api_key": _mask_key(_get("tts.api_key", "tts_api_key", "ALIYUN_TTS_API_KEY")),
+            "appkey": _mask_key(_get("tts.appkey", "tts_appkey", "ALIYUN_TTS_APPKEY", "")),
+            "voice": _get("tts.voice", "tts_voice", "ALIYUN_TTS_VOICE"),
+            "sample_rate": _get_int("tts.sample_rate", "tts_sample_rate", "ALIYUN_TTS_SAMPLE_RATE", 44100),
+            "format": _get("tts.format", "tts_format", "ALIYUN_TTS_FORMAT", "mp3"),
+            "timeout_sec": _get_int("tts.timeout_sec", "tts_timeout_sec", "ALIYUN_TTS_TIMEOUT_SEC", 60),
+            "retry_attempts": _get_int("tts.retry_attempts", "tts_retry_attempts", "TTS_RETRY_ATTEMPTS", 3),
             # 阿里云 TTS 音量/语速/基频（NLS tts_request 参数）
-            "aliyun_volume": _get_int("aliyun_tts_volume", "ALIYUN_TTS_VOLUME", 50),
-            "aliyun_speech_rate": _get_int("aliyun_tts_speech_rate", "ALIYUN_TTS_SPEECH_RATE", 0),
-            "aliyun_pitch_rate": _get_int("aliyun_tts_pitch_rate", "ALIYUN_TTS_PITCH_RATE", 0),
+            "aliyun_volume": _get_int("tts.aliyun_volume", "aliyun_tts_volume", "ALIYUN_TTS_VOLUME", 50),
+            "aliyun_speech_rate": _get_int(
+                "tts.aliyun_speech_rate", "aliyun_tts_speech_rate", "ALIYUN_TTS_SPEECH_RATE", 0
+            ),
+            "aliyun_pitch_rate": _get_int(
+                "tts.aliyun_pitch_rate", "aliyun_tts_pitch_rate", "ALIYUN_TTS_PITCH_RATE", 0
+            ),
             # Edge-TTS 字段（config_key = edge_*，与前端字段名一致）
-            "edge_voice": _get("edge_voice", "EDGE_TTS_VOICE", "zh-CN-XiaoxiaoNeural"),
-            "edge_rate": _get("edge_rate", "EDGE_TTS_RATE", ""),
-            "edge_volume": _get("edge_volume", "EDGE_TTS_VOLUME", ""),
-            "edge_pitch": _get("edge_pitch", "EDGE_TTS_PITCH", ""),
+            "edge_voice": _get("tts.edge_voice", "edge_voice", "EDGE_TTS_VOICE", "zh-CN-XiaoxiaoNeural"),
+            "edge_rate": _get("tts.edge_rate", "edge_rate", "EDGE_TTS_RATE", ""),
+            "edge_volume": _get("tts.edge_volume", "edge_volume", "EDGE_TTS_VOLUME", ""),
+            "edge_pitch": _get("tts.edge_pitch", "edge_pitch", "EDGE_TTS_PITCH", ""),
             # 腾讯云 TTS 字段
-            "tencent_secret_id": _mask_key(_get("tencent_tts_secret_id", "TENCENT_TTS_SECRET_ID", "")),
-            "tencent_secret_key": _mask_key(_get("tencent_tts_secret_key", "TENCENT_TTS_SECRET_KEY", "")),
-            "tencent_region": _get("tencent_tts_region", "TENCENT_TTS_REGION", "ap-guangzhou"),
-            "tencent_voice_type": _get_int("tencent_tts_voice_type", "TENCENT_TTS_VOICE_TYPE", 101011),
-            "tencent_volume": _get_int("tencent_tts_volume", "TENCENT_TTS_VOLUME", 0),
-            "tencent_speed": _get_int("tencent_tts_speed", "TENCENT_TTS_SPEED", 0),
+            "tencent_secret_id": _mask_key(
+                _get("tts.tencent_secret_id", "tencent_tts_secret_id", "TENCENT_TTS_SECRET_ID", "")
+            ),
+            "tencent_secret_key": _mask_key(
+                _get("tts.tencent_secret_key", "tencent_tts_secret_key", "TENCENT_TTS_SECRET_KEY", "")
+            ),
+            "tencent_region": _get("tts.tencent_region", "tencent_tts_region", "TENCENT_TTS_REGION", "ap-guangzhou"),
+            "tencent_voice_type": _get_int(
+                "tts.tencent_voice_type", "tencent_tts_voice_type", "TENCENT_TTS_VOICE_TYPE", 101011
+            ),
+            "tencent_volume": _get_int("tts.tencent_volume", "tencent_tts_volume", "TENCENT_TTS_VOLUME", 0),
+            "tencent_speed": _get_int("tts.tencent_speed", "tencent_tts_speed", "TENCENT_TTS_SPEED", 0),
             # Kokoro TTS（本地离线，免费高质量）
-            "kokoro_lang": _get("kokoro_lang", "KOKORO_LANG", "z"),
-            "kokoro_voice": _get("kokoro_voice", "KOKORO_VOICE", "zf_xiaoxiao"),
-            "kokoro_speed": _get_float("kokoro_speed", "KOKORO_SPEED", 1.0),
+            "kokoro_lang": _get("tts.kokoro_lang", "kokoro_lang", "KOKORO_LANG", "z"),
+            "kokoro_voice": _get("tts.kokoro_voice", "kokoro_voice", "KOKORO_VOICE", "zf_xiaoxiao"),
+            "kokoro_speed": _get_float("tts.kokoro_speed", "kokoro_speed", "KOKORO_SPEED", 1.0),
             # Piper TTS（本地离线，轻量免费）
-            "piper_voice": _get("piper_voice", "PIPER_VOICE", "zh_CN-huayan-medium"),
-            "piper_voice_dir": _get("piper_voice_dir", "PIPER_VOICE_DIR", "./models/piper"),
-            "piper_length_scale": _get_float("piper_length_scale", "PIPER_LENGTH_SCALE", 1.0),
-            "piper_volume": _get_float("piper_volume", "PIPER_VOLUME", 0.5),
-            "piper_noise_scale": _get_float("piper_noise_scale", "PIPER_NOISE_SCALE", 0.667),
+            "piper_voice": _get("tts.piper_voice", "piper_voice", "PIPER_VOICE", "zh_CN-huayan-medium"),
+            "piper_voice_dir": _get("tts.piper_voice_dir", "piper_voice_dir", "PIPER_VOICE_DIR", "./models/piper"),
+            "piper_length_scale": _get_float(
+                "tts.piper_length_scale", "piper_length_scale", "PIPER_LENGTH_SCALE", 1.0
+            ),
+            "piper_volume": _get_float("tts.piper_volume", "piper_volume", "PIPER_VOLUME", 0.5),
+            "piper_noise_scale": _get_float(
+                "tts.piper_noise_scale", "piper_noise_scale", "PIPER_NOISE_SCALE", 0.667
+            ),
             # TTS 交叉音色（段落间轮流换声，避免同质化）
             # 解析 JSON 字符串为对象返回前端；缺省/解析失败回退到关闭的默认结构
-            "cross_voice": _parse_cross_voice(_get("tts_cross_voice", "TTS_CROSS_VOICE", "{}")),
+            "cross_voice": _parse_cross_voice(
+                _get("tts.cross_voice", "tts_cross_voice", "TTS_CROSS_VOICE", "{}")
+            ),
         }
 
-        return {"llm": llm_config, "tts": tts_config, "image": self._get_image_config(raw)}
+        image_config = self._get_image_config(raw, fallback)
+        return {
+            "llm": llm_config,
+            "tts": tts_config,
+            "image": image_config,
+            "loaded": load_error is None,
+            "load_error": load_error,
+            "updated_at": await self._latest_updated_at(only_if_loaded=load_error is None),
+            "fallback_fields": fallback,
+        }
 
-    def _get_image_config(self, raw: dict[str, str] | None = None) -> dict:
+    async def _latest_updated_at(self, only_if_loaded: bool) -> Optional[str]:
+        """AI 配置最后一次入库修改时间（本地 naive，与项目其余时间口径一致）。
+
+        只统计 AI 自己的 key：ai_config 与通知配置共用一张表，不过滤的话
+        改一次通知配置就会刷新「AI 配置最后修改时间」。
+        """
+        if not only_if_loaded:
+            return None
+        try:
+            latest = (
+                await self.db.execute(
+                    select(func.max(AIConfig.updated_at)).where(
+                        AIConfig.config_key.in_(list(CONFIG_KEY_MAP) + [PRESET_CONFIGS_KEY])
+                    )
+                )
+            ).scalar_one_or_none()
+        except Exception:
+            logger.exception("AI 配置 updated_at 读取失败，按无修改时间处理")
+            return None
+        return latest.isoformat(timespec="seconds") if latest else None
+
+    def _get_image_config(self, raw: dict[str, str] | None = None, fallback: list[str] | None = None) -> dict:
         """图片生成配置段（T00730）：SQLite 覆盖优先，回退 Settings 默认值。"""
         raw = raw if raw is not None else {}
+        fallback = fallback if fallback is not None else []
         settings = get_settings()
 
-        def _get(key: str, settings_attr: str, default: str = "") -> str:
+        def _get(path: str, key: str, settings_attr: str, default: str = "") -> str:
             val = raw.get(key)
             if val is not None:
                 return val
+            fallback.append(path)
             return str(getattr(settings, settings_attr, default))
 
         return {
-            "api_key": _mask_key(_get("image_api_key", "IMAGE_API_KEY")),
-            "base_url": _get("image_api_base_url", "IMAGE_API_BASE_URL"),
-            "model": _get("image_api_model", "IMAGE_API_MODEL"),
+            "api_key": _mask_key(_get("image.api_key", "image_api_key", "IMAGE_API_KEY")),
+            "base_url": _get("image.base_url", "image_api_base_url", "IMAGE_API_BASE_URL"),
+            "model": _get("image.model", "image_api_model", "IMAGE_API_MODEL"),
         }
 
     # ---- 配置更新 ----

@@ -5,7 +5,7 @@
         type="primary"
         :icon="Check"
         :loading="saving"
-        :disabled="!configReady"
+        :disabled="!configReady || valuesNotLoaded"
         label="保存配置"
         desc="保存当前配置"
         @click="handleSave"
@@ -20,6 +20,27 @@
       :draft-blocked="draftBlocked"
       @retry="retryLoad"
     />
+
+    <!-- T02898：请求成功但读表失败 → 禁存；请求成功且读表成功 → 说明来源 -->
+    <el-alert
+      v-if="valuesNotLoaded"
+      data-guide="ai-config-load-error"
+      type="error"
+      title="AI 配置表读取失败"
+      :description="'已禁止保存：' + (provenance.load_error || '未返回原因')"
+      :closable="false"
+      show-icon
+      style="margin-bottom: 16px"
+    />
+    <div
+      v-else-if="provenance.loaded === true"
+      class="config-provenance"
+      data-guide="ai-config-provenance"
+    >
+      <span v-if="updatedAtText">库里最后一次修改：{{ updatedAtText }}</span>
+      <span v-else>库里暂无记录</span>
+      <el-tag v-if="fallbackNote" class="provenance-tag" type="warning" effect="light" size="small">{{ fallbackNote }}</el-tag>
+    </div>
 
     <el-tabs v-model="activeTab" class="config-tabs" @tab-change="handleTabChange">
       <!-- LLM 配置 -->
@@ -1020,6 +1041,27 @@ const configErrorMsg = cfgLoad.errorMessage
 const configRetrying = cfgLoad.retrying
 const draftBlocked = ref(false)
 
+// T02898（复用 INT-UX-04 口径）：请求成功 ≠ 屏上这几个值是库里存的。
+// get_config_for_frontend 对取不到的字段回落到 Settings(.env)，旧响应里
+// 「表是空的」与「表里有记录」长得一模一样；管理员在这种页面上点保存，
+// 会把 .env 的旧值静默固化进库。loaded=false 禁存，fallback_fields 按路径点名来源。
+const provenance = ref({ loaded: null, load_error: null, updated_at: null, fallback_fields: [] })
+const valuesNotLoaded = computed(() => provenance.value.loaded === false)
+const updatedAtText = computed(() => (provenance.value.updated_at || '').replace('T', ' '))
+// 路径 → 可读标签：不为 40+ 字段维护字典（会与后端字段一起漂移），
+// 按段名翻译、字段名原样保留，仍然逐项点名（如 LLM · api_key）。
+const sectionLabels = { llm: 'LLM', tts: 'TTS', image: '图片生成' }
+function fallbackLabel(path) {
+  const [section, ...rest] = String(path).split('.')
+  if (!rest.length || !sectionLabels[section]) return String(path)
+  return `${sectionLabels[section]} · ${rest.join('.')}`
+}
+const fallbackNote = computed(() => {
+  const fields = provenance.value.fallback_fields || []
+  if (!fields.length) return ''
+  return `以下字段的值来自环境变量回落，库里并未保存：${fields.map(fallbackLabel).join('、')}`
+})
+
 function restoreDrafts() {
   applyDraft(llmForm)
   enableDraft()
@@ -1272,23 +1314,31 @@ async function loadConfig() {
     } catch (e) {
       audioProfile.value = null
     }
+    // 来源信息不进 form：llm/tts/image 只取业务段，元数据单独留在 provenance
+    const { loaded, load_error, updated_at, fallback_fields, ...configValues } = configData || {}
+    provenance.value = {
+      loaded: loaded ?? null,
+      load_error: load_error ?? null,
+      updated_at: updated_at ?? null,
+      fallback_fields: fallback_fields || [],
+    }
     // 填充 LLM 配置
-    if (configData.llm) {
-      Object.assign(llmForm.value, configData.llm)
+    if (configValues.llm) {
+      Object.assign(llmForm.value, configValues.llm)
       // 加载每个预设独立保存的配置（API Key 脱敏）
-      presetConfigs.value = configData.llm.preset_configs || {}
+      presetConfigs.value = configValues.llm.preset_configs || {}
       // 优先使用后端根据 base_url 反向匹配的 selected_preset
-      if (configData.llm.selected_preset) {
-        selectedPreset.value = configData.llm.selected_preset
+      if (configValues.llm.selected_preset) {
+        selectedPreset.value = configValues.llm.selected_preset
       }
     }
     // 填充 TTS 配置
-    if (configData.tts) {
-      Object.assign(ttsForm.value, configData.tts)
+    if (configValues.tts) {
+      Object.assign(ttsForm.value, configValues.tts)
     }
     // 填充图片生成配置（T00730）
-    if (configData.image) {
-      Object.assign(imageForm.value, configData.image)
+    if (configValues.image) {
+      Object.assign(imageForm.value, configValues.image)
     }
     presets.value = presetData || []
     // T02487：把 config 原样返回给 useConfigLoad，作为「确实拿到配置」的判据
@@ -1365,6 +1415,10 @@ function applyPreset(key) {
 async function handleSave() {
   if (!configReady.value) {
     ElMessage.error('AI 配置未加载成功，已禁止保存（会用表单默认值覆盖线上配置）')
+    return
+  }
+  if (valuesNotLoaded.value) {
+    ElMessage.error(`AI 配置表读取失败（${provenance.value.load_error || '原因未知'}），已禁止保存`)
     return
   }
   saving.value = true
@@ -1733,6 +1787,20 @@ onUnmounted(() => {
     display: flex;
     justify-content: flex-end;
     margin-bottom: 16px;
+  }
+
+  .config-provenance {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: $color-text-secondary;
+  }
+
+  // 主题的 warning 是粉彩底色，默认 tag 文字也是浅色；来源提示信息量大，必须读得清
+  :deep(.provenance-tag) {
+    --el-tag-text-color: #{$color-text-primary};
   }
 
   .config-tabs {

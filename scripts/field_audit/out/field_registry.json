@@ -223,7 +223,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1175,
+            "line": 1217,
             "fn": "api.post",
             "fieldCount": 5,
             "unresolved": []
@@ -272,7 +272,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1486,
+            "line": 1540,
             "fn": "api.post",
             "fieldCount": 2,
             "unresolved": []
@@ -346,7 +346,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1631,
+            "line": 1685,
             "fn": "api.post",
             "fieldCount": 26,
             "unresolved": []
@@ -478,7 +478,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1399,
+            "line": 1453,
             "fn": "api.post",
             "fieldCount": 3,
             "unresolved": []
@@ -524,7 +524,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1511,
+            "line": 1565,
             "fn": "api.post",
             "fieldCount": 3,
             "unresolved": []
@@ -579,7 +579,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1548,
+            "line": 1602,
             "fn": "api.post",
             "fieldCount": 12,
             "unresolved": []
@@ -2106,7 +2106,7 @@
         "callSites": [
           {
             "file": "views/notification/NotificationConfig.vue",
-            "line": 745,
+            "line": 812,
             "fn": "previewNotificationTemplate",
             "fieldCount": 1,
             "unresolved": []
@@ -2823,7 +2823,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1372,
+            "line": 1426,
             "fn": "api.put",
             "fieldCount": 4,
             "unresolved": []
@@ -3542,7 +3542,7 @@
         "callSites": [
           {
             "file": "views/notification/NotificationConfig.vue",
-            "line": 641,
+            "line": 704,
             "fn": "saveNotificationConfig",
             "fieldCount": 13,
             "unresolved": [
@@ -3551,7 +3551,7 @@
           },
           {
             "file": "views/notification/NotificationConfig.vue",
-            "line": 667,
+            "line": 734,
             "fn": "saveNotificationConfig",
             "fieldCount": 13,
             "unresolved": [
@@ -3636,7 +3636,7 @@
         "callSites": [
           {
             "file": "views/notification/NotificationConfig.vue",
-            "line": 708,
+            "line": 775,
             "fn": "updateNotificationTemplate",
             "fieldCount": 4,
             "unresolved": []

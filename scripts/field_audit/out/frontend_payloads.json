@@ -361,7 +361,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1271,
+          "line": 1313,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -376,7 +376,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1266,
+          "line": 1308,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -395,7 +395,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1189,
+          "line": 1231,
           "fn": "api.get",
           "fieldCount": 3,
           "unresolved": []
@@ -410,7 +410,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1267,
+          "line": 1309,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -442,7 +442,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1662,
+          "line": 1716,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -460,7 +460,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1311,
+          "line": 1361,
           "fn": "api.get",
           "fieldCount": 2,
           "unresolved": []
@@ -1224,7 +1224,7 @@
       "sites": [
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 607,
+          "line": 658,
           "fn": "getNotificationConfig",
           "fieldCount": 0,
           "unresolved": []
@@ -1241,7 +1241,7 @@
       "sites": [
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 777,
+          "line": 844,
           "fn": "listNotificationLogs",
           "fieldCount": 1,
           "unresolved": []
@@ -1256,7 +1256,7 @@
       "sites": [
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 690,
+          "line": 757,
           "fn": "listNotificationTemplates",
           "fieldCount": 0,
           "unresolved": []
@@ -1729,7 +1729,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1175,
+          "line": 1217,
           "fn": "api.post",
           "fieldCount": 5,
           "unresolved": []
@@ -1747,7 +1747,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1486,
+          "line": 1540,
           "fn": "api.post",
           "fieldCount": 2,
           "unresolved": []
@@ -1796,7 +1796,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1631,
+          "line": 1685,
           "fn": "api.post",
           "fieldCount": 26,
           "unresolved": []
@@ -1811,7 +1811,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1452,
+          "line": 1506,
           "fn": "api.post",
           "fieldCount": 0,
           "unresolved": []
@@ -1847,7 +1847,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1399,
+          "line": 1453,
           "fn": "api.post",
           "fieldCount": 3,
           "unresolved": []
@@ -1866,7 +1866,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1511,
+          "line": 1565,
           "fn": "api.post",
           "fieldCount": 3,
           "unresolved": []
@@ -1894,7 +1894,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1548,
+          "line": 1602,
           "fn": "api.post",
           "fieldCount": 12,
           "unresolved": []
@@ -2670,7 +2670,7 @@
       "sites": [
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 819,
+          "line": 886,
           "fn": "resendNotificationLog",
           "fieldCount": 0,
           "unresolved": []
@@ -2687,7 +2687,7 @@
       "sites": [
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 745,
+          "line": 812,
           "fn": "previewNotificationTemplate",
           "fieldCount": 1,
           "unresolved": []
@@ -2702,7 +2702,7 @@
       "sites": [
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 669,
+          "line": 736,
           "fn": "sendTestNotification",
           "fieldCount": 0,
           "unresolved": []
@@ -3105,7 +3105,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1372,
+          "line": 1426,
           "fn": "api.put",
           "fieldCount": 4,
           "unresolved": []
@@ -3352,7 +3352,7 @@
       "sites": [
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 641,
+          "line": 704,
           "fn": "saveNotificationConfig",
           "fieldCount": 13,
           "unresolved": [
@@ -3361,7 +3361,7 @@
         },
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 667,
+          "line": 734,
           "fn": "saveNotificationConfig",
           "fieldCount": 13,
           "unresolved": [
@@ -3383,7 +3383,7 @@
       "sites": [
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 708,
+          "line": 775,
           "fn": "updateNotificationTemplate",
           "fieldCount": 4,
           "unresolved": []
