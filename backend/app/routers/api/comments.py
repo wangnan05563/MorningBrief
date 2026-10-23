@@ -8,7 +8,8 @@
 """
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, delete
+from sqlalchemy import select, func, delete, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import UserPayload, get_current_user, get_optional_user
@@ -188,24 +189,25 @@ async def like_comment(
     if comment is None:
         raise NotFoundError("评论不存在")
 
-    # 幂等检查：已点赞则直接返回
-    existing = (
-        await db.execute(
-            select(CommentLike.id).where(
-                CommentLike.user_id == openid,
-                CommentLike.comment_id == comment_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if existing:
-        return success(data={"liked": True, "like_count": comment.like_count})
-
-    # 新增点赞记录 + 计数 +1（串行化提交，消除并发写锁竞争）
+    # 幂等裁决下沉到唯一键：并发重复点赞由 ON CONFLICT 吞掉，只有真正插入的那次才加计数。
+    # 不再先查后插 —— 预检查在竞态下不成立，锁只在进程内单循环有效（T02910）。
     async with write_lock():
-        db.add(CommentLike(user_id=openid, comment_id=comment_id))
-        comment.like_count = (comment.like_count or 0) + 1
+        inserted = await db.execute(
+            sqlite_insert(CommentLike)
+            .values(user_id=openid, comment_id=comment_id)
+            .on_conflict_do_nothing(index_elements=["user_id", "comment_id"])
+        )
+        if inserted.rowcount:
+            await db.execute(
+                update(Comment)
+                .where(Comment.id == comment_id)
+                .values(like_count=func.coalesce(Comment.like_count, 0) + 1)
+            )
         await db.commit()
-    return success(data={"liked": True, "like_count": comment.like_count})
+    like_count = (
+        await db.execute(select(Comment.like_count).where(Comment.id == comment_id))
+    ).scalar_one()
+    return success(data={"liked": True, "like_count": like_count})
 
 
 @router.delete("/{comment_id}/like")
@@ -223,7 +225,8 @@ async def unlike_comment(
     if comment is None:
         raise NotFoundError("评论不存在")
 
-    # 删除点赞记录（无论是否存在都执行，DELETE 幂等）— 串行化提交
+    # 删除点赞记录（无论是否存在都执行，DELETE 幂等）— 串行化提交；
+    # 计数递减用单条条件 UPDATE，避免 Python 端读-改-写（T02910）
     async with write_lock():
         result = await db.execute(
             delete(CommentLike).where(
@@ -232,7 +235,14 @@ async def unlike_comment(
             )
         )
         # rowcount > 0 表示实际删除了记录，才需要减计数
-        if result.rowcount and (comment.like_count or 0) > 0:
-            comment.like_count = comment.like_count - 1
-            await db.commit()
-    return success(data={"liked": False, "like_count": comment.like_count})
+        if result.rowcount:
+            await db.execute(
+                update(Comment)
+                .where(Comment.id == comment_id, Comment.like_count > 0)
+                .values(like_count=Comment.like_count - 1)
+            )
+        await db.commit()
+    like_count = (
+        await db.execute(select(Comment.like_count).where(Comment.id == comment_id))
+    ).scalar_one()
+    return success(data={"liked": False, "like_count": like_count})

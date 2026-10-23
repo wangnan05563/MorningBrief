@@ -11,6 +11,7 @@ import os
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import select, delete, func
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache.manager import cache as cache_manager
@@ -132,39 +133,31 @@ async def add_favorite(
     if ep_result.scalar_one_or_none() is None:
         raise NotFoundError("节目不存在或未发布")
 
-    existing = await db.execute(
-        select(Favorite).where(
-            Favorite.user_id == openid,
-            Favorite.episode_id == req.episode_id,
-        )
-    )
-    fav = existing.scalar_one_or_none()
-    if fav:
-        # 兜底失效：缓存 TTL 窗口内的数据变更（如另一设备取消后重新收藏）保持一致
-        await cache_manager.delete_pattern(f"fav:list:{openid}:*")
-        return success(data={"success": True, "favorite_id": fav.id, "already_favorited": True})
-
-    new_fav = Favorite(user_id=openid, episode_id=req.episode_id)
+    # T01662：并发重复收藏由唯一键裁决（ON CONFLICT DO NOTHING）。不再先查后插——
+    # 预检查只是一次快路径，竞态下仍要落库裁决；锁只在进程内单循环成立（T02910）。
     async with write_lock():
-        # T01662 门禁发现的既有竞态：上面的存在性检查在锁外，两个并发请求可能都通过
-        # 检查后先后进锁，后提交者触发 UNIQUE(user_id, episode_id) → 500。
-        # 幂等契约是"已收藏则直接返回成功"，故进锁后再查一次，命中即走幂等分支。
-        recheck = await db.execute(
-            select(Favorite).where(
+        inserted = await db.execute(
+            sqlite_insert(Favorite)
+            .values(user_id=openid, episode_id=req.episode_id)
+            .on_conflict_do_nothing(index_elements=["user_id", "episode_id"])
+        )
+        was_inserted = bool(inserted.rowcount)
+        await db.commit()
+    favorite_id = (
+        await db.execute(
+            select(Favorite.id).where(
                 Favorite.user_id == openid,
                 Favorite.episode_id == req.episode_id,
             )
         )
-        dup = recheck.scalar_one_or_none()
-        if dup:
-            await cache_manager.delete_pattern(f"fav:list:{openid}:*")
-            return success(data={"success": True, "favorite_id": dup.id, "already_favorited": True})
-        db.add(new_fav)
-        await db.commit()
-        await db.refresh(new_fav)
+    ).scalar_one()
     # T01579：写后失效该用户全部列表页缓存
     await cache_manager.delete_pattern(f"fav:list:{openid}:*")
-    return success(data={"success": True, "favorite_id": new_fav.id, "already_favorited": False})
+    return success(data={
+        "success": True,
+        "favorite_id": favorite_id,
+        "already_favorited": not was_inserted,
+    })
 
 
 @router.delete("/{episode_id}")

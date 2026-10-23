@@ -1,0 +1,89 @@
+{
+  "_doc": "T02910：write_lock()/serialized_write() 的调用方归属登记。由 backend/tests/test_t02910_write_lock_event_loop.py 双向核对：代码里每处调用必须在此登记，登记项也必须仍存在于代码中。atomicity_source 只允许 database / none —— 写 asyncio-lock 会直接红：进程内单事件循环的锁不能作为并发正确性依据。",
+  "primitive": "app.core.write_gate",
+  "constraint": {
+    "scope": "single-process-single-event-loop",
+    "cross_process_mutual_exclusion": false,
+    "cross_event_loop_after_contention": "RuntimeError: ... is bound to a different event loop"
+  },
+  "allowed_atomicity_sources": ["database", "none"],
+  "entries": [
+    {
+      "caller": "backend/app/routers/api/comments.py::create_comment",
+      "api": "write_lock",
+      "purpose": "单条评论插入",
+      "atomicity_source": "none",
+      "note": "单语句插入，无先查后写；锁只降低进程内 SQLITE_BUSY。"
+    },
+    {
+      "caller": "backend/app/routers/api/comments.py::like_comment",
+      "api": "write_lock",
+      "purpose": "点赞去重 + 计数递增",
+      "atomicity_source": "database",
+      "note": "去重靠 UNIQUE(user_id, comment_id) + ON CONFLICT DO NOTHING；计数用单条 UPDATE like_count=like_count+1。锁不承担正确性。"
+    },
+    {
+      "caller": "backend/app/routers/api/comments.py::unlike_comment",
+      "api": "write_lock",
+      "purpose": "取消点赞 + 计数递减",
+      "atomicity_source": "database",
+      "note": "DELETE 幂等；递减用条件 UPDATE like_count>0，避免 Python 端读-改-写。"
+    },
+    {
+      "caller": "backend/app/routers/api/favorites.py::add_favorite",
+      "api": "write_lock",
+      "purpose": "收藏去重",
+      "atomicity_source": "database",
+      "note": "UNIQUE(user_id, episode_id) + ON CONFLICT DO NOTHING，并发重复收藏不再 500。"
+    },
+    {
+      "caller": "backend/app/routers/api/favorites.py::remove_favorite",
+      "api": "write_lock",
+      "purpose": "取消收藏",
+      "atomicity_source": "none",
+      "note": "单条 DELETE 本身幂等。"
+    },
+    {
+      "caller": "backend/app/routers/api/feedbacks.py::submit_feedback",
+      "api": "write_lock",
+      "purpose": "反馈单条插入",
+      "atomicity_source": "none",
+      "note": "id 由 uuid4 生成，无判重写。"
+    },
+    {
+      "caller": "backend/app/routers/api/subscriptions.py::record_message_subscription",
+      "api": "write_lock",
+      "purpose": "订阅消息授权单条插入",
+      "atomicity_source": "none",
+      "note": "一次授权一条记录，无判重写。"
+    },
+    {
+      "caller": "backend/app/routers/api/subscriptions.py::subscribe_channel",
+      "api": "write_lock",
+      "purpose": "频道订阅去重",
+      "atomicity_source": "database",
+      "note": "UNIQUE(user_id, channel_id) + ON CONFLICT DO NOTHING；原「锁内先查再插」已移除。"
+    },
+    {
+      "caller": "backend/app/routers/api/subscriptions.py::unsubscribe_channel",
+      "api": "write_lock",
+      "purpose": "取消频道订阅",
+      "atomicity_source": "none",
+      "note": "单条 DELETE 本身幂等。"
+    },
+    {
+      "caller": "backend/app/services/play_service.py::PlayService.flush_playlog_queue",
+      "api": "write_lock",
+      "purpose": "播放日志批量插入",
+      "atomicity_source": "none",
+      "note": "整批 INSERT，无先查后写；与请求路径写互斥以降低 busy。"
+    },
+    {
+      "caller": "backend/app/services/play_write_buffer.py::PlayWriteBuffer.flush",
+      "api": "serialized_write",
+      "purpose": "播放进度批量 upsert",
+      "atomicity_source": "database",
+      "note": "_persist 用 INSERT ... ON CONFLICT DO UPDATE，累加语义在 SQL 里完成。"
+    }
+  ]
+}

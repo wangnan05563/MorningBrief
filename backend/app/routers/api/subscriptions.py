@@ -11,6 +11,7 @@ import json
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy import select, delete
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -133,27 +134,22 @@ async def subscribe_channel(
     if ch_result.scalar_one_or_none() is None:
         raise NotFoundError("频道不存在或已停用")
 
-    # 幂等检查 + 插入必须在同一把全局写锁内：否则并发订阅会同时通过检查、
-    # 先后插入触发 channel_subscription UNIQUE 冲突 → 500（压测实测 4-5% 写错误）。
-    # 锁内先查后插，保证任一时刻只有一个事务能插入该 (user,channel) 组合。
-    new_sub = ChannelSubscription(
-        user_id=user.user_id,
-        channel_id=channel_id,
-        created_at=localnow_naive(),
-    )
+    # 幂等裁决下沉到唯一键：并发重复订阅由 ON CONFLICT 吞掉，不再依赖
+    # 「进锁后先查再插」（锁只在进程内单循环成立，T02910）。
     async with write_lock():
-        existing = await db.execute(
-            select(ChannelSubscription).where(
-                ChannelSubscription.user_id == user.user_id,
-                ChannelSubscription.channel_id == channel_id,
+        inserted = await db.execute(
+            sqlite_insert(ChannelSubscription)
+            .values(
+                user_id=user.user_id,
+                channel_id=channel_id,
+                created_at=localnow_naive(),
             )
+            .on_conflict_do_nothing(index_elements=["user_id", "channel_id"])
         )
-        if existing.scalar_one_or_none() is not None:
-            return success(data={"success": True, "already_subscribed": True})
-        db.add(new_sub)
+        was_inserted = bool(inserted.rowcount)
         await db.commit()
 
-    return success(data={"success": True, "already_subscribed": False})
+    return success(data={"success": True, "already_subscribed": not was_inserted})
 
 
 @router.delete("/channels/{channel_id}")
