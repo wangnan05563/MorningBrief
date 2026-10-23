@@ -17,6 +17,9 @@ export const getCosConfig = () => api.get('/cos/config')
 // 保存 COS 配置（热更新 Settings + 重置客户端缓存）
 export const saveCosConfig = (payload) => api.put('/cos/config', payload)
 
+// 清除已保存的 COS 凭证（只清 SecretId/SecretKey，保留地域/桶/CDN；回退 .env）
+export const resetCosConfig = () => api.post('/cos/reset-config')
+
 // 测试 COS 连接（列举桶根验证凭证与 Bucket 可达性）
 export const testCosConnection = () => api.post('/cos/test-connection')
 

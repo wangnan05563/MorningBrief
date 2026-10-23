@@ -3,6 +3,7 @@
 端点：
 - GET  /admin/api/v1/cos/config          获取 COS 配置（SecretId/SecretKey 脱敏）
 - PUT  /admin/api/v1/cos/config          保存 COS 配置（热更新 Settings + 重置客户端缓存）
+- POST /admin/api/v1/cos/reset-config    清除已存凭证（SecretId/SecretKey，保留地域/桶）
 - POST /admin/api/v1/cos/test-connection 测试 COS 连接（列举桶验证凭证）
 - GET  /admin/api/v1/cos/status          配置就绪状态（前端管理页快速判断）
 - GET  /admin/api/v1/cos/objects         列举某前缀下的目录与文件
@@ -17,6 +18,8 @@
 
 所有端点需要管理员权限。未配置 COS 时管理类接口返回可读的业务错误提示。
 """
+import json
+
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +27,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AdminPayload, require_admin
 from app.core.response import success
 from app.database import get_db
-from app.services.cos_config_service import CosConfigService
+from app.models.audit_log import AuditLog
+from app.services.cos_config_service import CREDENTIAL_KEYS, CosConfigService
 from app.services.cos_storage_service import CosStorageService
 
 
@@ -80,6 +84,29 @@ async def save_config(
         cdn_domain=body.cdn_domain,
     )
     return success(message="COS 配置已保存并热更新")
+
+
+@router.post("/reset-config")
+async def reset_config(
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """清除已保存的 COS 凭证（T02919）。
+
+    只清 SecretId / SecretKey：地域、桶、CDN 域名保留。这是 COS 侧唯一的
+    清除通道——保存接口的「留空」表示不修改。审计只记被清的 key 名，不含明文。
+    """
+    svc = CosConfigService(db)
+    config = await svc.reset_credentials()
+    db.add(AuditLog(
+        category="cos",
+        action="reset_config",
+        target="credentials",
+        operator=admin.username,
+        detail=json.dumps({"cleared_keys": CREDENTIAL_KEYS}, ensure_ascii=False),
+    ))
+    await db.commit()
+    return success(data=config, message="COS 凭证已清除，回退到 .env 默认值")
 
 
 @router.post("/test-connection")

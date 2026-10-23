@@ -102,11 +102,15 @@ T02323 对全部菜单做了只读源码走查，产出 634 条带 `file:line` �
 7. 帮助文档「数据库维护」章节的表白名单数量、SQL 能力表述与代码一致（白名单数量按 `ALLOWED_TABLES` 计，SQL 查询入口不存在）（M80）。
 8. AI 服务页把 API Key 框清空后保存 → 库里密钥保持原值，且界面明确写着「留空＝不修改」并指路「恢复初始配置」（该按钮调 `POST /ai/reset-config`，是唯一真会清空 `llm_api_key` 的通道）；`_normalize_*` 与 COS 的 `update_config` docstring 不得再声称「空字符串清除」（F3）。
 
+9. 对 LLM/TTS/图片/COS 四类凭据各执行一次**显式清除**（`POST /ai/reset-config?scope=llm|tts|image|all`、`POST /cos/reset-config`）→ 断言**库里该行确实没了**（不是只看返回码），且进程内 Settings 已回退到 .env 默认值、旧密钥不可再用；COS 只清 SecretId/SecretKey，地域/桶/CDN 保留；清除动作落审计且 detail 不含明文；界面每条「要作废请点 X」文案都能在本页找到名为 X 的按钮（T02919）。
+
 > F3 的修复只统一了口径（留空＝不修改），**没有**、也不应该实现「留空即删除」——前端把脱敏值折算成空串回传
 > （`AIConfig.vue` 的 `key.startsWith('****') ? '' : key`），后端一旦把空串当清除，只改 base_url 就会抹掉线上凭据。
-> 于是留下两个已被实测、但不属于本单边界的缺口，已分别派生跟踪：
-> **T02919**（唯一的清除通道 `reset-config` 只清 `LLM_RESET_KEYS` 四项，TTS/图片/COS 的凭据没有任何可操作清除入口，
-> 且 TTS/图片页签的「点『恢复初始配置』」是错误指引）；
+> 当时留下的两个缺口分别派生跟踪，现状如下：
+> **T02919（已闭环）**——原先 `reset-config` 只清 `LLM_RESET_KEYS` 四项，TTS/图片/COS 的凭据没有任何可操作清除入口，
+> 且 TTS/图片页签的「点『恢复初始配置』」是错误指引。现按「显式清除标记」裁决补齐：AI 侧 `scope=llm|tts|image|all`、
+> COS 侧新增 `POST /cos/reset-config`，两者都是删行 + Settings 回退 + 落审计（detail 只记 key 名），
+> 三处 `.field-tip` 与 COS 提示改为指向各自真实存在的清除按钮；「留空即删除」明确不做（理由见上一段）。
 > **T02920**（按 M80 的门禁做法——数字从源码派生、不写死——全量复核 `Help.vue` 其余章节，
 > 已实测「数据统计」章节列出的**收藏数、反馈数**两个指标在后端 `OVERVIEW_METRICS` 里不存在，
 > 且 COS 部署步骤给出的 `python jmeter_test/verify_cos.py` 实际位于 `scripts/jmeter_test/`）。

@@ -22,6 +22,17 @@
         :icon="Check"
         @click="handleSave"
       />
+      <!-- T02919：COS 凭证的唯一清除通道（保存时留空＝不修改） -->
+      <IconButton
+        type="danger"
+        plain
+        :loading="clearing"
+        :disabled="!configReady || valuesNotLoaded"
+        label="清除凭证"
+        desc="删除已保存的 SecretId/SecretKey（保留地域/桶/CDN）"
+        :icon="Delete"
+        @click="handleClearCredentials"
+      />
     </div>
 
     <ConfigLoadError
@@ -71,7 +82,8 @@
         style="margin-bottom: 20px"
       >
         腾讯云 COS 凭证用于音频/成品文件的云端存储与 CDN 分发。SecretId / SecretKey
-        保存后以脱敏形式展示，重新填写即为更新，留空（显示为 **** ）则保留原值。
+        保存后以脱敏形式展示，重新填写即为更新，留空（显示为 **** ）则保留原值；
+        要**作废**凭证请点右上角「清除凭证」（只清凭证，地域/桶/CDN 保留）。
       </el-alert>
 
       <el-form data-guide="cos-config-form" :model="form" label-width="140px" class="config-form">
@@ -183,11 +195,13 @@
 import { ref, onMounted, computed } from 'vue'
 import { useDraft } from '../../composables/useDraft'
 import { useConfigLoad } from '../../composables/useConfigLoad'
-import { Check, Connection, View, Hide } from '@element-plus/icons-vue'
+import { Check, Connection, Delete, View, Hide } from '@element-plus/icons-vue'
 import { ElMessage } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 import {
   getCosConfig,
   saveCosConfig,
+  resetCosConfig,
   testCosConnection,
   getCosStatus,
 } from '../../api/cos'
@@ -195,6 +209,7 @@ import {
 const loading = ref(false)
 const saving = ref(false)
 const testing = ref(false)
+const clearing = ref(false)
 const showId = ref(false)
 const showKey = ref(false)
 
@@ -343,6 +358,36 @@ async function handleSave() {
     await configLoad.load()
   } finally {
     saving.value = false
+  }
+}
+
+// T02919：清除已保存的 SecretId/SecretKey（唯一清除通道；保存时留空＝不修改）
+async function handleClearCredentials() {
+  if (!configLoad.isReady.value || valuesNotLoaded.value) {
+    ElMessage.error('配置未加载成功，已禁止清除（避免在未知状态下改动线上凭证）')
+    return
+  }
+  const ok = await dangerConfirm({
+    action: '清除 COS 凭证',
+    target: '已保存的 SecretId / SecretKey',
+    scope: [
+      '地域、存储桶、CDN 域名保留不变',
+      '清除后回退到 .env 默认值，旧凭证立即不可用',
+    ],
+    confirmLabel: '确认清除',
+  })
+  if (!ok) return
+
+  clearing.value = true
+  try {
+    await resetCosConfig()
+    ElMessage.success('COS 凭证已清除，回退到 .env 默认值')
+    commitDraft()
+    await configLoad.load()
+  } catch {
+    // 失败提示由拦截器统一给出；按钮不卡在 loading
+  } finally {
+    clearing.value = false
   }
 }
 

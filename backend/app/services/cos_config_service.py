@@ -40,6 +40,9 @@ CONFIG_KEY_MAP = {
 # 需要脱敏的配置项（SecretId / SecretKey 类）
 SENSITIVE_KEYS = {"cos_secret_id", "cos_secret_key"}
 
+# 显式清除通道清掉的字段（T02919）：只清凭证，保留地域/桶/CDN 等非敏感配置
+CREDENTIAL_KEYS = ["cos_secret_id", "cos_secret_key"]
+
 # 默认值（DB 无记录时回退到 Settings 默认值；这里给前端一个展示基线）
 DEFAULT_KEYS = {
     "cos_region": "ap-guangzhou",
@@ -171,9 +174,9 @@ class CosConfigService:
         """保存 COS 配置到 SQLite 并热更新 Settings 单例。
 
         脱敏值（****开头）与空串**都表示「不修改」**，跳过写入；留空不等于清除 Key。
-        换凭证直接填新值即可覆盖；当前没有「一键清除已存凭证」的接口，
-        需要作废旧密钥请在腾讯云侧禁用，或改用数据库维护页显式改写。
-        保存后重置 COS 客户端缓存，使下一次调用用新凭证重新初始化。
+        换凭证直接填新值即可覆盖；要**作废**已存凭证走 `reset_credentials()`
+        （`POST /cos/reset-config`，界面「清除凭证」），它会真正删行并把 Settings
+        回退到 .env 默认值。保存后重置 COS 客户端缓存，使下一次调用用新凭证重新初始化。
         """
         updates: dict[str, str] = {
             "cos_region": region or "ap-guangzhou",
@@ -202,6 +205,37 @@ class CosConfigService:
         reset_cos_client()
 
         logger.info("COS 配置已更新 keys=%s", list(updates.keys()))
+
+    async def reset_credentials(self) -> dict:
+        """清除已保存的 SecretId / SecretKey（T02919）。
+
+        只删这两行，保留 region/bucket/cdn_domain——它们的值本身不是凭据，
+        一起清掉会让「作废旧密钥」顺带把桶配置也废了。
+
+        Settings 单例同步回退到 .env 默认值，并重建 COS 客户端缓存；
+        只删库不回写内存的话，本进程仍拿旧凭证访问，看起来像「清除没生效」。
+
+        返回清除后的配置（脱敏，含 loaded/fallback_fields 来源字段）。
+        """
+        for key in CREDENTIAL_KEYS:
+            await self.db.execute(
+                delete(CosConfig).where(CosConfig.config_key == key)
+            )
+        await self.db.commit()
+
+        settings = get_settings()
+        from app.config import Settings
+        defaults = Settings()
+        for key in CREDENTIAL_KEYS:
+            attr = CONFIG_KEY_MAP.get(key)
+            if attr:
+                setattr(settings, attr, getattr(defaults, attr, ""))
+
+        from app.cos.client import reset_cos_client
+        reset_cos_client()
+
+        logger.info("COS 凭证已清除 keys=%s", CREDENTIAL_KEYS)
+        return await self.get_config_for_frontend()
 
     def _apply_to_settings(self, updates: dict[str, str]) -> None:
         """将更新同步到 Settings 内存单例。"""

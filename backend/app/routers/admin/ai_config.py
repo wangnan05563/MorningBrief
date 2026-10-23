@@ -20,14 +20,16 @@
 - POST /admin/api/v1/ai/chat       知识库问答（指定模型发起对话）
 - GET  /admin/api/v1/ai/selected-model  获取默认模型
 - POST /admin/api/v1/ai/selected-model  保存默认模型
-- POST /admin/api/v1/ai/reset-config  恢复 LLM 初始配置（清空预设配置）
+- POST /admin/api/v1/ai/reset-config  清除已保存配置/凭证（scope=llm|tts|image|all）
 
 所有端点需要管理员权限，防止运营误改 AI 配置。
 """
-from fastapi import APIRouter, BackgroundTasks, Depends
+import json
+from typing import Literal, Optional
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.ai_budget import get_today_summary, reset_budget
@@ -36,7 +38,8 @@ from app.core.auth import require_admin, AdminPayload
 from app.core.response import error, success
 from app.config import get_settings
 from app.database import get_db
-from app.services.ai_config_service import AIConfigService
+from app.models.audit_log import AuditLog
+from app.services.ai_config_service import AIConfigService, RESET_SCOPES
 from app.services.tts_model_manager import get_download_status, run_download
 
 router = APIRouter(prefix="/admin/api/v1/ai", tags=["B端-AI服务"])
@@ -530,18 +533,34 @@ async def reset_budget_endpoint(
 
 @router.post("/reset-config")
 async def reset_config(
+    scope: Literal["llm", "tts", "image", "all"] = Query(
+        "llm", description="清除范围：llm（LLM 配置+预设）| tts | image | all"
+    ),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
-    """恢复 LLM 初始配置（清空用户保存的预设配置和当前 LLM 配置）。
+    """清除已保存的配置/凭证（T02919）。
 
-    清空 llm_api_key / llm_base_url / llm_model / llm_preset_configs，
-    保留 timeout/retry 等通用项。热更新 Settings 单例回退到 .env 默认值。
-    返回重置后的 LLM 配置供前端刷新表单。
+    这是**唯一**的清除通道：保存接口里「留空」永远表示不修改（前端会把脱敏值
+    折算成空串回传，当成删除会在只改 base_url 时抹掉线上密钥）。
+    scope=llm 时行为与旧版一致（清 LLM 配置与预设，保留 timeout/retry）。
+
+    行会被真正删除并同步把 Settings 单例回退到 .env 默认值；审计只记录
+    scope 与被清的 key 名，不含任何明文凭据。
     """
     svc = AIConfigService(db)
-    llm_config = await svc.reset_to_defaults()
-    return success(data={"llm": llm_config}, message="LLM 配置已恢复初始状态")
+    config = await svc.reset_to_defaults(scope)
+    db.add(AuditLog(
+        category="ai",
+        action="reset_config",
+        target=scope,
+        operator=admin.username,
+        detail=json.dumps({"scope": scope, "cleared_keys": RESET_SCOPES[scope]}, ensure_ascii=False),
+    ))
+    await db.commit()
+
+    label = {"llm": "LLM", "tts": "TTS", "image": "图片", "all": "全部"}[scope]
+    return success(data=config, message=f"{label}配置已清除，回退到 .env 默认值")
 
 
 @router.get("/presets")

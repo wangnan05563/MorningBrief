@@ -172,6 +172,20 @@ PRESET_CONFIGS_KEY = "llm_preset_configs"
 # 恢复初始配置时需要清空的 LLM 配置 key（保留 timeout/retry 等通用项）
 LLM_RESET_KEYS = ["llm_api_key", "llm_base_url", "llm_model", PRESET_CONFIGS_KEY]
 
+# 各页签的显式清除范围（T02919）。
+# 清除是**独立端点动作**，不是「字段留空」（留空＝不修改）：前端保存时会把脱敏值
+# 折算成空串回传，若把空串当成删除，用户只改 base_url 就会顺带抹掉线上密钥。
+TTS_RESET_KEYS = [
+    "tts_api_key", "tts_appkey", "tencent_tts_secret_id", "tencent_tts_secret_key",
+]
+IMAGE_RESET_KEYS = ["image_api_key"]
+RESET_SCOPES: dict[str, list[str]] = {
+    "llm": LLM_RESET_KEYS,
+    "tts": TTS_RESET_KEYS,
+    "image": IMAGE_RESET_KEYS,
+    "all": LLM_RESET_KEYS + TTS_RESET_KEYS + IMAGE_RESET_KEYS,
+}
+
 # 需要转为 int 类型的配置项
 INT_KEYS = {
     "llm_timeout_sec", "llm_retry_attempts",
@@ -433,37 +447,47 @@ class AIConfigService:
         }
         await self._upsert_config(PRESET_CONFIGS_KEY, json.dumps(configs, ensure_ascii=False))
 
-    async def reset_to_defaults(self) -> dict:
-        """恢复 LLM 初始配置（清空用户保存的预设配置和当前 LLM 配置）。
+    async def reset_to_defaults(self, scope: str = "llm") -> dict:
+        """按 scope 清除已保存的配置/凭证，并回退到 .env 默认值（T02919）。
 
-        清空 llm_api_key / llm_base_url / llm_model / llm_preset_configs，
-        保留 timeout/retry 等通用项。热更新 Settings 单例回退到 .env 默认值。
+        scope ∈ llm | tts | image | all：
+        - llm   清 llm_api_key / llm_base_url / llm_model / 预设配置（保留 timeout/retry）
+        - tts   清阿里云/腾讯云 TTS 的四个凭据字段
+        - image 清 image_api_key
+        - all   以上全部
 
-        返回重置后的 LLM 配置（供前端刷新表单）。
+        **行确实删除**（不是写空串）：之后 get_config_for_frontend 只能回落到 Settings，
+        进程内 Settings 同步改成默认值，旧密钥立刻不可用（等重启也一样）。
+
+        返回清除后的完整配置（脱敏），供前端刷新对应表单。
         """
-        for key in LLM_RESET_KEYS:
+        if scope not in RESET_SCOPES:
+            raise ValueError(f"不支持的清除范围: {scope}")
+        keys = RESET_SCOPES[scope]
+
+        for key in keys:
             await self.db.execute(
                 delete(AIConfig).where(AIConfig.config_key == key)
             )
         await self.db.commit()
 
-        # 热更新 Settings 单例回退到 .env 默认值
+        # 热更新 Settings 单例回退到 .env 默认值：只删库不回写内存的话，
+        # 运行中的进程仍拿旧密钥继续调用上游，看起来像「清除没生效」。
         settings = get_settings()
         # 通过重新实例化 Settings 获取 .env 默认值，避免污染现有单例
         from app.config import Settings
         defaults = Settings()
-        settings.LLM_API_KEY = defaults.LLM_API_KEY
-        settings.LLM_BASE_URL = defaults.LLM_BASE_URL
-        settings.LLM_MODEL = defaults.LLM_MODEL
+        for key in keys:
+            attr = CONFIG_KEY_MAP.get(key)
+            if attr:
+                setattr(settings, attr, getattr(defaults, attr, ""))
 
-        logger.info("LLM 配置已恢复初始状态，清空 key=%s", LLM_RESET_KEYS)
+        # TTS 工厂缓存按 provider 建实例，不清掉会继续用旧凭证
+        if scope in ("tts", "all"):
+            self._invalidate_tts_cache_on_change({key: "" for key in TTS_RESET_KEYS})
 
-        # 返回重置后的配置（脱敏）
-        return {
-            "api_key": _mask_key(settings.LLM_API_KEY),
-            "base_url": settings.LLM_BASE_URL,
-            "model": settings.LLM_MODEL,
-        }
+        logger.info("AI 配置已清除 scope=%s keys=%s", scope, keys)
+        return await self.get_config_for_frontend()
 
     async def get_config_for_frontend(self) -> dict:
         """获取配置（前端展示用，API Key 脱敏）。

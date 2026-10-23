@@ -55,12 +55,12 @@
               type="warning"
               plain
               :icon="RefreshLeft"
-              :loading="resetting"
+              :loading="clearingScope === 'llm'"
               :disabled="!configReady"
               style="margin-left: auto"
               label="恢复初始配置"
-              desc="恢复 LLM 初始配置"
-              @click="handleResetConfig"
+              desc="清除 LLM 配置与全部预设（回退 .env 默认值）"
+              @click="handleResetConfig('llm')"
             />
           </div>
 
@@ -342,7 +342,7 @@
               </el-input>
               <div class="field-tip">
                 NLS 控制台「获取 Token」生成的访问令牌，不要填 AccessKey Secret；
-                清空这一栏并保存不会删除已保存的凭证（留空＝不修改）
+                清空这一栏并保存不会删除已保存的凭证（留空＝不修改）；要作废请点下方「清除 TTS 凭证」
               </div>
             </el-form-item>
             <el-form-item label="App Key">
@@ -769,6 +769,19 @@
                 desc="测试 TTS 连接是否正常"
                 @click="handleTestTTS"
               />
+              <!-- T02919：TTS 凭据的唯一清除通道（保存时留空＝不修改） -->
+              <IconButton
+                v-if="['aliyun', 'tencent'].includes(ttsForm.provider)"
+                type="danger"
+                plain
+                :icon="Delete"
+                :loading="clearingScope === 'tts'"
+                :disabled="!configReady"
+                style="margin-left: 12px"
+                label="清除 TTS 凭证"
+                desc="删除已保存的阿里云/腾讯云凭据（回退 .env 默认值）"
+                @click="handleResetConfig('tts')"
+              />
               <el-tag
                 v-if="ttsTestResult"
                 :type="ttsTestResult.success ? 'success' : 'danger'"
@@ -793,7 +806,7 @@
                 placeholder="图像生成服务 API Key（留空沿用已保存值）"
               />
               <div class="field-tip">
-                清空这一栏并保存不会删除已保存的 Key（留空＝不修改）
+                清空这一栏并保存不会删除已保存的 Key（留空＝不修改）；要作废请点下方「清除图片 Key」
               </div>
             </el-form-item>
             <el-form-item label="API Base URL">
@@ -804,6 +817,18 @@
             </el-form-item>
             <el-form-item label="连接测试">
               <IconButton :icon="Connection" :loading="testingImage" label="测试连接" desc="测试图片生成服务连接是否正常" @click="handleTestImage" />
+              <!-- T02919：图片 Key 的唯一清除通道（保存时留空＝不修改） -->
+              <IconButton
+                type="danger"
+                plain
+                :icon="Delete"
+                :loading="clearingScope === 'image'"
+                :disabled="!configReady"
+                style="margin-left: 12px"
+                label="清除图片 Key"
+                desc="删除已保存的图片生成 API Key（回退 .env 默认值）"
+                @click="handleResetConfig('image')"
+              />
               <el-tag
                 v-if="imageTestResult"
                 :type="imageTestResult.ok ? 'success' : 'danger'"
@@ -872,8 +897,9 @@ import { useDraft } from '../../composables/useDraft'
 import { useConfigLoad } from '../../composables/useConfigLoad'
 import { useRoute, useRouter } from 'vue-router'
 
-import { ElMessage, ElMessageBox } from '../../utils/message'
-import { Check, Refresh, RefreshLeft, Hide, View, Connection, Download, ArrowRight, VideoPlay } from '@element-plus/icons-vue'
+import { ElMessage } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
+import { Check, Refresh, RefreshLeft, Delete, Hide, View, Connection, Download, ArrowRight, VideoPlay } from '@element-plus/icons-vue'
 import api from '../../api'
 import { buildSyncNotices, parseDuration, parseRate } from '../../utils/calculatorSync'
 // T00388：TTS 音色官方同步按钮（音色组合 + 各引擎音色下拉右侧）
@@ -915,7 +941,8 @@ const selectedPreset = ref('')
 const presets = ref([])
 // 每个预设独立保存的配置（API Key 脱敏），结构：{preset_key: {api_key, base_url, model}}
 const presetConfigs = ref({})
-const resetting = ref(false)
+// T02919：清除是按页签的显式动作（llm/tts/image），不是「留空即删除」
+const clearingScope = ref('')
 // 拉取可用模型列表：加载态 / 模型下拉选项
 const fetchingModels = ref(false)
 const modelList = ref([])
@@ -1383,39 +1410,71 @@ async function handleTestImage() {
   }
 }
 
-// 恢复初始配置：清空所有预设配置和当前 LLM 配置，回退到出厂默认值
-async function handleResetConfig() {
+// T02919：清除已保存的配置/凭证。**唯一**的清除通道——保存时留空永远不删除
+// （前端会把脱敏值折算成空串回传，当成删除会在只改 base_url 时抹掉线上密钥）。
+const CLEAR_META = {
+  llm: {
+    title: '恢复 LLM 初始配置',
+    target: '当前 LLM 配置与全部预设',
+    scope: ['LLM API Key / Base URL / Model', '各预设里单独保存的 Key 与参数'],
+    success: 'LLM 配置已清除，回退到 .env 默认值',
+  },
+  tts: {
+    title: '清除 TTS 凭证',
+    target: '已保存的 TTS 凭据',
+    scope: ['阿里云 AccessToken / AppKey', '腾讯云 SecretId / SecretKey'],
+    success: 'TTS 凭证已清除，回退到 .env 默认值',
+  },
+  image: {
+    title: '清除图片生成 Key',
+    target: '已保存的图片生成 API Key',
+    scope: ['仅清 API Key，Base URL / 模型保留', '清除后回退到 .env 默认值'],
+    success: '图片生成 Key 已清除，回退到 .env 默认值',
+  },
+}
+
+async function handleResetConfig(scope = 'llm') {
   if (!configReady.value) {
-    ElMessage.error('AI 配置未加载成功，已禁止恢复初始配置（避免在未知状态下清空线上配置）')
+    ElMessage.error('AI 配置未加载成功，已禁止清除（避免在未知状态下清空线上配置）')
     return
   }
-  try {
-    await ElMessageBox.confirm(
-      '确认恢复 LLM 初始配置？将清空所有预设的已保存配置（API Key/Base URL/Model）和当前 LLM 配置，此操作不可恢复。',
-      '恢复初始配置',
-      { type: 'warning', confirmButtonText: '确认恢复', cancelButtonText: '取消' }
-    )
-  } catch {
-    return // 用户取消
-  }
+  const meta = CLEAR_META[scope]
+  const ok = await dangerConfirm({
+    action: meta.title,
+    target: meta.target,
+    scope: meta.scope,
+    confirmLabel: scope === 'llm' ? '确认恢复' : '确认清除',
+  })
+  if (!ok) return
 
-  resetting.value = true
+  clearingScope.value = scope
   try {
-    const data = await api.post('/ai/reset-config')
-    // 用后端返回的重置后配置刷新表单
-    if (data?.llm) {
+    const data = await api.post(`/ai/reset-config?scope=${scope}`)
+    // 用后端返回的清除后配置刷新表单（脱敏；无 .env 回落时为空）
+    if (scope === 'llm' && data?.llm) {
       llmForm.value.api_key = data.llm.api_key || ''
       llmForm.value.base_url = data.llm.base_url || ''
       llmForm.value.model = data.llm.model || ''
+      presetConfigs.value = {}
+      selectedPreset.value = ''
+      llmTestResult.value = null
     }
-    // 清空预设配置缓存和选中状态
-    presetConfigs.value = {}
-    selectedPreset.value = ''
-    llmTestResult.value = null
-    ElMessage.success('LLM 配置已恢复初始状态')
-    resetting.value = false
+    if (scope === 'tts' && data?.tts) {
+      ttsForm.value.api_key = data.tts.api_key || ''
+      ttsForm.value.appkey = data.tts.appkey || ''
+      ttsForm.value.tencent_secret_id = data.tts.tencent_secret_id || ''
+      ttsForm.value.tencent_secret_key = data.tts.tencent_secret_key || ''
+      ttsTestResult.value = null
+    }
+    if (scope === 'image' && data?.image) {
+      imageForm.value.api_key = data.image.api_key || ''
+      imageTestResult.value = null
+    }
+    ElMessage.success(meta.success)
+  } catch {
+    // 失败提示由请求拦截器统一给出；这里只保证按钮不卡在 loading
   } finally {
-    loading.value = false
+    clearingScope.value = ''
   }
 }
 
