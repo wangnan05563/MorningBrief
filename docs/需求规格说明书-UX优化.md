@@ -104,6 +104,8 @@ T02323 对全部菜单做了只读源码走查，产出 634 条带 `file:line` �
 
 9. 对 LLM/TTS/图片/COS 四类凭据各执行一次**显式清除**（`POST /ai/reset-config?scope=llm|tts|image|all`、`POST /cos/reset-config`）→ 断言**库里该行确实没了**（不是只看返回码），且进程内 Settings 已回退到 .env 默认值、旧密钥不可再用；COS 只清 SecretId/SecretKey，地域/桶/CDN 保留；清除动作落审计且 detail 不含明文；界面每条「要作废请点 X」文案都能在本页找到名为 X 的按钮（T02919）。
 
+10. 帮助文档全量复核：`Help.vue` 里每一处量化描述都由门禁从源码派生（指标清单按 `OVERVIEW_METRICS`、素材字段按 `MaterialCreateRequest`、状态与步骤名按枚举字典/后端约束、限流阈值按 `AI_BUDGET_RATE_LIMIT_PER_MIN`、清理项按 `Maintenance.vue` 的选项、参数区间按 `ParamCalculator.vue`），改事实源而不同步文档即红；照文档敲的脚本路径必须按原样在磁盘存在；`grep -E "[0-9]+ ?(个|张|种|步|项|条|款)"` 的每一处命中都在出处表里（T02920）。
+
 > F3 的修复只统一了口径（留空＝不修改），**没有**、也不应该实现「留空即删除」——前端把脱敏值折算成空串回传
 > （`AIConfig.vue` 的 `key.startsWith('****') ? '' : key`），后端一旦把空串当清除，只改 base_url 就会抹掉线上凭据。
 > 当时留下的两个缺口分别派生跟踪，现状如下：
@@ -111,9 +113,17 @@ T02323 对全部菜单做了只读源码走查，产出 634 条带 `file:line` �
 > 且 TTS/图片页签的「点『恢复初始配置』」是错误指引。现按「显式清除标记」裁决补齐：AI 侧 `scope=llm|tts|image|all`、
 > COS 侧新增 `POST /cos/reset-config`，两者都是删行 + Settings 回退 + 落审计（detail 只记 key 名），
 > 三处 `.field-tip` 与 COS 提示改为指向各自真实存在的清除按钮；「留空即删除」明确不做（理由见上一段）。
-> **T02920**（按 M80 的门禁做法——数字从源码派生、不写死——全量复核 `Help.vue` 其余章节，
-> 已实测「数据统计」章节列出的**收藏数、反馈数**两个指标在后端 `OVERVIEW_METRICS` 里不存在，
-> 且 COS 部署步骤给出的 `python jmeter_test/verify_cos.py` 实际位于 `scripts/jmeter_test/`）。
+> **T02920（已闭环）**——按 M80 的门禁做法（数字从源码派生、不写死）全量复核 `Help.vue` 其余章节，
+> 实际查出 6 处虚标，均已订正并纳入 `tests/unit/help-fact-claims.test.mjs`：
+> ①「数据统计」把**收藏数、反馈数**写成看板指标，后端 `OVERVIEW_METRICS` 只有 5 项；
+> ②「广告管理」宣称可**上传音频/图片素材**且**限制 10MB**、投放按「频道/时段/频次」，实际接口只有
+> `name/description/file_url/duration` 四字段、投放维度只有广告位 + 日期区间；
+> ③「工作流监控」状态写成 `pending`（那是步骤状态），步骤名与界面枚举字典不一致；
+> ④「队列管理」描述成「TTS 合成队列与音频拼接队列 + 清空已完成任务」，实际是任务状态计数 + 执行模式 + 批量删除；
+> ⑤「AI 服务」只列 3 个 TTS provider，界面有 5 个；
+> ⑥ 快速开始与 COS 部署步骤的脚本没带 `scripts/` 前缀（`verify_cos.py` 一条已由 `140ee13` 修掉，其余补全）。
+> 无法从代码核对的外部数字（Funnel 延迟毫秒、5-10 倍、COS 报价、ICP 备案工作日）一律撤下改为定性描述，
+> 而不是换成另一个写死的数字。
 
 ### M2 高危动作可用性与破坏性操作防护（P0）
 

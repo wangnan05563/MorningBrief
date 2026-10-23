@@ -243,7 +243,7 @@ const docSections = [
         content: [
           '安装依赖：pip install -r backend/requirements.txt',
           '复制配置：copy backend/.env.example backend/.env，填入 LLM API Key、TTS 配置、COS 凭证',
-          '启动服务：双击 启动服务.bat 或 python backend/launcher.py',
+          '启动服务：双击 scripts/启动服务.bat 或 python backend/launcher.py',
           '访问运营后台：浏览器打开 http://127.0.0.1:8000/，默认账号 admin / admin123',
           '配置频道：在「频道管理」页面设置 RSS 源、关键词、调度时间',
           '创建工作流：在「工作流监控」页面新建工作流，关联频道',
@@ -305,21 +305,21 @@ const docSections = [
       {
         type: 'feature',
         title: '核心功能',
-        content: '支持上传音频/图片广告素材、配置投放规则（按频道、时段、频次）、可视化排期日历查看本周/本月投放计划。',
+        content: '登记音频素材（名称、描述、素材 URL、时长；页面不提供文件上传）；投放规则按广告位（开头/中间/结尾）与生效日期区间配置，频道是否插播由频道编辑里的「投放广告」开关决定；排期日历按月查看每日各广告位的投放安排。',
       },
       {
         type: 'steps',
         title: '操作步骤',
         content: [
-          '在「广告素材」页面上传广告音频/图片',
-          '在「投放规则」页面配置投放条件（频道、时段、频次）',
-          '在「排期日历」页面查看与调整投放计划',
+          '在「广告素材」页面新增素材：填写名称、描述、音频 URL 与时长（秒）',
+          '在「投放规则」页面选择素材、广告位与日期范围并启用',
+          '在「排期日历」页面选择月份查看与调整投放计划',
         ],
       },
       {
         type: 'note',
         title: '注意事项',
-        content: '广告素材大小限制 10MB；排期冲突时系统会自动提示并拒绝保存。',
+        content: '同一广告位在日期区间重叠时会被拒绝保存并提示冲突（停用的投放不参与冲突判定，可先停用旧的再建新的）；素材 URL 需指向可公网访问的音频，播放失败不会自动改用其它素材。',
         noteType: 'warning',
       },
     ],
@@ -333,7 +333,7 @@ const docSections = [
       {
         type: 'feature',
         title: '核心功能',
-        content: '提供当日核心指标看板（DAU、播放量、完播率、收藏数、反馈数）、7 天/30 天趋势图、按日期切换的历史数据查询。',
+        content: '提供当日核心指标看板（DAU、播放量、完播率、平均收听、推算广告曝光）、7 天/30 天趋势图、按日期切换的历史数据查询。',
       },
       {
         type: 'steps',
@@ -384,12 +384,12 @@ const docSections = [
     id: 'queue',
     title: '队列管理',
     icon: markRaw(Operation),
-    intro: '查看 TTS 合成队列与音频拼接队列状态。',
+    intro: '查看工作流任务队列的执行状态并调整执行模式。',
     blocks: [
       {
         type: 'feature',
         title: '核心功能',
-        content: '展示 TTS 合成队列与音频拼接队列的待处理、处理中、完成、失败数量；支持手动重试失败任务、清空已完成任务。',
+        content: '顶部按任务状态分列计数卡片（排队中/运行中/成功/失败）；可切换执行模式（串行或并行，并行时设置并发数 1-5）；任务列表支持按状态与频道筛选，行内可取消、改优先级、从失败步骤重试；管理员可批量删除选中任务（删除稿件、审核、节目及播放记录，素材重置为待处理）。',
       },
     ],
   },
@@ -402,7 +402,7 @@ const docSections = [
       {
         type: 'feature',
         title: '核心功能',
-        content: '工作流按状态（pending/running/success/failed/cancelled）分类展示；点击进入详情页可查看每个步骤（爬取/改写/审核/TTS/拼接/发布）的执行情况、耗时、日志、错误信息。',
+        content: '工作流按状态（queued/running/success/failed/cancelled）分类展示；点击进入详情页可查看每个步骤（爬虫采集/LLM改写/质量审核/语音合成/音频拼接/创建审核）的执行情况、耗时、日志、错误信息。',
       },
       {
         type: 'steps',
@@ -451,7 +451,7 @@ const docSections = [
       {
         type: 'feature',
         title: '核心功能',
-        content: '支持 LLM（通义千问 OpenAI 兼容）与 TTS（阿里云 NLS / Edge-TTS / 腾讯云）多 provider 配置；AI 预算限流 60 次/分钟/服务类型；前端修改后热生效无需重启。',
+        content: '支持 LLM（通义千问 OpenAI 兼容接口）与 TTS 多 provider 配置（阿里云 NLS / Edge-TTS / 腾讯云 / Kokoro / Piper）；AI 预算限流 60 次/分钟/服务类型；前端修改后热生效无需重启。',
       },
       {
         type: 'config',
@@ -459,7 +459,7 @@ const docSections = [
         content: [
           ['LLM_API_KEY', 'sk-...', '通义千问 API Key'],
           ['LLM_MODEL', 'qwen-max', '模型名称'],
-          ['TTS_PROVIDER', 'aliyun', 'TTS 服务商：aliyun/edge/tencent'],
+          ['TTS_PROVIDER', 'aliyun', 'TTS 服务商：aliyun/edge/tencent/kokoro/piper'],
           ['ALIYUN_TTS_APPKEY', '...', '阿里云 NLS AppKey'],
           ['ALIYUN_TTS_API_KEY', 'AccessToken', '非 AccessKey Secret'],
           ['EDGE_TTS_VOICE', 'zh-CN-XiaoxiaoNeural', 'Edge-TTS 音色'],
@@ -533,7 +533,7 @@ const docSections = [
       {
         type: 'feature',
         title: '核心功能',
-        content: '三列清理卡片：缓存（TTLCache/pycache/临时文件）、数据库（黑名单/去重/AI 用量/播放日志/VACUUM）、日志（旧日志/大日志）；全部支持 dry_run 预览模式。',
+        content: '三组清理卡片：缓存（全部缓存/TTLCache/__pycache__ 目录/临时文件）、数据库（全部清理/旧播放日志/旧工作流记录/旧审核记录/过期 JWT 黑名单/旧爬虫去重记录/旧 AI 用量日志/VACUUM 压缩）、日志（全部清理/旧日志文件/大日志文件）；每组都有 dry_run 预览开关，关掉预览才会真实删除。',
       },
       {
         type: 'note',
@@ -552,14 +552,14 @@ const docSections = [
       {
         type: 'feature',
         title: '为什么需要 COS',
-        content: '未配置 COS 时，音频文件经 Tailscale Funnel 中转播放，受限于家庭宽带上行与公网中转延迟，首字播放延迟可达 300-1000ms。配置 COS 后音频直走腾讯云边缘节点，首字延迟降至 50-200ms，下载速度提升 5-10 倍，且不依赖用户电脑在线。',
+        content: '未配置 COS 时，音频文件经 Tailscale Funnel 中转播放，受限于家庭宽带上行与公网中转延迟，首字播放延迟明显偏高。配置 COS 后音频直走腾讯云边缘节点，首字延迟随之下降，且播放不再依赖开发电脑在线。',
       },
       {
         type: 'steps',
         title: '获取 COS 凭证步骤',
         content: [
           '注册腾讯云账号：访问 cloud.tencent.com，用微信扫码或手机号注册并完成实名认证（个人认证即可）',
-          '开通对象存储：控制台搜索"对象存储" → 首次进入会提示开通（按用量计费，10GB 内约 1 元/月）',
+          '开通对象存储：控制台搜索"对象存储" → 首次进入会提示开通（按用量计费，个人测试量级费用很低，具体以腾讯云报价页为准）',
           '创建存储桶：存储桶列表 → 创建存储桶，名称自定义（如 morningbrief-audio），地域选离你近的（如 ap-beijing/ap-shanghai），访问权限选"公有读私有写"',
           '获取 API 密钥：访问管理 → API 密钥管理（console.cloud.tencent.com/cam/capi）→ 新建密钥 → 复制 SecretId 和 SecretKey（SecretKey 只显示一次，请妥善保存）',
           '记录 Bucket 信息：存储桶详情页复制完整 Bucket 名称（格式：名称-appid，如 morningbrief-audio-1311027859）和所属地域（如 ap-beijing）',
@@ -584,7 +584,7 @@ const docSections = [
           '安装 COS SDK：pip install cos-python-sdk-v5',
           '验证凭证：python scripts/jmeter_test/verify_cos.py（自动上传测试文件 → 公网访问 → 清理）',
           '迁移历史音频：python scripts/jmeter_test/migrate_audio_to_cos.py（自动扫描 /audio/ 路径的 episode 并上传 COS）',
-          '重启后端服务：执行 stop.ps1 → start.ps1',
+          '重启后端服务：执行 scripts/stop.ps1 → scripts/start.ps1',
           '配置小程序域名白名单：mp.weixin.qq.com → 开发管理 → 服务器域名 → downloadFile 合法域名 → 添加 https://<bucket>.cos.<region>.myqcloud.com',
           '真机验证：小程序播放任意节目，观察首字播放延迟应显著降低',
         ],
@@ -597,7 +597,7 @@ const docSections = [
       {
         type: 'note',
         title: '注意事项',
-        content: 'COS_CDN_DOMAIN 留空时会用 COS 默认域名（xxx.cos.xxx.myqcloud.com），该域名已备案可直用。若需自定义 CDN 域名（如 audio.example.com），需先注册域名并完成 ICP 备案（约 7-20 个工作日）。SecretKey 切勿提交到 Git 或泄露给前端。迁移脚本幂等可重复执行。',
+        content: 'COS_CDN_DOMAIN 留空时会用 COS 默认域名（xxx.cos.xxx.myqcloud.com），该域名已备案可直用。若需自定义 CDN 域名（如 audio.example.com），需先注册域名并完成 ICP 备案（周期以管局实测为准，非即时生效）。SecretKey 切勿提交到 Git 或泄露给前端。迁移脚本幂等可重复执行。',
         noteType: 'warning',
       },
     ],
