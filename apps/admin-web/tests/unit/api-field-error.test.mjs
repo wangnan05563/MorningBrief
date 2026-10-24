@@ -18,6 +18,7 @@ import { registerHooks } from 'node:module'
 import { after, before, describe, it } from 'node:test'
 
 const MESSAGE_URL = new URL('../../src/utils/message.js', import.meta.url).href
+const LOGIN_TARGET_URL = new URL('../../src/utils/loginTarget.js', import.meta.url).href
 const STUB_URL = new URL('./helpers/element-plus-stub.mjs', import.meta.url).href
 const API_URL = new URL('../../src/api/index.js', import.meta.url).href
 
@@ -36,6 +37,10 @@ registerHooks({
     // index.js 写的是 `from '../utils/message'`（Vite 会补 .js，node 的 ESM 解析器不会）
     if (specifier.endsWith('/utils/message')) {
       return { url: MESSAGE_URL, format: 'module', shortCircuit: true }
+    }
+    // T02614 起 index.js 还依赖登录跳转目标模块，同样需要补扩展名
+    if (specifier.endsWith('/utils/loginTarget')) {
+      return { url: LOGIN_TARGET_URL, format: 'module', shortCircuit: true }
     }
     return nextResolve(specifier, context)
   },

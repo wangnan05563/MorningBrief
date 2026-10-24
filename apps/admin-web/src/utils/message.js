@@ -36,6 +36,9 @@ let _restoreTimer = null
 const _queue = []
 /** @type {Map<string, number>} `类型|文案` -> 该窗口首次展示时刻 */
 const _recent = new Map()
+// T02614：隐藏期间丢弃过 401 的标记 + 补跳登录页的回调（由 api 层注册，见 api/index.js）
+let _authExpired = false
+let _authExpiredHandler = null
 
 function _shouldBlock() {
   return document.hidden || _isRestoring
@@ -99,8 +102,37 @@ document.addEventListener('visibilitychange', () => {
     _isRestoring = false
     _restoreTimer = null
     _flush()
+    // T02614：隐藏期间丢弃过 401 时，会话已确认失效——恢复窗口结束立即补跳登录页。
+    // 放在这里（而不是 visibilitychange 当刻）有两个原因：
+    // 1) window-guard 的 2s 恢复保护期会静默吞掉 location.href 赋值，它的定时器先注册、先到期；
+    // 2) 先让 _flush 把隐藏期间的其它失败原因聚合提示出去，用户不至于只看到「被踢到登录页」。
+    // 没丢弃过 401 时什么都不做——不额外发请求，避免恢复瞬间集中打接口。
+    if (consumeAuthExpired()) _authExpiredHandler?.()
   }, _RESTORE_MS)
 })
+
+/**
+ * 记录「隐藏期间收到过 401」（T02614）。
+ *
+ * 后台标签页被踢下线时不能立刻跳转（会把用户正在看的页面刷走），也不能直接丢弃——
+ * 否则切回前台后界面还停在过期会话上，直到下一次请求才反应过来。这里只落一个标记，
+ * 由上面的恢复窗口在切回前台后统一补跳。
+ */
+export function markAuthExpired() {
+  _authExpired = true
+}
+
+/** 读取并清除标记；未丢弃过 401 时返回 false（调用方此时不应做任何额外动作） */
+export function consumeAuthExpired() {
+  const hit = _authExpired
+  _authExpired = false
+  return hit
+}
+
+/** 注册补跳回调（由 api 层提供，避免 message 反向依赖 api） */
+export function setAuthExpiredHandler(fn) {
+  _authExpiredHandler = typeof fn === 'function' ? fn : null
+}
 
 // ---- ElMessage 安全包装 ----
 
@@ -190,6 +222,7 @@ if (import.meta.env.DEV) {
     dedupeMs: _DEDUPE_MS,
     show: (type, text) => safeElMessage[type](text),
     notifyOnce: notifyErrorOnce,
+    authExpired: () => _authExpired,
     reset: () => safeElMessage.closeAll(),
   }
 }

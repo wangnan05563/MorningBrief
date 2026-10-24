@@ -7,7 +7,8 @@
  * - 401 自动跳转登录，403 提示无权限，其他错误统一 ElMessage 提示
  */
 import axios from 'axios'
-import { ElMessage } from '../utils/message'
+import { ElMessage, markAuthExpired, setAuthExpiredHandler } from '../utils/message'
+import { resolveLoginTarget } from '../utils/loginTarget'
 
 const api = axios.create({
   // baseURL 带 /news 前缀：通过 Tailscale Funnel 访问时，
@@ -36,6 +37,25 @@ function _markNotified(err) {
   }
   return err
 }
+
+/**
+ * 会话失效：清除本地非敏感状态（admin_token 已存 HttpOnly Cookie，JS 不可清除），
+ * 并按当前端跳转到对应登录页。
+ *
+ * @returns {boolean} 是否真的发生了跳转；已在登录页时返回 false
+ */
+function _redirectToLogin() {
+  const target = resolveLoginTarget()
+  localStorage.removeItem('admin_username')
+  localStorage.removeItem('admin_role')
+  if (target.onLoginPage) return false
+  globalThis.location.href = target.redirectUrl
+  return true
+}
+
+// T02614：隐藏期间丢弃的 401 由 message 的恢复窗口在切回前台后回调这里补跳。
+// 注册放在模块顶层：只要用过 api 实例，这条恢复路径就与拦截器同源可用。
+setAuthExpiredHandler(_redirectToLogin)
 
 // 请求拦截：鉴权 token 由 HttpOnly Cookie 自动携带（NFR-M103），
 // 非浏览器 API 客户端仍可经 Authorization 头调用（后端双通道兼容）。
@@ -73,30 +93,16 @@ api.interceptors.response.use(
     // 页面隐藏时不再整体静默丢弃提示：401 维持「不跳转、不清本地态」（避免后台标签页把人踢下线），
     // 其余错误交给 ElMessage 安全包装器入队、恢复后聚合补发（FR-UX-301）
     if (error.response?.status === 401 && document.hidden) {
+      // T02614：只记标记，切回前台由恢复窗口补跳登录页；否则隐藏期间的 401 被彻底丢掉，
+      // 用户回到前台后还停在已过期的会话上，直到下一次请求才被踢。
+      markAuthExpired()
       return Promise.reject(error)
     }
     if (error.response?.status === 401) {
-      // token 失效：清除本地非敏感状态（admin_token 已存 HttpOnly Cookie，JS 不可清除）
-      localStorage.removeItem('admin_username')
-      localStorage.removeItem('admin_role')
-      // 按端（PC / 移动）跳转对应登录页；前缀取 vite base，dev 下是 '/'、生产是 '/news/'。
-      // 原先硬编码 '/news' 前缀：dev 下 pathname 永远不等于 loginPath，「已在登录页」
-      // 判不出来，于是登录失败会被 location.href 刷走页面，错误提示根本没机会显示（FR-UX-304）
-      const pathname = globalThis.location.pathname
-      const isMobile = pathname.includes('/m/')
-      const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
-      const loginPath = `${base}/${isMobile ? 'm/' : ''}login`
-      // 只看末段是否登录页：base 前缀在 dev / 生产下不同，按后缀判定两端一致
-      const onLoginPage = pathname.endsWith(`${isMobile ? '/m' : ''}/login`)
-      if (!document.hidden && !onLoginPage) {
-        // T02511（FR-UX-602）：401 也要把「用户原本在哪一页（含 query）」交给登录页，
-        // 否则会话过期中途掉线时，深链与筛选状态全丢，登录后回不到原来那一屏。
-        // redirect 用**去掉 vite base 前缀**的应用内路径，与 route.fullPath 同口径，
-        // 登录页侧再经 sanitizeRedirect 校验（只接受站内绝对路径）。
-        const appPath = (pathname.slice(base.length) || '/') + globalThis.location.search
-        globalThis.location.href = `${loginPath}?redirect=${encodeURIComponent(appPath)}`
-      } else if (!error.config?.silent) {
-        // 已经在登录页（或页面隐藏不便跳转）时，401 不能是静默失败：
+      // T02511（FR-UX-602）：redirect 带上「用户原本在哪一页（含 query）」，登录后可回到原处；
+      // 计算口径与隐藏期补跳共用 utils/loginTarget，避免两条路径落到不同地址。
+      if (!_redirectToLogin() && !error.config?.silent) {
+        // 已经在登录页时，401 不能是静默失败：
         // 用户点了「登录」却毫无反应，只会反复重试同一个错密码（FR-UX-304）
         ElMessage.error(error.response?.data?.message || '用户名或密码错误')
         _markNotified(error)
