@@ -23,7 +23,7 @@ const PAGES = [
 const MIN_GAP = 22
 
 test.describe('桌面页面内边距', () => {
-  // T02518 附带修正：本用例断言的是 **桌面** 24px 口径，但 T00833 的全局媒体查询
+  // T02518 附带修正（视口口径见 T02807）：本用例断言的是 **桌面** 24px 口径，但 T00833 的全局媒体查询
   // （global.scss:62 `@media (max-width: 1439.98px) { .page-container { padding: 16px } }`）
   // 在窄窗口会把内边距收到 16px ⇒ Playwright 默认视口 1280×720 下必然测出 16px，
   // 与页面是否漏挂 .page-container 无关（假失败）。桌面页用例按 1366+ 主力屏之外的
