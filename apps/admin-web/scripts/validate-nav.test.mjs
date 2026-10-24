@@ -26,6 +26,7 @@ function facts(over = {}) {
     ariaLabels: new Set(['新增频道']),
     dataGuides: new Set(['review-table']),
     helpIds: ['review'],
+    helpSectionRoutes: [{ id: 'review', routes: ['/review'] }],
     menuRefs: ['内容审核'],
     mobileTargets: [{ from: 'layouts/MobileLayout.vue', to: '/m/home' }],
     aboutHrefs: [],
@@ -126,6 +127,63 @@ test('真实仓库的锚点契约事实非空（检查项等于真跑了）', as
 test('帮助文档指向不存在的菜单时报错', () => {
   const r = checkFacts(facts({ menuRefs: ['不存在的菜单'] }))
   assert.match(r.errors.join('\n'), /帮助文档指向不存在的菜单：「不存在的菜单」/)
+})
+
+test('帮助章节的 routes 指向不存在的路由时报错（T02635）', () => {
+  const r = checkFacts(
+    facts({
+      helpSectionRoutes: [{ id: 'cos-storage', routes: ['/cos-config', '/cos-removed'] }],
+    }),
+  )
+  assert.match(
+    r.errors.join('\n'),
+    /帮助文档章节「cos-storage」指向不存在的路由：\/cos-removed/,
+  )
+})
+
+test('帮助章节缺少 routes 字段时报错，防止新章节绕开门禁（T02635）', () => {
+  const r = checkFacts(facts({ helpSectionRoutes: [{ id: 'new-section', routes: null }] }))
+  assert.match(r.errors.join('\n'), /帮助文档章节「new-section」缺少 routes 字段/)
+})
+
+test('兜底重定向路由不能把不存在的章节路由「兜成存在」（T02635）', () => {
+  const base = facts()
+  const r = checkFacts({
+    ...base,
+    routes: [...base.routes, { path: '/:pathMatch(.*)*', meta: {} }],
+    helpSectionRoutes: [{ id: 'cos-storage', routes: ['/cos-nope'] }],
+  })
+  assert.match(
+    r.errors.join('\n'),
+    /帮助文档章节「cos-storage」指向不存在的路由：\/cos-nope/,
+  )
+})
+
+test('真实仓库的每个帮助章节都绑定了真实路由（T02635）', async () => {
+  const f = await collectFacts()
+  // 抽取数量必须与 id 对上，否则后面的「缺少 routes」检查可能只是没扫到
+  assert.equal(f.helpSectionRoutes.length, f.helpIds.length, '章节 id 与 routes 抽取数量不一致')
+  assert.ok(f.helpSectionRoutes.length >= 15, `帮助章节数异常：${f.helpSectionRoutes.length}`)
+  assert.deepEqual(
+    f.helpSectionRoutes.filter((s) => s.routes === null),
+    [],
+    '有章节没有写 routes 字段',
+  )
+  assert.ok(
+    f.helpSectionRoutes.some((s) => s.routes.length > 0),
+    '没有任何章节绑定路由，检查项等于没跑',
+  )
+  for (const section of f.helpSectionRoutes) {
+    for (const route of section.routes) {
+      assert.ok(route.startsWith('/'), `章节 ${section.id} 的 routes 不是绝对路径：${route}`)
+    }
+  }
+  // 只验「路由存在」会漏掉接错对象：章节读到别的章节的 routes 也全是真路由。
+  // 抽三对锚点钉住归属——review/cos-storage/db-admin 各认自己的页面。
+  const byId = new Map(f.helpSectionRoutes.map((s) => [s.id, s.routes]))
+  assert.ok(byId.get('review').includes('/review'), 'review 章节没有绑定 /review')
+  assert.ok(byId.get('cos-storage').includes('/cos-config'), 'cos-storage 章节没有绑定 /cos-config')
+  assert.ok(byId.get('db-admin').includes('/db-admin'), 'db-admin 章节没有绑定 /db-admin')
 })
 
 test('分组漂移（路由有组无配置 / 配置有组无菜单）双向报错', () => {

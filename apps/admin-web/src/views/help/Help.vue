@@ -228,6 +228,8 @@ function getBlockIcon(type) {
 const docSections = [
   {
     id: 'quickstart',
+    // 跨页章节：本节讲的是从零跑通全流程，没有单一对应页面
+    routes: [],
     title: '快速开始',
     icon: markRaw(MagicStick),
     intro: '从安装到首次跑通工作流的完整流程，新用户必读。',
@@ -266,6 +268,7 @@ const docSections = [
   },
   {
     id: 'review',
+    routes: ['/review', '/review/:id'],
     title: '内容审核',
     icon: markRaw(Document),
     intro: '审核 LLM 改写后的稿件，决定是否进入 TTS 合成流程。',
@@ -298,6 +301,7 @@ const docSections = [
   },
   {
     id: 'ads',
+    routes: ['/ads/materials', '/ads/placements', '/ads/schedule'],
     title: '广告管理',
     icon: markRaw(Picture),
     intro: '管理广告素材、投放规则与排期。',
@@ -326,6 +330,7 @@ const docSections = [
   },
   {
     id: 'stats',
+    routes: ['/stats', '/stats/channel-health', '/stats/rss-health', '/stats/llm-metrics'],
     title: '数据统计',
     icon: markRaw(DataLine),
     intro: '查看播放量、DAU、完播率等核心指标及趋势。',
@@ -333,7 +338,7 @@ const docSections = [
       {
         type: 'feature',
         title: '核心功能',
-        content: '提供当日核心指标看板（DAU、播放量、完播率、平均收听、推算广告曝光）、7 天/30 天趋势图、按日期切换的历史数据查询。',
+        content: '提供当日核心指标看板（DAU、播放量、完播率、平均收听、推算广告曝光）、7 天/30 天趋势图、按日期切换的历史数据查询。同组的「频道健康度」「RSS 源状态」「LLM 重试指标」分别用于排查频道产出、抓取源与改写重试。',
       },
       {
         type: 'steps',
@@ -349,6 +354,7 @@ const docSections = [
   },
   {
     id: 'channels',
+    routes: ['/channels', '/channels/material-library', '/channels/book-pool', '/materials', '/ebooks'],
     title: '频道管理',
     icon: markRaw(Menu),
     intro: '配置新闻频道、RSS 源、关键词、调度时间与 LLM 提示词。',
@@ -356,7 +362,7 @@ const docSections = [
       {
         type: 'feature',
         title: '核心功能',
-        content: '每个频道独立配置 RSS 源、关键词、调度时间、开场/结尾/约束提示词、BGM、TTS 音色，实现频道级内容隔离与个性化播报风格。',
+        content: '每个频道独立配置 RSS 源、关键词、调度时间、开场/结尾/约束提示词、BGM、TTS 音色，实现频道级内容隔离与个性化播报风格。素材侧入口为「素材库管理」「讲书稿素材池」，采集入口为「素材录入」「找书工具」。',
       },
       {
         type: 'config',
@@ -382,6 +388,7 @@ const docSections = [
   },
   {
     id: 'queue',
+    routes: ['/queue'],
     title: '队列管理',
     icon: markRaw(Operation),
     intro: '查看工作流任务队列的执行状态并调整执行模式。',
@@ -395,6 +402,7 @@ const docSections = [
   },
   {
     id: 'workflows',
+    routes: ['/workflows', '/workflows/:id'],
     title: '工作流监控',
     icon: markRaw(Monitor),
     intro: '查看工作流执行状态、步骤进度与日志。',
@@ -425,6 +433,7 @@ const docSections = [
   },
   {
     id: 'tunnel',
+    routes: ['/tunnel'],
     title: '内网穿透',
     icon: markRaw(Connection),
     intro: '通过 cloudflared/cpolar 暴露本地服务到公网，便于小程序真机测试。',
@@ -444,6 +453,7 @@ const docSections = [
   },
   {
     id: 'ai-config',
+    routes: ['/ai-config'],
     title: 'AI 服务',
     icon: markRaw(Cpu),
     intro: '配置 LLM 与 TTS 服务商、API Key、模型、预算等。',
@@ -475,6 +485,7 @@ const docSections = [
   },
   {
     id: 'notification',
+    routes: ['/notification'],
     title: '通知管理',
     icon: markRaw(Bell),
     intro: '配置钉钉/企微等通知渠道与事件订阅模板。',
@@ -488,6 +499,7 @@ const docSections = [
   },
   {
     id: 'tools',
+    routes: ['/tools/calculator'],
     title: '参数计算器',
     icon: markRaw(Calendar),
     intro: '在时长、总字数、语速倍率之间三选一锁定，由另外两项推导。',
@@ -507,6 +519,7 @@ const docSections = [
   },
   {
     id: 'db-admin',
+    routes: ['/db-admin'],
     title: '数据库维护',
     icon: markRaw(Coin),
     intro: '在线查看/编辑 SQLite 数据库表数据。',
@@ -526,6 +539,7 @@ const docSections = [
   },
   {
     id: 'maintenance',
+    routes: ['/maintenance'],
     title: '系统清理',
     icon: markRaw(Brush),
     intro: '清理历史数据、缓存、日志，VACUUM 压缩 SQLite。',
@@ -545,14 +559,16 @@ const docSections = [
   },
   {
     id: 'cos-storage',
-    title: '音频存储（COS）',
+    routes: ['/cos-config', '/cos-files'],
+    // 侧栏叫「云端配置」「文件管理」，章节标题与首句沿用同一套菜单名（T02635）
+    title: '云端存储（COS）',
     icon: markRaw(Coin),
-    intro: '配置腾讯云 COS 对象存储，加速小程序音频播放。生产环境强烈推荐。',
+    intro: '在「云端配置」填写腾讯云 COS 凭证，在「文件管理」查看云端音频；音频直连 COS 可加速小程序播放。生产环境强烈推荐。',
     blocks: [
       {
         type: 'feature',
         title: '为什么需要 COS',
-        content: '未配置 COS 时，音频文件经 Tailscale Funnel 中转播放，受限于家庭宽带上行与公网中转延迟，首字播放延迟明显偏高。配置 COS 后音频直走腾讯云边缘节点，首字延迟随之下降，且播放不再依赖开发电脑在线。',
+        content: '未配置 COS 时，音频文件经 Tailscale Funnel 中转播放，受限于家庭宽带上行与公网中转延迟，首字播放延迟明显偏高。配置 COS 后音频直走腾讯云边缘节点，首字延迟随之下降，且播放不再依赖开发电脑在线。凭证在「云端配置」维护，已上传的云端音频在「文件管理」查看。',
       },
       {
         type: 'steps',
@@ -604,6 +620,7 @@ const docSections = [
   },
   {
     id: 'about',
+    routes: ['/about'],
     title: '关于 / 版本信息',
     icon: markRaw(Promotion),
     intro: '系统元信息与文档资源统一入口。',

@@ -434,6 +434,20 @@ export async function collectFacts() {
   const helpText = read('views/help/Help.vue')
   const helpLiteral = literalAt(helpText, helpText.indexOf('const docSections = [') + 'const docSections = '.length)
   const helpIds = [...helpLiteral.matchAll(/^\s*id:\s*'([^']+)'/gm)].map((m) => m[1])
+  // T02635：章节用结构化 routes 绑定真实路由。缺字段记 null——否则新加的章节
+  // 只要不写 routes 就自动跳过校验，门禁等于只对老章节有效。
+  const sectionIdMatches = [...helpLiteral.matchAll(/^\s{4}id:\s*'([^']+)',/gm)]
+  const helpSectionRoutes = sectionIdMatches.map((m, i) => {
+    const chunk = helpLiteral.slice(
+      m.index,
+      i + 1 < sectionIdMatches.length ? sectionIdMatches[i + 1].index : helpLiteral.length,
+    )
+    const line = /^\s{4}routes:\s*\[([^\]]*)\]/m.exec(chunk)
+    return {
+      id: m[1],
+      routes: line ? [...line[1].matchAll(/'([^']+)'/g)].map((r) => r[1]) : null,
+    }
+  })
   // 只把「像菜单指引」的「」当作菜单引用：`进入「X」`、`侧边栏「X」`，或 `「X」页面`。
   // 帮助文档里大量「X」是按钮/弹窗名（「审核通过」「驳回」「重试」），按菜单口径校验会全是误报。
   const menuRefs = [
@@ -467,6 +481,7 @@ export async function collectFacts() {
     ariaLabels,
     dataGuides,
     helpIds,
+    helpSectionRoutes,
     menuRefs,
     mobileTargets,
     aboutHrefs,
@@ -484,6 +499,9 @@ export async function collectFacts() {
 function matchRoute(routes, path) {
   const want = path.split('/')
   return routes.some((r) => {
+    // 兜底重定向（/:pathMatch(.*)*）不是有效入口：把它当动态路由会让任何
+    // 单段路径都「存在」，门禁对 /cos-nope 这类错链就永远不报（T02635）
+    if (r.path.includes('*')) return false
     if (!r.path.includes(':')) return r.path === path
     const seg = r.path.split('/')
     if (seg.length !== want.length) return false
@@ -664,6 +682,25 @@ export function checkFacts(f) {
   for (const ref of f.menuRefs) {
     if (!menuTitles.has(ref) && !groupNames.has(ref)) {
       errors.push(`帮助文档指向不存在的菜单：「${ref}」（既不是路由标题也不是分组名）`)
+    }
+  }
+
+  // T02635：章节 ↔ 页面的唯一判据是 section.routes；「进入「X」」句式只作为兜底文案检查
+  for (const section of f.helpSectionRoutes ?? []) {
+    if (section.routes === null) {
+      errors.push(
+        `帮助文档章节「${section.id}」缺少 routes 字段：章节没和路由绑定，` +
+          `菜单改名/删除时门禁发现不了（T02635）`,
+      )
+      continue
+    }
+    for (const route of section.routes) {
+      if (!matchRoute(f.routes, route)) {
+        errors.push(
+          `帮助文档章节「${section.id}」指向不存在的路由：${route}；` +
+            `章节背后的页面已改名/删除，用户照着文档找不到入口`,
+        )
+      }
     }
   }
 

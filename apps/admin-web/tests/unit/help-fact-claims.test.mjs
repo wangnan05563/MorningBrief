@@ -62,6 +62,13 @@ function sectionText(id) {
   return DOC.slice(start, end)
 }
 
+/** 章节绑定的路由（T02635）：文档 ↔ 页面的结构化事实源，不再从正文句式反推 */
+function sectionRoutes(id) {
+  const m = /^\s*routes:\s*\[([^\]]*)\]/m.exec(sectionText(id))
+  assert.ok(m, `章节 ${id} 没有 routes 字段（T02635）`)
+  return [...m[1].matchAll(/'([^']+)'/g)].map((r) => r[1])
+}
+
 /** 章节里的参数配置表行：[键, 示例值, 说明] */
 function configRows(id) {
   return [
@@ -425,26 +432,25 @@ describe('T02920 参数计算器章节', () => {
 })
 
 describe('T02920 权限口径', () => {
-  it('写了「仅 admin」的章节，路由守卫确实 requireRole: admin', () => {
-    const routePathOf = {
-      workflows: 'workflows',
-      tunnel: 'tunnel',
-      'db-admin': 'db-admin',
-      maintenance: 'maintenance',
-    }
-    for (const [id, p] of Object.entries(routePathOf)) {
+  it('写了「仅 admin」的章节，其 routes 里的路由都 requireRole: admin', () => {
+    for (const id of ['workflows', 'tunnel', 'db-admin', 'maintenance']) {
       assert.match(
         sectionText(id),
         /仅 admin/,
         `章节 ${id} 不再声明权限，路由那条 gating 也要一起复核`,
       )
-      const at = ROUTER.indexOf(`path: '${p}'`)
-      assert.notEqual(at, -1, `路由里找不到 ${p}`)
-      assert.match(
-        ROUTER.slice(at, at + 260),
-        /requireRole: 'admin'/,
-        `${id} 章节宣称仅 admin，但路由不再限制角色了`,
-      )
+      const routes = sectionRoutes(id)
+      assert.ok(routes.length > 0, `章节 ${id} 没有绑定路由，无法核对权限口径`)
+      for (const route of routes) {
+        const p = route.replace(/^\//, '')
+        const at = ROUTER.indexOf(`path: '${p}'`)
+        assert.notEqual(at, -1, `路由里找不到 ${route}`)
+        assert.match(
+          ROUTER.slice(at, at + 260),
+          /requireRole: 'admin'/,
+          `章节 ${id} 宣称仅 admin，但路由 ${route} 不再限制角色了`,
+        )
+      }
     }
   })
 })
