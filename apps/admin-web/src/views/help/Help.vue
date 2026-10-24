@@ -166,7 +166,7 @@ import { useUserStore } from '../../stores/user'
 import { useGuide } from '../../guide/useGuide'
 import { GUIDE_STEPS } from '../../guide/guideConfig'
 import { getAbout } from '../../api/about'
-import { API_DOCS_PATH } from '../../utils/links'
+import { API_DOCS_PATH } from '../../utils/appPath'
 
 const router = useRouter()
 const userStore = useUserStore()

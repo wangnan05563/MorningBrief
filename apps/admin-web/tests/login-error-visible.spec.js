@@ -51,7 +51,13 @@ test.describe('登录失败可见', () => {
         contentType: 'application/json',
         body: JSON.stringify({ code: 401, message: '登录已过期，请重新登录', data: null }),
       }))
+    // T02633 验收：只要复位地址真的判对了「已在登录页」，401 就不该触发整页导航。
+    // 仅断言 URL 停在 /login 不够——刷新回 /login 也满足；这里数文档加载次数。
+    await page.addInitScript(() => {
+      window.__docLoads = (window.__docLoads || 0) + 1
+    })
     await page.goto('/login')
+    const loadsBefore = await page.evaluate(() => window.__docLoads)
     await page.getByPlaceholder('请输入用户名').fill('admin')
     await page.getByPlaceholder('请输入密码').fill('bad')
     await page.getByRole('button', { name: '登录' }).click()
@@ -59,6 +65,7 @@ test.describe('登录失败可见', () => {
     await expect(page.locator(BANNER)).toContainText('登录已过期', { timeout: 30000 })
     // 仍在登录页，没有被 location.href 刷走
     await expect(page).toHaveURL(/\/login$/)
+    expect(await page.evaluate(() => window.__docLoads)).toBe(loadsBefore)
   })
 
   test('账号被禁用（403）显示对应原因', async ({ page }) => {

@@ -599,6 +599,7 @@ import {
 } from '../../api/channels'
 import { formatTime } from '../../utils/format'
 import { dangerConfirm } from '../../utils/dangerConfirm'
+import { withAppPrefix } from '../../utils/appPath'
 import { CHANNEL_TYPE, enumLabel, enumTagType, enumOptions } from '../../constants/enums'
 
 const channelTypeOptions = enumOptions(CHANNEL_TYPE)
@@ -876,7 +877,7 @@ async function openCoverPicker() {
 
 /**
  * /channel-assets 静态资源预览 URL（T00730 修复「预制封面预览不显示」）：
- * 统一带 /news 前缀——与 axios baseURL（/news/admin/api/v1）同一约定。
+ * 前缀统一由 utils/appPath 提供（与 axios baseURL 同一来源，T02633）。
  * 生产经 Tailscale Funnel 只路由 /news/*，裸 /channel-assets 请求 404（表现为预览图不显示，
  * 但列表接口走 /news 正常，故「能看到图片大小」）；dev 由 Vite proxy /news/channel-assets 转发。
  * DB 存储的仍是干净的相对路径，仅渲染时拼接。
@@ -884,7 +885,7 @@ async function openCoverPicker() {
 function assetPreviewUrl(path) {
   if (!path) return ''
   if (/^https?:\/\//.test(path)) return path
-  return path.startsWith('/news/') ? path : '/news' + path
+  return withAppPrefix(path)
 }
 
 /**

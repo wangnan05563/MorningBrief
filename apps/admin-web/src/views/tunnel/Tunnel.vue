@@ -364,6 +364,7 @@ import {
   MagicStick, Key, Loading, Plus, ArrowRight,
 } from '@element-plus/icons-vue'
 import api from '../../api'
+import { API_BASE_URL } from '../../utils/appPath'
 import { readBizError } from '../../api/bizError'
 
 // 隧道状态
@@ -441,7 +442,7 @@ const apiBaseURL = computed(() => {
   const url = status.value?.public_url
   const prefix = status.value?.path_prefix || ''
   if (url) return url + prefix + 'admin/api/v1'
-  return '/news/admin/api/v1'
+  return API_BASE_URL
 })
 const isNamedTunnel = computed(() =>
   config.value?.tunnel_mode === 'named' && config.value?.hostname

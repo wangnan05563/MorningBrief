@@ -21,15 +21,15 @@
     },
     {
       "endpoint": "POST /channels",
-      "site": "views/channel/ChannelManagement.vue:1116",
+      "site": "views/channel/ChannelManagement.vue:1117",
       "reason_key": "spread-manually-verified",
-      "note": "...extPayload 的键已在 apps/admin-web/src/views/channel/ChannelManagement.vue:1064-1080 逐条核对：channel_type/type_label/selection_strategy/manual_material_ids/enable_ad/disclaimer_level/cover_url，全部在 ChannelCreateRequest 声明内。"
+      "note": "...extPayload 的键已在 apps/admin-web/src/views/channel/ChannelManagement.vue:1065-1081 逐条核对：channel_type/type_label/selection_strategy/manual_material_ids/enable_ad/disclaimer_level/cover_url，全部在 ChannelCreateRequest 声明内。"
     },
     {
       "endpoint": "PUT /channels/*",
-      "site": "views/channel/ChannelManagement.vue:1083",
+      "site": "views/channel/ChannelManagement.vue:1084",
       "reason_key": "spread-manually-verified",
-      "note": "同一份 extPayload（apps/admin-web/src/views/channel/ChannelManagement.vue:1064-1080），全部落在 ChannelUpdateRequest 声明内。"
+      "note": "同一份 extPayload（apps/admin-web/src/views/channel/ChannelManagement.vue:1065-1081），全部落在 ChannelUpdateRequest 声明内。"
     },
     {
       "endpoint": "PUT /notification/config",
@@ -105,7 +105,7 @@
     },
     {
       "endpoint": "PUT /channels/*/script-mode",
-      "site": "views/channel/ChannelManagement.vue:960",
+      "site": "views/channel/ChannelManagement.vue:961",
       "reason_key": "value-scalar",
       "note": "val 是同一个模式布尔开关，来自频道管理页的开关入口；包装体键名 enabled 在 ScriptModeRequest 声明内。"
     },

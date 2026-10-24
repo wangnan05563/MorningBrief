@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { useMobileViewport, llmMetricsResponse } from './helpers/mock'
+import { useMobileViewport, llmMetricsResponse, loginSuccessResponse } from './helpers/mock'
 
 /**
  * 隐藏期间丢弃的 401，切回前台后补跳登录页（T02614）
@@ -66,6 +66,11 @@ function deferred() {
 test.describe('隐藏期的 401 在恢复前台后补跳登录页', () => {
   test.beforeEach(async ({ page }) => {
     await setupVisibility(page)
+    // 未显式 mock 的后台请求一律给空壳：本文件只关心 401 时序，别让外壳挂载期的
+    // 其它接口把页面带去别的失败态（也不真打后端）。后注册的具体路由会优先命中。
+    await page.route(`${API}/**`, (route) =>
+      route.fulfill({ json: { code: 0, message: 'success', data: {} } })
+    )
     // PC 外壳启动时会静默查一次更新；给个确定答案，避免未 mock 的请求干扰计数
     await page.route(`${API}/about/check-update*`, (route) =>
       route.fulfill({ json: { code: 0, message: 'success', data: { has_update: false } } })
@@ -114,15 +119,28 @@ test.describe('隐藏期的 401 在恢复前台后补跳登录页', () => {
 
     const url = new URL(page.url())
     // 应用路由 base 是 /news/：补跳写入 /login 后由 router 规范化成 /news/login
-    // （即票据要求的 PC 登录地址；生产下 base 前缀的换算由单测 login-target.test.mjs 锁定）
+    // （即票据要求的 PC 登录地址）
     expect(url.pathname).toBe('/news/login')
-    // redirect 必须指回刚才那一页（含 query）。dev 的 vite base 为 '/'，因此这里保留
-    // router base 前缀 /news/；生产 base 为 '/news/' 时会剥掉它，两种基址都在单测里断言。
+    // T02633：redirect 是 vue-router 口径，必须剥掉 /news（登录页直接 router.push，
+    // 带前缀会拼成 /news/news/...）。dev 与生产在这里给出同一个值。
     const original = new URL(beforeHide)
-    expect(url.searchParams.get('redirect')).toBe(original.pathname + original.search)
+    const appPath = original.pathname.replace(/^\/news(?=\/)/, '')
+    expect(url.searchParams.get('redirect')).toBe(appPath + original.search)
     // 非敏感的本地态随会话一起清掉（token 在 HttpOnly Cookie 里，JS 清不了）
     expect(await page.evaluate(() => localStorage.getItem('admin_username'))).toBeNull()
     expect(await page.evaluate(() => localStorage.getItem('admin_role'))).toBeNull()
+
+    // 闭环：拿 redirect 登录后必须真的回到刚才那一页（停在地址栏「看着对」、
+    // 实际被 404 兜底到审核页不算数）
+    await page.route(`${API}/auth/login`, (route) => route.fulfill({ json: loginSuccessResponse }))
+    hold = false
+    await page.getByPlaceholder('请输入用户名').fill('admin')
+    await page.getByPlaceholder('请输入密码').fill('admin123')
+    await page.getByRole('button', { name: '登录' }).click()
+    await expect(page.locator('[data-guide="llm-metrics-page"]')).toBeVisible({ timeout: 30000 })
+    const after = new URL(page.url())
+    expect(after.pathname).toBe(original.pathname)
+    expect(after.search).toBe(original.search)
   })
 
   test('移动端：补跳 /m/login，redirect 保留 /m 路径', async ({ page }) => {
@@ -192,7 +210,9 @@ test.describe('隐藏期的 401 在恢复前台后补跳登录页', () => {
     // 与 PC 同源：路由 base /news/ 把 /m/login 规范化为 /news/m/login（即票据要求的地址）
     expect(url.pathname).toBe('/news/m/login')
     const original = new URL(beforeHide)
-    expect(url.searchParams.get('redirect')).toBe(original.pathname + original.search)
+    expect(url.searchParams.get('redirect')).toBe(
+      original.pathname.replace(/^\/news(?=\/)/, '') + original.search
+    )
   })
 
   test('未丢弃过 401：恢复前台不跳转、也不额外请求', async ({ page }) => {

@@ -210,8 +210,10 @@ describe('useFeedHealth 聚合与页面接线', () => {
 
 describe('跨端契约：后端事件流端点与前端 SSE 路径一致', () => {
   it('前端 SSE_ENDPOINT 指向后端真实注册的流式路由', () => {
-    const endpoint = srcFile('utils/sse.js').match(/const SSE_ENDPOINT = '([^']+)'/)[1]
+    // T02633 起端点由 utils/appPath 统一派生，sse.js 只消费不拼接
+    const endpoint = srcFile('utils/appPath.js').match(/SSE_ENDPOINT = withAppPrefix\('([^']+)'\)/)[1]
     assert.ok(endpoint.includes('/events/stream'), `端点异常: ${endpoint}`)
+    assert.match(srcFile('utils/sse.js'), /import \{ SSE_ENDPOINT \} from '\.\/appPath'/)
     const route = repoFile('backend/app/routers/admin/events.py')
     assert.match(route, /@router\.get\(["']\/stream["']/, '后端 /events/stream 路由不存在或被改名')
   })

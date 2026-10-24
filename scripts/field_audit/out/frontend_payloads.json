@@ -56,7 +56,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1213,
+          "line": 1214,
           "fn": "deleteChannel",
           "fieldCount": 0,
           "unresolved": []
@@ -230,7 +230,7 @@
       "sites": [
         {
           "file": "views/about/About.vue",
-          "line": 303,
+          "line": 304,
           "fn": "getAbout",
           "fieldCount": 0,
           "unresolved": []
@@ -259,7 +259,7 @@
         },
         {
           "file": "views/about/About.vue",
-          "line": 332,
+          "line": 333,
           "fn": "checkUpdate",
           "fieldCount": 0,
           "unresolved": []
@@ -274,7 +274,7 @@
       "sites": [
         {
           "file": "views/about/About.vue",
-          "line": 450,
+          "line": 451,
           "fn": "getUpgradeStatus",
           "fieldCount": 0,
           "unresolved": []
@@ -552,7 +552,7 @@
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 738,
+          "line": 739,
           "fn": "listChannels",
           "fieldCount": 2,
           "unresolved": []
@@ -646,7 +646,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1192,
+          "line": 1193,
           "fn": "deleteChannelPreview",
           "fieldCount": 1,
           "unresolved": []
@@ -668,7 +668,7 @@
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 943,
+          "line": 944,
           "fn": "getScriptMode",
           "fieldCount": 0,
           "unresolved": []
@@ -683,7 +683,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 763,
+          "line": 764,
           "fn": "listBgmFiles",
           "fieldCount": 0,
           "unresolved": []
@@ -698,7 +698,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 781,
+          "line": 782,
           "fn": "listBookRssSources",
           "fieldCount": 0,
           "unresolved": []
@@ -713,7 +713,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 868,
+          "line": 869,
           "fn": "listCoverPresets",
           "fieldCount": 0,
           "unresolved": []
@@ -728,7 +728,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 772,
+          "line": 773,
           "fn": "listRssSources",
           "fieldCount": 0,
           "unresolved": []
@@ -1097,28 +1097,28 @@
         },
         {
           "file": "utils/sse.js",
-          "line": 137,
+          "line": 134,
           "fn": "getStatus",
           "fieldCount": 0,
           "unresolved": []
         },
         {
           "file": "utils/sse.js",
-          "line": 159,
+          "line": 156,
           "fn": "getStatus",
           "fieldCount": 0,
           "unresolved": []
         },
         {
           "file": "utils/sse.js",
-          "line": 163,
+          "line": 160,
           "fn": "getStatus",
           "fieldCount": 0,
           "unresolved": []
         },
         {
           "file": "utils/sse.js",
-          "line": 170,
+          "line": 167,
           "fn": "getStatus",
           "fieldCount": 0,
           "unresolved": []
@@ -1515,7 +1515,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 617,
+          "line": 618,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -1530,7 +1530,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 466,
+          "line": 467,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -1547,7 +1547,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 454,
+          "line": 455,
           "fn": "api.get",
           "fieldCount": 1,
           "unresolved": []
@@ -1650,7 +1650,7 @@
       "sites": [
         {
           "file": "views/about/About.vue",
-          "line": 429,
+          "line": 430,
           "fn": "startUpgrade",
           "fieldCount": 0,
           "unresolved": []
@@ -2040,7 +2040,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1116,
+          "line": 1117,
           "fn": "createChannel",
           "fieldCount": 23,
           "unresolved": [
@@ -2123,7 +2123,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1227,
+          "line": 1228,
           "fn": "generateChannelPrompts",
           "fieldCount": 0,
           "unresolved": []
@@ -2140,7 +2140,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 911,
+          "line": 912,
           "fn": "uploadChannelIcon",
           "fieldCount": 0,
           "unresolved": [
@@ -2159,7 +2159,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 925,
+          "line": 926,
           "fn": "generateChannelIcon",
           "fieldCount": 1,
           "unresolved": []
@@ -2174,7 +2174,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1304,
+          "line": 1305,
           "fn": "recommendChannelBgm",
           "fieldCount": 0,
           "unresolved": []
@@ -2189,7 +2189,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1332,
+          "line": 1333,
           "fn": "recommendChannelSources",
           "fieldCount": 0,
           "unresolved": []
@@ -2206,7 +2206,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1285,
+          "line": 1286,
           "fn": "uploadBgmFile",
           "fieldCount": 0,
           "unresolved": [
@@ -2864,7 +2864,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 645,
+          "line": 646,
           "fn": "api.post",
           "fieldCount": 1,
           "unresolved": []
@@ -2879,7 +2879,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 596,
+          "line": 597,
           "fn": "api.post",
           "fieldCount": 0,
           "unresolved": []
@@ -2897,7 +2897,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 665,
+          "line": 666,
           "fn": "api.post",
           "fieldCount": 2,
           "unresolved": []
@@ -2924,7 +2924,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 564,
+          "line": 565,
           "fn": "api.post",
           "fieldCount": 11,
           "unresolved": []
@@ -2939,7 +2939,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 517,
+          "line": 518,
           "fn": "api.post",
           "fieldCount": 0,
           "unresolved": []
@@ -2954,7 +2954,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 545,
+          "line": 546,
           "fn": "api.post",
           "fieldCount": 0,
           "unresolved": []
@@ -3170,7 +3170,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1083,
+          "line": 1084,
           "fn": "updateChannel",
           "fieldCount": 26,
           "unresolved": [
@@ -3179,21 +3179,21 @@
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1177,
+          "line": 1178,
           "fn": "updateChannel",
           "fieldCount": 1,
           "unresolved": []
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1310,
+          "line": 1311,
           "fn": "updateChannel",
           "fieldCount": 2,
           "unresolved": []
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1349,
+          "line": 1350,
           "fn": "updateChannel",
           "fieldCount": 2,
           "unresolved": []
@@ -3228,7 +3228,7 @@
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 960,
+          "line": 961,
           "fn": "setScriptMode",
           "fieldCount": 1,
           "unresolved": [

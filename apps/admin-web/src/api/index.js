@@ -9,12 +9,12 @@
 import axios from 'axios'
 import { ElMessage, markAuthExpired, setAuthExpiredHandler } from '../utils/message'
 import { resolveLoginTarget } from '../utils/loginTarget'
+import { API_BASE_URL } from '../utils/appPath'
 
 const api = axios.create({
-  // baseURL 带 /news 前缀：通过 Tailscale Funnel 访问时，
-  // Funnel 自动去除 /news/ 前缀转发给后端，后端收到 /admin/api/v1/...
-  // 本地开发时 Vite proxy 的 rewrite 去除 /news 前缀
-  baseURL: '/news/admin/api/v1',
+  // 前缀统一由 utils/appPath 提供（T02633）：生产 Tailscale Funnel 剥掉 /news 转发后端，
+  // 本地由 Vite proxy 的 rewrite 去掉 /news
+  baseURL: API_BASE_URL,
   timeout: 15000,
   // NFR-M103：鉴权 token 存于 HttpOnly Cookie，需随请求自动携带（同源部署自动发送）
   withCredentials: true,

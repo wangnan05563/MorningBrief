@@ -7,10 +7,8 @@
  * 未配置仓库时前端直接隐藏这些入口，而不是留一个假地址。
  */
 
-// 交互式 API 文档路径：dev 经 Vite 代理去掉 /news 前缀打到后端 /docs；
-// 生产 Funnel 只路由 /news/*，而后端仅在 development 挂载 docs_url，
-// 因此入口显隐由 /about 的 docs_enabled 决定（见 About.vue）。
-export const API_DOCS_PATH = '/news/docs'
+// 交互式 API 文档路径由 utils/appPath 统一提供（前置 /news 前缀，dev 由 Vite 代理去前缀）；
+// 后端仅在 development 挂载 docs_url，入口显隐由 /about 的 docs_enabled 决定（见 About.vue）。
 
 /**
  * 由仓库地址派生项目类外链。

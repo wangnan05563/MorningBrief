@@ -45,6 +45,7 @@ import './styles/global.scss'
 
 // 全局安全的 ElMessage：页面隐藏/恢复中时静默丢弃，防止 DOM 插入激活最小化窗口
 import { ElMessage } from './utils/message'
+import { READY_PATH } from './utils/appPath'
 
 // ============================================================
 // T00827：桌面端启动画面（splash）进度控制
@@ -105,9 +106,9 @@ setSplash(60, '正在连接服务…')
 const probeReady = async (tries = 0) => {
   if (splashDone) return
   try {
-    // /news 前缀：dev 由 Vite 代理、生产由 Funnel 路由到后端；ready 探针在 SQLite
-    // 核心依赖就绪前返回 503，就绪后返回 200（比存活探针更能反映"可开始使用"）
-    const res = await fetch('/news/api/health/ready')
+    // 前缀统一由 utils/appPath 提供：dev 由 Vite 代理、生产由 Funnel 路由到后端；
+    // ready 探针在 SQLite 核心依赖就绪前返回 503，就绪后返回 200（比存活探针更能反映"可开始使用"）
+    const res = await fetch(READY_PATH)
     if (res.ok) {
       setSplash(100, '启动完成')
       setTimeout(hideSplash, 300)

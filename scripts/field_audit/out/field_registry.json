@@ -872,7 +872,7 @@
         "callSites": [
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1116,
+            "line": 1117,
             "fn": "createChannel",
             "fieldCount": 23,
             "unresolved": [
@@ -1034,7 +1034,7 @@
         "callSites": [
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 925,
+            "line": 926,
             "fn": "generateChannelIcon",
             "fieldCount": 1,
             "unresolved": []
@@ -2323,7 +2323,7 @@
         "callSites": [
           {
             "file": "views/tunnel/Tunnel.vue",
-            "line": 645,
+            "line": 646,
             "fn": "api.post",
             "fieldCount": 1,
             "unresolved": []
@@ -2368,7 +2368,7 @@
         "callSites": [
           {
             "file": "views/tunnel/Tunnel.vue",
-            "line": 665,
+            "line": 666,
             "fn": "api.post",
             "fieldCount": 2,
             "unresolved": []
@@ -2423,7 +2423,7 @@
         "callSites": [
           {
             "file": "views/tunnel/Tunnel.vue",
-            "line": 564,
+            "line": 565,
             "fn": "api.post",
             "fieldCount": 11,
             "unresolved": []
@@ -3042,7 +3042,7 @@
         "callSites": [
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1083,
+            "line": 1084,
             "fn": "updateChannel",
             "fieldCount": 26,
             "unresolved": [
@@ -3051,21 +3051,21 @@
           },
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1177,
+            "line": 1178,
             "fn": "updateChannel",
             "fieldCount": 1,
             "unresolved": []
           },
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1310,
+            "line": 1311,
             "fn": "updateChannel",
             "fieldCount": 2,
             "unresolved": []
           },
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1349,
+            "line": 1350,
             "fn": "updateChannel",
             "fieldCount": 2,
             "unresolved": []
@@ -3227,7 +3227,7 @@
           },
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 960,
+            "line": 961,
             "fn": "setScriptMode",
             "fieldCount": 1,
             "unresolved": [

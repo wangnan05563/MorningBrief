@@ -176,7 +176,8 @@ import {
   Refresh, CopyDocument, CircleCheckFilled, Top, TopRight, Search, Download, Loading,
 } from '@element-plus/icons-vue'
 import { getAbout, checkUpdate, startUpgrade, getUpgradeStatus } from '../../api/about'
-import { API_DOCS_PATH, buildRepoLinks } from '../../utils/links'
+import { buildRepoLinks } from '../../utils/links'
+import { API_DOCS_PATH } from '../../utils/appPath'
 
 const router = useRouter()
 

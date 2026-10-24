@@ -20,6 +20,7 @@
  */
 import { createRouter, createWebHistory } from 'vue-router'
 import { ElMessage } from '../utils/message'
+import { APP_BASE } from '../utils/appPath'
 import { crossEndTarget, isMobilePath } from '../utils/urlState'
 import { resolveMode } from '../composables/useIsMobile'
 
@@ -302,9 +303,8 @@ const routes = [
 ]
 
 const router = createRouter({
-  // base: '/news/' 与 Vite base 一致，让路由路径带上 /news/ 前缀
-  // 配合 Tailscale Funnel --set-path /news/ 路径区分模式
-  history: createWebHistory('/news/'),
+  // 应用前缀唯一来源见 utils/appPath：生产 Funnel --set-path /news/ 与 dev 代理共用
+  history: createWebHistory(APP_BASE),
   routes,
 })
 
