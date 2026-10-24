@@ -116,6 +116,23 @@ async def batch_delete_workflows(
     return success(data=data)
 
 
+@router.post("/batch-delete/preview")
+async def batch_delete_workflows_preview(
+    req: BatchDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """批量删除的影响面预览（只读，不删除、不写审计）。
+
+    与 batch_delete 同一 ID 约束与同一 id 集合推导，返回各类连带数据的服务端真实条数，
+    供前端 dangerConfirm 展示「动作+对象+影响条数+不可逆声明」；预览失败时前端禁止提交。
+    静态路由，须定义在 /{workflow_id} 之前。
+    """
+    svc = WorkflowService(db)
+    data = await svc.delete_preview(req.workflow_ids)
+    return success(data=data)
+
+
 @router.get("/{workflow_id}")
 async def get_workflow(
     workflow_id: str,

@@ -33,3 +33,16 @@ export const triggerWorkflow = (channelId, options = {}) => {
  */
 export const triggerAllWorkflows = () =>
   api.post('/workflows/trigger-all', {}, { timeout: 60000 })
+
+/**
+ * 批量删除工作流的影响面预览（T02596 / FR-UX-202，只读）
+ *
+ * 确认框必须展示服务端真实连带条数（稿件/审核/节目/播放记录/保留素材），
+ * 而不是把前端选中的 `ids.length` 当成影响面——后者只说「删几条工作流」，
+ * 会让人低估被级联删掉的数据量。预览失败时调用方须禁止进入确认（见 C10 口径）。
+ *
+ * @param {string[]} workflowIds 待删除工作流 ID 列表（1-100，与 batch-delete 同约束）
+ * @param {object} [config] axios 配置；页面传 `{ silent: true }` 自行给出失败语义
+ */
+export const batchDeletePreview = (workflowIds, config) =>
+  api.post('/workflows/batch-delete/preview', { workflow_ids: workflowIds }, config)

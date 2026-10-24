@@ -164,6 +164,20 @@ test.describe('工作流监控', () => {
       await route.fulfill({ json: workflowBatchDeleteResponse })
     })
 
+    // 影响面预览（T02596）：确认框里的条数来自服务端 delete_preview，而不是前端选中的行数
+    await page.route('**/admin/api/v1/workflows/batch-delete/preview', async (route) => {
+      await route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: {
+            workflows: 2, scripts: 2, reviews: 2, episodes: 2, play_logs: 4,
+            play_progress: 4, comments: 0, favorites: 0, auto_review_stats: 1,
+            workflow_steps: 6, materials_retained: 3,
+          },
+        },
+      })
+    })
     // 列表接口：首次加载返回 3 条，删除后刷新返回 1 条
     await page.route('**/admin/api/v1/workflows*', async (route) => {
       listCallCount += 1
@@ -219,8 +233,17 @@ test.describe('工作流监控', () => {
     // 点击批量删除
     await batchDeleteBtn.click()
 
-    // ElMessageBox 二次确认：WorkflowList.vue 中设置 confirmButtonText 为"确定删除"
-    await page.getByRole('button', { name: '确定删除' }).click()
+    // 高危批量动作走 dangerConfirm：服务端条数 + 逐字确认词 DELETE
+    const box = page.locator('.el-message-box')
+    await expect(box.getByText('批量删除工作流：2 个工作流')).toBeVisible({ timeout: 30000 })
+    await expect(box.getByText('稿件 2 篇 / 审核 2 条 / 节目 2 个 / 播放记录 4 条')).toBeVisible({ timeout: 30000 })
+    const confirmBtn = page.getByRole('button', { name: '确定删除' })
+    await confirmBtn.click()
+    // 不输入确认词直接点：不放行，也不发请求
+    await expect(box.getByText('请逐字输入 DELETE')).toBeVisible({ timeout: 30000 })
+    expect(batchDeleteCallCount).toBe(0)
+    await box.locator('input').fill('DELETE')
+    await confirmBtn.click()
 
     // 验证请求载荷：workflow_ids 包含 wf-001 和 wf-002
     await expect.poll(() => batchDeleteCallCount).toBe(1)

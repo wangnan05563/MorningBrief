@@ -4744,7 +4744,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/workflows.py:276",
+        "source": "backend/app/routers/admin/workflows.py:293",
         "refs": [
           "/{workflow_id}/retry",
           "AdminPayload",
@@ -4850,6 +4850,45 @@
         ]
       }
     },
+    "POST /workflows/batch-delete/preview": {
+      "raw_path": "/admin/api/v1/workflows/batch-delete/preview",
+      "endpoint": "batch_delete_workflows_preview",
+      "model": {
+        "name": "BatchDeleteRequest",
+        "module": "app.routers.admin.workflows",
+        "source": "backend/app/routers/admin/workflows.py:39",
+        "extra": "ignore",
+        "fields": [
+          "workflow_ids"
+        ],
+        "flatFields": [
+          "workflow_ids"
+        ]
+      },
+      "handler": {
+        "source": "backend/app/routers/admin/workflows.py:119",
+        "refs": [
+          "/batch-delete/preview",
+          "AdminPayload",
+          "AsyncSession",
+          "BatchDeleteRequest",
+          "Depends",
+          "WorkflowService",
+          "data",
+          "db",
+          "delete_preview",
+          "get_db",
+          "post",
+          "req",
+          "require_admin",
+          "router",
+          "success",
+          "svc",
+          "workflow_ids",
+          "批量删除的影响面预览（只读，不删除、不写审计）。\n\n    与 batch_delete 同一 ID 约束与同一 id 集合推导，返回各类连带数据的服务端真实条数，\n    供前端 dangerConfirm 展示「动作+对象+影响条数+不可逆声明」；预览失败时前端禁止提交。\n    静态路由，须定义在 /{workflow_id} 之前。\n    "
+        ]
+      }
+    },
     "POST /workflows/trigger": {
       "raw_path": "/admin/api/v1/workflows/trigger",
       "endpoint": "trigger_workflow",
@@ -4870,7 +4909,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/workflows.py:130",
+        "source": "backend/app/routers/admin/workflows.py:147",
         "refs": [
           "/trigger",
           "AdminPayload",
@@ -4923,7 +4962,7 @@
       "endpoint": "trigger_all_workflows",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/workflows.py:168",
+        "source": "backend/app/routers/admin/workflows.py:185",
         "refs": [
           "/trigger-all",
           "AdminPayload",

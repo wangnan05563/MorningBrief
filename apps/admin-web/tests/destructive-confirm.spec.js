@@ -251,4 +251,153 @@ test.describe('破坏性操作确认', () => {
       expect(await sent).toBe(false)
     })
   })
+
+  test.describe('批量删除工作流 / 队列任务（T02596）', () => {
+    // 影响条数来自服务端 delete_preview，而非前端选中的行数
+    const previewResponse = {
+      code: 0,
+      message: 'success',
+      data: {
+        workflows: 1, scripts: 3, reviews: 2, episodes: 1, play_logs: 5,
+        play_progress: 5, comments: 0, favorites: 0, auto_review_stats: 1,
+        workflow_steps: 4, materials_retained: 2,
+      },
+    }
+    const wfList = {
+      code: 0,
+      message: 'success',
+      data: { total: 2, list: [
+        { id: 'wf-001', episode_date: '2026-07-08', source: 'cron', status: 'success', started_at: '2026-07-08T05:00:00', finished_at: '2026-07-08T05:30:00' },
+        { id: 'wf-002', episode_date: '2026-07-07', source: 'manual', status: 'success', started_at: '2026-07-07T05:00:00', finished_at: null },
+      ] },
+    }
+    // 分流：preview / 真删 / 列表；`/workflows*` 的 * 不跨 /，必须用 **
+    const mockWorkflows = (previewFails = false) => async (route) => {
+      const url = route.request().url()
+      const method = route.request().method()
+      if (url.includes('/batch-delete/preview')) {
+        return previewFails
+          ? route.fulfill({ status: 500, json: { code: 500, message: '预览服务不可用', data: null } })
+          : route.fulfill({ json: previewResponse })
+      }
+      if (url.endsWith('/workflows/batch-delete') && method === 'POST') {
+        return route.fulfill({ json: { code: 0, message: 'success', data: { deleted: ['wf-001'] } } })
+      }
+      if (method === 'GET') return route.fulfill({ json: wfList })
+      return route.fulfill({ json: { code: 0, message: 'success', data: null } })
+    }
+    const isDeleteRequest = (req) => req.url().endsWith('/workflows/batch-delete') && req.method() === 'POST'
+    // 等待必须在点击「确定删除」之前登记：点完再开始监听会漏掉已经发出的请求
+    const watchDeleteRequest = (page) => page.waitForRequest(isDeleteRequest)
+    const expectNoDeleteRequest = async (page) => {
+      const sent = await page
+        .waitForRequest(isDeleteRequest, { timeout: 2000 })
+        .then(() => true)
+        .catch(() => false)
+      expect(sent).toBe(false)
+    }
+    const selectFirstRow = async (page) => {
+      // 行选框的原生 <input> 被 Element Plus 隐藏（可见的是 .el-checkbox__inner），
+      // 直接点 input 会「element is not visible」；点可见的方框本体
+      await page.locator('.el-table__body .el-checkbox__inner').first().click()
+      await expect(page.getByText('已选 1 项')).toBeVisible({ timeout: NAV_TIMEOUT })
+    }
+
+    test.beforeEach(async ({ page }) => {
+      await page.route('**/admin/api/v1/workflows**', mockWorkflows())
+    })
+
+    test('确认框列出服务端级联条数并需逐字输入 DELETE', async ({ page }) => {
+      await setLoginState(page, 'admin')
+      await page.goto('/workflows')
+      await expect(page.getByText('wf-001').first()).toBeVisible({ timeout: NAV_TIMEOUT })
+
+      await selectFirstRow(page)
+      await page.getByRole('button', { name: '批量删除' }).click()
+
+      const box = page.locator('.el-message-box')
+      await expect(box).toBeVisible({ timeout: NAV_TIMEOUT })
+      // 动作 + 对象
+      await expect(box.getByText('批量删除工作流：1 个工作流')).toBeVisible()
+      // 影响条数来自服务端预览（不是写死的分类清单，也不是「选中的行数」）
+      await expect(box.getByText('稿件 3 篇 / 审核 2 条 / 节目 1 个 / 播放记录 5 条')).toBeVisible()
+      await expect(box.getByText(/工作流步骤 4 条、自动审批统计 1 条/)).toBeVisible()
+      await expect(box.getByText(/素材 2 条不删除，重置为待处理状态/)).toBeVisible()
+      // 不可逆声明
+      await expect(box.getByText('此操作不可撤销：稿件/审核/节目/播放记录随之删除')).toBeVisible()
+
+      // 高风险批量动作要求确认词：不输入直接点确认不得放行
+      await box.getByRole('button', { name: '确定删除' }).click()
+      await expect(box.getByText('请逐字输入 DELETE')).toBeVisible()
+      await box.locator('input').fill('DELETE')
+      const delReq = watchDeleteRequest(page)
+      await box.getByRole('button', { name: '确定删除' }).click()
+
+      await delReq
+      await expect(page.locator('.el-message').getByText('已删除').first()).toBeVisible()
+    })
+
+    test('取消确认不发出删除请求', async ({ page }) => {
+      await setLoginState(page, 'admin')
+      await page.goto('/workflows')
+      await expect(page.getByText('wf-001').first()).toBeVisible({ timeout: NAV_TIMEOUT })
+      await selectFirstRow(page)
+      await page.getByRole('button', { name: '批量删除' }).click()
+
+      const box = page.locator('.el-message-box')
+      await expect(box).toBeVisible({ timeout: NAV_TIMEOUT })
+      await box.getByRole('button', { name: '取消' }).click()
+      await expect(box).toBeHidden()
+
+      await expectNoDeleteRequest(page)
+    })
+
+    test('影响面预览失败时禁止进入删除确认', async ({ page }) => {
+      await page.route('**/admin/api/v1/workflows**', mockWorkflows(true))
+      await setLoginState(page, 'admin')
+      await page.goto('/workflows')
+      await expect(page.getByText('wf-001').first()).toBeVisible({ timeout: NAV_TIMEOUT })
+      await selectFirstRow(page)
+      await page.getByRole('button', { name: '批量删除' }).click()
+
+      await expect(
+        page.locator('.el-message').getByText(/无法获取删除影响面预览，已禁止删除/).first(),
+      ).toBeVisible({ timeout: NAV_TIMEOUT })
+      await expect(page.locator('.el-message-box')).toHaveCount(0)
+
+      await expectNoDeleteRequest(page)
+    })
+
+    test('队列页批量删除复用同一服务端预览并列出条数', async ({ page }) => {
+      // 队列任务的批量删除走 /queue/tasks/batch-delete，但预览统一取工作流级联预览
+      const qList = { code: 0, message: 'success', data: { total: 1, items: [
+        { id: 'wf-001', channel_name: '科技频道', priority: 5, status: 'success', started_at: '2026-07-08T05:00:00' },
+      ] } }
+      await page.route('**/admin/api/v1/queue/tasks**', async (route) => {
+        if (route.request().method() === 'GET') return route.fulfill({ json: qList })
+        return route.fulfill({ json: { code: 0, message: 'success', data: { deleted: ['wf-001'] } } })
+      })
+      await page.route('**/admin/api/v1/queue/stats**', (route) =>
+        route.fulfill({ json: { code: 0, message: 'success', data: { running: 0, queued: 0, success: 1, failed: 0 } } }))
+      await page.route('**/admin/api/v1/queue/config**', (route) =>
+        route.fulfill({ json: { code: 0, message: 'success', data: {} } }))
+      await page.route('**/admin/api/v1/channels**', (route) =>
+        route.fulfill({ json: { code: 0, message: 'success', data: [] } }))
+      await page.route('**/admin/api/v1/workflows/batch-delete/preview', (route) =>
+        route.fulfill({ json: previewResponse }))
+
+      await setLoginState(page, 'admin')
+      await page.goto('/queue')
+      await expect(page.getByText('科技频道').first()).toBeVisible({ timeout: NAV_TIMEOUT })
+
+      await page.locator('.el-table__body .el-checkbox__inner').first().click()
+      await page.getByRole('button', { name: '批量删除' }).click()
+
+      const box = page.locator('.el-message-box')
+      await expect(box).toBeVisible({ timeout: NAV_TIMEOUT })
+      await expect(box.getByText('批量删除任务：1 个任务')).toBeVisible()
+      await expect(box.getByText('稿件 3 篇 / 审核 2 条 / 节目 1 个 / 播放记录 5 条')).toBeVisible()
+      await expect(box.getByText('请输入 DELETE 以确认')).toBeVisible()
+    })
+  })
 })

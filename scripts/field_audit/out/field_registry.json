@@ -2145,7 +2145,7 @@
         "callSites": [
           {
             "file": "views/queue/QueueManagement.vue",
-            "line": 667,
+            "line": 681,
             "fn": "batchDeleteTasks",
             "fieldCount": 1,
             "unresolved": [
@@ -2548,7 +2548,7 @@
       "model": "RetryRequest",
       "modelSource": "backend/app/routers/admin/workflows.py:23",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/workflows.py:276",
+      "handlerSource": "backend/app/routers/admin/workflows.py:293",
       "declared": [
         "step"
       ],
@@ -2596,7 +2596,7 @@
         "callSites": [
           {
             "file": "views/workflow/WorkflowList.vue",
-            "line": 668,
+            "line": 683,
             "fn": "api.post",
             "fieldCount": 1,
             "unresolved": []
@@ -2624,11 +2624,64 @@
       "verdict": null
     },
     {
+      "endpoint": "POST /workflows/batch-delete/preview",
+      "model": "BatchDeleteRequest",
+      "modelSource": "backend/app/routers/admin/workflows.py:39",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/workflows.py:119",
+      "declared": [
+        "workflow_ids"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/queue/QueueManagement.vue",
+            "line": 659,
+            "fn": "batchDeletePreview",
+            "fieldCount": 1,
+            "unresolved": [
+              "变量 ids 无可解析的声明"
+            ]
+          },
+          {
+            "file": "views/workflow/WorkflowList.vue",
+            "line": 661,
+            "fn": "batchDeletePreview",
+            "fieldCount": 1,
+            "unresolved": [
+              "变量 ids 无可解析的声明"
+            ]
+          }
+        ],
+        "fields": [
+          "workflow_ids"
+        ],
+        "unresolved": [
+          "变量 ids 无可解析的声明"
+        ],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "workflow_ids"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
       "endpoint": "POST /workflows/trigger",
       "model": "TriggerRequest",
       "modelSource": "backend/app/routers/admin/workflows.py:28",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/workflows.py:130",
+      "handlerSource": "backend/app/routers/admin/workflows.py:147",
       "declared": [
         "channel_id",
         "episode_date",
@@ -2638,14 +2691,14 @@
         "callSites": [
           {
             "file": "views/workflow/WorkflowList.vue",
-            "line": 554,
+            "line": 555,
             "fn": "triggerWorkflow",
             "fieldCount": 3,
             "unresolved": []
           },
           {
             "file": "views/workflow/WorkflowList.vue",
-            "line": 607,
+            "line": 608,
             "fn": "triggerWorkflow",
             "fieldCount": 3,
             "unresolved": []
@@ -3691,7 +3744,7 @@
         "callSites": [
           {
             "file": "views/queue/QueueManagement.vue",
-            "line": 462,
+            "line": 464,
             "fn": "updateQueueConfig",
             "fieldCount": 2,
             "unresolved": []
@@ -3737,7 +3790,7 @@
         "callSites": [
           {
             "file": "views/queue/QueueManagement.vue",
-            "line": 606,
+            "line": 608,
             "fn": "updatePriority",
             "fieldCount": 1,
             "unresolved": []
@@ -3816,9 +3869,9 @@
     }
   ],
   "totals": {
-    "endpointsWithBodyModel": 65,
+    "endpointsWithBodyModel": 66,
     "forbidCount": 3,
-    "withFrontendCallSite": 58,
+    "withFrontendCallSite": 59,
     "noFrontendCallSite": [
       "POST /backups/restore",
       "POST /m/device/register",
@@ -3882,6 +3935,7 @@
       "POST /reviews/*/action",
       "POST /reviews/batch-action",
       "POST /users/*/toggle-status",
+      "POST /workflows/batch-delete/preview",
       "PUT /ads/placements/*",
       "PUT /channels/*",
       "PUT /channels/*/script-mode",
@@ -3928,6 +3982,7 @@
       "POST /tunnel/config",
       "POST /workflows/*/retry",
       "POST /workflows/batch-delete",
+      "POST /workflows/batch-delete/preview",
       "PUT /ai/config",
       "PUT /channels/*/book-pool/order",
       "PUT /channels/*/script-mode",

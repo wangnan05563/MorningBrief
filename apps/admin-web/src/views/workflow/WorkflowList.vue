@@ -286,7 +286,8 @@ import { VideoPlay, Delete, Refresh, RefreshLeft, Close } from '@element-plus/ic
 import { useUserStore } from '../../stores/user'
 import api from '../../api'
 import { listChannels } from '../../api/channels'
-import { triggerAllWorkflows, triggerWorkflow } from '../../api/workflow'
+import { triggerAllWorkflows, triggerWorkflow, batchDeletePreview } from '../../api/workflow'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 import { subscribe, broadcastLocal } from '../../utils/sse'
 import { cleanupLoadingMasks } from '../../utils/window-guard'
 import { formatTime } from '../../utils/format'
@@ -652,16 +653,30 @@ async function handleBatchDelete() {
   const ids = selectedRows.value.map((r) => r.id)
   if (ids.length === 0) return
 
-  // 二次确认：显示具体 ID 数量让用户明确操作范围
+  // T02596：确认框的影响条数必须来自服务端真实级联计数，而不是前端选中的行数——
+  // 「选中 3 个」低估了它连带删掉的稿件/审核/节目/播放记录。预览失败不得降级成
+  // 一句空泛的「不可恢复」，直接禁止提交（与频道删除 C10 同一口径）。
+  let pv = null
   try {
-    await ElMessageBox.confirm(
-      `确认删除选中的 ${ids.length} 个工作流？\n\n将删除：稿件、审核、节目及播放记录。\n将保留：素材（重置为待处理状态，可被后续工作流复用）。\n\n此操作不可撤销。`,
-      '危险操作',
-      { type: 'warning', confirmButtonText: '确定删除', cancelButtonText: '取消' }
-    )
-  } catch {
+    pv = await batchDeletePreview(ids, { silent: true })
+  } catch (e) {
+    ElMessage.error(`无法获取删除影响面预览，已禁止删除：${e?.message || '请重试'}`)
     return
   }
+  const ok = await dangerConfirm({
+    action: '批量删除工作流',
+    target: `${ids.length} 个工作流`,
+    scope: `稿件 ${pv.scripts} 篇 / 审核 ${pv.reviews} 条 / 节目 ${pv.episodes} 个 / 播放记录 ${pv.play_logs} 条`,
+    lines: [
+      `· 工作流步骤 ${pv.workflow_steps} 条、自动审批统计 ${pv.auto_review_stats} 条随工作流一并删除；`,
+      `· 播放进度 ${pv.play_progress} 条、评论 ${pv.comments} 条、收藏 ${pv.favorites} 条随节目一并删除；`,
+      `· 素材 ${pv.materials_retained} 条不删除，重置为待处理状态（workflow_id 置空，可被后续工作流复用）。`,
+    ],
+    irreversible: '此操作不可撤销：稿件/审核/节目/播放记录随之删除，SQLite 无回收站，只能靠事先备份还原。',
+    confirmWord: 'DELETE',
+    confirmLabel: '确定删除',
+  })
+  if (!ok) return
 
   deleting.value = true
   try {

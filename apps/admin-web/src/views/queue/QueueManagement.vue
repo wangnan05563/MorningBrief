@@ -250,6 +250,8 @@ import {
   updateQueueConfig,
 } from '../../api/queue'
 import { listChannels } from '../../api/channels'
+import { batchDeletePreview } from '../../api/workflow'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 import { subscribe } from '../../utils/sse'
 import { formatTime } from '../../utils/format'
 import { useConfigLoad } from '../../composables/useConfigLoad'
@@ -650,17 +652,29 @@ async function handleBatchDelete() {
   const ids = selectedRows.value.map((r) => r.id)
   if (ids.length === 0) return
 
-  // 二次确认：显示具体数量让用户明确操作范围，避免误删
+  // T02596：影响条数来自服务端级联预览（队列任务即工作流，与批量删除工作流同一口径），
+  // 预览失败禁止提交；running/queued 由后端在删除阶段拒绝（409），下面的 catch 兜底提示。
+  let pv = null
   try {
-    await ElMessageBox.confirm(
-      `确认删除选中的 ${ids.length} 个任务？\n\n将删除：稿件、审核、节目及播放记录。\n将保留：素材（重置为待处理状态）。\n\n此操作不可撤销。`,
-      '危险操作',
-      { type: 'warning', confirmButtonText: '确定删除', cancelButtonText: '取消' },
-    )
-  } catch {
-    // 用户点取消，静默退出
+    pv = await batchDeletePreview(ids, { silent: true })
+  } catch (e) {
+    ElMessage.error(`无法获取删除影响面预览，已禁止删除：${e?.message || '请重试'}`)
     return
   }
+  const ok = await dangerConfirm({
+    action: '批量删除任务',
+    target: `${ids.length} 个任务`,
+    scope: `稿件 ${pv.scripts} 篇 / 审核 ${pv.reviews} 条 / 节目 ${pv.episodes} 个 / 播放记录 ${pv.play_logs} 条`,
+    lines: [
+      `· 工作流步骤 ${pv.workflow_steps} 条、自动审批统计 ${pv.auto_review_stats} 条随任务一并删除；`,
+      `· 播放进度 ${pv.play_progress} 条、评论 ${pv.comments} 条、收藏 ${pv.favorites} 条随节目一并删除；`,
+      `· 素材 ${pv.materials_retained} 条不删除，重置为待处理状态。`,
+    ],
+    irreversible: '此操作不可撤销：稿件/审核/节目/播放记录随之删除，SQLite 无回收站，只能靠事先备份还原。',
+    confirmWord: 'DELETE',
+    confirmLabel: '确定删除',
+  })
+  if (!ok) return
 
   deleting.value = true
   try {

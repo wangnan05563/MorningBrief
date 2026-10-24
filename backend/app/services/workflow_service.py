@@ -168,6 +168,73 @@ class WorkflowService:
             ],
         }
 
+    async def delete_preview(self, workflow_ids: list[str]) -> dict:
+        """批量删除工作流的影响面预览（T02596，只读，不执行任何删除/更新）。
+
+        口径与 batch_delete_workflows 的真实行为逐条对齐——确认框不能只写一句
+        「不可恢复」，要给出各类连带数据的服务端真实条数，否则运维会低估爆炸半径。
+        id 集合的推导（script_ids → episode_ids 的双条件）与删除阶段完全一致，
+        保证「预览数」等于「实际会动的行数」。缺 id 与删除一样报错（让前端禁提交）。
+        """
+        if not workflow_ids:
+            raise ParamError("workflow_ids 不能为空")
+
+        result = await self.db.execute(
+            select(Workflow.id).where(Workflow.id.in_(workflow_ids))
+        )
+        existing_ids = [row[0] for row in result.all()]
+        missing_ids = set(workflow_ids) - set(existing_ids)
+        if missing_ids:
+            raise NotFoundError(f"工作流不存在: {', '.join(sorted(missing_ids))}")
+
+        sc_result = await self.db.execute(
+            select(Script.id).where(Script.workflow_id.in_(workflow_ids))
+        )
+        script_ids = [row[0] for row in sc_result.all()]
+
+        ep_cond = or_(Episode.workflow_id.in_(workflow_ids), Episode.script_id.in_(script_ids))
+        ep_result = await self.db.execute(select(Episode.id).where(ep_cond))
+        episode_ids = [row[0] for row in ep_result.all()]
+
+        async def _count(model, *conditions) -> int:
+            if not conditions:
+                return 0
+            res = await self.db.execute(
+                select(func.count()).select_from(model).where(or_(*conditions))
+            )
+            return res.scalar() or 0
+
+        # 播放类表按 episode_id 集合清理：episode_ids 为空则不会有连带行，避免 `IN ()`
+        play_conds = [PlayLog.episode_id.in_(episode_ids)] if episode_ids else []
+        progress_conds = [PlayProgress.episode_id.in_(episode_ids)] if episode_ids else []
+        comment_conds = [Comment.episode_id.in_(episode_ids)] if episode_ids else []
+        favorite_conds = [Favorite.episode_id.in_(episode_ids)] if episode_ids else []
+
+        return {
+            "workflows": len(existing_ids),
+            "scripts": await _count(Script, Script.workflow_id.in_(workflow_ids)),
+            "reviews": await _count(
+                Review,
+                Review.workflow_id.in_(workflow_ids),
+                Review.script_id.in_(script_ids),
+            ),
+            "episodes": await _count(Episode, ep_cond),
+            "play_logs": await _count(PlayLog, *play_conds),
+            "play_progress": await _count(PlayProgress, *progress_conds),
+            "comments": await _count(Comment, *comment_conds),
+            "favorites": await _count(Favorite, *favorite_conds),
+            "auto_review_stats": await _count(
+                AutoReviewStat, AutoReviewStat.workflow_id.in_(workflow_ids)
+            ),
+            "workflow_steps": await _count(
+                WorkflowStep, WorkflowStep.workflow_id.in_(workflow_ids)
+            ),
+            # 素材不随删除丢失（重置 pending + 解除 workflow_id），单列保留条数供说明
+            "materials_retained": await _count(
+                Material, Material.workflow_id.in_(workflow_ids)
+            ),
+        }
+
     async def batch_delete_workflows(self, workflow_ids: list[str]) -> dict:
         """批量删除工作流（事务级联删除关联数据，但保留素材）。
 
