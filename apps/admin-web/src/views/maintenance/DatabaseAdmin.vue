@@ -142,7 +142,7 @@
               :label="col.name"
               :sortable="col.type.includes('INT') || col.type.includes('DATE') ? 'custom' : false"
               :min-width="getColumnWidth(col)"
-              show-overflow-tooltip
+              :show-overflow-tooltip="!col.sensitive"
             >
               <template #header>
                 <span class="col-header">
@@ -152,7 +152,15 @@
                 </span>
               </template>
               <template #default="{ row }">
-                <span class="cell-value" :class="{ 'cell-sensitive': col.sensitive }">
+                <!-- T02827：*** 不是脏数据。悬停说明它为什么被脱敏、该去哪里改原文 -->
+                <el-tooltip
+                  v-if="col.sensitive && isMaskedValue(row[col.name])"
+                  :content="sensitiveCellTooltip(row)"
+                  placement="top"
+                >
+                  <span class="cell-value cell-sensitive">{{ formatCellValue(row[col.name]) }}</span>
+                </el-tooltip>
+                <span v-else class="cell-value" :class="{ 'cell-sensitive': col.sensitive }">
                   {{ formatCellValue(row[col.name]) }}
                 </span>
               </template>
@@ -235,8 +243,34 @@
               · 时间戳由系统自动写入，界面只读（{{ formMode === 'create' ? '新增时留空由数据库填充' : '编辑时不会回写，保持原值' }}）
             </template>
           </span>
+          <!-- T02827：脱敏值来源要说清，并给出专用配置入口；否则操作者会猜菜单或手工清库 -->
+          <span v-if="isMaskedValue(formData[col.name])" class="mask-hint">
+            <template v-if="maskedEntries.length">
+              该值已脱敏显示，请前往
+              <router-link
+                v-for="entry in maskedEntries"
+                :key="entry.to"
+                :to="entry.to"
+                class="mask-hint__link"
+              >「{{ entry.label }}」</router-link>
+              修改；直接保存 *** 会被拒绝。
+            </template>
+            <template v-else>该值已脱敏显示：请留空保持原值，直接保存 *** 会被拒绝。</template>
+          </span>
           <!-- 后端字段级错误（INT-UX-01）落到出错那一栏，而不是只有一句 toast -->
-          <span v-if="fieldErrors[col.name]" class="field-error">{{ fieldErrors[col.name] }}</span>
+          <span v-if="fieldErrors[col.name]" class="field-error">
+            {{ fieldErrors[col.name] }}
+            <!-- T02827：拒绝「*** 回写」时，错误行里就要给出可点的专用入口 -->
+            <template v-if="isMaskWritebackError(fieldErrors[col.name]) && maskedEntries.length">
+              → 前往
+              <router-link
+                v-for="entry in maskedEntries"
+                :key="entry.to"
+                :to="entry.to"
+                class="mask-hint__link"
+              >「{{ entry.label }}」</router-link>
+            </template>
+          </span>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -645,6 +679,37 @@ function openEditDialog(row) {
 }
 
 const MASK_SENTINEL_RE = /^\*{2,}$/
+
+// T02827：脱敏值不是脏数据。ai_config 里这两族行各有专用配置入口，提示直接给出
+// 可点跳转——否则操作者只能猜菜单，现实路径往往是手工清库重填（更危险）。
+// 路由用页面路径而非 /news 前缀：base 由 router 统一处理，dev/prod 都指向同一页。
+const CONFIG_ENTRY_LINKS = [
+  { to: '/notification', label: '通知设置', match: ['notify'] },
+  { to: '/ai-config', label: 'AI 服务配置', match: ['llm', 'preset', 'tts', 'asr'] },
+]
+
+const isMaskedValue = (val) => typeof val === 'string' && MASK_SENTINEL_RE.test(val.trim())
+
+// 后端拒绝哨兵回写的文案（_mask_field_message）固定带这两个词之一
+const isMaskWritebackError = (msg) => /脱敏|专用配置入口/.test(String(msg ?? ''))
+
+function dedicatedEntries(row) {
+  if (selectedTable.value !== 'ai_config') return []
+  const key = String(row?.config_key ?? '').toLowerCase()
+  if (!key) return []
+  return CONFIG_ENTRY_LINKS.filter((entry) => entry.match.some((m) => key.includes(m)))
+}
+
+// 编辑弹窗里 formData 带着 config_key，按行判定该去哪个专用入口
+const maskedEntries = computed(() => dedicatedEntries(formData.value))
+
+function sensitiveCellTooltip(row) {
+  const labels = dedicatedEntries(row).map((entry) => `「${entry.label}」`)
+  if (labels.length) {
+    return `脱敏显示，不是脏数据；原文请到${labels.join('或')}查看/修改，在此保存 *** 会被拒绝`
+  }
+  return '脱敏显示，不是脏数据；请留空保持原值，*** 不能写回数据库'
+}
 
 // 界面不提交的列：主键（用 WHERE 定位）、敏感列（脱敏值回写会覆盖真实凭据）、
 // 以及系统维护的时间戳列（M20：isoformat() 的 `T` 分隔串回写会破坏按字符串比较的清理与排序）
@@ -1058,6 +1123,21 @@ onMounted(() => {
   font-size: 12px;
   color: $color-text-secondary;
   margin-left: 8px;
+}
+
+// T02827：脱敏字段的「去哪里改」提示（编辑弹窗内，带可点跳转）
+.mask-hint {
+  display: block;
+  font-size: 12px;
+  color: $color-text-secondary;
+  margin-left: 8px;
+  line-height: 1.6;
+
+  &__link {
+    color: $color-primary;
+    text-decoration: underline;
+    margin: 0 2px;
+  }
 }
 
 .field-error {
