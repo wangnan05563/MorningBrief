@@ -81,6 +81,21 @@ jobs:
         # 使用 npmmirror 镜像，规避默认 registry 在 CI 环境的偶发配置问题
         run: cd apps/admin-web && npm ci --registry=https://registry.npmmirror.com
 
+      - name: 导航引用一致性门禁（validate:nav）
+        # T02737：H5 侧门禁此前只在本地跑（小程序侧 T02510 已接入 CI，两边口径不一致）。
+        # 导航/引导的错法在运行时全部静默——引导步骤指向一个不存在的 aria-label 只是「那一步不亮」，
+        # 没有任何异常可捕获，只有构建期静态门禁拦得住。
+        # 位置要求：紧贴 npm ci 之后、npm run build 之前。门禁是秒级的，构建是分钟级的，
+        # 把门禁放到构建后面等于「红了先白等 7 分钟」，也浪费 runner。
+        # 口径说明：这两步与 e2e 的 globalSetup（T02636，见 apps/admin-web/tests/global-setup.mjs）
+        # 跑的是同一套命令，不是重复劳动——后者保证「本地跑 e2e 的人」也挡，前者保证 CI 在构建前就挡。
+        run: cd apps/admin-web && npm run validate:nav
+
+      - name: 导航门禁自身的测试（test:nav）
+        # 门禁也要被门禁住：validate-nav.mjs 的 31 条自测里包含「故意造一个错引用，门禁必须报红」。
+        # 只跑 validate:nav 的话，将来谁把某条检查改写成恒真，CI 会一直绿着放过真实缺陷。
+        run: cd apps/admin-web && npm run test:nav
+
       - name: 构建前端
         run: cd apps/admin-web && npm run build
 

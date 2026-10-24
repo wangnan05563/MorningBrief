@@ -3,7 +3,8 @@
  *
  * 门禁脚本本身早就有了，缺的是「谁会去跑它」：原先只挂 Vite build 的 buildStart，
  * dev 与提交前都不跑，改坏一条引导 `aria-label` 要等到下一次打包才暴露。
- * 本单把它接到 `npx playwright test` 的 globalSetup，于是本地 e2e 与 CI 都会挡。
+ * T02636 把它接到 `npx playwright test` 的 globalSetup，于是本地 e2e 与 CI 都会挡；
+ * T02737 再把它显式接进 CI 的 frontend job（构建之前，红了不必等几分钟构建）。
  *
  * 这里锁四件事（真实子进程的行为留给验收与探针，见 _validate/news2/result_T02636.md）：
  * 1. playwright 配置确实指向 globalSetup 文件——没接线的门禁等于没有门禁；
@@ -90,5 +91,100 @@ describe('导航门禁接入 e2e 全局前置', () => {
   it('CI 走的是带前置门禁的 playwright 入口', () => {
     const ci = readFileSync(fileURLToPath(CI_URL), 'utf8')
     assert.match(ci, /npx playwright test/, 'CI 必须经过 playwright（含 globalSetup）')
+  })
+})
+
+/**
+ * T02737：同一道门禁在 CI 里的位置与可跑性。
+ *
+ * 为什么单独立一组而不是并进上面：上面锁的是「开发侧（本地 e2e）跑不跑」，这里锁的是
+ * 「CI 跑不跑、什么时候跑」。两者是不同的失效面——globalSetup 被删，本地和 CI 一起失效；
+ * 而 CI 少了这两步时，本地开发者照样绿，只有别人机器上的构建才漏。
+ */
+describe('导航门禁接入 CI', () => {
+  /** 取出 frontend-build-test 这个 job 的原文（按 job 名切，避免全文件匹配到小程序 job 的步骤） */
+  const frontendJob = () => {
+    const ci = readFileSync(fileURLToPath(CI_URL), 'utf8')
+    const start = ci.indexOf('  frontend-build-test:')
+    assert.ok(start >= 0, 'CI 里得存在 frontend-build-test job')
+    const rest = ci.slice(start + 2)
+    const next = rest.search(/^ {2}\S/m)
+    return rest.slice(0, next < 0 ? undefined : next)
+  }
+
+  /** 按出现顺序收集 `- name: ...` 对应的 run 命令（逐行扫，注释/if/uses 行都不算步骤） */
+  const runSteps = (jobText) => {
+    const steps = []
+    let pending = null
+    for (const raw of jobText.split(/\r?\n/)) {
+      const name = /^\s*- name:\s*(.+)$/.exec(raw)
+      if (name) {
+        pending = name[1].trim()
+        continue
+      }
+      const run = /^\s*run:\s*(.+)$/.exec(raw)
+      if (run && pending) {
+        steps.push({ name: pending, run: run[1].trim() })
+        pending = null
+      }
+    }
+    return steps
+  }
+
+  it('CI 显式跑 validate:nav 与 test:nav，且都在构建之前', () => {
+    const steps = runSteps(frontendJob())
+    const idxOf = (needle) =>
+      steps.findIndex((s) => s.run.includes(needle))
+    const install = idxOf('npm ci')
+    const build = idxOf('npm run build')
+    const nav = idxOf('npm run validate:nav')
+    const selfTest = idxOf('npm run test:nav')
+
+    assert.ok(nav >= 0, 'CI 必须有 `npm run validate:nav` 这一步')
+    assert.ok(selfTest >= 0, 'CI 必须也跑门禁自身测试 `npm run test:nav`')
+    assert.ok(build >= 0, '对照基准（构建步骤）要在')
+    // 顺序而非存在性：放在构建后面，红一次要白等几分钟构建，等于没人愿意修
+    assert.ok(install < nav && nav < build, 'validate:nav 要夹在 npm ci 与 npm run build 之间')
+    assert.ok(install < selfTest && selfTest < build, 'test:nav 同样要前置')
+    assert.ok(nav < selfTest, '门禁先跑、门禁的测试随后（与 e2e 前置的顺序一致）')
+  })
+
+  it('这两步都在 apps/admin-web 里执行，且步骤名能看出跑的是什么', () => {
+    const steps = runSteps(frontendJob())
+    for (const s of steps) {
+      if (!/npm run (validate:nav|test:nav)/.test(s.run)) continue
+      assert.match(s.run, /cd apps\/admin-web &&/, `${s.name}：仓库根目录下没有这两个 script`)
+      assert.match(s.name, /导航/, `${s.name}：步骤名要能一眼看出是导航门禁，不能只写 npm 脚本名`)
+    }
+  })
+
+  it('门禁脚本只依赖 node 内置模块且无平台分支（ubuntu runner 上可跑）', () => {
+    // 票据要求「确认两个脚本在 ubuntu runner + Node 20 下可跑」。这里能静态锁死的是依赖面：
+    // 只要门禁 import 了三方包，CI 里它的可跑性就取决于 npm ci 是否成功、镜像是否可用；
+    // 只要它按平台分支，本地（win）绿就推不出 CI（linux）绿。这两点必须被断言，而不是写在注释里。
+    for (const rel of ['../../scripts/validate-nav.mjs', '../../scripts/validate-nav.test.mjs']) {
+      const src = readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8')
+      const imports = [...src.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1])
+      for (const spec of imports) {
+        if (spec.startsWith('node:')) continue
+        // 相对 import 只允许在 scripts/ 目录内部（门禁自测引门禁本体）；
+        // 一旦越出去引到 src/**，就会把 vue/element-plus 这条依赖链拽进门禁，CI 上它就不再是秒级检查
+        assert.match(
+          spec,
+          /^\.\.?\/(?!.*\/)/,
+          `门禁脚本不应引入三方包或跨目录依赖（CI 上等于把可跑性押在 npm ci 上）：${rel} import 了 ${spec}`,
+        )
+      }
+      assert.doesNotMatch(
+        src,
+        /process\.platform|os\.platform\(\)/,
+        `门禁不应按平台分支，否则 win 上绿不等于 ubuntu 上绿：${rel}`,
+      )
+      assert.doesNotMatch(
+        src,
+        /\b[A-Za-z]:[\\/]/,
+        `门禁里不能出现盘符路径（linux 无此路径）：${rel}`,
+      )
+    }
   })
 })
