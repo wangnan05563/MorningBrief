@@ -123,7 +123,6 @@ const save = (page) => page.getByRole('button', { name: '保存配置' })
 const puts = (calls) => calls.filter((c) => c.method === 'PUT')
 
 test.describe('自动审批护栏', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   test('关闭校验即点名「本项不再检查」，并给出生效/跳过清单', async ({ page }) => {
     await gotoPage(page)

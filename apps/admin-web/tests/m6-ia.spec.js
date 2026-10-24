@@ -37,7 +37,6 @@ async function stubFallback(page) {
 }
 
 test.describe('M6 信息架构与深链', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   test('B12：试听经代理加载，403 时说明原因并可重试', async ({ page }) => {
     await setLoginState(page, 'admin')

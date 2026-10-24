@@ -43,8 +43,8 @@ function silentWav() {
  * - 通过/打回操作
  */
 test.describe('审核流程', () => {
-  // vite 首次按需编译路由组件可能耗时 15-25s，给到 30s 避免 flaky
-  test.use({ expect: { timeout: 30000 } })
+  // vite 首次按需编译路由组件可能耗时 15-25s：真要放宽就写在具体断言上（{ timeout: N }）；
+  // test.use({ expect: { timeout } }) 在 Playwright 1.61 是空选项，会被静默忽略（T02778）
 
   test.beforeEach(async ({ page }) => {
     // 直接注入登录态，跳过登录页，聚焦审核流程本身

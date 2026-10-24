@@ -12,8 +12,8 @@ import { setLoginState, llmMetricsResponse, llmMetricsLegacyResponse } from './h
  * - 累计口径标注（T02508 / FR-UX-503：起点、PID、重启清零、缺字段退化）
  */
 test.describe('LLM 重试指标页面', () => {
-  // vite 首次按需编译路由组件可能耗时 15-25s，给到 30s 避免 flaky
-  test.use({ expect: { timeout: 30000 } })
+  // vite 首次按需编译路由组件可能耗时 15-25s：真要放宽就写在具体断言上（{ timeout: N }）；
+  // test.use({ expect: { timeout } }) 在 Playwright 1.61 是空选项，会被静默忽略（T02778）
 
   test.beforeEach(async ({ page }) => {
     await setLoginState(page, 'admin')

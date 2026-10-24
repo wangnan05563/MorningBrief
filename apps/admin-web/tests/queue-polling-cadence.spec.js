@@ -58,7 +58,6 @@ function watchTaskList(page) {
 }
 
 test.describe('队列页轮询节奏（T02837）', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   test('有活跃任务：首轮加载后按 5s 档触发下一次轮询', async ({ page }) => {
     await mockPage(page, queueTasksResponse)

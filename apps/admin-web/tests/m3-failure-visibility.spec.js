@@ -34,8 +34,8 @@ const bookPoolStateResponse = ok({
 const bookPoolItemsResponse = ok({ items: [{ id: 11, title: '《书A》', status: 'pending' }] })
 
 test.describe('M3 失败不得伪装成事实', () => {
-  // vite 首次按需编译路由组件可能耗时 15-25s
-  test.use({ expect: { timeout: 30000 } })
+  // vite 首次按需编译路由组件可能耗时 15-25s：真要放宽就写在具体断言上（{ timeout: N }）；
+  // test.use({ expect: { timeout } }) 在 Playwright 1.61 是空选项，会被静默忽略（T02778）
 
   test.beforeEach(async ({ page }) => {
     await setLoginState(page, 'admin')

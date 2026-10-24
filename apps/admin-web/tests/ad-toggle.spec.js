@@ -13,7 +13,6 @@ import {
  * 外加排期日历对停用状态的可见性（同一 bug 的另一半：日历看不出停过）。
  */
 test.describe('广告投放启停', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   async function mockPlacements(page, { putStatus = 200 } = {}) {
     const calls = []

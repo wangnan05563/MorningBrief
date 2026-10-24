@@ -51,7 +51,6 @@ async function openAudioTab(page) {
 }
 
 test.describe('频道最短时长（T02928）', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   test('编辑填 900 → 保存 → 重开显示 900', async ({ page }) => {
     const state = await mockChannels(page, CHANNEL)

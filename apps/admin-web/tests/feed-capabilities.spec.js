@@ -84,7 +84,6 @@ async function chooseSize(page, n) {
 }
 
 test.describe('审核列表：分页档位 + 筛选持久化 + 失败可见（B3/B4/B6）', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   test.beforeEach(async ({ page }) => {
     await setLoginState(page, 'admin')
@@ -172,7 +171,6 @@ test.describe('审核列表：分页档位 + 筛选持久化 + 失败可见（B3
 })
 
 test.describe('素材库：勾选批量删除（C52）', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   const materialRows = (n) =>
     Array.from({ length: n }, (_, i) => ({
@@ -252,7 +250,7 @@ test.describe('素材库：勾选批量删除（C52）', () => {
 })
 
 test.describe('移动端消息：分页取全量（I21）', () => {
-  test.use({ viewport: { width: 375, height: 667 }, expect: { timeout: 30000 } })
+  test.use({ viewport: { width: 375, height: 667 } })
 
   const msg = (i) => ({
     id: i,

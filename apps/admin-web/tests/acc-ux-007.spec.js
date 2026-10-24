@@ -39,7 +39,8 @@ async function openQa(page) {
 
 test.describe('ACC-UX-701 长回答与停止生成', () => {
   test('长回答等待 61 秒仍能收到回复，不被 15s 全局超时打断', async ({ page }) => {
-    test.setTimeout(120_000)
+    // 61s 真实等待 + 全量并发跑的双 worker 排队：断言窗口留到 90s，单测预算 150s
+    test.setTimeout(150_000)
     const input = await openQa(page)
     await page.route(`${API}/ai/chat`, async (route) => {
       await new Promise((r) => setTimeout(r, 61_000))
@@ -60,7 +61,7 @@ test.describe('ACC-UX-701 长回答与停止生成', () => {
     await expect(page.locator('.as-typing')).toContainText('正在思考')
 
     await expect(page.locator('.as-msg-assistant', { hasText: '超过一分钟的长回答已完整返回' }))
-      .toBeVisible({ timeout: 70_000 })
+      .toBeVisible({ timeout: 90_000 })
     expect(Date.now() - t0).toBeGreaterThan(60_000)
     await expect(page.locator('.as-typing')).toHaveCount(0)
   })

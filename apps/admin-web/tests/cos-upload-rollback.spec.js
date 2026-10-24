@@ -81,7 +81,6 @@ const chooseFile = (page) =>
   })
 
 test.describe('云端存储上传可回退', () => {
-  test.use({ expect: { timeout: NAV_TIMEOUT } })
 
   test('同名上传先弹覆盖确认，未确认前不发上传请求', async ({ page }) => {
     await setLoginState(page, 'admin')

@@ -55,7 +55,6 @@ const MASK_FIELD_MESSAGE =
   '请留空保持原值，或通过对应的专用配置入口修改'
 
 test.describe('数据库维护 · 脱敏值来源与专用入口（T02827）', () => {
-  test.use({ expect: { timeout: NAV_TIMEOUT } })
 
   test.beforeEach(async ({ page }) => {
     await page.route('**/admin/api/v1/db-admin/tables/ai_config/schema', (route) =>

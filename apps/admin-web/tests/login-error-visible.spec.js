@@ -23,7 +23,6 @@ async function mockLogin(page, handler) {
 }
 
 test.describe('登录失败可见', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   test.beforeEach(async ({ page }) => {
     await keepPageVisible(page)

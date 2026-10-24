@@ -85,7 +85,6 @@ function conflictEnvelope() {
 }
 
 test.describe('投放重叠裁决（T02927）', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   test('新建与在投投放重叠：表单内点名冲突素材与区间，弹窗不关闭', async ({ page }) => {
     await setLoginState(page, 'admin')

@@ -22,7 +22,6 @@ const deletePreviewResponse = {
 }
 
 test.describe('破坏性操作确认', () => {
-  test.use({ expect: { timeout: NAV_TIMEOUT } })
 
   test.describe('频道删除（C9/C10）', () => {
     // 单条 route 内分流：`channels*` 的 * 不跨 /，必须用 ** 才能覆盖 /channels/1 与子路径

@@ -62,8 +62,8 @@ const stubSse = (page) =>
   )
 
 test.describe('错误态与重试不引入额外轮询（NFR-UX-03）', () => {
-  // vite 首次按需编译路由组件可能耗时 15-25s；本组用例本身就要跑 8s 窗口
-  test.use({ expect: { timeout: 30000 } })
+  // vite 首次按需编译路由组件可能耗时 15-25s：真要放宽就写在具体断言上（{ timeout: N }）；
+  // test.use({ expect: { timeout } }) 在 Playwright 1.61 是空选项，会被静默忽略（T02778）
 
   /**
    * @param {object} cfg
@@ -174,7 +174,6 @@ test.describe('错误态与重试不引入额外轮询（NFR-UX-03）', () => {
 })
 
 test.describe('深链分页尺寸不得超过上限 100（NFR-UX-03）', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   /** 把 /workflows 的 size 记进数组，返回「所有实际发出去的 size」 */
   async function mockWorkflows(page) {

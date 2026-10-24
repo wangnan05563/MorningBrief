@@ -29,7 +29,6 @@ async function stubPlacements(page) {
 }
 
 test.describe('投放四态（T02602）', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   test('PC 状态列：四态各自可见，过期/待投放不再显示成已启用', async ({ page }) => {
     await setLoginState(page, 'admin')

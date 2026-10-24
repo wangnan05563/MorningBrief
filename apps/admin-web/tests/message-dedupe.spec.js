@@ -28,7 +28,6 @@ async function openQueuePage(page, handler) {
 }
 
 test.describe('提示去重与单一出口', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   test('同类型同文案 2 秒内只弹一条', async ({ page }) => {
     await openQueuePage(page, (route) => route.fulfill({ json: queueStatsResponse }))

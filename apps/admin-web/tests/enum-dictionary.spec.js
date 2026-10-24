@@ -73,7 +73,6 @@ async function mockQueue(page) {
 }
 
 test.describe('枚举文案统一', () => {
-  test.use({ expect: { timeout: NAV_TIMEOUT } })
 
   test('移动端队列：后端状态值全部有中文徽章，统计卡不再有恒空的格子', async ({ page }) => {
     await setLoginState(page, 'admin')

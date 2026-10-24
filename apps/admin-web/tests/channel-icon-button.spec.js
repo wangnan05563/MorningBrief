@@ -14,7 +14,8 @@ import { setLoginState, channelsListResponse } from './helpers/mock'
  */
 
 test.describe('频道图标区按钮可读性', () => {
-  test.use({ expect: { timeout: 30000 } })
+  // 全量并发跑时 /channels 首屏冷编译会磨掉默认 60s 单测预算（实测整条 click 等满 60s）
+  test.describe.configure({ timeout: 120_000 })
 
   test.beforeEach(async ({ page }) => {
     await page.route('**/admin/api/v1/channels**', (route) => {
@@ -32,7 +33,9 @@ test.describe('频道图标区按钮可读性', () => {
   test('编辑态：禁用的「AI 生成」图标按钮可识别（不得隐形）', async ({ page }) => {
     await setLoginState(page, 'admin')
     await page.goto('/channels')
-    await page.getByRole('button', { name: '编辑' }).first().click()
+    const editBtn = page.getByRole('button', { name: '编辑' }).first()
+    await expect(editBtn).toBeVisible({ timeout: 30_000 })
+    await editBtn.click()
 
     // T00812 后为纯图标按钮：以可访问名定位，断言图标可见（替代原文字对比度检查）
     const btn = page.getByRole('button', { name: 'AI 生成' }).first()
@@ -44,7 +47,9 @@ test.describe('频道图标区按钮可读性', () => {
   test('新增态：禁用的「上传图标」图标按钮可识别（实底按钮同样不得隐形）', async ({ page }) => {
     await setLoginState(page, 'admin')
     await page.goto('/channels')
-    await page.getByRole('button', { name: '新增频道' }).click()
+    const createBtn = page.getByRole('button', { name: '新增频道' })
+    await expect(createBtn).toBeVisible({ timeout: 30_000 })
+    await createBtn.click()
 
     // el-upload 包裹层也带 role=button，须限定到真实 <button> 上（用 aria-label 属性精确定位）
     const btn = page.locator('button.el-button[aria-label="上传图标"]').first()

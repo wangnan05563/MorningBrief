@@ -27,7 +27,6 @@ async function openSchedule(page, placements) {
 }
 
 test.describe('排期日历的投放重叠（D24）', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   test('同位同日两条投放：第二条不能被覆盖掉，必须出现重叠角标', async ({ page }) => {
     const ym = new Date().toISOString().slice(0, 7)

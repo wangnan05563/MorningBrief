@@ -40,7 +40,6 @@ async function expectNoRequest(page, predicate, ms = 2000) {
 }
 
 test.describe('M4 界面的说法必须是真的', () => {
-  test.use({ expect: { timeout: NAV } })
 
   // ---------------------------------------------------------------- G1 隧道引导块
 

@@ -18,7 +18,6 @@ import { statsMetricMeta } from './helpers/statsMeta'
  */
 
 const API = '**/admin/api/v1'
-const NAV = 30000
 const ok = (data) => ({ code: 0, message: 'success', data })
 
 async function stubEverything(page) {
@@ -31,7 +30,6 @@ async function stubEverything(page) {
 }
 
 test.describe('M5 指标口径必须说清楚', () => {
-  test.use({ expect: { timeout: NAV } })
 
   test('D39：广告曝光卡片自带「推算」标签与脚注', async ({ page }) => {
     await stubEverything(page)

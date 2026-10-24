@@ -73,7 +73,6 @@ function fieldItem(page, label) {
 }
 
 test.describe('素材编辑的清空预检（C56）', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   test('把正文删空后点保存：不发请求，并说明后果', async ({ page }) => {
     const putCalls = []

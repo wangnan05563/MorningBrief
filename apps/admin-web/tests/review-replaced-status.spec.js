@@ -18,7 +18,6 @@ import {
  * 拍板前不改 tab 结构，因此这里不覆盖 tab，用直达详情 + 注入列表载荷两种方式触达渲染器。
  */
 test.describe('审核 4 态文案口径', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   async function mockReviews(page, listPayload) {
     await setLoginState(page, 'admin')

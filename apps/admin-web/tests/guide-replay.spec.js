@@ -13,7 +13,6 @@ import { setLoginState, reviewListResponse } from './helpers/mock'
  * 自动化守卫（用户点击是明确意图，守卫只为防自动弹层挡住被测按钮）。
  */
 test.describe('引导重放与跳过记账', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   test.beforeEach(async ({ page }) => {
     await setLoginState(page, 'admin')

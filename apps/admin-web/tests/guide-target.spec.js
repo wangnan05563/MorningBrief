@@ -14,7 +14,6 @@ import {
  * 这条用例把这个残留缺口钉住。
  */
 test.describe('引导锚点', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   test.beforeEach(async ({ page }) => {
     await setLoginState(page, 'admin')

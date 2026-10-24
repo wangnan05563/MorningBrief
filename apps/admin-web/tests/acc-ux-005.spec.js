@@ -23,7 +23,6 @@ const THREE_DAYS = [
 const avg = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length
 
 test.describe('ACC-UX-501 指标单位与刻度一致', () => {
-  test.use({ expect: { timeout: 30000 } })
 
   for (const day of THREE_DAYS) {
     const seconds = avg(day.durations)
@@ -55,7 +54,8 @@ test.describe('ACC-UX-501 指标单位与刻度一致', () => {
 
       const cards = page.locator('[data-guide="stats-metric-card"]')
       const listen = cards.filter({ hasText: '平均收听' })
-      await expect(listen).toHaveCount(1)
+      // 全量并发跑时 /stats 首屏可能晚于默认 5s（vite 冷编译 + 双 worker）；这只放开首屏那一条
+      await expect(listen).toHaveCount(1, { timeout: 30_000 })
       await expect(listen.locator('.metric-label')).toHaveText('平均收听(分钟)')
       await expect(listen.locator('.metric-value')).toHaveText(day.minutes)
       // 原始秒值不得以「分钟」的身份出现
