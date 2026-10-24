@@ -405,7 +405,9 @@ def get_logger():
 # 有的只有 `... 失败: {str(e)}` 一行（抽到的真实样本「加载 AI 配置失败: not all
 # arguments converted during string formatting」就是这样 —— 没有异常类型、没有堆栈，
 # 事后完全查不出抛点），有的干脆不落日志。统一走这里，日志里可按 `域=` 直接检索。
-KEY_FAILURE_DOMAINS = ("config_load", "shutdown", "import", "auto_approve")
+# T02847：启动期各步骤（迁移/seed/隧道自动启动等）失败同样只落了 `... 失败: {str(e)}`，
+# 事后分不清是哪种异常，故新增 startup 域并入同一出口（可用 `域=startup` 一次捞全）。
+KEY_FAILURE_DOMAINS = ("config_load", "shutdown", "import", "auto_approve", "startup")
 
 
 def log_key_failure(

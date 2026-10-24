@@ -229,3 +229,52 @@ def test_桥接日志的调用点与来源库名都对(sampled):
     assert "src=app.services.probe_logger" in line, "标准库 logger 名没带进落盘行"
     # {name} 是调用方模块的 dotted name（pytest 会带 tests. 前缀，故用 in 而非 ==）
     assert "test_nfr05_structured_logging" in line
+
+
+# ---- 9. T02847：启动步骤失败也必须带异常类型与堆栈 ----
+
+async def test_启动步骤失败落结构化行且带异常类型(sampled, monkeypatch, tmp_path):
+    """真实跑一次迁移函数让它失败：断言的是落盘字节里有没有 exc_type/堆栈，
+    不是「log_key_failure 被调用过」。"""
+    import sqlite3
+
+    from app import main as main_mod
+    import app.paths as paths_mod
+
+    class _ExplodingConn:
+        def cursor(self):
+            raise RuntimeError("database is locked")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(paths_mod, "resolve_db_path", lambda: tmp_path / "probe.db")
+    monkeypatch.setattr(sqlite3, "connect", lambda *a, **k: _ExplodingConn())
+
+    await main_mod._migrate_playlog_indexes()
+
+    text = sampled()
+    assert "domain=startup event=play_log 表索引迁移失败" in text
+    assert "exc_type=RuntimeError" in text, "启动失败行仍然只有 str(e)"
+    assert "database is locked" in text
+    assert "Traceback (most recent call last)" in text, "启动失败行没有堆栈，查不出抛点"
+
+
+def test_启动期失败站点统一走结构化出口():
+    """静态门禁：任何启动失败都不许退回 `logger.warning("[startup] … 失败: {}", e)`。
+
+    单测里只能真实触发一两个步骤，剩下三十多处靠这里兜住「改回去」。
+    """
+    import re
+    from pathlib import Path
+
+    src = (Path(ls.__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
+
+    legacy = re.findall(
+        r'logger\.(?:warning|error)\(\s*"\[startup\][^"]*失败: \{\}"', src
+    )
+    assert not legacy, f"启动失败又退回单行 str(e)：{legacy}"
+    assert "_LOG_MATERIAL_MIGRATE_FAIL" not in src, "material 迁移失败的日志模板常量应随统一出口删除"
+    startup_sites = src.count('domain="startup"')
+    assert startup_sites >= 30, f"启动结构化站点只剩 {startup_sites} 处，疑似有站点改回明文日志"
+    assert "startup" in ls.KEY_FAILURE_DOMAINS, "startup 未登记为关键失败域，按域检索会漏"

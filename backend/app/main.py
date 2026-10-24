@@ -29,9 +29,8 @@ from starlette.responses import Response
 
 
 _PRAGMA_MATERIAL_INFO = "PRAGMA table_info(material)"
-# 启动期迁移常用 SQL 片段 / 日志模板（S1192：避免重复字面量）
+# 启动期迁移常用 SQL 片段（S1192：避免重复字面量）
 _SQL_INT_NOT_NULL_DEFAULT0 = "INTEGER NOT NULL DEFAULT 0"
-_LOG_MATERIAL_MIGRATE_FAIL = "[startup] material 表迁移失败: %s"
 def _read_range_sync(full_path: str, start: int, content_length: int) -> bytes:
     """同步读取文件指定字节范围（供 async 上下文通过 asyncio.to_thread 调用，避免阻塞事件循环）。"""
     with open(full_path, "rb") as f:
@@ -339,7 +338,7 @@ async def _migrate_channel_schema() -> None:  # NOSONAR
             conn.commit()
             logger.info("[startup] book_pool_item 表迁移完成，新增 book_key 列")
     except Exception as e:
-        logger.warning("[startup] channel 表迁移失败: {}", e)
+        log_key_failure(domain="startup", event="channel 表迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -366,7 +365,7 @@ async def _migrate_material_schema() -> None:  # NOSONAR
             conn.commit()
             logger.info("[startup] material 表迁移完成，新增 channel_id 列")
     except Exception as e:
-        logger.warning(_LOG_MATERIAL_MIGRATE_FAIL, e)
+        log_key_failure(domain="startup", event="material 表迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -398,7 +397,7 @@ async def _migrate_material_media_column() -> None:  # NOSONAR
         conn.commit()
         logger.info("[startup] material 表迁移完成，新增 media 列")
     except Exception as e:
-        logger.warning(_LOG_MATERIAL_MIGRATE_FAIL, e)
+        log_key_failure(domain="startup", event="material 表迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -420,7 +419,7 @@ async def _migrate_cover_url_column() -> None:  # NOSONAR
             conn.commit()
             logger.info("[startup] material migration done, added cover_url column")
     except Exception as e:
-        logger.warning("[startup] material cover_url migration failed: {}", e)
+        log_key_failure(domain="startup", event="material cover_url migration failed", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -448,7 +447,7 @@ async def _migrate_material_dedup_column() -> None:  # NOSONAR
             conn.commit()
             logger.info("[startup] material 表迁移完成，新增 dedup_key 列")
     except Exception as e:
-        logger.warning("[startup] material dedup_key 迁移失败: {}", e)
+        log_key_failure(domain="startup", event="material dedup_key 迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -474,7 +473,7 @@ async def _migrate_material_images_column() -> None:  # NOSONAR
             conn.commit()
             logger.info("[startup] material 表迁移完成，新增 images_json 列")
     except Exception as e:
-        logger.warning("[startup] material images_json 迁移失败: {}", e)
+        log_key_failure(domain="startup", event="material images_json 迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -543,7 +542,7 @@ async def _migrate_material_source_type_constraint() -> None:  # NOSONAR
         logger.info("[startup] material 表迁移完成，移除 ck_material_source_type 约束（表重建法）")
     except Exception as e:
         conn.rollback()
-        logger.warning("[startup] material source_type 约束迁移失败: {}", e)
+        log_key_failure(domain="startup", event="material source_type 约束迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -571,7 +570,7 @@ async def _migrate_hls_url_columns() -> None:  # NOSONAR
                 logger.info("[startup] {} 表迁移完成，新增 hls_url 列", table)
         conn.commit()
     except Exception as e:
-        logger.warning("[startup] hls_url 列迁移失败: {}", e)
+        log_key_failure(domain="startup", event="hls_url 列迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -602,7 +601,7 @@ async def _migrate_review_auto_approve_columns() -> None:  # NOSONAR
             logger.info("[startup] review 表迁移完成，新增 auto_trigger_reason 列")
         conn.commit()
     except Exception as e:
-        logger.warning("[startup] review 自动审批列迁移失败: {}", e)
+        log_key_failure(domain="startup", event="review 自动审批列迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -647,7 +646,7 @@ async def _migrate_duration_trace_columns() -> None:  # NOSONAR
                         "[startup] {} 表迁移完成，新增 {} 列", table, col_name)
         conn.commit()
     except Exception as e:
-        logger.warning("[startup] 时长改造留痕列迁移失败: {}", e)
+        log_key_failure(domain="startup", event="时长改造留痕列迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -685,7 +684,7 @@ async def _migrate_playlog_indexes() -> None:  # NOSONAR
         conn.commit()
         logger.info("[startup] play_log 表索引迁移完成（idx_user_played_at + idx_user_episode_played_at）")
     except Exception as e:
-        logger.warning("[startup] play_log 表索引迁移失败: {}", e)
+        log_key_failure(domain="startup", event="play_log 表索引迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -722,7 +721,7 @@ async def _migrate_read_path_indexes() -> None:  # NOSONAR
         conn.commit()
         logger.info("[startup] T01579 读路径索引迁移完成（favorite/episode/channel 复合索引）")
     except Exception as e:
-        logger.warning("[startup] 读路径索引迁移失败: {}", e)
+        log_key_failure(domain="startup", event="读路径索引迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -805,7 +804,7 @@ async def _migrate_fts5_index() -> None:  # NOSONAR
 
         conn.commit()
     except Exception as e:
-        logger.warning("[startup] FTS5 索引迁移失败: {}", e)
+        log_key_failure(domain="startup", event="FTS5 索引迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -829,7 +828,7 @@ async def _migrate_user_disabled_column() -> None:  # NOSONAR
             conn.commit()
             logger.info("[startup] user 表迁移完成，新增 disabled 列")
     except Exception as e:
-        logger.warning("[startup] user 表迁移失败: {}", e)
+        log_key_failure(domain="startup", event="user 表迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -852,7 +851,7 @@ async def _migrate_adplacement_enabled_column() -> None:  # NOSONAR
             conn.commit()
             logger.info("[startup] ad_placement 表迁移完成，新增 enabled 列")
     except Exception as e:
-        logger.warning("[startup] ad_placement 表迁移失败: {}", e)
+        log_key_failure(domain="startup", event="ad_placement 表迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -899,7 +898,7 @@ async def _migrate_auto_review_risk_columns() -> None:
                 "请在「系统配置 > 自动审批」至少保留一条校验并勾选风险确认"
             )
     except Exception as e:
-        logger.warning("[startup] auto_review_config 风险列迁移失败: {}", e)
+        log_key_failure(domain="startup", event="auto_review_config 风险列迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -924,7 +923,7 @@ async def _migrate_script_quality_report_column() -> None:
             conn.commit()
             logger.info("[startup] script 表迁移完成，新增 quality_report 列")
     except Exception as e:
-        logger.warning("[startup] script 表迁移失败: {}", e)
+        log_key_failure(domain="startup", event="script 表迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -981,7 +980,7 @@ async def _migrate_workflow_step_quality_check() -> None:
         logger.info("[startup] workflow_step 表迁移完成，step_name 约束已含 quality_check")
     except Exception as e:
         conn.rollback()
-        logger.warning("[startup] workflow_step 表迁移失败: {}", e)
+        log_key_failure(domain="startup", event="workflow_step 表迁移失败", exc=e, level="warning")
     finally:
         conn.close()
 
@@ -1069,7 +1068,7 @@ async def _seed_default_channel_assets() -> None:  # NOSONAR
         if copied:
             logger.info("[startup] 频道预制资产已补齐 {} 个（data/channel_assets）", copied)
     except Exception as e:  # NOSONAR 资产缺失不应阻断启动
-        logger.warning("[startup] 频道预制资产补齐失败（不影响启动）: {}", e)
+        log_key_failure(domain="startup", event="频道预制资产补齐失败（不影响启动）", exc=e, level="warning")
 
 
 def _make_loop_exception_handler():
@@ -1158,19 +1157,19 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
         try:
             await _seed_default_admin()
         except Exception as e:
-            logger.warning("[startup] 自动创建默认 admin 用户失败: {}", e)
+            log_key_failure(domain="startup", event="自动创建默认 admin 用户失败", exc=e, level="warning")
 
         # channel 表结构迁移（幂等追加 schedule_time / prompt / rss_sources / keywords 字段）
         try:
             await _migrate_channel_schema()
         except Exception as e:
-            logger.warning("[startup] channel 表迁移失败: {}", e)
+            log_key_failure(domain="startup", event="channel 表迁移失败", exc=e, level="warning")
 
         # material 表结构迁移（幂等追加 channel_id 字段，用于频道级素材隔离）
         try:
             await _migrate_material_schema()
         except Exception as e:
-            logger.warning(_LOG_MATERIAL_MIGRATE_FAIL, e)
+            log_key_failure(domain="startup", event="material 表迁移失败", exc=e, level="warning")
 
         # material table cover_url column migration (idempotent)
         try:
@@ -1180,80 +1179,80 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
             await _migrate_material_source_type_constraint()
             await _migrate_material_media_column()
         except Exception as e:
-            logger.warning("[startup] material cover_url migration failed: {}", e)
+            log_key_failure(domain="startup", event="material cover_url migration failed", exc=e, level="warning")
 
 
         # episode/review 表 hls_url 列迁移（幂等追加，用于 HLS 分片播放）
         try:
             await _migrate_hls_url_columns()
         except Exception as e:
-            logger.warning("[startup] hls_url 列迁移失败: {}", e)
+            log_key_failure(domain="startup", event="hls_url 列迁移失败", exc=e, level="warning")
 
         # review 表 auto_approved / auto_trigger_reason 列迁移（幂等追加，用于自动审批标记）
         try:
             await _migrate_review_auto_approve_columns()
         except Exception as e:
-            logger.warning("[startup] review 自动审批列迁移失败: {}", e)
+            log_key_failure(domain="startup", event="review 自动审批列迁移失败", exc=e, level="warning")
 
         # review/episode 时长改造留痕列迁移（T02028：实测时长与补足秒数正规落库）
         try:
             await _migrate_duration_trace_columns()
         except Exception as e:
-            logger.warning("[startup] 时长改造留痕列迁移失败: {}", e)
+            log_key_failure(domain="startup", event="时长改造留痕列迁移失败", exc=e, level="warning")
 
         # play_log 表索引迁移（幂等追加 idx_user_played_at 复合索引，优化 /recent 查询）
         try:
             await _migrate_playlog_indexes()
         except Exception as e:
-            logger.warning("[startup] play_log 表索引迁移失败: {}", e)
+            log_key_failure(domain="startup", event="play_log 表索引迁移失败", exc=e, level="warning")
 
         # T01579：收藏/历史/类型过滤三条读路径的复合索引迁移（幂等）
         try:
             await _migrate_read_path_indexes()
         except Exception as e:
-            logger.warning("[startup] 读路径索引迁移失败: {}", e)
+            log_key_failure(domain="startup", event="读路径索引迁移失败", exc=e, level="warning")
 
         # FTS5 全文索引迁移（幂等创建虚拟表 + 触发器 + 历史数据灌入）
         try:
             await _migrate_fts5_index()
         except Exception as e:
-            logger.warning("[startup] FTS5 索引迁移失败: {}", e)
+            log_key_failure(domain="startup", event="FTS5 索引迁移失败", exc=e, level="warning")
 
         # user 表 disabled 列迁移（M5 FR-M502 终端用户启停）
         try:
             await _migrate_user_disabled_column()
         except Exception as e:
-            logger.warning("[startup] user disabled 列迁移失败: {}", e)
+            log_key_failure(domain="startup", event="user disabled 列迁移失败", exc=e, level="warning")
 
         # ad_placement 表 enabled 列迁移（M7 FR-M702 投放启停）
         try:
             await _migrate_adplacement_enabled_column()
         except Exception as e:
-            logger.warning("[startup] ad_placement enabled 列迁移失败: {}", e)
+            log_key_failure(domain="startup", event="ad_placement enabled 列迁移失败", exc=e, level="warning")
 
         # auto_review_config 风险确认列迁移（T02492 / FR-UX-204）
         try:
             await _migrate_auto_review_risk_columns()
         except Exception as e:
-            logger.warning("[startup] auto_review_config risk 列迁移失败: {}", e)
+            log_key_failure(domain="startup", event="auto_review_config risk 列迁移失败", exc=e, level="warning")
 
         # T01712 P1：script.quality_report 列迁移（LLM 质量审核报告落库）
         try:
             await _migrate_script_quality_report_column()
         except Exception as e:
-            logger.warning("[startup] script quality_report 列迁移失败: {}", e)
+            log_key_failure(domain="startup", event="script quality_report 列迁移失败", exc=e, level="warning")
 
         # T01712 P1：workflow_step 表 CHECK 约束扩展（新增 quality_check 步骤名）
         try:
             await _migrate_workflow_step_quality_check()
         except Exception as e:
-            logger.warning("[startup] workflow_step quality_check 约束迁移失败: {}", e)
+            log_key_failure(domain="startup", event="workflow_step quality_check 约束迁移失败", exc=e, level="warning")
 
         # 自动 seed 默认频道（幂等，确保工作流监控页频道选项非空）
         try:
             await _seed_default_channels()
         except Exception as e:
-            logger.warning("[startup] 自动 seed 默认频道失败: {}", e)
+            log_key_failure(domain="startup", event="自动 seed 默认频道失败", exc=e, level="warning")
 
         # 频道预制封面/图标补齐（T00731，幂等，仅补缺失不覆盖）
         await _seed_default_channel_assets()
@@ -1294,7 +1293,7 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
                 if inserted > 0:
                     logger.info("[startup] 通知预设模板已 seed，新增 {} 条", inserted)
         except Exception as e:
-            logger.warning("[startup] 通知预设模板初始化失败: {}", e)
+            log_key_failure(domain="startup", event="通知预设模板初始化失败", exc=e, level="warning")
 
         # 启动 APScheduler 定时任务（工作流调度 + 播放日志落库 + 黑名单清理）
         from app.services.workflow_scheduler import workflow_scheduler
@@ -1314,7 +1313,7 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
             if _stale > 0:
                 logger.info("[startup] 已清理残留恢复快照 {} 个", _stale)
         except Exception as e:
-            logger.warning("[startup] 启动清理过期备份失败: {}", e)
+            log_key_failure(domain="startup", event="启动清理过期备份失败", exc=e, level="warning")
 
     # 启动播放进度写缓冲的周期 flush（P1 优化：进程内聚合 + 定时批量落库）
     # 注意：缓冲与下面的 EventBus 都是进程内 asyncio 状态，队列内容由本进程自己产生，
@@ -1348,7 +1347,7 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
                         logger.info("[startup] 内网穿透隧道已自动启动: {}", url)
                     except Exception as e:
                         # 自动启动失败不影响主服务：日志 + 通知双保障
-                        logger.warning("[startup] 内网穿透自动启动失败: {}", e)
+                        log_key_failure(domain="startup", event="内网穿透自动启动失败", exc=e, level="warning")
                         notify_autostart_failed(str(e))
 
                 threading.Thread(target=_auto_start_tunnel, daemon=True).start()
