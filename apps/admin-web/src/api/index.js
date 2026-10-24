@@ -90,6 +90,13 @@ api.interceptors.response.use(
     return data
   },
   (error) => {
+    // T02833：window-guard 主动丢弃的请求从未离开浏览器，不是网络故障。
+    // 恢复保护期内的请求已在 guard 侧挂起、就绪后原样重放，走不到这里；
+    // 能到这里的只有「页面隐藏期」的请求——用户看不到也点不了，静默收尾即可，
+    // 否则会弹成一条自造的 Network Error，还会被反馈队列留到回前台补发。
+    if (error.request?.__guardAborted || error.__guardAborted) {
+      return Promise.reject(_markNotified(error))
+    }
     // 页面隐藏时不再整体静默丢弃提示：401 维持「不跳转、不清本地态」（避免后台标签页把人踢下线），
     // 其余错误交给 ElMessage 安全包装器入队、恢复后聚合补发（FR-UX-301）
     if (error.response?.status === 401 && document.hidden) {

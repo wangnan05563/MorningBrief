@@ -187,10 +187,9 @@ test.describe('可见性感知的反馈队列', () => {
     await page.waitForTimeout(RESTORE_MS + 700)
     await expect(page.locator('.el-message-box')).toHaveCount(0)
     expect(requests.length).toBe(0)
-    // 这里不能再用 hits===0：本用例的契约是「被拦截的确认框不回放」，而恢复瞬间页面自身要重新
-    // 拉一次状态，那次请求会被 window-guard 的 2s 恢复保护期丢弃并表现为 axios 'Network Error'，
-    // 于是拦截器弹的这条提示被队列补发——它与确认框无关（守卫 × 队列 × 可见性刷新三者的相互作用，
-    // 已另立派生单跟踪）。因此按文案精确断言：属于本次高危动作的提示一条都不许出现。
+    // 恢复瞬间页面自身会重新拉一次状态；这类请求由 window-guard 挂起到保护期结束后重放，
+    // 不会变成 axios 'Network Error' 再被队列补发（T02833）。仍按文案精确断言：
+    // 属于本次高危动作的提示一条都不许出现。
     const replayed = await page.evaluate(() =>
       [...document.querySelectorAll('.el-message')]
         .map((e) => (e.textContent || '').trim())

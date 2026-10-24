@@ -18,6 +18,8 @@
  *   - document.title 修改（防止任务栏闪烁）
  *   - EventSource 构造（不新建 SSE 连接）
  *   - fetch / XMLHttpRequest（阻止后台网络活动，Edge 特有问题的根因）
+ *     其中「恢复保护期」内发起的请求会挂起、保护期结束后原样重放一次，
+ *     避免把守卫自己的拦截弹成用户可见的 Network Error（T02833）
  *   - Element Plus 的 ElMessageBox / ElNotification
  *
  * Edge 特有问题：
@@ -49,8 +51,79 @@ function _shouldBlockNetwork() {
   return document.hidden || _isRestoring
 }
 
+/** 被网络拦截挡下的原因（T02833：两种原因的处理方式不同，必须能区分） */
+function _blockReason() {
+  return document.hidden ? 'hidden' : 'restoring'
+}
+
+// 恢复保护期内打开、尚未发送的 XHR（T02833）。send 被拦时不合成失败，先挂起，
+// 保护期结束原样补发一次——同一 XHR 只 send 一次，不会产生重复请求。
+/** @type {{xhr: XMLHttpRequest, body: Document | BodyInit | null}[]} */
+const _deferredSends = []
+
 // 保存所有原始方法的引用
 const _orig = {}
+
+/**
+ * 让被守卫拦下的 XHR 以失败收场（请求从未离开浏览器）。
+ *
+ * 必须在 XHR 上打 __guardAborted 标记：axios 拦截器据此识别「这不是网络故障」，
+ * 既不弹提示，也不让 message.js 的可见性队列在恢复后补发一条自造的 Network Error。
+ */
+function _abortXhr(xhr, reason) {
+  xhr.__guardAborted = reason
+  xhr._guardBlocked = true
+  console.debug('[window-guard] 丢弃请求（%s）:', reason, xhr._guardUrl)
+  // 主动触发 error 事件，让 axios 的 Promise 能够 reject，
+  // 否则调用方的 loading 状态永远无法解除（如登录按钮卡死）
+  xhr.dispatchEvent(new Event('error'))
+  // 同时标记 readyState 为 DONE，确保 onreadystatechange 也能触发
+  xhr.readyState = 4
+  xhr.dispatchEvent(new Event('readystatechange'))
+}
+
+/**
+ * 恢复保护期内的 send：挂起而不是失败（T02833）。
+ *
+ * 这段窗口里发起的请求都是「页面已经回到前台」之后由页面自己触发的（回前台刷新、用户点击），
+ * 用户真正希望它们完成；而保护期只有 2s，延迟重发既不会重复请求，也不必让人看见一条
+ * 凭空出现的「Network Error」。
+ */
+function _deferSend(xhr, body) {
+  console.debug('[window-guard] 恢复保护期内挂起 XHR.send，就绪后重放:', xhr._guardUrl)
+  _deferredSends.push({ xhr, body })
+}
+
+/** 保护期结束：补发挂起的 send。排队期间被取消或页面又隐藏的，按对应语义收尾，绝不再发 */
+function _flushDeferredSends() {
+  if (!_deferredSends.length) return
+  const pending = _deferredSends.splice(0)
+  for (const { xhr, body } of pending) {
+    // 排队期间被 axios 取消/超时（abort 会把 readyState 打回 UNSENT）：不能再补发
+    if (xhr.readyState !== 1) continue
+    if (_shouldBlockNetwork()) {
+      _abortXhr(xhr, _blockReason())
+      continue
+    }
+    xhr._guardBlocked = false
+    try {
+      _orig.xhrSend.call(xhr, body)
+    } catch (err) {
+      console.debug('[window-guard] 重放 XHR.send 失败:', xhr._guardUrl, err)
+      _abortXhr(xhr, 'send-error')
+    }
+  }
+}
+
+/** 挂起期间页面重新隐藏：不再重放——陈旧请求不该等下一次回前台才打出去 */
+function _dropDeferredSends(reason) {
+  if (!_deferredSends.length) return
+  const pending = _deferredSends.splice(0)
+  for (const { xhr } of pending) {
+    if (xhr.readyState !== 1) continue
+    _abortXhr(xhr, reason)
+  }
+}
 
 function _installHooks() {
   // ---- window.focus ----
@@ -188,7 +261,10 @@ function _installHooks() {
     if (_shouldBlockNetwork()) {
       const url = typeof input === 'string' ? input : input?.url
       console.debug('[window-guard] 页面不可见/恢复保护期时阻止 fetch:', url)
-      return Promise.reject(new TypeError('Failed to fetch: page is hidden'))
+      const err = new TypeError('Failed to fetch: page is hidden')
+      // 与 XHR 同一口径：调用方据此知道这不是真实的网络故障（T02833）
+      err.__guardAborted = _blockReason()
+      return Promise.reject(err)
     }
     return _orig.fetch(input, init)
   }
@@ -202,19 +278,18 @@ function _installHooks() {
     if (_shouldBlockNetwork()) {
       console.debug('[window-guard] 页面不可见/恢复保护期时阻止 XHR.open:', method, url)
       this._guardBlocked = true
+      this._guardAbortReason = _blockReason()
     }
     return _orig.xhrOpen.call(this, method, url, ...rest)
   }
   XMLHttpRequest.prototype.send = function (body) {
     if (this._guardBlocked) {
-      console.debug('[window-guard] 页面隐藏时阻止 XHR.send:', this._guardUrl)
-      // 主动触发 error 事件，让 axios 的 Promise 能够 reject，
-      // 否则调用方的 loading 状态永远无法解除（如登录按钮卡死）
-      const errorEvent = new Event('error')
-      this.dispatchEvent(errorEvent)
-      // 同时标记 readyState 为 DONE，确保 onreadystatechange 也能触发
-      this.readyState = 4
-      this.dispatchEvent(new Event('readystatechange'))
+      // 恢复保护期：请求值得完成，挂起到就绪后重放；隐藏期：直接丢弃并打标记
+      if (this._guardAbortReason === 'restoring') {
+        _deferSend(this, body)
+        return
+      }
+      _abortXhr(this, this._guardAbortReason || 'hidden')
       return
     }
     return _orig.xhrSend.call(this, body)
@@ -255,6 +330,8 @@ function _cleanupStaleLoadingMasks() {
 function _onVisibilityChange() {
   if (document.hidden) {
     // 页面隐藏：hooks 自动生效（_shouldBlock 返回 true）
+    // 恢复保护期里挂起的请求不再等待：等下一次回前台才打出去只会是陈旧请求（T02833）
+    _dropDeferredSends('hidden')
     console.debug('[window-guard] 页面隐藏，拦截已激活')
   } else {
     // 页面恢复：启动 2s 保护期，防止隐藏期间积压的 Promise 回调集中触发
@@ -264,6 +341,8 @@ function _onVisibilityChange() {
       _restoreTimer = setTimeout(() => {
         _isRestoring = false
         console.debug('[window-guard] 恢复保护期结束，所有操作恢复正常')
+        // 保护期里被挂起的请求此刻补发（T02833）
+        _flushDeferredSends()
       }, 2000)
       console.debug('[window-guard] 页面恢复，启动 2s 保护期')
     }
