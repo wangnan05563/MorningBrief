@@ -5,7 +5,7 @@
       "model": "RowUpdateRequest",
       "modelSource": "backend/app/routers/admin/db_admin.py:38",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/db_admin.py:146",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:141",
       "declared": [
         "values"
       ],
@@ -804,12 +804,12 @@
     {
       "endpoint": "POST /backups/restore",
       "model": "RestoreRequest",
-      "modelSource": "backend/app/routers/admin/backup.py:30",
+      "modelSource": "backend/app/routers/admin/backup.py:32",
       "modelExtra": "ignore",
       "handlerSource": "backend/app/routers/admin/backup.py:95",
       "declared": [
         "backup_path",
-        "confirm_token"
+        "confirm_text"
       ],
       "frontend": {
         "callSites": [],
@@ -826,8 +826,7 @@
         "declaredButNotHandled": [],
         "modelNotSubmitted": [],
         "modelNotInColumn": [
-          "backup_path",
-          "confirm_token"
+          "backup_path"
         ],
         "columnNotInModel": []
       },
@@ -1153,7 +1152,7 @@
       "model": "CascadePreviewRequest",
       "modelSource": "backend/app/routers/admin/db_admin.py:49",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/db_admin.py:206",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:201",
       "declared": [
         "ids"
       ],
@@ -1200,7 +1199,7 @@
       "model": "ImportRequest",
       "modelSource": "backend/app/routers/admin/db_admin.py:54",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/db_admin.py:286",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:281",
       "declared": [
         "confirm_text",
         "content",
@@ -1254,7 +1253,7 @@
       "model": "ImportPreviewRequest",
       "modelSource": "backend/app/routers/admin/db_admin.py:64",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/db_admin.py:258",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:253",
       "declared": [
         "content",
         "format",
@@ -1304,7 +1303,7 @@
       "model": "RowCreateRequest",
       "modelSource": "backend/app/routers/admin/db_admin.py:33",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/db_admin.py:131",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:126",
       "declared": [
         "values"
       ],
@@ -1344,7 +1343,7 @@
       "model": "BatchDeleteRequest",
       "modelSource": "backend/app/routers/admin/db_admin.py:43",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/db_admin.py:185",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:180",
       "declared": [
         "confirm_text",
         "ids"

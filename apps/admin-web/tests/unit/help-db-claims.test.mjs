@@ -25,6 +25,11 @@ const ROUTER = readFileSync(
   new URL('../../../../backend/app/routers/admin/db_admin.py', import.meta.url),
   'utf8',
 )
+// T02592 起，总开关的比较逻辑收敛到 app/core/danger_op.py（备份恢复与数据库后台共用一份）
+const DANGER = readFileSync(
+  new URL('../../../../backend/app/core/danger_op.py', import.meta.url),
+  'utf8',
+)
 
 // 从后端源码取真实白名单表数：ALLOWED_TABLES 里的 `"name": "中文名",` 行
 function allowedTableCount() {
@@ -71,7 +76,8 @@ describe('M80 数据库维护帮助文案与代码一致', () => {
     assert.match(sec, /删除输入表名/, '删除的确认词是表名，不是固定口令')
     assert.match(sec, /导入输入 IMPORT/, '导入的确认词是 IMPORT')
     assert.match(sec, /DB_ADMIN_CONFIRM_TOKEN/, '没写服务端总开关，运维会以为是自己的拼写问题（M29 的原坑）')
-    assert.match(ROUTER, /if not CONFIRM_TOKEN/, '后端这个开关变了，文档要同步')
+    assert.match(DANGER, /if not server_token/, '后端这个开关变了，文档要同步')
+    assert.match(ROUTER, /validate_danger_op\(/, '危险操作确认不再走共用实现，文档的口径要重新核')
   })
 
   it('脱敏与 dry-run 预览的承诺有实现兜着', () => {

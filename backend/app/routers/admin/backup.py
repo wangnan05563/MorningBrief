@@ -1,10 +1,11 @@
 """B 端数据库备份管理路由。
 
 仅 admin 角色可访问。
-恢复操作须传 confirm_token 校验，防止误操作覆盖最新数据。
+恢复是「用旧快照覆盖当前库」的危险操作，确认口径与数据库后台一致（T02592）：
+服务端 DB_ADMIN_CONFIRM_TOKEN 只作总开关，操作者须手输目标备份文件名。
 """
-import hmac
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -12,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.auth import AdminPayload, require_admin
+from app.core.danger_op import validate_danger_op
 from app.core.exceptions import ParamError
 from app.core.response import success
 from app.database import get_db
@@ -21,7 +23,7 @@ from app.services.backup_service import BackupService
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# 恢复操作确认令牌（与 db_admin 复用同一令牌，保持危险操作校验统一）
+# 危险操作总开关：与 db_admin 复用同一配置项（配置为空即禁止，见 app/core/danger_op.py）
 CONFIRM_TOKEN = settings.DB_ADMIN_CONFIRM_TOKEN
 
 router = APIRouter(prefix="/admin/api/v1/backups", tags=["B端-数据库备份"])
@@ -30,19 +32,17 @@ router = APIRouter(prefix="/admin/api/v1/backups", tags=["B端-数据库备份"]
 class RestoreRequest(BaseModel):
     """恢复请求体。"""
     backup_path: str           # 备份文件路径（从 list_backups 返回的 path）
-    confirm_token: str         # 危险操作确认令牌
+    confirm_text: str = ""     # 手输确认文本（须为目标备份文件名）
 
 
-def _validate_confirm_token(token: str) -> None:
-    """校验危险操作确认令牌。
+def _validate_restore(confirm_text: str, backup_path: str) -> None:
+    """恢复放行条件：总开关已配置，且手输文本与要恢复的那个备份文件名一致。
 
-    空值拒绝执行：DB_ADMIN_CONFIRM_TOKEN 未配置时禁止危险操作。
-    使用 hmac.compare_digest 常量时间比较，防御时序攻击。
+    确认对象取 `Path(backup_path).name`——操作者必须把「将被覆盖成哪一份快照」
+    抄一遍，而不是点一下按钮。旧口径要求前端传固定令牌，那份令牌迟早会出现在
+    浏览器产物里；换成文件名后，服务端配置值从不外泄。
     """
-    if not CONFIRM_TOKEN:
-        raise ParamError("服务器未配置 DB_ADMIN_CONFIRM_TOKEN，危险操作被禁止")
-    if not hmac.compare_digest(token, CONFIRM_TOKEN):
-        raise ParamError("confirm_token 校验失败")
+    validate_danger_op(confirm_text, Path(backup_path).name, CONFIRM_TOKEN)
 
 
 # ---- 备份列表 ----
@@ -101,10 +101,10 @@ async def restore_backup(
     """从指定备份恢复数据库。
 
     警告：恢复会覆盖当前数据库，丢失自备份以来所有数据。
-    需传 confirm_token 校验，防止误操作。
+    需手输目标备份文件名作确认文本（服务端 DB_ADMIN_CONFIRM_TOKEN 只作总开关）。
     恢复后应用需重启以重建 engine 连接池。
     """
-    _validate_confirm_token(body.confirm_token)
+    _validate_restore(body.confirm_text, body.backup_path)
 
     try:
         await BackupService.restore_backup(body.backup_path)

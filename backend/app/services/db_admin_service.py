@@ -15,7 +15,7 @@
 - 标识符正则校验：防 ORDER BY / 列名注入
 - 参数化绑定：所有 WHERE 条件用 :param 绑定
 - 敏感字段脱敏：password_hash / API key 类字段
-- 危险操作令牌：删除/批量删除/导入须传 confirm_token
+- 危险操作确认：删除/批量删除/导入须手输确认文本，服务端配置只作总开关
 """
 import csv
 import io

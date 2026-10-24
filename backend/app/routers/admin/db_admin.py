@@ -4,7 +4,6 @@
 所有写操作（删除/批量删除/导入）须传手输确认文本；真正的开关是服务端 DB_ADMIN_CONFIRM_TOKEN 配置。
 """
 import csv
-import hmac
 import io
 import json
 import logging
@@ -16,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.auth import AdminPayload, require_admin
+from app.core.danger_op import validate_danger_op
 from app.core.exceptions import ParamError
 from app.core.response import success
 from app.database import get_db
@@ -26,7 +26,7 @@ settings = get_settings()
 
 router = APIRouter(prefix="/admin/api/v1/db-admin", tags=["B端-数据库维护"])
 
-# 危险操作确认令牌常量，前端须输入此值
+# 危险操作总开关：配置为空即禁止，非空时仍需操作者手输确认文本（见 app/core/danger_op.py）
 CONFIRM_TOKEN = settings.DB_ADMIN_CONFIRM_TOKEN
 
 
@@ -70,13 +70,8 @@ class ImportPreviewRequest(BaseModel):
 
 
 def _validate_danger_op(confirm_text: str, expected: str) -> None:
-    """危险操作放行条件：服务端配置了 DB_ADMIN_CONFIRM_TOKEN（总开关，未配置即禁止），
-    且操作者手输的确认文本与预期一致。令牌本身不再下发前端——
-    前端内置固定令牌等于把删除/导入权限打包进了浏览器产物。"""
-    if not CONFIRM_TOKEN:
-        raise ParamError("服务器未配置 DB_ADMIN_CONFIRM_TOKEN，危险操作被禁止")
-    if not hmac.compare_digest((confirm_text or "").strip(), expected):
-        raise ParamError(f"确认文本不匹配，请输入 {expected}")
+    """危险操作确认（口径见 app/core/danger_op.py，与备份恢复共用同一实现）。"""
+    validate_danger_op(confirm_text, expected, CONFIRM_TOKEN)
 
 
 # ---- 表浏览 ----

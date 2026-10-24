@@ -312,7 +312,7 @@
       "endpoint": "delete_row",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/db_admin.py:165",
+        "source": "backend/app/routers/admin/db_admin.py:160",
         "refs": [
           "/tables/{table}/rows/{pk_value:path}",
           "AdminPayload",
@@ -641,7 +641,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/db_admin.py:146",
+        "source": "backend/app/routers/admin/db_admin.py:141",
         "refs": [
           "/tables/{table}/rows/{pk_value:path}",
           "AdminPayload",
@@ -1785,15 +1785,15 @@
       "model": {
         "name": "RestoreRequest",
         "module": "app.routers.admin.backup",
-        "source": "backend/app/routers/admin/backup.py:30",
+        "source": "backend/app/routers/admin/backup.py:32",
         "extra": "ignore",
         "fields": [
           "backup_path",
-          "confirm_token"
+          "confirm_text"
         ],
         "flatFields": [
           "backup_path",
-          "confirm_token"
+          "confirm_text"
         ]
       },
       "handler": {
@@ -1811,7 +1811,7 @@
           "ParamError",
           "RestoreRequest",
           "ValueError",
-          "_validate_confirm_token",
+          "_validate_restore",
           "action",
           "add",
           "admin",
@@ -1820,7 +1820,7 @@
           "body",
           "category",
           "commit",
-          "confirm_token",
+          "confirm_text",
           "data",
           "database",
           "db",
@@ -1843,7 +1843,7 @@
           "username",
           "warning",
           "{\"source\": \"",
-          "从指定备份恢复数据库。\n\n    警告：恢复会覆盖当前数据库，丢失自备份以来所有数据。\n    需传 confirm_token 校验，防止误操作。\n    恢复后应用需重启以重建 engine 连接池。\n    ",
+          "从指定备份恢复数据库。\n\n    警告：恢复会覆盖当前数据库，丢失自备份以来所有数据。\n    需手输目标备份文件名作确认文本（服务端 DB_ADMIN_CONFIRM_TOKEN 只作总开关）。\n    恢复后应用需重启以重建 engine 连接池。\n    ",
           "恢复失败: ",
           "恢复成功，请重启应用以重建数据库连接",
           "恢复数据库失败 operator=%s path=%s",
@@ -2712,7 +2712,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/db_admin.py:206",
+        "source": "backend/app/routers/admin/db_admin.py:201",
         "refs": [
           "/tables/{table}/cascade-preview",
           "AdminPayload",
@@ -2763,7 +2763,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/db_admin.py:286",
+        "source": "backend/app/routers/admin/db_admin.py:281",
         "refs": [
           "/tables/{table}/import",
           "AdminPayload",
@@ -2831,7 +2831,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/db_admin.py:258",
+        "source": "backend/app/routers/admin/db_admin.py:253",
         "refs": [
           "/tables/{table}/import/preview",
           "AdminPayload",
@@ -2880,7 +2880,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/db_admin.py:131",
+        "source": "backend/app/routers/admin/db_admin.py:126",
         "refs": [
           "/tables/{table}/rows",
           "AdminPayload",
@@ -2933,7 +2933,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/db_admin.py:185",
+        "source": "backend/app/routers/admin/db_admin.py:180",
         "refs": [
           "/tables/{table}/rows/batch-delete",
           "AdminPayload",
