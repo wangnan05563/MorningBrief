@@ -10,6 +10,19 @@
       </el-col>
     </el-row>
 
+    <!-- 地址栏带来的非法 / 越界参数已按规则修正，这里如实点名（T02764）：
+         `?page=abc` 回落到第 1 页、`?size=7` 就近取档位、`?page=999` 落到最后一页，
+         若不提示，用户会以为分享出去的链接原样生效了 -->
+    <el-alert
+      v-if="invalidParams.length"
+      data-guide="queue-url-corrected"
+      type="warning"
+      :closable="false"
+      show-icon
+      :title="`链接里的参数已修正：${invalidParams.map((p) => p.key).join('、')}`"
+      :description="invalidParams.map((p) => `${p.key}=${p.raw}（${p.reason}）`).join('；')"
+    />
+
     <!-- 配置面板：模式 + 并发数（仅并行模式显示） -->
     <el-card shadow="never" class="config-panel glass">
       <!-- T02594（FR-UX-104）：加载失败必须说出来，不能让默认值冒充已加载配置 -->
@@ -175,10 +188,10 @@
           v-model:current-page="page"
           v-model:page-size="size"
           :total="total"
-          :page-sizes="[10, 20, 50]"
+          :page-sizes="PAGE_SIZE_OPTIONS"
           layout="total, sizes, prev, pager, next"
-          @size-change="loadTasks"
-          @current-change="loadTasks"
+          @size-change="handleSizeChange"
+          @current-change="handlePageChange"
         />
       </div>
     </el-card>
@@ -223,7 +236,7 @@
 
 <script setup>
 defineOptions({ name: 'QueueManagement' })
-import { ref, reactive, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { Delete, Check, Close, Edit, Refresh, View } from '@element-plus/icons-vue'
 import {
@@ -240,6 +253,8 @@ import { listChannels } from '../../api/channels'
 import { subscribe } from '../../utils/sse'
 import { formatTime } from '../../utils/format'
 import { useConfigLoad } from '../../composables/useConfigLoad'
+import { useUrlState } from '../../composables/useUrlState'
+import { PAGE_SIZE_OPTIONS, MAX_PAGE_SIZE, clampPageSize } from '../../constants/pagination'
 import ListLoadError from '../../components/ListLoadError.vue'
 import ConfigLoadError from '../../components/ConfigLoadError.vue'
 import {
@@ -293,6 +308,63 @@ const total = ref(0)
 const page = ref(1)
 const size = ref(20)
 const loading = ref(false)
+
+// T02764（FR-UX-602 收尾）：page/size 此前只活在组件内存里——刷新回到第 1 页、
+// 分享出去的链接不带分页。接线方式与 views/review/ReviewList.vue 完全一致：
+// 状态变更后显式 pushToUrl()，地址栏被外部改动时走 applyFromUrl 灌回状态并重载。
+// size.max 按 NFR-UX-03 收在 100（后端 queue 列表也是 le=100，越界是 HTTP 400）。
+const URL_SPECS = {
+  page: { default: 1, type: 'int', min: 1 },
+  size: { default: 20, type: 'int', min: 1, max: MAX_PAGE_SIZE },
+}
+const urlState = useUrlState(
+  URL_SPECS,
+  () => ({ page: page.value, size: size.value }),
+  { onExternalChange: applyFromUrl },
+)
+
+/**
+ * 地址栏的 size 是合法整数但不在可选档位里时（`?size=7`），按就近档位收敛：
+ * 原样发请求会渲染出「7 行 + 一个显示不出当前值的尺寸选择器」。校正过程记进
+ * sizeClamp，由页内告警点名（与 ReviewList.resolveSize 同口径）。
+ */
+function resolveSize(raw) {
+  const n = Number(raw)
+  const clamped = clampPageSize(n, PAGE_SIZE_OPTIONS, 20)
+  sizeClamp.value =
+    Number.isFinite(n) && n > 0 && n !== clamped
+      ? {
+          key: 'size',
+          raw: String(raw),
+          reason: `不在可选尺寸 ${PAGE_SIZE_OPTIONS.join('/')} 中：已按 ${clamped} 处理`,
+        }
+      : null
+  return clamped
+}
+
+/** 地址栏被外部改动（手改 URL / 前进后退）时：校验后的值灌回状态并重载 */
+function applyFromUrl(values) {
+  const nextSize = resolveSize(values.size)
+  const changed = values.page !== page.value || nextSize !== size.value
+  page.value = values.page
+  size.value = nextSize
+  // 外部改动后旧的「越界已修正」提示不再对应当前地址；若新地址仍越界，loadTasks 会重新记一条
+  pageClamp.value = null
+  if (changed) loadTasks()
+}
+
+// 页码越界要拿到 total 才知道上限，这条校正是加载后补记的（readUrlState 只能管
+// 「是不是整数 / 有没有小于下限」）。单独存一份而不是写进 urlState.invalid：
+// 后者在每次读 URL 时整体重写，钳制后回写地址会当场把提示清掉。
+const pageClamp = ref(null)
+const sizeClamp = ref(null)
+const invalidParams = computed(() => {
+  const extra = []
+  if (pageClamp.value) extra.push(pageClamp.value)
+  if (sizeClamp.value) extra.push(sizeClamp.value)
+  return extra.length ? [...urlState.invalid.value, ...extra] : urlState.invalid.value
+})
+
 // T02496（FR-UX-302）：非空即「这次请求没成功」，页面据此显示错误态而非空态
 const listError = ref('')
 const retryingList = ref(false)
@@ -410,20 +482,41 @@ async function loadChannels() {
 async function loadTasks() {
   loading.value = true
   try {
-    const params = { page: page.value, size: size.value }
-    if (filter.status) params.status = filter.status
-    if (filter.channel_id) params.channel_id = filter.channel_id
-    if (filter.priority) params.priority = filter.priority
-    // 仅当用户主动选择排序时传参，否则后端走默认排序（failed 优先+started_at 倒序）
-    if (userSort.value) {
-      params.sort_by = userSort.value.prop
-      params.sort_order = userSort.value.order === 'ascending' ? 'asc' : 'desc'
+    // 最多两轮：第一轮拿到 total 后若发现深链页码越界，校正到最后一页再取一次。
+    // 固定轮次而非递归，`?page=999` 不会把轮询 / 重试打成无限请求（同 ReviewList）。
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const params = { page: page.value, size: size.value }
+      if (filter.status) params.status = filter.status
+      if (filter.channel_id) params.channel_id = filter.channel_id
+      if (filter.priority) params.priority = filter.priority
+      // 仅当用户主动选择排序时传参，否则后端走默认排序（failed 优先+started_at 倒序）
+      if (userSort.value) {
+        params.sort_by = userSort.value.prop
+        params.sort_order = userSort.value.order === 'ascending' ? 'asc' : 'desc'
+      }
+      const data = await listQueueTasks(params)
+      // 后端返回 items 字段，对齐 SRS 5.1 API 规范
+      tasks.value = data.items || []
+      total.value = data.total || 0
+      listError.value = ''
+      const maxPage = Math.max(1, Math.ceil((data.total || 0) / size.value))
+      // 动态上限：让后续 readUrlState 也知道「这一页最多到几」
+      URL_SPECS.page.max = maxPage
+      // 深链可能指向不存在的页（`?page=999`，或别人分享后数据变少）：落到**最后一页**
+      // 而不是退回第 1 页，否则「尾部数据」会变成让人以为数据丢了的空表。
+      if (page.value > maxPage && attempt === 0) {
+        pageClamp.value = {
+          key: 'page',
+          raw: String(page.value),
+          reason: `超过上限 ${maxPage}：已落到最后一页`,
+        }
+        page.value = maxPage
+        continue
+      }
+      break
     }
-    const data = await listQueueTasks(params)
-    // 后端返回 items 字段，对齐 SRS 5.1 API 规范
-    tasks.value = data.items || []
-    total.value = data.total || 0
-    listError.value = ''
+    // 状态落定后显式回写（默认值不写进 URL，见 utils/urlState.js 的约定）
+    urlState.pushToUrl()
   } catch (e) {
     // 旧行为是把 tasks 清空——界面于是显示「暂无队列任务」，
     // 用户以为队列真的空了（ACC-UX-301 第 3 条要消除的正是这个误读）。
@@ -457,6 +550,20 @@ async function retryLoadTasks() {
 // 筛选变化时回到第一页，避免在旧页码上找不到数据
 function handleFilterChange() {
   page.value = 1
+  pageClamp.value = null
+  loadTasks()
+}
+
+/** 翻页（T02764）：用户主动选了合法页码，越界提示随即失去意义 */
+function handlePageChange() {
+  pageClamp.value = null
+  loadTasks()
+}
+
+/** 换分页尺寸回到第 1 页：第 8 页 × 20 行换成 100 行/页时，第 8 页已不存在 */
+function handleSizeChange() {
+  page.value = 1
+  pageClamp.value = null
   loadTasks()
 }
 
@@ -467,6 +574,7 @@ function handleSortChange({ prop, order }) {
   if (isRestoringSort) return
   userSort.value = order ? { prop, order } : null
   page.value = 1
+  pageClamp.value = null
   loadTasks()
 }
 
@@ -627,6 +735,10 @@ function handleVisibilityChange() {
 }
 
 onMounted(async () => {
+  // 深链优先：URL 上有 page/size 就按 URL 起（非法值由 readFromUrl 回落并在页内点名）
+  const v = urlState.readFromUrl()
+  page.value = v.page
+  size.value = resolveSize(v.size)
   loadChannels()
   setupSSE()
   document.addEventListener('visibilitychange', handleVisibilityChange)

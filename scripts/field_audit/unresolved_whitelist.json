@@ -51,7 +51,7 @@
     },
     {
       "endpoint": "POST /queue/tasks/batch-delete",
-      "site": "views/queue/QueueManagement.vue:559",
+      "site": "views/queue/QueueManagement.vue:667",
       "reason_key": "value-scalar",
       "note": "ids 是表格选中行的 id 数组，键名 workflow_ids 由包装体字面量给出，在 BatchDeleteTasksRequest 声明内。"
     },

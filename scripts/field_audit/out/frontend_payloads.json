@@ -587,7 +587,7 @@
         },
         {
           "file": "views/queue/QueueManagement.vue",
-          "line": 402,
+          "line": 474,
           "fn": "listChannels",
           "fieldCount": 2,
           "unresolved": []
@@ -1271,7 +1271,7 @@
       "sites": [
         {
           "file": "views/queue/QueueManagement.vue",
-          "line": 363,
+          "line": 435,
           "fn": "getQueueConfig",
           "fieldCount": 0,
           "unresolved": []
@@ -1295,7 +1295,7 @@
         },
         {
           "file": "views/queue/QueueManagement.vue",
-          "line": 354,
+          "line": 426,
           "fn": "getQueueStats",
           "fieldCount": 1,
           "unresolved": []
@@ -1327,7 +1327,7 @@
         },
         {
           "file": "views/queue/QueueManagement.vue",
-          "line": 422,
+          "line": 497,
           "fn": "listQueueTasks",
           "fieldCount": 9,
           "unresolved": []
@@ -2724,7 +2724,7 @@
         },
         {
           "file": "views/queue/QueueManagement.vue",
-          "line": 484,
+          "line": 592,
           "fn": "cancelTask",
           "fieldCount": 0,
           "unresolved": []
@@ -2746,7 +2746,7 @@
         },
         {
           "file": "views/queue/QueueManagement.vue",
-          "line": 521,
+          "line": 629,
           "fn": "retryTask",
           "fieldCount": 0,
           "unresolved": []
@@ -2765,7 +2765,7 @@
       "sites": [
         {
           "file": "views/queue/QueueManagement.vue",
-          "line": 559,
+          "line": 667,
           "fn": "batchDeleteTasks",
           "fieldCount": 1,
           "unresolved": [
@@ -3401,7 +3401,7 @@
       "sites": [
         {
           "file": "views/queue/QueueManagement.vue",
-          "line": 390,
+          "line": 462,
           "fn": "updateQueueConfig",
           "fieldCount": 2,
           "unresolved": []
@@ -3418,7 +3418,7 @@
       "sites": [
         {
           "file": "views/queue/QueueManagement.vue",
-          "line": 498,
+          "line": 606,
           "fn": "updatePriority",
           "fieldCount": 1,
           "unresolved": []

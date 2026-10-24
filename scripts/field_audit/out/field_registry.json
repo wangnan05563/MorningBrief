@@ -2146,7 +2146,7 @@
         "callSites": [
           {
             "file": "views/queue/QueueManagement.vue",
-            "line": 559,
+            "line": 667,
             "fn": "batchDeleteTasks",
             "fieldCount": 1,
             "unresolved": [
@@ -3692,7 +3692,7 @@
         "callSites": [
           {
             "file": "views/queue/QueueManagement.vue",
-            "line": 390,
+            "line": 462,
             "fn": "updateQueueConfig",
             "fieldCount": 2,
             "unresolved": []
@@ -3738,7 +3738,7 @@
         "callSites": [
           {
             "file": "views/queue/QueueManagement.vue",
-            "line": 498,
+            "line": 606,
             "fn": "updatePriority",
             "fieldCount": 1,
             "unresolved": []
