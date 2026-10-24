@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
+import { fileURLToPath } from 'node:url'
 
 /**
  * Playwright 配置
@@ -7,9 +8,13 @@ import { defineConfig, devices } from '@playwright/test'
  * - webServer 自动拉起 vite dev server，CI 下不复用已有实例避免污染
  * - 仅启用 chromium 项目，运营后台为内部系统无需跨浏览器测试
  * - trace 仅在首次重试时采集，平衡调试体验与磁盘开销
+ * - globalSetup 跑导航一致性门禁（T02636）：门禁原先只挂 vite build，
+ *   dev 与提交前都不跑，改坏引导/菜单引用要等到下一次打包才暴露；
+ *   `npx playwright test` 是本地与 CI 都会跑的命令，接这里才闭环
  */
 export default defineConfig({
   testDir: './tests',
+  globalSetup: fileURLToPath(new URL('./tests/global-setup.mjs', import.meta.url)),
   // tests/unit/ 放 node:test 的纯函数用例（npm run test:unit），
   // 不能让 playwright 按 *.test.mjs 把它们当 e2e 收集——它没有浏览器夹具
   testIgnore: '**/unit/**',

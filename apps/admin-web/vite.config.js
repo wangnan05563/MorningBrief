@@ -15,6 +15,8 @@ import { validate as validateNav } from './scripts/validate-nav.mjs'
  *
  * 只挂 build：dev 不该因为一条分组注释漂移而启不了服务（e2e 也跑在 dev 上）。
  * 独立校验走 `npm run validate:nav`。
+ * 「日常开发会跑的强制点」另有两处：`npx playwright test` 的 globalSetup
+ * （tests/global-setup.mjs，T02636）与 CI 的 npm run test:e2e。
  */
 function navConsistencyGate() {
   return {
