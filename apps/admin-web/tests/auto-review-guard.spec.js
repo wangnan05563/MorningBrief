@@ -138,6 +138,32 @@ test.describe('自动审批护栏', () => {
     await expect(summary.locator('.el-tag--danger')).toHaveText(['内容安全检测', '关键词白名单'])
   })
 
+  test('T02596 重试失败自动审批：确认框写明会直接发布，取消不发请求', async ({ page }) => {
+    await gotoPage(page)
+    const retries = []
+    await page.route('**/admin/api/v1/auto-review/retry/**', (route) => {
+      retries.push(route.request().url())
+      return route.fulfill({ json: { code: 0, message: 'success', data: { auto_approved: true } } })
+    })
+
+    await page.getByRole('button', { name: '重试' }).click()
+    const box = page.locator('.el-message-box')
+    await expect(box).toBeVisible()
+    await expect(box.getByText('重试自动审批：工作流 wf-1（记录 #1）')).toBeVisible()
+    await expect(box.getByText('影响范围：自动审批 1 条（仅审核记录仍为 pending 时执行）')).toBeVisible()
+    await expect(box.getByText(/重试成功会直接通过审核并自动发布对应节目/)).toBeVisible()
+    await expect(box.getByText(/自动发布后无法在本页撤回/)).toBeVisible()
+
+    await box.getByRole('button', { name: '取消' }).click()
+    await expect(box).toBeHidden()
+    expect(retries).toHaveLength(0)
+
+    await page.getByRole('button', { name: '重试' }).click()
+    await page.locator('.el-message-box').getByRole('button', { name: '确认重试' }).click()
+    await expect.poll(() => retries.length).toBe(1)
+    expect(retries[0]).toMatch(/\/auto-review\/retry\/1$/)
+  })
+
   test('未勾选风险确认时开启被前端拦截，不发请求', async ({ page }) => {
     const calls = await gotoPage(page)
     await switches(page).nth(0).click()

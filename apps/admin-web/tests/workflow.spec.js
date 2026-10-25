@@ -151,6 +151,45 @@ test.describe('工作流监控', () => {
     await expect(crawlCells.first()).toBeVisible({ timeout: 30000 })
   })
 
+  test('T02596 详情页审核通过：确认后自动发布，取消不发请求', async ({ page }) => {
+    await page.route('**/admin/api/v1/reviews*', (route) =>
+      route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: {
+            total: 1,
+            list: [{ id: 9, workflow_id: 'wf-001', status: 'pending', created_at: '2026-07-08T05:00:00' }],
+          },
+        },
+      }))
+    const actions = []
+    await page.route('**/admin/api/v1/reviews/9/action', (route) => {
+      actions.push(JSON.parse(route.request().postData() || '{}'))
+      return route.fulfill({ json: { code: 0, message: 'success', data: { ok: true } } })
+    })
+
+    await setLoginState(page, 'admin')
+    await page.goto('/workflows/wf-001')
+    await page.locator('.el-collapse-item__header').filter({ hasText: '创建审核 · 审核记录' }).click()
+    await page.getByRole('button', { name: '通过' }).click()
+
+    const box = page.locator('.el-message-box')
+    await expect(box).toBeVisible({ timeout: 30000 })
+    await expect(box.getByText('通过审核：审核 #9（工作流 wf-001）')).toBeVisible()
+    await expect(box.getByText('影响范围：审核 1 条（通过后立即自动发布对应节目）')).toBeVisible()
+    await expect(box.getByText(/发布后无法在本页撤回/)).toBeVisible()
+
+    await box.getByRole('button', { name: '取消' }).click()
+    await expect(box).toBeHidden()
+    expect(actions).toHaveLength(0)
+
+    await page.getByRole('button', { name: '通过' }).click()
+    await page.locator('.el-message-box').getByRole('button', { name: '确认通过' }).click()
+    await expect.poll(() => actions.length).toBe(1)
+    expect(actions[0]).toMatchObject({ action: 'approve' })
+  })
+
   test('admin 批量删除工作流：多选+确认+请求载荷+成功提示+列表刷新', async ({ page }) => {
     // 拦截批量删除请求：校验 payload 后返回成功
     let capturedPayload = null

@@ -333,7 +333,8 @@ import ConfigLoadError from '../../components/ConfigLoadError.vue'
 import { Refresh, Setting, Plus, DataLine, CircleCheck, CircleClose, Timer, List, WarningFilled, Check } from '@element-plus/icons-vue'
 // 提示必须走统一出口：直接从 element-plus 取 ElMessage 会绕过 2 秒去重与
 // 「隐藏期间不入 DOM」的窗口守卫（FR-UX-301/303）
-import { ElMessage, ElMessageBox } from '../../utils/message'
+import { ElMessage } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 import {
   getAutoReviewConfig,
   updateAutoReviewConfig,
@@ -552,13 +553,16 @@ async function loadHistory() {
 const retryingStat = ref('')
 async function retryStat(row) {
   retryingStat.value = row.workflow_id
-  try {
-    await ElMessageBox.confirm(
-      `确认重试 workflow_id=${row.workflow_id} 的自动审批？仅当审核记录仍为 pending 时才会执行。`,
-      '重试确认',
-      { type: 'warning', confirmButtonText: '确认重试', cancelButtonText: '取消' }
-    )
-  } catch {
+  // T02596：重试成功会直接通过审核并发布，属不可逆动作，写清对象与后果
+  const ok = await dangerConfirm({
+    action: '重试自动审批',
+    target: `工作流 ${row.workflow_id}（记录 #${row.id}）`,
+    scope: '自动审批 1 条（仅审核记录仍为 pending 时执行）',
+    lines: ['重试成功会直接通过审核并自动发布对应节目。'],
+    irreversible: '自动发布后无法在本页撤回：需要到节目侧手工下线。',
+    confirmLabel: '确认重试',
+  })
+  if (!ok) {
     retryingStat.value = ''
     return
   }

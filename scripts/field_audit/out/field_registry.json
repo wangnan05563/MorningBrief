@@ -2207,7 +2207,7 @@
           },
           {
             "file": "views/workflow/WorkflowDetail.vue",
-            "line": 971,
+            "line": 986,
             "fn": "handleReviewAction",
             "fieldCount": 3,
             "unresolved": [
@@ -2556,7 +2556,7 @@
         "callSites": [
           {
             "file": "views/workflow/WorkflowDetail.vue",
-            "line": 988,
+            "line": 1003,
             "fn": "api.post",
             "fieldCount": 1,
             "unresolved": []
@@ -3010,7 +3010,7 @@
         "callSites": [
           {
             "file": "views/system/AutoReviewConfig.vue",
-            "line": 480,
+            "line": 481,
             "fn": "updateAutoReviewConfig",
             "fieldCount": 5,
             "unresolved": []

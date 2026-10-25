@@ -967,6 +967,21 @@ async function onReviewAction(action) {
       reason = res.value
     } catch { return }
   }
+  // T02596：详情页的通过同样会立即自动发布，确认口径与审核工位保持一致
+  const approve = action === 'approve'
+  const ok = await dangerConfirm({
+    action: approve ? '通过审核' : '打回审核',
+    target: `审核 #${reviewId}（工作流 ${route.params.id}）`,
+    scope: approve
+      ? '审核 1 条（通过后立即自动发布对应节目）'
+      : '审核 1 条（打回后内容需要重新改写）',
+    lines: approve ? ['节目发布后听众即刻可见。'] : [],
+    irreversible: approve
+      ? '发布后无法在本页撤回，需要到节目侧手工下线。'
+      : '审核状态会立即变更，无法在本页撤销；重新生成/改写后才能再次提交。',
+    confirmLabel: approve ? '确认通过' : '确认打回',
+  })
+  if (!ok) return
   try {
     await handleReviewAction(reviewId, action, reason)
     ElMessage.success(action === 'approve' ? '审核已通过' : '已打回')
