@@ -493,6 +493,11 @@ export function checkFacts(facts) {
       }
     }
   }
+  // 角标口径（验收第 4 项）：删除中间项与把当前项上移都会改「当前条之后还剩几条」，
+  // 所以队列变更必须实时驱动角标；只靠 tab 页 onShow 补挂会出现「列表变了、角标还是旧数字」。
+  if (!/onQueueChange\(\(\)\s*=>\s*refreshTabBadge\(\)\)/.test(stripComments(f('app.js')))) {
+    errors.push('app.js 没把 onQueueChange 接到 refreshTabBadge：队列删除/重排后「历史」tab 角标停在旧数字（J77）')
+  }
 
   // —— 14. J14/J12：历史的两个出口 ——
   const historyWxml = wf('pages/history/history.wxml')

@@ -355,6 +355,18 @@ describe('T02540 / M6 信息架构：文案与入口的回归锁', () => {
       'J77',
     ))
 
+  test('J77 队列变更不再实时刷角标（只在 tab 页 onShow 补挂）被抓', () =>
+    expectHit(
+      { 'app.js': mutate('app.js', /onQueueChange\(\(\)\s*=>\s*refreshTabBadge\(\)\)/, 'onQueueChange(() => {})') },
+      'J77',
+    ))
+
+  test('J77 把角标接线只写进注释也照样被抓（门禁读的是去注释后的代码）', () =>
+    expectHit(
+      { 'app.js': mutate('app.js', /onQueueChange\(\(\)\s*=>\s*refreshTabBadge\(\)\)/, '// onQueueChange(() => refreshTabBadge())') },
+      'J77',
+    ))
+
   test('J14 历史页删掉「我的播放记录」出口被抓', () =>
     expectHit(
       { 'pages/history/history.wxml': read('pages/history/history.wxml').replace(/我的播放记录/g, '最近') },
