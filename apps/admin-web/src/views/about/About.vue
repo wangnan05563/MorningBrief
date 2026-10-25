@@ -257,8 +257,12 @@ const licenses = [
   { name: 'dayjs', version: '^1.11.0', license: 'MIT', repo: 'https://github.com/iamkun/dayjs' },
   { name: 'edge-tts', version: '7.3.1', license: 'LGPL-3.0', repo: 'https://github.com/rany2/edge-tts' },
   { name: 'element-plus', version: '^2.14.2', license: 'MIT', repo: 'https://github.com/element-plus/element-plus' },
+  { name: 'eslint', version: '^9.39.4', license: 'MIT', repo: 'https://github.com/eslint/eslint' },
+  { name: 'eslint-plugin-import', version: '^2.32.0', license: 'MIT', repo: 'https://github.com/import-js/eslint-plugin-import' },
+  { name: 'eslint-plugin-vue', version: '^10.11.1', license: 'MIT', repo: 'https://github.com/vuejs/eslint-plugin-vue' },
   { name: 'fastapi', version: '0.110.0', license: 'MIT', repo: 'https://github.com/tiangolo/fastapi' },
   { name: 'feedparser', version: '6.0.11', license: 'BSD-2-Clause', repo: 'https://github.com/kurtmckee/feedparser' },
+  { name: 'globals', version: '^17.13.0', license: 'MIT', repo: 'https://github.com/sindresorhus/globals' },
   { name: 'httpx', version: '0.27.0', license: 'BSD-3-Clause', repo: 'https://github.com/encode/httpx' },
   { name: 'jieba', version: '0.42.1', license: 'MIT', repo: 'https://github.com/fxsjy/jieba' },
   { name: 'loguru', version: '0.7.2', license: 'MIT', repo: 'https://github.com/Delgan/loguru' },
@@ -284,6 +288,7 @@ const licenses = [
   { name: 'vite', version: '^5.2.0', license: 'MIT', repo: 'https://github.com/vitejs/vite' },
   { name: 'vue', version: '^3.4.0', license: 'MIT', repo: 'https://github.com/vuejs/core' },
   { name: 'vue-chartjs', version: '^5.3.0', license: 'MIT', repo: 'https://github.com/apertureless/vue-chartjs' },
+  { name: 'vue-eslint-parser', version: '^10.4.1', license: 'MIT', repo: 'https://github.com/vuejs/vue-eslint-parser' },
   { name: 'vue-router', version: '^4.3.0', license: 'MIT', repo: 'https://github.com/vuejs/router' },
 ].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
 // </licenses>

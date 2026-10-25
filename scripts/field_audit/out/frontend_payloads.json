@@ -230,7 +230,7 @@
       "sites": [
         {
           "file": "views/about/About.vue",
-          "line": 303,
+          "line": 308,
           "fn": "getAbout",
           "fieldCount": 0,
           "unresolved": []
@@ -259,7 +259,7 @@
         },
         {
           "file": "views/about/About.vue",
-          "line": 332,
+          "line": 337,
           "fn": "checkUpdate",
           "fieldCount": 0,
           "unresolved": []
@@ -274,7 +274,7 @@
       "sites": [
         {
           "file": "views/about/About.vue",
-          "line": 450,
+          "line": 455,
           "fn": "getUpgradeStatus",
           "fieldCount": 0,
           "unresolved": []
@@ -1650,7 +1650,7 @@
       "sites": [
         {
           "file": "views/about/About.vue",
-          "line": 429,
+          "line": 434,
           "fn": "startUpgrade",
           "fieldCount": 0,
           "unresolved": []

@@ -50,7 +50,7 @@ test('requirements 解析：剥掉 extras/注释，按归一化名字去重', ()
   ])
 })
 
-test('仓库地址归一：git+/ssh/scp/git:// 与 .git、片段都收敛成 https', () => {
+test('仓库地址归一：git+/ssh/scp/git://、npm 简写与 .git、片段都收敛成 https', () => {
   const cases = [
     ['git+https://github.com/a/b.git', 'https://github.com/a/b'],
     ['git+ssh://git@github.com:a/b.git', 'https://github.com/a/b'],
@@ -60,6 +60,10 @@ test('仓库地址归一：git+/ssh/scp/git:// 与 .git、片段都收敛成 htt
     ['http://github.com/a/b', 'https://github.com/a/b'],
     ['github:a/b', 'https://github.com/a/b'],
     ['https://github.com/a/b/#readme', 'https://github.com/a/b'],
+    // eslint/globals 的 package.json 就把 repository 写成 npm 简写，不展开会是死链
+    ['eslint/eslint', 'https://github.com/eslint/eslint'],
+    ['some.user/repo-name', 'https://github.com/some.user/repo-name'],
+    ['user/repo.git', 'https://github.com/user/repo'],
     ['', ''],
   ]
   for (const [input, want] of cases) assert.equal(normalizeRepoUrl(input), want, input)
@@ -138,6 +142,8 @@ test('npm 仓库：repository 对象/字符串都认，缺失退到 npmjs 包页
     'https://github.com/vuejs/core',
   )
   assert.equal(repoFromNpmPackage('vue-chartjs', { repository: 'git+ssh://git@github.com:a/b.git' }), 'https://github.com/a/b')
+  // eslint / globals 就是这样写的：不展开成绝对地址，关于页的 <a :href> 会变成站内死链
+  assert.equal(repoFromNpmPackage('eslint', { repository: 'eslint/eslint' }), 'https://github.com/eslint/eslint')
   assert.equal(repoFromNpmPackage('@scope/pkg', {}), 'https://www.npmjs.com/package/%40scope%2Fpkg')
 })
 

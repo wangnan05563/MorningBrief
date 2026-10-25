@@ -121,7 +121,12 @@ export function normalizeRepoUrl(raw) {
   url = url.replace(/^git@([^:/]+):/i, 'https://$1/')
   url = url.replace(/^git:\/\//i, 'https://')
   url = url.replace(/^http:\/\/(?:www\.)?github\.com\//i, 'https://github.com/')
-  return url.replace(/\/+$/, '').replace(/\.git$/i, '')
+  url = url.replace(/\/+$/, '').replace(/\.git$/i, '')
+  // npm 允许 repository 写成 `user/repo` 简写（host 固定 GitHub）。不展开它，
+  // 关于页拿到的是相对 href，点开变成站内 404 —— 合规清单里出现死链比缺项更难看。
+  const shorthand = /^([\w.-]+)\/([\w.-]+)$/.exec(url)
+  if (shorthand) return `https://github.com/${shorthand[1]}/${shorthand[2]}`
+  return url
 }
 
 const PY_REPO_LABELS = ['repository', 'source', 'source code', 'code', 'github', 'homepage']

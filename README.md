@@ -63,7 +63,8 @@ pip install -r requirements-tts-extra.txt
 cd apps/admin-web
 npm install
 npm run dev        # 开发模式，Vite 本地服务
-npm run build      # 生产构建，base=/news/
+npm run lint       # ESLint（no-undef + import/no-unresolved），已挂在 build 前置
+npm run build      # 生产构建，base=/news/（先跑 lint，红了不出包）
 ```
 
 ### 微信小程序
