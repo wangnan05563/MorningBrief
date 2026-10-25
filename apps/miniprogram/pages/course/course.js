@@ -27,6 +27,7 @@ const { playEpisode, setQueue, downloadEpisode, cancelDownload } = require('../.
 // 离线下载存储（FR-MC-09）：按 openid 持久化已下载章节
 const downloadStore = require('../../services/download');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
+const durationFormat = require('../../utils/format');
 const skin = require('../../utils/skin');
 // T00599：加载态控制器（最短骨架展示 + 慢加载提示 + 超时重试）
 const { createLoadingController } = require('../../utils/loading');
@@ -398,10 +399,7 @@ Page({
   },
 
   _fmtDur(sec) {
-    if (!sec || sec < 0 || Number.isNaN(sec)) return '00:00';
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+    return durationFormat.time(sec)
   },
 
   onShareAppMessage() {

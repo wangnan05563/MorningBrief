@@ -24,7 +24,7 @@
         </view>
         <text class="item-title">{{item.title}}</text>
         <view class="item-footer">
-          <text class="item-duration">播放至 {{fmt.time(item.position)}}</text>
+          <text class="item-duration">播放至 {{dur.time(item.position)}}</text>
           <view class="play-icon-small">
             <image class="icon-text" lazy-load src="/images/icons/play-mini.png" mode="aspectFit" />
           </view>
@@ -39,15 +39,11 @@
   </block>
 </view>
 
+<wxs module="dur" src="../../utils/duration.wxs" />
+<!-- WXS：日期截断（时长换算已收敛到 utils/duration.wxs，模板不再做算术） -->
 <wxs module="fmt">
   module.exports = {
-    time: function(s) {
-      s = s || 0;
-      var m = Math.floor(s / 60);
-      var sec = Math.floor(s % 60);
-      return (m < 10 ? '0' + m : m) + ':' + (sec < 10 ? '0' + sec : sec);
-    },
-    date: function(iso) {
+    date: function (iso) {
       if (!iso) return '';
       return iso.length >= 10 ? iso.substring(0, 10) : iso;
     }

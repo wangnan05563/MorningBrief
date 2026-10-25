@@ -10,6 +10,7 @@
  * 从而在多页面共享同一个播放器时仍能正确反映本组件的播放态。
  */
 const { playEpisode, seek, onPlaybackChange, onTimeUpdateChange, offTimeUpdateChange } = require('../../services/audio');
+const durationFormat = require('../../utils/format');
 
 Component({
   properties: {
@@ -152,10 +153,7 @@ Component({
      * 秒 → "mm:ss"，供进度条两侧展示
      */
     formatTime(sec) {
-      if (!sec || sec < 0 || Number.isNaN(sec)) return '00:00';
-      const m = Math.floor(sec / 60);
-      const s = Math.floor(sec % 60);
-      return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+      return durationFormat.time(sec);
     },
   },
 });

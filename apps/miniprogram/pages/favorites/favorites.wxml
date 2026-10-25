@@ -55,7 +55,7 @@
         <view class="item-footer">
           <view class="item-duration">
             <image class="duration-icon" lazy-load src="/images/icons/duration.png" mode="aspectFit" />
-            <text>{{fmt.time(item.duration)}}</text>
+            <text>{{dur.time(item.duration)}}</text>
           </view>
           <view class="play-icon-small">
             <image class="icon-text" lazy-load src="/images/icons/play-mini.png" mode="aspectFit" />
@@ -71,18 +71,11 @@
   </block>
 </view>
 
-<!-- WXS：时间格式化（避免在 JS 中维护额外字段） -->
+<wxs module="dur" src="../../utils/duration.wxs" />
+<!-- WXS：日期截断（时长换算已收敛到 utils/duration.wxs，模板不再做算术） -->
 <wxs module="fmt">
   module.exports = {
-    // 秒 → "mm:ss"，与 history 页保持一致
-    time: function(s) {
-      s = s || 0;
-      var m = Math.floor(s / 60);
-      var sec = Math.floor(s % 60);
-      return (m < 10 ? '0' + m : m) + ':' + (sec < 10 ? '0' + sec : sec);
-    },
-    // ISO 时间 → "YYYY-MM-DD"，仅保留日期部分便于排版
-    date: function(iso) {
+    date: function (iso) {
       if (!iso) return '';
       return iso.length >= 10 ? iso.substring(0, 10) : iso;
     }

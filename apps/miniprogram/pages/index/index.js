@@ -19,6 +19,7 @@ const localData = require('../../services/local-data');
 const skin = require('../../utils/skin');
 const { playEpisode, safePlay, setQueue, setPendingSeek, seek, getPlaybackRate, setPlaybackRate, getSleepStatus, startSleepTimer, stopSleepTimer, onSleepChange, onError, getCurrentEpisode, onPlaybackChange, onTimeUpdateChange, offTimeUpdateChange } = require('../../services/audio');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
+const durationFormat = require('../../utils/format');
 // T00599：加载态控制器（最短骨架展示 600ms + 慢加载提示 2s + 超时重试 8s）
 const { createLoadingController } = require('../../utils/loading');
 // 带 TTL 的 storage 工具：lastPlayedEpisode 是续播缓存，7 天后自动过期清理
@@ -571,10 +572,7 @@ Page({
    * 秒数 → mm:ss
    */
   _formatDuration(sec) {
-    if (!sec || sec < 0 || Number.isNaN(sec)) return '00:00';
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+    return durationFormat.time(sec);
   },
 
   /**
@@ -966,10 +964,9 @@ Page({
    */
   formatSleepLabel(sec) {
     if (sec <= 0) return '';
-    const m = Math.floor(sec / 60);
+    const m = durationFormat.floorMinutes(sec);
     if (m < 60) return m + ' 分钟后停止';
-    const h = Math.floor(m / 60);
-    const rest = m % 60;
+    const { hours: h, minutes: rest } = durationFormat.splitHoursMinutes(sec);
     return rest ? h + '小时' + rest + '分钟后停止' : h + '小时后停止';
   },
 });

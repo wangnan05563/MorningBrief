@@ -7,7 +7,7 @@
   <view class="episode-title">{{episode.title}}</view>
   <view class="episode-duration">
     <image class="duration-icon" lazy-load src="/images/icons/duration.png" mode="aspectFit" />
-    <text>时长 {{fmt.time(episode.duration)}}</text>
+    <text>时长 {{dur.time(episode.duration)}}</text>
   </view>
 
   <!-- 操作按钮区：仅 showActions=true 时显示，列表场景用
@@ -22,14 +22,4 @@
   </view>
 </view>
 
-<!-- WXS：时长格式化 mm:ss，与各页面原 fmt.time 逻辑一致 -->
-<wxs module="fmt">
-  module.exports = {
-    time: function(s) {
-      s = s || 0;
-      var m = Math.floor(s / 60);
-      var sec = Math.floor(s % 60);
-      return (m < 10 ? '0' + m : m) + ':' + (sec < 10 ? '0' + sec : sec);
-    }
-  };
-</wxs>
+<wxs module="dur" src="../../utils/duration.wxs" />

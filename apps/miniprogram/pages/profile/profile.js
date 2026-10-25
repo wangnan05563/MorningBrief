@@ -12,6 +12,7 @@ const { fetchUserStats, updateUserProfile, uploadAvatar, fetchMySubscriptions, c
 const downloadStore = require('../../services/download');
 const localData = require('../../services/local-data');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
+const durationFormat = require('../../utils/format');
 // T00593：从相册/相机自选头像（chooseAvatar 被隐私声明拦截时的降级路径）
 const { pickAvatarFromAlbum } = require('../../utils/avatar-picker');
 // T02510：切回底部导航时刷新「历史」tab 的队列待播角标
@@ -349,7 +350,8 @@ Page({
       completedCount,
       favoriteCount,
       // T00726 反馈：统计行改用分钟数（"15小时38分钟"过长会窜行）
-      durationLabel: String(Math.round(totalListenDuration / 60)),
+      // 单位换算（后端 total_listen_seconds → 界面「分钟」）只在 utils/format 一处
+      durationLabel: String(durationFormat.minutes(totalListenDuration)),
     });
   },
 
@@ -474,12 +476,7 @@ Page({
    * 秒 → "X小时Y分钟"，用于收听时长展示
    */
   formatDuration(sec) {
-    if (!sec || sec < 0 || Number.isNaN(sec)) return '0分钟';
-    const m = Math.floor(sec / 60);
-    if (m < 60) return `${m}分钟`;
-    const h = Math.floor(m / 60);
-    const rest = m % 60;
-    return rest ? `${h}小时${rest}分钟` : `${h}小时`;
+    return durationFormat.cn(sec);
   },
 
   /**

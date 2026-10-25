@@ -1,0 +1,71 @@
+/**
+ * 时长格式化单一来源（T02710 / FR-UX-501）
+ *
+ * 这个文件同时被两边消费：
+ * - 小程序模板侧：`<wxs module="dur" src="../../utils/duration.wxs" />` 后调 `dur.time(x)`；
+ * - Node / 页面 JS：`utils/format.js` 直接 require 本文件再转发。
+ * 之所以写成 WXS 而不是普通 js，是为了让「模板里的那次换算」和「JS 里的那次换算」
+ * 是同一份代码——此前 mm:ss 在 5 个 wxml 里各抄一遍、秒→分在 9 个 js 里各算一遍，
+ * 同一条时长能显示成「00:47」「0分47秒」「47秒」三种样子。
+ *
+ * 语法限制：WXS 只支持 ES5 子集（没有模板字符串、没有 padStart），故手写补零；
+ * 内部互相调用走文件级 var，不依赖 `module.exports.xxx` 的自引用（真机 WXS 作用域
+ * 与 Node 不完全一致，少一分侥幸少一分麻烦）。
+ * 也正因如此本文件必须保持「Node 能直接 require」——tests/duration-format.test.js 会真的加载它并断言。
+ */
+
+function floorMinutes(sec) {
+  var n = Number(sec)
+  if (!isFinite(n) || n <= 0) return 0
+  return Math.floor(n / 60)
+}
+
+module.exports = {
+  /**
+   * 秒 → "mm:ss"（进度条、列表时长用）。
+   * 无效值（null / NaN / 负数）统一落到 '00:00'，不再出现 'NaN:NaN' 与空串两种口径。
+   */
+  time: function (sec) {
+    var n = Number(sec)
+    if (!isFinite(n) || n <= 0) n = 0
+    n = Math.floor(n)
+    var m = Math.floor(n / 60)
+    var s = Math.floor(n % 60)
+    return (m < 10 ? '0' + m : '' + m) + ':' + (s < 10 ? '0' + s : '' + s)
+  },
+
+  /**
+   * 秒 → 中文时长（"47分钟" / "1小时5分钟" / "2小时"），整段时长展示用。
+   */
+  cn: function (sec) {
+    var total = floorMinutes(sec)
+    var hours = Math.floor(total / 60)
+    var minutes = total % 60
+    if (hours <= 0) return minutes + '分钟'
+    return minutes > 0 ? hours + '小时' + minutes + '分钟' : hours + '小时'
+  },
+
+  /**
+   * 秒 → 分钟数（向下取整）。定时/倒计时文案按分钟说话。
+   */
+  floorMinutes: floorMinutes,
+
+  /**
+   * 秒 → 分钟数（四舍五入），个人中心「累计收听 N 分钟」用：
+   * 后端 total_listen_seconds 是秒，界面按分钟显示，换算只允许发生在这一处。
+   */
+  minutes: function (sec) {
+    var n = Number(sec)
+    if (!isFinite(n) || n <= 0) return 0
+    return Math.round(n / 60)
+  },
+
+  /**
+   * 秒 → { hours, minutes }（分钟向下取整后再拆，秒被丢弃）。
+   * 拆分口径由这里唯一决定，页面只负责拼自己的文案（「1时半」vs「1小时30分钟后停止」）。
+   */
+  splitHoursMinutes: function (sec) {
+    var total = floorMinutes(sec)
+    return { hours: Math.floor(total / 60), minutes: total % 60 }
+  }
+}

@@ -34,6 +34,7 @@ const {
 // T00387：下载记录存储 + 以标题命名导出
 const downloadStore = require('../../services/download');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
+const durationFormat = require('../../utils/format');
 const { copySourceUrl } = require('../../utils/clipboard');
 const skin = require('../../utils/skin');
 
@@ -1023,19 +1024,11 @@ Page({
   },
 
   formatTime(sec) {
-    if (!sec || sec < 0 || Number.isNaN(sec)) return '00:00';
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+    return durationFormat.time(sec);
   },
 
   formatDuration(sec) {
-    if (!sec || sec < 0 || Number.isNaN(sec)) return '0分钟';
-    const m = Math.floor(sec / 60);
-    if (m < 60) return m + '分钟';
-    const h = Math.floor(m / 60);
-    const rest = m % 60;
-    return rest ? h + '小时' + rest + '分钟' : h + '小时';
+    return durationFormat.cn(sec);
   },
 
   /**
@@ -1046,10 +1039,9 @@ Page({
    */
   formatSleepLabel(sec) {
     if (sec <= 0) return '';
-    const m = Math.floor(sec / 60);
+    const m = durationFormat.floorMinutes(sec);
     if (m < 60) return m + '分';
-    const h = Math.floor(m / 60);
-    const rest = m % 60;
+    const { hours: h, minutes: rest } = durationFormat.splitHoursMinutes(sec);
     if (rest === 0) return h + '时';
     if (rest === 30) return h + '时半';
     return h + '时' + rest + '分';

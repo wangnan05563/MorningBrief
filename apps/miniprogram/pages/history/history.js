@@ -14,6 +14,7 @@ const { fetchHistory, fetchChannels } = require('../../services/api');
 const localData = require('../../services/local-data');
 const { setQueue, playEpisode, setPendingSeek, safePlay, getCurrentEpisode, onPlaybackChange } = require('../../services/audio');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
+const durationFormat = require('../../utils/format');
 // T00599：加载态控制器（最短骨架展示 + 慢加载提示 + 超时重试）
 const { createLoadingController } = require('../../utils/loading');
 // T02510：切回底部导航时刷新「历史」tab 的队列待播角标
@@ -386,10 +387,7 @@ Page({
    * 秒数 → "mm:ss"，与 index 页一致
    */
   _formatDuration(sec) {
-    if (!sec || sec < 0 || Number.isNaN(sec)) return '00:00';
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+    return durationFormat.time(sec);
   },
 
   /**

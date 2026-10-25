@@ -6,6 +6,7 @@
  */
 const downloadStore = require('../../services/download');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
+const durationFormat = require('../../utils/format');
 
 Page({
   data: {
@@ -76,10 +77,7 @@ Page({
   },
 
   _fmtDur(sec) {
-    if (!sec || sec < 0 || Number.isNaN(sec)) return '';
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+    return durationFormat.formatDuration(sec, { emptyText: '' });
   },
 
   // 点击条目 → 离线播放（detail 页会自动命中下载路径）
