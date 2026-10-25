@@ -11,10 +11,16 @@
  * 后者不能省：一个永远返回通过的门禁比没有门禁更糟。
  * 输出用 `stdio: 'inherit'` 直通子进程，失败时能直接看到「哪个引导步骤、哪个选择器」，
  * 而不是一句 exit code 1。
+ *
+ * T02595 起还承担浏览器前置：playwright 自带 chromium 缺失/版本不匹配时，
+ * 本机自动回退系统 Chrome/Edge（config 侧生效），这里打印实际选定的模式；
+ * 一个都没有则直接抛错，把「装缓存 / 用系统浏览器」两条命令放进报错，
+ * 而不是让整轮 e2e 停在 playwright 那句 "Executable doesn't exist"。
  */
 import { spawnSync } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { checkBrowserPlan } from '../scripts/e2e-browser-plan.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -52,4 +58,5 @@ export function runNavGate({ run = spawnSync, execPath = process.execPath } = {}
 
 export default async function globalSetup() {
   runNavGate()
+  checkBrowserPlan()
 }

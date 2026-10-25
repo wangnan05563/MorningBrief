@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
+import { detectBrowserPlan } from './scripts/e2e-browser-plan.mjs'
 
 /**
  * Playwright 配置
@@ -11,7 +12,12 @@ import { fileURLToPath } from 'node:url'
  * - globalSetup 跑导航一致性门禁（T02636）：门禁原先只挂 vite build，
  *   dev 与提交前都不跑，改坏引导/菜单引用要等到下一次打包才暴露；
  *   `npx playwright test` 是本地与 CI 都会跑的命令，接这里才闭环
+ * - 浏览器前置（T02595）：自带 chromium 缓存缺失/版本不匹配时，本机（非 CI）
+ *   自动回退系统 Chrome/Edge，而不是让整轮 e2e 死在 "Executable doesn't exist"；
+ *   判定与打印在 scripts/e2e-browser-plan.mjs，globalSetup 里同口径再跑一次（missing 直接中止）
  */
+const browserPlan = detectBrowserPlan()
+
 export default defineConfig({
   testDir: './tests',
   globalSetup: fileURLToPath(new URL('./tests/global-setup.mjs', import.meta.url)),
@@ -35,13 +41,13 @@ export default defineConfig({
   // 单个测试超时：vite 编译 + 多次重试可能耗时较长
   timeout: 60000,
   projects: [
-    // PW_CHANNEL=chrome 时改用本机 Chrome：用于未下载 playwright 浏览器缓存的机器
-    // （默认行为不变，CI 仍用 playwright 自带 chromium headless shell）
+    // channel 来自浏览器前置：PW_CHANNEL 显式指定 > 自带 chromium > 系统 Chrome/Edge（仅本机）
+    // CI 不自动回退，runner 上必须先 `npx playwright install chromium`（见 .github/workflows/ci.yml）
     {
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        ...(process.env.PW_CHANNEL ? { channel: process.env.PW_CHANNEL } : {}),
+        ...(browserPlan.channel ? { channel: browserPlan.channel } : {}),
       },
     },
   ],

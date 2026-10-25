@@ -152,6 +152,31 @@ python perf_gate.py --tier standard                             # 默认档（�
 python perf_gate.py --tier full --update-baseline               # 全档位并重写延迟基线 gate_baseline.json
 ```
 
+### 管理后台 e2e（Playwright）
+
+```bash
+cd apps/admin-web
+npm run test:e2e        # 本地 e2e；浏览器前置自动检测，见下
+npm run e2e:install     # 首次运行或缓存缺失时：下载 playwright 自带 chromium（约 150MB）
+```
+
+`playwright test` 启动时由 `scripts/e2e-browser-plan.mjs` 做浏览器前置判定，四态：
+
+| 情况 | 行为 |
+| --- | --- |
+| 自带 chromium 缓存就绪 | 直接用，行为与从前一致 |
+| `PW_CHANNEL=chrome`（或 `msedge`） | 显式指定，优先于一切探测 |
+| 缓存缺失/版本与 `@playwright/test` 不匹配，本机有 Chrome/Edge | 非 CI 下自动回退系统浏览器，并打印一行提示 |
+| 都没有（或 CI 上没装） | 前置直接报错中止，并给出 `npm run e2e:install` / `PW_CHANNEL=chrome` 两条修复命令 |
+
+「版本不匹配」是常见坑：上游升级后缓存里是 `chromium-1248`、而 lockfile 里的
+`@playwright/test` 只认 `chromium-1228` 时，playwright 自己只会报
+`Executable doesn't exist at ...`，看不出该装还是该换——前置会把它归为缺失。
+
+CI 刻意**不**自动回退：workflow 里必须先 `npx playwright install --with-deps chromium`
+（见 `.github/workflows/ci.yml`），runner 上没有系统浏览器，静默回退只会把契约被破坏伪装成绿灯。
+Windows PowerShell 里显式指定渠道为 `$env:PW_CHANNEL="chrome"; npm run test:e2e`。
+
 ## 目录结构
 
 ```
