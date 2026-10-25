@@ -17,7 +17,7 @@ from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success, error
 from app.database import get_db
-from app.models import AuditLog, Channel
+from app.models import AuditLog, Channel, ChannelType
 from app.paths import resolve_bgm_dir, resolve_channel_asset_dir
 from app.services.channel_service import ChannelService, _TTL_CHANNELS, _UNSET
 from app.workflow.duration import MAX_CHANNEL_DURATION_SEC, MIN_CHANNEL_DURATION_SEC
@@ -28,6 +28,11 @@ router = APIRouter(prefix="/admin/api/v1/channels", tags=["B端-频道管理"])
 
 # 频道不存在错误消息常量（统一字面量，避免 S1192 字符串重复告警）
 _CHANNEL_NOT_FOUND_MSG = "频道不存在"
+
+# 频道类型白名单与提示文案都从模型枚举派生：新增类型时只改 ChannelType 一处，
+# 否则校验器会先于枚举把新值挡掉（T02704），前后端字典也就对不上。
+_CHANNEL_TYPE_VALUES = {t.value for t in ChannelType}
+_CHANNEL_TYPE_MSG = "channel_type 仅支持 " + " / ".join(t.value for t in ChannelType)
 
 
 def _normalize_schedule_time(v: str) -> str:
@@ -198,9 +203,9 @@ class ChannelCreateRequest(BaseModel):
     @field_validator("channel_type")
     @classmethod
     def validate_channel_type(cls, v: str) -> str:
-        v = (v or "news").strip()
-        if v not in ("news", "course", "audiobook"):
-            raise ValueError("channel_type 仅支持 news / course / audiobook")
+        v = (v or ChannelType.news.value).strip()
+        if v not in _CHANNEL_TYPE_VALUES:
+            raise ValueError(_CHANNEL_TYPE_MSG)
         return v
 
     @field_validator("disclaimer_level")
@@ -339,8 +344,8 @@ class ChannelUpdateRequest(BaseModel):
         if v is None or v == "":
             return None
         v = v.strip()
-        if v not in ("news", "course", "audiobook"):
-            raise ValueError("channel_type 仅支持 news / course / audiobook")
+        if v not in _CHANNEL_TYPE_VALUES:
+            raise ValueError(_CHANNEL_TYPE_MSG)
         return v
 
     @field_validator("disclaimer_level")

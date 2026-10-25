@@ -115,7 +115,7 @@
       "endpoint": "delete_channel",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:584",
+        "source": "backend/app/routers/admin/channels.py:589",
         "refs": [
           "/{channel_id}",
           "AdminPayload",
@@ -198,7 +198,7 @@
       "endpoint": "delete_bgm",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:722",
+        "source": "backend/app/routers/admin/channels.py:727",
         "refs": [
           "/bgm/{path:path}",
           "AdminPayload",
@@ -1857,7 +1857,7 @@
       "model": {
         "name": "ChannelCreateRequest",
         "module": "app.routers.admin.channels",
-        "source": "backend/app/routers/admin/channels.py:59",
+        "source": "backend/app/routers/admin/channels.py:64",
         "extra": "ignore",
         "fields": [
           "auto_generate_prompts",
@@ -1919,7 +1919,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:427",
+        "source": "backend/app/routers/admin/channels.py:432",
         "refs": [
           "",
           "AdminPayload",
@@ -2129,7 +2129,7 @@
       "endpoint": "generate_prompts",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:537",
+        "source": "backend/app/routers/admin/channels.py:542",
         "refs": [
           "/{channel_id}/generate-prompts",
           "AI 自动生成频道提示词。仅 admin。\n\n    根据频道 name + description 调用 LLM 生成 4 类提示词，\n    生成后直接持久化到频道记录，前端可再次编辑覆盖。\n    ",
@@ -2174,7 +2174,7 @@
       "endpoint": "upload_channel_icon",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:912",
+        "source": "backend/app/routers/admin/channels.py:917",
         "refs": [
           "",
           " 不存在",
@@ -2243,7 +2243,7 @@
       "model": {
         "name": "ChannelIconAIRequest",
         "module": "app.routers.admin.channels",
-        "source": "backend/app/routers/admin/channels.py:943",
+        "source": "backend/app/routers/admin/channels.py:948",
         "extra": "ignore",
         "fields": [
           "prompt"
@@ -2253,7 +2253,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:947",
+        "source": "backend/app/routers/admin/channels.py:952",
         "refs": [
           " 不存在",
           ". Rounded square composition, mint blue and deep navy palette, clean vector style, centered single subject, no text, no watermark.",
@@ -2321,7 +2321,7 @@
       "endpoint": "recommend_bgm",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:793",
+        "source": "backend/app/routers/admin/channels.py:798",
         "refs": [
           "",
           "/{channel_id}/recommend-bgm",
@@ -2364,7 +2364,7 @@
       "endpoint": "recommend_sources",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:824",
+        "source": "backend/app/routers/admin/channels.py:829",
         "refs": [
           "",
           "/{channel_id}/recommend-sources",
@@ -2407,7 +2407,7 @@
       "endpoint": "upload_bgm",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:662",
+        "source": "backend/app/routers/admin/channels.py:667",
         "refs": [
           "",
           " vs ",
@@ -5295,7 +5295,7 @@
       "model": {
         "name": "ChannelUpdateRequest",
         "module": "app.routers.admin.channels",
-        "source": "backend/app/routers/admin/channels.py:225",
+        "source": "backend/app/routers/admin/channels.py:230",
         "extra": "ignore",
         "fields": [
           "bgm_gap_mode",
@@ -5355,7 +5355,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:490",
+        "source": "backend/app/routers/admin/channels.py:495",
         "refs": [
           "/{channel_id}",
           "AdminPayload",
@@ -6211,7 +6211,7 @@
     },
     "Channel": {
       "table": "channel",
-      "source": "backend/app/models/channel.py:17",
+      "source": "backend/app/models/channel.py:31",
       "columns": [
         "bgm_gap_mode",
         "bgm_path",

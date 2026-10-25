@@ -835,9 +835,9 @@
     {
       "endpoint": "POST /channels",
       "model": "ChannelCreateRequest",
-      "modelSource": "backend/app/routers/admin/channels.py:59",
+      "modelSource": "backend/app/routers/admin/channels.py:64",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/channels.py:427",
+      "handlerSource": "backend/app/routers/admin/channels.py:432",
       "declared": [
         "auto_generate_prompts",
         "bgm_gap_mode",
@@ -1023,9 +1023,9 @@
     {
       "endpoint": "POST /channels/*/icon/ai-generate",
       "model": "ChannelIconAIRequest",
-      "modelSource": "backend/app/routers/admin/channels.py:943",
+      "modelSource": "backend/app/routers/admin/channels.py:948",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/channels.py:947",
+      "handlerSource": "backend/app/routers/admin/channels.py:952",
       "declared": [
         "prompt"
       ],
@@ -3059,9 +3059,9 @@
     {
       "endpoint": "PUT /channels/*",
       "model": "ChannelUpdateRequest",
-      "modelSource": "backend/app/routers/admin/channels.py:225",
+      "modelSource": "backend/app/routers/admin/channels.py:230",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/channels.py:490",
+      "handlerSource": "backend/app/routers/admin/channels.py:495",
       "declared": [
         "bgm_gap_mode",
         "bgm_path",

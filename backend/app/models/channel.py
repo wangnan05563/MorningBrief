@@ -5,13 +5,27 @@ Channel 作为工作流的分组标签，支持按内容分类频道独立产出
 提示词字段为空时回退到 rewriter.py 中的默认值。
 """
 from datetime import datetime
+from enum import Enum
 from typing import Optional
 
-from sqlalchemy import String, Integer, DateTime, Index, Text
+from sqlalchemy import String, Integer, DateTime, Index, Text, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from app.database import Base
+
+
+class ChannelType(str, Enum):
+    """频道类型（多频道适配 M2 / T02704）。
+
+    值集是前端 `enums.js` 的 `CHANNEL_TYPE` 字典与后端的唯一对账来源：
+    此前取值只写在列注释里，前端字典只能靠手抄。枚举值字符串保持不变，
+    存量数据无需迁移。驱动小程序「类型 → 皮肤」映射（course 走章节列表）。
+    """
+
+    news = "news"
+    course = "course"
+    audiobook = "audiobook"
 
 
 class Channel(Base):
@@ -20,6 +34,9 @@ class Channel(Base):
         Index("idx_channel_active", "is_active"),
         # T01579：收藏/最近播放按 channel_type 过滤时 JOIN channel，缺索引致全表扫描
         Index("idx_channel_type", "channel_type"),
+        # 新库由 create_all 建出；存量库由应用层校验兜底（SQLite 加 CHECK 需重建表，
+        # 见 main.py 的 channel 迁移只追加列）。取值以 ChannelType 为准。
+        CheckConstraint("channel_type IN ('news', 'course', 'audiobook')", name="ck_channel_type"),
         {"comment": "新闻频道表"},
     )
 
@@ -115,11 +132,16 @@ class Channel(Base):
     # manual 选题策略的素材 ID 列表（JSON 数组文本，如 "[12,13,14]"）。
     # 仅当 selection_strategy=manual 时读取，按列表顺序选题；为空则 manual 退化为空选。
     manual_material_ids: Mapped[Optional[str]] = mapped_column(Text, comment="manual 选题策略的素材 ID 列表（JSON 数组）")
-    # 频道类型（多频道适配 M2）：news=资讯(默认,存量兼容)/course=课程/audiobook=有声读物。
+    # 频道类型（多频道适配 M2）：取值见 ChannelType，默认 news 兼容存量。
     # 驱动小程序"类型→皮肤"映射；course 走章节列表+学习进度 UI，其余类型复用资讯皮肤。
-    channel_type: Mapped[str] = mapped_column(String(16), default="news", nullable=False, comment="频道类型 news/course/audiobook")
-    # 类型中文标签（冗余存储，避免前端按 type 硬编码中文）：如 "资讯"/"课程"/"有声读物"
-    type_label: Mapped[Optional[str]] = mapped_column(String(32), default=None, comment="类型中文标签（冗余）")
+    channel_type: Mapped[str] = mapped_column(
+        String(16), default=ChannelType.news.value, nullable=False,
+        comment="频道类型 ChannelType news/course/audiobook",
+    )
+    # 类型中文标签（冗余存储，避免前端按 type 硬编码中文）：如 "资讯"/"课程"/"有声读物"。
+    # 定位是运营人工覆盖名：非空时后端/前端都优先用它（review_service、channels 路由回传），
+    # 为空时回落 ChannelType 枚举对应的默认标签，两者不要各写一半。
+    type_label: Mapped[Optional[str]] = mapped_column(String(32), default=None, comment="类型中文标签（人工覆盖，空则回落枚举标签）")
     # 频道封面图 URL：小程序频道卡片/课程头图；为空时前端用类型默认封面兜底
     cover_url: Mapped[Optional[str]] = mapped_column(String(256), default=None, comment="频道封面图 URL")
     # 风险提示等级（多频道适配 M2）：none=无(默认,资讯)/normal=普通/strong=强提示(课程/资料)。

@@ -123,7 +123,7 @@ export const BACKEND_ENUM_OF = {
   MATERIAL_SOURCE_TYPE: 'MaterialSourceType',
   AD_POSITION: 'AdPosition',
   ADMIN_ROLE: 'AdminRole',
-  CHANNEL_TYPE: null,
+  CHANNEL_TYPE: 'ChannelType',
   FEEDBACK_STATUS: null,
 }
 

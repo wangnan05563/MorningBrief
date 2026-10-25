@@ -33,7 +33,7 @@ from app.models.ad_material import AdMaterial
 from app.models.ad_placement import AdPlacement, AdPosition
 # Channel 必须在 Workflow 之前导入：workflow.channel_id 外键引用 channel.id，
 # 若 Channel 未注册到 Base.metadata，create_all 会抛 NoReferencedTableError
-from app.models.channel import Channel
+from app.models.channel import Channel, ChannelType
 from app.models.workflow import (
     Workflow,
     WorkflowStep,
@@ -92,6 +92,7 @@ __all__ = [
     "AdPlacement",
     "AdPosition",
     "Channel",
+    "ChannelType",
     "Workflow",
     "WorkflowStep",
     "WorkflowSource",
