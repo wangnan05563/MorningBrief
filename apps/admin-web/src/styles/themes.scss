@@ -143,6 +143,11 @@
   --color-text-secondary: #A0AEC0;
   --color-border: rgba(0, 229, 255, 0.2);
 
+  /* 暗色卡片 #15151F 上的警告/危险文字要用亮色：variables.scss 里给浅色卡片
+     准备的深色会沉进背景（T02728） */
+  --text-warning-strong: #FFAB00;
+  --text-danger-strong: #FF1744;
+
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;

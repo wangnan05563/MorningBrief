@@ -22,6 +22,19 @@
   --color-danger: #FF9AA2;
   --color-info: #C7CEEA;
 
+  /* === 实心条与强语义文字（T02728） ===
+     漏斗条底色固定深浅、不随主题变化：白字实测 5.87 / 5.93 / 6.46:1。
+     此前直接用主题主色当底色，马卡龙主题的 --on-primary 与 --color-primary-dark
+     同为 #2D6B5F，末段文字与底色 1.0:1 完全看不见。
+     警告/危险文字同理收在这里：浅色卡片上用深色（≥4.5:1），
+     暗色主题的卡片是 #15151F，themes.scss 会覆盖成亮色。 */
+  --solid-primary: #2F6F63;
+  --solid-warning: #8A5A00;
+  --solid-success: #1F6B45;
+  --on-solid: #FFFFFF;
+  --text-warning-strong: #8A5A00;
+  --text-danger-strong: #B3261E;
+
   /* === 中性色 === */
   --color-bg: #F9FDFB;
   --color-bg-card: #FFFFFF;
@@ -83,6 +96,13 @@ $color-bg-card: var(--color-bg-card);
 $color-text-primary: var(--color-text-primary);
 $color-text-secondary: var(--color-text-secondary);
 $color-border: var(--color-border);
+
+$solid-primary: var(--solid-primary);
+$solid-warning: var(--solid-warning);
+$solid-success: var(--solid-success);
+$on-solid: var(--on-solid);
+$text-warning-strong: var(--text-warning-strong);
+$text-danger-strong: var(--text-danger-strong);
 
 $radius-sm: var(--radius-sm);
 $radius-md: var(--radius-md);

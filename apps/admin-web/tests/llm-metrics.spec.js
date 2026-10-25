@@ -146,4 +146,118 @@ test.describe('LLM 重试指标页面', () => {
       '累计自 2026-07-18 09:30:00',
     )
   })
+
+  // T02728：漏斗三段曾直接拿主题色当底色 —— 马卡龙主题 --on-primary 与
+  // --color-primary-dark 都是 #2D6B5F，末段文字 1.0:1 完全看不见，首段 3.4:1、
+  // 中段 2.4:1 也不达 AA。这里不钉具体色值（换色板不该让测试变脆），而是把
+  // computed color 与**实际落底背景**读出来算 WCAG 比值，6 套主题都必须 ≥ 4.5:1。
+  test('漏斗三段与派生率在 6 套主题下文字对比度达 AA（T02728）', async ({ page }) => {
+    // 自备 mock：让 warning / success / danger 三种状态各出现一次。
+    // 默认 mock 的 30/66.67/33.33 不含 danger，测不到 is-danger 的文字色。
+    await page.route('**/admin/api/v1/stats/llm-metrics*', async (route) => {
+      await route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: {
+            ...llmMetricsResponse.data,
+            triggered: 40,
+            improved: 20,
+            not_improved: 24,
+            trigger_rate: 40.0,
+            improve_rate: 50.0,
+            not_improve_rate: 60.0,
+          },
+        },
+      })
+    })
+    await page.goto('/stats/llm-metrics')
+    await expect(page.locator('.stage-bar')).toHaveCount(3, { timeout: 30000 })
+    // 三种状态色必须都在场，否则这条用例可能只覆盖到一种颜色
+    await expect(page.locator('.rate-card.is-warning')).toHaveCount(1)
+    await expect(page.locator('.rate-card.is-success')).toHaveCount(1)
+    await expect(page.locator('.rate-card.is-danger')).toHaveCount(1)
+
+    const offenders = []
+    for (const theme of ALL_THEMES) {
+      // 用「写入 localStorage + 重载」切主题，而不是改 data-theme 属性：
+      // el-card 的背景色带 transition，运行时切属性会量到过渡中的中间色。
+      // 这条路径也正是 src/main.js 启动时的主题落定方式。
+      await page.addInitScript((t) => localStorage.setItem('admin_theme', t), theme)
+      await page.reload()
+      await expect(page.locator('.stage-bar')).toHaveCount(3, { timeout: 30000 })
+      await expect(page.locator('.rate-card.is-warning')).toHaveCount(1)
+      await expect(page.locator('.rate-card.is-success')).toHaveCount(1)
+      await expect(page.locator('.rate-card.is-danger')).toHaveCount(1)
+
+      const rows = await page.evaluate(() => {
+        const parse = (s) => {
+          const m = /rgba?\(([^)]+)\)/.exec(s || '')
+          if (!m) return null
+          const p = m[1].split(/[,\s/]+/).filter(Boolean).map(Number)
+          return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }
+        }
+        // 沿祖先找第一个不透明背景：rate-value 自己没有底色，落底的是 el-card
+        const bgOf = (el) => {
+          let n = el
+          while (n && n.nodeType === 1) {
+            const c = parse(getComputedStyle(n).backgroundColor)
+            if (c && c.a >= 0.9) return c
+            n = n.parentElement
+          }
+          return { r: 255, g: 255, b: 255, a: 1 }
+        }
+        const collect = (sel, kind) =>
+          Array.from(document.querySelectorAll(sel)).map((el) => {
+            const bg = bgOf(el)
+            return {
+              kind,
+              text: el.textContent.trim(),
+              color: getComputedStyle(el).color,
+              bg: `rgb(${bg.r}, ${bg.g}, ${bg.b})`,
+            }
+          })
+        return [...collect('.stage-bar', 'stage-bar'), ...collect('.rate-value', 'rate-value')]
+      })
+
+      expect(rows, `${theme} 主题下没量到三段条与三个派生率`).toHaveLength(6)
+      for (const row of rows) {
+        const ratio = wcagRatio(row.color, row.bg)
+        if (ratio < AA_MIN) {
+          offenders.push(
+            `${theme} ${row.kind}「${row.text}」 ${ratio.toFixed(2)}:1 < ${AA_MIN}（${row.color} on ${row.bg}）`,
+          )
+        }
+      }
+    }
+
+    expect(offenders, '以下文字对比度不达 AA：\n      ' + offenders.join('\n      ')).toEqual([])
+  })
 })
+
+/** 6 套主题与 src/stores/theme.js 的 THEMES 一一对应 */
+const ALL_THEMES = ['macaron', 'enterprise', 'creative', 'showcase', 'commerce', 'portfolio']
+const AA_MIN = 4.5
+
+/** WCAG 2.x 相对亮度对比度；输入是 getComputedStyle 的 rgb()/rgba() 字符串 */
+function wcagRatio(fg, bg) {
+  const parse = (s) => {
+    const m = /rgba?\(([^)]+)\)/.exec(s || '')
+    if (!m) return null
+    const [r, g, b] = m[1].split(/[,\s/]+/).filter(Boolean).map(Number)
+    return { r, g, b }
+  }
+  const lum = (c) => {
+    const f = (v) => {
+      const x = v / 255
+      return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)
+    }
+    return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b)
+  }
+  const a = parse(fg)
+  const b = parse(bg)
+  if (!a || !b) throw new Error(`无法解析颜色：${fg} / ${bg}`)
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x)
+  return (hi + 0.05) / (lo + 0.05)
+}
+

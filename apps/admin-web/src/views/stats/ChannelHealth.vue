@@ -298,8 +298,8 @@ onMounted(loadData)
 
     // 按状态染色：与 el-tag 颜色体系一致
     &.is-healthy .summary-value { color: $color-primary-dark; }
-    &.is-warning .summary-value { color: #E09020; }
-    &.is-critical .summary-value { color: #E05050; }
+    &.is-warning .summary-value { color: $text-warning-strong; }
+    &.is-critical .summary-value { color: $text-danger-strong; }
     &.is-total .summary-value { color: $color-text-primary; }
   }
 

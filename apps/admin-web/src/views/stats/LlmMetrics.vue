@@ -316,8 +316,8 @@ onMounted(loadData)
     }
 
     &.is-success .rate-value { color: $color-primary-dark; }
-    &.is-warning .rate-value { color: #E09020; }
-    &.is-danger .rate-value { color: #E05050; }
+    &.is-warning .rate-value { color: $text-warning-strong; }
+    &.is-danger .rate-value { color: $text-danger-strong; }
   }
 
   .count-card {
@@ -363,8 +363,9 @@ onMounted(loadData)
         justify-content: space-between;
         padding: 12px 16px;
         border-radius: $radius-sm;
-        /* 主色实底上的文字：改用主题变量 --on-primary（白字压浅薄荷底对比度仅 ~1.5:1，不达标） */
-        color: var(--on-primary);
+        /* 三段条底色固定深浅、不随主题走（见 variables.scss --solid-*）：
+           主题主色当底色会与 --on-primary 撞色，马卡龙末段曾 1.0:1 完全不可读 */
+        color: $on-solid;
         font-weight: 600;
         min-height: 44px;
 
@@ -378,15 +379,15 @@ onMounted(loadData)
       }
 
       .stage-total {
-        background: $color-primary;
+        background: $solid-primary;
       }
 
       .stage-triggered {
-        background: #E09020;
+        background: $solid-warning;
       }
 
       .stage-improved {
-        background: $color-primary-dark;
+        background: $solid-success;
       }
     }
   }

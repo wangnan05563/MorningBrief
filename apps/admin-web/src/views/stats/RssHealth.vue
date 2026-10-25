@@ -386,7 +386,7 @@ onMounted(loadData)
 
     &.is-total .summary-value { color: $color-text-primary; }
     &.is-ok .summary-value { color: $color-primary-dark; }
-    &.is-fail .summary-value { color: #E05050; }
+    &.is-fail .summary-value { color: $text-danger-strong; }
     &.is-unknown .summary-value { color: $color-text-secondary; }
   }
 
@@ -418,7 +418,7 @@ onMounted(loadData)
     }
 
     .error-text {
-      color: #E05050;
+      color: $text-danger-strong;
       font-size: 12px;
     }
 
@@ -431,8 +431,8 @@ onMounted(loadData)
 
     // 延迟颜色编码
     .latency-ok { color: $color-primary-dark; font-weight: 500; }
-    .latency-warn { color: #E09020; }
-    .latency-bad { color: #E05050; font-weight: 500; }
+    .latency-warn { color: $text-warning-strong; }
+    .latency-bad { color: $text-danger-strong; font-weight: 500; }
   }
 }
 </style>
