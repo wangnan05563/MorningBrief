@@ -21,7 +21,8 @@ const localData = require('./local-data');
 const downloadStore = require('./download');
 const { isDevTools } = require('../utils/server-discovery');
 
-const STORAGE_KEY_SETTINGS = 'news_settings';
+// T02787：与 settings/tracker 读同一个 key，字面量收敛到单源
+const STORAGE_KEY_SETTINGS = require('./storage-keys').STATIC.SETTINGS;
 const DEFAULT_RATE = 1.0;
 
 let audioManager = null;

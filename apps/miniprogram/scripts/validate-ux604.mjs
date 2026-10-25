@@ -14,9 +14,12 @@
  *  3. J72 取消收藏入口：favorites.wxml 必须有非长按手势的可见入口（catchtap/bindtap 到取消收藏方法），
  *     且该方法在 favorites.js 里存在并落到 removeFavorite。只有 bind/catch 名对上还不算，
  *     方法名里必须含 unFavorite/unfavorite/removeFavorite/cancelFavorite 之一，防止绑到别处。
- *  4. J80 清除缓存文案 ↔ KEEP_KEYS 同源：确认文案必须逐类点名「收藏 / 进度 / 偏爱」这些
- *     真会被抹掉的类别（KEEP_KEYS 之外的那些），并且不得再出现「保留登录信息与设置」这种
- *     没列举后果的裸承诺；KEEP_KEYS 必须含设置 key（单源 services/constants）。
+ *  4. J80 / T02787 清除缓存 ↔ 分类表 ↔ 文案 三处同源：删哪些由 services/storage-keys.js
+ *     的 CACHE_KEYS 正向白名单决定（黑名单写法会被点名），确认文案必须逐类点名
+ *     「收藏 / 进度 / 偏爱」这些**不再被清除**的类别，并说明只影响本机；
+ *     设置 key 必须留在 KEEP_KEYS 里，且 constants 不得再导出第二份字面量。
+ *     行下说明（进页就看到的那句）与弹窗同口径：实现改成不毁数据后，
+ *     旧说明还在承诺「清除收藏/进度」同样算撒谎（按分句判，「只清除…」不算违规）。
  *  5. J99 隐私承诺 ↔ 实现：隐私第七条不得再写「退出登录即可」删除个人信息，
  *     必须给出可走的通道（意见反馈）与真开关的位置（设置 → 数据与统计）；
  *     第五条不得写「不会上传服务器」（收藏与进度确实双写）。
@@ -41,8 +44,15 @@
  * 14. J14/J12 历史的两个出口：页内分段入口直达「我的播放记录」，队列 chip 带可见「队列」文字。
  * 15. J20 个人中心第二层只做入口：不得再出现 secondList 内嵌列表（与整页重复取数/渲染）。
  *
+ * 16-20. J27/J28/J32/J59/J73/J81：详情页缓冲态与课程语境、失败可重试、离线兜底、
+ *     已下架标签、检查更新等实现与文案的接线（逐条见下方代码注释）。
+ * 21. T02787：字面量 storage key 只许出现在 services/storage-keys.js ——
+ *     黑名单清缓存会抹数据，根因就是 key 散在各模块、静态列不全；这条堵住新增散 key。
+ *
  * 局限（如实声明，不假装查过）：只做文本抽取与配对，不解析 WXML/JS 语法树；
- * 动态方法名、运行时拼出的 storage key、跨页 getCurrentPages() 跳转不在能力范围内。
+ * 动态方法名、跨页 getCurrentPages() 跳转不在能力范围内。
+ * （原先「运行时拼出的 storage key 无法静态列全」这一条已由 T02787 的
+ *  services/storage-keys.js 单源消除：拼法收成一处后，门禁与测试都能枚举全集。）
  *
  * 运行：node apps/miniprogram/scripts/validate-ux604.mjs
  * 自测（证伪样本，门禁会不会红）：node --test apps/miniprogram/tests/validate-ux604.test.mjs
@@ -86,6 +96,15 @@ const FILES = [
   'services/audio.js',
   // T02542 / M7
   'services/download.js',
+  // T02787：持有 storage key 的模块都要进门禁，字面量 key 禁令才覆盖得到
+  'services/storage-keys.js',
+  'services/local-data.js',
+  'services/auth.js',
+  'services/api.js',
+  'utils/server-discovery.js',
+  'utils/storage.js',
+  'pages/search/search.js',
+  'pages/feedback/feedback.js',
 ]
 
 /** wxml 里绑定 → 同页 js 方法必须存在（跳过动态绑定值） */
@@ -238,26 +257,86 @@ export function checkFacts(facts) {
     errors.push('favorites.js 不再调用 removeFavorite：取消收藏链路被切断')
   }
 
-  // —— 4. J80：清除缓存文案 ↔ KEEP_KEYS 同源 ——
+  // —— 4. J80 / T02787：清除缓存的白名单 ↔ 分类表 ↔ 文案 三处同源 ——
   const settingsJs = f('pages/settings/settings.js')
-  const keep = /KEEP_KEYS\s*=\s*\[([^\]]*)\]/.exec(settingsJs)
-  if (!keep) {
-    errors.push('settings.js 找不到 KEEP_KEYS 定义：清除范围失去唯一事实源')
-  } else if (!/STORAGE_KEY_SETTINGS/.test(keep[1])) {
-    errors.push('settings.js 的 KEEP_KEYS 未包含 STORAGE_KEY_SETTINGS——清除缓存会把用户设置一起抹掉（J80）')
-  } else if (!/STORAGE_KEY_SETTINGS\s*[:=]/.test(f('services/constants.js'))) {
-    errors.push('services/constants.js 未导出 STORAGE_KEY_SETTINGS 单源（settings 与 tracker 会各写一份字面量）（J99）')
+  const keysJs = f('services/storage-keys.js')
+  for (const name of ['KEEP_KEYS', 'CACHE_KEYS', 'USER_DATA_KEYS']) {
+    if (!new RegExp(`const ${name} = \\[`).test(keysJs)) {
+      errors.push(`services/storage-keys.js 缺少 ${name} 分类表：清除范围失去唯一事实源（T02787）`)
+    }
+  }
+  const keepBlock = /const KEEP_KEYS = \[([\s\S]*?)\]/.exec(keysJs)
+  if (keepBlock && !/STATIC\.SETTINGS/.test(keepBlock[1])) {
+    errors.push('services/storage-keys.js 的 KEEP_KEYS 未包含设置 key——清除缓存会把用户设置一起抹掉（J80）')
+  }
+  if (!/require\('\.\.\/\.\.\/services\/storage-keys'\)/.test(settingsJs)) {
+    errors.push('settings.js 不再引用 services/storage-keys：清除缓存改回自行判断，白名单形同虚设（T02787）')
+  }
+  if (!/clearCacheKeys\(/.test(settingsJs)) {
+    errors.push('settings.js 的清除缓存没走 storage-keys 的执行口 clearCacheKeys：删哪些又回到页面自己说了算（T02787）')
+  }
+  if (/KEEP_KEYS\.indexOf\(key\)\s*===\s*-1/.test(settingsJs)) {
+    errors.push('settings.js 回到「KEEP_KEYS 之外全删」的黑名单写法——那一行正是 J80 抹掉收藏/进度/偏爱的事故点（T02787）')
+  }
+  if (/STORAGE_KEY_SETTINGS/.test(f('services/constants.js'))) {
+    errors.push('services/constants.js 仍在导出 STORAGE_KEY_SETTINGS：key 名出现第二处，分类表就不再是全集（T02787）')
+  }
+  // 只看真 require：写成「提到 storage-keys 这个词就行」会被上一行的考古注释喂饱，
+  // 把 require 改回字面量后门禁照样绿（第一版就是这样，证伪样本当场戳穿了它）。
+  if (!/require\('\.\.\/services\/storage-keys'\)\.STATIC\.SETTINGS/.test(stripComments(f('utils/tracker.js')))) {
+    errors.push('utils/tracker.js 不再从 storage-keys 读设置 key：统计开关会去读一个没人写的 key（J99 / T02787）')
   }
   const modal = /onClearCache\(\)[\s\S]*?showModal\(\{([\s\S]*?)\n  \}/.exec(settingsJs)
   const modalText = modal ? stripComments(modal[1]) : ''
   for (const word of ['收藏', '进度', '偏爱']) {
     if (!modalText.includes(word)) {
-      errors.push(`清除缓存确认文案没有点名「${word}」——它确实在 KEEP_KEYS 之外会被抹掉，` +
+      errors.push(`清除缓存确认文案没有点名「${word}」——用户无法确认它现在不会被抹掉，` +
         `原先那句「保留登录信息与设置」正是 J80 的撒谎点`)
     }
   }
   if (/保留登录信息与设置）/.test(modalText) || !/服务器|本机/.test(modalText)) {
     errors.push('清除缓存确认文案回到了「只保留登录信息与设置」式的未列举写法，或未说明只影响本机（J80）')
+  }
+  if (/仍要清除/.test(modalText)) {
+    errors.push('清除缓存仍是警告级确认：现在它只删可再生项，却用红色「仍要清除」暗示会毁掉数据（T02787 文案与实现脱钩）')
+  }
+  // 行下说明（进页面就看到的那句）和弹窗必须同口径。T02787 把实现改成「不毁数据」后，
+  // 旧说明还写着「清除本机存的收藏、进度」——说多做少也是撒谎，而且它就在按钮底下，比弹窗更容易被当真。
+  const caption = /清除缓存[\s\S]{0,600}?list-caption">\s*<text>([\s\S]*?)<\/text>/.exec(wf('pages/settings/settings.wxml'))
+  if (!caption) {
+    errors.push('settings.wxml 的「清除缓存」行下没有说明文案：影响面必须进页就能看到，而不是等弹窗（J80 / T02787）')
+  } else {
+    // 逐分句判定：老句子是「清除本机存的收藏、进度…」，新句子是「只清除可再生的技术缓存…，
+    // 收藏/进度都会保留」。整串正则分不开这两种（「清除」和「收藏」之间没有标点），
+    // 所以按分句切：一个分句里「清除」没被否定词修饰，却又点名了用户数据，就是承诺删数据。
+    const NEGATED = /不会清除|不清除|只清除|无需清除|不必清除|已保留|都会保留|都会|不删除/
+    for (const clause of caption[1].split(/[；;]/)) {
+      if (/清除/.test(clause) && !NEGATED.test(clause) && /(收藏|进度|偏爱|历史|下载|搜索|反馈)/.test(clause)) {
+        errors.push('settings.wxml 的行下说明有一个分句在承诺「清除收藏/进度/偏爱」，而 T02787 后实现已经不碰它们了——' +
+          `文案与实现脱钩（说多做少同样是撒谎）：${clause.trim().slice(0, 60)}（T02787）`)
+        break
+      }
+    }
+    for (const word of ['保留', '本机']) {
+      if (!caption[1].includes(word)) {
+        errors.push(`settings.wxml 的行下说明没点明「${word}」：与弹窗口径不一致，用户会按旧说明预期后果（T02787）`)
+      }
+    }
+  }
+
+  // —— 21. T02787：字面量 storage key 只许出现在 services/storage-keys.js ——
+  // 黑名单之所以会抹数据，根因是 key 名散在各模块、按 openid 动态拼，静态列不全。
+  // 这条规则堵住的就是「新页面顺手写死一个 key」：它不会立刻出错，但会让白名单永远漏一项。
+  for (const rel of FILES.filter((r) => r.endsWith('.js') && r !== 'services/storage-keys.js')) {
+    const src = stripComments(f(rel))
+    const hits = []
+    if (/wx\.(?:set|get|remove)StorageSync\(\s*['"`]/.test(src)) hits.push('wx.*StorageSync(字面量)')
+    if (/(?:set|get)WithTTL\(\s*['"`]/.test(src)) hits.push('set/getWithTTL(字面量)')
+    if (/const\s+[A-Z][A-Z0-9_]*KEYS?\s*=\s*['"][a-z_]+['"]/.test(src)) hits.push('本地 const *KEY = 字面量')
+    if (hits.length) {
+      errors.push(`${rel}: 直接写死 storage key（${hits.join(' / ')}）——请引用 services/storage-keys.js，` +
+        '否则「清除缓存」的白名单列不全它，用户数据就会再次被顺手抹掉（T02787）')
+    }
   }
 
   // —— 5. J99：隐私开关三处齐 + 隐私文案不再撒谎 ——
@@ -293,6 +372,16 @@ export function checkFacts(facts) {
   const cache = privacySection(f('pages/privacy/privacy.js'), 'Cookie')
   if (cache && /不会上传服务器/.test(cache)) {
     errors.push('隐私政策第五条仍写「不会上传服务器」：收藏与播放进度是双写的（J98）')
+  }
+  // T02787 把「清除缓存」改成只删技术缓存后，第五条旧句「清除缓存只清除本机这一份」反过来撒了谎：
+  // 用户按它预期「点了会丢本机收藏」，实际一项不丢；隐私页是全仓对「清缓存后果」的第二处承诺，必须同口径。
+  if (cache) {
+    if (/清除缓存」只清除本机这一份/.test(cache)) {
+      errors.push('隐私政策第五条仍写「清除缓存只清除本机这一份」：实现已经不碰本机用户数据了（T02787）')
+    }
+    if (!/技术缓存/.test(cache) || !/不会删除服务器/.test(cache)) {
+      errors.push('隐私政策第五条没有如实描述「清除缓存」现在的后果（只清可再生技术缓存、不动本机数据、不删服务端）（T02787）')
+    }
   }
 
   // —— 6. J5：浮条纠偏的两个时机都要在 ——

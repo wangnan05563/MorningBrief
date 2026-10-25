@@ -12,7 +12,8 @@ const { trackPageView, trackEvent } = require('../../utils/tracker');
 // 频道类型 → 文案/皮肤映射（FR-MC-08）：搜索结果类型标签按类型取值
 const skin = require('../../utils/skin');
 
-const STORAGE_KEY_HISTORY = 'search_history';
+// T02787：搜索历史属用户数据，清除缓存不再抹它；key 名单源
+const STORAGE_KEY_HISTORY = require('../../services/storage-keys').STATIC.SEARCH_HISTORY;
 const DEBOUNCE_MS = 300;
 
 // 类型筛选选项（FR-MC-07）：全部 / 资讯 / 课程

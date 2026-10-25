@@ -13,7 +13,8 @@
  * 诚实边界：现阶段事件并不出网（只落控制台），开关关掉的实际效果是
  * 「本机不再产生使用记录」——这句话也照原样写进了隐私政策，不夸大成「阻止上传」。
  */
-const { STORAGE_KEY_SETTINGS } = require('../services/constants');
+// T02787：设置 key 单源挪到 services/storage-keys.js（原先经 services/constants 转一手）
+const STORAGE_KEY_SETTINGS = require('../services/storage-keys').STATIC.SETTINGS;
 
 /** null = 尚未读过设置；设置页变更时由 setTrackingEnabled 直接覆写，避免每次事件都读 storage */
 let _enabled = null;

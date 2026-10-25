@@ -17,8 +17,10 @@
  * - 响应必须包含 API code 字段（过滤路由器等非 API 页面）
  */
 
-const STORAGE_KEY_MANUAL = 'manual_api_base_url';
-const STORAGE_KEY_LAST_SUCCESS = 'last_success_api_base_url';
+// T02787：manual 是用户填的地址（保留），last_success 只是二次启动加速（可清除）；key 名单源
+const { STATIC: STORAGE_KEYS } = require('../services/storage-keys');
+const STORAGE_KEY_MANUAL = STORAGE_KEYS.MANUAL_API_BASE_URL;
+const STORAGE_KEY_LAST_SUCCESS = STORAGE_KEYS.LAST_SUCCESS_API_BASE_URL;
 const API_PREFIX = '/api/v1';
 const HEALTH_PATH = '/episodes/today';
 // 局域网地址探测超时：内网响应快，2 秒足够

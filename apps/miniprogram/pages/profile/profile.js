@@ -61,7 +61,7 @@ Page({
       // 为什么加 storage 节流：onShow 每次切 tab 都触发，用户点"以后再说"后下次再弹会骚扰
       // 用 openid 隔离标志位，用户拒绝后当次会话不再弹（与 maybeShowOnboarding 同款套路）
       if (!userInfo.avatar || !userInfo.nickname) {
-        const skipKey = 'skipSilentEnrich_' + (userInfo.openid || '');
+        const skipKey = require('../../services/storage-keys').silentEnrichSkipKey(userInfo.openid || '');
         if (!wx.getStorageSync(skipKey)) {
           this.silentEnrichProfile();
         }
@@ -123,7 +123,7 @@ Page({
         } else {
           // 用户拒绝：写标志避免下次 onShow 再弹（与 onShow 中的节流逻辑配合）
           const u = this.data.userInfo || {};
-          const skipKey = 'skipSilentEnrich_' + (u.openid || '');
+          const skipKey = require('../../services/storage-keys').silentEnrichSkipKey(u.openid || '');
           wx.setStorageSync(skipKey, Date.now());
         }
       },

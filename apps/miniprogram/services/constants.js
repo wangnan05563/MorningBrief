@@ -9,10 +9,6 @@
  */
 module.exports = {
   COURSE_COMPLETE_RATIO: 0.95,
-  /**
-   * 用户设置在本机 storage 里的 key（单源）。
-   * T02513 / J99 起 utils/tracker.js 也要读它来判断「使用记录统计」开关，
-   * 原先这个字符串只写在 pages/settings/settings.js 里，两处各写一份迟早会漂。
-   */
-  STORAGE_KEY_SETTINGS: 'news_settings',
+  // T02787 起，本机 storage 的 key 名与分类挪到 services/storage-keys.js 单源：
+  // 「清除缓存」要按类别做正向白名单，前提是 key 名能被静态列全，散在各模块里就列不全。
 };

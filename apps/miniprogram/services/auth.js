@@ -5,8 +5,10 @@
  */
 const { request } = require('./api');
 
-const STORAGE_KEY_TOKEN = 'news_token';
-const STORAGE_KEY_USER = 'news_user';
+// T02787：key 名与分类单源 services/storage-keys.js（名字逐字未变，老数据仍读得到）
+const { STATIC: STORAGE_KEYS } = require('./storage-keys');
+const STORAGE_KEY_TOKEN = STORAGE_KEYS.TOKEN;
+const STORAGE_KEY_USER = STORAGE_KEYS.USER;
 
 // 防止 refreshToken 并发触发多次 wx.login（开发者工具 wx.login 会缓存 code，
 // 短时间内多次调用拿到同一 code，后端第二次使用时报 invalid code）

@@ -15,6 +15,8 @@ const localData = require('../../services/local-data');
 const { setQueue, playEpisode, setPendingSeek, safePlay, getCurrentEpisode, onPlaybackChange } = require('../../services/audio');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 const durationFormat = require('../../utils/format');
+// T02787：上次播放项的 key 名单源（与首页 lastPlayedEpisode 同一个 key）
+const { STATIC: STORAGE_KEYS } = require('../../services/storage-keys');
 // T00599：加载态控制器（最短骨架展示 + 慢加载提示 + 超时重试）
 const { createLoadingController } = require('../../utils/loading');
 // T02510：切回底部导航时刷新「历史」tab 的队列待播角标
@@ -438,7 +440,7 @@ Page({
    */
   async loadLastPlayed() {
     try {
-      const cached = wx.getStorageSync('lastPlayedEpisode');
+      const cached = wx.getStorageSync(STORAGE_KEYS.LAST_PLAYED_EPISODE);
       if (cached && cached.id) {
         this.setData({ lastPlayedEpisode: cached });
         // 异步从后端补齐进度（localData.getProgress 优先本地，本地无时从后端读）

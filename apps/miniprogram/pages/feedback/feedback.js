@@ -10,7 +10,8 @@ const { trackPageView, trackEvent } = require('../../utils/tracker');
 // 内容最小长度：低于此值视为信息不足，难以定位问题
 const MIN_LENGTH = 10;
 // 本地反馈历史 key（仅本机可见，便于用户回溯已发送记录）
-const STORAGE_KEY_FEEDBACK_HISTORY = 'news_feedback_history';
+// T02787：反馈历史属用户数据（key 名单源）
+const STORAGE_KEY_FEEDBACK_HISTORY = require('../../services/storage-keys').STATIC.FEEDBACK_HISTORY;
 // 历史最多保留条数，避免无限增长
 const MAX_HISTORY = 20;
 

@@ -43,9 +43,9 @@ function getOpenid() {
   }
 }
 
-function progressKey(openid) { return `news_progress_${openid}`; }
-function favoritesKey(openid) { return `news_favorites_${openid}`; }
-function historyKey(openid) { return `news_history_${openid}`; }
+// T02787：key 名与分类单源在 services/storage-keys.js，这里按原名转发——
+// 拼法逐字不变，老用户本机已有的 news_progress_/news_favorites_/news_history_ 数据不受影响。
+const { progressKey, favoritesKey, historyKey } = require('./storage-keys');
 
 // 历史记录最大条数，超出按最旧优先淘汰
 const HISTORY_MAX = 100;
@@ -442,10 +442,9 @@ function _syncHistoryFromServer(openid) {
  * - 偏爱是节目筛选用，独立存储，不依赖订阅状态
  * 两者可独立使用，互不影响
  */
-function preferredChannelsKey(openid) { return `news_preferred_channels_${openid}`; }
-
-// 首次引导标记 key（不按 openid 隔离，全局只引导一次）
-const ONBOARDED_KEY = 'preferred_channels_onboarded';
+// T02787：偏爱频道只有本机一份，属用户数据；引导标记是用户已做过的选择 → 一并保留
+const { preferredChannelsKey, STATIC: STORAGE_KEYS } = require('./storage-keys');
+const ONBOARDED_KEY = STORAGE_KEYS.PREFERRED_ONBOARDED;
 
 /**
  * 获取偏爱频道 ID 列表

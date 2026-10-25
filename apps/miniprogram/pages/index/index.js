@@ -24,6 +24,8 @@ const durationFormat = require('../../utils/format');
 const { createLoadingController } = require('../../utils/loading');
 // 带 TTL 的 storage 工具：lastPlayedEpisode 是续播缓存，7 天后自动过期清理
 const { setWithTTL, getWithTTL } = require('../../utils/storage');
+// T02787：key 名单源，字面量不再散在页面里
+const { STATIC: STORAGE_KEYS } = require('../../services/storage-keys');
 // T02510：切回底部导航时刷新「历史」tab 的队列待播角标
 const { refreshTabBadge } = require('../../utils/tab-badge');
 
@@ -581,7 +583,7 @@ Page({
    */
   async loadLastPlayed() {
     try {
-      const cached = getWithTTL('lastPlayedEpisode');
+      const cached = getWithTTL(STORAGE_KEYS.LAST_PLAYED_EPISODE);
       if (cached && cached.id && cached.currentTime > 0) {
         this.setData({ lastPlayedEpisode: cached });
         // 异步从后端补齐进度（localData.getProgress 优先本地，本地无时从后端读）
@@ -589,7 +591,7 @@ Page({
           if (progress && progress.position > 0) {
             const enriched = { ...cached, currentTime: progress.position };
             this.setData({ lastPlayedEpisode: enriched });
-            setWithTTL('lastPlayedEpisode', enriched, LAST_PLAYED_TTL_MS);
+            setWithTTL(STORAGE_KEYS.LAST_PLAYED_EPISODE, enriched, LAST_PLAYED_TTL_MS);
           }
         }).catch(() => {});
         return;
@@ -609,7 +611,7 @@ Page({
           };
           const last = { ...ep, currentTime };
           this.setData({ lastPlayedEpisode: last });
-          setWithTTL('lastPlayedEpisode', last, LAST_PLAYED_TTL_MS);
+          setWithTTL(STORAGE_KEYS.LAST_PLAYED_EPISODE, last, LAST_PLAYED_TTL_MS);
         }
       }
     } catch (err) {
@@ -729,7 +731,7 @@ Page({
     // 关键写入（保持同步）：onPause/onEnded/onHide 时需立即落盘，避免 app 被杀时进度丢失
     // 同时叠加 7 天 TTL，过期后自动清理
     try {
-      setWithTTL('lastPlayedEpisode', this._pendingLastPlayed, LAST_PLAYED_TTL_MS);
+      setWithTTL(STORAGE_KEYS.LAST_PLAYED_EPISODE, this._pendingLastPlayed, LAST_PLAYED_TTL_MS);
     } catch (e) {}
     this._pendingLastPlayed = null;
   },
@@ -860,7 +862,7 @@ Page({
     }
     playEpisode(ep);
     try {
-      setWithTTL('lastPlayedEpisode', { ...ep, currentTime: 0 }, LAST_PLAYED_TTL_MS);
+      setWithTTL(STORAGE_KEYS.LAST_PLAYED_EPISODE, { ...ep, currentTime: 0 }, LAST_PLAYED_TTL_MS);
       this.setData({ lastPlayedEpisode: { ...ep, currentTime: 0 } });
     } catch (e) {}
     wx.navigateTo({ url: '/pages/detail/detail?id=' + id });

@@ -6,8 +6,9 @@
  * - 通知设置触发订阅消息授权（一次性模板，用户每次需重新授权）
  * - 接入埋点
  */
-// T02513 / J99：设置 key 收敛到 services/constants 单源（tracker.js 也按同一个 key 读开关）
-const { STORAGE_KEY_SETTINGS } = require('../../services/constants');
+// T02513 / J99：设置 key 单源；T02787 起单源是 services/storage-keys.js（tracker.js 读同一个 key）
+const { STATIC: STORAGE_KEYS, clearCacheKeys } = require('../../services/storage-keys');
+const STORAGE_KEY_SETTINGS = STORAGE_KEYS.SETTINGS;
 const { setPlaybackRate, setAutoPlayNext, setWifiOnlyAutoPlay, setTransitionEnabled } = require('../../services/audio');
 const { trackPageView, trackEvent, setTrackingEnabled } = require('../../utils/tracker');
 const { requestSubscribeMessageByType } = require('../../services/api');
@@ -23,12 +24,12 @@ const DEFAULT_SETTINGS = {
   usageTracking: true,
 };
 
-// 清除缓存时保留的 key：登录态 + 用户设置
-// ⚠ 这里的每一项都必须在 onClearCache 的确认文案里被如实描述到——
-// 本单修掉的正是「文案说只留登录信息与设置，实际把收藏/进度/偏爱一起抹掉」的撒谎（J80）。
-// storage key 命名尚未收敛（downloadKey(openid)/preferredChannelsKey(openid) 等是按 openid 动态拼的，
-// 静态列不全），因此「只清缓存类、不动用户数据」的改造留给派生单，本单先把话说实话。
-const KEEP_KEYS = ['news_token', 'news_user', STORAGE_KEY_SETTINGS];
+// T02787 / J80 续：清除缓存改为**正向白名单**——只删 services/storage-keys.js 里
+// 归入 CACHE_KEYS 的可再生项，收藏、播放进度与历史、偏爱频道、下载索引、上次播放项、
+// 搜索历史、反馈历史、待补报队列一律不动。
+// 原先这里是黑名单（KEEP_KEYS 只列 3 个，循环删掉其余全部），所以 key 名一旦散在各模块
+// 且按 openid 动态拼接，静态列不全，黑名单就永远漏——漏掉的那一类就是被抹掉的用户数据。
+// 认不出的 key（新版本残留、别人新加的）同样不删：宁可少清，不可多抹。
 
 Page({
   data: {
@@ -152,7 +153,8 @@ Page({
   },
 
   /**
-   * 读取当前缓存占用：currentSize 单位为 KB
+   * 本机 storage 占用（KB）：currentSize 是 storage 总量，含收藏/进度这些不会被清掉的数据，
+   * 所以它只代表「本机存了多少」，不代表「清除缓存能释放多少」——行下文案按这个口径说。
    */
   updateCacheSize() {
     try {
@@ -164,37 +166,36 @@ Page({
   },
 
   /**
-   * 清除缓存：保留登录态与用户设置，移除其余缓存
+   * 清除缓存：只删可再生项，用户数据一律不动
    *
-   * T02513 / J80：确认文案原先写「将清除本地缓存（保留登录信息与设置）」，
-   * 而 KEEP_KEYS 之外被抹掉的其实是收藏、播放进度、播放历史、偏爱频道、下载索引、
-   * 上次播放项、搜索历史、反馈历史 —— 用户以为清的是图片缓存，结果收藏清空、续听进度归零。
-   * 现在逐类如实列出，并把「哪些能自动回来、哪些回不来」说清楚（依据：
-   * 收藏与进度走 local-data 的双写，服务端有备份；偏爱频道只有本机一份）。
-   * 确认键改成「仍要清除」，让这个动作在视觉上不等同于普通的「确定」。
+   * T02513 / J80 把话说实话（文案逐类点名会被抹掉的东西）；T02787 才是真修：
+   * 删哪些由 services/storage-keys.js 的 CACHE_KEYS 白名单决定，
+   * 收藏、播放进度与历史、偏爱频道、下载索引、上次播放项、搜索历史、反馈历史、
+   * 待补报收听队列都在 USER_DATA_KEYS 里，清缓存碰不到；登录态与设置在 KEEP_KEYS 里。
+   * 因此这个动作不再需要红色「仍要清除」的警告级确认——它不再毁掉任何东西，
+   * 但也不能反过来冒充「能释放很多空间」：删了几项如实播报，0 项就说没有可清除的缓存。
    */
   onClearCache() {
     wx.showModal({
       title: '清除缓存',
       content:
-        '会清掉本机存的：收藏、播放进度与历史、偏爱频道、下载/搜索/反馈记录。\n' +
+        '只清可再生的技术缓存（例如上次探测到的服务地址）。\n' +
+        '不会清除：收藏、播放进度与历史、偏爱频道、下载索引、上次播放项、搜索与反馈记录。\n' +
         '保留：登录信息、播放与通知设置。\n' +
-        '收藏和进度服务端有备份，会重新同步回来；偏爱频道只有本机一份，清掉不可恢复。\n' +
-        '只影响本机，不删除服务器数据。',
-      confirmText: '仍要清除',
-      confirmColor: '#B0554A',
+        '本机存的基本都是你的数据，清缓存不会释放多少空间；只影响本机，不删除服务器数据。\n' +
+        '想彻底删除服务端数据请走意见反馈提出请求。',
+      confirmText: '清除',
       success: (res) => {
         if (!res.confirm) return;
         try {
           const info = wx.getStorageInfoSync();
-          info.keys.forEach((key) => {
-            if (KEEP_KEYS.indexOf(key) === -1) {
-              wx.removeStorageSync(key);
-            }
-          });
+          const removed = clearCacheKeys(info.keys, (key) => wx.removeStorageSync(key));
           this.updateCacheSize();
-          wx.showToast({ title: '已清除', icon: 'success' });
-          trackEvent('settings', 'clear_cache');
+          wx.showToast({
+            title: removed.length ? `已清除 ${removed.length} 项缓存` : '本机没有可清除的缓存',
+            icon: 'none',
+          });
+          trackEvent('settings', 'clear_cache', String(removed.length));
         } catch (err) {
           console.error('清除缓存失败', err);
           wx.showToast({ title: '清除失败', icon: 'none' });

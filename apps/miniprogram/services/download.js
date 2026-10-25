@@ -28,7 +28,8 @@ function getOpenid() {
   }
 }
 
-function downloadKey(openid) { return `news_downloads_${openid}`; }
+// T02787：下载索引属用户数据（索引没了，本机已下载的文件在界面上就找不到）；key 名单源
+const downloadKey = require('./storage-keys').downloadsKey;
 
 // 当前 openid 下载表的内存缓存，避免每次读 storage（下载列表通常不大）
 let _cache = null;

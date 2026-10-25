@@ -293,7 +293,8 @@ const searchEpisodes = (keyword, page = 1, size = 20, channelType) =>
  *
  * 去重规则：同一 episode 只保留**最新一条**（位置更靠后的上报覆盖前者），队列上限 50 条防膨胀。
  */
-const PENDING_REPORTS_KEY = 'pending_play_reports';
+// T02787：待补报的收听上报属用户数据（删了服务端永远补不回来）；key 名单源
+const PENDING_REPORTS_KEY = require('./storage-keys').STATIC.PENDING_REPORTS;
 const PENDING_REPORTS_MAX = 50;
 
 function readPendingReports() {

@@ -33,6 +33,21 @@ async function expectHit(overrides, tag) {
   )
 }
 
+/**
+ * 构造坏样本。必须验证「替换真的发生了」：
+ * 锚点正则在文件里命中 0 次时，String.replace 原样返回，门禁吃到的还是仓库的好代码，
+ * 于是这条证伪用例永远绿——比没有用例更糟，因为它假装查过了。
+ * （本单第一版就中过这个坑：KEEP_KEYS 里的 SETTINGS 不是最后一项，
+ * 带 `(?=\];)` 的锚点没命中，用例照样「通过」。）
+ */
+function mutate(rel, re, to) {
+  const src = read(rel)
+  assert.ok(re.test(src), `坏样本没构造成功：${rel} 里找不到锚点 ${re}`)
+  const out = src.replace(re, to)
+  assert.notEqual(out, src, `坏样本没改动 ${rel}`)
+  return out
+}
+
 test('golden：仓库当前状态必须干净（门禁红在真实代码上=本单没修完）', async () => {
   const { errors } = await validate()
   assert.deepEqual(errors, [])
@@ -105,26 +120,102 @@ describe('J72 取消收藏入口', () => {
     ))
 })
 
-describe('J80 清除缓存文案 ↔ KEEP_KEYS 同源', () => {
+describe('J80 / T02787 清除缓存：白名单分类 ↔ 接线 ↔ 文案 三处同源', () => {
   test('确认文案写回「将清除本地缓存（保留登录信息与设置）」被抓', () =>
     expectHit(
       {
-        'pages/settings/settings.js': read('pages/settings/settings.js').replace(
-          /content:\n(\s*)'会清掉本机存的[\s\S]*?不删除服务器数据。',/,
-          "$1content: '将清除本地缓存（保留登录信息与设置），确定继续？',",
+        'pages/settings/settings.js': mutate(
+          'pages/settings/settings.js',
+          /content:\n\s*'只清可再生[\s\S]*?提出请求。',/,
+          "content: '将清除本地缓存（保留登录信息与设置），确定继续？',",
         ),
       },
       'J80',
     ))
 
-  test('KEEP_KEYS 漏掉设置 key 被抓', () =>
+  test('清除动作写回「KEEP_KEYS 之外全删」的黑名单被抓（J80 的事故那一行）', () =>
     expectHit(
-      { 'pages/settings/settings.js': read('pages/settings/settings.js').replace(/KEEP_KEYS = \[([^\]]*)\]/, "KEEP_KEYS = ['news_token', 'news_user']") },
+      {
+        'pages/settings/settings.js': mutate(
+          'pages/settings/settings.js',
+          /const removed = clearCacheKeys\(info\.keys, \(key\) => wx\.removeStorageSync\(key\)\);/,
+          'const removed = []; info.keys.forEach((key) => { if (KEEP_KEYS.indexOf(key) === -1) { wx.removeStorageSync(key); removed.push(key); } });',
+        ),
+      },
+      'T02787',
+    ))
+
+  test('分类表 KEEP_KEYS 漏掉设置 key 被抓（清缓存会把用户设置一起抹掉）', () =>
+    expectHit(
+      { 'services/storage-keys.js': mutate('services/storage-keys.js', /  STATIC\.SETTINGS,\n/, '') },
       'J80',
     ))
 
-  test('设置 key 不再是单源（constants 里删掉）被抓', () =>
-    expectHit({ 'services/constants.js': read('services/constants.js').replace(/STORAGE_KEY_SETTINGS[^\n]*/, 'PLACEHOLDER: 1') }, 'J99'))
+  test('settings.js 不再引用 storage-keys 单源被抓（删哪些又回到页面自己说了算）', () =>
+    expectHit(
+      {
+        'pages/settings/settings.js': mutate(
+          'pages/settings/settings.js',
+          /const \{ STATIC: STORAGE_KEYS, clearCacheKeys \} = require\('\.\.\/\.\.\/services\/storage-keys'\);/,
+          "const STORAGE_KEY_SETTINGS = 'news_settings';",
+        ),
+      },
+      'T02787',
+    ))
+
+  test('页面里写死 storage key 字面量被抓（新增散 key 会让白名单列不全）', () =>
+    expectHit(
+      { 'pages/search/search.js': mutate('pages/search/search.js', /wx\.getStorageSync\(STORAGE_KEY_HISTORY\)/, "wx.getStorageSync('search_history')") },
+      'T02787',
+    ))
+
+  test('constants.js 重新导出第二份设置 key 被抓（分类表不再等于全集）', () =>
+    expectHit(
+      { 'services/constants.js': mutate('services/constants.js', /\n\];|\n\};/, ',\n  STORAGE_KEY_SETTINGS: \'news_settings\',\n};') },
+      'T02787',
+    ))
+
+  test('tracker.js 不再从单源读设置 key 被抓（开关会读一个没人写的 key）', () =>
+    expectHit(
+      {
+        'utils/tracker.js': mutate(
+          'utils/tracker.js',
+          /const STORAGE_KEY_SETTINGS = require\('\.\.\/services\/storage-keys'\)\.STATIC\.SETTINGS;/,
+          "const STORAGE_KEY_SETTINGS = 'news_settings';",
+        ),
+      },
+      'J99',
+    ))
+
+  test('清缓存不再毁数据却仍用红色「仍要清除」吓用户被抓（文案与实现脱钩）', () =>
+    expectHit(
+      { 'pages/settings/settings.js': mutate('pages/settings/settings.js', /confirmText: '清除',/, "confirmText: '仍要清除',") },
+      'T02787',
+    ))
+
+  test('行下说明写回「清除本机存的收藏…」被抓（实现改了、说明还在承诺删数据）', () =>
+    expectHit(
+      {
+        'pages/settings/settings.wxml': mutate(
+          'pages/settings/settings.wxml',
+          /<text>只清除可再生的技术缓存[\s\S]*?不删除服务器数据。<\/text>/,
+          '<text>清除本机存的收藏、播放进度与历史、偏爱频道、下载/搜索/反馈记录；保留登录信息与本设置页的开关。只影响本机，不删除服务器数据。</text>',
+        ),
+      },
+      'T02787',
+    ))
+
+  test('行下说明整条删掉被抓（影响面只在弹窗里说，进页读不到）', () =>
+    expectHit(
+      {
+        'pages/settings/settings.wxml': mutate(
+          'pages/settings/settings.wxml',
+          /<view class="list-caption">\s*<text>只清除可再生的技术缓存[\s\S]*?<\/text>\s*<\/view>\n/,
+          '',
+        ),
+      },
+      'T02787',
+    ))
 })
 
 describe('J99 隐私开关三处接线 + J98 承诺不撒谎', () => {
@@ -138,16 +229,34 @@ describe('J99 隐私开关三处接线 + J98 承诺不撒谎', () => {
     expectHit({ 'utils/tracker.js': read('utils/tracker.js').replace(/if \(!isEnabled\(\)\) return;/, '') }, 'J99'))
 
   test('隐私第七条写回「退出登录即可」被抓', () =>
-    expectHit({ 'pages/privacy/privacy.js': read('pages/privacy/privacy.js').replace(/3\) 要求删除个人信息——请注意：/, "3) 要求删除个人信息（退出登录即可）——") }, 'J98'))
+    expectHit({ 'pages/privacy/privacy.js': mutate('pages/privacy/privacy.js', /3\) 要求删除个人信息——请注意：/, "3) 要求删除个人信息（退出登录即可）——") }, 'J98'))
 
   test('隐私第七条不再给出真实通道（删掉意见反馈）被抓', () =>
-    expectHit({ 'pages/privacy/privacy.js': read('pages/privacy/privacy.js').replace(/意见反馈/g, '联系管理员邮箱') }, 'J98'))
+    expectHit({ 'pages/privacy/privacy.js': mutate('pages/privacy/privacy.js', /意见反馈/g, '联系管理员邮箱') }, 'J98'))
 
-  test('隐私第五条写回「不会上传服务器」被抓', () => {
-    const src = read('pages/privacy/privacy.js').replace('只清除本机这一份，不会删除服务器上的数据', '只清除本机这一份，不会上传服务器')
-    assert.notEqual(src, read('pages/privacy/privacy.js'), '坏样本没构造成功：第五条的措辞已变化，请同步这条证伪用例')
-    return expectHit({ 'pages/privacy/privacy.js': src }, 'J98')
-  })
+  test('隐私第五条写回「不会上传服务器」被抓', () =>
+    expectHit(
+      {
+        'pages/privacy/privacy.js': mutate(
+          'pages/privacy/privacy.js',
+          /上面这些本机数据一项都不会被它清掉；它同样不会删除服务器上的数据。/,
+          '上面这些本机数据一项都不会被它清掉；它们也不会上传服务器。',
+        ),
+      },
+      'J98',
+    ))
+
+  test('隐私第五条写回「清除缓存只清除本机这一份」被抓（实现改了、承诺没跟着改）', () =>
+    expectHit(
+      {
+        'pages/privacy/privacy.js': mutate(
+          'pages/privacy/privacy.js',
+          /「设置 → 存储管理 → 清除缓存」只清可再生的技术缓存[\s\S]*?不会删除服务器上的数据。/,
+          "「设置 → 存储管理 → 清除缓存」只清除本机这一份，不会删除服务器上的数据。',",
+        ),
+      },
+      'T02787',
+    ))
 })
 
 describe('J5 浮条纠偏的两个时机', () => {
