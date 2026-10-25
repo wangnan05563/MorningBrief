@@ -614,6 +614,12 @@
   color: var(--accent);
 }
 
+/* T02798（FR-UX-702）：缓冲中不可操作的入口用淡化态表明「现在点了没用」，
+   与 slider 的 disabled 同口径，避免出现「界面能动、音频不动」的假可播放 */
+.action-chip.is-blocked {
+  opacity: 0.45;
+}
+
 /* === 任务10：背景虚化层 === */
 /* 固定定位 + 高斯模糊，淡色滤镜柔化避免抢戏 */
 .bg-blur-layer {

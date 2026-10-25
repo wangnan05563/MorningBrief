@@ -393,6 +393,67 @@ describe('T02542 / M7：长任务收尾与逐菜单缺陷', () => {
       'J27',
     ))
 
+  // T02798：缓冲态「伪装成可播放」的三条防线各证伪一次
+  test('J27 删掉 slider 的 disabled 被抓', () =>
+    expectHit(
+      { 'pages/detail/detail.wxml': mutate('pages/detail/detail.wxml', /\n\s*disabled="\{\{isWaiting\}\}"/, '') },
+      'J27',
+    ))
+
+  test('J27 slider disabled 接错对象（挂到 isPlaying）被抓', () =>
+    expectHit(
+      { 'pages/detail/detail.wxml': mutate('pages/detail/detail.wxml', /disabled="\{\{isWaiting\}\}"/, 'disabled="{{isPlaying}}"') },
+      'J27',
+    ))
+
+  test('J27 倍速入口的可访问说明不随缓冲态变化被抓', () =>
+    expectHit(
+      {
+        'pages/detail/detail.wxml': mutate(
+          'pages/detail/detail.wxml',
+          /aria-label="\{\{isWaiting \? '缓冲中，暂不可切换倍速' : '切换播放倍速'\}\}"/,
+          'aria-label="切换播放倍速"',
+        ),
+      },
+      'J27',
+    ))
+
+  test('J27 删掉 onSeek 的 isWaiting 护栏被抓', () =>
+    expectHit(
+      {
+        'pages/detail/detail.js': mutate(
+          'pages/detail/detail.js',
+          /if \(this\.data\.isWaiting\) \{\n\s*wx\.showToast\(\{ title: '缓冲中，稍后再拖动进度', icon: 'none' \}\);\n\s*return;\n\s*\}\n/,
+          '',
+        ),
+      },
+      'J27',
+    ))
+
+  test('J27 删掉 onCycleRate 的 isWaiting 护栏被抓', () =>
+    expectHit(
+      {
+        'pages/detail/detail.js': mutate(
+          'pages/detail/detail.js',
+          /if \(this\.data\.isWaiting\) \{\n\s*wx\.showToast\(\{ title: '缓冲中，稍后再切倍速', icon: 'none' \}\);\n\s*return;\n\s*\}\n/,
+          '',
+        ),
+      },
+      'J27',
+    ))
+
+  test('J27 onSeekInput 的护栏写成注释不算守住', () =>
+    expectHit(
+      {
+        'pages/detail/detail.js': mutate(
+          'pages/detail/detail.js',
+          /    if \(this\.data\.isWaiting\) return;\n/,
+          '    // if (this.data.isWaiting) return;\n',
+        ),
+      },
+      'J27',
+    ))
+
   test('J28 删掉课程章节坐标被抓', () =>
     expectHit(
       { 'pages/detail/detail.wxml': read('pages/detail/detail.wxml').replace(/\{\{chapterLabel\}\}/g, '') },

@@ -536,6 +536,8 @@ Page({
 
   // bindinput：拖动中仅更新 UI 预览，不触发实际 seek
   onSeekInput(e) {
+    // T02798：缓冲期间拖动会让进度脱离真实位置，制造「已经跳过去了」的错觉
+    if (this.data.isWaiting) return;
     const pos = e.detail.value;
     this.setData({ currentTime: pos, currentTimeText: this.formatTime(pos) });
   },
@@ -543,6 +545,10 @@ Page({
   onSeek(e) {
     const player = getApp().globalData.player;
     if (!player || !this.isCurrentEpisode()) return;
+    if (this.data.isWaiting) {
+      wx.showToast({ title: '缓冲中，稍后再拖动进度', icon: 'none' });
+      return;
+    }
     const pos = e.detail.value;
     // 调用 services/audio 的 seek 函数：处理暂停状态下 seek 不生效的问题
     seek(pos);
@@ -675,6 +681,11 @@ Page({
    * 倍速循环切换
    */
   onCycleRate() {
+    // T02798：缓冲期间倍速会写进播放器配置却听不出效果，用户以为「切了没反应」
+    if (this.data.isWaiting) {
+      wx.showToast({ title: '缓冲中，稍后再切倍速', icon: 'none' });
+      return;
+    }
     const current = getPlaybackRate();
     const idx = RATE_OPTIONS.indexOf(current);
     const next = RATE_OPTIONS[(idx + 1) % RATE_OPTIONS.length];

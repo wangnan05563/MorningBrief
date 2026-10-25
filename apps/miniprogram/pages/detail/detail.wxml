@@ -145,6 +145,7 @@
             min="0"
             max="{{duration || 0}}"
             value="{{currentTime}}"
+            disabled="{{isWaiting}}"
             activeColor="#3F6C8F"
             backgroundColor="#EDF3F7"
             block-size="22"
@@ -163,7 +164,11 @@
            T00384：移除中文按钮文案，图标即按钮；仅保留倍速值与睡眠倒计时这类动态状态
            T00387：下载按钮位于列表图标右侧，下载中显示进度/再次点击取消 -->
       <view class="action-row">
-        <view class="action-chip" bindtap="onCycleRate" aria-label="切换播放倍速">
+        <view
+          class="action-chip {{isWaiting ? 'is-blocked' : ''}}"
+          bindtap="onCycleRate"
+          aria-label="{{isWaiting ? '缓冲中，暂不可切换倍速' : '切换播放倍速'}}"
+        >
           <text class="chip-rate">{{currentRate}}x</text>
         </view>
         <view

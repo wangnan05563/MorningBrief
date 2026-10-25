@@ -527,6 +527,21 @@ export function checkFacts(facts) {
   if (!/wx:if="\{\{isWaiting\}\}"/.test(detailWxml) || !/缓冲中/.test(detailWxml)) {
     errors.push('detail.wxml 没有绑定 isWaiting 的「缓冲中」节点：弱网起播与正常播放同貌（J27）')
   }
+  // J27/T02798 的第二半：缓冲态不得「伪装成可播放」。只显示菊花而入口照旧可点，
+  // 用户拖完进度条位置又被 onTimeUpdate 拉回去，观感等于「界面骗人」。
+  if (!/disabled="\{\{isWaiting\}\}"/.test(detailWxml)) {
+    errors.push('detail.wxml 的进度 slider 没在缓冲时 disabled：缓冲态仍伪装成可拖动（J27）')
+  }
+  const rateChipMatch = /bindtap="onCycleRate"[\s\S]{0,120}?aria-label="([^"]*)"/.exec(detailWxml)
+  if (!rateChipMatch || !/isWaiting/.test(rateChipMatch[1])) {
+    errors.push('倍速入口在缓冲时仍报「切换播放倍速」：可访问性与可见性都说不出「现在点了没用」（J27）')
+  }
+  const detailJsForWaiting = stripComments(f('pages/detail/detail.js'))
+  for (const gated of ['onSeekInput', 'onSeek', 'onCycleRate']) {
+    if (!/isWaiting/.test(methodBody(detailJsForWaiting, gated))) {
+      errors.push(`detail.js ${gated} 没有 isWaiting 护栏：WXML 的 disabled 之外还得有 JS 侧兜底（J27）`)
+    }
+  }
 
   // —— 17. J28：课程语境字段必须显示 ——
   if (!/wx:if="\{\{isCourse\}\}"/.test(detailWxml) || !/courseName/.test(detailWxml) || !/chapterLabel/.test(detailWxml)) {
