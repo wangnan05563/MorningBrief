@@ -236,58 +236,57 @@ const menuItems = computed(() => {
   return items
 })
 
-// 开源依赖清单：首版静态写入（P2 接入 license-checker 自动生成）
-// 数据来源：admin-web/package.json + backend/requirements.txt
-// 版本号是抄来的，抄来的东西会过期——所以构建期由 scripts/validate-nav.mjs
-// 把这张表与两份清单逐条比对（缺失/多余/版本不符都让构建失败），改依赖时不必再记得改这里。
+// 开源依赖清单由 scripts/gen-licenses.mjs 生成：版本取自 admin-web/package.json 与
+// backend/requirements.txt，许可与仓库取自已安装包的元数据。不要手改本块；改依赖后运行
+// `npm run gen:licenses`，再跑 `npm run validate:nav && npm run test:nav`。
+// 构建期由 scripts/validate-nav.mjs 逐条对账兜底（缺失/多余/版本不符都让构建失败）。
+// <licenses>
 const licenses = [
-  // 前端依赖
   { name: '@element-plus/icons-vue', version: '^2.3.0', license: 'MIT', repo: 'https://github.com/element-plus/element-plus-icons' },
+  { name: '@playwright/test', version: '^1.61.1', license: 'Apache-2.0', repo: 'https://github.com/microsoft/playwright' },
+  { name: '@vitejs/plugin-vue', version: '^5.0.0', license: 'MIT', repo: 'https://github.com/vitejs/vite-plugin-vue' },
+  { name: 'aiosqlite', version: '0.19.0', license: 'MIT', repo: 'https://github.com/omnilib/aiosqlite' },
+  { name: 'alembic', version: '1.13.1', license: 'MIT', repo: 'https://github.com/sqlalchemy/alembic' },
+  { name: 'apscheduler', version: '3.10.4', license: 'MIT', repo: 'https://github.com/agronholm/apscheduler' },
   { name: 'axios', version: '^1.6.0', license: 'MIT', repo: 'https://github.com/axios/axios' },
+  { name: 'bcrypt', version: '4.1.2', license: 'Apache-2.0', repo: 'https://github.com/pyca/bcrypt' },
+  { name: 'cachetools', version: '5.3.3', license: 'MIT', repo: 'https://github.com/tkem/cachetools' },
   { name: 'chart.js', version: '^4.4.0', license: 'MIT', repo: 'https://github.com/chartjs/Chart.js' },
+  { name: 'colorama', version: '0.4.6', license: 'BSD-3-Clause', repo: 'https://github.com/tartley/colorama' },
+  { name: 'cos-python-sdk-v5', version: '1.9.30', license: 'MIT', repo: 'https://www.qcloud.com' },
   { name: 'dayjs', version: '^1.11.0', license: 'MIT', repo: 'https://github.com/iamkun/dayjs' },
+  { name: 'edge-tts', version: '7.3.1', license: 'LGPL-3.0', repo: 'https://github.com/rany2/edge-tts' },
   { name: 'element-plus', version: '^2.14.2', license: 'MIT', repo: 'https://github.com/element-plus/element-plus' },
+  { name: 'fastapi', version: '0.110.0', license: 'MIT', repo: 'https://github.com/tiangolo/fastapi' },
+  { name: 'feedparser', version: '6.0.11', license: 'BSD-2-Clause', repo: 'https://github.com/kurtmckee/feedparser' },
+  { name: 'httpx', version: '0.27.0', license: 'BSD-3-Clause', repo: 'https://github.com/encode/httpx' },
+  { name: 'jieba', version: '0.42.1', license: 'MIT', repo: 'https://github.com/fxsjy/jieba' },
+  { name: 'loguru', version: '0.7.2', license: 'MIT', repo: 'https://github.com/Delgan/loguru' },
+  { name: 'openai', version: '1.12.0', license: 'Apache-2.0', repo: 'https://github.com/openai/openai-python' },
   { name: 'pinia', version: '^2.1.0', license: 'MIT', repo: 'https://github.com/vuejs/pinia' },
+  { name: 'pyahocorasick', version: '2.3.1', license: 'BSD-3-Clause AND Public-Domain', repo: 'https://github.com/WojciechMula/pyahocorasick' },
+  { name: 'pydantic-settings', version: '2.1.0', license: 'MIT', repo: 'https://github.com/pydantic/pydantic-settings' },
+  { name: 'pyjwt', version: '2.8.0', license: 'MIT', repo: 'https://github.com/jpadilla/pyjwt' },
+  { name: 'PyMuPDF', version: '1.28.2', license: 'AGPL-3.0', repo: 'https://github.com/pymupdf/pymupdf' },
+  { name: 'pytest', version: '8.4.2', license: 'MIT', repo: 'https://github.com/pytest-dev/pytest' },
+  { name: 'pytest-asyncio', version: '0.24.0', license: 'Apache-2.0', repo: 'https://github.com/pytest-dev/pytest-asyncio' },
+  { name: 'python-dotenv', version: '1.0.1', license: 'BSD-3-Clause', repo: 'https://github.com/theskumar/python-dotenv' },
+  { name: 'python-multipart', version: '0.0.9', license: 'Apache-2.0', repo: 'https://github.com/andrew-d/python-multipart' },
+  { name: 'pyyaml', version: '6.0.1', license: 'MIT', repo: 'https://github.com/yaml/pyyaml' },
+  { name: 'sass', version: '^1.72.0', license: 'MIT', repo: 'https://github.com/sass/dart-sass' },
+  { name: 'selectolax', version: '0.4.10', license: 'MIT', repo: 'https://github.com/rushter/selectolax' },
+  { name: 'slowapi', version: '0.1.9', license: 'MIT', repo: 'https://github.com/laurents/slowapi' },
+  { name: 'sqlalchemy', version: '2.0.25', license: 'MIT', repo: 'https://www.sqlalchemy.org' },
+  { name: 'tenacity', version: '8.2.3', license: 'Apache-2.0', repo: 'https://github.com/jd/tenacity' },
+  { name: 'unplugin-auto-import', version: '^0.17.0', license: 'MIT', repo: 'https://github.com/unplugin/unplugin-auto-import' },
+  { name: 'unplugin-vue-components', version: '^0.26.0', license: 'MIT', repo: 'https://github.com/unplugin/unplugin-vue-components' },
+  { name: 'uvicorn', version: '0.27.0', license: 'BSD-3-Clause', repo: 'https://github.com/encode/uvicorn' },
+  { name: 'vite', version: '^5.2.0', license: 'MIT', repo: 'https://github.com/vitejs/vite' },
   { name: 'vue', version: '^3.4.0', license: 'MIT', repo: 'https://github.com/vuejs/core' },
   { name: 'vue-chartjs', version: '^5.3.0', license: 'MIT', repo: 'https://github.com/apertureless/vue-chartjs' },
   { name: 'vue-router', version: '^4.3.0', license: 'MIT', repo: 'https://github.com/vuejs/router' },
-  // 前端 devDependencies
-  { name: '@playwright/test', version: '^1.61.1', license: 'Apache-2.0', repo: 'https://github.com/microsoft/playwright' },
-  { name: '@vitejs/plugin-vue', version: '^5.0.0', license: 'MIT', repo: 'https://github.com/vitejs/vite-plugin-vue' },
-  { name: 'sass', version: '^1.72.0', license: 'MIT', repo: 'https://github.com/sass/dart-sass' },
-  { name: 'unplugin-auto-import', version: '^0.17.0', license: 'MIT', repo: 'https://github.com/unplugin/unplugin-auto-import' },
-  { name: 'unplugin-vue-components', version: '^0.26.0', license: 'MIT', repo: 'https://github.com/unplugin/unplugin-vue-components' },
-  { name: 'vite', version: '^5.2.0', license: 'MIT', repo: 'https://github.com/vitejs/vite' },
-  // 后端依赖
-  { name: 'fastapi', version: '0.110.0', license: 'MIT', repo: 'https://github.com/tiangolo/fastapi' },
-  { name: 'uvicorn', version: '0.27.0', license: 'BSD-3-Clause', repo: 'https://github.com/encode/uvicorn' },
-  { name: 'sqlalchemy', version: '2.0.25', license: 'MIT', repo: 'https://github.com/sqlalchemy/sqlalchemy' },
-  { name: 'aiosqlite', version: '0.19.0', license: 'MIT', repo: 'https://github.com/omnilib/aiosqlite' },
-  { name: 'alembic', version: '1.13.1', license: 'MIT', repo: 'https://github.com/sqlalchemy/alembic' },
-  { name: 'cachetools', version: '5.3.3', license: 'MIT', repo: 'https://github.com/tkem/cachetools' },
-  { name: 'pyjwt', version: '2.8.0', license: 'MIT', repo: 'https://github.com/jpadilla/pyjwt' },
-  { name: 'bcrypt', version: '4.1.2', license: 'Apache-2.0', repo: 'https://github.com/pyca/bcrypt' },
-  { name: 'openai', version: '1.12.0', license: 'MIT', repo: 'https://github.com/openai/openai-python' },
-  { name: 'tenacity', version: '8.2.3', license: 'Apache-2.0', repo: 'https://github.com/jd/tenacity' },
-  { name: 'edge-tts', version: '7.3.1', license: 'MIT', repo: 'https://github.com/rany2/edge-tts' },
-  { name: 'httpx', version: '0.27.0', license: 'BSD-3-Clause', repo: 'https://github.com/encode/httpx' },
-  { name: 'feedparser', version: '6.0.11', license: 'BSD-2-Clause', repo: 'https://github.com/kurtmckee/feedparser' },
-  { name: 'selectolax', version: '0.4.10', license: 'MIT', repo: 'https://github.com/rushter/selectolax' },
-  { name: 'jieba', version: '0.42.1', license: 'MIT', repo: 'https://github.com/fxsjy/jieba' },
-  { name: 'pyahocorasick', version: '2.3.1', license: 'BSD-3-Clause', repo: 'https://github.com/WojciechMula/pyahocorasick' },
-  { name: 'cos-python-sdk-v5', version: '1.9.30', license: 'MIT', repo: 'https://github.com/tencentyun/cos-python-sdk-v5' },
-  { name: 'pydantic-settings', version: '2.1.0', license: 'MIT', repo: 'https://github.com/pydantic/pydantic-settings' },
-  { name: 'pyyaml', version: '6.0.1', license: 'MIT', repo: 'https://github.com/yaml/pyyaml' },
-  { name: 'python-dotenv', version: '1.0.1', license: 'BSD-3-Clause', repo: 'https://github.com/theskumar/python-dotenv' },
-  { name: 'python-multipart', version: '0.0.9', license: 'Apache-2.0', repo: 'https://github.com/Kludex/python-multipart' },
-  { name: 'slowapi', version: '0.1.9', license: 'MIT', repo: 'https://github.com/laurents/slowapi' },
-  { name: 'PyMuPDF', version: '1.28.2', license: 'AGPL-3.0', repo: 'https://github.com/pymupdf/PyMuPDF' },
-  { name: 'apscheduler', version: '3.10.4', license: 'MIT', repo: 'https://github.com/agronholm/apscheduler' },
-  { name: 'loguru', version: '0.7.2', license: 'MIT', repo: 'https://github.com/Delgan/loguru' },
-  { name: 'colorama', version: '0.4.6', license: 'BSD-3-Clause', repo: 'https://github.com/tartley/colorama' },
-  { name: 'pytest', version: '8.4.2', license: 'MIT', repo: 'https://github.com/pytest-dev/pytest' },
-  { name: 'pytest-asyncio', version: '0.24.0', license: 'Apache-2.0', repo: 'https://github.com/pytest-dev/pytest-asyncio' },
 ].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+// </licenses>
 
 // 按搜索关键词过滤依赖
 const filteredLicenses = computed(() => {
