@@ -17,6 +17,7 @@ import { describe, it } from 'node:test'
 import { metricText, metricValue } from '../../src/utils/format.js'
 import { returnTarget } from '../../src/utils/urlState.js'
 import { filterHelpSections } from '../../src/utils/helpSearch.js'
+import { resolveReviewAudio } from '../../src/utils/audioSource.js'
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8')
 
@@ -29,6 +30,7 @@ const MANAGE_QUEUE = read('../../src/views/mobile/ManageQueue.vue')
 const HELP = read('../../src/views/help/Help.vue')
 const BOOK_POOL = read('../../src/views/channel/BookPool.vue')
 const MOBILE_LAYOUT = read('../../src/layouts/MobileLayout.vue')
+const MOBILE_REVIEW = read('../../src/views/mobile/ReviewList.vue')
 const AD_SERVICE = read('../../../../backend/app/services/ad_service.py')
 const AD_ROUTER = read('../../../../backend/app/routers/admin/ads.py')
 const QUEUE_SERVICE = read('../../../../backend/app/services/queue_service.py')
@@ -52,6 +54,74 @@ describe('B12 审核详情试听必须走代理并给出失败态', () => {
   it('成功后显示时长与「重听」，审核员能确认听到的是这一期', () => {
     assert.match(REVIEW_DETAIL, /时长 \{\{ audioDuration \}\}/)
     assert.match(REVIEW_DETAIL, /label="重听"/)
+  })
+
+  // T02757：同一缺陷在移动端审核详情还活着——列表展开后直接把 COS 地址塞进 <audio>，
+  // 403/CORS 时是一条永远不响的音轨，外勤照样盲批。
+  it('移动端不再把 detail.audio_url / hls_url 直接塞进 <audio>', () => {
+    assert.doesNotMatch(MOBILE_REVIEW, /:src="item\.detail\.audio_url/)
+    assert.doesNotMatch(MOBILE_REVIEW, /:src="item\.detail\.hls_url/)
+    assert.match(MOBILE_REVIEW, /:src="item\.audioSrc"/)
+  })
+
+  it('移动端远端地址走代理，且用的是列表行的 workflow_id（不是审核 id）', () => {
+    assert.match(MOBILE_REVIEW, /import \{ getEpisodeAudioUrl \} from '\.\.\/\.\.\/api\/audio'/)
+    assert.match(MOBILE_REVIEW, /const workflowId = item\.workflow_id \|\| item\.detail\?\.workflow_id/)
+    assert.match(MOBILE_REVIEW, /await getEpisodeAudioUrl\(workflowId, url\)/)
+  })
+
+  it('移动端有加载态、失败原因与重试，只有 HLS 时说明不可试听', () => {
+    assert.match(MOBILE_REVIEW, /音频加载中…/)
+    assert.match(MOBILE_REVIEW, /试听音频加载失败：\{\{ item\.audioError \}\}/)
+    assert.match(MOBILE_REVIEW, /@click="loadItemAudio\(item\)"/)
+    assert.match(MOBILE_REVIEW, /当前浏览器不支持直接试听/)
+    assert.match(MOBILE_REVIEW, /@error="onItemAudioError\(item\)"/)
+  })
+
+  it('收起/离开页面回收代理 blob，在途请求不会覆盖新一轮状态', () => {
+    assert.match(MOBILE_REVIEW, /if \(item\.audioSrc && item\.audioSrc\.startsWith\('blob:'\)\)/)
+    assert.match(MOBILE_REVIEW, /if \(token !== item\.audioToken\)/)
+    assert.match(MOBILE_REVIEW, /onUnmounted\(\(\) => \{\s*list\.value\.forEach\(releaseItemAudio\)/)
+  })
+
+  // 真实库实测两种形态：33 条 COS 绝对地址、48 条 /audio/... 相对路径 —— 分流必须两种都覆盖
+  describe('resolveReviewAudio 按真实数据形态分流', () => {
+    const cos = 'https://morningbrief-audio-1311027859.cos.ap-beijing.myqcloud.com/episodes/20260820/a.mp3'
+
+    it('COS 绝对地址 → remote（交给后端代理）', () => {
+      assert.deepEqual(resolveReviewAudio({ audio_url: cos }), { mode: 'remote', url: cos })
+    })
+
+    it('协议相对地址补成 https，代理才接受', () => {
+      assert.deepEqual(resolveReviewAudio({ audio_url: '//cdn.example.com/a.mp3' }), {
+        mode: 'remote',
+        url: 'https://cdn.example.com/a.mp3',
+      })
+    })
+
+    it('相对 /audio/... → local（同源静态音频直接播，不走代理）', () => {
+      assert.deepEqual(resolveReviewAudio({ audio_url: '/audio/episodes/20260728/a.mp3' }), {
+        mode: 'local',
+        url: '/audio/episodes/20260728/a.mp3',
+      })
+    })
+
+    it('只有 HLS 清单 → hls（不产出可播地址）', () => {
+      assert.deepEqual(resolveReviewAudio({ audio_url: '', hls_url: 'https://x/a.m3u8' }), {
+        mode: 'hls',
+        url: '',
+      })
+    })
+
+    it('空/空白/缺失的 audio_url 不会被当成可播地址', () => {
+      assert.deepEqual(resolveReviewAudio({ audio_url: '   ' }), { mode: 'none', url: '' })
+      assert.deepEqual(resolveReviewAudio({}), { mode: 'none', url: '' })
+      assert.deepEqual(resolveReviewAudio(null), { mode: 'none', url: '' })
+    })
+
+    it('audio_url 两端空白会被去掉再判定', () => {
+      assert.deepEqual(resolveReviewAudio({ audio_url: `  ${cos}  ` }), { mode: 'remote', url: cos })
+    })
   })
 })
 

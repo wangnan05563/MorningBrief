@@ -1348,7 +1348,7 @@
       "sites": [
         {
           "file": "views/mobile/ReviewList.vue",
-          "line": 252,
+          "line": 272,
           "fn": "listReviews",
           "fieldCount": 1,
           "unresolved": []
@@ -1377,7 +1377,7 @@
       "sites": [
         {
           "file": "views/mobile/ReviewList.vue",
-          "line": 278,
+          "line": 304,
           "fn": "getReview",
           "fieldCount": 0,
           "unresolved": []
@@ -2788,7 +2788,7 @@
       "sites": [
         {
           "file": "views/mobile/ReviewList.vue",
-          "line": 335,
+          "line": 427,
           "fn": "handleReviewAction",
           "fieldCount": 3,
           "unresolved": [
@@ -2827,7 +2827,7 @@
       "sites": [
         {
           "file": "views/mobile/ReviewList.vue",
-          "line": 382,
+          "line": 474,
           "fn": "batchHandleReviewAction",
           "fieldCount": 3,
           "unresolved": [

@@ -83,10 +83,28 @@
             loading="lazy"
           />
 
-          <!-- 语音内容（音频播放）：优先 review.audio_url，缺省回退 episode.hls_url -->
-          <div v-if="item.detail.audio_url || item.detail.hls_url" class="m-detail__audio">
+          <!-- 语音内容（B12 / T02757）：远端地址必须走 /audio/proxy（私有桶 + CORS），
+               相对路径是同源静态音频可直接播；只有 HLS 清单时明确说明不可试听，
+               不再把不可直连的地址塞进 <audio src> 让审核员对着静音盲批。 -->
+          <div v-if="item.audioMode !== 'none'" class="m-detail__audio">
             <span class="m-detail__audio-label">语音内容</span>
-            <audio controls preload="none" :src="item.detail.audio_url || item.detail.hls_url"></audio>
+            <span v-if="item.audioMode === 'hls'" class="m-detail__audio-hint">
+              该节目只有 HLS 分片地址，当前浏览器不支持直接试听；请到 PC 端核对音频。
+            </span>
+            <template v-else>
+              <span v-if="item.audioLoading" class="m-detail__audio-hint">音频加载中…</span>
+              <div v-else-if="item.audioError" class="m-detail__audio-error">
+                <span>试听音频加载失败：{{ item.audioError }}</span>
+                <button type="button" class="m-btn m-btn--ghost" @click="loadItemAudio(item)">重试</button>
+              </div>
+              <audio
+                v-else-if="item.audioSrc"
+                controls
+                preload="none"
+                :src="item.audioSrc"
+                @error="onItemAudioError(item)"
+              ></audio>
+            </template>
           </div>
 
           <!-- 字段明细 -->
@@ -195,13 +213,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { listReviews, getReview, handleReviewAction, batchHandleReviewAction } from '../../api/reviews'
+import { getEpisodeAudioUrl } from '../../api/audio'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import { formatTriggerReason } from '../../utils/autoReviewRules'
 import { formatDuration } from '../../utils/format'
+import { resolveReviewAudio } from '../../utils/audioSource'
 import { returnTarget, readUrlState, SCOPED_REVIEW_SPECS } from '../../utils/urlState'
 
 const route = useRoute()
@@ -256,6 +276,12 @@ async function load() {
         expanded: false,
         detail: null,
         loadingDetail: false,
+        // B12：语音内容的三种来源与播放态，展开时按 detail 判定
+        audioMode: 'none',
+        audioSrc: '',
+        audioError: '',
+        audioLoading: false,
+        audioToken: 0,
       }))
       all.push(...items)
       // 已取满全部(total) 或本页不足 size（末页）→ 停止；page>=4 防御异常无限循环
@@ -276,12 +302,70 @@ async function loadDetail(item) {
   item.loadingDetail = true
   try {
     item.detail = await getReview(item.id)
+    prepareItemAudio(item)
   } catch {
     // 拦截器已提示；失败保留展开态且 detail 置空以便重试
     item.detail = null
   } finally {
     item.loadingDetail = false
   }
+}
+
+// B12（FR-UX-602 / T02757）：语音内容按来源分流——远端 COS 走 /audio/proxy 拉成 blob，
+// 同源相对路径直接播，只有 HLS 清单时明确说明不可试听（桌面 <audio> 不认 m3u8）。
+const AUDIO_DECODE_ERROR = '浏览器无法解码该音频（文件可能损坏或格式不支持）'
+
+function releaseItemAudio(item) {
+  // 本地相对路径不是 blob，不能 revoke；只有代理产出的 blob: URL 需要回收
+  if (item.audioSrc && item.audioSrc.startsWith('blob:')) URL.revokeObjectURL(item.audioSrc)
+  item.audioSrc = ''
+}
+
+function prepareItemAudio(item) {
+  const { mode, url } = resolveReviewAudio(item.detail)
+  item.audioMode = mode
+  item.audioError = ''
+  item.audioToken += 1
+  releaseItemAudio(item)
+  if (mode === 'local') {
+    item.audioSrc = url
+    return
+  }
+  if (mode === 'remote') loadItemAudio(item)
+}
+
+async function loadItemAudio(item) {
+  if (item.audioMode !== 'remote') return
+  const { url } = resolveReviewAudio(item.detail)
+  if (!url) return
+  // 代理按工作流路由，缺失时不能瞎猜一个 id 去请求
+  const workflowId = item.workflow_id || item.detail?.workflow_id
+  if (!workflowId) {
+    item.audioError = '详情缺少工作流 ID，无法经代理加载音频'
+    return
+  }
+  const token = (item.audioToken += 1)
+  item.audioLoading = true
+  item.audioError = ''
+  releaseItemAudio(item)
+  try {
+    const blobUrl = await getEpisodeAudioUrl(workflowId, url)
+    // 收起/重试后旧请求晚回来：丢掉它的 blob，不能覆盖新一轮状态
+    if (token !== item.audioToken) {
+      URL.revokeObjectURL(blobUrl)
+      return
+    }
+    item.audioSrc = blobUrl
+  } catch (e) {
+    if (token === item.audioToken) item.audioError = e?.message || '未知错误'
+  } finally {
+    if (token === item.audioToken) item.audioLoading = false
+  }
+}
+
+function onItemAudioError(item) {
+  item.audioError = AUDIO_DECODE_ERROR
+  releaseItemAudio(item)
 }
 
 // 点击标题：展开/收起详情；首次展开时懒加载审核详情
@@ -293,7 +377,15 @@ async function toggleExpand(item) {
     return
   }
   item.expanded = !item.expanded
-  if (item.expanded && !item.detail && !item.loadingDetail) {
+  if (!item.expanded) {
+    // 收起时释放试听资源；在途代理请求用 token 作废（回来时自己丢掉 blob）
+    item.audioToken += 1
+    releaseItemAudio(item)
+    item.audioError = ''
+    item.audioLoading = false
+    return
+  }
+  if (!item.detail && !item.loadingDetail) {
     await loadDetail(item)
   }
 }
@@ -403,6 +495,11 @@ onMounted(() => {
     )
   }
   load()
+})
+
+// 离开页面时回收所有代理 blob，避免把音频一直留在内存里
+onUnmounted(() => {
+  list.value.forEach(releaseItemAudio)
 })
 </script>
 
@@ -641,6 +738,22 @@ onMounted(() => {
 .m-detail__audio-label {
   font-size: 12px;
   color: #8a8f99;
+}
+
+.m-detail__audio-hint {
+  font-size: 12px;
+  color: #8a8f99;
+  line-height: 1.5;
+}
+
+.m-detail__audio-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  color: #f56c6c;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .m-detail__audio audio {
