@@ -12,6 +12,8 @@
 （`app/core/exceptions.py` 的 RequestValidationError 处理器），不是 200 信封。
 """
 import io
+import re
+from pathlib import Path
 
 from app.models import Channel
 
@@ -115,3 +117,192 @@ def test_channel_dict_fields_cover_model_column_names(client, admin_token):
     data = _create(client, admin_token, name="T02518 字段完整性")
     missing = sorted(editable - set(data.keys()))
     assert not missing, f"_channel_to_dict 漏序列化字段: {missing}"
+
+
+# ------------------------------------------------- T02820 三层字段矩阵
+
+
+ROOT = Path(__file__).resolve().parents[2]
+CHANNEL_VIEW = ROOT / "apps/admin-web/src/views/channel/ChannelManagement.vue"
+CHANNELS_ROUTER = ROOT / "backend/app/routers/admin/channels.py"
+
+# 只活在弹窗里、提交前会转换成别的字段或纯 UI 开关的键。
+# 每一项都要写明去向，否则「控件有、请求体没有」会被这张豁免表吞掉。
+UI_ONLY = {
+    "id": "编辑态主键，走 URL 路径不重复进请求体",
+    "lookbackEnabled": "开关，提交时折叠成 material_lookback_days 的 null/值",
+    "minDurationEnabled": "开关，提交时折叠成 min_duration_sec 的 null/值",
+    "inherit_segment_gap": "开关，提交时把 segment_gap_sec 置空以继承全局",
+    "inherit_bgm_gap": "开关，提交时把 bgm_gap_mode 置空以继承全局",
+    "manual_material_ids_text": "逗号文本，提交时序列化成 manual_material_ids",
+}
+# 只在某一个分支提交、另一个分支有意不提交的控件（不登记就等于放走「半边没接线」）
+CREATE_SKIP = {
+    "intro_prompt", "outro_prompt", "constraint_prompt", "rewrite_template",
+}
+UPDATE_SKIP = {
+    "auto_generate_prompts",
+}
+# 模型字段与控件名不同名但同源（必须显式登记，避免把改名当成缺口或反过来漏检）
+FIELD_ALIASES = {"manual_material_ids": "manual_material_ids_text"}
+
+
+def _balanced(src: str, open_idx: int) -> str:
+    """取 src[open_idx] 的 `{` 起配对的块内容。跳过字符串与 //、/* */ 注释。"""
+    assert src[open_idx] == "{", src[open_idx - 20:open_idx + 20]
+    depth, i = 0, open_idx
+    while i < len(src):
+        ch = src[i]
+        if ch in "'\"`":
+            quote, i = ch, i + 1
+            while i < len(src):
+                if src[i] == "\\":
+                    i += 2
+                    continue
+                if src[i] == quote:
+                    break
+                i += 1
+        elif src.startswith("//", i):
+            nl = src.find("\n", i)
+            if nl == -1:
+                break
+            i = nl
+        elif src.startswith("/*", i):
+            i = src.find("*/", i) + 2
+            continue
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return src[open_idx + 1:i]
+        i += 1
+    raise AssertionError("花括号不配对，源码结构可能已变")
+
+
+def _object_after(src: str, marker: str) -> tuple[str, set[str]]:
+    """marker 之后第一个对象字面量的块文本与顶格键集合（含 ...spread 展开）。"""
+    assert src.count(marker) == 1, f"锚点不唯一（{src.count(marker)} 处）：{marker!r}"
+    idx = src.index(marker) + len(marker)
+    while src[idx] != "{":
+        idx += 1
+    block = _balanced(src, idx)
+    keys, depth, i, prev = set(), 0, 0, ""
+    while i < len(block):
+        ch = block[i]
+        if ch in "'\"`":
+            quote, i = ch, i + 1
+            while i < len(block):
+                if block[i] == "\\":
+                    i += 2
+                    continue
+                if block[i] == quote:
+                    break
+                i += 1
+            prev = quote
+        elif block.startswith("//", i):
+            nl = block.find("\n", i)
+            if nl == -1:
+                break
+            i = nl
+            # 注释不改变 prev：`{ a: 1, // 说明\n b: 2` 里 b 的前一个有效字符仍是逗号
+        elif ch in "{[(":
+            depth += 1
+            prev = ch
+        elif ch in "}])":
+            depth -= 1
+            prev = ch
+        elif depth == 0 and (ch.isalpha() or ch in "_$"):
+            j = i
+            while j < len(block) and (block[j].isalnum() or block[j] in "_$"):
+                j += 1
+            k = j
+            while k < len(block) and block[k] in " \t\n":
+                k += 1
+            # 属性名前面只能是 `{` 或 `,`：三元 `? null : x` 里的 null 也会长得像 `word:`
+            if prev in "{," and k < len(block) and block[k] == ":":
+                keys.add(block[i:j])
+            prev = block[j - 1]
+            i = j
+            continue
+        elif ch not in " \t\n":
+            prev = ch
+        i += 1
+    return block, keys
+
+
+def _model_fields(cls_name: str) -> set[str]:
+    src = CHANNELS_ROUTER.read_text(encoding="utf-8")
+    # 类体到下一个顶格行结束：不能跨进模块级函数，否则函数体里的 try:/with: 会被当成字段
+    body = re.search(rf"class {cls_name}\(BaseModel\):(.*?)(?=\nclass |\n\S|\Z)", src, re.S)
+    assert body, f"未找到 {cls_name}"
+    return set(re.findall(r"^ {4}(\w+)\s*:", body.group(1), re.M))
+
+
+def test_channel_form_request_model_matrix_has_no_gap():
+    """控件 / 请求体 / 后端模型 三层字段矩阵（T02820 附加检查项）。
+
+    C15 的形态是「弹窗有控件、请求体没有该字段」——后端只能按默认值落库，
+    运营看到保存成功，实际配置没生效。序列化侧（模型→响应）已有
+    `test_channel_dict_fields_cover_model_column_names` 兜住，本用例兜的是
+    请求体侧：新增/编辑两个 payload 的每个键都必须被对应模型接收，
+    每个表单控件都必须有去处（进请求体，或在 UI_ONLY 里写明转换去向）。
+    """
+    src = CHANNEL_VIEW.read_text(encoding="utf-8")
+
+    _, form = _object_after(src, "const form = reactive(")
+    _, ext = _object_after(src, "const extPayload = ")
+    create_block, create = _object_after(src, "await createChannel(")
+    update_block, update = _object_after(
+        src, "// 编辑：提交所有字段（空字符串表示清空，后端会判断）\n      await updateChannel(form.id, "
+    )
+    # spread 展开的键也要算作「提交了」，否则扩展字段会被误判成未接线
+    if "...extPayload" in create_block:
+        create |= ext
+    if "...extPayload" in update_block:
+        update |= ext
+
+    create_model = _model_fields("ChannelCreateRequest")
+    update_model = _model_fields("ChannelUpdateRequest")
+
+    # 解析本身要成立：表单控件有几十个，解析成个位数说明锚点或扫描器坏了
+    assert len(form) >= 30, f"form 只解析出 {len(form)} 个键，扫描器可能失效：{sorted(form)}"
+
+    # 1) 请求体 → 后端模型：多提交一个模型不认识的键，FastAPI 会静默丢弃
+    assert create <= create_model, f"新增请求体有模型不接收的字段: {sorted(create - create_model)}"
+    assert update <= update_model, f"编辑请求体有模型不接收的字段: {sorted(update - update_model)}"
+
+    # 2) 控件 → 请求体：分分支检查，只接一半（C15 就是新增分支漏了）同样算缺口
+    missing_create = form - set(UI_ONLY) - CREATE_SKIP - create
+    assert not missing_create, f"新增请求体漏提交这些控件: {sorted(missing_create)}"
+    missing_update = form - set(UI_ONLY) - UPDATE_SKIP - update
+    assert not missing_update, f"编辑请求体漏提交这些控件: {sorted(missing_update)}"
+
+    # 3) 后端模型 → 控件：模型能存的字段，弹窗得能填（否则只能靠 API 改库）
+    aliased = set(FIELD_ALIASES)
+    no_control = create_model - form - aliased
+    assert not no_control, f"后端可写但弹窗无控件: {sorted(no_control)}"
+    no_control = update_model - form - aliased
+    assert not no_control, f"后端可编辑但弹窗无控件: {sorted(no_control)}"
+
+    # 4) C15 定点回归：新增分支必须显式提交 is_active，否则开关又是摆设
+    assert "is_active" in create and "is_active" in create_model
+    assert "is_active" in update and "is_active" in update_model
+
+    # 5) 别名表不能空转：它指向的控件与模型字段都要真实存在
+    for model_key, form_key in FIELD_ALIASES.items():
+        assert model_key in create_model | update_model, f"别名表里的 {model_key} 已不在模型上"
+        assert form_key in form, f"别名表里的控件 {form_key} 已不存在"
+
+
+def test_channel_matrix_ignores_spread_by_expanding_ext_payload():
+    """extPayload 的键必须真的被两个分支展开（否则扩展字段只在编辑态生效）。"""
+    src = CHANNEL_VIEW.read_text(encoding="utf-8")
+    _, ext = _object_after(src, "const extPayload = ")
+    create_block, _ = _object_after(src, "await createChannel(")
+    update_block, _ = _object_after(
+        src, "// 编辑：提交所有字段（空字符串表示清空，后端会判断）\n      await updateChannel(form.id, "
+    )
+    assert ext, "extPayload 未解析出任何键"
+    assert "...extPayload" in create_block, "新增分支未展开 extPayload ⇒ 扩展字段创建时丢失"
+    assert "...extPayload" in update_block, "编辑分支未展开 extPayload ⇒ 扩展字段无法修改"
