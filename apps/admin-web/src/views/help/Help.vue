@@ -167,6 +167,7 @@ import { useGuide } from '../../guide/useGuide'
 import { GUIDE_STEPS } from '../../guide/guideConfig'
 import { getAbout } from '../../api/about'
 import { API_DOCS_PATH } from '../../utils/appPath'
+import { filterHelpSections } from '../../utils/helpSearch'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -652,32 +653,9 @@ const docSections = [
 ]
 
 // M88：搜索此前只匹配 title/intro，正文里的「CONFIRM_DELETE」「VACUUM」「COS」「密钥」
-// 一律搜不到，用户会以为文档没写。现在把章节的块内容（含步骤数组、表格行、注意事项）
-// 一并纳入匹配，命中正文仍返回整章。
-function collectSectionText(value, out = []) {
-  if (typeof value === 'string') {
-    out.push(value)
-  } else if (Array.isArray(value)) {
-    value.forEach((v) => collectSectionText(v, out))
-  } else if (value && typeof value === 'object') {
-    Object.entries(value).forEach(([key, v]) => {
-      // 图标组件、样式枚举不是文档内容
-      if (key === 'icon' || key === 'noteType' || key === 'type' || key === 'id') return
-      collectSectionText(v, out)
-    })
-  }
-  return out
-}
-
-// 搜索过滤：标题、简介或正文任一命中即保留
-const filteredSections = computed(() => {
-  if (!search.value.trim()) return docSections
-  const kw = search.value.trim().toLowerCase()
-  return docSections.filter((s) => {
-    const haystack = collectSectionText([s.title, s.intro, s.blocks]).join('\n').toLowerCase()
-    return haystack.includes(kw)
-  })
-})
+// 一律搜不到，用户会以为文档没写。匹配口径（含步骤数组、表格行、注意事项）收在
+// utils/helpSearch.js：那是对真实文档可跑用例的纯函数，留在这里就只能断言源码写法。
+const filteredSections = computed(() => filterHelpSections(docSections, search.value))
 
 async function openApiDocs() {
   // 交互式文档只在后端 development 环境挂载（main.py 的 docs_url 受 is_dev 控制），

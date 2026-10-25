@@ -16,6 +16,7 @@ import { describe, it } from 'node:test'
 
 import { metricText, metricValue } from '../../src/utils/format.js'
 import { returnTarget } from '../../src/utils/urlState.js'
+import { filterHelpSections } from '../../src/utils/helpSearch.js'
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8')
 
@@ -142,9 +143,106 @@ describe('I48 队列项显式携带 workflow_id', () => {
 })
 
 describe('M88 帮助搜索覆盖正文', () => {
-  it('搜索 haystack 包含 blocks（正文），不只是标题与简介', () => {
-    assert.match(HELP, /function collectSectionText/)
-    assert.match(HELP, /collectSectionText\(\[s\.title, s\.intro, s\.blocks\]\)/)
+  // 从 SFC 里取出真实 docSections：搜索口径的用例必须跑在真实文档上，否则改了文案/加块类型
+  // 用例还在原地绿。数组字面量按括号配对截取（跳过字符串与注释），再用 markRaw 注入求值。
+  const literal = (() => {
+    const at = HELP.indexOf('const docSections =')
+    assert.notEqual(at, -1, 'Help.vue 里找不到 docSections')
+    const open = HELP.indexOf('[', at)
+    let depth = 0
+    let quote = ''
+    for (let i = open; i < HELP.length; i += 1) {
+      const ch = HELP[i]
+      if (quote) {
+        if (ch === '\\') i += 1
+        else if (ch === quote) quote = ''
+        continue
+      }
+      if (ch === '/' && HELP[i + 1] === '/') {
+        const nl = HELP.indexOf('\n', i)
+        i = nl === -1 ? HELP.length : nl
+        continue
+      }
+      if (ch === '/' && HELP[i + 1] === '*') {
+        const end = HELP.indexOf('*/', i + 2)
+        i = end === -1 ? HELP.length : end + 1
+        continue
+      }
+      if (ch === "'" || ch === '"' || ch === '`') {
+        quote = ch
+        continue
+      }
+      if (ch === '[') depth += 1
+      else if (ch === ']') {
+        depth -= 1
+        if (depth === 0) return HELP.slice(open, i + 1)
+      }
+    }
+    throw new Error('docSections 数组未闭合')
+  })()
+  const DOC = (() => {
+    const icons = [...new Set([...literal.matchAll(/markRaw\(([A-Za-z_$][\w$]*)\)/g)].map((m) => m[1]))]
+    // 文档数据只依赖 markRaw(图标)；把图标名注入成同名标识符即可原样求值
+    return new Function('markRaw', ...icons, 'return (' + literal + ')')((v) => v, ...icons.map((n) => n))
+  })()
+  const hits = (kw) => filterHelpSections(DOC, kw)
+  const bodyOnly = (kw) => {
+    const found = hits(kw)
+    assert.ok(found.length > 0, `「${kw}」应至少命中一章`)
+    return found.filter((s) => !`${s.title}\n${s.intro}`.toLowerCase().includes(kw.toLowerCase()))
+  }
+
+  it('真实文档的块类型齐全，正文类用例才有意义', () => {
+    const types = [...new Set(DOC.flatMap((s) => s.blocks.map((b) => b.type)))].sort()
+    assert.deepEqual(types, ['config', 'feature', 'note', 'scenario', 'steps'])
+  })
+
+  it('只在标题/简介命中的词仍能搜到（不因改造丢掉原有能力）', () => {
+    assert.ok(hits('广告管理').some((s) => s.title === '广告管理'))
+    assert.ok(hits('决定是否进入 TTS 合成流程').length === 1)
+  })
+
+  it('步骤数组可搜到，且确认命中位置在正文', () => {
+    const found = bodyOnly('访问运营后台')
+    assert.deepEqual(found.map((s) => s.id), ['quickstart'])
+  })
+
+  it('配置表格的参数列与说明列都可搜到', () => {
+    assert.deepEqual(bodyOnly('COS_SECRET_ID').map((s) => s.id), ['cos-storage'])
+    assert.ok(bodyOnly('通义千问').length >= 1)
+  })
+
+  it('注意事项块可搜到', () => {
+    assert.ok(bodyOnly('生产环境请立即修改密码').some((s) => s.id === 'quickstart'))
+  })
+
+  it('关键词按大小写不敏感与首尾空白归一匹配', () => {
+    assert.deepEqual(hits('cos_secret_id').map((s) => s.id), hits('COS_SECRET_ID').map((s) => s.id))
+    assert.deepEqual(hits('  COS_SECRET_ID  ').map((s) => s.id), ['cos-storage'])
+  })
+
+  it('跨章节命中返回全部相关章节而不是只取第一个', () => {
+    assert.ok(hits('COS').length >= 2)
+  })
+
+  it('块的 type / noteType 等展示枚举不算文档内容', () => {
+    assert.deepEqual(hits('warning'), [])
+    assert.deepEqual(hits('feature'), [])
+  })
+
+  it('空关键词与纯空白返回全部章节且保持原顺序，无命中返回空数组', () => {
+    assert.deepEqual(hits('').map((s) => s.id), DOC.map((s) => s.id))
+    assert.deepEqual(hits('   ').map((s) => s.id), DOC.map((s) => s.id))
+    assert.deepEqual(hits('不存在的词zzz'), [])
+  })
+
+  it('组件只保留一份实现：引用 utils/helpSearch，正文/空态都渲染过滤结果', () => {
+    assert.match(HELP, /import \{ filterHelpSections \} from '\.\.\/\.\.\/utils\/helpSearch'/)
+    assert.match(HELP, /filterHelpSections\(docSections, search\.value\)/)
+    assert.doesNotMatch(HELP, /function collectSectionText/)
+    assert.match(HELP, /v-for="s in filteredSections"/)
+    assert.match(HELP, /v-for="section in filteredSections"/)
+    assert.match(HELP, /未找到匹配的章节/)
   })
 })
 

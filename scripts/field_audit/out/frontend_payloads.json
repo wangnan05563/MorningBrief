@@ -237,7 +237,7 @@
         },
         {
           "file": "views/help/Help.vue",
-          "line": 686,
+          "line": 664,
           "fn": "getAbout",
           "fieldCount": 0,
           "unresolved": []
