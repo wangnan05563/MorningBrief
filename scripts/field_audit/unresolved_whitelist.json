@@ -33,13 +33,13 @@
     },
     {
       "endpoint": "PUT /notification/config",
-      "site": "views/notification/NotificationConfig.vue:704",
+      "site": "views/notification/NotificationConfig.vue:717",
       "reason_key": "spread-manually-verified",
-      "note": "...configForm 的键集合在 apps/admin-web/src/views/notification/NotificationConfig.vue:572-586 声明，13 项与 SaveConfigBody 逐一对应，无多余键。"
+      "note": "...configForm 的键集合在 apps/admin-web/src/views/notification/NotificationConfig.vue:585-599 声明，13 项与 SaveConfigBody 逐一对应，无多余键。"
     },
     {
       "endpoint": "PUT /notification/config",
-      "site": "views/notification/NotificationConfig.vue:734",
+      "site": "views/notification/NotificationConfig.vue:747",
       "reason_key": "spread-manually-verified",
       "note": "同上：另一条保存路径（测试发送前落盘）复用同一个 configForm。"
     },

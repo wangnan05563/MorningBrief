@@ -6,8 +6,9 @@
  *    构建期门禁 `scripts/validate-nav.mjs` 会解析后端模型做双向比对（后端新增/字典漏配都 fail）。
  * 2. 页面不得再自建同族映射。门禁同时按「对象字面量的键 ⊂ 某枚举值集」拦截重复声明。
  *    —— 这正是「填了不显示」「列表与详情文案不一致」两个 bug 的机械成因。
- * 3. `channel_type` 不是模型 Enum（`Channel.channel_type` 是自由字符串列），无法由门禁比对模型，
- *    因此它的值集在本文件单点声明，页面一律走 `enumLabel(CHANNEL_TYPE, …)`。
+ * 3. 后端没有模型枚举的域（如 `FEEDBACK_STATUS`：`Feedback.status` 是自由字符串列）
+ *    无法由门禁比对值集，必须在 `BACKEND_ENUM_OF` 里显式写 null；漏写会被门禁直接判错。
+ *    `CHANNEL_TYPE` 自 T02704 起已挂到模型枚举 `ChannelType`，与其余字典同一口径。
  *
  * 字段：
  * - label 中文文案（列表 / 详情 / 下拉共用）
@@ -68,6 +69,14 @@ export const FEEDBACK_STATUS = {
   resolved: { label: '已解决', badge: 'm-badge--on' },
 }
 
+/** 通知投递结果（T02702）；键与 `NotificationDeliveryStatus` 一致 */
+export const NOTIFICATION_DELIVERY_STATUS = {
+  success: { label: '成功', type: 'success' },
+  failed: { label: '失败', type: 'danger' },
+  failed_capped: { label: '失败达上限', type: 'warning' },
+  suppressed: { label: '已抑制', type: 'info' },
+}
+
 export const MATERIAL_STATUS = {
   pending: { label: '待消费', type: 'info' },
   selected: { label: '已选题', type: 'success' },
@@ -125,6 +134,7 @@ export const BACKEND_ENUM_OF = {
   ADMIN_ROLE: 'AdminRole',
   CHANNEL_TYPE: 'ChannelType',
   FEEDBACK_STATUS: null,
+  NOTIFICATION_DELIVERY_STATUS: 'NotificationDeliveryStatus',
 }
 
 export function enumLabel(dict, value, fallback = value) {

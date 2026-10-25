@@ -372,10 +372,12 @@
               style="width: 160px; margin-left: 12px"
               @change="handleLogFilterChange"
             >
-              <el-option label="成功" value="success" />
-              <el-option label="失败" value="failed" />
-              <el-option label="失败达上限" value="failed_capped" />
-              <el-option label="已抑制" value="suppressed" />
+              <el-option
+                v-for="o in deliveryStatusOptions"
+                :key="o.value"
+                :label="o.label"
+                :value="o.value"
+              />
             </el-select>
             <IconButton
               :icon="Refresh"
@@ -441,8 +443,11 @@
             <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
             <el-table-column prop="status" label="状态" width="100">
               <template #default="{ row }">
-                <el-tag :type="getStatusTagType(row.status)" size="small">
-                  {{ getStatusLabel(row.status) }}
+                <el-tag
+                  :type="enumTagType(NOTIFICATION_DELIVERY_STATUS, row.status, '')"
+                  size="small"
+                >
+                  {{ enumLabel(NOTIFICATION_DELIVERY_STATUS, row.status) }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -546,6 +551,14 @@ import {
   listNotificationLogs,
   resendNotificationLog,
 } from '../../api/notification'
+import {
+  NOTIFICATION_DELIVERY_STATUS,
+  enumLabel,
+  enumOptions,
+  enumTagType,
+} from '../../constants/enums'
+
+const deliveryStatusOptions = enumOptions(NOTIFICATION_DELIVERY_STATUS)
 
 const activeTab = ref('config')
 
@@ -911,24 +924,6 @@ function getEventTagType(eventType) {
   if (eventType === 'workflow.published') return 'success'
   if (eventType === 'system.stall_alert') return 'danger'
   return 'info'
-}
-
-function getStatusTagType(status) {
-  if (status === 'success') return 'success'
-  if (status === 'failed') return 'danger'
-  if (status === 'failed_capped') return 'warning'
-  if (status === 'suppressed') return 'info'
-  return ''
-}
-
-function getStatusLabel(status) {
-  const map = {
-    success: '成功',
-    failed: '失败',
-    failed_capped: '失败达上限',
-    suppressed: '已抑制',
-  }
-  return map[status] || status
 }
 
 function formatTime(iso) {

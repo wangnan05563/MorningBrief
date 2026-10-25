@@ -6397,7 +6397,7 @@
     },
     "NotificationLog": {
       "table": "notification_log",
-      "source": "backend/app/models/notification_log.py:16",
+      "source": "backend/app/models/notification_log.py:31",
       "columns": [
         "channel",
         "created_at",
