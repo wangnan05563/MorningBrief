@@ -202,7 +202,7 @@ import { ElMessage, ElMessageBox } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import { formatTriggerReason } from '../../utils/autoReviewRules'
 import { formatDuration } from '../../utils/format'
-import { returnTarget } from '../../utils/urlState'
+import { returnTarget, readUrlState, SCOPED_REVIEW_SPECS } from '../../utils/urlState'
 
 const route = useRoute()
 const router = useRouter()
@@ -216,12 +216,15 @@ function backToQueue() {
 }
 
 // 作用域模式：从队列页带 workflow_id（+channel_name）进入，列表按工作流过滤
-const scoped = computed(() => !!route.query.workflow_id)
+// T02760：参数先按 SCOPED_REVIEW_SPECS 规整，非法值（负数/数组/超长/格式不符）不参与作用域判定
+const deepLink = computed(() => readUrlState(route.query, SCOPED_REVIEW_SPECS))
+const scopedValues = computed(() => deepLink.value.values)
+const scoped = computed(() => !!scopedValues.value.workflow_id)
 const channelName = computed(
-  () => route.query.channel_name || list.value[0]?.channel_name || '—'
+  () => scopedValues.value.channel_name || list.value[0]?.channel_name || '—'
 )
 const workflowName = computed(
-  () => route.query.workflow_id || list.value[0]?.workflow_name || '—'
+  () => scopedValues.value.workflow_id || list.value[0]?.workflow_name || '—'
 )
 // 空态里点名「哪一条工作流」要用人能认的名字：频道名 +（工作流 ID），
 // 只显示一串数字 ID 的话，用户回来还是分不清是哪条任务
@@ -245,7 +248,7 @@ async function load() {
     while (true) {
       const params = { status: 'pending', page, size }
       // 作用域模式按工作流过滤，使顶部上下文与卡片一致
-      if (route.query.workflow_id) params.workflow_id = route.query.workflow_id
+      if (scopedValues.value.workflow_id) params.workflow_id = scopedValues.value.workflow_id
       const data = await listReviews(params)
       const items = (data.list || []).map((it) => ({
         ...it,
@@ -392,7 +395,15 @@ async function approveAll() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  // T02760：非法作用域参数会被静默丢弃（列表变成「全部待审」），必须让用户知道筛选没生效
+  if (deepLink.value.invalid.length) {
+    ElMessage.warning(
+      `地址中的筛选参数无效（${deepLink.value.invalid.map((i) => i.key).join('、')}），已按全部待审展示`,
+    )
+  }
+  load()
+})
 </script>
 
 <style scoped>

@@ -10,15 +10,20 @@
  */
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
 
 import {
   crossEndTarget,
   detailLocation,
   isMobilePath,
   isQueryDirty,
+  MATERIALS_QUERY_SPECS,
   parseFromQuery,
   readUrlState,
   returnTarget,
+  SCOPED_REVIEW_SPECS,
   sanitizeRedirect,
   splitAppUrl,
   stripModeQuery,
@@ -355,5 +360,135 @@ describe('跨端 withFrom 与详情 from 同一口径（parseFromQuery 一个入
     assert.equal(t.path, null)
     const q = crossEndTarget('/message-center', {}, 'mobile') // 等价表对不上：from 记原路径
     assert.deepEqual(parseFromQuery(q.query), { path: '/message-center', query: {} })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T02760 / FR-UX-602 E12：深链参数校验补全
+// ---------------------------------------------------------------------------
+
+describe('MATERIALS_QUERY_SPECS：素材库深链只放合法值进查询', () => {
+  it('合法深链原样生效', () => {
+    const { values, invalid } = readUrlState(
+      { channelId: '7', materialId: '21', source: '人工智能简史', keyword: '语音', view: 'book' },
+      MATERIALS_QUERY_SPECS,
+    )
+    assert.deepEqual(values, {
+      channelId: 7,
+      materialId: 21,
+      source: '人工智能简史',
+      keyword: '语音',
+      view: 'book',
+    })
+    assert.deepEqual(invalid, [])
+  })
+
+  it('没有参数时全部回默认值（不把 undefined 带进查询）', () => {
+    assert.deepEqual(readUrlState({}, MATERIALS_QUERY_SPECS).values, {
+      channelId: null,
+      materialId: null,
+      source: '',
+      keyword: '',
+      view: '',
+    })
+  })
+
+  it('channelId / materialId 只认正整数：负数、小数、非数字一律丢弃并留痕', () => {
+    for (const raw of ['-1', '0', '1.5', 'abc', '']) {
+      const { values, invalid } = readUrlState({ channelId: raw, materialId: raw }, MATERIALS_QUERY_SPECS)
+      assert.equal(values.channelId, null, `channelId=${JSON.stringify(raw)} 不该进查询`)
+      assert.equal(values.materialId, null, `materialId=${JSON.stringify(raw)} 不该进查询`)
+      const keys = invalid.map((i) => i.key)
+      if (raw !== '') {
+        assert.ok(keys.includes('channelId'), `channelId=${raw} 被静默丢弃，没有留痕`)
+        assert.ok(keys.includes('materialId'), `materialId=${raw} 被静默丢弃，没有留痕`)
+      }
+    }
+  })
+
+  it('重复参数（?channelId=7&channelId=8）取第一个并留痕', () => {
+    const { values, invalid } = readUrlState({ channelId: ['7', '8'] }, MATERIALS_QUERY_SPECS)
+    assert.equal(values.channelId, 7)
+    assert.equal(invalid[0].key, 'channelId')
+    assert.match(invalid[0].reason, /出现多次/)
+  })
+
+  it('view 只认 book；自由文本超长直接丢弃而不是截断进地址', () => {
+    const long = '书'.repeat(81)
+    const { values, invalid } = readUrlState(
+      { view: 'list', source: long, keyword: long },
+      MATERIALS_QUERY_SPECS,
+    )
+    assert.equal(values.view, '')
+    assert.equal(values.source, '')
+    assert.equal(values.keyword, '')
+    assert.deepEqual(invalid.map((i) => i.key).sort(), ['keyword', 'source', 'view'])
+  })
+
+  it('恰好 80 字的书名仍然可用（边界不该误杀）', () => {
+    const exact = '书'.repeat(80)
+    assert.equal(readUrlState({ source: exact }, MATERIALS_QUERY_SPECS).values.source, exact)
+  })
+})
+
+describe('SCOPED_REVIEW_SPECS：移动端作用域参数与 PC 审核列表同口径', () => {
+  it('UUID 风格的 workflow_id 可用，channel_name 原样带上', () => {
+    const wf = '3c5b7f96-7ac3-46ec-b4db-9a5908bde9d3'
+    const { values, invalid } = readUrlState(
+      { workflow_id: wf, channel_name: '科技前沿' },
+      SCOPED_REVIEW_SPECS,
+    )
+    assert.deepEqual(values, { workflow_id: wf, channel_name: '科技前沿' })
+    assert.deepEqual(invalid, [])
+  })
+
+  it('格式不符/超长/空白的 workflow_id 不让页面进入作用域模式', () => {
+    for (const raw of ['abc def', '#12', 'x'.repeat(65), '   ', '/etc/passwd']) {
+      const { values, invalid } = readUrlState({ workflow_id: raw }, SCOPED_REVIEW_SPECS)
+      assert.equal(values.workflow_id, '', `workflow_id=${raw} 不该被当成作用域`)
+      if (raw.trim()) assert.equal(invalid[0].key, 'workflow_id')
+    }
+  })
+
+  it('重复 workflow_id 取第一个并留痕（地址被手改时不静默扩大范围）', () => {
+    const { values, invalid } = readUrlState(
+      { workflow_id: ['wf-1', 'wf-2'] },
+      SCOPED_REVIEW_SPECS,
+    )
+    assert.equal(values.workflow_id, 'wf-1')
+    assert.equal(invalid[0].key, 'workflow_id')
+  })
+
+  it('channel_name 只是展示文本，超长丢弃不阻断作用域过滤', () => {
+    const { values } = readUrlState(
+      { workflow_id: 'wf-1', channel_name: '名'.repeat(41) },
+      SCOPED_REVIEW_SPECS,
+    )
+    assert.equal(values.workflow_id, 'wf-1')
+    assert.equal(values.channel_name, '')
+  })
+})
+
+describe('接线：两个页面不再手写 Number/String(route.query)', () => {
+  const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+  const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8')
+
+  it('素材库：channelId/materialId/source/keyword/view 全部走 MATERIALS_QUERY_SPECS', () => {
+    const src = read('src/views/channel/MaterialLibrary.vue')
+    assert.doesNotMatch(src, /Number\(route\.query\./, '又出现了手写 Number(route.query.*)')
+    assert.doesNotMatch(src, /String\(route\.query\./, '又出现了手写 String(route.query.*)')
+    assert.match(src, /readUrlState\(route\.query, MATERIALS_QUERY_SPECS\)/)
+    // 存在性：频道列表里找不到的 channelId 不能直接进筛选
+    assert.match(src, /\.some\(\(c\) => c\.id === deepLink\.values\.channelId\)/)
+    assert.match(src, /地址中的筛选参数无效/)
+  })
+
+  it('移动审核：作用域参数走 SCOPED_REVIEW_SPECS，非法值不参与过滤', () => {
+    const src = read('src/views/mobile/ReviewList.vue')
+    assert.doesNotMatch(src, /route\.query\.workflow_id/, '又直接读了 workflow_id')
+    assert.doesNotMatch(src, /route\.query\.channel_name/, '又直接读了 channel_name')
+    assert.match(src, /readUrlState\(route\.query, SCOPED_REVIEW_SPECS\)/)
+    assert.match(src, /params\.workflow_id = scopedValues\.value\.workflow_id/)
+    assert.match(src, /地址中的筛选参数无效/)
   })
 })

@@ -148,7 +148,7 @@
       "sites": [
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 651,
+          "line": 652,
           "fn": "deleteMaterialsBySource",
           "fieldCount": 3,
           "unresolved": []
@@ -163,7 +163,7 @@
       "sites": [
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 628,
+          "line": 629,
           "fn": "deleteMaterial",
           "fieldCount": 0,
           "unresolved": []
@@ -566,7 +566,7 @@
         },
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 738,
+          "line": 739,
           "fn": "listChannels",
           "fieldCount": 2,
           "unresolved": []
@@ -1151,7 +1151,7 @@
       "sites": [
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 482,
+          "line": 483,
           "fn": "listMaterials",
           "fieldCount": 10,
           "unresolved": []
@@ -1173,7 +1173,7 @@
       "sites": [
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 527,
+          "line": 528,
           "fn": "getMaterial",
           "fieldCount": 0,
           "unresolved": []
@@ -1209,7 +1209,7 @@
       "sites": [
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 470,
+          "line": 471,
           "fn": "aggregateMaterials",
           "fieldCount": 6,
           "unresolved": []
@@ -1348,7 +1348,7 @@
       "sites": [
         {
           "file": "views/mobile/ReviewList.vue",
-          "line": 249,
+          "line": 252,
           "fn": "listReviews",
           "fieldCount": 1,
           "unresolved": []
@@ -1377,7 +1377,7 @@
       "sites": [
         {
           "file": "views/mobile/ReviewList.vue",
-          "line": 275,
+          "line": 278,
           "fn": "getReview",
           "fieldCount": 0,
           "unresolved": []
@@ -2544,7 +2544,7 @@
         },
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 596,
+          "line": 597,
           "fn": "createMaterial",
           "fieldCount": 10,
           "unresolved": []
@@ -2570,14 +2570,14 @@
       "sites": [
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 690,
+          "line": 691,
           "fn": "batchDeleteMaterials",
           "fieldCount": 2,
           "unresolved": []
         },
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 715,
+          "line": 716,
           "fn": "batchDeleteMaterials",
           "fieldCount": 1,
           "unresolved": []
@@ -2788,7 +2788,7 @@
       "sites": [
         {
           "file": "views/mobile/ReviewList.vue",
-          "line": 332,
+          "line": 335,
           "fn": "handleReviewAction",
           "fieldCount": 3,
           "unresolved": [
@@ -2827,7 +2827,7 @@
       "sites": [
         {
           "file": "views/mobile/ReviewList.vue",
-          "line": 379,
+          "line": 382,
           "fn": "batchHandleReviewAction",
           "fieldCount": 3,
           "unresolved": [
@@ -3344,7 +3344,7 @@
       "sites": [
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 559,
+          "line": 560,
           "fn": "updateMaterial",
           "fieldCount": 8,
           "unresolved": []

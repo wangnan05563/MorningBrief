@@ -141,6 +141,30 @@ export function isQueryDirty(currentQuery, specs, values) {
 }
 
 /**
+ * 深链参数规格（T02760 / FR-UX-602 E12「深链参数需校验存在性」）
+ *
+ * 为什么集中在这里：页面手写 `Number(route.query.x)` / `String(route.query.y)` 时，
+ * 负数、小数、重复参数、超长自由文本都会静默进查询——结果为空列表背锅，
+ * 用户以为「没有数据」。规格与解析器放一起，页面只消费 readUrlState 的结果。
+ */
+
+/** 素材库「管理素材」深链（?channelId=&materialId=&source=&view=book&keyword=） */
+export const MATERIALS_QUERY_SPECS = {
+  channelId: { type: 'int', min: 1, default: null },
+  materialId: { type: 'int', min: 1, default: null },
+  // source 是书名自由文本，不是枚举：只限长度，避免把整段正文塞进地址栏
+  source: { default: '', maxLength: 80 },
+  keyword: { default: '', maxLength: 80 },
+  view: { enum: ['book'], default: '' },
+}
+
+/** 移动端审核页「按工作流作用域」深链：workflow_id 与 PC 审核列表同一 pattern */
+export const SCOPED_REVIEW_SPECS = {
+  workflow_id: { default: '', maxLength: 64, pattern: '^[A-Za-z0-9_-]+$' },
+  channel_name: { default: '', maxLength: 40 },
+}
+
+/**
  * 跨端（PC ↔ 移动端）重定向时的目标计算（T02511 的「跨端重定向保留 path 与 query」）。
  *
  * 背景：App.vue 早先在「视口是手机宽度但路由在 PC 命名空间」时直接 `replace('/m/home')`，

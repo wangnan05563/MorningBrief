@@ -335,6 +335,7 @@ import { useRoute } from 'vue-router'
 import { Plus, Close, Search, Refresh, RefreshLeft, Edit, Delete, View, Check, Picture } from '@element-plus/icons-vue'
 import { ElMessage } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
+import { readUrlState, MATERIALS_QUERY_SPECS } from '../../utils/urlState'
 import { formatTime } from '../../utils/format'
 import { blankedFieldMessage, findBlankedCriticalField } from '../../utils/blankGuard'
 import { useUserStore } from '../../stores/user'
@@ -736,9 +737,21 @@ function reportBatchDelete(data, requested) {
 
 onMounted(async () => {
   channels.value = await listChannels()
-  const qid = Number(route.query.channelId)
-  if (qid) filters.channel_id = qid
-  applyDeepLink()
+  // T02760：深链参数先过 urlState 的规格，再决定是否进查询（非法值回落并告知）
+  const deepLink = readUrlState(route.query, MATERIALS_QUERY_SPECS)
+  const dropped = deepLink.invalid.map((i) => i.key)
+  if (deepLink.values.channelId) {
+    // 存在性校验：指向不存在的频道只会得到空列表，与「该频道没素材」无法区分
+    if ((channels.value || []).some((c) => c.id === deepLink.values.channelId)) {
+      filters.channel_id = deepLink.values.channelId
+    } else {
+      dropped.push('channelId')
+    }
+  }
+  applyDeepLink(deepLink.values)
+  if (dropped.length) {
+    ElMessage.warning(`地址中的筛选参数无效（${[...new Set(dropped)].join('、')}），已按默认视图展示`)
+  }
   await load()
 })
 
@@ -748,21 +761,21 @@ onMounted(async () => {
  *   避免标题含 % / _ 时被当作 LIKE 通配符）；
  * - keyword：直接回填搜索框；
  * - view=book：直接落到按书聚合视图。
+ * T02760：入参已由 MATERIALS_QUERY_SPECS 规整，这里只消费合法值。
  */
-function applyDeepLink() {
-  const mid = Number(route.query.materialId)
-  if (mid) {
-    materialIdFilter.value = mid
+function applyDeepLink(values) {
+  if (values.materialId) {
+    materialIdFilter.value = values.materialId
     viewMode.value = 'list'
     return
   }
-  if (route.query.source) {
-    sourceFilter.value = String(route.query.source)
+  if (values.source) {
+    sourceFilter.value = values.source
     viewMode.value = 'list'
     return
   }
-  if (route.query.view === 'book') viewMode.value = 'book'
-  if (route.query.keyword) filters.keyword = String(route.query.keyword)
+  if (values.view === 'book') viewMode.value = 'book'
+  if (values.keyword) filters.keyword = values.keyword
 }
 </script>
 
