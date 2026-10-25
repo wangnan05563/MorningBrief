@@ -299,4 +299,40 @@ test.describe('工作流监控', () => {
     await expect(page.getByText('已生成')).toBeVisible({ timeout: 30000 })
     await expect(page.getByRole('button', { name: '删除成品' })).toHaveCount(0, { timeout: 30000 })
   })
+
+  test('详情页删素材：确认框写清对象/条数/不可恢复，取消不发请求（T02596）', async ({ page }) => {
+    await setLoginState(page, 'admin')
+    const deletes = []
+    // 注册在 beforeEach 的 materials 兜底之后：Playwright 后注册先匹配
+    await page.route('**/admin/api/v1/materials/1', (route) => {
+      if (route.request().method() === 'DELETE') {
+        deletes.push(route.request().url())
+        return route.fulfill({ json: { code: 0, message: 'success', data: null } })
+      }
+      return route.continue()
+    })
+
+    await page.goto('/workflows/wf-001')
+    await page.locator('.el-collapse-item__header', { hasText: '爬虫采集 · 素材' }).click()
+    await expect(page.getByText('测试素材一：AI 芯片突破')).toBeVisible({ timeout: 30000 })
+
+    const panel = page.locator('.el-collapse-item').filter({ hasText: '爬虫采集 · 素材' })
+    await panel.getByRole('button', { name: '删除' }).first().click()
+
+    const box = page.locator('.el-message-box')
+    await expect(box).toBeVisible({ timeout: 30000 })
+    await expect(box.getByText('删除素材：「测试素材一：AI 芯片突破」（ID 1）')).toBeVisible()
+    await expect(box.getByText(/影响范围：素材 1 条/)).toBeVisible()
+    await expect(box.getByText(/素材为硬删除，无关联数据被连带删除/)).toBeVisible()
+    await expect(box.getByText(/删除后不可恢复/)).toBeVisible()
+
+    await box.getByRole('button', { name: '取消' }).click()
+    await expect(box).toBeHidden()
+    expect(deletes).toHaveLength(0)
+
+    await panel.getByRole('button', { name: '删除' }).first().click()
+    await page.locator('.el-message-box').getByRole('button', { name: '确认删除' }).click()
+    await expect.poll(() => deletes.length).toBe(1)
+    expect(deletes[0]).toMatch(/\/materials\/1$/)
+  })
 })

@@ -333,7 +333,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { Plus, Close, Search, Refresh, RefreshLeft, Edit, Delete, View, Check, Picture } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from '../../utils/message'
+import { ElMessage } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 import { formatTime } from '../../utils/format'
 import { blankedFieldMessage, findBlankedCriticalField } from '../../utils/blankGuard'
 import { useUserStore } from '../../stores/user'
@@ -613,11 +614,17 @@ async function onSaveCreate() {
 }
 
 async function onDelete(row) {
-  await ElMessageBox.confirm(
-    `确定删除素材「${row.title}」（ID ${row.id}）？删除后不可恢复；讲书稿书单中的对应条目取书时会提示书稿缺失。`,
-    '删除素材',
-    { type: 'warning' },
-  )
+  // T02596：素材是硬删除且无外键级联，影响范围就是这 1 条；但书单里引用它的条目会失效，
+  // 必须写出来（只写「不可恢复」会让人以为删完就没事）
+  const ok = await dangerConfirm({
+    action: '删除素材',
+    target: `「${row.title}」（ID ${row.id}）`,
+    scope: '素材 1 条',
+    lines: ['素材为硬删除，无关联数据被连带删除；讲书稿书单中引用它的条目取书时会提示书稿缺失。'],
+    irreversible: '删除后不可恢复：素材没有回收站，只能重新采集或录入。',
+    confirmLabel: '确认删除',
+  })
+  if (!ok) return
   await deleteMaterial(row.id)
   ElMessage.success('已删除')
   await load()
@@ -626,11 +633,19 @@ async function onDelete(row) {
 // T00895：删除整本书聚合记录（按来源删除该书全部章节素材）
 // 必须二次确认且提示不可恢复；后端返回 deleted=0 时视为该书名已无关联素材，友好提示
 async function onDeleteBook(row) {
-  await ElMessageBox.confirm(
-    `确定删除《${row.source}》全部 ${row.chapters} 条章节素材？删除后不可恢复。`,
-    '删除整本书',
-    { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
-  )
+  const ok = await dangerConfirm({
+    action: '删除整本书',
+    target: `《${row.source}》`,
+    scope: `素材 ${row.chapters} 条（该书全部章节）`,
+    lines: [
+      filters.channel_id
+        ? `仅删除当前频道（channel_id=${filters.channel_id}）下的同名素材。`
+        : '未选频道：各频道下同名书的素材都会被删。',
+    ],
+    irreversible: '删除后不可恢复：素材为硬删除，没有回收站，只能重新采集。',
+    confirmLabel: '确认删除',
+  })
+  if (!ok) return
   deletingBook.value = row.source
   try {
     const data = await deleteMaterialsBySource(row.source, filters.channel_id || undefined)
@@ -657,17 +672,19 @@ async function onBatchDelete() {
   if (viewMode.value === 'book') {
     const sources = selectedBooks.value.map((b) => b.source).filter(Boolean)
     if (!sources.length) return
-    const scopeNote = filters.channel_id ? '' : '（未选频道：各频道下同名书的素材都会被删）'
-    try {
-      await ElMessageBox.confirm(
-        `确定删除勾选的 ${sources.length} 本书（共 ${selectedChapters.value} 章）的全部章节素材？` +
-          `${scopeNote}删除后不可恢复。`,
-        '批量删除整本书',
-        { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
-      )
-    } catch {
-      return
-    }
+    const ok = await dangerConfirm({
+      action: '批量删除整本书',
+      target: `${sources.length} 本书（共 ${selectedChapters.value} 章）`,
+      scope: `${sources.length} 本书的全部章节素材`,
+      lines: [
+        filters.channel_id
+          ? `仅删除当前频道（channel_id=${filters.channel_id}）下的同名素材。`
+          : '未选频道：各频道下同名书的素材都会被删。',
+      ],
+      irreversible: '删除后不可恢复：素材为硬删除，没有回收站，只能重新采集。',
+      confirmLabel: '确认删除',
+    })
+    if (!ok) return
     batchDeleting.value = true
     try {
       const data = await batchDeleteMaterials({
@@ -684,15 +701,15 @@ async function onBatchDelete() {
 
   const ids = selectedItems.value.map((r) => r.id).filter(Boolean)
   if (!ids.length) return
-  try {
-    await ElMessageBox.confirm(
-      `确定删除勾选的 ${ids.length} 条素材？删除后不可恢复；讲书稿书单中的对应条目取书时会提示书稿缺失。`,
-      '批量删除素材',
-      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
-    )
-  } catch {
-    return
-  }
+  const ok = await dangerConfirm({
+    action: '批量删除素材',
+    target: `${ids.length} 条素材`,
+    scope: `素材 ${ids.length} 条`,
+    lines: ['讲书稿书单中引用这些素材的条目，取书时会提示书稿缺失。'],
+    irreversible: '删除后不可恢复：素材为硬删除，没有回收站，只能重新采集或录入。',
+    confirmLabel: '确认删除',
+  })
+  if (!ok) return
   batchDeleting.value = true
   try {
     const data = await batchDeleteMaterials({ ids })

@@ -445,6 +445,7 @@
 import { ref, computed, onMounted, onUnmounted, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 import { ArrowLeft, Plus, Edit, Delete, Refresh, View, VideoPlay, Check, Close } from '@element-plus/icons-vue'
 import api from '../../api'
 import { subscribe } from '../../utils/sse'
@@ -714,9 +715,17 @@ async function saveMaterial() {
 }
 
 async function handleDeleteMaterial(row) {
-  try {
-    await ElMessageBox.confirm(`确认删除素材「${row.title}」？`, '危险操作', { type: 'warning' })
-  } catch { return }
+  // T02596：素材是硬删除且无外键级联，影响范围就是这 1 条；书单里引用它的条目会失效，
+  // 必须写出来，避免只看到「不可恢复」就以为删完没别的影响
+  const ok = await dangerConfirm({
+    action: '删除素材',
+    target: `「${row.title}」（ID ${row.id}）`,
+    scope: '素材 1 条（仅本工作流下的这条素材，工作流与稿件不受影响）',
+    lines: ['素材为硬删除，无关联数据被连带删除；讲书稿书单中引用它的条目取书时会提示书稿缺失。'],
+    irreversible: '删除后不可恢复：素材没有回收站，只能重新采集或录入。',
+    confirmLabel: '确认删除',
+  })
+  if (!ok) return
   try {
     await deleteMaterial(row.id)
     ElMessage.success('已删除')

@@ -400,4 +400,96 @@ test.describe('破坏性操作确认', () => {
       await expect(box.getByText('请输入 DELETE 以确认')).toBeVisible()
     })
   })
+
+  test.describe('素材删除三入口（T02596 切片B）', () => {
+    // 素材是硬删除且无外键级联，影响条数就是请求范围本身；
+    // 确认框必须把这层如实讲出来，不能只写一句「不可恢复」
+    const stubSse = (page) =>
+      page.route('**/admin/api/v1/events/stream**', (route) =>
+        route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }))
+
+    test('素材库单条删除：对象+条数+不可恢复写全，取消不发请求', async ({ page }) => {
+      await setLoginState(page, 'admin')
+      await stubSse(page)
+      await page.route('**/admin/api/v1/channels**', (route) =>
+        route.fulfill({ json: { code: 0, message: 'success', data: [
+          { id: 1, name: '科技前沿', channel_type: 'news', enabled: true },
+        ] } }))
+      const deletes = []
+      await page.route('**/admin/api/v1/materials**', (route) => {
+        const method = route.request().method()
+        if (method === 'DELETE') {
+          deletes.push(route.request().url())
+          return route.fulfill({ json: { code: 0, message: 'success', data: null } })
+        }
+        return route.fulfill({ json: { code: 0, message: 'success', data: { total: 1, list: [
+          { id: 100, source: '人民网', title: '素材一', category: 'tech', status: 'pending',
+            source_type: 'list', url: 'https://a.com/1', crawled_at: '2026-07-08T05:00:00' },
+        ] } } })
+      })
+
+      await page.goto('/channels/material-library')
+      const row = page.locator('[data-guide="material-library-table"] .el-table__body tr').first()
+      await expect(row).toContainText('素材一', { timeout: NAV_TIMEOUT })
+      await row.getByRole('button', { name: '删除' }).click()
+
+      const box = page.locator('.el-message-box')
+      await expect(box).toBeVisible({ timeout: NAV_TIMEOUT })
+      await expect(box.getByText('删除素材：「素材一」（ID 100）')).toBeVisible()
+      await expect(box.getByText('影响范围：素材 1 条')).toBeVisible()
+      await expect(box.getByText(/素材为硬删除，无关联数据被连带删除/)).toBeVisible()
+      await expect(box.getByText(/删除后不可恢复/)).toBeVisible()
+
+      await box.getByRole('button', { name: '取消' }).click()
+      await expect(box).toBeHidden()
+      expect(deletes).toHaveLength(0)
+
+      // 确认后请求打到这条素材本身（不是「选中的第一行」之外的对象）
+      await row.getByRole('button', { name: '删除' }).click()
+      await page.locator('.el-message-box').getByRole('button', { name: '确认删除' }).click()
+      await expect.poll(() => deletes.length).toBe(1)
+      expect(deletes[0]).toMatch(/\/materials\/100$/)
+    })
+
+    test('广告素材删除：先讲明关联投放会拒删，取消不发请求', async ({ page }) => {
+      await setLoginState(page, 'admin')
+      const deletes = []
+      await page.route('**/admin/api/v1/ads/materials**', (route) => {
+        const method = route.request().method()
+        if (method === 'DELETE') {
+          deletes.push(route.request().url())
+          return route.fulfill({ json: { code: 0, message: 'success', data: null } })
+        }
+        return route.fulfill({ json: { code: 0, message: 'success', data: { total: 2, list: [
+          { id: 1, name: '品牌广告A', description: '默认素材', duration: 15,
+            file_url: 'https://example.com/ads/a.mp3', is_default: true },
+          { id: 2, name: '促销广告B', description: '促销素材', duration: 30,
+            file_url: 'https://example.com/ads/b.mp3', is_default: false },
+        ] } } })
+      })
+
+      await page.goto('/ads/materials')
+      // 第 1 行是默认素材，删除按钮禁用；点第 2 行
+      const row = page.locator('.el-table__body tr').nth(1)
+      await expect(row).toContainText('促销广告B', { timeout: NAV_TIMEOUT })
+      await row.getByRole('button', { name: '删除' }).click()
+
+      const box = page.locator('.el-message-box')
+      await expect(box).toBeVisible({ timeout: NAV_TIMEOUT })
+      await expect(box.getByText('删除广告素材：「促销广告B」（ID 2）')).toBeVisible()
+      await expect(box.getByText('影响范围：广告素材 1 条；关联的投放规则不会被连带删除')).toBeVisible()
+      await expect(box.getByText(/仍被投放规则引用，后端会拒绝删除/)).toBeVisible()
+      await expect(box.getByText(/删除后不可恢复/)).toBeVisible()
+
+      await box.getByRole('button', { name: '取消' }).click()
+      await expect(box).toBeHidden()
+      // 转换前这里没有 catch，取消会抛未处理的 rejection；提前拦下后必须一条请求都不发
+      expect(deletes).toHaveLength(0)
+
+      await row.getByRole('button', { name: '删除' }).click()
+      await page.locator('.el-message-box').getByRole('button', { name: '确认删除' }).click()
+      await expect.poll(() => deletes.length).toBe(1)
+      expect(deletes[0]).toMatch(/\/ads\/materials\/2$/)
+    })
+  })
 })

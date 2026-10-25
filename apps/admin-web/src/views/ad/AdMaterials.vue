@@ -123,7 +123,8 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from '../../utils/message'
+import { ElMessage } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 import { Plus, VideoPlay, Delete, Close, Check } from '@element-plus/icons-vue'
 
 import api from '../../api'
@@ -185,10 +186,17 @@ async function handleSubmit() {
 }
 
 async function handleDelete(row) {
-  // 删除是不可逆操作，需二次确认避免误触
-  await ElMessageBox.confirm(`确认删除素材「${row.name}」？`, '提示', {
-    type: 'warning',
+  // T02596：后端在「素材仍被投放引用」时直接拒绝删除，这句话必须提前讲，
+  // 否则用户点完确认才收到 400，会以为界面出错
+  const ok = await dangerConfirm({
+    action: '删除广告素材',
+    target: `「${row.name}」（ID ${row.id}）`,
+    scope: '广告素材 1 条；关联的投放规则不会被连带删除',
+    lines: ['若该素材仍被投放规则引用，后端会拒绝删除（需先修改或删除对应投放）。'],
+    irreversible: '删除后不可恢复：素材记录从库中移除，没有回收站。',
+    confirmLabel: '确认删除',
   })
+  if (!ok) return
   await api.delete(`/ads/materials/${row.id}`)
   ElMessage.success('删除成功')
   fetchList()
