@@ -30,6 +30,7 @@ import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '../src')
+const TESTS = resolve(SRC, '../tests')
 
 const read = (rel) => readFileSync(join(SRC, rel), 'utf8')
 
@@ -402,6 +403,68 @@ function versionCore(v) {
   return String(v).replace(/^[\^~>=<]+/, '').replace(/^v/, '').replace(/\.+$/, '')
 }
 
+/**
+ * e2e 用例的手机视口口径（T02766 / IDD-M104）。
+ *
+ * 移动端外壳按视口分流：宽度 > 768 时打开 `/m/…` 会被换到对面同名 PC 页，
+ * 断言全以「元素不存在」失败——看起来像移动端坏了，其实是用例没设视口。
+ * 这里只做静态检查：整份 spec 里 goto 了 `/m…` 的每个调用点，要么在当前
+ * `test(...)` 内先调 `useMobileViewport(page)` / `setViewportSize(...)`，
+ * 要么文件内 `test.use({ viewport: … })` 声明了 ≤768 的宽度。
+ * 无法静态解析的 viewport 常量视为未声明（宁可报错，不假装查过）。
+ */
+export function scanMobileSpecs(dir = TESTS) {
+  const knownViewports = new Map()
+  try {
+    const mock = readFileSync(join(dir, 'helpers/mock.js'), 'utf8')
+    for (const m of mock.matchAll(/(?:export\s+)?const\s+([A-Z][A-Z0-9_]*)\s*=\s*\{\s*width\s*:\s*(\d+)/g)) {
+      knownViewports.set(m[1], Number(m[2]))
+    }
+  } catch {
+    // 没有 helpers/mock.js 时只认内联视口
+  }
+
+  const mobileViewportDeclared = (text) => {
+    for (const call of text.matchAll(/test\.use\(\s*\{([\s\S]*?)\}\s*\)/g)) {
+      const vm = call[1].match(/viewport\s*:\s*(\{[^}]*\}|[A-Za-z_$][\w$]*)/)
+      if (!vm) continue
+      const expr = vm[1]
+      if (expr.startsWith('{')) {
+        const w = expr.match(/width\s*:\s*(\d+)/)
+        if (w && Number(w[1]) <= 768) return true
+      } else if ((knownViewports.get(expr) ?? Infinity) <= 768) {
+        return true
+      }
+    }
+    return false
+  }
+
+  const result = []
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith('.spec.js')) continue
+    const text = readFileSync(join(dir, name), 'utf8')
+    const gotos = [...text.matchAll(/\.goto\(\s*[`'"]([^`'"]+)[`'"]/g)]
+      .filter((m) => m[1] === '/m' || m[1].startsWith('/m/'))
+      .map((m) => ({ index: m.index, line: text.slice(0, m.index).split('\n').length }))
+    if (!gotos.length) continue
+    const coveredByFile = mobileViewportDeclared(text)
+    const uncovered = gotos
+      .filter((g) => {
+        if (coveredByFile) return false
+        const before = text.slice(0, g.index)
+        const starts = [...before.matchAll(/^[ \t]*test(?:\.(?:only|skip|fixme|slow))?\s*\(/gm)]
+        const from = starts.length ? starts[starts.length - 1].index : 0
+        const inTest = /useMobileViewport\s*\(|setViewportSize\s*\(/.test(text.slice(from, g.index))
+        // beforeEach 里设视口是整组用例的写法（manage-feedback 等），也算覆盖
+        const inBeforeEach = /beforeEach\([\s\S]{0,800}?(?:useMobileViewport|setViewportSize)\s*\(/.test(before)
+        return !inTest && !inBeforeEach
+      })
+      .map((g) => g.line)
+    result.push({ file: `tests/${name}`, mobileGotos: gotos.length, uncovered })
+  }
+  return result
+}
+
 export async function collectFacts() {
   const routerText = read('router/index.js')
   const routes = collectRoutes(routesLiteralText())
@@ -493,6 +556,7 @@ export async function collectFacts() {
     enumDictionary,
     backendEnums,
     enumDuplicates,
+    mobileSpecs: scanMobileSpecs(),
   }
 }
 
@@ -717,6 +781,16 @@ export function checkFacts(f) {
     if (!matchRoute(f.routes, t.to)) errors.push(`移动端入口指向不存在的路由：${t.from} → ${t.to}`)
   }
 
+  for (const spec of f.mobileSpecs ?? []) {
+    for (const line of spec.uncovered ?? []) {
+      errors.push(
+        `${spec.file}:${line} goto 了 /m 开头的路径，但当前用例没有可静态确认的手机视口：` +
+          `宽度 >768 时会被换到 PC 页，断言会以「元素不存在」假失败（IDD-M104 / T02766）；` +
+          `请在该 test 内先 await useMobileViewport(page)，或用 test.use({ viewport: MOBILE_VIEWPORT })`,
+      )
+    }
+  }
+
   for (const h of f.aboutHrefs) {
     if (!matchRoute(f.routes, h)) errors.push(`关于页菜单项指向不存在的路由：${h}`)
   }
@@ -819,7 +893,7 @@ if (isCli) {
     `[validate-nav] 路由 ${facts.routes.length} 条 · 引导 ${Object.keys(facts.guideSteps).length} 页 · ` +
       `aria-label ${facts.ariaLabels.size} 个 · 分组 ${facts.groups.length} 个 · 帮助章节 ${facts.helpIds.length} 篇 · ` +
       `开源清单 ${facts.dependencyTable.length} 项（npm ${Object.keys(facts.npmManifest).length} + ` +
-      `pip ${py ? py.size : '—'}）· 枚举字典 ${enumCount} 份`,
+      `pip ${py ? py.size : '—'}）· 枚举字典 ${enumCount} 份 · 移动端用例 ${facts.mobileSpecs.length} 份`,
   )
   if (iconsSkipped && includeIcons) console.log('[validate-nav] 图标名单加载失败，已跳过该项')
   if (depsSkipped) console.log('[validate-nav] 未提供依赖清单，跳过开源清单对账')

@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { collectFacts, checkFacts, checkEnums, collectEnumDuplicates } from './validate-nav.mjs'
+import { collectFacts, checkFacts, checkEnums, collectEnumDuplicates, scanMobileSpecs } from './validate-nav.mjs'
 
 /** 最小可用事实集：只写用到字段，其余留空 */
 function facts(over = {}) {
@@ -31,6 +31,7 @@ function facts(over = {}) {
     mobileTargets: [{ from: 'layouts/MobileLayout.vue', to: '/m/home' }],
     aboutHrefs: [],
     commentGroups: ['内容运营'],
+    mobileSpecs: [],
     ...over,
   }
 }
@@ -468,5 +469,67 @@ test('真实仓库的枚举字典与后端逐值对上（T02504）', async () =>
   // 迁移完成后，视图里不该再有任何一份同族映射（这一条是「迁移真做了」的证据）
   assert.deepEqual(f.enumDuplicates, { dupes: [], phantoms: [] })
   assert.deepEqual(checkEnums(f).errors, [])
+})
+
+/** 移动端用例视口扫描夹具：只放 helpers/mock.js 与给定 spec */
+function mobileSpecTree(files) {
+  const dir = mkdtempSync(join(tmpdir(), 'mobile-viewport-'))
+  mkdirSync(join(dir, 'helpers'), { recursive: true })
+  writeFileSync(join(dir, 'helpers/mock.js'), 'export const MOBILE_VIEWPORT = { width: 375, height: 667 }\n')
+  for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text)
+  return dir
+}
+
+test('移动端用例视口门禁：只放行当前用例设过的视口（T02766）', () => {
+  const head = "import { test, expect } from './pw'\n"
+  const dir = mobileSpecTree({
+    'forgot.spec.js': head + "test('a', async ({ page }) => {\n  await page.goto('/m/home')\n})\n",
+    'helper.spec.js': head + "test('a', async ({ page }) => {\n  await useMobileViewport(page)\n  await page.goto('/m/home')\n})\n",
+    // 设在 goto 之后：本次导航已经进错端了，不能算
+    'after.spec.js': head + "test('a', async ({ page }) => {\n  await page.goto('/m/home')\n  await useMobileViewport(page)\n})\n",
+    'file-use.spec.js': head + "test.use({ viewport: { width: 375, height: 667 } })\ntest('a', async ({ page }) => {\n  await page.goto('/m/home')\n})\n",
+    'file-const.spec.js': head + "test.use({ viewport: MOBILE_VIEWPORT })\ntest('a', async ({ page }) => {\n  await page.goto('/m/home')\n})\n",
+    // 文件级 test.use 存在但宽度是 PC：仍会换端，必须报
+    'wide.spec.js': head + "test.use({ viewport: { width: 1280, height: 800 } })\ntest('a', async ({ page }) => {\n  await page.goto('/m/home')\n})\n",
+    // beforeEach 设视口：整组用例共用，两条 /m 用例都应放行
+    'beforeeach.spec.js':
+      head +
+      "test.describe('mobile', () => {\n  test.beforeEach(async ({ page }) => {\n    await useMobileViewport(page)\n  })\n" +
+      "  test('a', async ({ page }) => {\n    await page.goto('/m/home')\n  })\n" +
+      "  test('b', async ({ page }) => {\n    await page.goto('/m/message')\n  })\n})\n",
+    'pc.spec.js': head + "test('a', async ({ page }) => {\n  await page.goto('/queue')\n})\n",
+    // /maintenance 也以 /m 开头，但不是移动端路径；前缀判断过宽会把它误报
+    'pc-prefix.spec.js': head + "test('a', async ({ page }) => {\n  await page.goto('/maintenance')\n})\n",
+    // 前一条用例设了视口，不能给后一条同文件用例兜底
+    'cross-test.spec.js':
+      head +
+      "test('a', async ({ page }) => {\n  await useMobileViewport(page)\n  await page.goto('/m/home')\n})\n" +
+      "test('b', async ({ page }) => {\n  await page.goto('/m/message')\n})\n",
+  })
+  const r = Object.fromEntries(scanMobileSpecs(dir).map((x) => [x.file, x]))
+  assert.equal(r['tests/pc.spec.js'], undefined, 'PC 用例不该进入清单')
+  assert.equal(r['tests/pc-prefix.spec.js'], undefined, '/maintenance 不是移动端路径')
+  for (const ok of ['helper', 'file-use', 'file-const', 'beforeeach']) {
+    assert.deepEqual(r[`tests/${ok}.spec.js`].uncovered, [], `${ok} 被误报`)
+  }
+  assert.deepEqual(r['tests/forgot.spec.js'].uncovered, [3], '没设视口必须报')
+  assert.deepEqual(r['tests/after.spec.js'].uncovered, [3], 'goto 之后才设视口不算')
+  assert.deepEqual(r['tests/wide.spec.js'].uncovered, [4], 'PC 宽度不算手机视口')
+  assert.deepEqual(r['tests/cross-test.spec.js'].uncovered, [7], '前一条用例的视口不能兜底后一条')
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('移动端用例未设视口必须在门禁里报错（T02766）', () => {
+  const bad = checkFacts(facts({ mobileSpecs: [{ file: 'tests/x.spec.js', mobileGotos: 1, uncovered: [12] }] }))
+  assert.match(bad.errors.join('\n'), /tests\/x\.spec\.js:12.*IDD-M104/)
+  const ok = checkFacts(facts({ mobileSpecs: [{ file: 'tests/x.spec.js', mobileGotos: 1, uncovered: [] }] }))
+  assert.deepEqual(ok.errors, [])
+})
+
+test('真实仓库的移动端用例都声明了手机视口（T02766）', async () => {
+  const f = await collectFacts()
+  assert.ok(f.mobileSpecs.length >= 10, `移动端用例份数异常：${f.mobileSpecs.length}`)
+  const leaks = f.mobileSpecs.flatMap((s) => s.uncovered.map((line) => `${s.file}:${line}`))
+  assert.deepEqual(leaks, [], `以下 /m 用例未设手机视口：${leaks.join('、')}`)
 })
 
