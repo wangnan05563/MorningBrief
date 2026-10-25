@@ -76,6 +76,7 @@ import {
   getEmergencyAudit,
 } from '../../api/mobile'
 import { ElMessage, ElMessageBox } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 
 // null = 状态未知（读失败），绝不能退化成 { enabled: false }
 const m = ref(null)
@@ -212,13 +213,16 @@ async function resume() {
     ElMessage.warning('状态未知，请先重新读取后再执行恢复')
     return
   }
-  try {
-    await ElMessageBox.confirm('确认解除应急停服并恢复新任务触发？', '二次确认', {
-      type: 'warning', confirmButtonText: '确认恢复', cancelButtonText: '取消',
-    })
-  } catch {
-    return
-  }
+  // T02596：恢复会立即放行新任务触发，按统一口径写明对象与停服期间的缺口
+  const ok = await dangerConfirm({
+    action: '解除应急停服',
+    target: '生产调度（当前为停服态）',
+    scope: '调度开关 1 项（恢复新任务触发）',
+    lines: ['已在执行中的任务不受影响，恢复后自动放行新任务。'],
+    irreversible: '停服期间未触发的任务不会自动补跑。',
+    confirmLabel: '确认恢复',
+  })
+  if (!ok) return
   submitting.value = true
   try {
     const data = await emergencyResume()

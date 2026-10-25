@@ -992,12 +992,16 @@ async function onReviewAction(action) {
 // ===== 重跑 =====
 async function handleRetry() {
   if (!retryStep.value) return
-  try {
-    await ElMessageBox.confirm(
-      `确认从「${stepLabel(retryStep.value)}」步骤开始重跑？将在当前工作流上断点续跑，保留已完成的步骤产出。`,
-      '提示', { type: 'warning' },
-    )
-  } catch { return }
+  // T02596：重跑会覆盖该步骤及其后的产物，按统一口径点名工作流与起点步骤
+  const ok = await dangerConfirm({
+    action: '重跑工作流',
+    target: `工作流 ${route.params.id}（从「${stepLabel(retryStep.value)}」步骤起）`,
+    scope: '工作流 1 个（断点续跑，已完成步骤的产出保留）',
+    lines: ['该步骤及之后的产物会被重新生成并覆盖。'],
+    irreversible: '重跑无法撤回：要恢复到重跑前的内容，只能再跑一次或手工替换。',
+    confirmLabel: '确认重跑',
+  })
+  if (!ok) return
   retrying.value = true
   try {
     await api.post(`/workflows/${route.params.id}/retry`, { step: retryStep.value })

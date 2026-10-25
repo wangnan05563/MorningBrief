@@ -147,7 +147,7 @@
               :icon="Close"
               label="取消"
               desc="取消该任务"
-              @click="handleCancel(row.id)"
+              @click="handleCancel(row)"
             />
             <el-popover trigger="click" width="240" placement="top" @show="editingPriority = row.priority">
               <!-- T00812：popover reference 与内部按钮关闭 Tooltip，避免悬浮提示与弹层/下拉同时弹出、阻断 popover 触发 -->
@@ -167,7 +167,7 @@
               :icon="Refresh"
               label="重试"
               desc="从失败步骤断点续跑该任务"
-              @click="handleRetry(row.id)"
+              @click="handleRetry(row)"
             />
             <IconButton size="small" :icon="View" label="详情" desc="查看任务详情" @click="openDetail(row)" />
           </template>
@@ -237,7 +237,7 @@
 <script setup>
 defineOptions({ name: 'QueueManagement' })
 import { ref, reactive, computed, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
-import { ElMessage, ElMessageBox } from '../../utils/message'
+import { ElMessage } from '../../utils/message'
 import { Delete, Check, Close, Edit, Refresh, View } from '@element-plus/icons-vue'
 import {
   getQueueStats,
@@ -580,15 +580,20 @@ function handleSortChange({ prop, order }) {
   loadTasks()
 }
 
-async function handleCancel(id) {
+async function handleCancel(row) {
+  const id = row.id
   // 防重复点击：同一任务取消中直接忽略
   if (cancelingIds.value.has(id)) return
-  try {
-    await ElMessageBox.confirm('确认取消该任务？', '提示', { type: 'warning' })
-  } catch {
-    // 用户点取消，静默退出
-    return
-  }
+  // T02596：取消会把任务从队列摘掉，已排队/执行中的进度作废，按破坏性动作写全对象与后果
+  const ok = await dangerConfirm({
+    action: '取消队列任务',
+    target: `任务 ${id}（${row.channel_name || '未关联频道'}）`,
+    scope: '队列任务 1 条',
+    lines: ['取消后该任务不会再被执行。'],
+    irreversible: '已排队/执行中的进度不会保留：需要重新提交任务才会从第一步开始跑。',
+    confirmLabel: '确认取消',
+  })
+  if (!ok) return
   cancelingIds.value.add(id)
   try {
     await cancelTask(id)
@@ -615,17 +620,19 @@ async function handlePriority(row) {
   }
 }
 
-async function handleRetry(id) {
+async function handleRetry(row) {
+  const id = row.id
   if (retryingIds.value.has(id)) return
-  try {
-    await ElMessageBox.confirm(
-      '将在原工作流上从失败步骤重跑，已成功的步骤（爬虫/改写等）不会重复执行。确认重试？',
-      '断点续跑确认',
-      { type: 'warning' },
-    )
-  } catch {
-    return
-  }
+  // T02596：续跑会重新占用队列与合成资源，属不可撤回的服务端动作
+  const ok = await dangerConfirm({
+    action: '重试失败任务',
+    target: `任务 ${id}（${row.channel_name || '未关联频道'}）`,
+    scope: '队列任务 1 条（在原工作流上从失败步骤续跑）',
+    lines: ['已成功的步骤（爬虫/改写等）不会重复执行。'],
+    irreversible: '本次续跑无法撤回：重新入队后就会开始执行。',
+    confirmLabel: '确认重试',
+  })
+  if (!ok) return
   retryingIds.value.add(id)
   try {
     await retryTask(id)

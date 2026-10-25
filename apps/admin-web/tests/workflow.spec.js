@@ -65,6 +65,22 @@ test.describe('工作流监控', () => {
       await route.fulfill({ json: workflowTriggerResponse })
     })
 
+    // 全频道启动接口
+    await page.route('**/admin/api/v1/workflows/trigger-all', async (route) => {
+      await route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: {
+            total: 2,
+            triggered: [{ channel_id: 1, channel_name: '科技频道', workflow_id: 'wf-101' }],
+            skipped: [],
+            failed: [],
+          },
+        },
+      })
+    })
+
     // 工作流列表接口（catch-all，放在最后）：glob 尾部带 * 以匹配查询参数
     await page.route('**/admin/api/v1/workflows*', async (route) => {
       await route.fulfill({ json: workflowListResponse })
@@ -96,20 +112,64 @@ test.describe('工作流监控', () => {
     await expect(page.getByRole('button', { name: '手动触发' })).toHaveCount(0, { timeout: 30000 })
   })
 
-  test('admin 显示触发按钮并可触发', async ({ page }) => {
+  test('admin 触发工作流：确认框写全对象与不可撤回后果，取消不发请求', async ({ page }) => {
+    // T02596：触发会立即入队并消耗改写/合成资源，确认框必须点名对象与范围
+    const triggers = []
+    await page.route('**/admin/api/v1/workflows/trigger', async (route) => {
+      triggers.push(route.request().url())
+      await route.fulfill({ json: workflowTriggerResponse })
+    })
     await setLoginState(page, 'admin')
     await page.goto('/workflows')
 
     // admin 应看到触发按钮
     await expect(page.getByRole('button', { name: '手动触发' })).toBeVisible({ timeout: 30000 })
 
-    // 点击触发
     await page.getByRole('button', { name: '手动触发' }).click()
-    // ElMessageBox 二次确认（main.js 加载 zh-cn 语言包，按钮文案为「确定」）
-    await page.getByRole('button', { name: '确定' }).click()
+    await expect(page.getByText('触发工作流：未选频道（使用默认提示词）')).toBeVisible()
+    await expect(page.getByText('影响范围：工作流运行 1 次（包含爬虫采集）')).toBeVisible()
+    await expect(page.getByText('触发无法撤回')).toBeVisible()
+    await page.locator('.el-message-box').getByRole('button', { name: '取消' }).click()
+    await expect(page.locator('.el-message-box')).toHaveCount(0)
+    expect(triggers).toHaveLength(0)
+
+    await page.getByRole('button', { name: '手动触发' }).click()
+    await page.locator('.el-message-box').getByRole('button', { name: '确认触发' }).click()
 
     // 应显示成功提示，包含新工作流 ID
     await expect(page.locator('.el-message').getByText('已触发，工作流 ID: wf-003')).toBeVisible({ timeout: 30000 })
+    expect(triggers).toHaveLength(1)
+  })
+
+  test('全频道启动：确认框点名活跃频道数与跳过规则，取消不发请求', async ({ page }) => {
+    const calls = []
+    await page.route('**/admin/api/v1/workflows/trigger-all', async (route) => {
+      calls.push(route.request().url())
+      await route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: { total: 2, triggered: [{ channel_id: 1, channel_name: '科技频道', workflow_id: 'wf-101' }], skipped: [], failed: [] },
+        },
+      })
+    })
+    await setLoginState(page, 'admin')
+    await page.goto('/workflows')
+    await expect(page.getByRole('button', { name: '全频道启动' })).toBeVisible({ timeout: 30000 })
+
+    await page.getByRole('button', { name: '全频道启动' }).click()
+    // 频道列表来自服务端（2 个活跃频道），条数不能靠前端猜
+    await expect(page.getByText('全频道启动工作流：全部活跃频道（2 个）')).toBeVisible()
+    await expect(page.getByText('影响范围：工作流运行最多 2 次（当日已有运行中的频道自动跳过）')).toBeVisible()
+    await expect(page.getByText('启动无法整体撤回')).toBeVisible()
+    await page.locator('.el-message-box').getByRole('button', { name: '取消' }).click()
+    await expect(page.locator('.el-message-box')).toHaveCount(0)
+    expect(calls).toHaveLength(0)
+
+    await page.getByRole('button', { name: '全频道启动' }).click()
+    await page.locator('.el-message-box').getByRole('button', { name: '确认启动' }).click()
+    await expect(page.getByText('总频道数')).toBeVisible({ timeout: 30000 })
+    expect(calls).toHaveLength(1)
   })
 
   test('点击工作流跳转详情', async ({ page }) => {
@@ -188,6 +248,35 @@ test.describe('工作流监控', () => {
     await page.locator('.el-message-box').getByRole('button', { name: '确认通过' }).click()
     await expect.poll(() => actions.length).toBe(1)
     expect(actions[0]).toMatchObject({ action: 'approve' })
+  })
+
+  test('T02596 详情页重跑：确认框点名起点步骤，取消不发请求', async ({ page }) => {
+    // 重跑会覆盖该步骤及其后的产物，确认框必须写清工作流与起点
+    const retries = []
+    await page.route('**/admin/api/v1/workflows/wf-001/retry', async (route) => {
+      retries.push({ url: route.request().url(), body: route.request().postDataJSON() })
+      await route.fulfill({ json: { code: 0, message: 'success', data: null } })
+    })
+    await setLoginState(page, 'admin')
+    await page.goto('/workflows/wf-001')
+    await expect(page.getByText('工作流详情').first()).toBeVisible({ timeout: 30000 })
+
+    await page.locator('.action-card .el-select').click()
+    await page.locator('.el-select-dropdown__item').filter({ hasText: 'LLM改写' }).first().click()
+    await page.getByRole('button', { name: '重跑', exact: true }).click()
+
+    await expect(page.getByText('重跑工作流：工作流 wf-001（从「LLM改写」步骤起）')).toBeVisible()
+    await expect(page.getByText('影响范围：工作流 1 个（断点续跑，已完成步骤的产出保留）')).toBeVisible()
+    await expect(page.getByText('该步骤及之后的产物会被重新生成并覆盖')).toBeVisible()
+    await page.locator('.el-message-box').getByRole('button', { name: '取消' }).click()
+    await expect(page.locator('.el-message-box')).toHaveCount(0)
+    expect(retries).toHaveLength(0)
+
+    await page.getByRole('button', { name: '重跑', exact: true }).click()
+    await page.locator('.el-message-box').getByRole('button', { name: '确认重跑' }).click()
+    await expect(page.locator('.el-message').getByText('已开始重跑')).toBeVisible({ timeout: 30000 })
+    expect(retries).toHaveLength(1)
+    expect(retries[0].body).toEqual({ step: 'rewrite' })
   })
 
   test('admin 批量删除工作流：多选+确认+请求载荷+成功提示+列表刷新', async ({ page }) => {

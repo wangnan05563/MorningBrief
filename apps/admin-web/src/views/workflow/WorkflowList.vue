@@ -281,7 +281,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from '../../utils/message'
+import { ElMessage } from '../../utils/message'
 import { VideoPlay, Delete, Refresh, RefreshLeft, Close } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
 import api from '../../api'
@@ -537,19 +537,21 @@ async function retryLoadList() {
 async function handleTrigger() {
   // 若已选择频道筛选，触发时携带频道 ID，rewrite 步骤据此读取频道级提示词
   const channelId = filterChannelId.value
+  // T02596：触发会立即入队并消耗改写/合成资源，按统一口径写清对象、范围与不可撤回后果
+  const channelName = channels.value.find((c) => String(c.id) === String(channelId))?.name
   const skip = skipCrawl.value
-  const tip = channelId
-    ? (skip
-        ? '确认立即触发该频道的工作流（跳过爬虫，素材已入库）？将使用频道级提示词从改写开始生成内容。'
-        : '确认立即触发该频道的工作流？将使用频道级提示词生成语音新闻。')
-    : (skip
-        ? '确认立即触发工作流（跳过爬虫，素材已入库）？未选频道将使用默认提示词，可能因无素材失败。'
-        : '确认立即触发一期新闻工作流？（未选频道，使用默认提示词）')
-  try {
-    await ElMessageBox.confirm(tip, '提示', { type: 'warning' })
-  } catch {
-    return
-  }
+  const ok = await dangerConfirm({
+    action: '触发工作流',
+    target: channelName ? `频道「${channelName}」` : '未选频道（使用默认提示词）',
+    scope: `工作流运行 1 次（${skip ? '跳过爬虫，从改写开始' : '包含爬虫采集'}）`,
+    lines: [
+      skip ? '使用频道级提示词，素材取自已入库内容。' : '将使用频道级提示词生成语音新闻。',
+      ...(channelName ? [] : ['未选频道时素材与提示词都走默认配置，可能因无素材失败。']),
+    ],
+    irreversible: '触发无法撤回：运行会继续执行并消耗 LLM/语音合成资源，产出可在工作流侧删除。',
+    confirmLabel: '确认触发',
+  })
+  if (!ok) return
   triggering.value = true
   try {
     const data = await triggerWorkflow(channelId, { skipCrawl: skip })
@@ -564,18 +566,17 @@ async function handleTrigger() {
 }
 
 async function handleTriggerAll() {
-  // 二次确认：全频道触发影响范围大，需明确告知用户系统行为
-  try {
-    await ElMessageBox.confirm(
-      '确认立即触发所有活跃频道的工作流？\n\n' +
-      '系统将跳过当日已有运行中工作流的频道，\n' +
-      '失败频道可在结果对话框中重试。',
-      '全频道启动',
-      { type: 'warning', confirmButtonText: '确认启动', cancelButtonText: '取消' }
-    )
-  } catch {
-    return
-  }
+  // T02596：全频道启动影响面大，确认框点名频道数与跳过规则
+  const active = channels.value.filter((c) => c.is_active !== 0 && c.is_active !== false)
+  const ok = await dangerConfirm({
+    action: '全频道启动工作流',
+    target: `全部活跃频道（${active.length} 个）`,
+    scope: `工作流运行最多 ${active.length} 次（当日已有运行中的频道自动跳过）`,
+    lines: ['失败频道可在结果对话框中逐个重试。'],
+    irreversible: '启动无法整体撤回：已开始的运行会继续执行并消耗合成资源，产出可在工作流侧删除。',
+    confirmLabel: '确认启动',
+  })
+  if (!ok) return
 
   triggeringAll.value = true
   try {

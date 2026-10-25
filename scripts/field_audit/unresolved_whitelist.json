@@ -51,19 +51,19 @@
     },
     {
       "endpoint": "POST /queue/tasks/batch-delete",
-      "site": "views/queue/QueueManagement.vue:681",
+      "site": "views/queue/QueueManagement.vue:688",
       "reason_key": "value-scalar",
       "note": "ids 是表格选中行的 id 数组，键名 workflow_ids 由包装体字面量给出，在 BatchDeleteTasksRequest 声明内。"
     },
     {
       "endpoint": "POST /workflows/batch-delete/preview",
-      "site": "views/workflow/WorkflowList.vue:661",
+      "site": "views/workflow/WorkflowList.vue:662",
       "reason_key": "value-scalar",
       "note": "ids 是工作流列表勾选行的 id 数组，键名 workflow_ids 由 src/api/workflow.js 的 batchDeletePreview 字面量给出，在 BatchDeleteRequest 声明内（T02596 删除影响面预览）。"
     },
     {
       "endpoint": "POST /workflows/batch-delete/preview",
-      "site": "views/queue/QueueManagement.vue:659",
+      "site": "views/queue/QueueManagement.vue:666",
       "reason_key": "value-scalar",
       "note": "队列页批量删除复用同一份服务端级联预览：ids 是队列勾选任务的 workflow id 数组，键名 workflow_ids 由 api 包装体字面量给出，在 BatchDeleteRequest 声明内（T02596）。"
     },

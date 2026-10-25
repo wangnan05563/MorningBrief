@@ -122,17 +122,31 @@ test.describe('队列管理', () => {
     await expect(page.locator('.el-message').getByText('配置已保存')).toBeVisible({ timeout: 30000 })
   })
 
-  test('取消排队任务', async ({ page }) => {
+  test('取消排队任务：确认框写全对象与后果，取消不发请求', async ({ page }) => {
+    // T02596：取消是破坏性动作，确认框必须点名任务与不可恢复的执行进度
+    const actions = []
+    await page.route('**/admin/api/v1/queue/tasks/*/cancel', async (route) => {
+      actions.push(route.request().url())
+      await route.fulfill({ json: queueActionSuccessResponse })
+    })
     await setLoginState(page, 'admin')
     await page.goto('/queue')
 
     // 第一行是 queued 状态，应有取消按钮
     await page.getByRole('button', { name: '取消' }).first().click()
-    // ElMessageBox 确认
-    await page.getByRole('button', { name: '确定' }).click()
+    await expect(page.getByText('取消队列任务：任务 wf-20260708-0001（科技频道）')).toBeVisible()
+    await expect(page.getByText('影响范围：队列任务 1 条')).toBeVisible()
+    await expect(page.getByText('已排队/执行中的进度不会保留')).toBeVisible()
 
-    // 成功提示
+    await page.locator('.el-message-box').getByRole('button', { name: '取消', exact: true }).click()
+    await expect(page.locator('.el-message-box')).toHaveCount(0)
+    expect(actions).toHaveLength(0)
+
+    await page.getByRole('button', { name: '取消' }).first().click()
+    await page.locator('.el-message-box').getByRole('button', { name: '确认取消' }).click()
     await expect(page.locator('.el-message').getByText('已取消')).toBeVisible({ timeout: 30000 })
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toContain('/queue/tasks/wf-20260708-0001/cancel')
   })
 
   test('改优先级', async ({ page }) => {
@@ -148,17 +162,31 @@ test.describe('队列管理', () => {
     await expect(page.locator('.el-message').getByText('优先级已更新')).toBeVisible({ timeout: 30000 })
   })
 
-  test('重试失败任务', async ({ page }) => {
+  test('重试失败任务：确认框点名任务，取消不发请求', async ({ page }) => {
+    // T02596：续跑会重新入队执行，确认框写清对象与「已成功步骤不重复执行」
+    const actions = []
+    await page.route('**/admin/api/v1/queue/tasks/*/retry', async (route) => {
+      actions.push(route.request().url())
+      await route.fulfill({ json: queueActionSuccessResponse })
+    })
     await setLoginState(page, 'admin')
     await page.goto('/queue')
 
     // 第二行是 failed 状态，重试按钮
     await page.getByRole('button', { name: '重试' }).click()
-    // ElMessageBox 确认
-    await page.getByRole('button', { name: '确定' }).click()
+    await expect(page.getByText('重试失败任务：任务 wf-20260708-0002（财经频道）')).toBeVisible()
+    await expect(page.getByText('影响范围：队列任务 1 条（在原工作流上从失败步骤续跑）')).toBeVisible()
+    await expect(page.getByText('已成功的步骤（爬虫/改写等）不会重复执行')).toBeVisible()
 
-    // 成功提示：QueueManagement.vue handleRetry 实际文案
+    await page.locator('.el-message-box').getByRole('button', { name: '取消', exact: true }).click()
+    await expect(page.locator('.el-message-box')).toHaveCount(0)
+    expect(actions).toHaveLength(0)
+
+    await page.getByRole('button', { name: '重试' }).click()
+    await page.locator('.el-message-box').getByRole('button', { name: '确认重试' }).click()
     await expect(page.locator('.el-message').getByText('已从失败步骤断点续跑，原工作流已重新入队')).toBeVisible({ timeout: 30000 })
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toContain('/queue/tasks/wf-20260708-0002/retry')
   })
 
   test('详情抽屉显示任务信息', async ({ page }) => {

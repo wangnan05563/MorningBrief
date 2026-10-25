@@ -167,6 +167,10 @@ test.describe('应急停服 · 状态可信与可用性', () => {
     await expect(btn(page, '解除应急停服')).toBeVisible({ timeout: NAV_TIMEOUT })
 
     await btn(page, '解除应急停服').click()
+    // T02596：恢复走统一危险确认，点名调度开关与停服期间的缺口
+    await expect(page.getByText('解除应急停服：生产调度（当前为停服态）')).toBeVisible()
+    await expect(page.getByText('影响范围：调度开关 1 项（恢复新任务触发）')).toBeVisible()
+    await expect(page.getByText('停服期间未触发的任务不会自动补跑')).toBeVisible()
     await page.locator('.el-message-box').getByRole('button', { name: '确认恢复' }).click()
 
     await expect.poll(() => requests.length).toBe(1)
