@@ -16,7 +16,11 @@
  * - 枚举字典（T02504 / FR-UX-405）：`src/constants/enums.js` 的键集合必须与
  *   `backend/app/models` 里的 `class X(str, Enum)` 成员逐值对上（双向），且页面里不得再
  *   出现同一枚举的第二份「值 → 文案」映射——四份映射必然漂成四种说法，移动端还抄过
- *   一个后端根本不存在的值，于是状态直接漏出英文原值。
+ *   一个后端根本不存在的值，于是状态直接漏出英文原值；
+ * - 指标单位（T02709 / FR-UX-501）：单位只随接口 `meta` 下发，页面不得写死
+ *   `(分钟)`/`(秒)`/`%`，不得自己做 `*100` 换算或「秒 → 分」换算，尤其不得读取
+ *   `.factor`——那一定是第二处换算点（T02507：二次换算只让曲线整体缩放，e2e 与像素
+ *   断言都读不出来）。存量硬编码逐条登记在 `METRIC_UNIT_ALLOW` 里。
  *
  * 之所以是构建期而不是运行时：这些错全部发生在「文案/选择器」层面，运行时只会表现为
  * 引导气泡指错元素、帮助文档把人带不到页面、菜单少一项——用户说不清、测试也测不出。
@@ -465,6 +469,276 @@ export function scanMobileSpecs(dir = TESTS) {
   return result
 }
 
+/**
+ * 指标单位硬编码检查（T02709 / FR-UX-501，延续 T02504 的枚举门禁思路）。
+ *
+ * 为什么需要：T02506 把「单位口径」改成后端唯一真源 + 页面按 `meta` 渲染，但没有任何
+ * 机制阻止下一个页面重新写一份 `(分钟)` / `*100`——这正是「平均收听标签写分钟、值是秒」
+ * 的成因。枚举靠 T02504 门禁守住，单位这条同理。
+ *
+ * 判据（全部静态、逐行）：
+ * - `.factor`：`src/views/**`、`src/components/**` 里任何读取都报错。T02507 实测过：
+ *   `metricNumber(v, meta) * meta.display.factor` 会让曲线相对自身整体缩放，坐标轴跟着
+ *   放大，e2e（含画布像素断言）与 node 单测全绿——只有「换算唯一出口」这条静态规则能抓。
+ *   `display.unit` / `display.precision` 不产生换算，允许读取。
+ * - `* 100` 与 `'%'` 出现在同一行：二次百分比换算（`(x * 100) + '%'`）。
+ * - `{{ … }}` 后直接跟 `次`/`秒`/`分`/`分钟`/`%`：插值值旁边写死单位。
+ * - `(分钟)`/`(分)`/`(秒)`/`(次)`/`(%)` 形式且同文件没有 `metricLabel/metricValue/
+ *   metricText/metricNumber` 调用：单位是手写的而不是渲染 meta。调用了 helper 的文件
+ *   视为已走 meta（T02706 的对照：StatsOverview / mobile/Home 已无字面量）。
+ * - `Math.floor/round/ceil(… / 60)`、`… % 60`：视图里的「秒 → 分」换算。
+ *
+ * 注释先剔除：本仓库多处注释在讲「不要再抄 `(分钟)`」，按字面扫会把说明当违规。
+ * 行号是物理行号（注释替换为等长空格，不改变行结构），报错可直接跳转。
+ */
+const METRIC_UNIT_PATTERNS = [
+  {
+    kind: 'factor',
+    test: (line) => /\.\s*factor\b/.test(line),
+    message: (v) =>
+      `${v.file}:${v.line} 读取了 .factor：换算只能在 utils/format.js 的 metricNumber 一处发生；` +
+      `视图再乘一次会让曲线/卡片整体缩放而 e2e 与像素断言都读不出来（T02507 / FR-UX-502）`,
+  },
+  {
+    kind: 'percent',
+    test: (line) => /\*\s*100\b/.test(line) && /['"`]%['"`]|%\s*[)}]/.test(line),
+    message: (v) =>
+      `${v.file}:${v.line} 在页面里做百分比换算（${v.text}）：* 100 与 '%' 同时出现，` +
+      `会把 meta 已换算的值再放大一次；改用 utils/format.js 的 metricValue / metricText（FR-UX-501）`,
+  },
+  {
+    kind: 'unit-label',
+    needsMeta: true,
+    test: (line) => /[(（]\s*(?:分钟|分|秒|次|%)\s*[)）]/.test(line),
+    message: (v) =>
+      `${v.file}:${v.line} 硬编码了指标单位（${v.text}）：同一文件没有调用 metricLabel/metricValue/metricText/metricNumber，` +
+      `说明单位是手写的；改用 utils/format.js 的 metricValue + 接口 meta（FR-UX-501）`,
+  },
+  {
+    kind: 'unit-suffix',
+    test: (line) => /\}\}\s*(?:分钟|分|秒|次|%)/.test(line),
+    message: (v) =>
+      `${v.file}:${v.line} 在插值值后面写死单位（${v.text}）：后端改口径时这一行会直接显示错，` +
+      `改用 utils/format.js 的 metricText，单位随 meta 下发（FR-UX-501）`,
+  },
+  {
+    kind: 'minute-conv',
+    test: (line) => /Math\.(?:floor|round|ceil)\s*\([^\n]*?\/\s*60\s*\)/.test(line) || /%[^=\n]*\b60\b/.test(line),
+    message: (v) =>
+      `${v.file}:${v.line} 在视图里做「秒 → 分」换算（${v.text}）：时长换算应集中到 ` +
+      `utils/format.js 的 formatDuration，分散实现会让 PC 与移动端口径分叉（T02709）`,
+  },
+]
+
+const METRIC_HELPER_RE = /\bmetric(?:Label|Value|Text|Number)\s*\(/
+
+/**
+ * 存量硬编码豁免（T02709 验收允许的临时白名单）。
+ * 每条都必须点名 `文件:行` 并写清「为什么不是违规」或「归哪张派生单」；
+ * 条目一旦不再命中会反过来报错（白名单只减不增，避免悄悄腐烂成永久豁免）。
+ */
+export const METRIC_UNIT_ALLOW = [
+  {
+    file: 'views/ad/AdMaterials.vue',
+    lines: [24, 92],
+    reason: '素材时长是表格列/表单输入，duration 字段本身以秒存储且接口没有 meta',
+  },
+  {
+    file: 'views/ai/AIConfig.vue',
+    lines: [106, 172, 182, 410],
+    reason: '配置项的输入单位（留白/超时），写的是用户要填的量纲，不是后端指标的展示口径',
+  },
+  {
+    file: 'views/ai/AIConfig.vue',
+    lines: [1288],
+    reason: '字数反算公式（总字数 = 目标时长 × 210 × 倍率 / 60），换算的是字数而不是展示单位',
+  },
+  {
+    file: 'views/ai/AIConfig.vue',
+    lines: [626, 717],
+    reason: '下载进度百分比由前端按已下载/总字节算，不是后端指标 meta',
+  },
+  {
+    file: 'views/channel/ChannelManagement.vue',
+    lines: [483, 505],
+    reason: '频道级停顿时长/最短时长的输入单位，字段以秒存储且没有 meta',
+  },
+  {
+    file: 'views/help/Help.vue',
+    lines: [318, 510],
+    reason: '帮助正文讲解公式与填写说明，单位是文档语义，不是页面渲染值',
+  },
+  {
+    file: 'views/tools/ParamCalculator.vue',
+    lines: [20],
+    reason: '公式说明：时长(秒) = 总字数 ÷ (210 × 倍率) × 60，解释的是换算关系本身',
+  },
+  {
+    file: 'views/tools/ParamCalculator.vue',
+    lines: [295, 296],
+    reason: '计算器把秒显示成 mm:ss 供输入对照，属工具自身的记法，不是指标单位标签',
+  },
+  {
+    file: 'views/workflow/WorkflowDetail.vue',
+    lines: [71],
+    reason: '队列任务的耗时列（后端返回秒），该接口没有指标 meta；列入派生单统一',
+  },
+  {
+    file: 'views/mobile/ManageAlert.vue',
+    lines: [110, 111],
+    reason: '本地 hh:mm:ss 排版（不产出单位标签），与 formatDuration 显示形不同；统一口径见派生单',
+  },
+  {
+    file: 'views/queue/QueueManagement.vue',
+    lines: [413, 414, 416, 417],
+    reason: '本地 hh:mm:ss 排版（不产出单位标签），与 formatDuration 显示形不同；统一口径见派生单',
+  },
+  {
+    file: 'views/review/ReviewDetail.vue',
+    lines: [267, 268],
+    reason: '本地 mm:ss 排版（音频精确到秒的时长展示），不产出单位标签',
+  },
+  {
+    file: 'views/system/AutoReviewConfig.vue',
+    lines: [246],
+    reason: '「{{ count }} 次」是失败记录条数徽标，不是统计指标 meta',
+  },
+  {
+    file: 'views/system/AutoReviewConfig.vue',
+    lines: [606],
+    reason: '已知存量：自动审批成功率仍在前端 *100；归派生单「其余统计接口纳入单位元数据表」（T02508）',
+  },
+  {
+    file: 'views/mobile/ManageUsers.vue',
+    lines: [28],
+    reason: '已知存量：收听次数/时长仍是写死「次/秒」；T02508 派生单接入单位 meta 后删除本条',
+  },
+  {
+    file: 'views/workflow/components/WorkflowProgressIndicator.vue',
+    lines: [25],
+    reason: '工作流进度百分比由前端按步骤数算，不是后端指标',
+  },
+  {
+    file: 'components/FeedHealthBanner.vue',
+    lines: [17],
+    reason: '轮询失败次数是前端请求计数，不是后端统计指标',
+  },
+]
+
+const METRIC_UNIT_ALLOW_SET = new Map(
+  METRIC_UNIT_ALLOW.flatMap((entry) =>
+    entry.lines.map((line) => [`${entry.file}:${line}`, entry.reason]),
+  ),
+)
+
+/** 注释替换成等长空白（保留换行与偏移），避免「注释里讲不要写 (分钟)」被当成违规 */
+function stripComments(text) {
+  let out = ''
+  let quote = null
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i]
+    const next = text[i + 1]
+    if (quote) {
+      out += ch
+      if (ch === '\\') {
+        out += next ?? ''
+        i += 1
+      } else if (ch === quote) quote = null
+      continue
+    }
+    if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch
+      out += ch
+      continue
+    }
+    if (ch === '/' && next === '/') {
+      while (i < text.length && text[i] !== '\n') {
+        out += ' '
+        i += 1
+      }
+      if (i < text.length) out += '\n'
+      continue
+    }
+    if (ch === '/' && next === '*') {
+      out += '  '
+      i += 2
+      while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) {
+        out += text[i] === '\n' ? '\n' : ' '
+        i += 1
+      }
+      out += '  '
+      i += 1
+      continue
+    }
+    out += ch
+  }
+  return out
+}
+
+/**
+ * 扫描视图里的单位硬编码。返回 `[{ file, line, kind, text }]`；
+ * `utils/format.js`（唯一换算出口）读不到时返回 null——前端单独构建、文件尚未创建的场景，
+ * 由调用方打印「跳过」而不是假装通过。
+ */
+export function collectMetricUnitViolations(srcDir = SRC) {
+  let formatSource
+  try {
+    formatSource = readFileSync(join(srcDir, 'utils/format.js'), 'utf8')
+  } catch {
+    return null
+  }
+  if (!/export function metricNumber/.test(formatSource)) return null
+
+  const out = []
+  for (const dirName of ['views', 'components']) {
+    let files
+    try {
+      files = walk(join(srcDir, dirName), [], ['.vue', '.js'])
+    } catch {
+      continue
+    }
+    for (const file of files) {
+      const rel = file.slice(srcDir.length + 1).replace(/\\/g, '/')
+      const text = stripComments(readFileSync(file, 'utf8'))
+      const usesMeta = METRIC_HELPER_RE.test(text)
+      text.split(/\r?\n/).forEach((line, i) => {
+        for (const rule of METRIC_UNIT_PATTERNS) {
+          if (rule.needsMeta && usesMeta) continue
+          if (!rule.test(line)) continue
+          out.push({ file: rel, line: i + 1, kind: rule.kind, text: line.trim().slice(0, 90) })
+        }
+      })
+    }
+  }
+  return out
+}
+
+/** 单位硬编码门禁（T02709）：命中即报错；白名单条目失效也报错，防止豁免悄悄腐烂 */
+export function checkMetricUnits(f) {
+  const errors = []
+  const found = f.metricUnits
+  if (!found) return { errors, skipped: true }
+  const used = new Set()
+  for (const v of found) {
+    const key = `${v.file}:${v.line}`
+    if (METRIC_UNIT_ALLOW_SET.has(key)) {
+      used.add(key)
+      continue
+    }
+    const rule = METRIC_UNIT_PATTERNS.find((r) => r.kind === v.kind)
+    errors.push(rule.message(v))
+  }
+  for (const [key, reason] of METRIC_UNIT_ALLOW_SET) {
+    if (!used.has(key)) {
+      errors.push(
+        `指标单位白名单条目已失效：${key}（${reason}）；` +
+          `对应硬编码已删除或行号漂移，请更新或删除该条（白名单只减不增）`,
+      )
+    }
+  }
+  return { errors, skipped: false }
+}
+
 export async function collectFacts() {
   const routerText = read('router/index.js')
   const routes = collectRoutes(routesLiteralText())
@@ -557,6 +831,7 @@ export async function collectFacts() {
     backendEnums,
     enumDuplicates,
     mobileSpecs: scanMobileSpecs(),
+    metricUnits: collectMetricUnitViolations(),
   }
 }
 
@@ -836,12 +1111,16 @@ export function checkFacts(f) {
   const enumResult = checkEnums(f)
   errors.push(...enumResult.errors)
 
+  const unitResult = checkMetricUnits(f)
+  errors.push(...unitResult.errors)
+
   return {
     errors,
     iconNames: [...iconNames],
     depsSkipped: !!dep.skipped,
     enumsSkipped: !!enumResult.skipped,
     enumBackendSkipped: !!enumResult.backendSkipped,
+    metricUnitsSkipped: !!unitResult.skipped,
   }
 }
 
@@ -861,7 +1140,8 @@ async function checkIconNames(iconNames) {
 
 export async function validate({ includeIcons = false } = {}) {
   const facts = await collectFacts()
-  const { errors, iconNames, depsSkipped, enumsSkipped, enumBackendSkipped } = checkFacts(facts)
+  const { errors, iconNames, depsSkipped, enumsSkipped, enumBackendSkipped, metricUnitsSkipped } =
+    checkFacts(facts)
   const iconResult = includeIcons ? await checkIconNames(iconNames) : { errors: [], skipped: true }
   return {
     facts,
@@ -871,6 +1151,7 @@ export async function validate({ includeIcons = false } = {}) {
     depsSkipped,
     enumsSkipped,
     enumBackendSkipped,
+    metricUnitsSkipped,
   }
 }
 
@@ -884,21 +1165,27 @@ if (isCli) {
     depsSkipped,
     enumsSkipped,
     enumBackendSkipped,
+    metricUnitsSkipped,
     facts,
   } = await validate({ includeIcons })
   const all = [...errors, ...iconErrors]
   const py = facts.pyManifest
   const enumCount = facts.enumDictionary?.dicts.size ?? 0
+  const unitCount = facts.metricUnits ? facts.metricUnits.length : '—'
   console.log(
     `[validate-nav] 路由 ${facts.routes.length} 条 · 引导 ${Object.keys(facts.guideSteps).length} 页 · ` +
       `aria-label ${facts.ariaLabels.size} 个 · 分组 ${facts.groups.length} 个 · 帮助章节 ${facts.helpIds.length} 篇 · ` +
       `开源清单 ${facts.dependencyTable.length} 项（npm ${Object.keys(facts.npmManifest).length} + ` +
-      `pip ${py ? py.size : '—'}）· 枚举字典 ${enumCount} 份 · 移动端用例 ${facts.mobileSpecs.length} 份`,
+      `pip ${py ? py.size : '—'}）· 枚举字典 ${enumCount} 份 · 移动端用例 ${facts.mobileSpecs.length} 份 · ` +
+      `单位硬编码 ${unitCount} 处（豁免 ${METRIC_UNIT_ALLOW_SET.size} 行）`,
   )
   if (iconsSkipped && includeIcons) console.log('[validate-nav] 图标名单加载失败，已跳过该项')
   if (depsSkipped) console.log('[validate-nav] 未提供依赖清单，跳过开源清单对账')
   if (enumsSkipped) console.log('[validate-nav] 未找到 src/constants/enums.js，跳过枚举对账')
   else if (enumBackendSkipped) console.log('[validate-nav] 读不到 backend/app/models，跳过枚举值集比对')
+  if (metricUnitsSkipped) {
+    console.log('[validate-nav] 未找到 src/utils/format.js 的 metricNumber（换算唯一出口），跳过单位字面量检查')
+  }
   if (all.length) {
     for (const e of all) console.error(`  ✗ ${e}`)
     console.error(`[validate-nav] ${all.length} 项不一致`)

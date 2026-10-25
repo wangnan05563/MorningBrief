@@ -9,7 +9,16 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { collectFacts, checkFacts, checkEnums, collectEnumDuplicates, scanMobileSpecs } from './validate-nav.mjs'
+import {
+  collectFacts,
+  checkFacts,
+  checkEnums,
+  collectEnumDuplicates,
+  scanMobileSpecs,
+  collectMetricUnitViolations,
+  checkMetricUnits,
+  METRIC_UNIT_ALLOW,
+} from './validate-nav.mjs'
 
 /** 最小可用事实集：只写用到字段，其余留空 */
 function facts(over = {}) {
@@ -532,4 +541,130 @@ test('真实仓库的移动端用例都声明了手机视口（T02766）', async
   const leaks = f.mobileSpecs.flatMap((s) => s.uncovered.map((line) => `${s.file}:${line}`))
   assert.deepEqual(leaks, [], `以下 /m 用例未设手机视口：${leaks.join('、')}`)
 })
+
+/** 单位硬编码夹具：临时 src 树必须带 utils/format.js（换算唯一出口），否则整项按跳过处理 */
+function metricFixtureTree(files) {
+  const dir = mkdtempSync(join(tmpdir(), 'metric-unit-gate-'))
+  mkdirSync(join(dir, 'utils'), { recursive: true })
+  writeFileSync(join(dir, 'utils/format.js'), 'export function metricNumber() {}\n')
+  for (const [rel, content] of Object.entries(files)) {
+    const p = join(dir, rel)
+    mkdirSync(dirname(p), { recursive: true })
+    writeFileSync(p, content, 'utf8')
+  }
+  return dir
+}
+
+const allowHits = () =>
+  METRIC_UNIT_ALLOW.flatMap((e) =>
+    e.lines.map((line) => ({ file: e.file, line, kind: 'unit-suffix', text: '白名单存量' })),
+  )
+
+test('单位门禁：写死单位、*100 拼 %、读 .factor 都抓到（T02709 反证一/二 + T02507）', () => {
+  const dir = metricFixtureTree({
+    'views/Stats.vue':
+      '<template><div>{{ card.label }}</div></template>\n<script setup>\n' +
+      "const card = { label: '平均收听(分钟)' }\n" +
+      '</script>\n',
+    'views/Rate.vue': '<script setup>\nconst pct = (v) => (v * 100).toFixed(1) + \'%\'\n</script>\n',
+    'views/Trend.vue':
+      '<script setup>\n' +
+      'const scaled = trendPoints.map((v) => metricNumber(v, meta) * meta.display.factor)\n' +
+      '</script>\n',
+  })
+  const got = collectMetricUnitViolations(dir)
+  const byFile = Object.fromEntries(got.map((v) => [v.file, v]))
+  assert.equal(byFile['views/Stats.vue'].kind, 'unit-label')
+  assert.equal(byFile['views/Stats.vue'].line, 3, '行号要落在 .vue 的物理行')
+  assert.equal(byFile['views/Rate.vue'].kind, 'percent')
+  assert.equal(byFile['views/Trend.vue'].kind, 'factor')
+  const r = checkMetricUnits({ metricUnits: [...allowHits(), ...got] })
+  assert.equal(r.errors.length, 3, `应报 3 条：${JSON.stringify(r.errors)}`)
+  assert.match(r.errors.join('\n'), /平均收听\(分钟\).*metricValue \+ 接口 meta/)
+  assert.match(r.errors.join('\n'), /百分比换算.*再放大一次/)
+  assert.match(r.errors.join('\n'), /换算只能在 utils\/format\.js 的 metricNumber 一处发生/)
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('单位门禁：插值后写死单位、视图里做秒→分换算都抓到；注释里的示例不算', () => {
+  const dir = metricFixtureTree({
+    'views/Users.vue':
+      '<template><div>收听 {{ fmt(u.count) }} 次 · {{ fmt(u.duration) }} 秒</div></template>\n',
+    'views/Duration.vue':
+      '<script setup>\n' +
+      'const m = Math.floor(sec / 60)\n' +
+      'const r = sec % 60\n' +
+      '</script>\n',
+    'views/Comment.vue':
+      '<script setup>\n' +
+      "// 不要再写 '平均收听(分钟)' 或 {{ x }} 次\n" +
+      '/* (秒) 只允许出现在注释说明里 */\n' +
+      "const url = 'https://example.com/path'\n" +
+      '</script>\n',
+  })
+  const got = collectMetricUnitViolations(dir)
+  assert.deepEqual(
+    got.map((v) => `${v.file}:${v.line}:${v.kind}`),
+    [
+      'views/Duration.vue:2:minute-conv',
+      'views/Duration.vue:3:minute-conv',
+      'views/Users.vue:1:unit-suffix',
+    ],
+  )
+  assert.equal(got.filter((v) => v.file === 'views/Comment.vue').length, 0, '注释被当成了违规')
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('单位门禁：已走 metricValue/metricLabel 的文件不再要求改（FR-UX-501 的对照面）', () => {
+  const dir = metricFixtureTree({
+    'views/Overview.vue':
+      '<script setup>\nimport { metricLabel, metricValue } from \'../utils/format\'\n' +
+      "const label = (m) => metricLabel(m)\n" +
+      "const legacy = '平均收听(分钟)' // helper 在，单位来自 meta，这一行只是遗留注释？\n" +
+      '</script>\n',
+    // 没有任何 helper：同样的 (秒) 必须报，证明豁免不是「看文件在不在 views 下」
+    'views/Channel.vue': '<script setup>\nconst f = { label: \'最短时长（秒）\' }\n</script>\n',
+  })
+  const got = collectMetricUnitViolations(dir)
+  assert.equal(got.filter((v) => v.file === 'views/Overview.vue').length, 0, '已走 meta 的文件被误报')
+  assert.equal(got.filter((v) => v.file === 'views/Channel.vue').length, 1, '未走 meta 的硬编码没抓到')
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('单位门禁：白名单逐行生效，条目失效要反过来报错（白名单只减不增）', () => {
+  assert.deepEqual(checkMetricUnits({ metricUnits: allowHits() }).errors, [])
+  const extra = checkMetricUnits({
+    metricUnits: [...allowHits(), { file: 'views/x.vue', line: 9, kind: 'percent', text: 'x' }],
+  })
+  assert.equal(extra.errors.length, 1)
+  assert.match(extra.errors[0], /views\/x\.vue:9/)
+  const stale = checkMetricUnits({ metricUnits: allowHits().slice(1) })
+  assert.equal(stale.errors.length, 1)
+  assert.match(stale.errors[0], /白名单条目已失效：views\/ad\/AdMaterials\.vue:24/)
+  // 接线：checkFacts 必须把这一项带进总错误集，否则门禁脚本「有检查但没报」
+  const wired = checkFacts(facts({ metricUnits: [{ file: 'views/x.vue', line: 9, kind: 'percent', text: 'x' }] }))
+  assert.match(wired.errors.join('\n'), /views\/x\.vue:9/)
+})
+
+test('单位门禁：format.js 读不到时跳过并说明，不假装通过（前端单独构建）', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'metric-unit-empty-'))
+  assert.equal(collectMetricUnitViolations(dir), null)
+  assert.equal(checkMetricUnits({ metricUnits: null }).skipped, true)
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('真实仓库的指标单位只剩白名单里的存量（T02709 / T02507）', async () => {
+  const f = await collectFacts()
+  assert.ok(Array.isArray(f.metricUnits), 'src/utils/format.js 没解析出来，单位门禁等于没跑')
+  const allowed = METRIC_UNIT_ALLOW.reduce((n, e) => n + e.lines.length, 0)
+  assert.equal(f.metricUnits.length, allowed, '出现了新的单位硬编码，或白名单行号漂移')
+  assert.deepEqual(checkMetricUnits(f).errors, [])
+  // 抽取要能对上已知缺陷面，否则「0 违规」只是因为扫了个空气
+  const kinds = new Set(f.metricUnits.map((v) => v.kind))
+  for (const kind of ['unit-label', 'unit-suffix', 'percent', 'minute-conv']) {
+    assert.ok(kinds.has(kind), `真实仓库没抽到 ${kind} 类命中，检查项等于没跑`)
+  }
+  assert.equal(kinds.has('factor'), false, '视图里出现了 .factor 读取：第二处换算点')
+})
+
 
