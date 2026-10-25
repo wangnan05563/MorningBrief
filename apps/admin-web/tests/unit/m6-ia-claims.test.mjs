@@ -121,9 +121,71 @@ describe('E12 工作流详情深链返回', () => {
 })
 
 describe('I19 消息可跳转', () => {
-  it('明确契约：payload.path 优先，workflow_id 进作用域审核页', () => {
-    assert.match(MESSAGE, /payload\.path\.startsWith\('\/'\)/)
-    assert.match(MESSAGE, /path: '\/m\/review', query: \{ workflow_id: String\(workflowId\) \}/)
+  // 直接从 SFC 里取出 messageTarget 求值：这是纯函数，行为必须可跑，不能只断言源码里
+  // 有那两行——优先级写反、startsWith 取反这类错误，正则一条都抓不到。
+  const messageTarget = (() => {
+    const at = MESSAGE.indexOf('function messageTarget(m)')
+    assert.notEqual(at, -1, 'Message.vue 里找不到 messageTarget')
+    let depth = 0
+    let quote = ''
+    for (let i = at; i < MESSAGE.length; i += 1) {
+      const ch = MESSAGE[i]
+      if (quote) {
+        if (ch === '\\') i += 1
+        else if (ch === quote) quote = ''
+        continue
+      }
+      if (ch === '/' && MESSAGE[i + 1] === '/') {
+        const nl = MESSAGE.indexOf('\n', i)
+        i = nl === -1 ? MESSAGE.length : nl
+        continue
+      }
+      if (ch === "'" || ch === '"' || ch === '`') {
+        quote = ch
+        continue
+      }
+      if (ch === '{') depth += 1
+      else if (ch === '}') {
+        depth -= 1
+        if (depth === 0) return new Function('return (' + MESSAGE.slice(at, i + 1) + ')')()
+      }
+    }
+    throw new Error('messageTarget 未闭合')
+  })()
+
+  it('显式 payload.path 优先于 workflow_id，且原样带 query', () => {
+    assert.equal(messageTarget({ payload: { path: '/m/review?tab=all', workflow_id: 7 } }), '/m/review?tab=all')
+  })
+
+  it('只有 workflow_id 时进作用域审核页，id 一律转成字符串', () => {
+    assert.deepEqual(messageTarget({ payload: { workflow_id: 42 } }), {
+      path: '/m/review',
+      query: { workflow_id: '42' },
+    })
+    assert.deepEqual(messageTarget({ payload: { workflow_id: 'wf-9' } }).query.workflow_id, 'wf-9')
+  })
+
+  it('相对地址不算深链：path 不以 / 开头时丢弃', () => {
+    assert.equal(messageTarget({ payload: { path: 'review' } }), '')
+    assert.equal(messageTarget({ payload: { path: 'https://evil.example/x' } }), '')
+  })
+
+  it('空 workflow_id 不生成链接（0/空串/null/undefined 都不算目标）', () => {
+    assert.equal(messageTarget({ payload: { workflow_id: '' } }), '')
+    assert.equal(messageTarget({ payload: { workflow_id: null } }), '')
+    assert.equal(messageTarget({ payload: {} }), '')
+  })
+
+  it('payload 缺失或不是对象时不跳转、不抛错', () => {
+    assert.equal(messageTarget({}), '')
+    assert.equal(messageTarget({ payload: 'x' }), '')
+    assert.equal(messageTarget(null), '')
+    assert.equal(messageTarget({ payload: [] }), '')
+  })
+
+  it('不按 msg_type/标题猜地址：没有显式契约就不跳', () => {
+    assert.equal(messageTarget({ msg_type: 'review', title: '有新的审核任务' }), '')
+    assert.equal(messageTarget({ msg_type: 'alert', title: '工作流失败' }), '')
   })
 
   it('open() 在标记已读后仍会跳转（不再直接 return）', () => {
@@ -132,6 +194,11 @@ describe('I19 消息可跳转', () => {
     const body = MESSAGE.slice(at, MESSAGE.indexOf('\n}', at))
     assert.match(body, /router\.push\(target\)/)
     assert.doesNotMatch(body, /if \(m\.read\) \{\s*\/\/[^\n]*\n\s*return/)
+  })
+
+  it('可跳转的消息在列表上有明确入口（chevron + link 类）', () => {
+    assert.match(MESSAGE, /'m-msg__item--link': !!messageTarget\(m\)/)
+    assert.match(MESSAGE, /<span v-if="messageTarget\(m\)" class="m-msg__go" aria-label="查看详情">/)
   })
 })
 
