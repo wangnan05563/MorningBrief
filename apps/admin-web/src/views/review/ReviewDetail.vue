@@ -182,7 +182,7 @@
  *
  * 设计要点：
  * - 三种操作共用一个表单，按 action 动态显示段落选择与理由输入
- * - 提交前用 ElMessageBox 二次确认，避免误操作（审核不可逆）
+ * - 提交前用 dangerConfirm 二次确认，写清对象/后果/可撤销性（T02596）
  * - 操作成功后返回列表页，让列表重新拉取最新待审核数据
  * - **返回保留来源**（T02512 / FR-UX-603）：列表进本页时把当时地址（含 tab/分页）挂在 `?from=`，
  *   返回与操作后回跳都按它走；深链直接打开（没有 from）时兜回 `/review` 首页，
@@ -190,7 +190,8 @@
  */
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from '../../utils/message'
+import { ElMessage } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 import { ArrowLeft, Check, Close, ZoomIn, Refresh, RefreshLeft } from '@element-plus/icons-vue'
 import api from '../../api'
 import { getEpisodeAudioUrl } from '../../api/audio'
@@ -316,13 +317,26 @@ async function handleSubmit() {
     return
   }
 
-  try {
-    await ElMessageBox.confirm(`确认执行「${actionText(action.value)}」操作？`, '提示', {
-      type: 'warning',
-    })
-  } catch {
-    return // 用户取消
-  }
+  // T02596：审核动作有副作用（通过=自动发布，打回/替换=稿件退回重做），
+  // 确认框要把对象、后果和可撤销性一起说清，而不是一句「确认执行」。
+  const actionLabel = actionText(action.value)
+  const ok = await dangerConfirm({
+    action: `${actionLabel}审核`,
+    target: `审核 #${detail.value?.id ?? route.params.id}（工作流 ${detail.value?.workflow_id || '未知'}，${detail.value?.episode_date || '日期未知'}）`,
+    scope:
+      action.value === 'approve'
+        ? '审核 1 条（通过后立即自动发布对应节目）'
+        : action.value === 'reject'
+          ? '审核 1 条（打回后内容需要重新改写）'
+          : `审核 1 条（替换第 ${segmentId.value} 段后重新提交）`,
+    lines: action.value === 'approve' ? ['节目发布后听众即刻可见。'] : [],
+    irreversible:
+      action.value === 'approve'
+        ? '发布后无法在本页撤回，需要到节目侧手工下线。'
+        : '审核状态会立即变更，无法在本页撤销；重新生成/改写后才能再次提交。',
+    confirmLabel: `确认${actionLabel}`,
+  })
+  if (!ok) return // 用户取消
 
   submitting.value = true
   try {

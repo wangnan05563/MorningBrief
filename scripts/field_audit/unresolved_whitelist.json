@@ -87,19 +87,19 @@
     },
     {
       "endpoint": "POST /reviews/batch-action",
-      "site": "views/review/ReviewList.vue:456",
+      "site": "views/review/ReviewList.vue:467",
       "reason_key": "value-scalar",
-      "note": "ids 是批量通过所选的 review_id 数组（apps/admin-web/src/views/review/ReviewList.vue:456），键名 review_ids 在 BatchActionRequest 声明内。"
+      "note": "ids 是批量通过所选的 review_id 数组（apps/admin-web/src/views/review/ReviewList.vue:467），键名 review_ids 在 BatchActionRequest 声明内。"
     },
     {
       "endpoint": "POST /reviews/batch-action",
-      "site": "views/review/ReviewList.vue:500",
+      "site": "views/review/ReviewList.vue:511",
       "reason_key": "value-scalar",
-      "note": "ids 是批量打回所选的 review_id 数组（apps/admin-web/src/views/review/ReviewList.vue:500），与批量通过共用 BatchActionRequest。"
+      "note": "ids 是批量打回所选的 review_id 数组（apps/admin-web/src/views/review/ReviewList.vue:511），与批量通过共用 BatchActionRequest。"
     },
     {
       "endpoint": "POST /users/*/toggle-status",
-      "site": "views/mobile/ManageUsers.vue:85",
+      "site": "views/mobile/ManageUsers.vue:90",
       "reason_key": "value-scalar",
       "note": "next 是 0/1 状态开关值，由 row.status 取反得到；键名 status 由 api 包装体给出并在 UserToggleBody 声明内。"
     },
@@ -111,7 +111,7 @@
     },
     {
       "endpoint": "PUT /channels/*/script-mode",
-      "site": "views/channel/BookPoolPanel.vue:338",
+      "site": "views/channel/BookPoolPanel.vue:339",
       "reason_key": "value-scalar",
       "note": "val 是讲书稿模式开关的布尔值；api/bookPool.js 的包装体提交 {enabled}，在 ScriptModeRequest 声明内。"
     },

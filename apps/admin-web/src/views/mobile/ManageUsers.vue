@@ -42,7 +42,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { listUsers, toggleUserStatus } from '../../api/users'
-import { ElMessage, ElMessageBox } from '../../utils/message'
+import { ElMessage } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 
 const keyword = ref('')
 const list = ref([])
@@ -72,15 +73,19 @@ async function reload() {
 async function toggle(u) {
   const next = u.disabled ? 0 : 1
   const action = next ? '禁用' : '启用'
-  try {
-    await ElMessageBox.confirm(
-      `确认${action}用户「${u.nickname || u.openid}」？`,
-      '二次确认',
-      { type: 'warning', confirmButtonText: '确认', cancelButtonText: '取消' }
-    )
-  } catch {
-    return // 取消
-  }
+  const ok = await dangerConfirm({
+    action: `${action}用户`,
+    target: `「${u.nickname || u.openid}」`,
+    scope: '用户 1 个',
+    lines: next
+      ? ['禁用后该用户无法登录管理端与小程序，进行中的会话会在下次校验时失效。']
+      : ['启用后该用户可以重新登录。'],
+    irreversible: next
+      ? '禁用可随时改回启用，但禁用期间的访问不会被补回。'
+      : '启用可随时改回禁用。',
+    confirmLabel: `确认${action}`,
+  })
+  if (!ok) return // 取消
   try {
     await toggleUserStatus(u.id, next)
     u.disabled = next

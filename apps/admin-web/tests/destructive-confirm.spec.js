@@ -586,4 +586,50 @@ test.describe('破坏性操作确认', () => {
       ).toBeVisible({ timeout: NAV_TIMEOUT })
     })
   })
+
+  test.describe('终端用户禁用/启用（T02596 切片D）', () => {
+    const usersResponse = {
+      code: 0,
+      message: 'success',
+      data: {
+        total: 1,
+        list: [
+          { id: 5, nickname: '张三', openid: 'o_abcdefghijklmn', disabled: 0,
+            total_listen_count: 3, total_listen_duration: 120, created_at: '2026-07-01T00:00:00' },
+        ],
+      },
+    }
+
+    test('禁用前讲明登录与会话影响，取消不发请求', async ({ page }) => {
+      await setLoginState(page, 'admin')
+      await useMobileViewport(page)
+      const posts = []
+      await page.route('**/admin/api/v1/users**', (route) => {
+        if (route.request().method() === 'GET') return route.fulfill({ json: usersResponse })
+        posts.push({ url: route.request().url(), body: route.request().postData() })
+        return route.fulfill({ json: { code: 0, message: 'success', data: null } })
+      })
+
+      await page.goto('/m/manage/users')
+      await expect(page.getByText('张三').first()).toBeVisible({ timeout: NAV_TIMEOUT })
+
+      await page.getByRole('button', { name: '禁用' }).click()
+      const box = page.locator('.el-message-box')
+      await expect(box).toBeVisible({ timeout: NAV_TIMEOUT })
+      await expect(box.getByText('禁用用户：「张三」')).toBeVisible()
+      await expect(box.getByText('影响范围：用户 1 个')).toBeVisible()
+      await expect(box.getByText(/禁用后该用户无法登录管理端与小程序/)).toBeVisible()
+      await expect(box.getByText(/禁用期间的访问不会被补回/)).toBeVisible()
+
+      await box.getByRole('button', { name: '取消' }).click()
+      await expect(box).toBeHidden()
+      expect(posts).toHaveLength(0)
+
+      await page.getByRole('button', { name: '禁用' }).click()
+      await page.locator('.el-message-box').getByRole('button', { name: '确认禁用' }).click()
+      await expect.poll(() => posts.length).toBe(1)
+      expect(posts[0].url).toMatch(/\/users\/5\/toggle-status$/)
+      expect(JSON.parse(posts[0].body)).toEqual({ disabled: 1 })
+    })
+  })
 })

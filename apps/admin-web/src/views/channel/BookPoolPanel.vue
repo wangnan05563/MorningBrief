@@ -198,7 +198,8 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { View, RefreshLeft, Plus, ArrowUp, ArrowDown, Delete, Search, Close, Check } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from '../../utils/message'
+import { ElMessage } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 import ListLoadError from '../../components/ListLoadError.vue'
 // C84：候选分页页长档位与素材库面板共用同一常量
 import { PANEL_PAGE_SIZE_OPTIONS } from '../../constants/pagination'
@@ -367,7 +368,15 @@ async function onPreview() {
 }
 
 async function onResetProgress() {
-  await ElMessageBox.confirm('重置后将从书单第一本重新开始（书单与排序保留），确定继续？', '重置进度', { type: 'warning' })
+  const ok = await dangerConfirm({
+    action: '重置书单进度',
+    target: `频道 ID ${props.channelId} 的讲书稿书单（共 ${items.value.length} 本）`,
+    scope: '取书进度 1 项（复位到书单第 1 本；书单与排序保留）',
+    lines: ['下一次生成会从第 1 本重新开始。'],
+    irreversible: '重置后原来的取书位置不会保留，无法撤销。',
+    confirmLabel: '确认重置',
+  })
+  if (!ok) return
   const res = await resetBookPoolProgress(props.channelId)
   Object.assign(state, res || {})
   preview.value = null
@@ -382,7 +391,15 @@ async function onMove(row, direction) {
 }
 
 async function onRemove(row) {
-  await ElMessageBox.confirm(`确定把《${row.title}》移出书单？（素材库中的素材不受影响）`, '移出书单', { type: 'warning' })
+  const ok = await dangerConfirm({
+    action: '移出书单',
+    target: `《${row.title}》`,
+    scope: `书单条目 1 条（${items.value.length} 本 → ${Math.max(items.value.length - 1, 0)} 本）`,
+    lines: ['素材库中的素材不受影响；再次加入需从候选书单重新选择。'],
+    irreversible: '移出后书单顺序会重排，原来的位置需要手动恢复。',
+    confirmLabel: '确认移出',
+  })
+  if (!ok) return
   const data = await removeBookFromPool(props.channelId, row.id)
   items.value = data?.items || []
   await loadState()

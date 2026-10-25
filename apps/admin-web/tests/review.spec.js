@@ -198,21 +198,38 @@ test.describe('审核流程', () => {
   })
 
   test('通过审核操作', async ({ page }) => {
+    const actions = []
+    await page.route('**/admin/api/v1/reviews/*/action', (route) => {
+      actions.push(JSON.parse(route.request().postData() || '{}'))
+      return route.fulfill({ json: reviewActionSuccessResponse })
+    })
     await page.goto('/review/1')
 
     // 默认选中"通过"
     await expect(page.getByRole('radio', { name: '通过' })).toBeChecked({ timeout: 30000 })
 
-    // 点击提交，触发确认弹窗
+    // 点击提交，触发确认弹窗（T02596：动作+对象+后果+不可撤销）
     await page.getByRole('button', { name: '提交' }).click()
 
-    // ElMessageBox 二次确认（main.js 加载 zh-cn 语言包，按钮文案为「确定」）
-    await page.getByRole('button', { name: '确定' }).click()
+    const box = page.locator('.el-message-box')
+    await expect(box).toBeVisible({ timeout: 30000 })
+    await expect(box.getByText('通过审核：审核 #1（工作流 wf-001，2026-07-08）')).toBeVisible()
+    await expect(box.getByText(/影响范围：审核 1 条（通过后立即自动发布对应节目）/)).toBeVisible()
+    await expect(box.getByText(/发布后无法在本页撤回/)).toBeVisible()
+
+    // 取消只是关弹窗，不能发出审核请求
+    await box.getByRole('button', { name: '取消' }).click()
+    await expect(box).toBeHidden()
+    expect(actions).toHaveLength(0)
+
+    await page.getByRole('button', { name: '提交' }).click()
+    await box.getByRole('button', { name: '确认通过' }).click()
 
     // 操作成功后应跳回列表页
     await expect(page).toHaveURL(/\/review$/, { timeout: 30000 })
     // 应显示成功提示
     await expect(page.locator('.el-message').getByText('操作成功')).toBeVisible({ timeout: 30000 })
+    expect(actions).toEqual([{ action: 'approve' }])
   })
 
   test('打回审核操作', async ({ page }) => {
@@ -227,8 +244,12 @@ test.describe('审核流程', () => {
 
     await page.getByRole('button', { name: '提交' }).click()
 
-    // ElMessageBox 二次确认（main.js 加载 zh-cn 语言包，按钮文案为「确定」）
-    await page.getByRole('button', { name: '确定' }).click()
+    const box = page.locator('.el-message-box')
+    await expect(box).toBeVisible({ timeout: 30000 })
+    await expect(box.getByText('打回审核：审核 #1（工作流 wf-001，2026-07-08）')).toBeVisible()
+    await expect(box.getByText(/影响范围：审核 1 条（打回后内容需要重新改写）/)).toBeVisible()
+    await expect(box.getByText(/审核状态会立即变更，无法在本页撤销/)).toBeVisible()
+    await box.getByRole('button', { name: '确认打回' }).click()
 
     // 操作成功跳回列表
     await expect(page).toHaveURL(/\/review$/, { timeout: 30000 })
@@ -261,6 +282,11 @@ test.describe('审核流程', () => {
   })
 
   test('批量通过：成功提交后显示统计提示', async ({ page }) => {
+    const batchCalls = []
+    await page.route('**/admin/api/v1/reviews/batch-action', (route) => {
+      batchCalls.push(JSON.parse(route.request().postData() || '{}'))
+      return route.fulfill({ json: reviewBatchActionSuccessResponse })
+    })
     await page.goto('/review')
 
     await expect(page.getByText('wf-001')).toBeVisible({ timeout: 30000 })
@@ -271,15 +297,27 @@ test.describe('审核流程', () => {
 
     await expect(page.getByText('已选 2 条')).toBeVisible({ timeout: 30000 })
 
-    // 点击批量通过
+    // 点击批量通过（T02596：写清条数、工作流分布与「发布不可整体撤回」）
     await page.getByRole('button', { name: '批量通过' }).click()
 
-    // ElMessageBox 二次确认
-    await expect(page.getByText('批量通过确认')).toBeVisible({ timeout: 30000 })
-    await page.getByRole('button', { name: '确定' }).click()
+    const box = page.locator('.el-message-box')
+    await expect(box).toBeVisible({ timeout: 30000 })
+    await expect(box.getByText('批量通过审核并自动发布：选中的 2 条审核记录')).toBeVisible()
+    await expect(box.getByText(/影响范围：审核 2 条（覆盖 2 个工作流）/)).toBeVisible()
+    await expect(box.getByText(/批量发布后无法整体撤回/)).toBeVisible()
+
+    // 取消不会把整批内容发出去
+    await box.getByRole('button', { name: '取消' }).click()
+    await expect(box).toBeHidden()
+    expect(batchCalls).toHaveLength(0)
+
+    await page.getByRole('button', { name: '批量通过' }).click()
+    await box.getByRole('button', { name: '确认通过' }).click()
 
     // 成功提示：mock 返回 2 条成功
     await expect(page.locator('.el-message').getByText(/批量通过完成/)).toBeVisible({ timeout: 30000 })
+    expect(batchCalls).toHaveLength(1)
+    expect(batchCalls[0].action).toBe('approve')
   })
 
   test('批量打回：需填写理由后才能提交', async ({ page }) => {
@@ -295,6 +333,9 @@ test.describe('审核流程', () => {
 
     // 弹出 prompt 输入理由
     await expect(page.getByText('批量打回确认')).toBeVisible({ timeout: 30000 })
+    // 条数与「不会自动重新生成」写进提示，避免只看到一句「请输入理由」
+    await expect(page.getByText(/批量打回 1 条审核记录/)).toBeVisible()
+    await expect(page.getByText(/不会自动重新生成/)).toBeVisible()
 
     // 输入理由
     await page.getByPlaceholder('请输入打回理由').fill('批量打回：内容质量不达标')

@@ -68,7 +68,7 @@ function channelRow(overrides = {}) {
  */
 async function mockApi(page, opts = {}) {
   const channels = [channelRow()]
-  const calls = { create: null, update: null, scriptMode: null, schedule: null }
+  const calls = { create: null, update: null, scriptMode: null, schedule: null, reset: 0, removed: [] }
   const poolItems = opts.poolItems || [
     { id: 11, title: 'A 书', material_id: 101, enabled: true },
     { id: 12, title: 'B 书', material_id: 102, enabled: true },
@@ -125,6 +125,16 @@ async function mockApi(page, opts = {}) {
       return route.fulfill({ json: ok({ ...scriptState, ...calls.schedule }) })
     }
     if (/\/book-pool\/candidates/.test(p)) return route.fulfill({ json: ok({ items: [] }) })
+    if (/\/book-pool\/progress\/reset$/.test(p) && route.request().method() === 'POST') {
+      calls.reset += 1
+      scriptState.cursor = 0
+      return route.fulfill({ json: ok({ ...scriptState }) })
+    }
+    if (/\/book-pool\/items\/\d+$/.test(p) && route.request().method() === 'DELETE') {
+      calls.removed.push(p)
+      const itemId = Number(p.split('/').pop())
+      return route.fulfill({ json: ok({ items: poolItems.filter((i) => i.id !== itemId) }) })
+    }
     if (p.endsWith('/book-pool') && route.request().method() === 'GET') {
       return route.fulfill({ json: ok({ items: poolItems, state: scriptState }) })
     }
@@ -279,12 +289,44 @@ test.describe('讲书稿素材池面板：模式开关可用 + 预览失效', ()
     await previewBtn.click()
     await expect(page.locator('.book-pool-panel .el-alert').filter({ hasText: '下次将生成：《B 书》' })).toBeVisible()
     // 移出《A 书》后预览失效，再点一次拿到新结果
-    // main.js 显式加载 zh-cn 语言包，确认按钮文案是「确定」（T02806）
     await page.getByRole('button', { name: '移出' }).first().click()
-    await page.locator('.el-message-box').getByRole('button', { name: '确定' }).click()
+    await page.locator('.el-message-box').getByRole('button', { name: '确认移出' }).click()
     await expect(page.locator('.book-pool-panel .el-alert').filter({ hasText: '下次将生成' })).toHaveCount(0)
     await previewBtn.click()
     await expect(page.locator('.book-pool-panel .el-alert').filter({ hasText: '下次将生成：《B 书》' })).toBeVisible()
+  })
+
+  test('T02596 重置进度/移出书单：确认框写全影响面，取消不发请求', async ({ page }) => {
+    const { calls } = await mockApi(page)
+    await page.goto('/news/channels/book-pool?channelId=7')
+    const box = page.locator('.el-message-box')
+
+    await page.getByRole('button', { name: '重置进度' }).click()
+    await expect(box).toBeVisible()
+    await expect(box.getByText('重置书单进度：频道 ID 7 的讲书稿书单（共 2 本）')).toBeVisible()
+    await expect(box.getByText('影响范围：取书进度 1 项（复位到书单第 1 本；书单与排序保留）')).toBeVisible()
+    await expect(box.getByText(/重置后原来的取书位置不会保留/)).toBeVisible()
+    await box.getByRole('button', { name: '取消' }).click()
+    await expect(box).toBeHidden()
+    expect(calls.reset).toBe(0)
+
+    await page.getByRole('button', { name: '重置进度' }).click()
+    await box.getByRole('button', { name: '确认重置' }).click()
+    await expect.poll(() => calls.reset).toBe(1)
+
+    const firstRow = page.locator('.book-pool-panel .el-table__row').first()
+    await firstRow.getByRole('button', { name: '移出' }).click()
+    await expect(box.getByText('移出书单：《A 书》')).toBeVisible()
+    await expect(box.getByText('影响范围：书单条目 1 条（2 本 → 1 本）')).toBeVisible()
+    await expect(box.getByText(/素材库中的素材不受影响/)).toBeVisible()
+    await box.getByRole('button', { name: '取消' }).click()
+    await expect(box).toBeHidden()
+    expect(calls.removed).toHaveLength(0)
+
+    await firstRow.getByRole('button', { name: '移出' }).click()
+    await box.getByRole('button', { name: '确认移出' }).click()
+    await expect.poll(() => calls.removed).toHaveLength(1)
+    expect(calls.removed[0]).toMatch(/\/channels\/7\/book-pool\/items\/11$/)
   })
 })
 

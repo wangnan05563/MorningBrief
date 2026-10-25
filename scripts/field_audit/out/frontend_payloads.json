@@ -71,7 +71,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 386,
+          "line": 403,
           "fn": "removeBookFromPool",
           "fieldCount": 0,
           "unresolved": []
@@ -609,7 +609,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 310,
+          "line": 311,
           "fn": "listBookPool",
           "fieldCount": 0,
           "unresolved": []
@@ -629,7 +629,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 406,
+          "line": 423,
           "fn": "listBookCandidates",
           "fieldCount": 4,
           "unresolved": []
@@ -661,7 +661,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 296,
+          "line": 297,
           "fn": "getScriptMode",
           "fieldCount": 0,
           "unresolved": []
@@ -1355,7 +1355,7 @@
         },
         {
           "file": "views/review/ReviewList.vue",
-          "line": 315,
+          "line": 316,
           "fn": "api.get",
           "fieldCount": 5,
           "unresolved": []
@@ -1384,7 +1384,7 @@
         },
         {
           "file": "views/review/ReviewDetail.vue",
-          "line": 299,
+          "line": 300,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -1564,7 +1564,7 @@
       "sites": [
         {
           "file": "views/mobile/ManageUsers.vue",
-          "line": 63,
+          "line": 64,
           "fn": "listUsers",
           "fieldCount": 1,
           "unresolved": []
@@ -2059,7 +2059,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 457,
+          "line": 474,
           "fn": "addBooksToPool",
           "fieldCount": 1,
           "unresolved": []
@@ -2076,7 +2076,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 378,
+          "line": 387,
           "fn": "moveBookInPool",
           "fieldCount": 0,
           "unresolved": [
@@ -2093,7 +2093,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 363,
+          "line": 364,
           "fn": "previewNextBook",
           "fieldCount": 0,
           "unresolved": []
@@ -2108,7 +2108,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 371,
+          "line": 380,
           "fn": "resetBookPoolProgress",
           "fieldCount": 0,
           "unresolved": []
@@ -2797,7 +2797,7 @@
         },
         {
           "file": "views/review/ReviewDetail.vue",
-          "line": 333,
+          "line": 347,
           "fn": "api.post",
           "fieldCount": 3,
           "unresolved": []
@@ -2836,7 +2836,7 @@
         },
         {
           "file": "views/review/ReviewList.vue",
-          "line": 456,
+          "line": 467,
           "fn": "batchHandleReviewAction",
           "fieldCount": 3,
           "unresolved": [
@@ -2845,7 +2845,7 @@
         },
         {
           "file": "views/review/ReviewList.vue",
-          "line": 500,
+          "line": 511,
           "fn": "batchHandleReviewAction",
           "fieldCount": 3,
           "unresolved": [
@@ -2973,7 +2973,7 @@
       "sites": [
         {
           "file": "views/mobile/ManageUsers.vue",
-          "line": 85,
+          "line": 90,
           "fn": "toggleUserStatus",
           "fieldCount": 1,
           "unresolved": [
@@ -3249,7 +3249,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 338,
+          "line": 339,
           "fn": "setScriptMode",
           "fieldCount": 1,
           "unresolved": [
@@ -3278,7 +3278,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 350,
+          "line": 351,
           "fn": "updateBookPoolSchedule",
           "fieldCount": 2,
           "unresolved": []

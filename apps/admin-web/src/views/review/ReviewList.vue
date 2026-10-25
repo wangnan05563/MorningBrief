@@ -202,6 +202,7 @@ import { Select, Close, View, Search, RefreshLeft } from '@element-plus/icons-vu
 import api from '../../api'
 import { batchHandleReviewAction } from '../../api/reviews'
 import { ElMessage, ElMessageBox } from '../../utils/message'
+import { dangerConfirm } from '../../utils/dangerConfirm'
 import { formatTime, formatDuration } from '../../utils/format'
 import { REVIEW_STATUS, enumLabel, enumTagType } from '../../constants/enums'
 import { PAGE_SIZE_OPTIONS, MAX_PAGE_SIZE, clampPageSize } from '../../constants/pagination'
@@ -440,15 +441,25 @@ async function handleBatchApprove() {
   const ids = selectedRows.value.map((r) => r.id)
   if (ids.length === 0) return
 
-  try {
-    await ElMessageBox.confirm(
-      `确认批量通过选中的 ${ids.length} 条审核记录？\n通过后将自动发布对应节目。`,
-      '批量通过确认',
-      { type: 'warning', confirmButtonText: '确定', cancelButtonText: '取消' }
-    )
-  } catch {
-    return
+  // T02596：通过即自动发布，批量影响面可能跨工作流；列表不返回频道名，
+  // 按可选数据给出工作流分布，别只报一个总条数（与移动端 I2 同口径）
+  const byWorkflow = {}
+  for (const r of selectedRows.value) {
+    const key = r.workflow_id || '未知工作流'
+    byWorkflow[key] = (byWorkflow[key] || 0) + 1
   }
+  const ok = await dangerConfirm({
+    action: '批量通过审核并自动发布',
+    target: `选中的 ${ids.length} 条审核记录`,
+    scope: [
+      `审核 ${ids.length} 条（覆盖 ${Object.keys(byWorkflow).length} 个工作流）`,
+      ...Object.entries(byWorkflow).map(([id, count]) => `· ${id}：${count} 条`),
+    ],
+    lines: ['通过后系统会逐条自动发布对应节目，听众即刻可见。'],
+    irreversible: '批量发布后无法整体撤回：已发布节目不会自动下线，需要逐条到节目侧处理。',
+    confirmLabel: '确认通过',
+  })
+  if (!ok) return
 
   batchAction.value = 'approve'
   batchLoading.value = true
@@ -479,7 +490,7 @@ async function handleBatchReject() {
   let reason
   try {
     const result = await ElMessageBox.prompt(
-      `请输入批量打回理由（将应用于选中的 ${ids.length} 条记录）：`,
+      `批量打回 ${ids.length} 条审核记录\n打回后这些内容需要重新改写后再提交审核，不会自动重新生成。\n请输入打回理由（将应用于全部 ${ids.length} 条）：`,
       '批量打回确认',
       {
         type: 'warning',
