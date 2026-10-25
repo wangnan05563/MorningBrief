@@ -123,9 +123,9 @@
     },
     {
       "endpoint": "PUT /feedbacks/*/status",
-      "site": "views/mobile/ManageFeedback.vue:88",
+      "site": "views/mobile/ManageFeedback.vue:89",
       "reason_key": "value-scalar",
-      "note": "next 取的是 row 上的状态值（成员表达式，值不可静态定），键名 status 由 api 包装体给出并在 FeedbackStatusUpdateRequest 声明内。"
+      "note": "next 取的是 row 上的状态值经 Map 映射后的结果（值不可静态定），键名 status 由 api 包装体给出并在 FeedbackStatusUpdateRequest 声明内。"
     }
   ]
 }

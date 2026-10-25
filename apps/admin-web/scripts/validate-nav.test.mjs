@@ -341,6 +341,33 @@ test('枚举对账：字典缺值（漏英文原值）与多值（永不命中�
   assert.match(renamed.errors.join('\n'), /找不到该定义：枚举已改名/)
 })
 
+test('枚举对账：字典未在 BACKEND_ENUM_OF 登记必须报错（不能靠漏写跳过，T02703）', () => {
+  const r = checkEnums(
+    enumFacts({
+      dictionary: {
+        dicts: new Map([
+          ['WORKFLOW_STATUS', ['queued', 'running', 'success', 'failed', 'cancelled']],
+          ['FEEDBACK_STATUS', ['pending', 'processed', 'resolved']],
+        ]),
+        backendOf: new Map([['WORKFLOW_STATUS', 'WorkflowStatus']]),
+      },
+    }),
+  )
+  assert.match(r.errors.join('\n'), /FEEDBACK_STATUS 未在 BACKEND_ENUM_OF 登记/)
+})
+
+test('枚举对账：显式 null 的非模型枚举跳过值集比对且不算漏登记', () => {
+  const r = checkEnums(
+    enumFacts({
+      dictionary: {
+        dicts: new Map([['FEEDBACK_STATUS', ['pending', 'processed', 'resolved']]]),
+        backendOf: new Map([['FEEDBACK_STATUS', null]]),
+      },
+    }),
+  )
+  assert.deepEqual(r.errors, [])
+})
+
 test('枚举对账：后端模型读不到时只跳过值集比对，重复映射照抓（前端单独构建）', () => {
   const r = checkEnums(
     enumFacts({

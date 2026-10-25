@@ -54,6 +54,20 @@ export const REVIEW_STATUS = {
   replaced: { label: '已替换', type: 'info' },
 }
 
+/**
+ * 用户反馈处理状态（T02703）
+ *
+ * 后端没有模型枚举：`Feedback.status` 是自由字符串列（backend/app/models/feedback.py:38），
+ * 值集只存在于服务层 `routers/admin/feedbacks.py` 的 `_ALLOWED_STATUS`。
+ * 因此这里无法与模型对账，`BACKEND_ENUM_OF.FEEDBACK_STATUS` 显式登记为 null；
+ * 页面（移动端反馈页的 tab / 徽章 / 按钮文案）一律走本字典，不再各写一份。
+ */
+export const FEEDBACK_STATUS = {
+  pending: { label: '待处理', badge: 'm-badge--warn' },
+  processed: { label: '处理中', badge: 'm-badge--info' },
+  resolved: { label: '已解决', badge: 'm-badge--on' },
+}
+
 export const MATERIAL_STATUS = {
   pending: { label: '待消费', type: 'info' },
   selected: { label: '已选题', type: 'success' },
@@ -110,6 +124,7 @@ export const BACKEND_ENUM_OF = {
   AD_POSITION: 'AdPosition',
   ADMIN_ROLE: 'AdminRole',
   CHANNEL_TYPE: null,
+  FEEDBACK_STATUS: null,
 }
 
 export function enumLabel(dict, value, fallback = value) {

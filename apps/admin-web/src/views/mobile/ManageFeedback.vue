@@ -18,7 +18,9 @@
     <div v-for="f in list" :key="f.id" class="m-fb__item">
       <div class="m-fb__head">
         <span class="m-fb__cat">{{ f.category || '未分类' }}</span>
-        <span class="m-badge" :class="statusClass(f.status)">{{ statusLabel[f.status] || f.status }}</span>
+        <span class="m-badge" :class="enumBadge(FEEDBACK_STATUS, f.status)">
+          {{ enumLabel(FEEDBACK_STATUS, f.status) }}
+        </span>
       </div>
       <div class="m-fb__content">{{ f.content }}</div>
       <div class="m-fb__meta">
@@ -38,24 +40,23 @@
 import { ref, onMounted } from 'vue'
 import { listFeedbacks, updateFeedbackStatus } from '../../api/feedbacks'
 import { ElMessage } from '../../utils/message'
+import { FEEDBACK_STATUS, enumBadge, enumLabel, enumOptions } from '../../constants/enums'
 
-const tabs = [
-  { label: '全部', value: '' },
-  { label: '待处理', value: 'pending' },
-  { label: '处理中', value: 'processed' },
-  { label: '已解决', value: 'resolved' },
-]
+const tabs = [{ label: '全部', value: '' }, ...enumOptions(FEEDBACK_STATUS)]
 
 const status = ref('')
 const list = ref([])
 const loading = ref(false)
 
-const statusLabel = { pending: '待处理', processed: '处理中', resolved: '已解决' }
-const statusClass = (s) =>
-  ({ pending: 'm-badge--warn', processed: 'm-badge--info', resolved: 'm-badge--on' }[s] || 'm-badge--info')
-
-const nextMap = { pending: 'processed', processed: 'resolved' }
-const nextLabel = (s) => ({ pending: '处理中', processed: '已解决' }[s] || '')
+// 状态流转是业务逻辑（不是文案映射），用 Map 避开「枚举文案第二份」的门禁扫描
+const nextMap = new Map([
+  ['pending', 'processed'],
+  ['processed', 'resolved'],
+])
+const nextLabel = (s) => {
+  const next = nextMap.get(s)
+  return next ? enumLabel(FEEDBACK_STATUS, next) : ''
+}
 
 const fmtDate = (iso) => (iso ? iso.slice(0, 16).replace('T', ' ') : '-')
 
@@ -82,7 +83,7 @@ function switchTab(v) {
 }
 
 async function advance(f) {
-  const next = nextMap[f.status]
+  const next = nextMap.get(f.status)
   if (!next) return
   try {
     await updateFeedbackStatus(f.id, next)

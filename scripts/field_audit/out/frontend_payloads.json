@@ -1000,7 +1000,7 @@
       "sites": [
         {
           "file": "views/mobile/ManageFeedback.vue",
-          "line": 65,
+          "line": 66,
           "fn": "listFeedbacks",
           "fieldCount": 1,
           "unresolved": []
@@ -3313,16 +3313,16 @@
         "status"
       ],
       "unresolved": [
-        "变量 next 指向 MemberExpression"
+        "变量 next 无可解析的声明"
       ],
       "sites": [
         {
           "file": "views/mobile/ManageFeedback.vue",
-          "line": 88,
+          "line": 89,
           "fn": "updateFeedbackStatus",
           "fieldCount": 1,
           "unresolved": [
-            "变量 next 指向 MemberExpression"
+            "变量 next 无可解析的声明"
           ]
         }
       ]

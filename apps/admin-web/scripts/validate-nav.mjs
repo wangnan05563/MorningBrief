@@ -618,6 +618,15 @@ export function checkEnums(f) {
   if (!dict) return { errors, skipped: true }
   const backend = f.backendEnums
   for (const [name, values] of dict.dicts) {
+    // 必须显式登记：模型枚举写类名，非模型枚举写 null。
+    // 允许「不声明」等于允许字典悄悄与后端脱钩——比对会被静默跳过，门禁却显示通过。
+    if (!dict.backendOf.has(name)) {
+      errors.push(
+        `枚举字典 ${name} 未在 BACKEND_ENUM_OF 登记：模型枚举请写类名，非模型枚举请显式写 null；` +
+          `靠「没声明」跳过比对会让字典与后端脱钩（T02703）`,
+      )
+      continue
+    }
     const cls = dict.backendOf.get(name)
     if (!cls || !backend) continue
     const defined = backend.get(cls)
