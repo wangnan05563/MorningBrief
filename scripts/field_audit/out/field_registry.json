@@ -2207,7 +2207,7 @@
           },
           {
             "file": "views/workflow/WorkflowDetail.vue",
-            "line": 947,
+            "line": 971,
             "fn": "handleReviewAction",
             "fieldCount": 3,
             "unresolved": [
@@ -2556,7 +2556,7 @@
         "callSites": [
           {
             "file": "views/workflow/WorkflowDetail.vue",
-            "line": 964,
+            "line": 988,
             "fn": "api.post",
             "fieldCount": 1,
             "unresolved": []
@@ -3833,7 +3833,7 @@
         "callSites": [
           {
             "file": "views/workflow/WorkflowDetail.vue",
-            "line": 805,
+            "line": 811,
             "fn": "updateSegments",
             "fieldCount": 1,
             "unresolved": []

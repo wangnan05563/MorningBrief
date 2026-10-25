@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test'
-import { setLoginState, channelsListResponse, useMobileViewport } from './helpers/mock'
+import {
+  setLoginState,
+  channelsListResponse,
+  adPlacementsListResponse,
+  useMobileViewport,
+} from './helpers/mock'
 
 /**
  * T02490（FR-UX-202）破坏性操作确认规范 E2E
@@ -490,6 +495,95 @@ test.describe('破坏性操作确认', () => {
       await page.locator('.el-message-box').getByRole('button', { name: '确认删除' }).click()
       await expect.poll(() => deletes.length).toBe(1)
       expect(deletes[0]).toMatch(/\/ads\/materials\/2$/)
+    })
+  })
+
+  test.describe('单对象硬删除（T02596 切片C）', () => {
+    test('投放规则删除：点名广告位+素材与排期，取消不发请求', async ({ page }) => {
+      await setLoginState(page, 'admin')
+      const deletes = []
+      await page.route('**/admin/api/v1/ads/placements**', (route) => {
+        if (route.request().method() === 'DELETE') {
+          deletes.push(route.request().url())
+          return route.fulfill({ json: { code: 0, message: 'success', data: null } })
+        }
+        return route.fulfill({ json: adPlacementsListResponse })
+      })
+
+      await page.goto('/ads/placements')
+      const row = page.locator('.el-table__body tr').first()
+      await expect(row).toContainText('品牌广告A', { timeout: NAV_TIMEOUT })
+      await row.getByRole('button', { name: '删除' }).click()
+
+      const box = page.locator('.el-message-box')
+      await expect(box).toBeVisible({ timeout: NAV_TIMEOUT })
+      // 动作 + 对象：广告位与素材名都要在，不能只写一个「投放 #1」
+      await expect(box.getByText('删除投放规则：开头位 · 品牌广告A')).toBeVisible()
+      await expect(box.getByText('影响范围：投放规则 1 条（生效区间 2026-07-01 ~ 2026-07-31）')).toBeVisible()
+      // 说清「已生成节目里的广告不会被去掉」与素材不受影响，避免误判为连坐删除
+      await expect(box.getByText(/已生成节目里拼进音频的广告不会被去掉/)).toBeVisible()
+      await expect(box.getByText(/广告素材本身不受影响/)).toBeVisible()
+      await expect(box.getByText(/删除后不可恢复/)).toBeVisible()
+
+      await box.getByRole('button', { name: '取消' }).click()
+      await expect(box).toBeHidden()
+      expect(deletes).toHaveLength(0)
+
+      await row.getByRole('button', { name: '删除' }).click()
+      await page.locator('.el-message-box').getByRole('button', { name: '确认删除' }).click()
+      await expect.poll(() => deletes.length).toBe(1)
+      expect(deletes[0]).toMatch(/\/ads\/placements\/1$/)
+    })
+
+    test('COS 文件夹删除：说明递归范围与数量以服务端为准，取消不发请求', async ({ page }) => {
+      await setLoginState(page, 'admin')
+      const deletes = []
+      await page.route('**/admin/api/v1/cos**', (route) => {
+        const url = route.request().url()
+        const method = route.request().method()
+        if (url.includes('/cos/status')) {
+          return route.fulfill({
+            json: { code: 0, message: 'ok', data: { configured: true, bucket: 'bkt', region: 'ap-guangzhou', cdn_domain: '' } },
+          })
+        }
+        if (url.includes('/cos/objects')) {
+          return route.fulfill({
+            json: { code: 0, message: 'ok', data: { prefix: '', folders: ['books/'], files: [] } },
+          })
+        }
+        if (url.includes('/cos/folder') && method === 'DELETE') {
+          deletes.push(url)
+          return route.fulfill({ json: { code: 0, message: '已删除 3 个对象', data: { deleted: 3 } } })
+        }
+        return route.fulfill({ json: { code: 0, message: 'ok', data: null } })
+      })
+
+      await page.goto('/cos-files')
+      const row = page.locator('[data-guide="cos-files-table"] .el-table__body tr').first()
+      await expect(row).toContainText('books', { timeout: NAV_TIMEOUT })
+      await row.getByRole('button', { name: '删除' }).click()
+
+      const box = page.locator('.el-message-box')
+      await expect(box).toBeVisible({ timeout: NAV_TIMEOUT })
+      // 对象要带完整 key：只写显示名「books」会让人以为删的是空目录
+      await expect(box.getByText('删除 COS 文件夹：「books」（books/）')).toBeVisible()
+      await expect(box.getByText(/影响范围：文件夹 1 个及其下全部对象（数量以服务端实际删除为准）/)).toBeVisible()
+      await expect(box.getByText(/只删对象存储里的文件，素材库\/数据库记录不受影响/)).toBeVisible()
+      await expect(box.getByText(/删除后不可恢复：COS 没有回收站/)).toBeVisible()
+
+      await box.getByRole('button', { name: '取消' }).click()
+      await expect(box).toBeHidden()
+      expect(deletes).toHaveLength(0)
+
+      await row.getByRole('button', { name: '删除' }).click()
+      await page.locator('.el-message-box').getByRole('button', { name: '确认删除' }).click()
+      await expect.poll(() => deletes.length).toBe(1)
+      expect(deletes[0]).toContain('/cos/folder')
+      expect(deletes[0]).toMatch(/prefix=books(%2F|\/)/)
+      // 成功提示必须给出服务端实际删除数量，而不是笼统的「已删除」
+      await expect(
+        page.locator('.el-message').getByText('已删除 3 个对象').first(),
+      ).toBeVisible({ timeout: NAV_TIMEOUT })
     })
   })
 })

@@ -23,7 +23,7 @@
       "sites": [
         {
           "file": "views/ad/AdPlacements.vue",
-          "line": 357,
+          "line": 369,
           "fn": "api.delete",
           "fieldCount": 0,
           "unresolved": []
@@ -89,7 +89,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 420,
+          "line": 424,
           "fn": "deleteCosFolder",
           "fieldCount": 2,
           "unresolved": []
@@ -107,7 +107,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 422,
+          "line": 427,
           "fn": "deleteCosObject",
           "fieldCount": 2,
           "unresolved": []
@@ -185,7 +185,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 773,
+          "line": 779,
           "fn": "deleteScript",
           "fieldCount": 0,
           "unresolved": []
@@ -200,7 +200,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 911,
+          "line": 935,
           "fn": "deleteEpisodeAudio",
           "fieldCount": 0,
           "unresolved": []
@@ -215,7 +215,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 899,
+          "line": 914,
           "fn": "deleteTtsAudio",
           "fieldCount": 0,
           "unresolved": []
@@ -762,7 +762,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 434,
+          "line": 439,
           "fn": "getCosDownloadUrl",
           "fieldCount": 3,
           "unresolved": []
@@ -1362,7 +1362,7 @@
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 927,
+          "line": 951,
           "fn": "listReviews",
           "fieldCount": 1,
           "unresolved": []
@@ -1614,7 +1614,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 826,
+          "line": 832,
           "fn": "listAudioFiles",
           "fieldCount": 0,
           "unresolved": []
@@ -2804,7 +2804,7 @@
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 947,
+          "line": 971,
           "fn": "handleReviewAction",
           "fieldCount": 3,
           "unresolved": [
@@ -2992,7 +2992,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 964,
+          "line": 988,
           "fn": "api.post",
           "fieldCount": 1,
           "unresolved": []
@@ -3465,7 +3465,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 805,
+          "line": 811,
           "fn": "updateSegments",
           "fieldCount": 1,
           "unresolved": []

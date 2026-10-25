@@ -176,7 +176,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from '../../utils/message'
+import { ElMessage } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import { Plus, Delete, Close, Check } from '@element-plus/icons-vue'
 
@@ -353,7 +353,19 @@ async function handleSubmit() {
 }
 
 async function handleDelete(row) {
-  await ElMessageBox.confirm('确认删除该投放规则？', '提示', { type: 'warning' })
+  // T02596：删除投放是硬删除且不连带素材/节目；确认框补上影响对象与排期后果
+  const ok = await dangerConfirm({
+    action: '删除投放规则',
+    target: `${positionLabel(row.position)}位 · ${row.material_name || `投放 #${row.id}`}`,
+    scope: `投放规则 1 条（生效区间 ${row.start_date} ~ ${row.end_date}）`,
+    lines: [
+      '删除后该场景不再插入这条广告；已生成节目里拼进音频的广告不会被去掉。',
+      '广告素材本身不受影响，仍可在「广告素材」页继续使用。',
+    ],
+    irreversible: '删除后不可恢复：没有回收站，需要重新创建投放规则。',
+    confirmLabel: '确认删除',
+  })
+  if (!ok) return
   await api.delete(`/ads/placements/${row.id}`)
   ElMessage.success('删除成功')
   fetchList()

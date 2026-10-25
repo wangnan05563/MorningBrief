@@ -175,7 +175,7 @@ import {
   Upload, FolderOpened, Refresh, Download, Edit, Delete, Document,
   Plus, Close, Check,
 } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from '../../utils/message'
+import { ElMessage } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import { buildDestKey, validateSegment } from '../../utils/cosPath'
 import {
@@ -405,23 +405,28 @@ async function confirmRename() {
 // 删除
 async function handleDelete(row) {
   const isFolder = row.isFolder
-  try {
-    await ElMessageBox.confirm(
-      `确认删除${isFolder ? '文件夹' : '文件'}「${row.name}」${isFolder ? '及其下所有内容' : ''}？此操作不可恢复。`,
-      '删除确认',
-      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }
-    )
-  } catch {
-    return
-  }
+  // T02596：文件夹是递归删除，条数只能由服务端算；确认框把「数量以实际为准」说出来，
+  // 避免写成「1 个」误导用户以为只删目录本身
+  const ok = await dangerConfirm({
+    action: isFolder ? '删除 COS 文件夹' : '删除 COS 文件',
+    target: `「${row.name}」（${row.key}）`,
+    scope: isFolder
+      ? '文件夹 1 个及其下全部对象（数量以服务端实际删除为准）'
+      : 'COS 对象 1 个',
+    lines: ['只删对象存储里的文件，素材库/数据库记录不受影响。'],
+    irreversible: '删除后不可恢复：COS 没有回收站，只能重新上传。',
+    confirmLabel: '确认删除',
+  })
+  if (!ok) return
   opLoading.value = true
   try {
     if (isFolder) {
-      await deleteCosFolder(row.key)
+      const data = await deleteCosFolder(row.key)
+      ElMessage.success(`已删除 ${data?.deleted ?? 0} 个对象`)
     } else {
       await deleteCosObject(row.key)
+      ElMessage.success('已删除')
     }
-    ElMessage.success('已删除')
     await loadList()
   } finally {
     opLoading.value = false

@@ -766,9 +766,15 @@ async function loadScript() {
 
 async function handleDeleteScript() {
   if (!script.value.data) return
-  try {
-    await ElMessageBox.confirm('确认删除该稿件？删除后无法恢复。', '危险操作', { type: 'warning' })
-  } catch { return }
+  const ok = await dangerConfirm({
+    action: '删除稿件',
+    target: `工作流 ${route.params.id} 的稿件（ID ${script.value.data.id}）`,
+    scope: '稿件 1 篇（含内嵌分段）；审核与节目记录不会被连带删除',
+    lines: ['删除后该工作流不再有可审核/可合成的稿件，需要重新生成才能继续。'],
+    irreversible: '删除后不可恢复：稿件没有回收站。',
+    confirmLabel: '确认删除',
+  })
+  if (!ok) return
   try {
     await deleteScript(script.value.data.id)
     ElMessage.success('稿件已删除')
@@ -892,9 +898,18 @@ function revokeAllBlobUrls() {
 }
 
 async function handleDeleteTts(filename) {
-  try {
-    await ElMessageBox.confirm(`确认删除音频「${filename}」？`, '危险操作', { type: 'warning' })
-  } catch { return }
+  const ok = await dangerConfirm({
+    action: '删除 TTS 片段音频',
+    target: `「${filename}」`,
+    scope: '音频文件 1 个（该片段的分段配音）',
+    lines: [
+      '不会自动重新合成；需要重跑语音合成才能再生成该片段。',
+      '已拼接的成品音频不受影响。',
+    ],
+    irreversible: '删除后不可恢复：文件直接从音频缓存目录移除，没有回收站。',
+    confirmLabel: '确认删除',
+  })
+  if (!ok) return
   try {
     await deleteTtsAudio(route.params.id, filename)
     ElMessage.success('已删除')
@@ -904,9 +919,18 @@ async function handleDeleteTts(filename) {
 }
 
 async function handleDeleteEpisode() {
-  try {
-    await ElMessageBox.confirm('确认删除成品音频？', '危险操作', { type: 'warning' })
-  } catch { return }
+  const ok = await dangerConfirm({
+    action: '删除成品音频',
+    target: `工作流 ${route.params.id} 的拼接成品`,
+    scope: '成品音频文件 1 个（本地音频缓存）',
+    lines: [
+      '已发布节目若仍引用该文件将无法回放；节目记录本身不会被删除。',
+      '重新拼接/合成后可以再生成成品。',
+    ],
+    irreversible: '删除后不可恢复：文件直接从音频缓存目录移除，没有回收站。',
+    confirmLabel: '确认删除',
+  })
+  if (!ok) return
   try {
     await deleteEpisodeAudio(route.params.id)
     ElMessage.success('已删除')

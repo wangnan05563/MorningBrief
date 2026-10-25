@@ -75,7 +75,7 @@
     },
     {
       "endpoint": "POST /reviews/*/action",
-      "site": "views/workflow/WorkflowDetail.vue:947",
+      "site": "views/workflow/WorkflowDetail.vue:971",
       "reason_key": "value-scalar",
       "note": "action 取 approve/reject 字面量之一，键名由 api 包装体 {action, segment_id} 给出，均在 ActionRequest 声明内。"
     },

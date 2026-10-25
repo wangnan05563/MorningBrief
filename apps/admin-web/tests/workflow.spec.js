@@ -335,4 +335,137 @@ test.describe('工作流监控', () => {
     await expect.poll(() => deletes.length).toBe(1)
     expect(deletes[0]).toMatch(/\/materials\/1$/)
   })
+
+  test('详情页删稿件：点名稿件 ID 与不连带审核/节目，取消不发请求（T02596 切片C）', async ({ page }) => {
+    await setLoginState(page, 'admin')
+    const deletes = []
+    await page.route('**/admin/api/v1/scripts**', (route) => {
+      if (route.request().method() === 'DELETE') {
+        deletes.push(route.request().url())
+        return route.fulfill({ json: { code: 0, message: 'success', data: null } })
+      }
+      return route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: {
+            id: 77,
+            workflow_id: 'wf-001',
+            total_words: 1200,
+            estimated_duration: 480,
+            status: 'draft',
+            segments: [{ seq: 1, title: '开场', content: '开场内容' }],
+          },
+        },
+      })
+    })
+
+    await page.goto('/workflows/wf-001')
+    await page.locator('.el-collapse-item__header', { hasText: 'LLM改写 · 稿件' }).click()
+    const panel = page.locator('.el-collapse-item').filter({ hasText: 'LLM改写 · 稿件' })
+    await expect(panel.getByRole('button', { name: '删除稿件' })).toBeVisible({ timeout: 30000 })
+    await panel.getByRole('button', { name: '删除稿件' }).click()
+
+    const box = page.locator('.el-message-box')
+    await expect(box).toBeVisible({ timeout: 30000 })
+    await expect(box.getByText('删除稿件：工作流 wf-001 的稿件（ID 77）')).toBeVisible()
+    await expect(box.getByText(/影响范围：稿件 1 篇（含内嵌分段）；审核与节目记录不会被连带删除/)).toBeVisible()
+    await expect(box.getByText(/删除后该工作流不再有可审核\/可合成的稿件/)).toBeVisible()
+    await expect(box.getByText(/删除后不可恢复：稿件没有回收站/)).toBeVisible()
+
+    await box.getByRole('button', { name: '取消' }).click()
+    await expect(box).toBeHidden()
+    expect(deletes).toHaveLength(0)
+
+    await panel.getByRole('button', { name: '删除稿件' }).click()
+    await page.locator('.el-message-box').getByRole('button', { name: '确认删除' }).click()
+    await expect.poll(() => deletes.length).toBe(1)
+    expect(deletes[0]).toMatch(/\/scripts\/77$/)
+  })
+
+  test('详情页删 TTS 片段：点名文件名与「不会自动重新合成」，取消不发请求（T02596 切片C）', async ({ page }) => {
+    await setLoginState(page, 'admin')
+    const deletes = []
+    // 本地缓存态（remote:false）才渲染删除按钮；注册在 beforeEach 的远端 mock 之后以覆盖它
+    await page.route('**/admin/api/v1/workflows/wf-001/audio', (route) =>
+      route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: {
+            tts_dir: [{ name: 'seg_1.mp3', size_bytes: 2048, remote: false }],
+            episode_file: { path: 'audio_cache/wf-001/episode.mp3', exists: true, remote: false },
+          },
+        },
+      }))
+    await page.route('**/admin/api/v1/workflows/wf-001/audio/tts/**', (route) => {
+      deletes.push(route.request().url())
+      return route.fulfill({ json: { code: 0, message: 'success', data: null } })
+    })
+
+    await page.goto('/workflows/wf-001')
+    await page.locator('.el-collapse-item__header', { hasText: '语音合成 · TTS 片段' }).click()
+    const panel = page.locator('.el-collapse-item').filter({ hasText: '语音合成 · TTS 片段' })
+    await expect(panel.getByText('seg_1.mp3')).toBeVisible({ timeout: 30000 })
+    await panel.getByRole('button', { name: '删除' }).click()
+
+    const box = page.locator('.el-message-box')
+    await expect(box).toBeVisible({ timeout: 30000 })
+    await expect(box.getByText('删除 TTS 片段音频：「seg_1.mp3」')).toBeVisible()
+    await expect(box.getByText('影响范围：音频文件 1 个（该片段的分段配音）')).toBeVisible()
+    await expect(box.getByText(/不会自动重新合成/)).toBeVisible()
+    await expect(box.getByText(/已拼接的成品音频不受影响/)).toBeVisible()
+    await expect(box.getByText(/删除后不可恢复/)).toBeVisible()
+
+    await box.getByRole('button', { name: '取消' }).click()
+    await expect(box).toBeHidden()
+    expect(deletes).toHaveLength(0)
+
+    await panel.getByRole('button', { name: '删除' }).click()
+    await page.locator('.el-message-box').getByRole('button', { name: '确认删除' }).click()
+    await expect.poll(() => deletes.length).toBe(1)
+    expect(deletes[0]).toMatch(/\/audio\/tts\/seg_1\.mp3$/)
+  })
+
+  test('详情页删成品音频：点名对象并说明节目记录不受影响，取消不发请求（T02596 切片C）', async ({ page }) => {
+    await setLoginState(page, 'admin')
+    const deletes = []
+    await page.route('**/admin/api/v1/workflows/wf-001/audio', (route) =>
+      route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: {
+            tts_dir: [{ name: 'seg_1.mp3', size_bytes: 2048, remote: false }],
+            episode_file: { path: 'audio_cache/wf-001/episode.mp3', exists: true, remote: false },
+          },
+        },
+      }))
+    await page.route('**/admin/api/v1/workflows/wf-001/audio/episode', (route) => {
+      deletes.push(route.request().url())
+      return route.fulfill({ json: { code: 0, message: 'success', data: null } })
+    })
+
+    await page.goto('/workflows/wf-001')
+    await page.locator('.el-collapse-item__header', { hasText: '音频拼接 · 成品' }).click()
+    const panel = page.locator('.el-collapse-item').filter({ hasText: '音频拼接 · 成品' })
+    await expect(panel.getByRole('button', { name: '删除成品' })).toBeVisible({ timeout: 30000 })
+    await panel.getByRole('button', { name: '删除成品' }).click()
+
+    const box = page.locator('.el-message-box')
+    await expect(box).toBeVisible({ timeout: 30000 })
+    await expect(box.getByText('删除成品音频：工作流 wf-001 的拼接成品')).toBeVisible()
+    await expect(box.getByText('影响范围：成品音频文件 1 个（本地音频缓存）')).toBeVisible()
+    await expect(box.getByText(/已发布节目若仍引用该文件将无法回放；节目记录本身不会被删除/)).toBeVisible()
+    await expect(box.getByText(/删除后不可恢复/)).toBeVisible()
+
+    await box.getByRole('button', { name: '取消' }).click()
+    await expect(box).toBeHidden()
+    expect(deletes).toHaveLength(0)
+
+    await panel.getByRole('button', { name: '删除成品' }).click()
+    await page.locator('.el-message-box').getByRole('button', { name: '确认删除' }).click()
+    await expect.poll(() => deletes.length).toBe(1)
+    expect(deletes[0]).toMatch(/\/audio\/episode$/)
+  })
 })
