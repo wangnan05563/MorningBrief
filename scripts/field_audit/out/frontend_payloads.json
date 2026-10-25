@@ -23,7 +23,7 @@
       "sites": [
         {
           "file": "views/ad/AdPlacements.vue",
-          "line": 369,
+          "line": 453,
           "fn": "api.delete",
           "fieldCount": 0,
           "unresolved": []
@@ -301,7 +301,7 @@
         },
         {
           "file": "views/ad/AdPlacements.vue",
-          "line": 271,
+          "line": 355,
           "fn": "api.get",
           "fieldCount": 4,
           "unresolved": []
@@ -321,7 +321,7 @@
       "sites": [
         {
           "file": "views/ad/AdPlacements.vue",
-          "line": 242,
+          "line": 310,
           "fn": "api.get",
           "fieldCount": 4,
           "unresolved": []
@@ -1690,7 +1690,7 @@
       "sites": [
         {
           "file": "views/ad/AdPlacements.vue",
-          "line": 330,
+          "line": 414,
           "fn": "api.post",
           "fieldCount": 4,
           "unresolved": []
@@ -3099,7 +3099,7 @@
       "sites": [
         {
           "file": "views/ad/AdPlacements.vue",
-          "line": 305,
+          "line": 389,
           "fn": "api.put",
           "fieldCount": 1,
           "unresolved": []

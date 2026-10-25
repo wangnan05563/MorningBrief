@@ -1,5 +1,16 @@
 <template>
   <div data-guide="ads-placements-page" class="page-container ad-placements">
+    <!-- T02758（FR-UX-602 / D13）：地址栏里的非法参数已按规则修正，这里如实点名，
+         否则用户会以为分享出去的筛选/分页原样生效 -->
+    <el-alert
+      v-if="invalidParams.length"
+      data-guide="ads-url-corrected"
+      type="warning"
+      :closable="false"
+      show-icon
+      :title="`链接里的参数已修正：${invalidParams.map((p) => p.key).join('、')}`"
+      :description="invalidParams.map((p) => `${p.key}=${p.raw}（${p.reason}）`).join('；')"
+    />
     <div class="toolbar">
       <!-- T00811：移除与导航栏重复的页面标题，仅保留操作按钮 -->
       <!-- D13：后端一直下发 enabled，但列表既无状态列也无筛选——移动端停用的规则
@@ -7,12 +18,13 @@
       <el-select
         v-model="enabledFilter"
         data-guide="ads-enabled-filter"
+        placeholder="全部状态"
         style="width: 140px"
         @change="onFilterChange"
       >
-        <el-option label="全部状态" :value="''" />
-        <el-option label="仅启用" :value="1" />
-        <el-option label="仅停用" :value="0" />
+        <el-option label="全部状态" value="" />
+        <el-option label="仅启用" value="1" />
+        <el-option label="仅停用" value="0" />
       </el-select>
       <IconButton
         type="primary"
@@ -73,7 +85,7 @@
           v-model:current-page="page"
           v-model:page-size="size"
           :total="total"
-          :page-sizes="[10, 20, 50]"
+          :page-sizes="PAGE_SIZE_OPTIONS"
           layout="total, sizes, prev, pager, next"
           background
           @size-change="fetchList"
@@ -175,7 +187,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import { Plus, Delete, Close, Check } from '@element-plus/icons-vue'
@@ -184,6 +196,8 @@ import api from '../../api'
 import { readBizError } from '../../api/bizError'
 import { AD_POSITION, enumLabel, enumTagType, enumOptions } from '../../constants/enums'
 import { placementStatusMeta } from '../../utils/placementStatus'
+import { useUrlState } from '../../composables/useUrlState'
+import { PAGE_SIZE_OPTIONS, MAX_PAGE_SIZE, clampPageSize } from '../../constants/pagination'
 
 const positionOptions = enumOptions(AD_POSITION)
 
@@ -192,8 +206,58 @@ const loading = ref(false)
 const page = ref(1)
 const size = ref(20)
 const total = ref(0)
-// D13：'' = 全部状态，1 = 仅启用，0 = 仅停用
+// D13：'' = 全部状态，'1' = 仅启用，'0' = 仅停用（字符串与 URL 同口径）
 const enabledFilter = ref('')
+
+// T02758（FR-UX-602 / D13）：筛选与分页此前只活在组件内存里——刷新回第 1 页、
+// 分享出去的链接不带筛选。接线与 QueueManagement.vue 同源，不另立读写逻辑。
+const URL_SPECS = {
+  enabled: { enum: ['', '1', '0'], default: '' },
+  page: { default: 1, type: 'int', min: 1 },
+  size: { default: 20, type: 'int', min: 1, max: MAX_PAGE_SIZE },
+}
+const urlState = useUrlState(
+  URL_SPECS,
+  () => ({ enabled: enabledFilter.value, page: page.value, size: size.value }),
+  { onExternalChange: applyFromUrl },
+)
+
+// 地址栏的 size 不在可选档位里时（`?size=7`）就近收敛，否则表格行数与选择器对不上
+const sizeClamp = ref(null)
+function resolveSize(raw) {
+  const n = Number(raw)
+  const clamped = clampPageSize(n, PAGE_SIZE_OPTIONS, 20)
+  sizeClamp.value =
+    Number.isFinite(n) && n > 0 && n !== clamped
+      ? {
+          key: 'size',
+          raw: String(raw),
+          reason: `不在可选尺寸 ${PAGE_SIZE_OPTIONS.join('/')} 中：已按 ${clamped} 处理`,
+        }
+      : null
+  return clamped
+}
+
+// 页码越界要拿到 total 才知道上限，这条校正是加载后补记的
+const pageClamp = ref(null)
+const invalidParams = computed(() => {
+  const extra = []
+  if (pageClamp.value) extra.push(pageClamp.value)
+  if (sizeClamp.value) extra.push(sizeClamp.value)
+  return extra.length ? [...urlState.invalid.value, ...extra] : urlState.invalid.value
+})
+
+/** 地址栏被外部改动（手改 URL / 前进后退）时：校验后的值灌回状态并重载 */
+function applyFromUrl(values) {
+  const nextSize = resolveSize(values.size)
+  const changed =
+    values.enabled !== enabledFilter.value || values.page !== page.value || nextSize !== size.value
+  enabledFilter.value = values.enabled
+  page.value = values.page
+  size.value = nextSize
+  pageClamp.value = null
+  if (changed) fetchList()
+}
 
 const materialOptions = ref([])
 const togglingIds = ref([])
@@ -239,15 +303,34 @@ const statusTone = (status) => placementStatusMeta(status).tone
 async function fetchList() {
   loading.value = true
   try {
-    const data = await api.get('/ads/placements', {
-      params: {
-        page: page.value,
-        size: size.value,
-        enabled: enabledFilter.value === '' ? undefined : enabledFilter.value,
-      },
-    })
-    tableData.value = data.list || []
-    total.value = data.total || 0
+    let attempt = 0
+    // 深链可能指向不存在的页（`?page=999`，或分享后数据变少）：像队列页一样落到最后一页，
+    // 否则尾部数据会变成一张让人以为「投放都没了」的空表
+    while (true) {
+      const data = await api.get('/ads/placements', {
+        params: {
+          page: page.value,
+          size: size.value,
+          enabled: enabledFilter.value === '' ? undefined : enabledFilter.value,
+        },
+      })
+      tableData.value = data.list || []
+      total.value = data.total || 0
+      const maxPage = Math.max(1, Math.ceil((data.total || 0) / size.value))
+      URL_SPECS.page.max = maxPage
+      if (page.value > maxPage && attempt === 0) {
+        pageClamp.value = {
+          key: 'page',
+          raw: String(page.value),
+          reason: `超过上限 ${maxPage}：已落到最后一页`,
+        }
+        page.value = maxPage
+        attempt += 1
+        continue
+      }
+      break
+    }
+    urlState.pushToUrl()
   } finally {
     loading.value = false
   }
@@ -256,6 +339,7 @@ async function fetchList() {
 // 换筛选条件回到第 1 页，否则第 3 页筛完可能一条都没有（空页≠没有匹配项）
 function onFilterChange() {
   page.value = 1
+  pageClamp.value = null
   fetchList()
 }
 
@@ -371,7 +455,14 @@ async function handleDelete(row) {
   fetchList()
 }
 
-onMounted(fetchList)
+onMounted(() => {
+  // 深链优先：URL 上有 enabled/page/size 就按 URL 起（非法值由 readFromUrl 回落并在页内点名）
+  const v = urlState.readFromUrl()
+  enabledFilter.value = v.enabled
+  page.value = v.page
+  size.value = resolveSize(v.size)
+  fetchList()
+})
 </script>
 
 <style scoped lang="scss">
