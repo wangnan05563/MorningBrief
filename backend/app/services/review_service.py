@@ -1,11 +1,12 @@
 """审核服务：审核列表、详情、审批/打回/替换。"""
+from datetime import date
 from typing import Optional
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.exceptions import BizError, NotFoundError
+from app.core.exceptions import BizError, NotFoundError, ParamError
 from app.core.timeutil import localnow_naive
 from app.models import Review, Workflow, Channel, Script, Episode, Material
 from app.models.review import ReviewStatus
@@ -17,6 +18,15 @@ _REVIEW_NOT_FOUND_MSG = "审核记录不存在"
 # 审核详情展示的采集图片上限：与节目脚本接口（T00766 轮播 9 张）保持一致，
 # 超长文章的图片集可能上百张，整段回传只会拖慢详情页首屏
 REVIEW_IMAGE_LIMIT = 9
+
+
+def _escape_like(text: str) -> str:
+    """把 LIKE 通配符转成字面量。
+
+    审核人筛选按前缀匹配；`?reviewer=%` 若不转义会退化成「匹配所有人」，
+    `_` 也会变成任意单字符，用户看到的是「筛选没生效」。
+    """
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _ordered_material_ids(segments) -> list[int]:
@@ -38,8 +48,21 @@ class ReviewService:
     async def list_reviews(  # NOSONAR
         self, status: str, page: int, size: int,
         workflow_id: str = None,
+        reviewer: str = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+        channel_id: int = None,
     ) -> dict:
-        """审核列表分页，status/workflow_id 为空时不过滤。
+        """审核列表分页，各筛选参数为空时不过滤。
+
+        日期口径：`date_from`/`date_to` 都按 **episode_date**（列表「日期」列展示的就是它，
+        且模型已有 idx_date 索引）。不用 created_at——那是「记录何时写入」，
+        与「节目属于哪一天」不是一回事，混用会出现「筛了 10 月却看不到列表里 10 月那行」。
+        区间两端都是闭区间（含当天）。
+
+        审核人口径：按 `review.reviewer_name` 前缀匹配。该列是审核动作发生时写入的
+        admin username 快照，直接过滤可避免 join；`reviewer_name` 为 NULL 的待审核记录
+        不会命中任何审核人筛选（符合预期）。
 
         返回字段在桌面端既有字段基础上扩展频道/工作流/稿件上下文，
         供移动端审核页展示「当前频道 + 工作流」标题与卡片摘要：
@@ -48,6 +71,9 @@ class ReviewService:
         - title / content_preview：由关联 Script 的分段标题与全文首段推导，便于卡片直读
         - channel_type：频道类型（news/course/audiobook），用于移动端差异化展示
         """
+        if date_from and date_to and date_from > date_to:
+            raise ParamError("date_from 不能晚于 date_to")
+
         # 总数独立查询（仅按 Review 维度过滤），避免 join 影响计数
         count_stmt = select(func.count(Review.id))
 
@@ -69,6 +95,27 @@ class ReviewService:
         if workflow_id:
             count_stmt = count_stmt.where(Review.workflow_id == workflow_id)
             list_stmt = list_stmt.where(Review.workflow_id == workflow_id)
+
+        # 审核人：前缀匹配，通配符按字面量处理（见 _escape_like）
+        if reviewer:
+            cond = Review.reviewer_name.like(f"{_escape_like(reviewer)}%", escape="\\")
+            count_stmt = count_stmt.where(cond)
+            list_stmt = list_stmt.where(cond)
+
+        # 日期区间按 episode_date（列表展示列 + idx_date 索引），两端闭区间
+        if date_from:
+            count_stmt = count_stmt.where(Review.episode_date >= date_from)
+            list_stmt = list_stmt.where(Review.episode_date >= date_from)
+        if date_to:
+            count_stmt = count_stmt.where(Review.episode_date <= date_to)
+            list_stmt = list_stmt.where(Review.episode_date <= date_to)
+
+        # 频道过滤用子查询而不是 join：列表查询本身已 LEFT JOIN Workflow，
+        # 再用 IN 保持 count/list 两个语句的条件完全对称（工作流缺失时也不会被误排除）
+        if channel_id:
+            channel_workflow_ids = select(Workflow.id).where(Workflow.channel_id == channel_id)
+            count_stmt = count_stmt.where(Review.workflow_id.in_(channel_workflow_ids))
+            list_stmt = list_stmt.where(Review.workflow_id.in_(channel_workflow_ids))
 
         count_result = await self.db.execute(count_stmt)
         total = count_result.scalar() or 0

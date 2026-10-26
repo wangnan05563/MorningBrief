@@ -27,6 +27,8 @@ import {
   sanitizeRedirect,
   splitAppUrl,
   stripModeQuery,
+  validateDateRange,
+  validateIsoDate,
   writeUrlQuery,
 } from '../../src/utils/urlState.js'
 
@@ -466,6 +468,59 @@ describe('SCOPED_REVIEW_SPECS：移动端作用域参数与 PC 审核列表同�
     )
     assert.equal(values.workflow_id, 'wf-1')
     assert.equal(values.channel_name, '')
+  })
+})
+
+describe('日期筛选参数（T02804）：格式与日历真实性都校验', () => {
+  const DATE_SPECS = {
+    date_from: { default: '', validator: validateIsoDate },
+    date_to: { default: '', validator: validateIsoDate },
+  }
+
+  it('合法的 YYYY-MM-DD 原样保留', () => {
+    const { values, invalid } = readUrlState(
+      { date_from: '2026-10-20', date_to: '2026-10-21' },
+      DATE_SPECS,
+    )
+    assert.equal(values.date_from, '2026-10-20')
+    assert.equal(values.date_to, '2026-10-21')
+    assert.deepEqual(invalid, [])
+  })
+
+  it('非 YYYY-MM-DD 回落默认值并说明格式要求', () => {
+    for (const bad of ['2026/10/20', '2026-1-1', '20261020', 'abc']) {
+      const { values, invalid } = readUrlState({ date_from: bad }, DATE_SPECS)
+      assert.equal(values.date_from, '', `${bad} 应被丢弃，而不是原样发给后端`)
+      assert.equal(invalid[0].key, 'date_from')
+      assert.match(invalid[0].reason, /YYYY-MM-DD/)
+    }
+  })
+
+  it('正则能过但日历上不存在的日期一样回落', () => {
+    // 只做 pattern 校验时这三个值都能通过，然后换来一次 400 或静默空列表
+    for (const bad of ['2026-02-30', '2026-13-01', '2026-04-31']) {
+      const { values, invalid } = readUrlState({ date_to: bad }, DATE_SPECS)
+      assert.equal(values.date_to, '', `${bad} 不是真实日期`)
+      assert.match(invalid[0].reason, /不是有效日期/)
+    }
+  })
+
+  it('闰年边界：2028-02-29 合法、2027-02-29 非法', () => {
+    assert.equal(validateIsoDate('2028-02-29'), true)
+    assert.match(String(validateIsoDate('2027-02-29')), /不是有效日期/)
+  })
+
+  it('区间反了给出人话；相等或只填一端时通过', () => {
+    assert.equal(validateDateRange('2026-10-21', '2026-10-20'), '开始日期不能晚于结束日期')
+    assert.equal(validateDateRange('2026-10-20', '2026-10-20'), true)
+    assert.equal(validateDateRange('', '2026-10-20'), true)
+    assert.equal(validateDateRange('2026-10-20', ''), true)
+    assert.match(String(validateDateRange('2026-02-30', '2026-03-01')), /^开始日期不是有效日期/)
+  })
+
+  it('写回 URL：默认空值省略，设置值保留', () => {
+    const query = writeUrlQuery({}, DATE_SPECS, { date_from: '2026-10-20', date_to: '' })
+    assert.deepEqual(query, { date_from: '2026-10-20' })
   })
 })
 

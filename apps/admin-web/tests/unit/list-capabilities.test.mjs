@@ -44,6 +44,26 @@ function listViews(dir = 'views', base = '../../src/') {
 }
 
 /**
+ * 从 `opener`（以 `{` 结尾）起按花括号配平取出整个对象字面量。
+ *
+ * ⚠ 断言「请求参数里有什么」时不能直接对整文件跑正则：同一页面在 console.error
+ * 上下文里也会出现同名字段，整文件正则会被它顶包，参数真的改名了也照样绿（实测）。
+ */
+function objectBlock(text, opener) {
+  const start = text.indexOf(opener)
+  assert.ok(start >= 0, `找不到对象起始标记：${opener}`)
+  let depth = 0
+  for (let i = start + opener.length - 1; i < text.length; i++) {
+    if (text[i] === '{') depth++
+    else if (text[i] === '}') {
+      depth--
+      if (depth === 0) return text.slice(start, i + 1)
+    }
+  }
+  throw new Error(`花括号不配平：${opener}`)
+}
+
+/**
  * 抽出形如 `<el-pagination ...>` 的整段属性文本（含跨行）。
  *
  * ⚠ 必须跟踪引号状态：`v-if="materials.total > materialsSize"` 里的 `>`
@@ -212,6 +232,61 @@ describe('审核列表（B3 / B4 / B6）接线', () => {
     assert.match(vue, /params:\s*\{[\s\S]*?workflow_id:\s*filters\.workflow_id/)
     assert.match(vue, /function onFilterSearch\(\)\s*\{[\s\S]*?page\.value = 1/)
     assert.match(vue, /URL_SPECS,\s*\(\)\s*=>\s*\([\s\S]*?workflow_id:\s*filters\.workflow_id/)
+  })
+
+  it('T02804 审核人/日期/频道：四类筛选都进 URL 规格与请求参数', () => {
+    // URL 规格：日期必须是 validator（只写 pattern 会放过 2026-02-30），频道是正整数
+    assert.match(vue, /reviewer:\s*\{\s*default:\s*''/)
+    assert.match(vue, /date_from:\s*\{\s*default:\s*'',\s*validator:\s*validateIsoDate/)
+    assert.match(vue, /date_to:\s*\{\s*default:\s*'',\s*validator:\s*validateIsoDate/)
+    assert.match(vue, /channel_id:\s*\{\s*default:\s*'',\s*type:\s*'int',\s*min:\s*1/)
+
+    // 请求参数：四类一起交给后端，前端不做「只筛当前页」的假过滤。
+    // ⚠ 必须限定在 params 对象内部断言：整文件正则会拿 console.error 里的同名字段顶包
+    // （实测：把 params 的 date_from 改成 dateFrom，整文件正则仍然绿）。
+    const paramsBlock = objectBlock(vue, 'params: {')
+    assert.match(paramsBlock, /reviewer:\s*filters\.reviewer/)
+    assert.match(paramsBlock, /date_from:\s*filters\.date_from/)
+    assert.match(paramsBlock, /date_to:\s*filters\.date_to/)
+    assert.match(paramsBlock, /channel_id:\s*filters\.channel_id/)
+
+    // 状态快照也要带上，否则改筛选后 URL 不更新（同样限定在快照对象内）
+    const snapshotBlock = objectBlock(vue, '() => ({')
+    assert.match(snapshotBlock, /reviewer:\s*filters\.reviewer/)
+    assert.match(snapshotBlock, /date_from:\s*filters\.date_from/)
+    assert.match(snapshotBlock, /date_to:\s*filters\.date_to/)
+    assert.match(snapshotBlock, /channel_id:\s*filters\.channel_id/)
+
+    // 日期区间两端各自一个参数，不把 "a ~ b" 整串塞进一个 key
+    assert.doesNotMatch(vue, /date_range/, '区间必须拆成 date_from / date_to 两个参数')
+
+    // 区间反了在前端拦一次，别用一次失败请求换一句人话
+    assert.match(vue, /validateDateRange\(filters\.date_from,\s*filters\.date_to\)/)
+
+    // 重置要清空全部筛选，不能只清 workflow_id
+    assert.match(
+      vue,
+      /function onFilterReset\(\)\s*\{[\s\S]*?filters\.workflow_id = ''[\s\S]*?filters\.reviewer = ''[\s\S]*?filters\.date_from = ''[\s\S]*?filters\.date_to = ''[\s\S]*?filters\.channel_id = ''/,
+    )
+
+    // 频道下拉加载失败时禁用并说明原因，不把「拉不到」伪装成「没有频道」
+    assert.match(vue, /listChannels\(false\)/)
+    assert.match(vue, /channelOptionsError/)
+    assert.match(vue, /:disabled="!!channelOptionsError"/)
+  })
+
+  it('T02804 前后端筛选参数名一致（前端发什么，后端就收什么）', () => {
+    const router = repoFile('backend/app/routers/admin/reviews.py')
+    const service = repoFile('backend/app/services/review_service.py')
+    for (const name of ['reviewer', 'date_from', 'date_to', 'channel_id']) {
+      assert.match(router, new RegExp(`\\b${name}:\\s`), `路由缺参数 ${name}（前端会发出一个被忽略的查询参数）`)
+      assert.match(service, new RegExp(`\\b${name}\\b`), `service 缺参数 ${name}`)
+    }
+    // 日期口径锁在 episode_date 上：改成 created_at 会让「按节目日期筛」筛不到列表里那天
+    assert.match(service, /Review\.episode_date >= date_from/)
+    assert.match(service, /Review\.episode_date <= date_to/)
+    // LIKE 通配符必须转义，否则 ?reviewer=% 等于不筛选
+    assert.match(service, /_escape_like\(reviewer\)/)
   })
 
   it('地址栏 size 不在档位里时就近钳制并如实点名（不静默按 7 行渲染）', () => {

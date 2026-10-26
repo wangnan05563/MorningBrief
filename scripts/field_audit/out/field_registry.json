@@ -1750,7 +1750,7 @@
           },
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 596,
+            "line": 597,
             "fn": "createMaterial",
             "fieldCount": 10,
             "unresolved": []
@@ -1839,14 +1839,14 @@
         "callSites": [
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 690,
+            "line": 691,
             "fn": "batchDeleteMaterials",
             "fieldCount": 2,
             "unresolved": []
           },
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 715,
+            "line": 716,
             "fn": "batchDeleteMaterials",
             "fieldCount": 1,
             "unresolved": []
@@ -2179,9 +2179,9 @@
     {
       "endpoint": "POST /reviews/*/action",
       "model": "ActionRequest",
-      "modelSource": "backend/app/routers/admin/reviews.py:19",
+      "modelSource": "backend/app/routers/admin/reviews.py:20",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/reviews.py:127",
+      "handlerSource": "backend/app/routers/admin/reviews.py:134",
       "declared": [
         "action",
         "reason",
@@ -2191,7 +2191,7 @@
         "callSites": [
           {
             "file": "views/mobile/ReviewList.vue",
-            "line": 332,
+            "line": 427,
             "fn": "handleReviewAction",
             "fieldCount": 3,
             "unresolved": [
@@ -2244,9 +2244,9 @@
     {
       "endpoint": "POST /reviews/batch-action",
       "model": "BatchActionRequest",
-      "modelSource": "backend/app/routers/admin/reviews.py:30",
+      "modelSource": "backend/app/routers/admin/reviews.py:31",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/reviews.py:68",
+      "handlerSource": "backend/app/routers/admin/reviews.py:75",
       "declared": [
         "action",
         "reason",
@@ -2256,7 +2256,7 @@
         "callSites": [
           {
             "file": "views/mobile/ReviewList.vue",
-            "line": 379,
+            "line": 474,
             "fn": "batchHandleReviewAction",
             "fieldCount": 3,
             "unresolved": [
@@ -2265,7 +2265,7 @@
           },
           {
             "file": "views/review/ReviewList.vue",
-            "line": 467,
+            "line": 586,
             "fn": "batchHandleReviewAction",
             "fieldCount": 3,
             "unresolved": [
@@ -2274,7 +2274,7 @@
           },
           {
             "file": "views/review/ReviewList.vue",
-            "line": 511,
+            "line": 630,
             "fn": "batchHandleReviewAction",
             "fieldCount": 3,
             "unresolved": [
@@ -3485,7 +3485,7 @@
         "callSites": [
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 559,
+            "line": 560,
             "fn": "updateMaterial",
             "fieldCount": 8,
             "unresolved": []

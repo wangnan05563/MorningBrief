@@ -165,6 +165,49 @@ export const SCOPED_REVIEW_SPECS = {
 }
 
 /**
+ * 校验 `YYYY-MM-DD` 日期文本（T02804 / 审核列表日期筛选）。
+ *
+ * 光有 `^\d{4}-\d{2}-\d{2}$` 不够：`2026-02-30`、`2026-13-01` 都能过正则，
+ * 原样发给后端只会换来一个 400，或者更糟——被当成合法字符串后静默查不到数据。
+ * 这里用 `Date.UTC` 回读年月日做真实性校验（UTC 避免时区把 00:00 推回前一天）。
+ *
+ * @returns {true|string} 通过返回 true，否则返回可直接展示给用户的原因
+ */
+export function validateIsoDate(text) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(text ?? '').trim())
+  if (!m) return '日期格式应为 YYYY-MM-DD'
+  const year = Number(m[1])
+  const month = Number(m[2])
+  const day = Number(m[3])
+  const dt = new Date(Date.UTC(year, month - 1, day))
+  if (
+    dt.getUTCFullYear() !== year ||
+    dt.getUTCMonth() !== month - 1 ||
+    dt.getUTCDate() !== day
+  ) {
+    return `不是有效日期：${text}`
+  }
+  return true
+}
+
+/**
+ * 校验日期区间（T02804）。两端都可为空；都为空或单端时不构成区间，直接通过。
+ * 后端对 `date_from > date_to` 返回 400，前端先拦一次，避免用一次失败请求换一句人话。
+ *
+ * @returns {true|string}
+ */
+export function validateDateRange(from, to) {
+  const a = String(from ?? '').trim()
+  const b = String(to ?? '').trim()
+  if (!a || !b) return true
+  const errA = validateIsoDate(a)
+  if (errA !== true) return `开始日期${errA}`
+  const errB = validateIsoDate(b)
+  if (errB !== true) return `结束日期${errB}`
+  return a <= b ? true : '开始日期不能晚于结束日期'
+}
+
+/**
  * 跨端（PC ↔ 移动端）重定向时的目标计算（T02511 的「跨端重定向保留 path 与 query」）。
  *
  * 背景：App.vue 早先在「视口是手机宽度但路由在 PC 命名空间」时直接 `replace('/m/home')`，

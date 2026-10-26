@@ -18,20 +18,66 @@
       :description="invalidParams.map((p) => `${p.key}=${p.raw}（${p.reason}）`).join('；')"
     />
 
-    <!-- T02517（FR-UX-703 / B4）：工作流 ID 筛选。后端 list_reviews 一直支持
-         `workflow_id` 精确过滤（reviews.py:44），但界面上没有任何入口，
-         定位某一条只能盲翻页。筛选条件跟着 URL 走（同 tab/page/size），
-         刷新与分享都不会丢。审核人/日期/频道筛选后端尚无参数，未在此假装有。 -->
+    <!-- T02517（FR-UX-703 / B4）+ T02804：四类定位能力（工作流 / 审核人 / 节目日期 / 频道）。
+         此前只落了 workflow_id，因为其余三项后端没有过滤参数——前端加框只会过滤当前页，
+         跨页结果错。T02804 补齐后端参数后，筛选条件统一进 URL_SPECS：
+         刷新/分享不丢，手改地址栏的非法值在这里点名回落（见 invalidParams 告警）。 -->
     <el-form :inline="true" class="filter-form" data-guide="review-filters">
       <el-form-item label="工作流 ID">
         <el-input
           v-model="filters.workflow_id"
           placeholder="按工作流 ID 精确定位"
           clearable
-          style="width: 240px"
+          style="width: 200px"
           @keyup.enter="onFilterSearch"
           @clear="onFilterSearch"
         />
+      </el-form-item>
+      <el-form-item label="审核人">
+        <el-input
+          v-model="filters.reviewer"
+          placeholder="按审核人用户名前缀"
+          clearable
+          style="width: 180px"
+          @keyup.enter="onFilterSearch"
+          @clear="onFilterSearch"
+        />
+      </el-form-item>
+      <el-form-item label="节目日期">
+        <el-date-picker
+          v-model="filters.date_from"
+          type="date"
+          value-format="YYYY-MM-DD"
+          placeholder="开始日期"
+          clearable
+          style="width: 150px"
+        />
+        <span class="date-sep">至</span>
+        <el-date-picker
+          v-model="filters.date_to"
+          type="date"
+          value-format="YYYY-MM-DD"
+          placeholder="结束日期"
+          clearable
+          style="width: 150px"
+        />
+      </el-form-item>
+      <el-form-item label="频道">
+        <el-select
+          v-model="filters.channel_id"
+          :placeholder="channelOptionsError || '全部频道'"
+          :disabled="!!channelOptionsError"
+          clearable
+          filterable
+          style="width: 180px"
+        >
+          <el-option
+            v-for="ch in channelOptions"
+            :key="ch.id"
+            :label="ch.name"
+            :value="ch.id"
+          />
+        </el-select>
       </el-form-item>
       <el-form-item>
         <IconButton
@@ -40,14 +86,14 @@
           :loading="loading"
           :icon="Search"
           label="搜索"
-          desc="按当前工作流 ID 查询审核记录"
+          desc="按当前筛选条件查询审核记录"
           @click="onFilterSearch"
         />
         <IconButton
           size="small"
           :icon="RefreshLeft"
           label="重置"
-          desc="清空工作流 ID 筛选"
+          desc="清空全部筛选条件"
           @click="onFilterReset"
         />
       </el-form-item>
@@ -110,6 +156,10 @@
       />
       <el-table-column prop="episode_date" label="日期" width="140" />
       <el-table-column prop="workflow_id" label="工作流ID" min-width="160" />
+      <!-- T02804：频道筛选生效后必须能看见频道名，否则筛完仍不知道结果属于哪个频道 -->
+      <el-table-column label="频道" width="140">
+        <template #default="{ row }">{{ row.channel_name || '-' }}</template>
+      </el-table-column>
       <el-table-column label="状态" width="120">
         <template #default="{ row }">
           <el-tag :type="statusTagType(row.status)" effect="light">
@@ -201,13 +251,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { Select, Close, View, Search, RefreshLeft } from '@element-plus/icons-vue'
 import api from '../../api'
 import { batchHandleReviewAction } from '../../api/reviews'
+import { listChannels } from '../../api/channels'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import { formatTime, formatDuration } from '../../utils/format'
 import { REVIEW_STATUS, enumLabel, enumTagType } from '../../constants/enums'
 import { PAGE_SIZE_OPTIONS, MAX_PAGE_SIZE, clampPageSize } from '../../constants/pagination'
 import { useUrlState } from '../../composables/useUrlState'
-import { detailLocation } from '../../utils/urlState'
+import { detailLocation, validateIsoDate, validateDateRange } from '../../utils/urlState'
 import ListLoadError from '../../components/ListLoadError.vue'
 
 const route = useRoute()
@@ -222,8 +273,19 @@ const size = ref(10)
 // T02517（B6）：列表加载失败原因（空字符串=无失败）。失败时**保留** list 里的旧数据，
 // 由错误态组件注明「下方为上次成功加载的数据」，不谎报「暂无数据」。
 const listError = ref('')
-// T02517（B4）：筛选条件（后端 list_reviews 目前只支持 workflow_id，其余不假装有）
-const filters = reactive({ workflow_id: '' })
+// T02517（B4）+ T02804：筛选条件（后端 list_reviews 已支持 workflow_id / reviewer / 日期 / 频道）
+const filters = reactive({
+  workflow_id: '',
+  reviewer: '',
+  date_from: '',
+  date_to: '',
+  channel_id: '',
+})
+
+// 频道筛选选项：列表加载失败时禁用下拉并在占位符里说明原因，
+// 不把「拉不到频道」伪装成「没有频道」
+const channelOptions = ref([])
+const channelOptionsError = ref('')
 
 // URL 参数规格。tab 的白名单**只放这三个**：el-tabs 只渲染三个 pane，
 // 把 enum 全量（含 replaced）放进去会让 `?tab=replaced` 通过校验却渲染出空表格。
@@ -234,12 +296,23 @@ const URL_SPECS = {
   page: { default: 1, type: 'int', min: 1 },
   size: { default: 10, type: 'int', min: 1, max: MAX_PAGE_SIZE },
   workflow_id: { default: '', maxLength: 64, pattern: '^[A-Za-z0-9_-]+$' },
+  // reviewer 不加 pattern：reviewer_name 是审核动作时写入的 username 快照，
+  // 没有创建入口约束字符集；用 ASCII pattern 会把带中文/空格的历史用户名静默回落成空筛选
+  reviewer: { default: '', maxLength: 64 },
+  // 日期各自一个参数（不塞 "a ~ b" 整串）：~ 与空格在 query 编码后会弄脏地址栏
+  date_from: { default: '', validator: validateIsoDate },
+  date_to: { default: '', validator: validateIsoDate },
+  channel_id: { default: '', type: 'int', min: 1 },
 }
 const urlState = useUrlState(URL_SPECS, () => ({
   tab: activeTab.value,
   page: page.value,
   size: size.value,
   workflow_id: filters.workflow_id,
+  reviewer: filters.reviewer,
+  date_from: filters.date_from,
+  date_to: filters.date_to,
+  channel_id: filters.channel_id,
 }), { onExternalChange: applyFromUrl })
 
 /**
@@ -266,16 +339,22 @@ function resolveSize(raw) {
 /** 地址栏被外部改动（手改 URL / 前进后退）时：把校验后的值灌回状态并重载 */
 function applyFromUrl(values) {
   const nextSize = resolveSize(values.size)
-  const nextWorkflowId = values.workflow_id || ''
+  const next = {
+    workflow_id: values.workflow_id || '',
+    reviewer: values.reviewer || '',
+    date_from: values.date_from || '',
+    date_to: values.date_to || '',
+    channel_id: values.channel_id || '',
+  }
   const changed =
     values.tab !== activeTab.value ||
     values.page !== page.value ||
     nextSize !== size.value ||
-    nextWorkflowId !== filters.workflow_id
+    Object.keys(next).some((k) => next[k] !== filters[k])
   activeTab.value = values.tab
   page.value = values.page
   size.value = nextSize
-  filters.workflow_id = nextWorkflowId
+  Object.assign(filters, next)
   if (changed) loadList()
 }
 
@@ -318,8 +397,13 @@ async function loadList() {
           status: activeTab.value,
           page: page.value,
           size: size.value,
-          // T02517（B4）：后端一直支持 workflow_id 精确过滤，界面此前没有入口
+          // T02517（B4）/ T02804：四类定位条件都交给后端过滤，
+          // 前端不做「只筛当前页」的假过滤（跨页结果会错）
           workflow_id: filters.workflow_id || undefined,
+          reviewer: filters.reviewer || undefined,
+          date_from: filters.date_from || undefined,
+          date_to: filters.date_to || undefined,
+          channel_id: filters.channel_id || undefined,
         },
       })
       list.value = data.list
@@ -358,6 +442,10 @@ async function loadList() {
       page: page.value,
       size: size.value,
       workflow_id: filters.workflow_id || null,
+      reviewer: filters.reviewer || null,
+      date_from: filters.date_from || null,
+      date_to: filters.date_to || null,
+      channel_id: filters.channel_id || null,
       message: listError.value,
     })
   } finally {
@@ -373,12 +461,22 @@ function handleSizeChange() {
 
 /** 筛选查询：条件变了必须回第 1 页，否则「筛完落在第 3 页」是个空表 */
 function onFilterSearch() {
+  // 日期区间先在前端拦：后端对 from > to 返回 400，没必要用一次失败请求换一句人话
+  const rangeError = validateDateRange(filters.date_from, filters.date_to)
+  if (rangeError !== true) {
+    ElMessage.warning(`日期区间无效：${rangeError}`)
+    return
+  }
   page.value = 1
   loadList()
 }
 
 function onFilterReset() {
   filters.workflow_id = ''
+  filters.reviewer = ''
+  filters.date_from = ''
+  filters.date_to = ''
+  filters.channel_id = ''
   onFilterSearch()
 }
 
@@ -391,13 +489,34 @@ function handleTabChange() {
   loadList()
 }
 
-// 深链优先：URL 上有 tab/page/size/workflow_id 就按 URL 起（非法值由 readFromUrl 回落并记录）
+/**
+ * 频道筛选下拉的数据源（T02804）。独立请求且失败不阻断列表：
+ * 频道接口挂了只是「没法按频道筛」，不该连审核列表一起打不开；
+ * 但也不能装作没有频道——下拉被禁用且占位符直接写失败原因。
+ */
+async function loadChannelOptions() {
+  try {
+    const data = await listChannels(false)
+    const rows = Array.isArray(data) ? data : (data?.list || [])
+    channelOptions.value = rows.map((c) => ({ id: c.id, name: c.name }))
+    channelOptionsError.value = ''
+  } catch (e) {
+    channelOptionsError.value = e?.message || '频道列表加载失败'
+  }
+}
+
+// 深链优先：URL 上有 tab/page/size/筛选条件就按 URL 起（非法值由 readFromUrl 回落并记录）
 onMounted(() => {
   const v = urlState.readFromUrl()
   activeTab.value = v.tab
   page.value = v.page
   size.value = resolveSize(v.size)
   filters.workflow_id = v.workflow_id || ''
+  filters.reviewer = v.reviewer || ''
+  filters.date_from = v.date_from || ''
+  filters.date_to = v.date_to || ''
+  filters.channel_id = v.channel_id || ''
+  loadChannelOptions()
   loadList()
 })
 
@@ -558,5 +677,10 @@ async function handleBatchReject() {
   display: flex;
   justify-content: flex-end;
   margin-top: 20px;
+}
+
+.date-sep {
+  margin: 0 6px;
+  color: var(--el-text-color-secondary);
 }
 </style>

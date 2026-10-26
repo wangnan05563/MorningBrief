@@ -1,5 +1,6 @@
 """B 端审核路由。"""
 import json
+from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -42,6 +43,10 @@ class BatchActionRequest(BaseModel):
 async def list_reviews(
     status: str = Query(None),
     workflow_id: str = Query(None, description="按工作流 ID 过滤"),
+    reviewer: str = Query(None, max_length=64, description="按审核人用户名前缀过滤"),
+    date_from: Optional[date] = Query(None, description="节目日期下界（含），YYYY-MM-DD"),
+    date_to: Optional[date] = Query(None, description="节目日期上界（含），YYYY-MM-DD"),
+    channel_id: Optional[int] = Query(None, ge=1, description="按频道过滤"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -50,6 +55,8 @@ async def list_reviews(
     svc = ReviewService(db)
     data = await svc.list_reviews(
         status=status, page=page, size=size, workflow_id=workflow_id,
+        reviewer=reviewer, date_from=date_from, date_to=date_to,
+        channel_id=channel_id,
     )
     return success(data=data)
 

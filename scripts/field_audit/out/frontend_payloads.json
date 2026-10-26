@@ -593,6 +593,13 @@
           "unresolved": []
         },
         {
+          "file": "views/review/ReviewList.vue",
+          "line": 499,
+          "fn": "listChannels",
+          "fieldCount": 2,
+          "unresolved": []
+        },
+        {
           "file": "views/workflow/WorkflowList.vue",
           "line": 428,
           "fn": "listChannels",
@@ -1339,7 +1346,11 @@
       "url": "/reviews",
       "fields": [
         "params",
+        "params.channel_id",
+        "params.date_from",
+        "params.date_to",
         "params.page",
+        "params.reviewer",
         "params.size",
         "params.status",
         "params.workflow_id"
@@ -1355,9 +1366,9 @@
         },
         {
           "file": "views/review/ReviewList.vue",
-          "line": 316,
+          "line": 395,
           "fn": "api.get",
-          "fieldCount": 5,
+          "fieldCount": 9,
           "unresolved": []
         },
         {
@@ -2836,7 +2847,7 @@
         },
         {
           "file": "views/review/ReviewList.vue",
-          "line": 467,
+          "line": 586,
           "fn": "batchHandleReviewAction",
           "fieldCount": 3,
           "unresolved": [
@@ -2845,7 +2856,7 @@
         },
         {
           "file": "views/review/ReviewList.vue",
-          "line": 511,
+          "line": 630,
           "fn": "batchHandleReviewAction",
           "fieldCount": 3,
           "unresolved": [
@@ -14285,5 +14296,5 @@
       }
     }
   ],
-  "rawSites": 221
+  "rawSites": 222
 }

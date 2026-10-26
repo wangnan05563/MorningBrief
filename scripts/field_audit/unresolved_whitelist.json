@@ -69,7 +69,7 @@
     },
     {
       "endpoint": "POST /reviews/*/action",
-      "site": "views/mobile/ReviewList.vue:332",
+      "site": "views/mobile/ReviewList.vue:427",
       "reason_key": "value-scalar",
       "note": "action 取 approve/reject 字面量之一，来自移动端审批按钮的入参；键名与 segment_id 均在 ActionRequest 声明内。"
     },
@@ -81,21 +81,21 @@
     },
     {
       "endpoint": "POST /reviews/batch-action",
-      "site": "views/mobile/ReviewList.vue:379",
+      "site": "views/mobile/ReviewList.vue:474",
       "reason_key": "value-scalar",
       "note": "ids 是移动端批量选中的 review_id 数组，键名 review_ids 由包装体给出，在 BatchActionRequest 声明内。"
     },
     {
       "endpoint": "POST /reviews/batch-action",
-      "site": "views/review/ReviewList.vue:467",
+      "site": "views/review/ReviewList.vue:586",
       "reason_key": "value-scalar",
-      "note": "ids 是批量通过所选的 review_id 数组（apps/admin-web/src/views/review/ReviewList.vue:467），键名 review_ids 在 BatchActionRequest 声明内。"
+      "note": "ids 是批量通过所选的 review_id 数组（apps/admin-web/src/views/review/ReviewList.vue:586），键名 review_ids 在 BatchActionRequest 声明内。"
     },
     {
       "endpoint": "POST /reviews/batch-action",
-      "site": "views/review/ReviewList.vue:511",
+      "site": "views/review/ReviewList.vue:630",
       "reason_key": "value-scalar",
-      "note": "ids 是批量打回所选的 review_id 数组（apps/admin-web/src/views/review/ReviewList.vue:511），与批量通过共用 BatchActionRequest。"
+      "note": "ids 是批量打回所选的 review_id 数组（apps/admin-web/src/views/review/ReviewList.vue:630），与批量通过共用 BatchActionRequest。"
     },
     {
       "endpoint": "POST /users/*/toggle-status",
