@@ -53,6 +53,7 @@
             :limit="1"
             :on-change="onFileChange"
             :on-remove="onFileRemove"
+            :on-exceed="onExceed"
             accept=".txt,.md,.markdown,.epub,.docx,.html,.htm,.pdf"
           >
             <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
@@ -259,6 +260,17 @@ function onFileChange(file) {
 function onFileRemove() {
   selectedFile.value = null
   fileList.value = []
+}
+/**
+ * T02803（C94）：「单个文件」的 limit 超限时 Element Plus 直接 return——既不进 on-change，
+ * 也不改 file-list，用户点了选择却毫无反应。这里明确告知被忽略的条数；
+ * 注意超限是整批丢弃（已选的 1 个文件保留，新选的都不进来），所以文案说「本次选择的」。
+ */
+function onExceed(files) {
+  const ignored = Array.isArray(files) ? files.length : 1
+  ElMessage.warning(
+    `本课程素材一次只能上传 1 个文件，已忽略本次选择的 ${ignored} 个；如需替换请先移除已选文件再重新选择`,
+  )
 }
 async function doUpload() {
   if (!selectedFile.value) return

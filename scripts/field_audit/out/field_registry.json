@@ -1845,7 +1845,7 @@
         "callSites": [
           {
             "file": "views/channel/CourseMaterials.vue",
-            "line": 322,
+            "line": 334,
             "fn": "createMaterial",
             "fieldCount": 8,
             "unresolved": []
@@ -1995,7 +1995,7 @@
         "callSites": [
           {
             "file": "views/channel/CourseMaterials.vue",
-            "line": 294,
+            "line": 306,
             "fn": "importFromCos",
             "fieldCount": 4,
             "unresolved": []
@@ -2082,7 +2082,7 @@
         "callSites": [
           {
             "file": "views/channel/CourseMaterials.vue",
-            "line": 355,
+            "line": 367,
             "fn": "importFromUrl",
             "fieldCount": 5,
             "unresolved": []
@@ -2163,7 +2163,7 @@
         "callSites": [
           {
             "file": "views/channel/CourseMaterials.vue",
-            "line": 379,
+            "line": 391,
             "fn": "sharePreview",
             "fieldCount": 2,
             "unresolved": []

@@ -185,11 +185,10 @@ describe('仓库级不变量：每个 el-pagination 都能选尺寸且不越上�
   })
 })
 
-// C94 剩余工作的豁免表：**只允许带派生单号的条目**（T02803）。
-// 该文件被并发会话改动中，此刻动手会把别人的 WIP 裹进提交，故 T02517 只留门禁不落地。
-const PENDING_UPLOAD_ON_EXCEED = {
-  'views/channel/CourseMaterials.vue': 'T02803',
-}
+// C94 剩余工作的豁免表：**只允许带派生单号的条目**。
+// T02803 已给 CourseMaterials.vue 补上 :on-exceed，表必须清空——
+// 留着空豁免表即「全仓库零超限静默忽略」，新增违例会被立刻挡下。
+const PENDING_UPLOAD_ON_EXCEED = {}
 
 describe('仓库级不变量：设了 :limit 的 el-upload 必须有 :on-exceed', () => {
   it('超限静默忽略的地方与豁免表完全一致（不多不少）', () => {
