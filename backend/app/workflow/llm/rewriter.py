@@ -58,8 +58,17 @@ _AUDIOBOOK_QUALITY_RULE = (
     "【书籍解读专项要求】1. 内容必须严格源自当前书籍章节素材，禁止引用或嫁接书外作品、"
     "新闻事件、产业动态、娱乐节目讯息。2. 禁止使用“视线转向产业资本动向”“从开发商动态来看”"
     "“另一款大作”“硬件之外软件也有看点”“顺带提一下一款新作”等新闻播报拼接套话。"
-    "3. 若需提及作者、书名、出版信息，只能依据所选素材原文，不得臆造或张冠李戴。"
+    "3. 若需提及作者、书名、出版信息，只能依据所选素材原文，不得臆造或张冠李戴；"
+    "年份、日期、地点、人名等事实要素同样必须与素材原文保持一致，"
+    "严禁改写或杜撰（如素材原文写“二〇一四年十一月”不得写成“二〇一七年”）。"
     "4. 段与段按书籍章节内在逻辑自然过渡，保持连贯，不打断、不跳章拼贴。"
+    "5. 视角必须统一：若素材为作者第一人称自述，改写时一律转述为“作者回忆道”“作者写道”"
+    "“作者提起”，禁止在解述中直接以“我”的口吻叙述，避免听众分不清讲述者是谁。"
+    "6. 段首钩子句式必须多样化：不得用“你有没有想过”“你是否想过”这类套问开场，"
+    "应从素材中的具体场景、悬念或反常识事实切入；抛出问题后须用一句点明本段讲到书中哪个部分，"
+    "不得只抛问题不承上。"
+    "7. 严禁未兑现的内容预告：不得写“待会再说”“后面会讲”“稍后再说”之类延后承诺，"
+    "预告展开的例子必须在同一段内兑现，无把握兑现就不预告。"
 )
 
 # 复检残留的书外套话衔接短语 → 中性承接（T00914 复检发现 prompt 约束无法 100% 杜绝
@@ -79,16 +88,161 @@ _AUDIOBOOK_BRIDGE_CLEANUP = {
     "另一款大作": "",
     "硬件之外，软件也有看点": "",
     "顺带提一下这种新作": "",
+    # T01009 实测串味残留（style_hint 曾误注入游戏词库所致，兜底清洗防复发）：
+    # “来看今天游戏圈的一条重磅消息”整体删除——删除后紧跟的“，”由下方标点规整收口，
+    # 但其后对游戏的评述句无法短语级修复，根治依赖 style_hint 隔离后重跑
+    "来看今天游戏圈的一条重磅消息": "",
+    "把镜头切到下一条游戏资讯": "",
+    "把视线转向另一个平台": _BRIDGE_REPL,
+    # 游戏受众称呼 → 中性听众称呼；“3A大作”类比句保留句构、仅替换喻体
+    "各位游戏爱好者": "各位听众",
+    "主机玩家": "各位听众",
+    "3A大作": "经典之作",
 }
 
 
+# 未兑现预告短语：稿件里“待会再说”多数源自原书文本被截断选材——原书承诺后文展开，
+# 对应部分却没进素材，承诺就成了对听众的空头支票。清洗层无法判断是否兑现，
+# 唯一安全策略是整句删除：少一句预告叙事更顺，留一个坑则破坏信任（T01010 兜底）
+_PROMISE_PAT = re.compile(r"待会[儿]?再说|后面再[说讲]|后面会讲|稍后再说")
+
+
+# 按段位置追加的专项条款（T01010 对标得到听书稿：开篇导论 + 收尾总结）。
+# 为什么不能并入 _AUDIOBOOK_QUALITY_RULE：各段并发独立改写，单段 LLM 看不到其他段，
+# 无法自行判断“我是全篇第几段”；style_seq 取自 selected 索引（并发下稳定，与
+# style_hint 轮换同源），由 _rewrite_one_with_limit 逐段追加
+def _append_audiobook_position_rule(rule: str | None, style_seq: int, total: int) -> str | None:
+    """按段在整期中的位置追加导论/收尾条款，仅 audiobook 的 quality_rule 会被传入。"""
+    if not rule:
+        return rule
+    if style_seq <= 1:
+        return rule + (
+            " 10. 本段是本期节目正文开篇段：开头必须交代作者身份与本书性质，"
+            "作者身份只能使用素材原文或系统注入的作者姓名中出现的线索，素材未提供的严禁编造；"
+            "若素材为作者第一人称自述，须在段内向听众声明“文中‘我’即作者本人”，"
+            "让听众明白后续第一人称故事都是作者亲历。"
+        )
+    if style_seq >= total:
+        return rule + (
+            " 10. 本段是本期节目正文收尾段：结尾必须用三到五句收束本讲覆盖的内容，"
+            "把本段故事接回书籍主线，并以一句连接听众生活的话收束，"
+            "不得在故事中途戛然而止，也不要写“感谢收听”式告别语（结尾由系统统一播出）。"
+        )
+    return rule
+
+
+# 超长段拆分的绝对字数下限：短节目档 words_per_segment 较小（可低至 500 字左右），
+# 仅按 1.5 倍相对阈值会把正常段落也拆碎；低于该绝对下限的一律视为正常篇幅
+_AUDIOBOOK_SPLIT_MIN_CHARS = 800
+
+
+def _split_overlong_audiobook_segments(
+    segments: list[dict], words_per_segment: int
+) -> list[dict]:
+    """audiobook 超长段程序化拆分（T01010 对标得到听书稿·工程层兜底）。
+
+    为什么不靠 prompt 约束：单段字数已由 _rewrite_one_with_limit 的字数重试兜底，
+    但 LLM 在单次返回里把多个自然段连写成一个超长块（实测 seg6 1304 字含 3 个
+    自然段）时重试无法消除——自然段边界本来就存在，只是没被拆开。
+
+    为什么按 \\n\\n 自然段边界拆而非按字数硬切：自然段边界本身是语义停顿点，
+    沿边界拆分无损且确定（拆出的每段可直接独立播报）；按字数硬切会在句中
+    截断，TTS 拼接处断句突兀。清洗层已把 \\r\\n 归一、单换行合并，\\n\\n 边界可靠。
+
+    拆分规则：
+    - 阈值 = max(words_per_segment × 1.5, 绝对下限)：只拆明显超长的段，
+      避免把贴合目标篇幅（约 words_per_segment）的正常段也拆碎、增加 TTS
+      拼接次数与文稿页碎片感；
+    - 贪心装箱自然段：单段尽量多装且不超阈值；单个自然段自身超阈值时
+      无法无损拆分，保留原段仅告警；
+    - 拆分后统一重排 seq：拆分会改变段数，seq 断层会让前端文稿页错乱。
+
+    仅 audiobook 调用：新闻稿一段即一条消息，超长是选材问题而非格式问题，
+    程序化拆分会破坏新闻段落完整性。
+    """
+    threshold = max(int(words_per_segment * 1.5), _AUDIOBOOK_SPLIT_MIN_CHARS)
+    out: list[dict] = []
+    for seg in segments:
+        content = seg.get("content") or ""
+        if len(content) <= threshold:
+            out.append(seg)
+            continue
+        paras = [p.strip() for p in re.split(r"\n\s*\n", content) if p.strip()]
+        chunks: list[str] = []
+        cur = ""
+        for p in paras:
+            cand = f"{cur}\n\n{p}" if cur else p
+            if cur and len(cand) > threshold:
+                chunks.append(cur)
+                cur = p
+            else:
+                cur = cand
+        if cur:
+            chunks.append(cur)
+        if len(chunks) <= 1:
+            # 无自然段边界（一气呵成）或单自然段超长：无损拆分不可行，不硬切
+            logger.warning(
+                "[超长段拆分] seg{} {} 字超阈值 {} 但无自然段边界，保留原段",
+                seg.get("seq"), len(content), threshold,
+            )
+            out.append(seg)
+            continue
+        logger.warning(
+            "[超长段拆分] seg{} {} 字超阈值 {}，按自然段边界拆为 {} 段",
+            seg.get("seq"), len(content), threshold, len(chunks),
+        )
+        for piece in chunks:
+            # title/material_id/cover_url 原样继承：拆分只改变播报节奏，
+            # 不改变段落归属（素材溯源与文稿页封面保持一致）
+            out.append({**seg, "content": piece})
+    if len(out) != len(segments):
+        for i, s in enumerate(out, 1):
+            s["seq"] = i
+    return out
+
+
+def _detect_repeated_audiobook_hooks(
+    segments: list[dict], max_repeats: int = 2
+) -> list[tuple[str, int]]:
+    """检测段首钩子同型重复（T01010·纯函数，返回超阈值指纹列表供调用方告警）。
+
+    为什么只检测不改稿：首句钩子往往与段内首个事件强关联，程序化替换会
+    破坏叙事衔接；并发改写下单段 LLM 也看不到其他段的钩子，根治靠质量
+    规则第 6 条（钩子多样化）+ 此处监控暴露 + 人工审核兜底。
+
+    判定口径：取每段第一个分句（首个句读前）作“钩子指纹”，完全相同且
+    出现次数超过 max_repeats 才报告。变体钩子（同型不同词）检不出，属
+    监控定位用的宽松口径，宁可漏报不误报。长度 <4 的分句（“所以”“但是”
+    类连接词）不作指纹，误报率高。
+    """
+    from collections import Counter
+
+    fingerprints: list[str] = []
+    for seg in segments:
+        text = (seg.get("content") or "").strip()
+        if not text:
+            continue
+        clause = re.split(r"[，。！？；、\n]", text, maxsplit=1)[0].strip()
+        if len(clause) >= 4:
+            fingerprints.append(clause)
+    counts = Counter(fingerprints)
+    return [(c, n) for c, n in counts.most_common() if n > max_repeats]
+
+
 def _clean_audiobook_bridge_phrases(text: str) -> tuple[str, int]:
-    """清洗 audiobook 段中残留的新闻播报式书外套话衔接短语。
+    """清洗 audiobook 段中残留的新闻播报式书外套话衔接短语与格式残留。
 
     返回 (清洗后文本, 命中短语数)。prompt 层面的《书籍解读专项要求》约束属于软约束，
     复检（T00914 §5.3）证实现有模型仍会偶发产出，故在改写结果落库前用该函数兜底，
     把“从开发商动态来看”“换个赛道”等一律换成中性的“回到书中”承接语或删除，
     以保证最终文稿衔接连贯、不串味新闻平台。纯文本无副作用，便于单测。
+
+    T01009 补充格式规整（同样只对 audiobook 生效）：
+    - 整行孤立标点（LLM 设问后残留的独立“。”行）直接删除
+    - 段内单个换行是素材复制断行（如“英雄\\n被请到”），中文无空格习惯直接合并；
+      连续两个换行是有意的自然段分隔，保留
+    - 段首孤立标点（如“。在《我只知道人是什么》中”）剥离
+    - 未兑现预告句（“待会再说/后面会讲”所在整句）直接删除
     """
     if not text:
         return text, 0
@@ -97,10 +251,28 @@ def _clean_audiobook_bridge_phrases(text: str) -> tuple[str, int]:
         if phrase in text:
             text = text.replace(phrase, repl)
             hits += 1
+    # 未兑现预告句整句删除：按句末标点/换行切句（零宽切分保留分隔符），
+    # 含预告短语的句子整句丢弃。须在换行规整前做——预告句删除后可能留下
+    # 双句号等残留，由下方“连续标点收口”循环统一处理
+    parts = re.split(r"(?<=[。！？；\n])", text)
+    kept = [p for p in parts if not _PROMISE_PAT.search(p)]
+    if len(kept) != len(parts):
+        hits += len(parts) - len(kept)
+        text = "".join(kept)
+    # 统一换行符为 \n（Windows 素材常带 \r\n，否则单换行合并后会残留 \r）
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
     # 规整替换残留的连续标点：替换后可能出现三个连续逗号/句号
     # 单次 replace 对三连只收掉一对，故循环直到不再含连续标点
     while "，，" in text or "。。" in text:
         text = text.replace("，，", "，").replace("。。", "。")
+    # 删除整行只有孤立标点的行（须在换行合并前做，否则标点会黏进下句）
+    text = re.sub(r"(?m)^[ \t\u3000]*[。，、；：]+[ \t\u3000]*$\n?", "", text)
+    # 合并段内单个换行（素材复制断行）；\n\n 自然段分隔保留
+    text = re.sub(r"(?<!\n)\n(?!\n)", "", text)
+    # 剥离每个自然段段首的孤立标点：覆盖两种残留形态——
+    # 段首黏连（“。在《我只知道人是什么》中”）与 \n\n 后行首（“？\n\n。二〇一四年…”）；
+    # 中文正文段首不会以句读标点开头，不会误伤正常内容
+    text = re.sub(r"(?m)^[ \t\u3000]*[。，、；：，,]+[ \t\u3000]*", "", text)
     return text, hits
 
 
@@ -132,7 +304,7 @@ async def _build_audiobook_quality_rule(channel_id: int | None, book_title: str)
     if not book_title:
         return rule
     title_line = (
-        f"5. 本书唯一书名是《{book_title}》，正文统一以“{book_title}”指代本书，"
+        f"8. 本书唯一书名是《{book_title}》，正文统一以“{book_title}”指代本书，"
         "严禁用“这本新作”“这部作品”“另一款大作”等泛指，也不许引用任何其他书名来指代本书。"
     )
     author = None
@@ -150,8 +322,8 @@ async def _build_audiobook_quality_rule(channel_id: int | None, book_title: str)
         except Exception as e:
             logger.warning("读取书籍作者失败，降级为仅书名约束: {}", e)
     if author:
-        return rule + title_line + f" 6. 本书作者是“{author}”，凡需提及作者只能写“{author}”，严禁写成他人。"
-    return rule + title_line + " 6. 若书籍素材未提供作者信息，则全文不要擅自编造作者姓名。"
+        return rule + title_line + f" 9. 本书作者是“{author}”，凡需提及作者只能写“{author}”，严禁写成他人。"
+    return rule + title_line + " 9. 若书籍素材未提供作者信息，则全文不要擅自编造作者姓名。"
 
 # 提示词文件内容缓存（模块加载后不变，避免每次改写重复读盘）
 _PROMPT_FILE_CACHE: dict[str, str] = {}
@@ -1830,8 +2002,19 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
             bool(channel_prompts["rewrite_template"]),
             channel_prompts.get("selection_strategy"),
         )
-    # 选题策略：None/空 → heat（存量兼容）；outline=文档章节顺序；manual=手动指定 ID
+    # 选题策略：None/空 → heat（存量兼容）；outline=文档章节顺序；manual=指定 ID
     selection_strategy = (channel_prompts or {}).get("selection_strategy") or "heat"
+    # 章节顺序守卫（T01010 对标得到听书稿·主体结构）：outline 选题是听书“单本分集
+    # 连载”的顺序保证——_fetch_materials/_select_top_materials 的 outline 分支均按
+    # 素材 id 升序（=文档章节顺序），book_part_planner 的上/中/下篇切分与篇间衔接
+    # 依赖该顺序；误配 heat 会按品类热度打散章节序，篇章结构全乱。策略是运营可配
+    # 字段，不强制改写，大声告警提示修正
+    if channel_type in _AUDIOBOOK_CHANNEL_TYPES and selection_strategy not in ("outline", "manual"):
+        logger.warning(
+            "[听书编排] audiobook 频道 selection_strategy={} 不保证章节顺序，"
+            "分集上/中/下篇可能乱序，建议将该频道选题策略改为 outline",
+            selection_strategy,
+        )
 
     # 0.5 读取目标时长 + TTS 语速倍率，反算每段目标字数
     # 数学关系：总字数 = 目标时长 × 基础语速 × 倍率 / 60
@@ -2017,7 +2200,8 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                 enable_thinking_question=channel_prompts["enable_thinking_question"] if channel_prompts else True,
                 style_hint=style_hint,
                 book_context=book_ctx_map.get(m.get("id")),
-                quality_rule=quality_rule,
+                # 开篇导论/收尾总结按段位置追加（quality_rule 本体是全段共用的静态串）
+                quality_rule=_append_audiobook_position_rule(quality_rule, style_seq, total_for_style),
             )
 
     # enumerate 从 1 开始：seq=1 用开场白（intro），seq>=2 用过渡词（transition）
@@ -2042,7 +2226,8 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                     constraint_text=channel_prompts["constraint_prompt"] if channel_prompts else None,
                     enable_thinking_question=channel_prompts["enable_thinking_question"] if channel_prompts else True,
                     style_hint=style_hint,
-                    quality_rule=quality_rule,
+                    # 敏感词重试与首版同段同位置，导论/收尾条款须保持一致
+                    quality_rule=_append_audiobook_position_rule(quality_rule, i + 1, total_for_style),
                 )
                 r = _clean_audiobook_segment_content(r, channel_type)
                 segments.append({**r, "seq": len(segments) + 1})
@@ -2112,6 +2297,18 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
             len(segments), target_segments, target_segments,
         )
         segments = segments[:target_segments]
+
+    # 4.6 audiobook 超长段拆分 + 钩子重复告警（T01010 对标得到听书稿·工程层兜底）
+    # 必须在 4.5 段数截断之后：拆分会增加段数，若在其之前执行，截断会误删
+    # 拆分后靠后的章节段（截断按段数而非时长）；放在 5 组装之前，使
+    # start_sec/end_sec 估算与文稿页分段直接受益于更细的播报粒度
+    if channel_type in _AUDIOBOOK_CHANNEL_TYPES:
+        segments = _split_overlong_audiobook_segments(segments, words_per_segment)
+        for hook, n in _detect_repeated_audiobook_hooks(segments):
+            logger.warning(
+                "[钩子重复] 段首钩子「{}」出现 {} 次（阈值 2），钩子句式趋同，建议复核",
+                hook, n,
+            )
 
     # 5. 组装整稿（频道级开场白/结尾 + 改写段），用实际语速估算时长
     # 课程频道不注入日期播报（inject_date=False），保持讲解连贯性

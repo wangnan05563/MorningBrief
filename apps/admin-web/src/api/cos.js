@@ -63,9 +63,22 @@ export const createCosFolder = (prefix) =>
 export const deleteCosFolder = (prefix) =>
   api.delete('/cos/folder', { params: { prefix } })
 
+// 移动/重命名前的同名冲突预览（覆盖条数由服务端实测给出，T02608）
+// silent：预览失败由调用方给出「已取消移动」的针对性提示，避免拦截器二次弹错
+export const checkCosMoveConflict = (sourceKey, destKey) =>
+  api.get('/cos/move-preview', {
+    params: { source_key: sourceKey, dest_key: destKey },
+    silent: true,
+  })
+
 // 重命名 / 移动对象或文件夹（source_key 以 / 结尾视为文件夹）
-export const moveCosObject = (sourceKey, destKey) =>
-  api.post('/cos/move', { source_key: sourceKey, dest_key: destKey })
+// overwrite=false 时，目标已存在同名对象会被服务端拒绝（业务码 409）
+export const moveCosObject = (sourceKey, destKey, { overwrite = false } = {}) =>
+  api.post('/cos/move', {
+    source_key: sourceKey,
+    dest_key: destKey,
+    overwrite: !!overwrite,
+  })
 
 // 获取对象元数据（大小 / 最后修改 / 类型 / ETag）
 export const getCosMetadata = (key) =>

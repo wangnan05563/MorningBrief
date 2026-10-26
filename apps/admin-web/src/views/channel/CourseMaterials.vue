@@ -441,11 +441,11 @@ onMounted(async () => {
   font-size: 15px;
 }
 .hint {
-  background: #f5f7fa;
-  border: 1px solid #ebeef5;
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   padding: 10px 12px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   font-size: 13px;
   line-height: 1.6;
   margin-bottom: 14px;

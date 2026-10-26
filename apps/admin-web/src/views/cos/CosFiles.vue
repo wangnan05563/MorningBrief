@@ -393,8 +393,49 @@ async function confirmRename() {
   }
   opLoading.value = true
   try {
-    await moveCosObject(row.key, destKey)
-    ElMessage.success('重命名成功')
+    // H19（T02608）：同名与否以服务端实测为准，不能看本页列表——
+    // 列表只是进入目录时的快照，且分页外/子层级里的同名对象根本不在视野内，
+    // 而 copy_object 是「存在即换掉」，静默覆盖就发生在这一步。
+    let conflict = null
+    try {
+      const hit = await checkCosMoveConflict(row.key, destKey)
+      conflict = hit && hit.conflict_count > 0 ? hit : null
+    } catch {
+      ElMessage.error('同名检测失败，已取消重命名：无法确认是否会覆盖已有对象')
+      return
+    }
+    if (conflict) {
+      const first = conflict.conflicts?.[0] || {}
+      const ok = await dangerConfirm({
+        action: '重命名并覆盖同名对象',
+        target: `「${row.name}」→ ${destKey}`,
+        scope: row.isFolder
+          ? `目标位置已有 ${conflict.conflict_count} 个同名对象，移动整个文件夹会把它们逐个换掉`
+          : `云端已存在同名对象（${formatSize(first.size)}${first.last_modified ? `，更新于 ${first.last_modified}` : ''}）`,
+        lines: [
+          `覆盖前旧对象自动备份到 ${currentPrefix.value || '/'}${_MOVE_BACKUP_HINT(row)}，可在文件列表逐层找回`,
+          ...(conflict.conflict_count > 1
+            ? [
+                `将被覆盖的样例：${(conflict.conflicts || [])
+                  .slice(0, 3)
+                  .map((c) => c.dest_key)
+                  .join('、')}${conflict.conflicts_truncated ? ' …' : ''}`,
+              ]
+            : []),
+        ],
+        irreversible: '快照只保留覆盖前的那一份：如需长期保留多版本请为存储桶开启版本控制。',
+        confirmWord: '覆盖',
+        confirmLabel: '确认覆盖重命名',
+      })
+      if (!ok) return
+    }
+    // overwrite 由服务端把关：绕过本页直接调接口时，同名移动会被拒绝而不是静默覆盖
+    await moveCosObject(row.key, destKey, { overwrite: !!conflict })
+    ElMessage.success(
+      conflict
+        ? `重命名成功，已覆盖 ${conflict.conflict_count} 个同名对象（旧对象已备份到 .backup/）`
+        : '重命名成功',
+    )
     renameVisible.value = false
     await loadList()
   } finally {

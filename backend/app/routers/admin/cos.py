@@ -13,7 +13,8 @@
 - DELETE /admin/api/v1/cos/object        删除单个对象
 - POST /admin/api/v1/cos/folder          新建文件夹
 - DELETE /admin/api/v1/cos/folder        删除文件夹（递归）
-- POST /admin/api/v1/cos/move            重命名 / 移动（文件或文件夹）
+- POST /admin/api/v1/cos/move            重命名 / 移动（文件或文件夹，目标同名默认拒绝）
+- GET  /admin/api/v1/cos/move-preview    移动前的目标同名冲突预览（覆盖条数）
 - GET  /admin/api/v1/cos/metadata        获取对象元数据
 
 所有端点需要管理员权限。未配置 COS 时管理类接口返回可读的业务错误提示。
@@ -21,7 +22,7 @@
 import json
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AdminPayload, require_admin
@@ -52,9 +53,17 @@ class CosFolderBody(BaseModel):
 
 
 class CosMoveBody(BaseModel):
-    """重命名 / 移动请求体。"""
+    """重命名 / 移动请求体。
+
+    overwrite 默认 False：目标已有同名对象时服务端拒绝（业务码 409），
+    必须由调用方确认后显式带 True 才会覆盖（T02608 / H19）。
+    多传字段一律 422 而不是静默丢弃——「参数被吞」和「没生效」在界面上看起来一样。
+    """
+    model_config = ConfigDict(extra="forbid")
+
     source_key: str
     dest_key: str
+    overwrite: bool = False
 
 
 @router.get("/config")
@@ -245,6 +254,22 @@ async def delete_folder(
     return success(data={"deleted": count}, message=f"已删除 {count} 个对象")
 
 
+@router.get("/move-preview")
+async def move_preview(
+    source_key: str = Query(..., description="源对象 Key 或源前缀（以 / 结尾表示文件夹）"),
+    dest_key: str = Query(..., description=_DESC_OBJECT_KEY),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """移动/重命名前的同名冲突预览：目标侧将被覆盖的对象条数与样例。
+
+    条数只由服务端实测给出（T02608 第 5 点）：文件夹移动是批量覆盖，
+    前端按当前页列表估算会漏掉分页外与子层级里的同名对象。
+    """
+    svc = CosStorageService()
+    data = await svc.move_preview(source_key=source_key, dest_key=dest_key)
+    return success(data=data)
+
+
 @router.post("/move")
 async def move_object(
     body: CosMoveBody,
@@ -253,10 +278,19 @@ async def move_object(
     """重命名 / 移动对象或文件夹。
 
     source_key 以 '/' 结尾视为文件夹，递归移动。
+    目标位置已有同名对象时默认拒绝（业务码 409），需带 overwrite=true 重做，
+    且覆盖前会把旧对象复制到 .backup/<时间戳>/（T02608 / H19）。
     """
     svc = CosStorageService()
-    result = await svc.move_object(source_key=body.source_key, dest_key=body.dest_key)
-    return success(data=result, message="移动成功")
+    result = await svc.move_object(
+        source_key=body.source_key, dest_key=body.dest_key, overwrite=body.overwrite
+    )
+    overwritten = result.get("overwritten") or 0
+    message = (
+        f"移动成功，已覆盖 {overwritten} 个同名对象，旧对象已备份到 .backup/ 目录"
+        if overwritten else "移动成功"
+    )
+    return success(data=result, message=message)
 
 
 @router.get("/metadata")

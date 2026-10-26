@@ -307,11 +307,27 @@ if ($SkipPack -and (Test-Path "$distDir\MorningBrief.exe")) {
     # 关键：--distpath "release" 让 COLLECT 输出到 release/MorningBrief，
     # 与 $distDir / installer.iss / start.ps1 完全一致。PyInstaller 6.x 的 COLLECT 不接受
     # distpath 参数，输出目录只能由 --distpath 命令行参数（全局 CONF['distpath']）决定。
-    # 关键：PyInstaller 的全部 INFO/Warning 日志走 stderr，本脚本 ErrorActionPreference=Stop，
-    # 不合并流时第一条 stderr 就会触发 NativeCommandError 终止性错误把脚本杀掉（依赖安装/
-    # 第三方库的 SyntaxWarning 同样会中招）。2>&1 把 stderr 并入成功流才能安全跑完。
-    & $buildPyInstaller $specFile --noconfirm --distpath "release" 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "PyInstaller 打包失败" }
+    # 关键：PyInstaller 的全部 INFO/Warning 都写 stderr，量很大（数百行）。
+    # 原先用 `& pyinstaller ... 2>&1` 把 stderr 并入 PS 管道，会被反压彻底阻塞：子进程 CPU 与磁盘
+    # I/O 双双归零、日志停在半句话、不报任何错（实测卡死 88 分钟，且输出接控制台时同样中招）。
+    # 改成由操作系统做文件重定向、完全不经过 PowerShell 管道，任何工况都不会阻塞。
+    $pyiOutLog = Join-Path $repoRoot "build\pyinstaller.stdout.log"
+    $pyiErrLog = Join-Path $repoRoot "build\pyinstaller.stderr.log"
+    New-Item -ItemType Directory -Force -Path (Split-Path $pyiErrLog -Parent) | Out-Null
+    Write-Host "  日志输出: build\pyinstaller.stderr.log" -ForegroundColor DarkGray
+
+    $pyiProc = Start-Process -FilePath $buildPyInstaller `
+        -ArgumentList @((Join-Path $repoRoot $specFile), '--noconfirm', '--distpath', 'release') `
+        -WorkingDirectory $repoRoot -NoNewWindow -Wait -PassThru `
+        -RedirectStandardOutput $pyiOutLog -RedirectStandardError $pyiErrLog
+
+    if ($pyiProc.ExitCode -ne 0) {
+        Write-Host "  PyInstaller 失败输出（尾部 20 行）:" -ForegroundColor Red
+        Get-Content $pyiErrLog -Tail 20 -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "    $_" -ForegroundColor DarkGray
+        }
+        throw "PyInstaller 打包失败（exit $($pyiProc.ExitCode)，完整日志: $pyiErrLog）"
+    }
     Write-OK "PyInstaller 打包完成"
 }
 

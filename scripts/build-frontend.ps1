@@ -25,6 +25,30 @@ function Write-Step { param([string]$Message) Write-Host "$StepPrefix $Message" 
 function Write-OK    { param([string]$Message) Write-Host "$StepPrefix   [OK] $Message" -ForegroundColor Green }
 function Write-Warn  { param([string]$Message) Write-Host "$StepPrefix   [WARN] $Message" -ForegroundColor Yellow }
 
+# 找出会锁住 <FrontendDir>\node_modules 的进程：
+#   a) 可执行文件本身就位于该 node_modules 内（如 esbuild service）；
+#   b) node/esbuild/vite 类进程且命令行指向该 node_modules（如 vite dev server）。
+# 只对 b) 限定进程名，避免把「命令行里恰好出现该路径」的无关进程（终端、编辑器、构建脚本）误判为占用者。
+function Get-NodeModulesLockingProcesses {
+    param([string]$FrontendDir)
+
+    $needle = (Join-Path $FrontendDir "node_modules").ToLowerInvariant()
+    $serverNames = @('node', 'esbuild', 'vite', 'electron', 'npm', 'npx')
+    try {
+        return @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
+            if ($_.ProcessId -eq $PID) { return $false }
+            $exeInModules = $_.ExecutablePath -and $_.ExecutablePath.ToLowerInvariant().Contains($needle)
+            $isServerCmd  = $_.CommandLine -and
+                            $_.CommandLine.ToLowerInvariant().Contains($needle) -and
+                            ($serverNames -contains [System.IO.Path]::GetFileNameWithoutExtension($_.Name).ToLowerInvariant())
+            $exeInModules -or $isServerCmd
+        } | Select-Object ProcessId, Name, CommandLine)
+    } catch {
+        # WMI 不可用时不做拦截，交由 npm 自身报错
+        return @()
+    }
+}
+
 $Script:ProjectRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $Script:FrontendDir = Join-Path $ProjectRoot "apps/admin-web"
 $Script:DistDir     = Join-Path $FrontendDir "dist"
@@ -144,6 +168,28 @@ if ($SkipInstall) {
         }
 
         if ($needInstall) {
+            # npm ci 会先删空 node_modules，若其中有文件被运行中的进程占用（dev server
+            # 的 vite / esbuild service），删除会失败成 EPERM，此时依赖已残缺、重装必败。
+            # 因此先拦下占用进程，把损失控制在“未动 node_modules”的状态。
+            $lockers = Get-NodeModulesLockingProcesses $FrontendDir
+            if ($lockers) {
+                Write-Host ""
+                Write-Host "[ERROR] node_modules 正被以下进程占用，依赖未做任何改动" -ForegroundColor Red
+                foreach ($p in $lockers) {
+                    Write-Host "  PID $($p.ProcessId)  $($p.Name)" -ForegroundColor Red
+                    if ($p.CommandLine) {
+                        Write-Host "    $($p.CommandLine)" -ForegroundColor DarkGray
+                    }
+                }
+                Write-Host ""
+                Write-Host "  这些通常是 admin-web 的 vite dev server 及其 esbuild 子进程。" -ForegroundColor Gray
+                Write-Host "  先关闭它们（或在终端 Ctrl+C），再重跑本脚本；确认可丢弃时用：" -ForegroundColor Gray
+                foreach ($p in $lockers) {
+                    Write-Host "    taskkill /F /T /PID $($p.ProcessId)" -ForegroundColor Gray
+                }
+                exit 1
+            }
+
             Write-Host "  预计耗时：约 1-3 分钟" -ForegroundColor DarkGray
             if (Test-Path $lockFile) {
                 & $npmCmd ci --no-fund --no-audit

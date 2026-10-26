@@ -45,6 +45,9 @@ _BACKUP_DIR_NAME = ".backup"
 # 快照重名探测上限：同一秒内连续覆盖到第 N 份即中止，避免探测无限循环
 _MAX_BACKUP_PROBES = 20
 
+# 移动冲突预览最多列几条样例（确认框只用于点名，全量条数另有 conflict_count）
+_MOVE_CONFLICT_SAMPLE_LIMIT = 10
+
 
 def _validate_key(key: str) -> None:
     """校验对象 Key / 前缀，防路径穿越。
@@ -382,45 +385,145 @@ class CosStorageService:
 
     # ---- 重命名 / 移动 ----
 
-    async def move_object(self, source_key: str, dest_key: str) -> dict:
-        """重命名 / 移动对象。
+    async def move_preview(self, source_key: str, dest_key: str) -> dict:
+        """移动/重命名前的冲突预览：目标侧有多少个同名对象会被覆盖（T02608 / H19）。
 
-        source_key 以 '/' 结尾视为文件夹：递归复制前缀下所有对象到 dest 前缀，
-        再删除源对象；否则为单文件复制 + 删除。覆盖目标（COS 复制即覆盖）。
-        返回 {moved: N}（移动的对象数）。
+        条数只来自服务端实测：前端手里只有当前页的列表，据它判断「目标位置是空的」
+        是假承诺——分页外、子层级里已存在的对象照样会被 copy_object 静默换掉。
+        预览与真正执行共用同一份列举与同一个 Key 映射，确认框看到的条数＝实际覆盖数。
         """
+        source, dest, is_prefix, keys, conflicts = await self._move_plan(source_key, dest_key)
+        return self._move_preview_payload(source, dest, is_prefix, len(keys), conflicts)
+
+    async def _move_plan(self, source_key: str, dest_key: str) -> tuple:
+        """算出 (source, dest, is_prefix, 源 Key 列表, 冲突列表)，预览与执行共用。"""
         if not is_cos_configured():
             raise BizError(code=400, message=_ERROR_MESSAGE_COS_NOT_CONFIGURED)
-        # 文件夹移动
-        if source_key.endswith("/"):
-            return await self._move_prefix(source_key, dest_key)
-        _validate_key(source_key)
-        _validate_key(dest_key)
+        is_prefix = source_key.endswith("/")
+        if not is_prefix:
+            _validate_key(source_key)
+            _validate_key(dest_key)
+            conflicts = []
+            if await _cos_call(cos_client.object_exists(Key=dest_key)):
+                meta = await _cos_call(cos_client.head_object(Key=dest_key))
+                conflicts = [{
+                    "dest_key": dest_key,
+                    "size": meta.get("size", 0),
+                    "last_modified": meta.get("last_modified", ""),
+                }]
+            return (source_key, dest_key, False, [source_key], conflicts)
 
-        await _cos_call(cos_client.copy_object(SourceKey=source_key, Key=dest_key))
-        await _cos_call(cos_client.delete_object(Key=source_key))
-        return {"moved": 1}
-
-    async def _move_prefix(self, source_prefix: str, dest_prefix: str) -> dict:
-        """递归移动文件夹：复制前缀下所有对象到新前缀，再删源。"""
-        source_prefix = _normalize_prefix(source_prefix)
-        dest_prefix = _normalize_prefix(dest_prefix)
+        source_prefix = _normalize_prefix(source_key)
+        dest_prefix = _normalize_prefix(dest_key)
         _validate_key(source_prefix)
         _validate_key(dest_prefix)
-
         keys = await self._list_all_keys(source_prefix)
         if not keys:
-            return {"moved": 0}
-        for src in keys:
-            # 计算目标 key：把源前缀替换为目标前缀
-            rel = src[len(source_prefix):] if src.startswith(source_prefix) else src
-            dst = dest_prefix + rel
+            return (source_prefix, dest_prefix, True, [], [])
+        existing = await self._list_prefix_sizes(dest_prefix)
+        conflicts = []
+        for dst in self._move_pairs(source_prefix, dest_prefix, keys):
+            if dst in existing:
+                conflicts.append({"dest_key": dst, "size": existing[dst], "last_modified": ""})
+        return (source_prefix, dest_prefix, True, keys, conflicts)
+
+    @staticmethod
+    def _move_pairs(source_prefix: str, dest_prefix: str, keys: list[str]) -> list[tuple[str, str]]:
+        """源 Key → 目标 Key 的唯一映射（把源前缀替换为目标前缀）。"""
+        return [
+            (src, dest_prefix + (src[len(source_prefix):] if src.startswith(source_prefix) else src))
+            for src in keys
+        ]
+
+    @staticmethod
+    def _move_preview_payload(source, dest, is_prefix, moved, conflicts) -> dict:
+        return {
+            "source_key": source,
+            "dest_key": dest,
+            "is_prefix": is_prefix,
+            "moved": moved,
+            "conflict_count": len(conflicts),
+            "conflicts": conflicts[:_MOVE_CONFLICT_SAMPLE_LIMIT],
+            "conflicts_truncated": len(conflicts) > _MOVE_CONFLICT_SAMPLE_LIMIT,
+        }
+
+    async def move_object(
+        self, source_key: str, dest_key: str, overwrite: bool = False
+    ) -> dict:
+        """重命名 / 移动对象（目标同名默认拒绝，覆盖前先留快照）。
+
+        source_key 以 '/' 结尾视为文件夹：递归复制前缀下所有对象到 dest 前缀，
+        再删除源对象；否则为单文件复制 + 删除。返回 {moved, overwritten, backup_keys}。
+
+        H19（T02608）：旧实现直接 copy_object——COS 复制即覆盖，目标已存在时被换掉的
+        那个对象连一条提示都没有，与上传路径覆盖前不备份是同一类破坏。现在与
+        upload_file 同一口径，且把关放在服务端（确认框可被绕过、列表存在时间窗）：
+        - 目标已存在且 overwrite=False → 业务码 409，消息点名目标 Key 与当前大小；
+        - overwrite=True → 先把每个将被覆盖的目标对象复制进 .backup/<时间戳>/ 再复制，
+          快照失败即中止整个移动，绝不退化成静默覆盖。
+        """
+        source, dest, is_prefix, keys, conflicts = await self._move_plan(source_key, dest_key)
+        if is_prefix:
+            return await self._move_prefix(source, dest, overwrite, keys, conflicts)
+        if conflicts and not overwrite:
+            raise self._move_conflict_error(source, dest, conflicts)
+
+        backup_keys = [
+            await self._snapshot_before_overwrite(c["dest_key"]) for c in conflicts
+        ]
+        await _cos_call(cos_client.copy_object(SourceKey=source, Key=dest))
+        await _cos_call(cos_client.delete_object(Key=source))
+        return {"moved": 1, "overwritten": bool(conflicts), "backup_keys": backup_keys}
+
+    @staticmethod
+    def _move_conflict_error(source: str, dest: str, conflicts: list[dict]) -> BizError:
+        """409 消息：单个对象报大小与修改时间，文件夹报条数与样例 Key。"""
+        if len(conflicts) == 1:
+            one = conflicts[0]
+            detail = f"{dest}（{_human_size(one.get('size'))}，更新于 {one.get('last_modified') or '时间未知'}）"
+            tail = "已拒绝移动，请确认后再以覆盖方式重做"
+        else:
+            names = "、".join(c["dest_key"] for c in conflicts[:_MOVE_CONFLICT_SAMPLE_LIMIT])
+            more = "…" if len(conflicts) > _MOVE_CONFLICT_SAMPLE_LIMIT else ""
+            detail = f"{len(conflicts)} 个同名对象（{names}{more}）"
+            tail = "已拒绝移动整个文件夹，请确认后再以覆盖方式重做"
+        return BizError(
+            code=409,
+            message=f"目标位置已有{detail}；移动「{source}」会把它们换掉。{tail}",
+            data={
+                "conflict_count": len(conflicts),
+                "conflicts": conflicts[:_MOVE_CONFLICT_SAMPLE_LIMIT],
+            },
+        )
+
+    async def _move_prefix(
+        self,
+        source_prefix: str,
+        dest_prefix: str,
+        overwrite: bool,
+        keys: list[str],
+        conflicts: list[dict],
+    ) -> dict:
+        """递归移动文件夹：复制前缀下所有对象到新前缀，再删源。
+
+        keys / conflicts 都来自 _move_plan：预览、409 判断与实际覆盖用同一份数据，
+        不会出现「确认框说 3 条、实际覆盖 5 条」。
+        """
+        if conflicts and not overwrite:
+            raise self._move_conflict_error(source_prefix, dest_prefix, conflicts)
+        if not keys:
+            return {"moved": 0, "overwritten": 0, "backup_keys": []}
+        # 覆盖前逐个快照；这里失败会直接上抛中止，此时源尚未删除，不会两头空
+        backup_keys = [
+            await self._snapshot_before_overwrite(c["dest_key"]) for c in conflicts
+        ]
+        for src, dst in self._move_pairs(source_prefix, dest_prefix, keys):
             await _cos_call(cos_client.copy_object(SourceKey=src, Key=dst))
         # 复制成功后删除源（分批）
         batch_size = 500
         for i in range(0, len(keys), batch_size):
             await _cos_call(cos_client.delete_objects(keys[i:i + batch_size]))
-        return {"moved": len(keys)}
+        return {"moved": len(keys), "overwritten": len(conflicts), "backup_keys": backup_keys}
 
     # ---- 元数据 ----
 
@@ -435,9 +538,9 @@ class CosStorageService:
 
     # ---- 内部工具 ----
 
-    async def _list_all_keys(self, prefix: str) -> list[str]:
-        """列举某前缀下所有对象 Key（不分页上限，最多 10 页）。"""
-        keys: list[str] = []
+    async def _list_prefix_objects(self, prefix: str) -> list[dict]:
+        """列举某前缀下所有对象原始条目（不分页上限，最多 10 页）。"""
+        items: list[dict] = []
         marker = ""
         pages = 0
         while pages < _LIST_MAX_PAGES:
@@ -446,9 +549,8 @@ class CosStorageService:
                 prefix=prefix, marker=marker, max_keys=_LIST_PAGE_SIZE
             ))
             for item in resp.get("Contents", []) or []:
-                k = item.get("Key")
-                if k:
-                    keys.append(k)
+                if item.get("Key"):
+                    items.append(item)
             if not resp.get("IsTruncated"):
                 break
             next_marker = resp.get("NextMarker") or (
@@ -457,7 +559,19 @@ class CosStorageService:
             if not next_marker:
                 break
             marker = next_marker
-        return keys
+        return items
+
+    async def _list_all_keys(self, prefix: str) -> list[str]:
+        """列举某前缀下所有对象 Key。"""
+        return [item["Key"] for item in await self._list_prefix_objects(prefix)]
+
+    async def _list_prefix_sizes(self, prefix: str) -> dict[str, int]:
+        """列举前缀下所有对象 → {key: size}。
+
+        冲突预览要给出「覆盖哪个对象、它现在多大」，光有条数不够；
+        与 _list_all_keys 共用同一份列举，预览所见即移动所为。
+        """
+        return {item["Key"]: item.get("Size") or 0 for item in await self._list_prefix_objects(prefix)}
 
 
 def _normalize_last_modified(value) -> str:
