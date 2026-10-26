@@ -337,9 +337,11 @@ class CosConfigService:
 
         settings = get_settings()
         try:
-            # 列举桶根（最多 1 个对象即可验证可读），用分隔符模拟目录避免大桶全量列举
+            # 列举桶根（最多 1 个对象即可验证可读），用分隔符模拟目录避免大桶全量列举。
+            # 参数名必须与包装层的小写签名一致：写成 SDK 的 Prefix/Delimiter/MaxKeys
+            # 会在进入函数前就抛 TypeError，被下面的兜底分支误报成「连接失败」。
             _ = await cos_client.list_objects_delimited(
-                Prefix="", Delimiter="/", MaxKeys=1
+                prefix="", delimiter="/", max_keys=1
             )
             # 能拿到响应即说明凭证与 Bucket 有效
             return {
