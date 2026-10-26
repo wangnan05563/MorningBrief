@@ -540,7 +540,7 @@ const METRIC_HELPER_RE = /\bmetric(?:Label|Value|Text|Number)\s*\(/
 export const METRIC_UNIT_ALLOW = [
   {
     file: 'views/ad/AdMaterials.vue',
-    lines: [24, 92],
+    lines: [33, 103],
     reason: '素材时长是表格列/表单输入，duration 字段本身以秒存储且接口没有 meta',
   },
   {
@@ -580,7 +580,7 @@ export const METRIC_UNIT_ALLOW = [
   },
   {
     file: 'views/workflow/WorkflowDetail.vue',
-    lines: [71],
+    lines: [81],
     reason: '队列任务的耗时列（后端返回秒），该接口没有指标 meta；列入派生单统一',
   },
   {
@@ -595,12 +595,12 @@ export const METRIC_UNIT_ALLOW = [
   },
   {
     file: 'views/review/ReviewDetail.vue',
-    lines: [267, 268],
+    lines: [292, 293],
     reason: '本地 mm:ss 排版（音频精确到秒的时长展示），不产出单位标签',
   },
   {
     file: 'views/system/AutoReviewConfig.vue',
-    lines: [246],
+    lines: [254],
     reason: '「{{ count }} 次」是失败记录条数徽标，不是统计指标 meta',
   },
   {

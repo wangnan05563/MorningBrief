@@ -14,6 +14,7 @@
             :icon="Plus"
             label="库内手工新增素材"
             desc="在素材库里直接补一条记录；上传书稿/文档请走菜单「素材录入」"
+            :disabled="!!loadError"
             @click="openCreate"
           />
           <!-- C114：这里与工作流详情「爬虫采集 · 素材库」是同一份频道级素材，
@@ -83,6 +84,15 @@
         </el-form-item>
       </el-form>
 
+      <!-- T02626：列表失败时页内说明 + 重试；已有旧行时注明是上次成功的数据 -->
+      <ListLoadError
+        v-if="loadError"
+        :message="loadError"
+        :stale="viewMode === 'book' ? books.length > 0 : items.length > 0"
+        :retrying="loading"
+        @retry="load"
+      />
+
       <!-- T02517（FR-UX-703 / C52）：两张表都补勾选列 + 批量删除。
            此前只能一行一行点删除，清理一本误入库的书要重复几十次同样动作。
            明细表按素材 ID 批删，聚合表按书名（含当前频道筛选）整本批删。 -->
@@ -98,6 +108,7 @@
             plain
             :icon="Delete"
             :loading="batchDeleting"
+            :disabled="!!loadError"
             label="批量删除"
             desc="删除勾选的素材，需二次确认且不可恢复"
             @click="onBatchDelete"
@@ -164,11 +175,12 @@
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <IconButton size="small" :icon="Edit" label="编辑" desc="编辑该素材" @click="openEdit(row)" />
-            <IconButton size="small" type="danger" plain :icon="Delete" label="删除" desc="删除该素材" @click="onDelete(row)" />
+            <IconButton size="small" :icon="Edit" :disabled="!!loadError" label="编辑" desc="编辑该素材" @click="openEdit(row)" />
+            <IconButton size="small" type="danger" plain :icon="Delete" :disabled="!!loadError" label="删除" desc="删除该素材" @click="onDelete(row)" />
           </template>
         </el-table-column>
-        <template #empty><el-empty description="没有匹配的素材" :image-size="90" /></template>
+        <!-- T02626：失败态不出「没有匹配的素材」 -->
+        <template #empty><el-empty v-if="!loadError" description="没有匹配的素材" :image-size="90" /></template>
       </el-table>
 
       <!-- 按书聚合视图（T00775 遗留建议）：一行一本书，点书名下钻到该书全部章节 -->
@@ -201,6 +213,7 @@
               type="danger"
               :loading="deletingBook === row.source"
               :icon="Delete"
+              :disabled="!!loadError"
               label="删除"
               desc="删除该书名下全部章节素材"
               @click="onDeleteBook(row)"
@@ -208,7 +221,7 @@
           </template>
         </el-table-column>
         <template #empty>
-          <el-empty description="没有可聚合的书——上传 EPUB/DOCX 时「来源」会记为书名" :image-size="90" />
+          <el-empty v-if="!loadError" description="没有可聚合的书——上传 EPUB/DOCX 时「来源」会记为书名" :image-size="90" />
         </template>
       </el-table>
 
@@ -341,6 +354,7 @@ import { blankedFieldMessage, findBlankedCriticalField } from '../../utils/blank
 import { useUserStore } from '../../stores/user'
 import { listChannels } from '../../api/channels'
 import { aggregateMaterials } from '../../api/materialLibrary'
+import ListLoadError from '../../components/ListLoadError.vue'
 import { PANEL_PAGE_SIZE_OPTIONS } from '../../constants/pagination'
 import {
   MATERIAL_STATUS,
@@ -379,6 +393,9 @@ const total = ref(0)
 const page = ref(1)
 const size = ref(20)
 const loading = ref(false)
+// T02626（FR-UX-302）：此前 load() 只有 try/finally，失败时既无页内错误态也无留痕，
+// 首屏失败直接落「没有匹配的素材」——把接口挂了说成筛选没命中。
+const loadError = ref('')
 const filters = reactive({ channel_id: null, status: null, keyword: '', source_type: null, media_type: null })
 // T00775：视图模式——list=素材明细，book=按书聚合（讲书稿场景找整本书）
 const viewMode = ref('list')
@@ -478,6 +495,7 @@ async function load() {
       // 注意键名是 list（不是 items）——见 T00775 根因
       books.value = data?.list || []
       total.value = data?.total || 0
+      loadError.value = ''
       return
     }
     const data = await listMaterials({
@@ -494,6 +512,16 @@ async function load() {
     // T00775：后端返回键是 list（不是 items），取错键会导致列表恒为空
     items.value = data?.list || []
     total.value = data?.total || 0
+    loadError.value = ''
+  } catch (e) {
+    // T02626：保留上次成功的行（stale），错误态由模板负责，绝不把失败渲染成「没有匹配的素材」
+    loadError.value = e?.response?.data?.message || e?.message || '素材列表加载失败'
+    console.error('[material-library] 素材列表加载失败', {
+      status: e?.response?.status,
+      viewMode: viewMode.value,
+      page: page.value,
+      message: loadError.value,
+    })
   } finally {
     loading.value = false
   }
@@ -736,7 +764,11 @@ function reportBatchDelete(data, requested) {
 }
 
 onMounted(async () => {
-  channels.value = await listChannels()
+  try {
+    channels.value = await listChannels()
+  } catch {
+    // T02626：频道筛选拉不到不阻断素材列表；拦截器已提示，此处不让整个挂载流程中断
+  }
   // T02760：深链参数先过 urlState 的规格，再决定是否进查询（非法值回落并告知）
   const deepLink = readUrlState(route.query, MATERIALS_QUERY_SPECS)
   const dropped = deepLink.invalid.map((i) => i.key)

@@ -654,7 +654,13 @@ test('单位门禁：白名单逐行生效，条目失效要反过来报错（�
   assert.match(extra.errors[0], /views\/x\.vue:9/)
   const stale = checkMetricUnits({ metricUnits: allowHits().slice(1) })
   assert.equal(stale.errors.length, 1)
-  assert.match(stale.errors[0], /白名单条目已失效：views\/ad\/AdMaterials\.vue:24/)
+  // 断言从数据里取第一条，不写死行号：白名单行号随源码漂移时，
+  // 这条用例不该跟着红（它验证的是「失效条目会报错」，不是某一行在第几行）
+  const firstAllowed = METRIC_UNIT_ALLOW[0]
+  assert.match(
+    stale.errors[0],
+    new RegExp(`白名单条目已失效：${firstAllowed.file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:${firstAllowed.lines[0]}`),
+  )
   // 接线：checkFacts 必须把这一项带进总错误集，否则门禁脚本「有检查但没报」
   const wired = checkFacts(facts({ metricUnits: [{ file: 'views/x.vue', line: 9, kind: 'percent', text: 'x' }] }))
   assert.match(wired.errors.join('\n'), /views\/x\.vue:9/)

@@ -11,6 +11,16 @@
       />
     </div>
 
+    <!-- T02626（FR-UX-302）：取数失败不能落到「暂无 LLM 调用数据」——
+         那是在断言「没有调用」，而实际只是没取到。 -->
+    <ListLoadError
+      v-if="llmLoad.isError"
+      :message="llmLoad.errorMessage"
+      :stale="metrics.total_calls > 0"
+      :retrying="llmLoad.retrying"
+      @retry="llmLoad.retry()"
+    />
+
     <!-- T02508（FR-UX-503）：本页所有计数都是进程内累计，重启即清零。
          不写清起点，运维会把"攒了半个月的触发率"读成"今天的触发率"。
          放在空态之外：即使还没有调用，也要让人看到这批数字从什么时候开始算 -->
@@ -21,7 +31,7 @@
 
     <!-- 说明卡：解释指标含义，便于运维理解派生率意义 -->
     <el-alert
-      v-if="!loading && metrics.total_calls > 0"
+      v-if="!loading && !llmLoad.isError && metrics.total_calls > 0"
       class="info-alert"
       type="info"
       :closable="false"
@@ -36,12 +46,12 @@
     <div v-loading="loading">
       <!-- 空态：服务刚启动尚未产生调用（引导据此跳过「重试率概览」一步，T02656） -->
       <el-empty
-        v-if="!loading && metrics.total_calls === 0"
+        v-if="!loading && !llmLoad.isError && metrics.total_calls === 0"
         data-guide="llm-metrics-empty"
         description="暂无 LLM 调用数据，工作流执行后将自动累计"
       />
 
-      <template v-else>
+      <template v-else-if="!llmLoad.isError">
         <!-- 派生率卡片：trigger / improve / not_improve -->
         <el-row data-guide="llm-metrics-rates" :gutter="16" class="rate-row">
           <el-col v-for="r in rateCards" :key="r.key" :xs="24" :sm="8">
@@ -99,8 +109,9 @@ import { Refresh } from '@element-plus/icons-vue'
 import { getLlmMetrics } from '../../api/stats'
 import { cumulativeScopeText, uptimeText as formatUptime } from '../../utils/scope'
 import { metricLabel, metricText, metricValue } from '../../utils/format'
+import ListLoadError from '../../components/ListLoadError.vue'
+import { useLoadState } from '../../composables/useLoadState'
 
-const loading = ref(false)
 // 默认全 0，避免空态时 computed 除零报错
 // started_at / pid：后端 T02508 新增的累计口径字段，null 表示后端未升级（不能拿当前时间冒充起点）
 const metrics = ref({
@@ -118,6 +129,23 @@ const metrics = ref({
 })
 // 本次拉取时刻：用于算「已运行多久」，取到数就冻结，不做定时器（页面不需要秒级跳动）
 const fetchedAt = ref(null)
+
+// T02626：三态加载。失败时 metrics 保留上一次成功的值（stale），页面据此区分
+// 「服务刚起来还没有调用」和「这次没取到」——两者的零值卡片长得一模一样。
+const llmLoad = useLoadState(
+  async () => {
+    const data = await getLlmMetrics()
+    // 合并而非整体替换：避免后端缺字段时丢失前端默认值（如 not_improve_rate）
+    if (data && typeof data === 'object') {
+      metrics.value = { ...metrics.value, ...data }
+    }
+    // 仅在取数成功时冻结时刻：失败时保留上一次的值，口径不能变成"刚刚"
+    fetchedAt.value = dayjs()
+    return data
+  },
+  { failMessage: 'LLM 指标加载失败' },
+)
+const loading = llmLoad.isLoading
 
 // 累计口径文案：PRD ACC-UX-501 要求「明确显示累计自 x 时间，重启清零」
 // subject 说明这句口径覆盖的对象——本页所有数字（含三个派生率）都是进程内累计
@@ -227,24 +255,9 @@ function rateClass(kind, rate) {
   return 'is-success'
 }
 
-async function loadData() {
-  loading.value = true
-  try {
-    const data = await getLlmMetrics()
-    // 合并而非整体替换：避免后端缺字段时丢失前端默认值（如 not_improve_rate）
-    if (data && typeof data === 'object') {
-      metrics.value = { ...metrics.value, ...data }
-    }
-    // 仅在取数成功时冻结时刻：失败时保留上一次的值，口径不能变成"刚刚"
-    fetchedAt.value = dayjs()
-  } catch (e) {
-    // 拦截器已统一提示，这里保留 metrics 现值不清空，避免页面闪烁
-  } finally {
-    loading.value = false
-  }
-}
+const loadData = llmLoad.load
 
-onMounted(loadData)
+onMounted(llmLoad.load)
 </script>
 
 <style scoped lang="scss">

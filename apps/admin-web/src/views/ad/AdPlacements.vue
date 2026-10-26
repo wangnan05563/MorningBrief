@@ -31,11 +31,20 @@
         label="新建投放"
         desc="打开新建投放对话框"
         :icon="Plus"
+        :disabled="!!listError"
         @click="openCreateDialog"
       />
     </div>
 
     <div class="card-soft table-card">
+      <!-- T02626：失败时页内说明 + 重试；已有旧行时注明是上次成功的数据 -->
+      <ListLoadError
+        v-if="listError"
+        :message="listError"
+        :stale="tableData.length > 0"
+        :retrying="loading"
+        @retry="fetchList"
+      />
       <el-table data-guide="ads-placements-table" :data="tableData" v-loading="loading" stripe>
         <el-table-column prop="material_name" label="素材名称" min-width="160" show-overflow-tooltip />
         <el-table-column label="广告位" width="120" align="center">
@@ -55,6 +64,7 @@
               <el-switch
                 :model-value="row.enabled === 1"
                 :loading="togglingIds.includes(row.id)"
+                :disabled="!!listError"
                 @update:model-value="(v) => handleToggle(row, v)"
               />
               <!-- T02602：状态由服务端按「开关 + 今天是否落在区间」派生，
@@ -73,11 +83,13 @@
               label="删除"
               desc="删除该投放规则"
               :icon="Delete"
+              :disabled="!!listError"
               @click="handleDelete(row)"
             />
           </template>
         </el-table-column>
-        <template #empty><el-empty description="暂无投放规则，点击右上角「新增规则」创建" :image-size="90" /></template>
+        <!-- T02626：失败态不出「暂无投放规则，点击右上角创建」 -->
+        <template #empty><el-empty v-if="!listError" description="暂无投放规则，点击右上角「新增规则」创建" :image-size="90" /></template>
       </el-table>
 
       <div class="pagination-wrap">
@@ -198,11 +210,14 @@ import { AD_POSITION, enumLabel, enumTagType, enumOptions } from '../../constant
 import { placementStatusMeta } from '../../utils/placementStatus'
 import { useUrlState } from '../../composables/useUrlState'
 import { PAGE_SIZE_OPTIONS, MAX_PAGE_SIZE, clampPageSize } from '../../constants/pagination'
+import ListLoadError from '../../components/ListLoadError.vue'
 
 const positionOptions = enumOptions(AD_POSITION)
 
 const tableData = ref([])
 const loading = ref(false)
+// T02626：列表失败要上屏并可重试；失败时保留上次成功的行，不落「暂无投放规则」。
+const listError = ref('')
 const page = ref(1)
 const size = ref(20)
 const total = ref(0)
@@ -330,7 +345,17 @@ async function fetchList() {
       }
       break
     }
+    listError.value = ''
     urlState.pushToUrl()
+  } catch (e) {
+    listError.value = e?.response?.data?.message || e?.message || '投放规则加载失败'
+    console.error('[ad-placements] 投放规则加载失败', {
+      status: e?.response?.status,
+      page: page.value,
+      size: size.value,
+      enabled: enabledFilter.value || null,
+      message: listError.value,
+    })
   } finally {
     loading.value = false
   }

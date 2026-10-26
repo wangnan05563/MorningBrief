@@ -158,4 +158,163 @@ test.describe('列表错误态与重试', () => {
     await expect(banner).toHaveCount(0)
     await expect(page.locator('canvas')).toBeVisible({ timeout: 30000 })
   })
+
+  // ---------------------------------------------------------------
+  // T02626（FR-UX-302）：详情页与统计/管理页的错误态。
+  // 每页只断言同一件事——失败时给出页内错误横幅与重试入口，
+  // 且不能把「没取到」说成「没有数据」。数据本身在其它用例覆盖。
+  // ---------------------------------------------------------------
+
+  test('审核详情：详情接口失败显示错误态而不是空稿件', async ({ page }) => {
+    await page.route(/\/admin\/api\/v1\/reviews\/\d+$/, (route) => route.abort())
+
+    await page.goto('/review/1')
+    const banner = page.locator('.list-load-error')
+    await expect(banner).toBeVisible({ timeout: 30000 })
+    await expect(banner.getByRole('button', { name: '重试', exact: true })).toBeVisible()
+    // 稿件区未渲染（不是「稿件全文」空壳）
+    await expect(page.getByText('稿件全文')).toHaveCount(0)
+  })
+
+  test('工作流详情：详情接口失败显示错误态，重试取到后时间线才出现', async ({ page }) => {
+    // 详情请求可能带 silent 之类的 query，按后缀匹配会把它们漏给 vite 代理
+    await failFirstThenSucceed(page, '**/admin/api/v1/workflows/1*', {
+      code: 0,
+      message: 'success',
+      data: {
+        workflow_id: 1,
+        source: 'crawler',
+        status: 'running',
+        // 只给 crawl 一步，其余步骤由前端补成 pending —— 用来区分「真数据」与「空壳」
+        steps: [{ name: 'crawl', status: 'success' }],
+      },
+    })
+
+    await page.goto('/workflows/1')
+    const banner = page.locator('.list-load-error')
+    await expect(banner).toBeVisible({ timeout: 30000 })
+    // 六步流水线未渲染：detail 为 {} 时那六行全是「等待中」，等于替后端断言「还没开始跑」
+    await expect(page.getByText('等待中')).toHaveCount(0)
+
+    // 重试必须打回详情接口（接到别的 loader 上时这里既不会消失也不会有数据）
+    await banner.getByRole('button', { name: '重试', exact: true }).click()
+    await expect(banner).toHaveCount(0)
+    await expect(page.getByText('等待中').first()).toBeVisible({ timeout: 30000 })
+  })
+
+  test('素材库：列表接口失败显示错误态而非「没有匹配的素材」', async ({ page }) => {
+    await page.route('**/admin/api/v1/channels*', (route) => route.fulfill({ json: channelsListResponse }))
+    await page.route(/\/admin\/api\/v1\/materials\//, (route) => route.abort())
+
+    await page.goto('/channels/material-library')
+    const banner = page.locator('.list-load-error')
+    await expect(banner).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('没有匹配的素材')).toHaveCount(0)
+    await expect(banner.getByRole('button', { name: '重试', exact: true })).toBeVisible()
+  })
+
+  test('COS 文件：对象列表失败显示错误态而非「该目录下暂无内容」', async ({ page }) => {
+    await page.route('**/admin/api/v1/cos/status', (route) =>
+      route.fulfill({ json: { code: 0, message: 'success', data: { configured: true, backup_keep_count: 5 } } })
+    )
+    await page.route('**/admin/api/v1/cos/objects*', (route) => route.abort())
+
+    await page.goto('/cos-files')
+    const banner = page.locator('.list-load-error')
+    await expect(banner).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('该目录下暂无内容')).toHaveCount(0)
+    await expect(banner.getByRole('button', { name: '重试', exact: true })).toBeVisible()
+  })
+
+  test('找书工具：随机抽取失败显示错误态而非「没有匹配的书目」', async ({ page }) => {
+    await page.route('**/admin/api/v1/ebooks/index/status', (route) =>
+      route.fulfill({
+        json: { code: 0, message: 'success', data: { ready: true, book_count: 10, category_count: 3, built_at: null, build: {} } },
+      })
+    )
+    await page.route('**/admin/api/v1/ebooks/categories*', (route) =>
+      route.fulfill({ json: { code: 0, message: 'success', data: { categories: [] } } })
+    )
+    await page.route('**/admin/api/v1/channels*', (route) => route.fulfill({ json: channelsListResponse }))
+    await page.route('**/admin/api/v1/ebooks/random*', (route) => route.abort())
+
+    await page.goto('/ebooks')
+    await page.getByRole('button', { name: '随机', exact: true }).click()
+    const banner = page.locator('.list-load-error')
+    await expect(banner).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText(/没有匹配的书目/)).toHaveCount(0)
+  })
+
+  test('广告素材：列表失败显示错误态而非「暂无广告素材」', async ({ page }) => {
+    await page.route('**/admin/api/v1/ads/materials*', (route) => route.abort())
+
+    await page.goto('/ads/materials')
+    const banner = page.locator('.list-load-error')
+    await expect(banner).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText(/暂无广告素材/)).toHaveCount(0)
+    await expect(banner.getByRole('button', { name: '重试', exact: true })).toBeVisible()
+  })
+
+  test('广告投放：列表失败显示错误态而非「暂无投放规则」', async ({ page }) => {
+    await page.route('**/admin/api/v1/ads/placements*', (route) => route.abort())
+
+    await page.goto('/ads/placements')
+    const banner = page.locator('.list-load-error')
+    await expect(banner).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText(/暂无投放规则/)).toHaveCount(0)
+  })
+
+  test('频道健康度：接口失败显示错误态而非「暂无频道数据」', async ({ page }) => {
+    await page.route('**/admin/api/v1/stats/channel-health*', (route) => route.abort())
+
+    await page.goto('/stats/channel-health')
+    const banner = page.locator('.list-load-error')
+    await expect(banner).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('暂无频道数据')).toHaveCount(0)
+  })
+
+  test('LLM 指标：接口失败不显示「暂无 LLM 调用数据」', async ({ page }) => {
+    await page.route('**/admin/api/v1/stats/llm-metrics*', (route) => route.abort())
+
+    await page.goto('/stats/llm-metrics')
+    const banner = page.locator('.list-load-error')
+    await expect(banner).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText(/暂无 LLM 调用数据/)).toHaveCount(0)
+  })
+
+  test('RSS 健康度：接口失败不显示「暂无 RSS 源」也不会画成 0 个失败源', async ({ page }) => {
+    await page.route('**/admin/api/v1/stats/rss-health*', (route) => route.abort())
+
+    await page.goto('/stats/rss-health')
+    const banner = page.locator('.list-load-error')
+    await expect(banner).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('暂无 RSS 源')).toHaveCount(0)
+    await expect(page.getByText('全局源清单总数')).toHaveCount(0)
+  })
+
+  test('自动审批：统计与历史各自显示错误态而非「暂无审批记录」', async ({ page }) => {
+    await page.route('**/admin/api/v1/auto-review/config', (route) =>
+      route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: {
+            enabled: false,
+            require_content_safe: true,
+            require_steps_first_success: true,
+            keyword_whitelist: [],
+            updated_at: null,
+            skipped_rules: [],
+          },
+        },
+      })
+    )
+    await page.route('**/admin/api/v1/auto-review/stats*', (route) => route.abort())
+    await page.route('**/admin/api/v1/auto-review/history*', (route) => route.abort())
+
+    await page.goto('/auto-review')
+    const banners = page.locator('.list-load-error')
+    await expect(banners).toHaveCount(2, { timeout: 30000 })
+    await expect(page.getByText('暂无审批记录')).toHaveCount(0)
+  })
 })

@@ -8,7 +8,7 @@
       "sites": [
         {
           "file": "views/ad/AdMaterials.vue",
-          "line": 200,
+          "line": 217,
           "fn": "api.delete",
           "fieldCount": 0,
           "unresolved": []
@@ -23,7 +23,7 @@
       "sites": [
         {
           "file": "views/ad/AdPlacements.vue",
-          "line": 453,
+          "line": 478,
           "fn": "api.delete",
           "fieldCount": 0,
           "unresolved": []
@@ -89,7 +89,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 565,
+          "line": 599,
           "fn": "deleteCosFolder",
           "fieldCount": 2,
           "unresolved": []
@@ -107,7 +107,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 568,
+          "line": 602,
           "fn": "deleteCosObject",
           "fieldCount": 2,
           "unresolved": []
@@ -148,7 +148,7 @@
       "sites": [
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 652,
+          "line": 680,
           "fn": "deleteMaterialsBySource",
           "fieldCount": 3,
           "unresolved": []
@@ -163,14 +163,14 @@
       "sites": [
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 629,
+          "line": 657,
           "fn": "deleteMaterial",
           "fieldCount": 0,
           "unresolved": []
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 730,
+          "line": 798,
           "fn": "deleteMaterial",
           "fieldCount": 0,
           "unresolved": []
@@ -185,7 +185,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 779,
+          "line": 855,
           "fn": "deleteScript",
           "fieldCount": 0,
           "unresolved": []
@@ -200,7 +200,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 935,
+          "line": 1016,
           "fn": "deleteEpisodeAudio",
           "fieldCount": 0,
           "unresolved": []
@@ -215,7 +215,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 914,
+          "line": 995,
           "fn": "deleteTtsAudio",
           "fieldCount": 0,
           "unresolved": []
@@ -294,14 +294,14 @@
       "sites": [
         {
           "file": "views/ad/AdMaterials.vue",
-          "line": 159,
+          "line": 150,
           "fn": "api.get",
           "fieldCount": 3,
           "unresolved": []
         },
         {
           "file": "views/ad/AdPlacements.vue",
-          "line": 355,
+          "line": 380,
           "fn": "api.get",
           "fieldCount": 4,
           "unresolved": []
@@ -321,7 +321,7 @@
       "sites": [
         {
           "file": "views/ad/AdPlacements.vue",
-          "line": 310,
+          "line": 325,
           "fn": "api.get",
           "fieldCount": 4,
           "unresolved": []
@@ -493,7 +493,7 @@
       "sites": [
         {
           "file": "views/system/AutoReviewConfig.vue",
-          "line": 420,
+          "line": 441,
           "fn": "getAutoReviewConfig",
           "fieldCount": 0,
           "unresolved": []
@@ -510,7 +510,7 @@
       "sites": [
         {
           "file": "views/system/AutoReviewConfig.vue",
-          "line": 546,
+          "line": 573,
           "fn": "listAutoReviewHistory",
           "fieldCount": 1,
           "unresolved": []
@@ -527,7 +527,7 @@
       "sites": [
         {
           "file": "views/system/AutoReviewConfig.vue",
-          "line": 525,
+          "line": 546,
           "fn": "getAutoReviewStats",
           "fieldCount": 1,
           "unresolved": []
@@ -566,14 +566,14 @@
         },
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 739,
+          "line": 768,
           "fn": "listChannels",
           "fieldCount": 2,
           "unresolved": []
         },
         {
           "file": "views/ebooks/BookFinder.vue",
-          "line": 363,
+          "line": 398,
           "fn": "listChannels",
           "fieldCount": 2,
           "unresolved": []
@@ -769,7 +769,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 580,
+          "line": 614,
           "fn": "getCosDownloadUrl",
           "fieldCount": 3,
           "unresolved": []
@@ -790,7 +790,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 343,
+          "line": 377,
           "fn": "checkCosObject",
           "fieldCount": 3,
           "unresolved": [
@@ -814,7 +814,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 446,
+          "line": 480,
           "fn": "checkCosMoveConflict",
           "fieldCount": 4,
           "unresolved": [
@@ -834,7 +834,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 298,
+          "line": 325,
           "fn": "listCosObjects",
           "fieldCount": 2,
           "unresolved": []
@@ -853,7 +853,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 503,
+          "line": 537,
           "fn": "previewCosRestore",
           "fieldCount": 3,
           "unresolved": []
@@ -875,7 +875,7 @@
         },
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 286,
+          "line": 304,
           "fn": "getCosStatus",
           "fieldCount": 0,
           "unresolved": []
@@ -977,7 +977,7 @@
       "sites": [
         {
           "file": "views/ebooks/BookFinder.vue",
-          "line": 219,
+          "line": 236,
           "fn": "getEbookCategories",
           "fieldCount": 2,
           "unresolved": []
@@ -992,7 +992,7 @@
       "sites": [
         {
           "file": "views/ebooks/BookFinder.vue",
-          "line": 329,
+          "line": 364,
           "fn": "getEbookIndexStatus",
           "fieldCount": 0,
           "unresolved": []
@@ -1010,7 +1010,7 @@
       "sites": [
         {
           "file": "views/ebooks/BookFinder.vue",
-          "line": 287,
+          "line": 306,
           "fn": "getRandomEbooks",
           "fieldCount": 2,
           "unresolved": []
@@ -1031,7 +1031,7 @@
       "sites": [
         {
           "file": "views/ebooks/BookFinder.vue",
-          "line": 311,
+          "line": 333,
           "fn": "searchEbooks",
           "fieldCount": 3,
           "unresolved": [
@@ -1201,14 +1201,14 @@
       "sites": [
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 483,
+          "line": 501,
           "fn": "listMaterials",
           "fieldCount": 10,
           "unresolved": []
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 624,
+          "line": 687,
           "fn": "listMaterials",
           "fieldCount": 4,
           "unresolved": []
@@ -1223,21 +1223,21 @@
       "sites": [
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 528,
+          "line": 556,
           "fn": "getMaterial",
           "fieldCount": 0,
           "unresolved": []
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 659,
+          "line": 727,
           "fn": "getMaterial",
           "fieldCount": 0,
           "unresolved": []
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 737,
+          "line": 805,
           "fn": "getMaterial",
           "fieldCount": 0,
           "unresolved": []
@@ -1259,7 +1259,7 @@
       "sites": [
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 471,
+          "line": 488,
           "fn": "aggregateMaterials",
           "fieldCount": 6,
           "unresolved": []
@@ -1416,7 +1416,7 @@
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 951,
+          "line": 1032,
           "fn": "listReviews",
           "fieldCount": 1,
           "unresolved": []
@@ -1438,7 +1438,7 @@
         },
         {
           "file": "views/review/ReviewDetail.vue",
-          "line": 300,
+          "line": 225,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -1456,7 +1456,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 758,
+          "line": 826,
           "fn": "getScriptByWorkflow",
           "fieldCount": 2,
           "unresolved": []
@@ -1474,7 +1474,7 @@
       "sites": [
         {
           "file": "views/stats/ChannelHealth.vue",
-          "line": 240,
+          "line": 145,
           "fn": "getChannelHealth",
           "fieldCount": 2,
           "unresolved": []
@@ -1489,7 +1489,7 @@
       "sites": [
         {
           "file": "views/stats/LlmMetrics.vue",
-          "line": 233,
+          "line": 137,
           "fn": "getLlmMetrics",
           "fieldCount": 0,
           "unresolved": []
@@ -1524,7 +1524,7 @@
       "sites": [
         {
           "file": "views/stats/RssHealth.vue",
-          "line": 295,
+          "line": 308,
           "fn": "getRssHealth",
           "fieldCount": 0,
           "unresolved": [
@@ -1533,7 +1533,7 @@
         },
         {
           "file": "views/stats/RssHealth.vue",
-          "line": 307,
+          "line": 328,
           "fn": "getRssHealth",
           "fieldCount": 0,
           "unresolved": [
@@ -1653,7 +1653,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 569,
+          "line": 622,
           "fn": "api.get",
           "fieldCount": 1,
           "unresolved": []
@@ -1668,7 +1668,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 832,
+          "line": 908,
           "fn": "listAudioFiles",
           "fieldCount": 0,
           "unresolved": []
@@ -1724,7 +1724,7 @@
       "sites": [
         {
           "file": "views/ad/AdMaterials.vue",
-          "line": 179,
+          "line": 196,
           "fn": "api.post",
           "fieldCount": 4,
           "unresolved": []
@@ -1744,7 +1744,7 @@
       "sites": [
         {
           "file": "views/ad/AdPlacements.vue",
-          "line": 414,
+          "line": 439,
           "fn": "api.post",
           "fieldCount": 4,
           "unresolved": []
@@ -2053,7 +2053,7 @@
       "sites": [
         {
           "file": "views/system/AutoReviewConfig.vue",
-          "line": 574,
+          "line": 608,
           "fn": "retryFailedAutoReview",
           "fieldCount": 0,
           "unresolved": []
@@ -2279,7 +2279,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 403,
+          "line": 437,
           "fn": "createCosFolder",
           "fieldCount": 1,
           "unresolved": []
@@ -2300,7 +2300,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 486,
+          "line": 520,
           "fn": "moveCosObject",
           "fieldCount": 3,
           "unresolved": [
@@ -2338,7 +2338,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 536,
+          "line": 570,
           "fn": "restoreCosObject",
           "fieldCount": 3,
           "unresolved": [
@@ -2372,7 +2372,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 371,
+          "line": 405,
           "fn": "uploadCosFile",
           "fieldCount": 0,
           "unresolved": [
@@ -2497,7 +2497,7 @@
       "sites": [
         {
           "file": "views/ebooks/BookFinder.vue",
-          "line": 246,
+          "line": 263,
           "fn": "createDraftMaterial",
           "fieldCount": 5,
           "unresolved": []
@@ -2512,7 +2512,7 @@
       "sites": [
         {
           "file": "views/ebooks/BookFinder.vue",
-          "line": 349,
+          "line": 384,
           "fn": "rebuildEbookIndex",
           "fieldCount": 0,
           "unresolved": []
@@ -2603,14 +2603,14 @@
         },
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 597,
+          "line": 625,
           "fn": "createMaterial",
           "fieldCount": 10,
           "unresolved": []
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 700,
+          "line": 768,
           "fn": "createMaterial",
           "fieldCount": 6,
           "unresolved": []
@@ -2629,14 +2629,14 @@
       "sites": [
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 691,
+          "line": 719,
           "fn": "batchDeleteMaterials",
           "fieldCount": 2,
           "unresolved": []
         },
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 716,
+          "line": 744,
           "fn": "batchDeleteMaterials",
           "fieldCount": 1,
           "unresolved": []
@@ -2856,14 +2856,14 @@
         },
         {
           "file": "views/review/ReviewDetail.vue",
-          "line": 347,
+          "line": 360,
           "fn": "api.post",
           "fieldCount": 3,
           "unresolved": []
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 986,
+          "line": 1070,
           "fn": "handleReviewAction",
           "fieldCount": 3,
           "unresolved": [
@@ -3051,7 +3051,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 1007,
+          "line": 1091,
           "fn": "api.post",
           "fieldCount": 1,
           "unresolved": []
@@ -3158,7 +3158,7 @@
       "sites": [
         {
           "file": "views/ad/AdPlacements.vue",
-          "line": 389,
+          "line": 414,
           "fn": "api.put",
           "fieldCount": 1,
           "unresolved": []
@@ -3215,7 +3215,7 @@
       "sites": [
         {
           "file": "views/system/AutoReviewConfig.vue",
-          "line": 483,
+          "line": 504,
           "fn": "updateAutoReviewConfig",
           "fieldCount": 5,
           "unresolved": []
@@ -3404,14 +3404,14 @@
       "sites": [
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 560,
+          "line": 588,
           "fn": "updateMaterial",
           "fieldCount": 8,
           "unresolved": []
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 689,
+          "line": 757,
           "fn": "updateMaterial",
           "fieldCount": 5,
           "unresolved": []
@@ -3525,7 +3525,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 811,
+          "line": 887,
           "fn": "updateSegments",
           "fieldCount": 1,
           "unresolved": []

@@ -17,8 +17,17 @@
       </div>
     </div>
 
+    <!-- T02626（FR-UX-302）：巡检数据取不到时，汇总卡/表格里的 0 不能读成「没有失败源」 -->
+    <ListLoadError
+      v-if="listError"
+      :message="listError"
+      :stale="rawData.sources.length > 0"
+      :retrying="loading"
+      @retry="loadData"
+    />
+
     <!-- 汇总卡片：总数 / OK / 失败 / 未知 -->
-    <el-row :gutter="16" class="summary-row">
+    <el-row v-if="!listError || rawData.sources.length > 0" :gutter="16" class="summary-row">
       <el-col v-for="s in summaryCards" :key="s.key" :xs="12" :sm="6">
         <el-card shadow="hover">
           <div class="summary-card" :class="s.cls">
@@ -46,7 +55,7 @@
     </div>
 
     <!-- 筛选区：状态筛选 + 品类筛选 + 搜索 -->
-    <div class="filter-bar">
+    <div v-if="!listError || rawData.sources.length > 0" class="filter-bar">
       <el-radio-group v-model="statusFilter">
         <el-radio-button value="all">全部（{{ allCount }}）</el-radio-button>
         <el-radio-button value="ok">正常（{{ okCount }}）</el-radio-button>
@@ -63,7 +72,7 @@
     </div>
 
     <!-- 源状态表格 -->
-    <el-card shadow="never" class="table-card">
+    <el-card v-if="!listError || rawData.sources.length > 0" shadow="never" class="table-card">
       <el-table data-guide="rss-health-table"
         v-loading="loading"
         :data="filteredSources"
@@ -144,7 +153,7 @@
             <span v-else class="muted">-</span>
           </template>
         </el-table-column>
-        <template #empty><el-empty :description="emptyText" :image-size="90" /></template>
+        <template #empty><el-empty v-if="!listError" :description="emptyText" :image-size="90" /></template>
       </el-table>
     </el-card>
   </div>
@@ -157,9 +166,13 @@ import dayjs from 'dayjs'
 import { getRssHealth } from '../../api/stats'
 import { cumulativeScopeText, uptimeText as formatUptime } from '../../utils/scope'
 import { metricLabel, metricText } from '../../utils/format'
+import ListLoadError from '../../components/ListLoadError.vue'
 
 const loading = ref(false)
 const refreshing = ref(false)
+// T02626：失败文案（空串=无错）。rawData 在失败时保留上一次成功的值，
+// 汇总卡与表格因此可以带 stale 标记继续展示，而不是清零冒充「全 0 正常」。
+const listError = ref('')
 const rawData = ref({ total: 0, ok: 0, fail: 0, unknown: 0, sources: [] })
 // INT-UX-03 / T02526：带单位的列（延迟、连续失败）的 unit/scale 由接口下发；
 // 后端未升级时为空，列名退回页面自己的「延迟」文案、数值不带猜测单位。
@@ -295,6 +308,14 @@ async function loadData() {
     const data = await getRssHealth()
     applyData(data)
     fetchedAt.value = dayjs()
+    listError.value = ''
+  } catch (e) {
+    // 保留上一次成功的 rawData：stale 数据比「0 个失败源」诚实
+    listError.value = e?.message || 'RSS 源状态加载失败'
+    console.error('[rss-health] 源状态加载失败', {
+      status: e?.response?.status,
+      message: e?.message,
+    })
   } finally {
     loading.value = false
   }
@@ -307,6 +328,14 @@ async function refresh() {
     const data = await getRssHealth({ params: { refresh: true }, timeout: 60000 })
     applyData(data)
     fetchedAt.value = dayjs()
+    listError.value = ''
+  } catch (e) {
+    // 巡检失败同样要落成页面文字：按钮转一圈就结束、表格还是旧数字，看不出没巡检成
+    listError.value = e?.message || '立即巡检失败'
+    console.error('[rss-health] 立即巡检失败', {
+      status: e?.response?.status,
+      message: e?.message,
+    })
   } finally {
     refreshing.value = false
   }

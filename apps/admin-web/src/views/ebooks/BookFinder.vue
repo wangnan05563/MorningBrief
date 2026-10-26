@@ -119,6 +119,14 @@
           未选频道时「加入书单」不会提交；书稿仍需到「素材录入」上传后才会进入该频道的讲书稿书单。
         </span>
       </div>
+      <!-- T02626：检索/随机失败上屏错误态 + 重试；已有旧结果时标注为上次成功的数据 -->
+      <ListLoadError
+        v-if="searchError"
+        :message="searchError"
+        :stale="hits.length > 0"
+        :retrying="searching"
+        @retry="retrySearch"
+      />
       <el-table data-guide="ebooks-results" :data="hits" v-loading="searching" stripe style="width: 100%">
         <el-table-column type="index" width="56" label="#" />
         <el-table-column prop="title" label="书名" min-width="240" show-overflow-tooltip />
@@ -137,6 +145,7 @@
             <IconButton
               size="small"
               :loading="draftingUrl === row.url"
+              :disabled="!!searchError"
               :icon="Check"
               label="加入书单"
               :desc="planChannelId
@@ -147,7 +156,9 @@
           </template>
         </el-table-column>
         <template #empty>
+          <!-- T02626：失败态不出「点击检索开始浏览」——用户已经点过了 -->
           <el-empty
+            v-if="!searchError"
             :description="searched ? '没有匹配的书目（可尝试换关键词或先选分类）' : '点击「检索」或「随机」开始浏览'"
             :image-size="90"
           />
@@ -177,6 +188,7 @@ import {
   searchEbooks,
 } from '../../api/ebooks'
 import { listChannels } from '../../api/channels'
+import ListLoadError from '../../components/ListLoadError.vue'
 
 const keyword = ref('')
 const category = ref('')
@@ -196,6 +208,11 @@ const scannedCount = ref(0)
 const failedCategories = ref([])
 const searching = ref(false)
 const searched = ref(false)
+// T02626：检索/随机失败必须与「还没检索」分开。此前失败后 searched 仍为 false，
+// 空态写着「点击检索开始浏览」——用户明明点了，界面却像什么都没发生。
+const searchError = ref('')
+// 重试要回到用户上一次按的那条路径（检索 / 随机），不能一律当成关键词检索
+const lastMode = ref('search')
 
 // 索引状态（T00612：全量检索走本地索引，避免全量抓取超时）
 const indexInfo = ref({ book_count: 0, category_count: 0, built_at: null, build: {} })
@@ -275,6 +292,7 @@ function applyResult(data) {
   indexAgeDays.value = data?.index_age_days ?? null
   if (data?.auto_rebuild?.triggered) startPolling()
   searched.value = true
+  searchError.value = ''
 }
 
 /**
@@ -282,12 +300,15 @@ function applyResult(data) {
  * 随机是「浏览发现」路径：不依赖关键词/分类输入（后端从全索引抽样），点击只切换 loading。
  */
 async function onRandom() {
+  lastMode.value = 'random'
   searching.value = true
   try {
     const data = await getRandomEbooks(10)
     applyResult(data)
   } catch (e) {
     // 索引未就绪（428）等由请求拦截器提示；刷新一次状态便于用户看到构建进度
+    searchError.value = e?.response?.data?.message || e?.message || '随机书目加载失败'
+    console.error('[book-finder] 随机书目加载失败', { status: e?.response?.status, message: searchError.value })
     await loadIndexStatus()
   } finally {
     searching.value = false
@@ -306,16 +327,30 @@ async function onSearch() {
     await onRebuildIndex()
     return
   }
+  lastMode.value = 'search'
   searching.value = true
   try {
     const data = await searchEbooks({ keyword: kw, category: category.value, limit: limit.value })
     applyResult(data)
   } catch (e) {
     // 索引缺失（428）等业务错误由拦截器提示；刷新一次状态便于用户看到进度
+    searchError.value = e?.response?.data?.message || e?.message || '书目检索失败'
+    console.error('[book-finder] 书目检索失败', {
+      status: e?.response?.status,
+      keyword: kw,
+      category: category.value || null,
+      message: searchError.value,
+    })
     await loadIndexStatus()
   } finally {
     searching.value = false
   }
+}
+
+/** T02626：错误态重试——沿用用户上一次选择的那条路径 */
+function retrySearch() {
+  if (lastMode.value === 'random') onRandom()
+  else onSearch()
 }
 
 function formatTime(iso) {

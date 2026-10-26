@@ -7,12 +7,21 @@
         label="新增素材"
         desc="打开新增素材对话框"
         :icon="Plus"
+        :disabled="listLoad.isError"
         @click="openCreateDialog"
       />
     </div>
 
     <!-- 表格卡片化：复用全局 .card-soft 保持视觉一致 -->
     <div class="card-soft table-card">
+      <!-- T02626：失败时页内说明 + 重试；已有旧行时注明是上次成功的数据 -->
+      <ListLoadError
+        v-if="listLoad.isError"
+        :message="listLoad.errorMessage"
+        :stale="tableData.length > 0"
+        :retrying="listLoad.retrying"
+        @retry="listLoad.retry()"
+      />
       <el-table data-guide="ads-materials-table" :data="tableData" v-loading="loading" stripe>
         <el-table-column prop="name" label="名称" min-width="160" />
         <el-table-column
@@ -36,12 +45,13 @@
               label="试听"
               desc="播放该素材音频"
               :icon="VideoPlay"
+              :disabled="listLoad.isError"
               @click="playAudio(row)"
             />
             <IconButton
               link
               type="danger"
-              :disabled="row.is_default"
+              :disabled="row.is_default || listLoad.isError"
               label="删除"
               desc="删除该素材"
               :icon="Delete"
@@ -49,7 +59,8 @@
             />
           </template>
         </el-table-column>
-        <template #empty><el-empty description="暂无广告素材，点击右上角「新增素材」上传" :image-size="90" /></template>
+        <!-- T02626：失败态不出「暂无广告素材，点击右上角上传」——那会把接口挂了说成还没上传 -->
+        <template #empty><el-empty v-if="!listLoad.isError" description="暂无广告素材，点击右上角「新增素材」上传" :image-size="90" /></template>
       </el-table>
 
       <!-- 分页：素材量可能较大，必须支持分页 -->
@@ -128,9 +139,24 @@ import { dangerConfirm } from '../../utils/dangerConfirm'
 import { Plus, VideoPlay, Delete, Close, Check } from '@element-plus/icons-vue'
 
 import api from '../../api'
+import ListLoadError from '../../components/ListLoadError.vue'
+import { useLoadState } from '../../composables/useLoadState'
 
 const tableData = ref([])
-const loading = ref(false)
+// T02626（FR-UX-302）：列表三态收敛到 useLoadState；失败时保留上次成功的行，
+// 空态只在 ready 且确为空时出现，绝不再把「接口挂了」说成「还没上传」。
+const listLoad = useLoadState(
+  async () => {
+    const data = await api.get('/ads/materials', {
+      params: { page: page.value, size: size.value },
+    })
+    tableData.value = data.list || []
+    total.value = data.total || 0
+    return data
+  },
+  { failMessage: '广告素材列表加载失败' },
+)
+const loading = listLoad.isLoading
 const page = ref(1)
 const size = ref(20)
 const total = ref(0)
@@ -154,16 +180,7 @@ const rules = {
 }
 
 async function fetchList() {
-  loading.value = true
-  try {
-    const data = await api.get('/ads/materials', {
-      params: { page: page.value, size: size.value },
-    })
-    tableData.value = data.list || []
-    total.value = data.total || 0
-  } finally {
-    loading.value = false
-  }
+  await listLoad.load()
 }
 
 function openCreateDialog() {

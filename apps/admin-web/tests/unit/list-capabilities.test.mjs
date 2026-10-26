@@ -472,3 +472,119 @@ describe('维护中心分页档位（NFR-UX-03 越界项已收口）', () => {
     assert.ok(sizes.every((n) => n <= MAX_PAGE_SIZE), '解析出的档位必须全部 ≤ 100')
   })
 })
+
+/**
+ * T02626（FR-UX-302）：列表/详情错误态落地门禁。
+ *
+ * 修的是同一类缺陷：请求失败时页面把数据置空，于是显示「暂无数据」——
+ * 用户无法区分「库里真的没有」和「接口没取到」。单页接好不等于不会退化，
+ * 所以按页点名断言三件事同时存在：错误横幅、横幅上的重试出口、
+ * 以及「空态必须被错误态压住」的那条门控表达式（`!xxxError`）。
+ *
+ * 不在这里断言文案长什么样（那是 ListLoadError 的职责），只钉接线。
+ */
+describe('T02626 列表/详情错误态接线（11 页）', () => {
+  const PAGES = [
+    {
+      rel: 'views/review/ReviewDetail.vue',
+      // 详情页没有列表空态，但「提交审核」必须被失败态禁用（否则会拿空详情发请求）
+      flag: /v-if="detailLoad\.isError"/,
+      extra: /:disabled="detailLoad\.isError"/,
+    },
+    {
+      rel: 'views/workflow/WorkflowDetail.vue',
+      // 详情本身 + 素材/稿件/音频/拼接/审核五个面板，各自失败、各自可重试
+      flag: /v-if="detailError"/,
+      banners: 6,
+      // 审核面板的通过/打回也必须被失败态禁用：否则会拿空详情直接发布
+      extra: /:disabled="!!review\.error"/,
+    },
+    {
+      rel: 'views/channel/MaterialLibrary.vue',
+      flag: /v-if="loadError"/,
+      extra: /<el-empty v-if="!loadError"/,
+    },
+    {
+      rel: 'views/cos/CosFiles.vue',
+      flag: /v-if="statusError \|\| listError"/,
+      extra: /该目录下暂无内容/,
+    },
+    {
+      rel: 'views/ebooks/BookFinder.vue',
+      flag: /v-if="searchError"/,
+      extra: /<el-empty\s+v-if="!searchError"/,
+    },
+    {
+      rel: 'views/ad/AdMaterials.vue',
+      flag: /v-if="listLoad\.isError"/,
+      extra: /<el-empty v-if="!listLoad\.isError"/,
+    },
+    {
+      rel: 'views/ad/AdPlacements.vue',
+      flag: /v-if="listError"/,
+      extra: /<el-empty v-if="!listError"/,
+    },
+    {
+      rel: 'views/stats/ChannelHealth.vue',
+      flag: /v-if="healthLoad\.isError"/,
+      extra: /<el-empty v-if="!loading && !healthLoad\.isError && channels\.length === 0"/,
+    },
+    {
+      rel: 'views/stats/LlmMetrics.vue',
+      flag: /v-if="llmLoad\.isError"/,
+      // 空态与「有数据」两半都要被压住：否则失败时要么显示「暂无调用」，要么渲染一组 0 卡片
+      extra: /v-else-if="!llmLoad\.isError"/,
+    },
+    {
+      rel: 'views/stats/RssHealth.vue',
+      flag: /v-if="listError"/,
+      // 汇总卡与筛选计数在失败时必须一起压住，否则「失败 0 个」会被读成巡检结论
+      extra: /<el-row v-if="!listError \|\| rawData\.sources\.length > 0"/,
+    },
+    {
+      rel: 'views/system/AutoReviewConfig.vue',
+      // 配置区已有 ConfigLoadError（T02594）；统计与历史是两套独立请求，各要一个横幅
+      flag: /v-if="statsError"/,
+      banners: 2,
+      extra: /<el-empty v-if="!historyError"/,
+    },
+  ]
+
+  it('覆盖 11 个页面（清单本身不许缩水）', () => {
+    assert.equal(PAGES.length, 11)
+  })
+
+  for (const page of PAGES) {
+    it(`${page.rel}：错误横幅 + 重试出口 + 空态门控`, () => {
+      const text = srcFile(page.rel)
+      assert.match(text, /import ListLoadError from/, '缺少错误态组件导入')
+      assert.match(text, page.flag, '错误横幅的显隐条件缺失或改了口径')
+      assert.match(text, /:retrying=/, '横幅重试期间不给 loading，用户会以为按钮没生效')
+      assert.match(text, /@retry=/, '错误态必须自带重试出口（拦截器 toast 会消失）')
+      assert.match(text, page.extra, '空态/写操作没有被错误态拦住')
+      if (page.banners) {
+        assert.equal(
+          text.match(/<ListLoadError/g)?.length ?? 0,
+          page.banners,
+          `${page.rel} 应有 ${page.banners} 个错误横幅（每个独立请求一个）`,
+        )
+      }
+    })
+  }
+
+  it('自建错误 ref 的页面都保留了结构化 console.error（禁止只弹一条 toast 就完事）', () => {
+    for (const rel of [
+      'views/workflow/WorkflowDetail.vue',
+      'views/channel/MaterialLibrary.vue',
+      'views/cos/CosFiles.vue',
+      'views/ebooks/BookFinder.vue',
+      'views/ad/AdPlacements.vue',
+      'views/stats/RssHealth.vue',
+      'views/system/AutoReviewConfig.vue',
+    ]) {
+      const text = srcFile(rel)
+      assert.match(text, /console\.error\(/, `${rel} 失败路径缺少控制台留痕`)
+      assert.doesNotMatch(text, /catch\s*(\(\w*\))?\s*\{\s*\}/, `${rel} 出现了吞掉异常的裸 catch`)
+    }
+  })
+})

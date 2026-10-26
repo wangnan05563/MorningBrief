@@ -1,9 +1,18 @@
 <template>
   <div data-guide="cos-files-page" class="page-container cos-files">
+    <!-- T02626：状态/列表请求失败时给页内错误态与重试，不冒充「尚未配置」或「目录为空」 -->
+    <ListLoadError
+      v-if="statusError || listError"
+      :message="statusError || listError"
+      :stale="tableData.length > 0"
+      :retrying="loading"
+      @retry="reload"
+    />
+
     <!-- 顶部状态 / 工具栏 -->
     <div class="top-bar">
       <el-alert
-        v-if="!configured"
+        v-if="!configured && !statusError"
         type="warning"
         :closable="false"
         show-icon
@@ -33,14 +42,14 @@
             label="上传文件"
             desc="上传文件到当前目录"
             :icon="Upload"
-            :disabled="!configured"
+            :disabled="!configured || !!listError"
             @click="triggerUpload"
           />
           <IconButton
             label="新建文件夹"
             desc="在当前目录新建文件夹"
             :icon="Plus"
-            :disabled="!configured"
+            :disabled="!configured || !!listError"
             @click="openNewFolder"
           />
           <IconButton
@@ -72,7 +81,7 @@
     />
 
     <el-card shadow="never" v-loading="loading">
-      <el-empty v-if="configured && !loading && folders.length === 0 && files.length === 0" description="该目录下暂无内容" />
+      <el-empty v-if="configured && !loading && !listError && folders.length === 0 && files.length === 0" description="该目录下暂无内容" />
 
       <el-table data-guide="cos-files-table" v-else :data="tableData" stripe style="width: 100%">
         <el-table-column label="名称" min-width="280">
@@ -105,6 +114,7 @@
               label="恢复"
               desc="用该快照替换当前对象"
               :icon="RefreshLeft"
+              :disabled="!!listError"
               @click="handleRestore(row)"
             />
             <IconButton
@@ -114,6 +124,7 @@
               label="下载"
               desc="下载该文件"
               :icon="Download"
+              :disabled="!!listError"
               @click="handleDownload(row)"
             />
             <IconButton
@@ -123,6 +134,7 @@
               label="重命名"
               desc="重命名或移动该对象"
               :icon="Edit"
+              :disabled="!!listError"
               @click="openRename(row)"
             />
             <IconButton
@@ -131,6 +143,7 @@
               label="删除"
               desc="删除该对象"
               :icon="Delete"
+              :disabled="!!listError"
               @click="handleDelete(row)"
             />
           </template>
@@ -206,6 +219,7 @@ import {
 import { ElMessage } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import { buildDestKey, validateSegment } from '../../utils/cosPath'
+import ListLoadError from '../../components/ListLoadError.vue'
 import {
   getCosStatus,
   listCosObjects,
@@ -224,6 +238,10 @@ import {
 const loading = ref(false)
 const opLoading = ref(false)
 const configured = ref(false)
+// T02626：状态查询失败不能落成「COS 尚未配置」（那会把接口挂了说成没配置）；
+// 列表失败也不能落成「该目录下暂无内容」。两者共用一条页内错误态。
+const statusError = ref('')
+const listError = ref('')
 const currentPrefix = ref('')
 const folders = ref([])
 const files = ref([])
@@ -286,9 +304,18 @@ async function loadStatus() {
     const st = await getCosStatus()
     configured.value = !!(st && st.configured)
     backupKeep.value = Number(st?.backup_keep_count ?? 5)
+    statusError.value = ''
   } catch (e) {
     configured.value = false
+    statusError.value = e?.response?.data?.message || e?.message || 'COS 状态加载失败'
+    console.error('[cos-files] 状态加载失败', { status: e?.response?.status, message: statusError.value })
   }
+}
+
+/** 错误态「重试」：先确认配置状态，确认已配置后再拉当前目录 */
+async function reload() {
+  await loadStatus()
+  if (configured.value) await loadList()
 }
 
 async function loadList() {
@@ -299,8 +326,15 @@ async function loadList() {
     folders.value = data.folders || []
     files.value = data.files || []
     inSnapshotDir.value = !!data.is_snapshot_dir
+    listError.value = ''
   } catch (e) {
-    // 全局拦截器已提示
+    // T02626：保留上次成功的目录内容（stale 文案说明），并落结构化日志
+    listError.value = e?.response?.data?.message || e?.message || '目录列表加载失败'
+    console.error('[cos-files] 目录列表加载失败', {
+      status: e?.response?.status,
+      prefix: currentPrefix.value,
+      message: listError.value,
+    })
   } finally {
     loading.value = false
   }

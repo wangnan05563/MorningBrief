@@ -60,7 +60,7 @@
         "callSites": [
           {
             "file": "views/ad/AdMaterials.vue",
-            "line": 179,
+            "line": 196,
             "fn": "api.post",
             "fieldCount": 4,
             "unresolved": []
@@ -116,7 +116,7 @@
         "callSites": [
           {
             "file": "views/ad/AdPlacements.vue",
-            "line": 414,
+            "line": 439,
             "fn": "api.post",
             "fieldCount": 4,
             "unresolved": []
@@ -1073,7 +1073,7 @@
         "callSites": [
           {
             "file": "views/cos/CosFiles.vue",
-            "line": 403,
+            "line": 437,
             "fn": "createCosFolder",
             "fieldCount": 1,
             "unresolved": []
@@ -1115,7 +1115,7 @@
         "callSites": [
           {
             "file": "views/cos/CosFiles.vue",
-            "line": 486,
+            "line": 520,
             "fn": "moveCosObject",
             "fieldCount": 3,
             "unresolved": [
@@ -1165,7 +1165,7 @@
         "callSites": [
           {
             "file": "views/cos/CosFiles.vue",
-            "line": 536,
+            "line": 570,
             "fn": "restoreCosObject",
             "fieldCount": 3,
             "unresolved": [
@@ -1454,7 +1454,7 @@
         "callSites": [
           {
             "file": "views/ebooks/BookFinder.vue",
-            "line": 246,
+            "line": 263,
             "fn": "createDraftMaterial",
             "fieldCount": 5,
             "unresolved": []
@@ -1852,14 +1852,14 @@
           },
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 597,
+            "line": 625,
             "fn": "createMaterial",
             "fieldCount": 10,
             "unresolved": []
           },
           {
             "file": "views/workflow/WorkflowDetail.vue",
-            "line": 700,
+            "line": 768,
             "fn": "createMaterial",
             "fieldCount": 6,
             "unresolved": []
@@ -1941,14 +1941,14 @@
         "callSites": [
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 691,
+            "line": 719,
             "fn": "batchDeleteMaterials",
             "fieldCount": 2,
             "unresolved": []
           },
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 716,
+            "line": 744,
             "fn": "batchDeleteMaterials",
             "fieldCount": 1,
             "unresolved": []
@@ -2302,14 +2302,14 @@
           },
           {
             "file": "views/review/ReviewDetail.vue",
-            "line": 347,
+            "line": 360,
             "fn": "api.post",
             "fieldCount": 3,
             "unresolved": []
           },
           {
             "file": "views/workflow/WorkflowDetail.vue",
-            "line": 986,
+            "line": 1070,
             "fn": "handleReviewAction",
             "fieldCount": 3,
             "unresolved": [
@@ -2658,7 +2658,7 @@
         "callSites": [
           {
             "file": "views/workflow/WorkflowDetail.vue",
-            "line": 1007,
+            "line": 1091,
             "fn": "api.post",
             "fieldCount": 1,
             "unresolved": []
@@ -2861,7 +2861,7 @@
         "callSites": [
           {
             "file": "views/ad/AdPlacements.vue",
-            "line": 389,
+            "line": 414,
             "fn": "api.put",
             "fieldCount": 1,
             "unresolved": []
@@ -3112,7 +3112,7 @@
         "callSites": [
           {
             "file": "views/system/AutoReviewConfig.vue",
-            "line": 483,
+            "line": 504,
             "fn": "updateAutoReviewConfig",
             "fieldCount": 5,
             "unresolved": []
@@ -3590,14 +3590,14 @@
         "callSites": [
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 560,
+            "line": 588,
             "fn": "updateMaterial",
             "fieldCount": 8,
             "unresolved": []
           },
           {
             "file": "views/workflow/WorkflowDetail.vue",
-            "line": 689,
+            "line": 757,
             "fn": "updateMaterial",
             "fieldCount": 5,
             "unresolved": []
@@ -3938,7 +3938,7 @@
         "callSites": [
           {
             "file": "views/workflow/WorkflowDetail.vue",
-            "line": 811,
+            "line": 887,
             "fn": "updateSegments",
             "fieldCount": 1,
             "unresolved": []

@@ -11,7 +11,17 @@
     <!-- T02516（FR-UX-702）：SSE 断流 / 轮询失败常驻提示 + 「立即重连并刷新」入口 -->
     <FeedHealthBanner :feed="feed" @refresh="feed.refreshNow()" />
 
-    <el-card v-loading="loading" shadow="never" class="info-card">
+    <!-- T02626（FR-UX-302）：详情本身没取到时，下面几张卡片会渲染成全 "-" / 全「等待中」，
+         那是在断言「这个工作流还没开始跑」——实际只是没拿到数据。 -->
+    <ListLoadError
+      v-if="detailError"
+      :message="detailError"
+      :stale="!!detail.workflow_id"
+      :retrying="loading"
+      @retry="loadDetail()"
+    />
+
+    <el-card v-if="!detailError || !!detail.workflow_id" v-loading="loading" shadow="never" class="info-card">
       <el-descriptions :column="3" border>
         <el-descriptions-item label="工作流 ID">{{ detail.workflow_id }}</el-descriptions-item>
         <el-descriptions-item label="频道">
@@ -39,7 +49,7 @@
     </el-card>
 
     <!-- 步骤进度条：5 步流水线可视化 -->
-    <el-card shadow="never" class="steps-card">
+    <el-card v-if="!detailError || !!detail.workflow_id" shadow="never" class="steps-card">
       <el-steps :active="activeStep" align-center>
         <el-step
           v-for="(s, i) in orderedSteps"
@@ -52,7 +62,7 @@
     </el-card>
 
     <!-- 步骤详情表格 -->
-    <el-card shadow="never" class="table-card">
+    <el-card v-if="!detailError || !!detail.workflow_id" shadow="never" class="table-card">
       <el-table :data="orderedSteps" stripe>
         <el-table-column label="步骤" width="160">
           <template #default="{ row }">{{ stepLabel(row.name) }}</template>
@@ -77,7 +87,7 @@
     </el-card>
 
     <!-- 步骤产物折叠面板：展开后懒加载对应产物并支持 CRUD -->
-    <el-card shadow="never" class="products-card">
+    <el-card v-if="!detailError || !!detail.workflow_id" shadow="never" class="products-card">
       <template #header>
         <span class="card-title">步骤产物</span>
       </template>
@@ -95,9 +105,17 @@
               与菜单「素材库管理」同一份数据（按本频道查询）；在另一页增删改后，回到这里请点「刷新」。
             </div>
             <div class="panel-toolbar">
-              <IconButton size="small" type="primary" :icon="Plus" label="新增素材" desc="新增一条素材" @click="openMaterialDialog()" />
+              <!-- T02626：素材没加载成功时禁用写入入口，避免把列表失败误当成空库后随手新增 -->
+              <IconButton size="small" type="primary" :icon="Plus" :disabled="!!materials.error" label="新增素材" desc="新增一条素材" @click="openMaterialDialog()" />
               <IconButton size="small" :icon="Refresh" label="刷新" desc="重新加载素材列表" @click="loadMaterials" />
             </div>
+            <ListLoadError
+              v-if="materials.error"
+              :message="materials.error"
+              :stale="materials.list.length > 0"
+              :retrying="materials.loading"
+              @retry="loadMaterials"
+            />
             <el-table :data="materials.list" v-loading="materials.loading" size="small" stripe>
               <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
               <el-table-column prop="source" label="来源" width="100" />
@@ -111,11 +129,12 @@
               <el-table-column label="操作" width="200" fixed="right">
                 <template #default="{ row }">
                   <IconButton size="small" link :icon="View" label="查看" desc="查看素材全文" @click="viewMaterial(row)" />
-                  <IconButton size="small" link :icon="Edit" label="编辑" desc="编辑该素材" @click="openMaterialDialog(row)" />
-                  <IconButton size="small" link type="danger" :icon="Delete" label="删除" desc="删除该素材" @click="handleDeleteMaterial(row)" />
+                  <IconButton size="small" link :icon="Edit" :disabled="!!materials.error" label="编辑" desc="编辑该素材" @click="openMaterialDialog(row)" />
+                  <IconButton size="small" link type="danger" :icon="Delete" :disabled="!!materials.error" label="删除" desc="删除该素材" @click="handleDeleteMaterial(row)" />
                 </template>
               </el-table-column>
-              <template #empty><el-empty description="本工作流尚未关联素材" :image-size="80" /></template>
+              <!-- T02626：失败态下不得再出「尚未关联素材」——那是把接口挂了说成空库 -->
+              <template #empty><el-empty v-if="!materials.error" description="本工作流尚未关联素材" :image-size="80" /></template>
             </el-table>
             <!-- T02517（FR-UX-703 / B3 同类）：面板分页同样给出尺寸选择器。
                  此前 `:page-size="20"` 写死且 layout 里没有 sizes，
@@ -142,6 +161,13 @@
           </template>
           <div class="panel-content">
             <div v-loading="script.loading">
+              <ListLoadError
+                v-if="script.error"
+                :message="script.error"
+                :stale="!!script.data"
+                :retrying="script.loading"
+                @retry="loadScript"
+              />
               <template v-if="script.data">
                 <el-descriptions :column="3" border size="small" class="script-info">
                   <el-descriptions-item label="稿件 ID">{{ script.data.id }}</el-descriptions-item>
@@ -152,8 +178,8 @@
                   </el-descriptions-item>
                 </el-descriptions>
                 <div class="panel-toolbar">
-                  <IconButton size="small" type="primary" :icon="Edit" label="编辑分段" desc="编辑稿件各分段标题与内容" @click="openSegmentsEditor" />
-                  <IconButton size="small" type="danger" :icon="Delete" label="删除稿件" desc="删除该稿件" @click="handleDeleteScript" />
+                  <IconButton size="small" type="primary" :icon="Edit" :disabled="!!script.error" label="编辑分段" desc="编辑稿件各分段标题与内容" @click="openSegmentsEditor" />
+                  <IconButton size="small" type="danger" :icon="Delete" :disabled="!!script.error" label="删除稿件" desc="删除该稿件" @click="handleDeleteScript" />
                 </div>
                 <el-table :data="script.data.segments" size="small" stripe>
                   <el-table-column prop="seq" label="#" width="50" />
@@ -203,7 +229,7 @@
                   />
                 </template>
               </template>
-              <el-empty v-else-if="!script.loading" description="该工作流暂无稿件" />
+              <el-empty v-else-if="!script.loading && !script.error" description="该工作流暂无稿件" />
             </div>
           </div>
         </el-collapse-item>
@@ -218,6 +244,13 @@
             <div class="panel-toolbar">
               <IconButton size="small" :icon="Refresh" label="刷新" desc="重新加载音频文件列表" @click="loadAudioFiles" />
             </div>
+            <ListLoadError
+              v-if="audioFiles.error"
+              :message="audioFiles.error"
+              :stale="audioFiles.tts.length > 0"
+              :retrying="audioFiles.loading"
+              @retry="loadAudioFiles"
+            />
             <el-table :data="audioFiles.tts" v-loading="audioFiles.loading" size="small" stripe>
               <el-table-column prop="name" label="文件名" min-width="200" show-overflow-tooltip />
               <el-table-column label="大小" width="100">
@@ -248,7 +281,7 @@
               </el-table-column>
               <el-table-column label="操作" width="80" fixed="right">
                 <template #default="{ row }">
-                  <IconButton v-if="!row.remote" size="small" link type="danger" :icon="Delete" label="删除" desc="删除该音频片段" @click="handleDeleteTts(row.name)" />
+                  <IconButton v-if="!row.remote" size="small" link type="danger" :icon="Delete" :disabled="!!audioFiles.error" label="删除" desc="删除该音频片段" @click="handleDeleteTts(row.name)" />
                 </template>
               </el-table-column>
             </el-table>
@@ -262,6 +295,13 @@
           </template>
           <div class="panel-content">
             <div v-loading="audioFiles.loading">
+              <ListLoadError
+                v-if="audioFiles.error"
+                :message="audioFiles.error"
+                :stale="!!audioFiles.episode"
+                :retrying="audioFiles.loading"
+                @retry="loadAudioFiles"
+              />
               <template v-if="audioFiles.episode">
                 <el-descriptions :column="2" border size="small">
                   <el-descriptions-item label="文件路径">{{ audioFiles.episode.path }}</el-descriptions-item>
@@ -288,10 +328,10 @@
                   />
                 </div>
                 <div class="panel-toolbar">
-                  <IconButton v-if="!audioFiles.episode?.remote" size="small" type="danger" :icon="Delete" label="删除成品" desc="删除成品音频" @click="handleDeleteEpisode" />
+                  <IconButton v-if="!audioFiles.episode?.remote" size="small" type="danger" :icon="Delete" :disabled="!!audioFiles.error" label="删除成品" desc="删除成品音频" @click="handleDeleteEpisode" />
                 </div>
               </template>
-              <el-empty v-else-if="!audioFiles.loading" description="尚未生成成品音频" />
+              <el-empty v-else-if="!audioFiles.loading && !audioFiles.error" description="尚未生成成品音频" />
             </div>
           </div>
         </el-collapse-item>
@@ -303,6 +343,13 @@
           </template>
           <div class="panel-content">
             <div v-loading="review.loading">
+              <ListLoadError
+                v-if="review.error"
+                :message="review.error"
+                :stale="!!review.data"
+                :retrying="review.loading"
+                @retry="loadReview"
+              />
               <template v-if="review.data">
                 <el-descriptions :column="3" border size="small">
                   <el-descriptions-item label="审核 ID">{{ review.data.id }}</el-descriptions-item>
@@ -315,6 +362,7 @@
                   <IconButton
                     v-if="review.data.status === 'pending'"
                     size="small" type="success"
+                    :disabled="!!review.error"
                     :icon="Check"
                     label="通过"
                     desc="审核通过该稿件"
@@ -323,6 +371,7 @@
                   <IconButton
                     v-if="review.data.status === 'pending'"
                     size="small" type="danger"
+                    :disabled="!!review.error"
                     :icon="Close"
                     label="打回"
                     desc="打回该稿件"
@@ -330,7 +379,7 @@
                   />
                 </div>
               </template>
-              <el-empty v-else-if="!review.loading" description="该工作流暂无审核记录" />
+              <el-empty v-else-if="!review.loading && !review.error" description="该工作流暂无审核记录" />
             </div>
           </div>
         </el-collapse-item>
@@ -478,6 +527,7 @@ import { returnTarget } from '../../utils/urlState'
 import { PANEL_PAGE_SIZE_OPTIONS } from '../../constants/pagination'
 import PageBreadcrumb from '../../components/PageBreadcrumb.vue'
 import FeedHealthBanner from '../../components/FeedHealthBanner.vue'
+import ListLoadError from '../../components/ListLoadError.vue'
 import { useFeedHealth } from '../../composables/useFeedHealth'
 
 const route = useRoute()
@@ -507,6 +557,9 @@ function goBack() {
 const loading = ref(false)
 const retrying = ref(false)
 const detail = ref({})
+// T02626：详情取数失败单独记账。silent 轮询失败仍只走 feed 健康度条（T02516）——
+// 有旧数据时再顶一条红横幅，等于同一件事报两遍。
+const detailError = ref('')
 // T02516（FR-UX-702）：SSE 状态 + 刷新成败的统一记账；onRefresh 复用 loadDetail()
 // （用户主动触发的非 silent 刷新），不新增任何定时器——NFR-UX-03。
 const feed = useFeedHealth({ onRefresh: () => loadDetail() })
@@ -567,6 +620,7 @@ async function loadDetail(silent = false) {
   if (!silent) loading.value = true
   try {
     detail.value = await api.get(`/workflows/${route.params.id}`, { silent })
+    detailError.value = ''
     feed.markPollSuccess()
     // 根据最新状态启停轮询：工作流非终态时启动，终态时停止
     startPollingIfNeeded()
@@ -574,6 +628,14 @@ async function loadDetail(silent = false) {
     // T02516（FR-UX-702）：silent 模式下拦截器把提示一并抑制了，
     // 「轮询整晚挂掉、页面一直显示旧进度」此前零痕迹——失败只能在这里落到健康度条。
     feed.markPollFailure(e)
+    if (!silent) {
+      detailError.value = e?.response?.data?.message || e?.message || '工作流详情加载失败'
+      console.error('[workflow-detail] 详情加载失败', {
+        status: e?.response?.status,
+        message: detailError.value,
+        workflowId: route.params.id,
+      })
+    }
   } finally {
     if (!silent) loading.value = false
   }
@@ -605,7 +667,8 @@ async function loadPanelData(panelName) {
 }
 
 // ===== crawl 素材 =====
-const materials = ref({ list: [], total: 0, loading: false })
+// T02626：error 与 loading 分开。失败时保留上次成功的行（stale），空态只在 ready 且为空时出。
+const materials = ref({ list: [], total: 0, loading: false, error: '' })
 const materialsPage = ref(1)
 // T02517（FR-UX-703）：面板分页尺寸改成可选状态（此前模板与请求里各写死一份 20）
 const materialsSize = ref(20)
@@ -628,7 +691,12 @@ async function loadMaterials() {
     })
     materials.value.list = data.list || []
     materials.value.total = data.total || 0
-  } catch { /* 拦截器已提示 */ } finally {
+    materials.value.error = ''
+  } catch (e) {
+    // T02626：不能只靠拦截器 toast——表格会落「本工作流尚未关联素材」，把接口挂了说成没素材
+    materials.value.error = e?.response?.data?.message || e?.message || '素材加载失败'
+    console.error('[workflow-detail] 素材加载失败', { status: e?.response?.status, message: materials.value.error })
+  } finally {
     materials.value.loading = false
   }
 }
@@ -750,15 +818,23 @@ function viewMaterial(row) {
 }
 
 // ===== rewrite 稿件 =====
-const script = ref({ data: null, loading: false })
+const script = ref({ data: null, loading: false, error: '' })
 
 async function loadScript() {
   script.value.loading = true
   try {
     script.value.data = await getScriptByWorkflow(route.params.id)
-  } catch {
-    // 404 表示暂无稿件，不算错误
-    script.value.data = null
+    script.value.error = ''
+  } catch (e) {
+    // T02626：只有 404 才是「该工作流暂无稿件」；其余失败必须上屏，
+    // 否则网络/5xx 会被空态文案伪装成「确实没生成过稿件」。
+    if (e?.response?.status === 404) {
+      script.value.data = null
+      script.value.error = ''
+    } else {
+      script.value.error = e?.response?.data?.message || e?.message || '稿件加载失败'
+      console.error('[workflow-detail] 稿件加载失败', { status: e?.response?.status, message: script.value.error })
+    }
   } finally {
     script.value.loading = false
   }
@@ -822,7 +898,7 @@ async function saveSegments() {
 
 // ===== tts/stitch 音频 =====
 // 每项附加 blobUrl（按需加载）和 loading 状态，供内联 <audio> 控件使用
-const audioFiles = ref({ tts: [], episode: null, loading: false })
+const audioFiles = ref({ tts: [], episode: null, loading: false, error: '' })
 // 成品音频的播放状态（单条，独立于 TTS 列表）
 const episodePlayer = ref({ blobUrl: null, loading: false })
 
@@ -837,7 +913,12 @@ async function loadAudioFiles() {
       loading: false,
     }))
     audioFiles.value.episode = data.episode_file || null
-  } catch { /* 拦截器已提示 */ } finally {
+    audioFiles.value.error = ''
+  } catch (e) {
+    // T02626：失败时保留上次成功的清单；空态由模板按 error 门控
+    audioFiles.value.error = e?.response?.data?.message || e?.message || '音频文件加载失败'
+    console.error('[workflow-detail] 音频文件加载失败', { status: e?.response?.status, message: audioFiles.value.error })
+  } finally {
     audioFiles.value.loading = false
   }
 }
@@ -940,7 +1021,7 @@ async function handleDeleteEpisode() {
 }
 
 // ===== review 审核 =====
-const review = ref({ data: null, loading: false })
+const review = ref({ data: null, loading: false, error: '' })
 
 function reviewStatusLabel(s) { return enumLabel(REVIEW_STATUS, s) }
 function reviewStatusType(s) { return enumTagType(REVIEW_STATUS, s) }
@@ -950,8 +1031,11 @@ async function loadReview() {
   try {
     const data = await listReviews({ workflow_id: route.params.id, size: 1 })
     review.value.data = data.list?.[0] || null
-  } catch {
-    review.value.data = null
+    review.value.error = ''
+  } catch (e) {
+    // T02626：保留旧记录并上屏错误；不能因为一次失败就把审核记录说成「暂无」
+    review.value.error = e?.response?.data?.message || e?.message || '审核记录加载失败'
+    console.error('[workflow-detail] 审核记录加载失败', { status: e?.response?.status, message: review.value.error })
   } finally {
     review.value.loading = false
   }

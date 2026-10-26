@@ -175,7 +175,15 @@
 
     <!-- 统计指标卡片 -->
       <div class="stats-section" v-loading="loadingStats">
-        <el-row :gutter="16">
+        <!-- T02626（FR-UX-302）：统计取不到时，四张 0 卡片会被读成「一次都没跑过」 -->
+        <ListLoadError
+          v-if="statsError"
+          :message="statsError"
+          :stale="!!stats"
+          :retrying="loadingStats"
+          @retry="loadStats"
+        />
+        <el-row v-if="!statsError || !!stats" :gutter="16">
           <!-- 响应式栅格：窄视口(<1200)自动 2 列，避免 4 列卡片被压得过窄（原 span=6 固定四列）
                在 1366 屏 + 125% 缩放等场景下被挤压换行/文字截断 -->
           <el-col :xs="12" :sm="12" :md="12" :lg="6">
@@ -219,7 +227,7 @@
       </el-row>
 
       <!-- 日期范围选择 -->
-      <div class="date-range-bar">
+      <div v-if="!statsError || !!stats" class="date-range-bar">
         <el-date-picker
           v-model="dateRange"
           type="daterange"
@@ -261,13 +269,21 @@
         </el-radio-group>
       </div>
 
+      <!-- T02626（FR-UX-302）：历史拉取失败时不能显示「暂无审批记录」 -->
+      <ListLoadError
+        v-if="historyError"
+        :message="historyError"
+        :stale="history.list.length > 0"
+        :retrying="loadingHistory"
+        @retry="loadHistory"
+      />
+
       <el-table data-guide="auto-review-table"
         :data="history.list"
         v-loading="loadingHistory"
         stripe
         style="width: 100%"
-      >
-        <el-table-column prop="id" label="ID" width="80" />
+      >        <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="workflow_id" label="工作流 ID" min-width="160" show-overflow-tooltip />
         <el-table-column prop="review_id" label="审核 ID" width="100" />
         <el-table-column label="结果" width="100">
@@ -301,6 +317,7 @@
               type="primary"
               link
               :loading="retryingStat === row.workflow_id"
+              :disabled="!!historyError"
               label="重试"
               desc="重新执行该失败的自动审批"
               :icon="Refresh"
@@ -308,7 +325,7 @@
             />
           </template>
         </el-table-column>
-        <template #empty><el-empty description="暂无审批记录" :image-size="90" /></template>
+        <template #empty><el-empty v-if="!historyError" description="暂无审批记录" :image-size="90" /></template>
       </el-table>
 
       <el-pagination
@@ -330,6 +347,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useDraft } from '../../composables/useDraft'
 import { useConfigLoad } from '../../composables/useConfigLoad'
 import ConfigLoadError from '../../components/ConfigLoadError.vue'
+import ListLoadError from '../../components/ListLoadError.vue'
 import { Refresh, Setting, Plus, DataLine, CircleCheck, CircleClose, Timer, List, WarningFilled, Check } from '@element-plus/icons-vue'
 // 提示必须走统一出口：直接从 element-plus 取 ElMessage 会绕过 2 秒去重与
 // 「隐藏期间不入 DOM」的窗口守卫（FR-UX-301/303）
@@ -395,6 +413,9 @@ const stats = ref(null)
 const meta = ref({})
 const loadingStats = ref(true)
 const dateRange = ref(null)
+// T02626：统计/历史各自的失败文案（配置区已有 ConfigLoadError，互不替代）
+const statsError = ref('')
+const historyError = ref('')
 
 // 历史数据
 const history = ref({ total: 0, list: [] })
@@ -525,8 +546,14 @@ async function loadStats() {
     const res = await getAutoReviewStats(params)
     stats.value = res
     meta.value = res?.meta || {}
+    statsError.value = ''
   } catch (err) {
-    notifyErrorOnce(err, '加载统计失败：' + (err.message || '未知错误'))
+    // 保留上一次成功的 stats：四张 0 卡片比「没取到」更容易被误读成真实业绩
+    statsError.value = err?.message || '自动审批统计加载失败'
+    console.error('[auto-review] 统计加载失败', {
+      status: err?.response?.status,
+      message: err?.message,
+    })
   } finally {
     loadingStats.value = false
   }
@@ -545,8 +572,15 @@ async function loadHistory() {
     }
     const res = await listAutoReviewHistory(params)
     history.value = res
+    historyError.value = ''
   } catch (err) {
-    notifyErrorOnce(err, '加载历史失败：' + (err.message || '未知错误'))
+    historyError.value = err?.message || '自动审批历史加载失败'
+    console.error('[auto-review] 历史加载失败', {
+      status: err?.response?.status,
+      page: historyPage.value,
+      size: historySize.value,
+      message: err?.message,
+    })
   } finally {
     loadingHistory.value = false
   }

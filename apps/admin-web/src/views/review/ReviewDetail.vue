@@ -1,12 +1,22 @@
 <template>
   <div class="review-detail page-container" v-loading="loading">
+    <!-- T02626（FR-UX-302）：详情拉取失败与「详情为空」必须分开。
+         失败时只给页内错误态 + 重试，不渲染日期/工作流 ID 的空壳，也不允许提交审核。 -->
+    <ListLoadError
+      v-if="detailLoad.isError"
+      :message="detailLoad.errorMessage"
+      :stale="!!detail.id"
+      :retrying="detailLoad.retrying"
+      @retry="detailLoad.retry()"
+    />
+
     <div class="detail-header">
       <div class="header-title">
         <div class="header-row">
           <IconButton :icon="ArrowLeft" plain label="返回列表" desc="返回进入本页时的那一页（保留审核状态与分页）" @click="goBack" />
           <PageBreadcrumb :items="breadcrumb" @back="goBack" />
         </div>
-        <div class="header-info">
+        <div v-if="detail.id" class="header-info">
           <span class="info-item">日期：<strong>{{ detail.episode_date }}</strong></span>
           <span class="info-item">工作流ID：<strong>{{ detail.workflow_id }}</strong></span>
           <el-tag :type="statusTagType(detail.status)" effect="light">
@@ -16,7 +26,8 @@
       </div>
     </div>
 
-    <el-row :gutter="16">
+    <!-- 没有数据时不渲染空卡片：否则首次加载失败会显示「暂无音频」等假空态 -->
+    <el-row v-if="detail.id" :gutter="16">
       <!-- 左侧：稿件全文 + 引用素材 -->
       <el-col :span="14">
         <el-card class="script-card">
@@ -167,7 +178,8 @@
               <el-input v-model="reason" type="textarea" :rows="3" placeholder="请输入理由" />
             </el-form-item>
             <el-form-item>
-              <IconButton type="primary" :loading="submitting" :icon="Check" label="提交" desc="提交当前审核操作" @click="handleSubmit" />
+              <!-- T02626：详情没加载成功时禁用提交——拿空对象/旧详情去改审核状态是静默破坏 -->
+              <IconButton type="primary" :loading="submitting" :disabled="detailLoad.isError" :icon="Check" label="提交" desc="提交当前审核操作" @click="handleSubmit" />
             </el-form-item>
           </el-form>
         </el-card>
@@ -198,13 +210,26 @@ import { getEpisodeAudioUrl } from '../../api/audio'
 import { REVIEW_STATUS, enumLabel, enumTagType } from '../../constants/enums'
 import { returnTarget } from '../../utils/urlState'
 import PageBreadcrumb from '../../components/PageBreadcrumb.vue'
+import ListLoadError from '../../components/ListLoadError.vue'
+import { useLoadState } from '../../composables/useLoadState'
 
 const route = useRoute()
 const router = useRouter()
 
-const loading = ref(false)
 const submitting = ref(false)
 const detail = ref({})
+// T02626（FR-UX-302）：详情三态收敛到 useLoadState。失败时保留旧详情（stale 提示），
+// 只有「拿到详情」才算 ready——此前 catch 后什么都不变，首屏失败就落一屏空字段。
+const detailLoad = useLoadState(
+  async () => {
+    const data = await api.get(`/reviews/${route.params.id}`)
+    detail.value = data || {}
+    await loadAudio()
+    return detail.value
+  },
+  { failMessage: '审核详情加载失败' },
+)
+const loading = detailLoad.isLoading
 // T00809 下一步：默认展示前 9 张缩略图，「查看全部」弹窗展示全量（后端已返回完整 images）
 const IMAGE_SHOW_LIMIT = 9
 const galleryVisible = ref(false)
@@ -294,18 +319,6 @@ const breadcrumb = computed(() => [
   { label: route.meta?.title || '审核详情' },
 ])
 
-async function loadDetail() {
-  loading.value = true
-  try {
-    detail.value = await api.get(`/reviews/${route.params.id}`)
-    await loadAudio()
-  } catch {
-    // 错误提示由拦截器统一处理
-  } finally {
-    loading.value = false
-  }
-}
-
 async function handleSubmit() {
   // 前置校验：replace 需选段落，reject/replace 需填理由（approve 无需理由）
   if (action.value === 'replace' && !segmentId.value) {
@@ -380,7 +393,7 @@ function goBack() {
     .catch((err) => console.warn('[review-detail] 返回列表被拒绝（已静默处理）:', err?.message || err))
 }
 
-onMounted(loadDetail)
+onMounted(detailLoad.load)
 onBeforeUnmount(() => {
   audioToken += 1
   releaseAudio()

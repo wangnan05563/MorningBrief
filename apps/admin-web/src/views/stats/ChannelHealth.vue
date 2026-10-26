@@ -11,8 +11,17 @@
       <span v-if="trendWindow" class="window-note">统计区间 {{ trendWindow }}</span>
     </div>
 
-    <!-- 汇总卡片：healthy / warning / critical / total -->
-    <el-row :gutter="16" class="summary-row">
+    <!-- T02626：失败时页内说明 + 重试；已有旧数据时注明是上次成功的数据 -->
+    <ListLoadError
+      v-if="healthLoad.isError"
+      :message="healthLoad.errorMessage"
+      :stale="channels.length > 0"
+      :retrying="healthLoad.retrying"
+      @retry="healthLoad.retry()"
+    />
+
+    <!-- 汇总卡片：healthy / warning / critical / total。失败且无旧数据时不渲染一排 0 -->
+    <el-row v-if="!healthLoad.isError || channels.length > 0" :gutter="16" class="summary-row">
       <el-col v-for="s in summaryCards" :key="s.key" :xs="12" :sm="6">
         <el-card shadow="hover">
           <div class="summary-card" :class="s.cls">
@@ -25,7 +34,8 @@
 
     <!-- 频道卡片网格：每卡片含基础信息 + mini 折线图 -->
     <div v-loading="loading" class="channel-grid">
-      <el-empty v-if="!loading && channels.length === 0" data-guide="channel-health-empty" description="暂无频道数据" />
+      <!-- T02626：失败态不出「暂无频道数据」 -->
+      <el-empty v-if="!loading && !healthLoad.isError && channels.length === 0" data-guide="channel-health-empty" description="暂无频道数据" />
 
       <el-row v-if="!loading && channels.length > 0" data-guide="channel-health-cards" :gutter="16">
         <el-col
@@ -118,15 +128,29 @@ import {
   Tooltip,
 } from 'chart.js'
 import { getChannelHealth } from '../../api/stats'
+import ListLoadError from '../../components/ListLoadError.vue'
+import { useLoadState } from '../../composables/useLoadState'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip)
 
 const rangeDays = ref(7)
-const loading = ref(false)
 const summary = ref({ healthy: 0, warning: 0, critical: 0, total: 0 })
 const channels = ref([])
 // INT-UX-03 / T02526：折线没有坐标轴，单位字「条」由接口 meta 下发，页面不再自己写
 const meta = ref({})
+// T02626（FR-UX-302）：三态收敛到 useLoadState。失败时保留上次成功的频道与汇总，
+// 空态只在 ready 且确为空时出现——不再把接口挂了说成「暂无频道数据」。
+const healthLoad = useLoadState(
+  async () => {
+    const data = await getChannelHealth(rangeDays.value)
+    channels.value = data.channels || []
+    summary.value = data.summary || { healthy: 0, warning: 0, critical: 0, total: 0 }
+    meta.value = data.meta || {}
+    return data
+  },
+  { failMessage: '频道健康度加载失败' },
+)
+const loading = healthLoad.isLoading
 const countUnit = computed(() => meta.value.count?.display?.unit || '条')
 
 // 汇总卡片配置：cls 用于按状态染色，便于一眼识别整体健康度
@@ -234,19 +258,10 @@ function statusLabel(status) {
   return '健康'
 }
 
-async function loadData() {
-  loading.value = true
-  try {
-    const data = await getChannelHealth(rangeDays.value)
-    channels.value = data.channels || []
-    summary.value = data.summary || { healthy: 0, warning: 0, critical: 0, total: 0 }
-    meta.value = data.meta || {}
-  } finally {
-    loading.value = false
-  }
-}
+// 顶部「近 7/14/30 天」切换与错误态重试都回到同一个三态入口
+const loadData = healthLoad.load
 
-onMounted(loadData)
+onMounted(healthLoad.load)
 </script>
 
 <style scoped lang="scss">
