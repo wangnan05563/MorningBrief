@@ -172,6 +172,56 @@ test.describe('工作流监控', () => {
     expect(calls).toHaveLength(1)
   })
 
+  test('批量重试失败的频道：失败原因只进结果对话框，不逐条弹拦截器提示', async ({ page }) => {
+    // T02629：重试是「N 个频道并发触发」，每个失败若都让拦截器各弹一条，用户会被刷屏；
+    // 失败原因已经回填到结果对话框的「失败」页签，重试请求必须 silent。
+    const retried = []
+    await page.route('**/admin/api/v1/workflows/trigger-all', async (route) => {
+      await route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: {
+            total: 3,
+            triggered: [],
+            skipped: [],
+            failed: [
+              { channel_id: 1, channel_name: '科技频道', error: '解析失败' },
+              { channel_id: 2, channel_name: '财经频道', error: '解析失败' },
+              { channel_id: 3, channel_name: '体育频道', error: '解析失败' },
+            ],
+          },
+        },
+      })
+    })
+    // 每个频道的后端 message 各不相同：去重按键值对生效，若没有 silent 就会弹出三条
+    await page.route('**/admin/api/v1/workflows/trigger', async (route) => {
+      const body = JSON.parse(route.request().postData() || '{}')
+      retried.push(body.channel_id)
+      await route.fulfill({
+        status: 500,
+        json: { code: 500, message: `频道 ${body.channel_id} 触发失败`, data: null },
+      })
+    })
+    await setLoginState(page, 'admin')
+    await page.goto('/workflows')
+
+    await expect(page.getByRole('button', { name: '全频道启动' })).toBeVisible({ timeout: 30000 })
+    await page.getByRole('button', { name: '全频道启动' }).click()
+    await page.locator('.el-message-box').getByRole('button', { name: '确认启动' }).click()
+
+    const dlg = page.locator('.el-dialog').filter({ hasText: '全频道触发结果' })
+    await expect(dlg).toBeVisible({ timeout: 30000 })
+    await dlg.getByRole('tab', { name: /失败/ }).click()
+    await dlg.getByRole('button', { name: '重试失败频道' }).click()
+
+    // 等页面自己的汇总提示：它出现时重试已全部结束，拦截器那些提示（若存在）也早已在 DOM 里
+    await expect(page.locator('.el-message').getByText('重试失败 3 个频道')).toBeVisible({ timeout: 30000 })
+    expect([...retried].sort()).toEqual([1, 2, 3])
+    const toasts = await page.locator('.el-message').allTextContents()
+    expect(toasts.filter((t) => t.includes('触发失败'))).toEqual([])
+  })
+
   test('点击工作流跳转详情', async ({ page }) => {
     await setLoginState(page, 'admin')
     await page.goto('/workflows')

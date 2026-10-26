@@ -202,6 +202,11 @@ test.describe('破坏性操作确认', () => {
       await expect(
         page.locator('.el-message').getByText(/级联影响预览失败，已禁止删除/).first(),
       ).toBeVisible({ timeout: NAV_TIMEOUT })
+      // T02629：预览请求 silent——后端原文（「预览失败」）不得再单独弹一条，否则同一件事
+      // 两条提示，其中一条还没说清「已禁止删除」。按整条文案精确比对：页面自己那条
+      // 「级联影响预览失败，已禁止删除」也含「预览失败」四个字，模糊匹配会误伤。
+      const toasts = (await page.locator('.el-message').allTextContents()).map((t) => t.trim())
+      expect(toasts).not.toContain('预览失败')
       await expect(page.locator('.el-dialog').filter({ hasText: '确认删除' })).toHaveCount(0)
     })
   })

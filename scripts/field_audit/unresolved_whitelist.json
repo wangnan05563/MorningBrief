@@ -57,7 +57,7 @@
     },
     {
       "endpoint": "POST /workflows/batch-delete/preview",
-      "site": "views/workflow/WorkflowList.vue:662",
+      "site": "views/workflow/WorkflowList.vue:663",
       "reason_key": "value-scalar",
       "note": "ids 是工作流列表勾选行的 id 数组，键名 workflow_ids 由 src/api/workflow.js 的 batchDeletePreview 字面量给出，在 BatchDeleteRequest 声明内（T02596 删除影响面预览）。"
     },

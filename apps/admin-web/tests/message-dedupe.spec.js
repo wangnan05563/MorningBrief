@@ -121,8 +121,14 @@ test.describe('提示去重与单一出口', () => {
     expect(result.toasts.filter((t) => t.includes('服务暂不可用'))).toHaveLength(0)
   })
 
-  test('提示必须走 utils/message 单一出口', () => {
+  test('提示必须走 utils/message 单一出口（含 ElNotification 等旁路）', () => {
     const offenders = []
+    // 直引这些符号都等于绕过统一出口：去重、窗口守卫、隐藏期补发全部失效。
+    // 包装器本体（utils/message.js）是唯一允许直连 element-plus 的地方；
+    // main.js 的默认导入只用于 app.use(ElementPlus) 注册组件，不产生提示。
+    const NAMED_BYPASS =
+      /import\s*\{[^}]*\b(?:ElMessage|ElMessageBox|ElNotification|ElLoading)\b[^}]*\}\s*from\s*['"]element-plus['"]/
+    const NS_BYPASS = /import\s*\*\s*as\s+\w+\s+from\s*['"]element-plus['"]/
     const walk = (dir) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name)
@@ -131,12 +137,48 @@ test.describe('提示去重与单一出口', () => {
         // 包装器本体必须直连 element-plus
         if (full.endsWith(path.join('utils', 'message.js'))) continue
         const text = fs.readFileSync(full, 'utf-8')
-        if (/import\s*\{[^}]*\bElMessage(Box)?\b[^}]*\}\s*from\s*['"]element-plus['"]/.test(text)) {
+        if (NAMED_BYPASS.test(text) || NS_BYPASS.test(text)) {
           offenders.push(path.relative(SRC_DIR, full))
         }
       }
     }
     walk(SRC_DIR)
     expect(offenders, `绕过统一提示出口的页面：${offenders.join(', ')}`).toEqual([])
+  })
+
+  test('页面 catch 与拦截器同一件事只留一条说明（真实链路）', async ({ page }) => {
+    // 落地点选自动审批保存：请求非 silent，拦截器会先弹后端 message；
+    // 页面 catch 改用 notifyErrorOnce 后不得再弹一条「保存失败：…」。
+    await setLoginState(page, 'admin')
+    await page.route('**/admin/api/v1/auto-review/config', (route) => {
+      if (route.request().method() === 'PUT') {
+        return route.fulfill({ json: { code: 500, message: '规则保存被拒绝', data: null } })
+      }
+      return route.fulfill({ json: { code: 0, message: 'ok', data: {
+        enabled: false,
+        require_content_safe: true,
+        require_steps_first_success: false,
+        keyword_whitelist: [],
+        skipped_rules: [],
+        risk_acknowledged: false,
+      } } })
+    })
+    await page.route('**/admin/api/v1/auto-review/stats**', (route) =>
+      route.fulfill({ json: { code: 0, message: 'ok', data: { fail_distribution: [] } } }))
+    await page.route('**/admin/api/v1/auto-review/history**', (route) =>
+      route.fulfill({ json: { code: 0, message: 'ok', data: { total: 0, list: [] } } }))
+    // 布局层的「检查更新」也是非 silent 请求；不 mock 会打到未运行/旧版后端，多弹一条干扰计数
+    await page.route('**/admin/api/v1/about/check-update', (route) =>
+      route.fulfill({ json: { code: 0, message: 'ok', data: { update_available: false } } }))
+
+    await page.goto('/auto-review')
+    await page.getByRole('button', { name: '保存配置' }).click()
+
+    // 先等拦截器那条真的出现，再给页面 catch 一个「补第二条」的机会（若回归会发生在这里）
+    await expect(page.locator('.el-message').filter({ hasText: '规则保存被拒绝' })).toHaveCount(1)
+    await page.waitForTimeout(400)
+    const toasts = await page.locator('.el-message').allTextContents()
+    expect(toasts).toHaveLength(1)
+    expect(toasts[0]).toContain('规则保存被拒绝')
   })
 })

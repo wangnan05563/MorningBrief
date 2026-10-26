@@ -604,9 +604,10 @@ async function retryFailedChannels() {
   retrying.value = true
   try {
     const failedList = triggerAllResult.value.failed
-    // 并发重试所有失败频道：与全频道触发一致，trigger_workflow 仅入队不阻塞
+    // 并发重试所有失败频道：与全频道触发一致，trigger_workflow 仅入队不阻塞。
+    // silent：每个频道的失败原因已经回填进下面的对话框，拦截器再各弹一条只会刷屏。
     const retryResults = await Promise.allSettled(
-      failedList.map((ch) => triggerWorkflow(ch.channel_id))
+      failedList.map((ch) => triggerWorkflow(ch.channel_id, { silent: true }))
     )
 
     // 分类重试结果：成功的移到 triggered，仍失败的更新 error 信息

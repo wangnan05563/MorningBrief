@@ -346,7 +346,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1685,
+            "line": 1683,
             "fn": "api.post",
             "fieldCount": 26,
             "unresolved": []
@@ -524,7 +524,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1565,
+            "line": 1563,
             "fn": "api.post",
             "fieldCount": 3,
             "unresolved": []
@@ -579,7 +579,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1602,
+            "line": 1600,
             "fn": "api.post",
             "fieldCount": 12,
             "unresolved": []
@@ -2596,7 +2596,7 @@
         "callSites": [
           {
             "file": "views/workflow/WorkflowList.vue",
-            "line": 684,
+            "line": 685,
             "fn": "api.post",
             "fieldCount": 1,
             "unresolved": []
@@ -2645,7 +2645,7 @@
           },
           {
             "file": "views/workflow/WorkflowList.vue",
-            "line": 662,
+            "line": 663,
             "fn": "batchDeletePreview",
             "fieldCount": 1,
             "unresolved": [
@@ -2698,7 +2698,7 @@
           },
           {
             "file": "views/workflow/WorkflowList.vue",
-            "line": 609,
+            "line": 610,
             "fn": "triggerWorkflow",
             "fieldCount": 3,
             "unresolved": []

@@ -48,7 +48,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { Refresh, MoreFilled } from '@element-plus/icons-vue'
 import api from '../api'
-import { ElMessage, ElMessageBox } from '../utils/message'
+import { ElMessage, ElMessageBox, notifyErrorOnce } from '../utils/message'
 
 const props = defineProps({
   provider: { type: String, required: true },
@@ -113,7 +113,7 @@ async function onSync() {
     ElMessage.success(`已同步官方音色 ${count} 个`)
   } catch (e) {
     // 失败不中断使用：本地列表保持原样（后端同样保留原列表）
-    ElMessage.error(e && e.message ? e.message : '音色同步失败，请稍后重试')
+    notifyErrorOnce(e, (e && e.message) || '音色同步失败，请稍后重试')
   } finally {
     syncing.value = false
   }
@@ -138,7 +138,7 @@ async function onCommand(cmd) {
     emit('synced', null) // null = 让父组件重新走 loadVoices 拉内置清单
     ElMessage.success('已恢复内置音色清单')
   } catch (e) {
-    ElMessage.error('恢复失败，请稍后重试')
+    notifyErrorOnce(e, '恢复失败，请稍后重试')
   } finally {
     syncing.value = false
   }

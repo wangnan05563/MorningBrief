@@ -918,7 +918,7 @@ import { useDraft } from '../../composables/useDraft'
 import { useConfigLoad } from '../../composables/useConfigLoad'
 import { useRoute, useRouter } from 'vue-router'
 
-import { ElMessage } from '../../utils/message'
+import { ElMessage, notifyErrorOnce } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import { Check, Refresh, RefreshLeft, Delete, Hide, View, Connection, Download, ArrowRight, VideoPlay } from '@element-plus/icons-vue'
 import api from '../../api'
@@ -1548,10 +1548,8 @@ async function handleFetchModels() {
     }
   } catch (e) {
     modelList.value = []
-    // 拦截器已弹出后端 message，此处仅兜底
-    if (!e?.message) {
-      ElMessage.error('获取模型列表失败')
-    }
+    // 拦截器已弹出后端 message；未带标记的错误（本地抛出）才由这里兜底
+    notifyErrorOnce(e, '获取模型列表失败')
   } finally {
     fetchingModels.value = false
   }

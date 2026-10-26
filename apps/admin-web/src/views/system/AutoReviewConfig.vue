@@ -333,7 +333,7 @@ import ConfigLoadError from '../../components/ConfigLoadError.vue'
 import { Refresh, Setting, Plus, DataLine, CircleCheck, CircleClose, Timer, List, WarningFilled, Check } from '@element-plus/icons-vue'
 // 提示必须走统一出口：直接从 element-plus 取 ElMessage 会绕过 2 秒去重与
 // 「隐藏期间不入 DOM」的窗口守卫（FR-UX-301/303）
-import { ElMessage } from '../../utils/message'
+import { ElMessage, notifyErrorOnce } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import {
   getAutoReviewConfig,
@@ -489,7 +489,7 @@ async function saveConfig() {
     ElMessage.success('配置已保存，下次工作流创建审核记录时按新配置判定')
     commitDraft()
   } catch (err) {
-    ElMessage.error('保存失败：' + (err.message || '未知错误'))
+    notifyErrorOnce(err, '保存失败：' + (err.message || '未知错误'))
   } finally {
     saving.value = false
   }
@@ -523,7 +523,7 @@ async function loadStats() {
     const res = await getAutoReviewStats(params)
     stats.value = res
   } catch (err) {
-    ElMessage.error('加载统计失败：' + (err.message || '未知错误'))
+    notifyErrorOnce(err, '加载统计失败：' + (err.message || '未知错误'))
   } finally {
     loadingStats.value = false
   }
@@ -543,7 +543,7 @@ async function loadHistory() {
     const res = await listAutoReviewHistory(params)
     history.value = res
   } catch (err) {
-    ElMessage.error('加载历史失败：' + (err.message || '未知错误'))
+    notifyErrorOnce(err, '加载历史失败：' + (err.message || '未知错误'))
   } finally {
     loadingHistory.value = false
   }
@@ -577,7 +577,7 @@ async function retryStat(row) {
     // 刷新统计与历史
     await Promise.all([loadStats(), loadHistory()])
   } catch (err) {
-    ElMessage.error('重试失败：' + (err.message || '未知错误'))
+    notifyErrorOnce(err, '重试失败：' + (err.message || '未知错误'))
   } finally {
     retryingStat.value = ''
   }

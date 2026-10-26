@@ -57,9 +57,14 @@ export function batchDelete(table, ids, confirmText) {
 
 // ---- 级联预览 ----
 
-/** 预览级联删除影响范围 */
+/**
+ * 预览级联删除影响范围
+ *
+ * silent：失败由调用方给出「已禁止删除」的完整语义（与频道/工作流删除预览同口径），
+ * 避免拦截器再弹一条、用户看到同一件事两句说明。
+ */
 export function cascadePreview(table, ids) {
-  return api.post(`/db-admin/tables/${table}/cascade-preview`, { ids })
+  return api.post(`/db-admin/tables/${table}/cascade-preview`, { ids }, { silent: true })
 }
 
 // ---- 导出 ----

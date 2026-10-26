@@ -358,7 +358,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useDraft } from '../../composables/useDraft'
 import { useConfigLoad } from '../../composables/useConfigLoad'
-import { ElMessage } from '../../utils/message'
+import { ElMessage, notifyErrorOnce } from '../../utils/message'
 import {
   CopyDocument, Link, VideoPlay, VideoPause, Setting, Check,
   MagicStick, Key, Loading, Plus, ArrowRight,
@@ -548,7 +548,7 @@ async function handleStop() {
     ElMessage.success('隧道已关闭')
   } catch (error) {
     const resp = readBizError(error)
-    ElMessage.error(resp?.message || '停止失败')
+    notifyErrorOnce(error, resp?.message || '停止失败')
   } finally {
     stopping.value = false
   }
@@ -581,7 +581,7 @@ async function handleSaveConfig() {
     await configLoad.load()
   } catch (error) {
     const resp = readBizError(error)
-    ElMessage.error(resp?.message || '配置保存失败')
+    notifyErrorOnce(error, resp?.message || '配置保存失败')
   } finally {
     savingConfig.value = false
   }
@@ -604,7 +604,7 @@ async function handleCloudflareLogin() {
     }
   } catch (error) {
     const resp = readBizError(error)
-    ElMessage.error(resp?.message || '授权启动失败')
+    notifyErrorOnce(error, resp?.message || '授权启动失败')
   } finally {
     loginLoading.value = false
   }
@@ -653,7 +653,7 @@ async function handleCloudflareCreate() {
     wizardStep.value = 2
   } catch (error) {
     const resp = readBizError(error)
-    ElMessage.error(resp?.message || '创建隧道失败')
+    notifyErrorOnce(error, resp?.message || '创建隧道失败')
   } finally {
     createLoading.value = false
   }
@@ -676,7 +676,7 @@ async function handleCloudflareRouteDns() {
     wizardStep.value = 3
   } catch (error) {
     const resp = readBizError(error)
-    ElMessage.error(resp?.message || 'DNS 配置失败')
+    notifyErrorOnce(error, resp?.message || 'DNS 配置失败')
   } finally {
     routeLoading.value = false
   }
