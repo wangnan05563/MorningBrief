@@ -44,6 +44,19 @@ class CacheCleanupRequest(BaseModel):
     dry_run: bool = False
 
 
+class WorkflowChainCleanupRequest(BaseModel):
+    """指定工作流全链清理请求体。
+
+    按 ID 清理没有「保留 N 天」语义，因此不声明 days；target 也不适用，
+    路径本身已表明清理范围（T02926 同口径：不声明用不上的字段）。
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_id: str = Field(min_length=1, max_length=64)
+    dry_run: bool = False
+
+
+
 # ---- 存储状态查询 ----
 
 @router.get("/status")
@@ -73,6 +86,24 @@ async def cleanup_database(
     result = await svc.cleanup_database(
         target=body.target, days=body.days,
         dry_run=body.dry_run, admin_name=admin.username,
+    )
+    return success(data=result)
+
+
+# ---- 指定工作流全链清理 ----
+
+@router.post("/workflow-chain")
+async def cleanup_workflow_chain(
+    body: WorkflowChainCleanupRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """按工作流 ID 清理其全部子表（与按天清理共用同一套级联口径）。"""
+    svc = MaintenanceService(db)
+    result = await svc.cleanup_workflow_chain(
+        workflow_id=body.workflow_id,
+        dry_run=body.dry_run,
+        admin_name=admin.username,
     )
     return success(data=result)
 

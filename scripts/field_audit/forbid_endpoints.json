@@ -22,6 +22,13 @@
       "probe_field": "t02926_undeclared_probe",
       "why": "同 database：日志按天数清理，字段契约与审计口径要一起钉住",
       "evidence": "backend/app/routers/admin/maintenance.py:22 backend/app/services/maintenance_service.py:353"
+    },
+    {
+      "key": "POST /maintenance/workflow-chain",
+      "model": "WorkflowChainCleanupRequest",
+      "probe_field": "days",
+      "why": "按工作流 ID 的全链清理没有「保留 N 天」语义；页面若照抄数据库清理的 payload 多带 days，必须被拒而不是静默吞（T02599）",
+      "evidence": "backend/app/routers/admin/maintenance.py:47 backend/app/services/maintenance_service.py:447 apps/admin-web/src/views/maintenance/Maintenance.vue:426"
     }
   ]
 }

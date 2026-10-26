@@ -1628,7 +1628,7 @@
       "model": "CacheCleanupRequest",
       "modelSource": "backend/app/routers/admin/maintenance.py:35",
       "modelExtra": "forbid",
-      "handlerSource": "backend/app/routers/admin/maintenance.py:99",
+      "handlerSource": "backend/app/routers/admin/maintenance.py:130",
       "declared": [
         "dry_run",
         "target"
@@ -1659,7 +1659,7 @@
       "model": "CleanupRequest",
       "modelSource": "backend/app/routers/admin/maintenance.py:22",
       "modelExtra": "forbid",
-      "handlerSource": "backend/app/routers/admin/maintenance.py:62",
+      "handlerSource": "backend/app/routers/admin/maintenance.py:75",
       "declared": [
         "days",
         "dry_run",
@@ -1692,7 +1692,7 @@
       "model": "CleanupRequest",
       "modelSource": "backend/app/routers/admin/maintenance.py:22",
       "modelExtra": "forbid",
-      "handlerSource": "backend/app/routers/admin/maintenance.py:82",
+      "handlerSource": "backend/app/routers/admin/maintenance.py:113",
       "declared": [
         "days",
         "dry_run",
@@ -1719,6 +1719,55 @@
         "columnNotInModel": []
       },
       "verdict": "真缺陷（已修）：两处一起修：①`audit_log.detail` 从不记录保留窗口，事后只看得到「清过了」看不到「按几天清的」；②三个清理端点共用 CleanupRequest，缓存端点因此接收它根本无法兑现的 days（TTLCache/__pycache__/临时文件没有「保留 N 天」语义）。现在拆出 CacheCleanupRequest（不声明 days）并给两个请求体加 extra=forbid，数据库/日志清理把 days 写进审计 detail。前端本就只在非缓存分类提交 days（apps/admin-web/src/views/maintenance/Maintenance.vue:400 的 category !== 'cache' 判断），所以这不是线上错数据，而是把潜在的契约漏洞关死（backend/app/routers/admin/maintenance.py:22 backend/app/routers/admin/maintenance.py:35 apps/admin-web/src/views/maintenance/Maintenance.vue:400 backend/app/services/maintenance_service.py:271）"
+    },
+    {
+      "endpoint": "POST /maintenance/workflow-chain",
+      "model": "WorkflowChainCleanupRequest",
+      "modelSource": "backend/app/routers/admin/maintenance.py:47",
+      "modelExtra": "forbid",
+      "handlerSource": "backend/app/routers/admin/maintenance.py:95",
+      "declared": [
+        "dry_run",
+        "workflow_id"
+      ],
+      "frontend": {
+        "callSites": [],
+        "fields": [],
+        "unresolved": [],
+        "hasCallSite": false
+      },
+      "ormTable": "WorkflowStep",
+      "ormScore": 0.5,
+      "ormTied": [
+        "WorkflowStep"
+      ],
+      "ormColumns": [
+        "error",
+        "finished_at",
+        "id",
+        "result",
+        "retry_count",
+        "started_at",
+        "status",
+        "step_name",
+        "workflow_id"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [],
+        "columnNotInModel": [
+          "error",
+          "finished_at",
+          "result",
+          "retry_count",
+          "started_at",
+          "status",
+          "step_name"
+        ]
+      },
+      "verdict": null
     },
     {
       "endpoint": "POST /materials",
@@ -3869,8 +3918,8 @@
     }
   ],
   "totals": {
-    "endpointsWithBodyModel": 66,
-    "forbidCount": 3,
+    "endpointsWithBodyModel": 67,
+    "forbidCount": 4,
     "withFrontendCallSite": 59,
     "noFrontendCallSite": [
       "POST /backups/restore",
@@ -3879,6 +3928,7 @@
       "POST /maintenance/cache",
       "POST /maintenance/database",
       "POST /maintenance/logs",
+      "POST /maintenance/workflow-chain",
       "PUT /channels/*/book-pool/order"
     ],
     "frontendNotInModel": [],

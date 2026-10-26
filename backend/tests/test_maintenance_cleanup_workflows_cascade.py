@@ -31,17 +31,19 @@ from app.models import (
     Workflow,
     WorkflowStep,
 )
+from app.models.audit_log import AuditLog
 from app.models.workflow import WorkflowSource, WorkflowStatus
+from app.core.exceptions import NotFoundError, ParamError
 from app.services.maintenance_service import MaintenanceService
 
 
-async def _seed_workflow(db, wid, finished_at, *, old=True):
+async def _seed_workflow(db, wid, finished_at, *, old=True, status=WorkflowStatus.success):
     """构造一条工作流及其完整子表链；old=True 时额外加一条 NULL-workflow 孤儿 Episode。"""
     wf = Workflow(
         id=wid,
         episode_date=date.today(),
         source=WorkflowSource.cron,
-        status=WorkflowStatus.success,
+        status=status,
         started_at=None,
         finished_at=finished_at,
     )
@@ -153,3 +155,77 @@ async def test_cleanup_workflows_dry_run_only_counts(db_session):
     # dry_run 不删除任何行
     assert (await db_session.execute(select(Workflow).where(Workflow.id == "dry-wf"))).scalar_one_or_none() is not None
     assert (await db_session.execute(select(Script).where(Script.workflow_id == "dry-wf"))).scalars().all() != []
+
+
+@pytest.mark.asyncio
+async def test_cleanup_workflow_chain_by_id_preview_then_delete(db_session):
+    """T02599：按 ID 全链清理先预览命中行数，再真删；其他工作流不受影响。"""
+    now = datetime.now()
+    await _seed_workflow(db_session, "target-wf", now - timedelta(days=3), old=True)
+    await _seed_workflow(db_session, "other-wf", now - timedelta(days=2), old=False)
+    svc = MaintenanceService(db_session)
+
+    preview = await svc.cleanup_workflow_chain("target-wf", dry_run=True, admin_name="tester")
+    assert preview["target"] == "workflow_chain"
+    assert preview["workflow_id"] == "target-wf"
+    assert preview["dry_run"] is True
+    assert preview["counts"] == {
+        "workflow_steps": 1, "scripts": 1, "episodes": 2, "reviews": 1,
+        "auto_review_stats": 1, "notification_logs": 1, "play_logs": 1,
+        "play_progress": 1, "comments": 1, "favorites": 1, "workflows": 1,
+    }
+    assert preview["total_deleted"] == 12
+    assert all(" 将删除 " in line for line in preview["cleaned"])
+    # 预览不得删任何行
+    assert (await db_session.execute(select(Workflow).where(Workflow.id == "target-wf"))).scalar_one_or_none() is not None
+    assert (await db_session.execute(select(Script).where(Script.workflow_id == "target-wf"))).scalars().all() != []
+
+    result = await svc.cleanup_workflow_chain("target-wf", dry_run=False, admin_name="tester")
+    assert result["dry_run"] is False
+    assert result["counts"] == preview["counts"]
+    assert all(" 已删除 " in line for line in result["cleaned"])
+
+    # 目标工作流全链清空
+    for model, cond in [
+        (Workflow, Workflow.id == "target-wf"),
+        (WorkflowStep, WorkflowStep.workflow_id == "target-wf"),
+        (Script, Script.workflow_id == "target-wf"),
+        (Episode, Episode.workflow_id == "target-wf"),
+        (Review, Review.workflow_id == "target-wf"),
+        (AutoReviewStat, AutoReviewStat.workflow_id == "target-wf"),
+        (NotificationLog, NotificationLog.workflow_id == "target-wf"),
+    ]:
+        assert (await db_session.execute(select(model).where(cond))).scalars().all() == [], model
+
+    # 负对照：另一条工作流及其子表原样保留
+    assert (await db_session.execute(select(Workflow).where(Workflow.id == "other-wf"))).scalar_one_or_none() is not None
+    assert (await db_session.execute(select(Script).where(Script.workflow_id == "other-wf"))).scalars().all() != []
+
+    # 审计：动作、对象、操作者三要素齐全（T02599 要求事后可查「谁删了哪条」）
+    audit = (await db_session.execute(
+        select(AuditLog).where(
+            AuditLog.category == "maintenance",
+            AuditLog.action == "cleanup_workflow_chain",
+        )
+    )).scalars().all()
+    assert [a.target for a in audit] == ["target-wf", "target-wf"]
+    assert all(a.operator == "tester" for a in audit)
+
+
+@pytest.mark.asyncio
+async def test_cleanup_workflow_chain_rejects_running_and_unknown(db_session):
+    """运行中工作流拒绝清理；未知 ID 明确 404，不能静默当作已清理。"""
+    await _seed_workflow(
+        db_session, "running-wf", None,
+        old=False, status=WorkflowStatus.running,
+    )
+    svc = MaintenanceService(db_session)
+
+    with pytest.raises(ParamError) as refused:
+        await svc.cleanup_workflow_chain("running-wf", dry_run=False, admin_name="tester")
+    assert "仅已完结的工作流允许全链清理" in refused.value.message
+    assert (await db_session.execute(select(Workflow).where(Workflow.id == "running-wf"))).scalar_one_or_none() is not None
+
+    with pytest.raises(NotFoundError) as missing:
+        await svc.cleanup_workflow_chain("no-such-wf", dry_run=True, admin_name="tester")
+    assert "工作流不存在" in missing.value.message

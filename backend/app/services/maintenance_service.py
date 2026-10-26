@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache.manager import cache
 from app.config import get_settings
+from app.core.exceptions import NotFoundError, ParamError
 from app.core.timeutil import localnow_naive
 from app.database import engine
 from app.models import (
@@ -53,6 +54,21 @@ settings = get_settings()
 
 # 大日志文件阈值（10MB），超过此大小可清理
 LARGE_LOG_THRESHOLD_BYTES = 10 * 1024 * 1024
+
+# 工作流全链清理的逐表口径：display 顺序 = 删除/统计顺序（子表在前，Workflow 最后）
+WORKFLOW_CHAIN_TABLES = {
+    "workflow_steps": "工作流步骤",
+    "scripts": "稿件",
+    "episodes": "节目",
+    "reviews": "审核记录",
+    "auto_review_stats": "自动审核统计",
+    "notification_logs": "通知记录",
+    "play_logs": "播放日志",
+    "play_progress": "播放进度",
+    "comments": "评论",
+    "favorites": "收藏",
+    "workflows": "工作流",
+}
 
 
 class MaintenanceService:
@@ -423,10 +439,67 @@ class MaintenanceService:
 
         # 级联清理子表：子表的 workflow_id 多为普通字符串列（非外键），
         # 删 Workflow 不会自动清理，须手动按 workflow_id 删除，否则数据悬空累积。
-        # 删除顺序：播放数据/评论/收藏 → Episode → AutoReviewStat → Review →
-        #           NotificationLog → Script → Workflow
         # Episode/Review 同时按 script_id 清理，覆盖 workflow_id 为 NULL 的历史孤儿
         # （避免删 Script 时触发 FOREIGN KEY constraint failed）。
+        script_ids, episode_ids = await self._workflow_chain_ids(wf_ids)
+        return await self._delete_workflow_chain(wf_ids, script_ids, episode_ids)
+
+    async def cleanup_workflow_chain(
+        self, workflow_id: str, dry_run: bool, admin_name: str
+    ) -> dict:
+        """按工作流 ID 全链清理（稿件/节目/审核/播放数据等子表一并删除）。
+
+        与 `_cleanup_workflows` 共用同一套级联口径，区别只是选择范围从
+        「N 天前的已完结工作流」变成「指定 ID」。运行中/排队中的工作流可能仍被
+        worker 写入，拒绝清理；未知 ID 按 404 返回，避免把输错 ID 当成「已清理」。
+        """
+        from app.models.workflow import WorkflowStatus
+
+        result = await self.db.execute(
+            select(Workflow).where(Workflow.id == workflow_id)
+        )
+        wf = result.scalar_one_or_none()
+        if wf is None:
+            raise NotFoundError(f"工作流不存在: {workflow_id}")
+        finished_statuses = {
+            WorkflowStatus.success.value,
+            WorkflowStatus.failed.value,
+            WorkflowStatus.cancelled.value,
+        }
+        if wf.status not in finished_statuses:
+            raise ParamError(
+                f"仅已完结的工作流允许全链清理（当前状态：{wf.status}）"
+            )
+
+        wf_ids = [workflow_id]
+        script_ids, episode_ids = await self._workflow_chain_ids(wf_ids)
+        counts = await self._count_workflow_chain(wf_ids, script_ids, episode_ids)
+        if not dry_run:
+            await self._delete_workflow_chain(wf_ids, script_ids, episode_ids)
+
+        action = "将删除" if dry_run else "已删除"
+        cleaned = [
+            f"{label} {action} {counts[key]} 条"
+            for key, label in WORKFLOW_CHAIN_TABLES.items()
+            if counts[key] > 0
+        ]
+        await self._write_audit(
+            "cleanup_workflow_chain", workflow_id, admin_name, dry_run, cleaned, []
+        )
+        return {
+            "target": "workflow_chain",
+            "workflow_id": workflow_id,
+            "dry_run": dry_run,
+            "cleaned": cleaned,
+            "errors": [],
+            "counts": counts,
+            "total_deleted": sum(counts.values()),
+        }
+
+    async def _workflow_chain_ids(
+        self, wf_ids: list[str]
+    ) -> tuple[list[str], list[str]]:
+        """收集全链的 script_id / episode_id（含 workflow_id 为 NULL 的孤儿）。"""
         script_result = await self.db.execute(
             select(Script.id).where(Script.workflow_id.in_(wf_ids))
         )
@@ -441,7 +514,57 @@ class MaintenanceService:
             )
         )
         episode_ids = [row[0] for row in ep_result.all()]
+        return script_ids, episode_ids
 
+    async def _count_workflow_chain(
+        self, wf_ids: list[str], script_ids: list[str], episode_ids: list[str]
+    ) -> dict[str, int]:
+        """逐表统计全链命中行数；dry-run 与真删共用同一组条件。"""
+
+        async def count(model, condition) -> int:
+            result = await self.db.execute(
+                select(func.count()).select_from(model).where(condition)
+            )
+            return int(result.scalar() or 0)
+
+        episode_match = or_(
+            Episode.workflow_id.in_(wf_ids),
+            Episode.script_id.in_(script_ids),
+        )
+        review_match = or_(
+            Review.workflow_id.in_(wf_ids),
+            Review.script_id.in_(script_ids),
+        )
+        return {
+            "workflow_steps": await count(
+                WorkflowStep, WorkflowStep.workflow_id.in_(wf_ids)
+            ),
+            "scripts": await count(Script, Script.workflow_id.in_(wf_ids)),
+            "episodes": await count(Episode, episode_match),
+            "reviews": await count(Review, review_match),
+            "auto_review_stats": await count(
+                AutoReviewStat, AutoReviewStat.workflow_id.in_(wf_ids)
+            ),
+            "notification_logs": await count(
+                NotificationLog, NotificationLog.workflow_id.in_(wf_ids)
+            ),
+            "play_logs": await count(PlayLog, PlayLog.episode_id.in_(episode_ids)),
+            "play_progress": await count(
+                PlayProgress, PlayProgress.episode_id.in_(episode_ids)
+            ),
+            "comments": await count(Comment, Comment.episode_id.in_(episode_ids)),
+            "favorites": await count(Favorite, Favorite.episode_id.in_(episode_ids)),
+            "workflows": await count(Workflow, Workflow.id.in_(wf_ids)),
+        }
+
+    async def _delete_workflow_chain(
+        self, wf_ids: list[str], script_ids: list[str], episode_ids: list[str]
+    ) -> int:
+        """删除全链数据并提交，返回删除的 Workflow 行数。
+
+        删除顺序：播放数据/评论/收藏 → Episode → AutoReviewStat → Review →
+        NotificationLog → Script → WorkflowStep → Workflow。
+        """
         if episode_ids:
             # Comment/Favorite/PlayProgress 的 episode_id 是普通列（无 FK），须随 Episode 清理
             await self.db.execute(

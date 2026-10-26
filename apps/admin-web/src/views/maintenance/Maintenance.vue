@@ -135,7 +135,18 @@
                 <el-option label="旧爬虫去重记录" value="old_dedup" />
                 <el-option label="旧 AI 用量日志" value="old_ai_usage" />
                 <el-option label="VACUUM 压缩" value="vacuum" />
+                <el-option label="指定工作流全链清理" value="workflow_chain" />
               </el-select>
+            </el-form-item>
+            <el-form-item v-if="isWorkflowChain" label="工作流 ID">
+              <el-input
+                v-model="dbForm.workflow_id"
+                clearable
+                placeholder="粘贴工作流 ID"
+              />
+              <div class="form-tip">
+                仅 success / failed / cancelled 状态的工作流允许清理；运行中会被拒绝
+              </div>
             </el-form-item>
             <el-form-item v-if="showDbDays" label="保留天数">
               <el-input-number
@@ -229,6 +240,7 @@
         <li>数据库清理的「保留天数」仅对按时间清理的目标生效（VACUUM 和过期黑名单除外）</li>
         <li>审核记录仅清理已完结状态（approved/rejected/replaced），pending 状态不会被清理</li>
         <li>工作流记录仅清理已完结状态（success/failed/cancelled），running 状态不会被清理</li>
+        <li>「指定工作流全链清理」按工作流 ID 删除其稿件/节目/审核/播放数据等子表，运行中的工作流会被拒绝</li>
         <li>VACUUM 会锁定数据库直到压缩完成，建议在低峰期执行</li>
         <li class="text-muted">注意：清理操作不可逆，请谨慎操作</li>
       </ol>
@@ -254,10 +266,11 @@ const TARGET_LABELS = {
   old_playlogs: '旧播放日志', old_workflows: '旧工作流记录', old_reviews: '旧审核记录（已完结）',
   expired_blacklist: '过期 JWT 黑名单', old_dedup: '旧爬虫去重记录', old_ai_usage: '旧 AI 用量日志',
   vacuum: 'VACUUM 压缩', old_logs: '旧日志文件', large_logs: '大日志文件（>10MB）',
+  workflow_chain: '指定工作流全链清理',
 }
 const CATEGORY_TARGETS = {
   cache: ['all', 'ttlcache', 'pycache', 'temp'],
-  database: ['all', 'old_playlogs', 'old_workflows', 'old_reviews', 'expired_blacklist', 'old_dedup', 'old_ai_usage', 'vacuum'],
+  database: ['all', 'old_playlogs', 'old_workflows', 'old_reviews', 'expired_blacklist', 'old_dedup', 'old_ai_usage', 'vacuum', 'workflow_chain'],
   logs: ['all', 'old_logs', 'large_logs'],
 }
 function targetLabel(category, target) {
@@ -309,7 +322,7 @@ const lastSuccessAt = ref(null)
 
 // 三个表单状态（互不干扰）
 const cacheForm = ref({ target: 'all', dry_run: true })
-const dbForm = ref({ target: 'all', days: 30, dry_run: true })
+const dbForm = ref({ target: 'all', days: 30, dry_run: true, workflow_id: '' })
 const logForm = ref({ target: 'old_logs', days: 7, dry_run: true })
 
 // 清理结果
@@ -322,10 +335,11 @@ const cacheLoading = ref(false)
 const dbLoading = ref(false)
 const logLoading = ref(false)
 
-// VACUUM 和 expired_blacklist 不需要天数输入
+// VACUUM / expired_blacklist / 指定工作流全链清理都不按天数执行
 const showDbDays = computed(
-  () => !['vacuum', 'expired_blacklist'].includes(dbForm.value.target)
+  () => !['vacuum', 'expired_blacklist', 'workflow_chain'].includes(dbForm.value.target)
 )
+const isWorkflowChain = computed(() => dbForm.value.target === 'workflow_chain')
 // large_logs 不需要天数输入
 const showLogDays = computed(() => logForm.value.target !== 'large_logs')
 
@@ -371,6 +385,14 @@ async function handleCleanup(category) {
   const loading = loadingMap[category]
   const result = resultMap[category]
 
+  // 指定工作流全链清理：本地前置校验（不发请求），后续走独立端点
+  const chain = category === 'database' && form.target === 'workflow_chain'
+  const workflowId = chain ? form.workflow_id.trim() : ''
+  if (chain && !workflowId) {
+    ElMessage.error('请填写要清理的工作流 ID')
+    return
+  }
+
   // 非预览模式二次确认：写清删什么、保留多久、预览到多少条、能否恢复（M59）
   if (!form.dry_run) {
     const previewLines = result.value?.cleaned?.length
@@ -382,10 +404,14 @@ async function handleCleanup(category) {
       : ['尚未做过 dry-run 预览，建议先切到「预览清理」确认影响范围。']
     const ok = await dangerConfirm({
       action: '立即执行清理',
-      target: `${CATEGORY_NAMES[category]} · ${targetLabel(category, form.target)}`,
-      scope: showDays(category, form)
-        ? `仅保留最近 ${form.days} 天，早于该窗口的数据与文件会被删除`
-        : '该目标不受天数条件约束',
+      target: chain
+        ? `${CATEGORY_NAMES[category]} · ${targetLabel(category, form.target)} · 工作流 ${workflowId}`
+        : `${CATEGORY_NAMES[category]} · ${targetLabel(category, form.target)}`,
+      scope: chain
+        ? '仅删除该工作流及其稿件/节目/审核/播放数据等子表，其他工作流不受影响'
+        : showDays(category, form)
+          ? `仅保留最近 ${form.days} 天，早于该窗口的数据与文件会被删除`
+          : '该目标不受天数条件约束',
       lines: previewLines,
       irreversible: '删除后不可恢复：SQLite 没有回收站，只能靠事先备份还原。',
       confirmLabel: '确认执行',
@@ -396,13 +422,17 @@ async function handleCleanup(category) {
   loading.value = true
   result.value = null
   try {
-    const payload = { target: form.target, dry_run: form.dry_run }
-    if (category !== 'cache') {
+    // 全链清理没有 days 语义，走独立端点；其余照旧按 target 走 /maintenance/{category}
+    const url = chain ? '/maintenance/workflow-chain' : `/maintenance/${category}`
+    const payload = chain
+      ? { workflow_id: workflowId, dry_run: form.dry_run }
+      : { target: form.target, dry_run: form.dry_run }
+    if (!chain && category !== 'cache') {
       payload.days = form.days
     }
     // 长任务专用超时（M62）：这一页的三个「立即执行」都是分钟级操作，
     // 不能用 api/index.js 的 15s 全局值——否则后端在正常干活，前端先判死。
-    const data = await api.post(`/maintenance/${category}`, payload, {
+    const data = await api.post(url, payload, {
       timeout: LONG_TASK_TIMEOUT_MS,
       // 超时提示由本页按「后端仍在执行」的口径自己给，拦截器再叠一条「timeout of ...」只会误导重复提交
       silent: true,

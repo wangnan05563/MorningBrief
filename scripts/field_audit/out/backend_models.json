@@ -3344,7 +3344,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/maintenance.py:99",
+        "source": "backend/app/routers/admin/maintenance.py:130",
         "refs": [
           "/cache",
           "AdminPayload",
@@ -3393,7 +3393,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/maintenance.py:62",
+        "source": "backend/app/routers/admin/maintenance.py:75",
         "refs": [
           "/database",
           "AdminPayload",
@@ -3442,7 +3442,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/maintenance.py:82",
+        "source": "backend/app/routers/admin/maintenance.py:113",
         "refs": [
           "/logs",
           "AdminPayload",
@@ -3468,6 +3468,52 @@
           "target",
           "username",
           "清理日志文件（按天数或按大小）。"
+        ]
+      }
+    },
+    "POST /maintenance/workflow-chain": {
+      "raw_path": "/admin/api/v1/maintenance/workflow-chain",
+      "endpoint": "cleanup_workflow_chain",
+      "model": {
+        "name": "WorkflowChainCleanupRequest",
+        "module": "app.routers.admin.maintenance",
+        "source": "backend/app/routers/admin/maintenance.py:47",
+        "extra": "forbid",
+        "fields": [
+          "dry_run",
+          "workflow_id"
+        ],
+        "flatFields": [
+          "dry_run",
+          "workflow_id"
+        ]
+      },
+      "handler": {
+        "source": "backend/app/routers/admin/maintenance.py:95",
+        "refs": [
+          "/workflow-chain",
+          "AdminPayload",
+          "AsyncSession",
+          "Depends",
+          "MaintenanceService",
+          "WorkflowChainCleanupRequest",
+          "admin",
+          "admin_name",
+          "body",
+          "cleanup_workflow_chain",
+          "data",
+          "db",
+          "dry_run",
+          "get_db",
+          "post",
+          "require_admin",
+          "result",
+          "router",
+          "success",
+          "svc",
+          "username",
+          "workflow_id",
+          "按工作流 ID 清理其全部子表（与按天清理共用同一套级联口径）。"
         ]
       }
     },

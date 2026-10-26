@@ -14,6 +14,10 @@
       "reason": "同上：动态路径 /maintenance/${category}（apps/admin-web/src/views/maintenance/Maintenance.vue:405）。"
     },
     {
+      "endpoint": "POST /maintenance/workflow-chain",
+      "reason": "T02599 新增：页面按目标分支拼 URL（apps/admin-web/src/views/maintenance/Maintenance.vue:426 `chain ? '/maintenance/workflow-chain' : ...`），抽取器只认字面 URL；调用点与请求体由 tests/maintenance-workflow-chain.spec.js 覆盖。"
+    },
+    {
       "endpoint": "POST /m/device/register",
       "reason": "api/mobile.js:18 定义了包装函数但没有任何视图调用它；小程序设备注册走 apps/miniprogram 自己的请求层，不在 admin-web 的抽取范围内。"
     },

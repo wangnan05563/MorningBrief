@@ -1132,7 +1132,7 @@
         },
         {
           "file": "views/maintenance/Maintenance.vue",
-          "line": 343,
+          "line": 357,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -2505,25 +2505,6 @@
           "line": 159,
           "fn": "markRead",
           "fieldCount": 1,
-          "unresolved": []
-        }
-      ]
-    },
-    {
-      "method": "POST",
-      "url": "/maintenance/*",
-      "fields": [
-        "days",
-        "dry_run",
-        "target"
-      ],
-      "unresolved": [],
-      "sites": [
-        {
-          "file": "views/maintenance/Maintenance.vue",
-          "line": 405,
-          "fn": "api.post",
-          "fieldCount": 3,
           "unresolved": []
         }
       ]
@@ -14296,5 +14277,5 @@
       }
     }
   ],
-  "rawSites": 222
+  "rawSites": 221
 }

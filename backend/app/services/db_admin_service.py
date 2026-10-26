@@ -88,7 +88,7 @@ UNDECLARED_DOWNSTREAM: dict[str, str] = {
     "workflow": (
         "本预览只覆盖已声明的关联表（workflow_step）。"
         "script / review / episode / play_log 等下游数据不会随之删除，可能留下悬空引用；"
-        "需要按全链路清理请改用「系统清理」页。"
+        "需要按全链路清理请到「系统清理」页选择「指定工作流全链清理」。"
     ),
 }
 
