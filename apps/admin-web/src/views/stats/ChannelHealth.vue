@@ -13,15 +13,15 @@
 
     <!-- T02626：失败时页内说明 + 重试；已有旧数据时注明是上次成功的数据 -->
     <ListLoadError
-      v-if="healthLoad.isError"
-      :message="healthLoad.errorMessage"
+      v-if="healthLoadError"
+      :message="healthLoadMessage"
       :stale="channels.length > 0"
-      :retrying="healthLoad.retrying"
-      @retry="healthLoad.retry()"
+      :retrying="healthLoadRetrying"
+      @retry="healthLoadRetry"
     />
 
     <!-- 汇总卡片：healthy / warning / critical / total。失败且无旧数据时不渲染一排 0 -->
-    <el-row v-if="!healthLoad.isError || channels.length > 0" :gutter="16" class="summary-row">
+    <el-row v-if="!healthLoadError || channels.length > 0" :gutter="16" class="summary-row">
       <el-col v-for="s in summaryCards" :key="s.key" :xs="12" :sm="6">
         <el-card shadow="hover">
           <div class="summary-card" :class="s.cls">
@@ -35,7 +35,7 @@
     <!-- 频道卡片网格：每卡片含基础信息 + mini 折线图 -->
     <div v-loading="loading" class="channel-grid">
       <!-- T02626：失败态不出「暂无频道数据」 -->
-      <el-empty v-if="!loading && !healthLoad.isError && channels.length === 0" data-guide="channel-health-empty" description="暂无频道数据" />
+      <el-empty v-if="!loading && !healthLoadError && channels.length === 0" data-guide="channel-health-empty" description="暂无频道数据" />
 
       <el-row v-if="!loading && channels.length > 0" data-guide="channel-health-cards" :gutter="16">
         <el-col
@@ -150,6 +150,14 @@ const healthLoad = useLoadState(
   },
   { failMessage: '频道健康度加载失败' },
 )
+// ⚠ useLoadState 返回的是普通对象，属性本身是 ref。模板里直接写 `healthLoad.isError`
+// 拿到的是那个 ref 对象（恒真 → 错误横幅常驻、空态永不出现）；必须解构到顶层再给模板用。
+const {
+  isError: healthLoadError,
+  errorMessage: healthLoadMessage,
+  retrying: healthLoadRetrying,
+  retry: healthLoadRetry,
+} = healthLoad
 const loading = healthLoad.isLoading
 const countUnit = computed(() => meta.value.count?.display?.unit || '条')
 

@@ -7,7 +7,7 @@
         label="新增素材"
         desc="打开新增素材对话框"
         :icon="Plus"
-        :disabled="listLoad.isError"
+        :disabled="listLoadError"
         @click="openCreateDialog"
       />
     </div>
@@ -16,11 +16,11 @@
     <div class="card-soft table-card">
       <!-- T02626：失败时页内说明 + 重试；已有旧行时注明是上次成功的数据 -->
       <ListLoadError
-        v-if="listLoad.isError"
-        :message="listLoad.errorMessage"
+        v-if="listLoadError"
+        :message="listLoadMessage"
         :stale="tableData.length > 0"
-        :retrying="listLoad.retrying"
-        @retry="listLoad.retry()"
+        :retrying="listLoadRetrying"
+        @retry="listLoadRetry"
       />
       <el-table data-guide="ads-materials-table" :data="tableData" v-loading="loading" stripe>
         <el-table-column prop="name" label="名称" min-width="160" />
@@ -45,13 +45,13 @@
               label="试听"
               desc="播放该素材音频"
               :icon="VideoPlay"
-              :disabled="listLoad.isError"
+              :disabled="listLoadError"
               @click="playAudio(row)"
             />
             <IconButton
               link
               type="danger"
-              :disabled="row.is_default || listLoad.isError"
+              :disabled="row.is_default || listLoadError"
               label="删除"
               desc="删除该素材"
               :icon="Delete"
@@ -60,7 +60,7 @@
           </template>
         </el-table-column>
         <!-- T02626：失败态不出「暂无广告素材，点击右上角上传」——那会把接口挂了说成还没上传 -->
-        <template #empty><el-empty v-if="!listLoad.isError" description="暂无广告素材，点击右上角「新增素材」上传" :image-size="90" /></template>
+        <template #empty><el-empty v-if="!listLoadError" description="暂无广告素材，点击右上角「新增素材」上传" :image-size="90" /></template>
       </el-table>
 
       <!-- 分页：素材量可能较大，必须支持分页 -->
@@ -156,6 +156,14 @@ const listLoad = useLoadState(
   },
   { failMessage: '广告素材列表加载失败' },
 )
+// ⚠ useLoadState 返回的是普通对象，属性本身是 ref。模板里直接写 `listLoad.isError`
+// 拿到的是那个 ref 对象（恒真 → 错误横幅常驻、按钮恒禁用）；必须解构到顶层再给模板用。
+const {
+  isError: listLoadError,
+  errorMessage: listLoadMessage,
+  retrying: listLoadRetrying,
+  retry: listLoadRetry,
+} = listLoad
 const loading = listLoad.isLoading
 const page = ref(1)
 const size = ref(20)

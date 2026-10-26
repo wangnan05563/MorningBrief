@@ -14,11 +14,11 @@
     <!-- T02626（FR-UX-302）：取数失败不能落到「暂无 LLM 调用数据」——
          那是在断言「没有调用」，而实际只是没取到。 -->
     <ListLoadError
-      v-if="llmLoad.isError"
-      :message="llmLoad.errorMessage"
+      v-if="llmLoadError"
+      :message="llmLoadMessage"
       :stale="metrics.total_calls > 0"
-      :retrying="llmLoad.retrying"
-      @retry="llmLoad.retry()"
+      :retrying="llmLoadRetrying"
+      @retry="llmLoadRetry"
     />
 
     <!-- T02508（FR-UX-503）：本页所有计数都是进程内累计，重启即清零。
@@ -31,7 +31,7 @@
 
     <!-- 说明卡：解释指标含义，便于运维理解派生率意义 -->
     <el-alert
-      v-if="!loading && !llmLoad.isError && metrics.total_calls > 0"
+      v-if="!loading && !llmLoadError && metrics.total_calls > 0"
       class="info-alert"
       type="info"
       :closable="false"
@@ -46,12 +46,12 @@
     <div v-loading="loading">
       <!-- 空态：服务刚启动尚未产生调用（引导据此跳过「重试率概览」一步，T02656） -->
       <el-empty
-        v-if="!loading && !llmLoad.isError && metrics.total_calls === 0"
+        v-if="!loading && !llmLoadError && metrics.total_calls === 0"
         data-guide="llm-metrics-empty"
         description="暂无 LLM 调用数据，工作流执行后将自动累计"
       />
 
-      <template v-else-if="!llmLoad.isError">
+      <template v-else-if="!llmLoadError">
         <!-- 派生率卡片：trigger / improve / not_improve -->
         <el-row data-guide="llm-metrics-rates" :gutter="16" class="rate-row">
           <el-col v-for="r in rateCards" :key="r.key" :xs="24" :sm="8">
@@ -145,6 +145,14 @@ const llmLoad = useLoadState(
   },
   { failMessage: 'LLM 指标加载失败' },
 )
+// ⚠ useLoadState 返回的是普通对象，属性本身是 ref。模板里直接写 `llmLoad.isError`
+// 拿到的是那个 ref 对象（恒真 → 错误横幅常驻、指标卡与空态都出不来）；必须解构到顶层再给模板用。
+const {
+  isError: llmLoadError,
+  errorMessage: llmLoadMessage,
+  retrying: llmLoadRetrying,
+  retry: llmLoadRetry,
+} = llmLoad
 const loading = llmLoad.isLoading
 
 // 累计口径文案：PRD ACC-UX-501 要求「明确显示累计自 x 时间，重启清零」

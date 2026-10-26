@@ -255,6 +255,83 @@ test.describe('列表错误态与重试', () => {
     await expect(banner.getByRole('button', { name: '重试', exact: true })).toBeVisible()
   })
 
+  /**
+   * T02626 首版的真实事故：这几个页面把 useLoadState 的 ref 当布尔直接用在模板里
+   * （`v-if="listLoad.isError"`），拿到的其实是 ref 对象——恒真。于是**成功取数时**
+   * 错误横幅也一直挂着、提交按钮恒禁用、空态永不出现；上面每条失败路径用例却照样全绿。
+   * 所以必须有一组成功路径断言：横幅不在，内容在。
+   */
+  test('成功取数时广告素材/频道健康/LLM 指标都不挂错误横幅', async ({ page }) => {
+    await page.route('**/admin/api/v1/ads/materials*', (route) =>
+      route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: {
+            total: 1,
+            list: [{ id: 1, name: '占位音频', description: '测试', duration: 10, is_default: false }],
+          },
+        },
+      })
+    )
+    await page.route('**/admin/api/v1/stats/channel-health*', (route) =>
+      route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: {
+            channels: [
+              {
+                channel_id: 1,
+                name: '科技前沿',
+                is_active: true,
+                health_status: 'healthy',
+                today_pending: 0,
+                range_total: 1,
+                rss_source_count: 1,
+                keyword_count: 2,
+                daily_trend: [],
+              },
+            ],
+            summary: { healthy: 1, warning: 0, critical: 0, total: 1 },
+            meta: {},
+          },
+        },
+      })
+    )
+    await page.route('**/admin/api/v1/stats/llm-metrics*', (route) =>
+      route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: {
+            total_calls: 3,
+            triggered: 1,
+            improved: 1,
+            not_improved: 0,
+            trigger_rate: 0.33,
+            improve_rate: 1,
+            not_improve_rate: 0,
+            started_at: '2026-10-26T08:00:00',
+            pid: 1,
+            meta: {},
+          },
+        },
+      })
+    )
+
+    const cases = [
+      ['/ads/materials', '[data-guide="ads-materials-table"] .el-table__row'],
+      ['/stats/channel-health', '[data-guide="channel-health-cards"]'],
+      ['/stats/llm-metrics', '[data-guide="llm-metrics-rates"]'],
+    ]
+    for (const [path, content] of cases) {
+      await page.goto(`/news${path}`)
+      await expect(page.locator(content).first()).toBeVisible({ timeout: 30000 })
+      await expect(page.locator('.list-load-error')).toHaveCount(0)
+    }
+  })
+
   test('广告投放：列表失败显示错误态而非「暂无投放规则」', async ({ page }) => {
     await page.route('**/admin/api/v1/ads/placements*', (route) => route.abort())
 

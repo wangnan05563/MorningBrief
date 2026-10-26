@@ -3,11 +3,11 @@
     <!-- T02626（FR-UX-302）：详情拉取失败与「详情为空」必须分开。
          失败时只给页内错误态 + 重试，不渲染日期/工作流 ID 的空壳，也不允许提交审核。 -->
     <ListLoadError
-      v-if="detailLoad.isError"
-      :message="detailLoad.errorMessage"
+      v-if="detailLoadError"
+      :message="detailLoadMessage"
       :stale="!!detail.id"
-      :retrying="detailLoad.retrying"
-      @retry="detailLoad.retry()"
+      :retrying="detailLoadRetrying"
+      @retry="detailLoadRetry"
     />
 
     <div class="detail-header">
@@ -179,7 +179,7 @@
             </el-form-item>
             <el-form-item>
               <!-- T02626：详情没加载成功时禁用提交——拿空对象/旧详情去改审核状态是静默破坏 -->
-              <IconButton type="primary" :loading="submitting" :disabled="detailLoad.isError" :icon="Check" label="提交" desc="提交当前审核操作" @click="handleSubmit" />
+              <IconButton type="primary" :loading="submitting" :disabled="detailLoadError" :icon="Check" label="提交" desc="提交当前审核操作" @click="handleSubmit" />
             </el-form-item>
           </el-form>
         </el-card>
@@ -229,6 +229,14 @@ const detailLoad = useLoadState(
   },
   { failMessage: '审核详情加载失败' },
 )
+// ⚠ useLoadState 返回的是普通对象，属性本身是 ref。模板里直接写 `detailLoad.isError`
+// 拿到的是 ref 对象（恒真 → 错误横幅常驻、提交按钮恒禁用）；必须解构到顶层再给模板用。
+const {
+  isError: detailLoadError,
+  errorMessage: detailLoadMessage,
+  retrying: detailLoadRetrying,
+  retry: detailLoadRetry,
+} = detailLoad
 const loading = detailLoad.isLoading
 // T00809 下一步：默认展示前 9 张缩略图，「查看全部」弹窗展示全量（后端已返回完整 images）
 const IMAGE_SHOW_LIMIT = 9

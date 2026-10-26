@@ -595,7 +595,7 @@ export const METRIC_UNIT_ALLOW = [
   },
   {
     file: 'views/review/ReviewDetail.vue',
-    lines: [292, 293],
+    lines: [300, 301],
     reason: '本地 mm:ss 排版（音频精确到秒的时长展示），不产出单位标签',
   },
   {

@@ -488,8 +488,8 @@ describe('T02626 列表/详情错误态接线（11 页）', () => {
     {
       rel: 'views/review/ReviewDetail.vue',
       // 详情页没有列表空态，但「提交审核」必须被失败态禁用（否则会拿空详情发请求）
-      flag: /v-if="detailLoad\.isError"/,
-      extra: /:disabled="detailLoad\.isError"/,
+      flag: /v-if="detailLoadError"/,
+      extra: /:disabled="detailLoadError"/,
     },
     {
       rel: 'views/workflow/WorkflowDetail.vue',
@@ -516,8 +516,8 @@ describe('T02626 列表/详情错误态接线（11 页）', () => {
     },
     {
       rel: 'views/ad/AdMaterials.vue',
-      flag: /v-if="listLoad\.isError"/,
-      extra: /<el-empty v-if="!listLoad\.isError"/,
+      flag: /v-if="listLoadError"/,
+      extra: /<el-empty v-if="!listLoadError"/,
     },
     {
       rel: 'views/ad/AdPlacements.vue',
@@ -526,14 +526,14 @@ describe('T02626 列表/详情错误态接线（11 页）', () => {
     },
     {
       rel: 'views/stats/ChannelHealth.vue',
-      flag: /v-if="healthLoad\.isError"/,
-      extra: /<el-empty v-if="!loading && !healthLoad\.isError && channels\.length === 0"/,
+      flag: /v-if="healthLoadError"/,
+      extra: /<el-empty v-if="!loading && !healthLoadError && channels\.length === 0"/,
     },
     {
       rel: 'views/stats/LlmMetrics.vue',
-      flag: /v-if="llmLoad\.isError"/,
+      flag: /v-if="llmLoadError"/,
       // 空态与「有数据」两半都要被压住：否则失败时要么显示「暂无调用」，要么渲染一组 0 卡片
-      extra: /v-else-if="!llmLoad\.isError"/,
+      extra: /v-else-if="!llmLoadError"/,
     },
     {
       rel: 'views/stats/RssHealth.vue',
@@ -586,5 +586,31 @@ describe('T02626 列表/详情错误态接线（11 页）', () => {
       assert.match(text, /console\.error\(/, `${rel} 失败路径缺少控制台留痕`)
       assert.doesNotMatch(text, /catch\s*(\(\w*\))?\s*\{\s*\}/, `${rel} 出现了吞掉异常的裸 catch`)
     }
+  })
+
+  /**
+   * 回归门禁（T02626 首版的真实事故）：`useLoadState` 返回的是**普通对象**，属性本身是 ref。
+   * 模板里写 `xxxLoad.isError` 拿到的是那个 ref 对象——恒真。于是错误横幅常驻、提交按钮恒禁用、
+   * 空态永不出现；而当时每个失败路径的 e2e 仍然全绿（横幅本来就在），只有成功路径的交互
+   * （审核详情提交）把它戳破。
+   *
+   * 正确写法只有一种：解构到顶层（`const { isError: xxxError } = xxxLoad`），模板用顶层名。
+   * 这里按目录扫所有页面的**模板段**，防止新页面再踩。
+   */
+  it('模板不许直接取 useLoadState 返回对象的 ref 属性（恒真陷阱）', () => {
+    const offenders = []
+    for (const { rel, text } of ALL_VIEWS) {
+      const scriptAt = text.indexOf('<script')
+      const template = scriptAt >= 0 ? text.slice(0, scriptAt) : text
+      for (const m of text.matchAll(/const\s+(\w+)\s*=\s*use(?:LoadState|ConfigLoad)\(/g)) {
+        const hit = new RegExp(`\\b${m[1]}\\.(isError|errorMessage|retrying|isReady)\\b`).exec(template)
+        if (hit) offenders.push(`${rel} → ${m[1]}.${hit[1]}`)
+      }
+    }
+    assert.deepEqual(
+      offenders,
+      [],
+      '模板里的 xxx.isError 拿到的是 ref 对象（恒真）；必须解构到顶层再给模板用',
+    )
   })
 })
