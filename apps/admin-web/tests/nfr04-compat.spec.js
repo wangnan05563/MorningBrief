@@ -17,9 +17,9 @@ import { setLoginState, MOBILE_VIEWPORT } from './helpers/mock'
  * 覆盖范围：暗色主题取 6 套里唯一的 `isDark` 主题 showcase；
  * 375px 取 NFR-UX-04 写明的验收宽度。
  *
- * 已知缺口（如实记录，不假装通过）：移动端 H5 外壳与 12 个视图的颜色全部硬编码浅色、
- * 零主题变量，暗色主题对 `/m/*` 不生效；其次级文字 #8a8f99 on #fff 只有 3.25:1，
- * 连浅色主题都不达 AA。这部分由 T02839 收口，本轮先以「基线天花板」钉住不再恶化。
+ * 移动端 H5（`/m/*`）也曾整层硬编码浅色、零主题变量，暗色主题对它不生效；
+ * 现已由 T02839 收口：外壳与 12 个视图统一走 `--m-*` 语义 token，
+ * 暗色下的孤岛/对比度按「必须为零」判定（下面第三条移动端用例）。
  *
  * 截图证据：`COMPAT_SHOTS=1 npx playwright test tests/nfr04-compat.spec.js`
  * 会把整页截图写到 `_validate/news2/`（gitignore 内，不入库）。
@@ -48,19 +48,10 @@ const PC_PAGES = [
 const M_PAGES = ['/m/home', '/m/review', '/m/message', '/m/mine', '/m/manage', '/m/manage/users', '/m/manage/alert']
 
 /**
- * 移动端已知缺口基线（T02839 收口前只许降不许升）。
- * 数值来自 T02522 的探针实测（暗色 showcase + 375px，2026-10-21）。
- * 留空 = 该项已修完，任何一条回升都会红。
+ * 移动端（T02839）：外壳与 12 个视图已改用 themes/variables 的 --m-* token，
+ * 暗色下不再有白底孤岛；次级文字取 --color-text-secondary（浅色主题 ≥ 4.5:1）。
+ * 这里不再保留「基线天花板」——任何一块孤岛或一处不达标文字都直接红。
  */
-const MOBILE_DEBT_CEILING = {
-  '/m/home': { islands: 9, contrast: 17 },
-  '/m/review': { islands: 4, contrast: 8 },
-  '/m/message': { islands: 3, contrast: 8 },
-  '/m/mine': { islands: 6, contrast: 9 },
-  '/m/manage': { islands: 9, contrast: 12 },
-  '/m/manage/users': { islands: 4, contrast: 6 },
-  '/m/manage/alert': { islands: 4, contrast: 11 },
-}
 
 async function mockShell(page) {
   // 就绪探针不 mock 的话 splash 要等 2s 网络失败才收起，量到的会是启动画面本身
@@ -273,20 +264,35 @@ test.describe('375px 移动宽度', () => {
     expect(page.url()).toContain('/m/manage/queue')
   })
 
-  test('移动端暗色缺口不再扩大（T02839 收口前的基线天花板）', async ({ page }) => {
+  test('移动端暗色无白底孤岛、正文对比度达 AA（T02839）', async ({ page }) => {
     await useTheme(page, DARK_THEME)
     for (const path of M_PAGES) {
       await gotoReady(page, path)
       const m = await page.evaluate(measure)
-      const ceiling = MOBILE_DEBT_CEILING[path]
+      expect(m.theme, `${path} 暗色主题没生效`).toBe(DARK_THEME)
       expect(
-        m.islands.length,
-        `${path} 暗色白底孤岛比基线更多（${m.islands.length} > ${ceiling.islands}）：\n      ${fmt(m.islands)}`,
-      ).toBeLessThanOrEqual(ceiling.islands)
+        m.islands,
+        `${path} 暗色下仍有白底孤岛：\n      ${fmt(m.islands)}`,
+      ).toEqual([])
       expect(
-        m.lowContrast.length,
-        `${path} 不达标文字比基线更多（${m.lowContrast.length} > ${ceiling.contrast}）：\n      ${fmt(m.lowContrast)}`,
-      ).toBeLessThanOrEqual(ceiling.contrast)
+        m.lowContrast,
+        `${path} 暗色下仍有不达标文字：\n      ${fmt(m.lowContrast)}`,
+      ).toEqual([])
+      if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/_shot_t02839_dark_m375_${path.replace(/\W+/g, '_')}.png`, fullPage: true })
+    }
+  })
+
+  // 对比度这条与暗色无关：次级文字 #8a8f99 on #fff 只有 3.25:1，默认马卡龙主题下就不达标
+  test('移动端浅色主题正文对比度达 AA（T02839）', async ({ page }) => {
+    for (const path of M_PAGES) {
+      await gotoReady(page, path)
+      const m = await page.evaluate(measure)
+      expect(m.theme, `${path} 没落在默认浅色主题`).toBe('macaron')
+      expect(
+        m.lowContrast,
+        `${path} 浅色主题下有不达标文字：\n      ${fmt(m.lowContrast)}`,
+      ).toEqual([])
+      if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/_shot_t02839_light_m375_${path.replace(/\W+/g, '_')}.png`, fullPage: true })
     }
   })
 })

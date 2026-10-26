@@ -45,7 +45,7 @@ function go(to) {
 
 .m-manage__hint {
   font-size: 12px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
   line-height: 1.6;
   margin: 0;
   padding: 0 2px;
@@ -58,7 +58,7 @@ function go(to) {
 }
 
 .m-manage__card {
-  background: #fff;
+  background: var(--m-surface);
   border-radius: 12px;
   padding: 16px 14px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
@@ -70,17 +70,17 @@ function go(to) {
 
 .m-manage__icon {
   font-size: 24px;
-  color: var(--el-color-primary, #409eff);
+  color: var(--m-primary-strong);
 }
 
 .m-manage__label {
   font-size: 15px;
   font-weight: 600;
-  color: #1f2329;
+  color: var(--m-text);
 }
 
 .m-manage__desc {
   font-size: 12px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
 }
 </style>

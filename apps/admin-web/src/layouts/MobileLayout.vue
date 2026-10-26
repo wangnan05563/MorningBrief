@@ -210,8 +210,8 @@ watch(
   flex-direction: column;
   height: 100vh;
   height: 100dvh; /* 移动端动态视口，避开地址栏 */
-  background: #f5f6f8;
-  color: #1f2329;
+  background: var(--m-bg);
+  color: var(--m-text);
 }
 
 .m-appbar {
@@ -220,8 +220,8 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fff;
-  border-bottom: 1px solid #ebedf0;
+  background: var(--m-surface);
+  border-bottom: 1px solid var(--m-border);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -250,7 +250,7 @@ watch(
   padding: 0 8px 0 4px;
   border: none;
   background: transparent;
-  color: #1f2329;
+  color: var(--m-text);
   font-size: 20px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -280,8 +280,8 @@ watch(
 .m-tabbar {
   flex: 0 0 auto;
   display: flex;
-  background: #fff;
-  border-top: 1px solid #ebedf0;
+  background: var(--m-surface);
+  border-top: 1px solid var(--m-border);
   padding-bottom: env(safe-area-inset-bottom);
 }
 
@@ -292,13 +292,13 @@ watch(
   align-items: center;
   justify-content: center;
   padding: 6px 0 4px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
   text-decoration: none;
   font-size: 11px;
 }
 
 .m-tabbar__item--active {
-  color: var(--el-color-primary, #409eff);
+  color: var(--m-primary-strong);
 }
 
 .m-tabbar__icon {
@@ -321,10 +321,11 @@ watch(
   padding: 0 4px;
   box-sizing: border-box;
   border-radius: 8px;
-  /* 底色取深红而非 #E6544A：白字压 #E6544A 只有 ~3.4:1，10px 小字不达 WCAG AA；
-     #C9433B 配白字 ≈ 4.8:1（与 T02728 漏斗角标同一口径，避免再犯一次同色不可读） */
-  background: #c9433b;
-  color: #fff;
+  /* 底色/字色都走主题令牌（T02839）：浅色主题是深红底白字（≈5.4:1），
+     showcase 反相成亮粉底深字——两套组合都过 AA 10px 小字要求。
+     直接用 #E6544A 配白字只有 ~3.4:1，别再退回去 */
+  background: var(--m-danger);
+  color: var(--m-on-solid);
   font-size: 10px;
   font-weight: 600;
   line-height: 16px;

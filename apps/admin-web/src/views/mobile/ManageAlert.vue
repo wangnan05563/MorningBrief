@@ -254,19 +254,19 @@ onMounted(reload)
 }
 
 .m-alert__banner--on {
-  background: #fef0f0;
-  border: 1px solid #fbc4c4;
+  background: var(--m-danger-soft);
+  border: 1px solid var(--m-danger-line);
 }
 
 .m-alert__banner--off {
-  background: #f0f9eb;
-  border: 1px solid #c2e7b0;
+  background: var(--m-success-soft);
+  border: 1px solid var(--m-success-line);
 }
 
 /* 未知态用警示色：既不是「一切正常」也不是「已停服」 */
 .m-alert__banner--unknown {
-  background: #fdf6ec;
-  border: 1px solid #f3d19e;
+  background: var(--m-warning-soft);
+  border: 1px solid var(--m-warning-line);
 }
 
 .m-alert__status {
@@ -274,24 +274,24 @@ onMounted(reload)
   font-weight: 700;
 }
 
-.m-alert__banner--on .m-alert__status { color: #f56c6c; }
-.m-alert__banner--off .m-alert__status { color: #67c23a; }
-.m-alert__banner--unknown .m-alert__status { color: #e6a23c; }
+.m-alert__banner--on .m-alert__status { color: var(--m-danger); }
+.m-alert__banner--off .m-alert__status { color: var(--m-success); }
+.m-alert__banner--unknown .m-alert__status { color: var(--m-warning); }
 
 .m-alert__sub {
   font-size: 12px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
   margin-top: 6px;
 }
 
 .m-alert__elapsed {
   font-weight: 600;
-  color: #f56c6c;
+  color: var(--m-danger);
 }
 
 .m-alert__tip {
   font-size: 12px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
   line-height: 1.7;
   margin: 0;
   padding: 0 2px;
@@ -308,32 +308,32 @@ onMounted(reload)
 
 .m-btn--block { width: 100%; }
 
-.m-btn--primary { background: var(--el-color-primary, #409eff); color: #fff; }
-.m-btn--danger { background: #f56c6c; color: #fff; }
+.m-btn--primary { background: var(--m-solid-primary); color: var(--m-on-solid); }
+.m-btn--danger { background: var(--m-solid-danger); color: var(--m-on-solid); }
 .m-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .m-empty {
   text-align: center;
-  color: #b0b4bb;
+  color: var(--m-text-sub);
   padding: 40px 0;
   font-size: 14px;
 }
 
 /* 记录列表走主题变量，别再往暗色主题上贴一块不透明底色（NFR-UX-04 的坑） */
 .m-alert__audit {
-  border-top: 1px solid var(--el-border-color-lighter, #ebeef5);
+  border-top: 1px solid var(--m-border);
   padding-top: 12px;
 }
 
 .m-alert__audit-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--el-text-color-primary, #303133);
+  color: var(--m-text);
 }
 
 .m-alert__audit-empty {
   font-size: 12px;
-  color: var(--el-text-color-secondary, #909399);
+  color: var(--m-text-sub);
   margin-top: 8px;
 }
 
@@ -345,9 +345,9 @@ onMounted(reload)
 
 .m-alert__audit-item {
   font-size: 12px;
-  color: var(--el-text-color-secondary, #909399);
+  color: var(--m-text-sub);
   padding: 6px 0;
-  border-bottom: 1px dashed var(--el-border-color-lighter, #ebeef5);
+  border-bottom: 1px dashed var(--m-border);
 }
 
 .m-alert__audit-item:last-child {
@@ -359,12 +359,12 @@ onMounted(reload)
   margin-right: 6px;
 }
 
-.m-alert__audit-action--emergency_stop { color: #f56c6c; }
-.m-alert__audit-action--emergency_resume { color: #67c23a; }
+.m-alert__audit-action--emergency_stop { color: var(--m-danger); }
+.m-alert__audit-action--emergency_resume { color: var(--m-success); }
 
 .m-alert__audit-reason {
   margin-top: 2px;
-  color: var(--el-text-color-regular, #606266);
+  color: var(--m-text);
   word-break: break-all;
 }
 </style>

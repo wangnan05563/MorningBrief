@@ -521,7 +521,7 @@ onUnmounted(() => {
 
 /* 上下文标题区 */
 .m-review__ctx {
-  background: #fff;
+  background: var(--m-surface);
   border-radius: 12px;
   padding: 14px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
@@ -537,12 +537,12 @@ onUnmounted(() => {
 .m-review__ctx-label {
   font-size: 16px;
   font-weight: 700;
-  color: #1f2329;
+  color: var(--m-text);
 }
 
 .m-review__ctx-count {
   font-size: 12px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
 }
 
 .m-review__ctx-tags {
@@ -555,7 +555,7 @@ onUnmounted(() => {
 .m-review__ctx-hint {
   margin: 8px 0 0;
   font-size: 12px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
   line-height: 1.5;
 }
 
@@ -578,13 +578,13 @@ onUnmounted(() => {
 }
 
 .m-chip--ch {
-  color: #409eff;
-  background: #ecf5ff;
+  color: var(--m-primary-strong);
+  background: var(--m-primary-soft);
 }
 
 .m-chip--wf {
-  color: #67c23a;
-  background: #f0f9eb;
+  color: var(--m-success);
+  background: var(--m-success-soft);
 }
 
 /* 一键全部审批按钮 */
@@ -596,13 +596,17 @@ onUnmounted(() => {
   border-radius: 10px;
   font-size: 15px;
   font-weight: 600;
-  color: #fff;
-  background: linear-gradient(90deg, #409eff, #67c23a);
+  color: var(--m-on-solid);
+  background: var(--m-solid-success);
   cursor: pointer;
 }
 
+/* 禁用态（0 条待审 / 审批中）单独给一对可读配色：
+   实底色 + on-solid 是给「能点」的状态准备的，禁用后底变成浅色，
+   深色 on-solid 文字会直接沉进去（showcase 下实测 1.09:1） */
 .m-btn--approve-all:disabled {
-  background: #c8c9cc;
+  color: var(--m-success);
+  background: var(--m-success-soft);
   cursor: not-allowed;
 }
 
@@ -614,7 +618,7 @@ onUnmounted(() => {
 
 /* 审核卡片 */
 .m-review__item {
-  background: #fff;
+  background: var(--m-surface);
   border-radius: 12px;
   padding: 14px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
@@ -641,13 +645,13 @@ onUnmounted(() => {
 .m-review__title {
   font-size: 15px;
   font-weight: 600;
-  color: #1f2329;
+  color: var(--m-text);
   flex: 1;
 }
 
 .m-review__chev {
   flex: 0 0 auto;
-  color: #8a8f99;
+  color: var(--m-text-sub);
   transition: transform 0.2s ease;
   display: inline-flex;
 }
@@ -662,24 +666,24 @@ onUnmounted(() => {
   gap: 10px;
   margin: 6px 0;
   font-size: 12px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
 }
 
 .m-review__ch {
-  color: #409eff;
+  color: var(--m-primary-strong);
 }
 
 .m-review__wf {
-  color: #67c23a;
+  color: var(--m-success);
 }
 
 .m-review__type {
-  color: var(--el-color-primary, #409eff);
+  color: var(--m-primary-strong);
 }
 
 .m-review__auto {
-  color: #e6a23c;
-  background: #fdf6ec;
+  color: var(--m-warning);
+  background: var(--m-warning-soft);
   border-radius: 4px;
   padding: 0 5px;
 }
@@ -687,44 +691,44 @@ onUnmounted(() => {
 /* I5（FR-UX-704）：成品时长用中性色，凑时用与 PC `el-tag type=warning` 同系的琥珀色描边，
    让外勤一眼能分辨「这条是靠凑时长达标的」 */
 .m-review__dur {
-  color: var(--el-text-color-regular, #606266);
-  background: var(--el-fill-color-light, #f5f7fa);
+  color: var(--m-text);
+  background: var(--m-bg);
   border-radius: 4px;
   padding: 0 5px;
 }
 
 .m-review__supplement {
-  color: #e6a23c;
-  background: #fdf6ec;
-  border: 1px solid #faecd8;
+  color: var(--m-warning);
+  background: var(--m-warning-soft);
+  border: 1px solid var(--m-warning-line);
   border-radius: 4px;
   padding: 0 5px;
 }
 
 .m-review__text {
   font-size: 13px;
-  color: #4e5969;
+  color: var(--m-text);
   line-height: 1.5;
   margin-bottom: 12px;
 }
 
 /* 展开详情区 */
 .m-review__detail {
-  border-top: 1px dashed #ebeef5;
+  border-top: 1px dashed var(--m-border);
   margin-top: 10px;
   padding-top: 12px;
 }
 
 .m-detail__loading {
   text-align: center;
-  color: #8a8f99;
+  color: var(--m-text-sub);
   font-size: 13px;
   padding: 16px 0;
 }
 
 .m-detail__err {
   text-align: center;
-  color: #f56c6c;
+  color: var(--m-danger);
   font-size: 13px;
   padding: 16px 0;
 }
@@ -735,7 +739,7 @@ onUnmounted(() => {
   object-fit: cover;
   border-radius: 10px;
   margin-bottom: 12px;
-  background: #f5f6f8;
+  background: var(--m-bg);
 }
 
 .m-detail__audio {
@@ -747,12 +751,12 @@ onUnmounted(() => {
 
 .m-detail__audio-label {
   font-size: 12px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
 }
 
 .m-detail__audio-hint {
   font-size: 12px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
   line-height: 1.5;
 }
 
@@ -761,7 +765,7 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
-  color: #f56c6c;
+  color: var(--m-danger);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -786,13 +790,13 @@ onUnmounted(() => {
 
 .m-detail__field dt {
   font-size: 11px;
-  color: #a0a4ab;
+  color: var(--m-text-sub);
 }
 
 .m-detail__field dd {
   margin: 0;
   font-size: 13px;
-  color: #1f2329;
+  color: var(--m-text);
   word-break: break-all;
 }
 
@@ -803,27 +807,27 @@ onUnmounted(() => {
 .m-detail__h {
   font-size: 13px;
   font-weight: 600;
-  color: #1f2329;
+  color: var(--m-text);
   margin: 0 0 6px;
 }
 
 .m-detail__text {
   font-size: 13px;
-  color: #4e5969;
+  color: var(--m-text);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 320px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  background: #fafbfc;
+  background: var(--m-bg);
   border-radius: 8px;
   padding: 10px;
   margin: 0;
 }
 
 .m-detail__seg {
-  background: #fafbfc;
+  background: var(--m-bg);
   border-radius: 8px;
   padding: 10px;
   margin-bottom: 8px;
@@ -832,13 +836,13 @@ onUnmounted(() => {
 .m-detail__seg-title {
   font-size: 13px;
   font-weight: 600;
-  color: #1f2329;
+  color: var(--m-text);
   margin-bottom: 4px;
 }
 
 .m-detail__seg-text {
   font-size: 13px;
-  color: #4e5969;
+  color: var(--m-text);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
@@ -854,8 +858,8 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   font-size: 12px;
-  color: #4e5969;
-  background: #f0f2f5;
+  color: var(--m-text);
+  background: var(--m-bg);
   border-radius: 6px;
   padding: 4px 10px;
   max-width: 100%;
@@ -863,8 +867,8 @@ onUnmounted(() => {
 }
 
 .m-chip2--link {
-  color: #409eff;
-  background: #ecf5ff;
+  color: var(--m-primary-strong);
+  background: var(--m-primary-soft);
   text-decoration: none;
 }
 
@@ -888,14 +892,14 @@ onUnmounted(() => {
 }
 
 .m-btn--primary {
-  background: var(--el-color-primary, #409eff);
-  color: #fff;
+  background: var(--m-solid-primary);
+  color: var(--m-on-solid);
 }
 
 .m-btn--ghost {
-  background: #fff;
-  border-color: #dcdfe6;
-  color: #4e5969;
+  background: var(--m-surface);
+  border-color: var(--m-border);
+  color: var(--m-text);
 }
 
 .m-btn:disabled {
@@ -905,7 +909,7 @@ onUnmounted(() => {
 
 .m-empty {
   text-align: center;
-  color: #b0b4bb;
+  color: var(--m-text-sub);
   padding: 40px 0;
   font-size: 14px;
 }
@@ -914,7 +918,7 @@ onUnmounted(() => {
 .m-empty__hint {
   margin-top: 6px;
   font-size: 12px;
-  color: #b0b4bb;
+  color: var(--m-text-sub);
 }
 
 /* 作用域模式的返回入口（T02779）：常驻上下文区，需看得见、点得到，
@@ -924,7 +928,7 @@ onUnmounted(() => {
   padding: 0;
   border: 0;
   background: none;
-  color: #c9433b;
+  color: var(--m-danger);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.4;

@@ -34,6 +34,37 @@
   --on-solid: #FFFFFF;
   --text-warning-strong: #8A5A00;
   --text-danger-strong: #B3261E;
+  --text-success-strong: #1F6B45;
+
+  /* === 移动端语义 token（T02839） ===
+     /m/* 的外壳与 12 个视图原先全是硬编码浅色，暗色主题对移动端完全无效；
+     这里统一映射到通用主题变量，不新增一套配色，6 套主题改 --color-* 时
+     移动端自动跟随。--m-text-sub 取 color-text-secondary：旧的 #8a8f99 on #fff
+     只有 3.25:1，连浅色主题都不达 AA。
+     --m-*-soft / -line 由主题色派生：浅色主题得到淡色块，showcase 下自动变成
+     深色半透明块，不再是一块块白底孤岛。实底按钮单独用 --m-solid-*，
+     因为浅色主题的 --color-primary 偏浅，白字压上去不达 AA。 */
+  --m-bg: var(--color-bg);
+  --m-surface: var(--color-bg-card);
+  --m-text: var(--color-text-primary);
+  --m-text-sub: var(--color-text-secondary);
+  --m-border: var(--color-border);
+  --m-primary: var(--color-primary);
+  --m-primary-strong: var(--color-primary-dark);
+  --m-danger: var(--text-danger-strong);
+  --m-warning: var(--text-warning-strong);
+  --m-success: var(--text-success-strong);
+  --m-solid-primary: var(--color-primary-dark);
+  --m-solid-success: var(--solid-success);
+  --m-solid-danger: var(--text-danger-strong);
+  --m-on-solid: var(--on-solid);
+  --m-primary-soft: color-mix(in srgb, var(--color-primary) 16%, var(--color-bg-card));
+  --m-success-soft: color-mix(in srgb, var(--color-success) 16%, var(--color-bg-card));
+  --m-warning-soft: color-mix(in srgb, var(--color-warning) 14%, var(--color-bg-card));
+  --m-danger-soft: color-mix(in srgb, var(--color-danger) 8%, var(--color-bg-card));
+  --m-success-line: color-mix(in srgb, var(--m-success) 45%, var(--color-bg-card));
+  --m-warning-line: color-mix(in srgb, var(--m-warning) 45%, var(--color-bg-card));
+  --m-danger-line: color-mix(in srgb, var(--m-danger) 45%, var(--color-bg-card));
 
   /* === 中性色 === */
   --color-bg: #F9FDFB;

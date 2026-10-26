@@ -51,7 +51,7 @@ async function onLogout() {
   display: flex;
   align-items: center;
   gap: 14px;
-  background: #fff;
+  background: var(--m-surface);
   border-radius: 12px;
   padding: 18px 14px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
@@ -61,8 +61,8 @@ async function onLogout() {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: var(--el-color-primary, #409eff);
-  color: #fff;
+  background: var(--m-solid-primary);
+  color: var(--m-on-solid);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -73,12 +73,12 @@ async function onLogout() {
 .m-mine__name {
   font-size: 16px;
   font-weight: 600;
-  color: #1f2329;
+  color: var(--m-text);
 }
 
 .m-mine__role {
   font-size: 12px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
   margin-top: 2px;
 }
 
@@ -86,16 +86,16 @@ async function onLogout() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #fff;
+  background: var(--m-surface);
   border-radius: 12px;
   padding: 16px 14px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   font-size: 15px;
-  color: #1f2329;
+  color: var(--m-text);
 }
 
 .m-arrow {
-  color: #c0c4cc;
+  color: var(--m-text-sub);
 }
 
 .m-btn {
@@ -108,8 +108,8 @@ async function onLogout() {
 }
 
 .m-btn--danger {
-  background: #fff;
-  color: #f56c6c;
-  border: 1px solid #fbc4c4;
+  background: var(--m-surface);
+  color: var(--m-danger);
+  border: 1px solid var(--m-danger-line);
 }
 </style>

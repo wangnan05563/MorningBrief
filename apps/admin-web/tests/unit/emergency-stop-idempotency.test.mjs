@@ -167,7 +167,8 @@ describe('管理端把记录读出来', () => {
     const from = view().indexOf('.m-alert__audit {')
     assert.notEqual(from, -1, '找不到记录块样式')
     const css = view().slice(from, view().indexOf('}', from))
-    assert.match(css, /var\(--el-border-color-lighter/, '边框没走主题变量')
+    // T02839：移动端统一走 --m-* 语义 token（--el-border-color-lighter 的浅色默认值在暗色下不吃主题）
+    assert.match(css, /var\(--m-border\)/, '边框没走主题变量')
     assert.ok(!/#fff\b/.test(css), `记录块写死了浅色底：${css}`)
   })
 })

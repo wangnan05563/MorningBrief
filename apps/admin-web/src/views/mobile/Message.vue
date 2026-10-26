@@ -211,25 +211,25 @@ onMounted(refresh)
 
 .m-msg__count {
   font-size: 13px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
 }
 
 .m-msg__action {
   font-size: 13px;
-  color: var(--el-color-primary, #409eff);
+  color: var(--m-primary-strong);
   background: none;
   border: none;
   cursor: pointer;
 }
 
 .m-msg__action:disabled {
-  color: #c0c4cc;
+  color: var(--m-text-sub);
   cursor: not-allowed;
 }
 
 .m-msg__empty {
   text-align: center;
-  color: #b0b4bb;
+  color: var(--m-text-sub);
   font-size: 14px;
   padding: 40px 0;
 }
@@ -242,8 +242,8 @@ onMounted(refresh)
   gap: 10px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: #fef0f0;
-  color: #c45656;
+  background: var(--m-danger-soft);
+  color: var(--m-danger);
   font-size: 13px;
 }
 
@@ -266,14 +266,14 @@ onMounted(refresh)
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  background: #fff;
+  background: var(--m-surface);
   border-radius: 12px;
   padding: 14px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .m-msg__item--unread {
-  border-left: 3px solid var(--el-color-primary, #409eff);
+  border-left: 3px solid var(--m-primary-strong);
 }
 
 .m-msg__item--link {
@@ -284,7 +284,7 @@ onMounted(refresh)
   align-self: center;
   font-size: 20px;
   line-height: 1;
-  color: #b0b4bb;
+  color: var(--m-text-sub);
   flex: 0 0 auto;
 }
 
@@ -294,15 +294,15 @@ onMounted(refresh)
   border-radius: 50%;
   margin-top: 6px;
   flex: 0 0 auto;
-  background: #c0c4cc;
+  background: var(--m-text-sub);
 }
 
 .m-msg__dot--warning {
-  background: #e6a23c;
+  background: var(--m-warning);
 }
 
 .m-msg__dot--critical {
-  background: #f56c6c;
+  background: var(--m-danger);
 }
 
 .m-msg__body {
@@ -312,7 +312,7 @@ onMounted(refresh)
 
 .m-msg__title {
   font-size: 15px;
-  color: #1f2329;
+  color: var(--m-text);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -320,22 +320,22 @@ onMounted(refresh)
 
 .m-msg__tag {
   font-size: 11px;
-  color: #fff;
-  background: var(--el-color-primary, #409eff);
+  color: var(--m-on-solid);
+  background: var(--m-solid-primary);
   border-radius: 4px;
   padding: 1px 5px;
 }
 
 .m-msg__text {
   font-size: 13px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
   margin-top: 4px;
   line-height: 1.5;
 }
 
 .m-msg__time {
   font-size: 11px;
-  color: #b0b4bb;
+  color: var(--m-text-sub);
   margin-top: 6px;
 }
 </style>

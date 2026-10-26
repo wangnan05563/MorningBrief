@@ -116,7 +116,7 @@ onMounted(load)
   font-size: 15px;
   font-weight: 600;
   margin: 0 0 10px;
-  color: #1f2329;
+  color: var(--m-text);
 }
 
 .m-grid {
@@ -126,7 +126,7 @@ onMounted(load)
 }
 
 .m-card {
-  background: #fff;
+  background: var(--m-surface);
   border-radius: 12px;
   padding: 14px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
@@ -135,20 +135,20 @@ onMounted(load)
 .m-card__value {
   font-size: 22px;
   font-weight: 700;
-  color: var(--el-color-primary, #409eff);
+  color: var(--m-primary-strong);
 }
 
 .m-card__label {
   margin-top: 4px;
   font-size: 12px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
 }
 
 .m-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #fff;
+  background: var(--m-surface);
   border-radius: 12px;
   padding: 16px 14px;
   margin-bottom: 10px;
@@ -157,23 +157,23 @@ onMounted(load)
 
 .m-row__label {
   font-size: 15px;
-  color: #1f2329;
+  color: var(--m-text);
 }
 
 .m-row__value {
   font-size: 15px;
-  color: #409eff;
+  color: var(--m-primary-strong);
   font-weight: 600;
 }
 
 .m-arrow {
-  color: #c0c4cc;
+  color: var(--m-text-sub);
   margin-left: 2px;
 }
 
 .m-tip {
   font-size: 12px;
-  color: #b0b4bb;
+  color: var(--m-text-sub);
   line-height: 1.6;
   padding: 0 4px;
 }

@@ -189,7 +189,7 @@ onMounted(reload)
 }
 
 .m-q__stat {
-  background: #fff;
+  background: var(--m-surface);
   border-radius: 10px;
   padding: 10px 4px;
   text-align: center;
@@ -199,17 +199,17 @@ onMounted(reload)
 .m-q__stat-v {
   font-size: 18px;
   font-weight: 700;
-  color: var(--el-color-primary, #409eff);
+  color: var(--m-primary-strong);
 }
 
 .m-q__stat-l {
   font-size: 11px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
   margin-top: 2px;
 }
 
 .m-q__item {
-  background: #fff;
+  background: var(--m-surface);
   border-radius: 12px;
   padding: 14px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
@@ -224,7 +224,7 @@ onMounted(reload)
 .m-q__ch {
   font-size: 15px;
   font-weight: 600;
-  color: #1f2329;
+  color: var(--m-text);
 }
 
 .m-q__no {
@@ -236,16 +236,16 @@ onMounted(reload)
 
 .m-q__no-l {
   font-size: 12px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
   flex: 0 0 auto;
 }
 
 .m-q__no-v {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 13px;
-  color: #1f2329;
-  background: #f5f7fa;
-  border: 1px dashed #d0d5dd;
+  color: var(--m-text);
+  background: var(--m-bg);
+  border: 1px dashed var(--m-border);
   border-radius: 6px;
   padding: 3px 8px;
   cursor: pointer;
@@ -254,20 +254,20 @@ onMounted(reload)
 }
 
 .m-q__no-v:active {
-  background: #eef2f7;
+  background: var(--m-bg);
 }
 
 .m-q__meta {
   display: flex;
   gap: 12px;
   font-size: 12px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
   margin-top: 6px;
   flex-wrap: wrap;
 }
 
 .m-q__err {
-  color: #f56c6c;
+  color: var(--m-danger);
 }
 
 .m-q__actions {
@@ -284,10 +284,10 @@ onMounted(reload)
   font-weight: 500;
 }
 
-.m-badge--on { color: #67c23a; background: #f0f9eb; }
-.m-badge--off { color: #f56c6c; background: #fef0f0; }
-.m-badge--warn { color: #e6a23c; background: #fdf6ec; }
-.m-badge--info { color: #409eff; background: #ecf5ff; }
+.m-badge--on { color: var(--m-success); background: var(--m-success-soft); }
+.m-badge--off { color: var(--m-danger); background: var(--m-danger-soft); }
+.m-badge--warn { color: var(--m-warning); background: var(--m-warning-soft); }
+.m-badge--info { color: var(--m-primary-strong); background: var(--m-primary-soft); }
 
 .m-btn {
   height: 46px;
@@ -304,12 +304,12 @@ onMounted(reload)
   font-size: 14px;
 }
 
-.m-btn--primary { background: var(--el-color-primary, #409eff); color: #fff; }
-.m-btn--danger { background: #fff; color: #f56c6c; border: 1px solid #fbc4c4; }
+.m-btn--primary { background: var(--m-solid-primary); color: var(--m-on-solid); }
+.m-btn--danger { background: var(--m-surface); color: var(--m-danger); border: 1px solid var(--m-danger-line); }
 
 .m-empty {
   text-align: center;
-  color: #b0b4bb;
+  color: var(--m-text-sub);
   padding: 40px 0;
   font-size: 14px;
 }

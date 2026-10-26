@@ -147,6 +147,15 @@
      准备的深色会沉进背景（T02728） */
   --text-warning-strong: #FFAB00;
   --text-danger-strong: #FF1744;
+  --text-success-strong: #00E676;
+
+  /* 移动端（T02839）：暗底上的实底按钮用亮色 + 深字；浅色主题那套
+     「深底白字」在暗色里既不好看也不是必须，这里按主题色反相 */
+  --m-solid-primary: var(--color-primary);
+  --m-solid-success: var(--color-success);
+  --m-on-solid: var(--on-primary);
+  /* #FF1744 压在半透明红底上只剩 4.3:1，移动端危险文字单独提亮 */
+  --m-danger: #FF8A9B;
 
   --radius-sm: 8px;
   --radius-md: 12px;

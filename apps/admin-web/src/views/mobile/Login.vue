@@ -88,18 +88,18 @@ async function onLogin() {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: #f5f6f8;
+  background: var(--m-bg);
 }
 
 .m-login__brand {
   font-size: 26px;
   font-weight: 700;
-  color: var(--el-color-primary, #409eff);
+  color: var(--m-primary-strong);
 }
 
 .m-login__sub {
   margin: 8px 0 28px;
-  color: #8a8f99;
+  color: var(--m-text-sub);
   font-size: 14px;
 }
 
@@ -113,16 +113,16 @@ async function onLogin() {
 
 .m-input {
   height: 46px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--m-border);
   border-radius: 10px;
   padding: 0 14px;
   font-size: 16px; /* ≥16px 避免 iOS 聚焦放大 */
-  background: #fff;
+  background: var(--m-surface);
   outline: none;
 }
 
 .m-input:focus {
-  border-color: var(--el-color-primary, #409eff);
+  border-color: var(--m-solid-primary);
 }
 
 .m-btn {
@@ -135,8 +135,8 @@ async function onLogin() {
 }
 
 .m-btn--primary {
-  background: var(--el-color-primary, #409eff);
-  color: #fff;
+  background: var(--m-solid-primary);
+  color: var(--m-on-solid);
 }
 
 .m-btn--primary:disabled {
@@ -147,8 +147,8 @@ async function onLogin() {
   margin: 0;
   padding: 10px 12px;
   border-radius: 8px;
-  background: #fef0f0;
-  color: #d54941;
+  background: var(--m-danger-soft);
+  color: var(--m-danger);
   font-size: 14px;
   line-height: 1.5;
   text-align: left;
@@ -159,8 +159,8 @@ async function onLogin() {
   margin: 0;
   padding: 10px 12px;
   border-radius: 8px;
-  background: #f4f4f5;
-  color: #606266;
+  background: var(--m-bg);
+  color: var(--m-text);
   font-size: 13px;
   line-height: 1.5;
   text-align: left;
@@ -168,7 +168,7 @@ async function onLogin() {
 
 .m-login__hint {
   margin-top: 20px;
-  color: #b0b4bb;
+  color: var(--m-text-sub);
   font-size: 12px;
 }
 </style>
