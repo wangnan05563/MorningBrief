@@ -1,6 +1,7 @@
 <template>
   <!-- page-container：补齐 24px 页面内边距（同 BookPool / MaterialLibrary，缺它会 0px 贴边） -->
-  <div class="course-materials page-container">
+  <!-- T02645：引导锚点改显式 data-guide（此前用 .page-container / .el-upload 裸类豁免） -->
+  <div class="course-materials page-container" data-guide="materials-page">
     <el-card shadow="never">
       <template #header>
         <div class="page-header">
@@ -48,6 +49,7 @@
           />
           <el-upload
             drag
+            data-guide="materials-upload"
             v-model:file-list="fileList"
             :auto-upload="false"
             :limit="1"

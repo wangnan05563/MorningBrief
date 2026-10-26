@@ -559,7 +559,7 @@
         },
         {
           "file": "views/channel/CourseMaterials.vue",
-          "line": 422,
+          "line": 424,
           "fn": "listChannels",
           "fieldCount": 2,
           "unresolved": []
@@ -2596,7 +2596,7 @@
       "sites": [
         {
           "file": "views/channel/CourseMaterials.vue",
-          "line": 334,
+          "line": 336,
           "fn": "createMaterial",
           "fieldCount": 8,
           "unresolved": []
@@ -2656,7 +2656,7 @@
       "sites": [
         {
           "file": "views/channel/CourseMaterials.vue",
-          "line": 306,
+          "line": 308,
           "fn": "importFromCos",
           "fieldCount": 4,
           "unresolved": []
@@ -2677,7 +2677,7 @@
       "sites": [
         {
           "file": "views/channel/CourseMaterials.vue",
-          "line": 367,
+          "line": 369,
           "fn": "importFromUrl",
           "fieldCount": 5,
           "unresolved": []
@@ -2695,7 +2695,7 @@
       "sites": [
         {
           "file": "views/channel/CourseMaterials.vue",
-          "line": 391,
+          "line": 393,
           "fn": "sharePreview",
           "fieldCount": 2,
           "unresolved": []
@@ -2712,7 +2712,7 @@
       "sites": [
         {
           "file": "views/channel/CourseMaterials.vue",
-          "line": 280,
+          "line": 282,
           "fn": "uploadMaterialFile",
           "fieldCount": 0,
           "unresolved": [

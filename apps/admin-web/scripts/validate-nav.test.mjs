@@ -111,16 +111,25 @@ test('锚点契约：组合选择器与可能多实例的裸类报错（T02502�
   assert.match(text, /禁止未打显式锚点的裸类：\/review → \.el-table/)
 })
 
-test('锚点契约：只放行全页唯一的布局类，同页多个的类不放行（T02502）', () => {
-  const pageLevel = checkFacts(
-    facts({ guideSteps: { '/review': [{ s: ['.page-container'], t: '整页', d: '' }] } }),
+test('锚点契约：裸类一律报错，不再有「全页唯一布局类」豁免（T02645）', () => {
+  // T02502 曾放行 .page-container / .el-upload 两个布局类；T02645 把最后一处
+  // （/materials）改用 data-guide 后清单清空，豁免与分支一并删除。
+  // 这里同时钉住「曾经的豁免对象」与「一开始就不放行的多实例类」，防止哪天又加回来。
+  const r = checkFacts(
+    facts({
+      guideSteps: {
+        '/review': [
+          { s: ['.page-container'], t: '整页', d: '' },
+          { s: ['.el-upload'], t: '上传', d: '' },
+        ],
+        '/ads/materials': [{ s: ['.el-table'], t: '列表', d: '' }],
+      },
+    }),
   )
-  assert.deepEqual(pageLevel.errors, [])
-  // `.el-table` 在带弹窗表格的页面上会有两个实例，querySelector 取到的可能是弹窗那个
-  const ambiguous = checkFacts(
-    facts({ guideSteps: { '/ads/materials': [{ s: ['.el-table'], t: '列表', d: '' }] } }),
-  )
-  assert.match(ambiguous.errors.join('\n'), /禁止未打显式锚点的裸类：\/ads\/materials → \.el-table/)
+  const text = r.errors.join('\n')
+  assert.match(text, /禁止未打显式锚点的裸类：\/review → \.page-container/)
+  assert.match(text, /禁止未打显式锚点的裸类：\/review → \.el-upload/)
+  assert.match(text, /禁止未打显式锚点的裸类：\/ads\/materials → \.el-table/)
 })
 
 test('真实仓库的锚点契约事实非空（检查项等于真跑了）', async () => {

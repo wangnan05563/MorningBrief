@@ -845,13 +845,12 @@ function matchRoute(routes, path) {
  * - `[data-guide="x"]` / `[aria-label="x"]`：显式锚点，视图里存在才算数；
  * - 含空格/组合符的选择器（`.top-bar .el-button`）：位置兜底。真实锚点缺失时它会静默
  *   命中另一个元素——T02500 的「引导指错元素」正是这样藏住的，比落空更坏；
- * - 裸类：允许全页唯一的布局/组件根类（下面的清单），其余（`.el-table`、`.el-tabs`、
- *   各视图自己的 `.xxx-page`）可能命中错误实例或随重构漂移，必须打 data-guide。
+ * - 裸类：一律禁止。曾经放行过「全页唯一」的布局类（`.page-container` / `.el-upload`），
+ *   T02645 把最后一处改用 data-guide 后清单已清空——豁免表留着就会有人往里加类，
+ *   门禁便退化成兜底通道。`querySelector` 命中的是哪一层的实例，构建期根本看不出来。
  * 兜底链（一步写多个选择器）同样禁止：宁可这一步落空（浮层带 data-guide-missing，
  * 门禁与运行时审计都能发现），也不要指错。
  */
-const PAGE_UNIQUE_CLASSES = new Set(['.page-container', '.el-upload'])
-
 function anchorProblem(sel, path, f) {
   const guide = /^\[data-guide="([^"]+)"\]$/.exec(sel)
   if (guide) {
@@ -868,7 +867,6 @@ function anchorProblem(sel, path, f) {
   if (/[\s>]/.test(sel)) {
     return `引导步骤禁止位置兜底：${path} → ${sel}；组合选择器会在真实锚点缺失时静默命中另一个元素（T02500 抓到的缺陷形态），请给目标元素打 data-guide`
   }
-  if (PAGE_UNIQUE_CLASSES.has(sel)) return null
   return `引导步骤禁止未打显式锚点的裸类：${path} → ${sel}；该类的实例数不受约束（同页可能有多个），请给目标元素打 data-guide`
 }
 
