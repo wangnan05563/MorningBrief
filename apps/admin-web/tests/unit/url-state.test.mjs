@@ -547,3 +547,60 @@ describe('接线：两个页面不再手写 Number/String(route.query)', () => {
     assert.match(src, /地址中的筛选参数无效/)
   })
 })
+
+// ---------------------------------------------------------------------------
+// T02779 / FR-UX-603 收尾：每个「列表→详情」入口都挂来源，每个详情都按来源回
+// ---------------------------------------------------------------------------
+
+describe('接线：列表→详情统一走 detailLocation，详情统一按 returnTarget 回', () => {
+  const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+  const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8')
+  // 注释里会写「不要用 router.back()」这类说明，直接正则扫源码会误判，
+  // 所以先剥掉模板/块/行注释再断言（https:// 里的 // 不能当行注释切，前面有冒号）
+  const code = (rel) =>
+    read(rel)
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  it('两个 PC 详情页都按 ?from= 回，且挂载面包屑', () => {
+    for (const rel of ['src/views/review/ReviewDetail.vue', 'src/views/workflow/WorkflowDetail.vue']) {
+      const src = read(rel)
+      assert.match(src, /returnTarget\(route\.query, ['"]\//, `${rel} 没用 returnTarget 解析来源`)
+      assert.match(src, /<PageBreadcrumb/, `${rel} 缺面包屑（层级不可见，上级也点不了）`)
+      assert.doesNotMatch(code(rel), /router\.back\(/, `${rel} 又用 router.back()：历史栈为空时点了没反应`)
+    }
+  })
+
+  it('列表进详情把 route.fullPath 挂到 from，而不是 push 裸路径', () => {
+    const ENTRIES = [
+      ['src/views/review/ReviewList.vue', /detailLocation\(route\.fullPath, `\/review\/\$\{id\}`\)/],
+      ['src/views/workflow/WorkflowList.vue', /detailLocation\(route\.fullPath, `\/workflows\/\$\{id\}`\)/],
+      ['src/views/mobile/ManageQueue.vue', /detailLocation\(route\.fullPath, '\/m\/review'/],
+    ]
+    for (const [rel, pattern] of ENTRIES) {
+      assert.match(read(rel), pattern, `${rel} 进详情没挂来源：返回只能回到默认视图`)
+      assert.doesNotMatch(
+        code(rel),
+        /router\.push\(`\/(?:review|workflows|m\/review)/,
+        `${rel} 又出现裸路径 push：来源筛选会在返回时被抹掉`,
+      )
+    }
+  })
+
+  it('移动端作用域审核：返回队列常驻上下文区，不能只活在空态里', () => {
+    const src = read('src/views/mobile/ReviewList.vue')
+    const back = src.indexOf('data-guide="m-review-back-queue"')
+    const empty = src.indexOf('data-guide="m-review-empty"')
+    assert.ok(back > 0, '找不到「返回队列」的锚点')
+    // 只在空态里渲染 = 有稿可审时手机上根本没有回队列的入口（T02779 的原始缺陷）
+    assert.ok(back < empty, '「返回队列」又回到空态里了：列表非空时没有返回入口')
+    assert.match(
+      src,
+      /v-if="scoped"\s+type="button"\s+class="m-review__back"\s+data-guide="m-review-back-queue"/,
+      '返回入口必须绑 scoped，且用的是上下文区的按钮样式',
+    )
+    assert.match(src, /returnTarget\(route\.query, '\/m\/manage\/queue'\)/)
+    assert.doesNotMatch(code('src/views/mobile/ReviewList.vue'), /router\.back\(/)
+  })
+})

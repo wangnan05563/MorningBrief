@@ -75,7 +75,7 @@
     },
     {
       "endpoint": "POST /reviews/*/action",
-      "site": "views/mobile/ReviewList.vue:427",
+      "site": "views/mobile/ReviewList.vue:436",
       "reason_key": "value-scalar",
       "note": "action 取 approve/reject 字面量之一，来自移动端审批按钮的入参；键名与 segment_id 均在 ActionRequest 声明内。"
     },
@@ -87,7 +87,7 @@
     },
     {
       "endpoint": "POST /reviews/batch-action",
-      "site": "views/mobile/ReviewList.vue:474",
+      "site": "views/mobile/ReviewList.vue:483",
       "reason_key": "value-scalar",
       "note": "ids 是移动端批量选中的 review_id 数组，键名 review_ids 由包装体给出，在 BatchActionRequest 声明内。"
     },

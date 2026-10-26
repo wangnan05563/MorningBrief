@@ -57,9 +57,12 @@ const queueTasks = [
 /**
  * @param {object} opts.record 为 true 时把最后一次 /workflows 请求的 query 存到 opts.onListQuery，
  *   供「筛选真的跟着返回回来了」的断言（只看控件显示什么是不够的，接口参数才是用户看到的数据口径）
+ * @param {Array} opts.scopedRows 作用域审核（带 workflow_id）时返回的稿件；默认空列表，
+ *   即「这条工作流没有待审内容」——有稿可审的场景见下方 T02779 用例
  */
-async function mockApi(page, { onListQuery } = {}) {
+async function mockApi(page, { onListQuery, scopedRows = [] } = {}) {
   page.__lastWorkflowsQuery = null
+  page.__lastReviewQuery = null
   await page.route('**/admin/api/v1/**', (route) => {
     const url = new URL(route.request().url())
     const path = url.pathname
@@ -72,10 +75,11 @@ async function mockApi(page, { onListQuery } = {}) {
       })
     }
     if (path.endsWith('/reviews') && route.request().method() === 'GET') {
-      // 作用域模式（移动端从队列「去审核」带 workflow_id 进来）刻意返回空列表：
-      // 手机屏幕上「返回队列」只在作用域空态里出现，这正是 E12 那套「空态也要能回去」的入口
+      page.__lastReviewQuery = Object.fromEntries(url.searchParams.entries())
+      // 作用域模式（移动端从队列「去审核」带 workflow_id 进来）默认返回空列表：
+      // 那覆盖「没有待审稿件时也要能回到队列」；有稿可审时返回入口是否还在，由 scopedRows 用例覆盖
       if (url.searchParams.get('workflow_id')) {
-        return route.fulfill({ json: ok({ total: 0, list: [], items: [] }) })
+        return route.fulfill({ json: ok({ total: scopedRows.length, list: scopedRows, items: scopedRows }) })
       }
       const status = url.searchParams.get('status') || 'pending'
       return route.fulfill({ json: ok(reviewRows[status] || { total: 0, list: [] }) })
@@ -285,5 +289,51 @@ test.describe('移动端：去审核与返回队列、二级页层级', () => {
     const back = page.locator('[data-guide="mobile-appbar-back"]')
     await expectLong(back).toBeVisible()
     await expectLong(back).toContainText('管理')
+  })
+})
+
+/**
+ * T02779（FR-UX-603 收尾）：作用域审核页「有稿可审」时，返回队列的入口也必须还在。
+ *
+ * 那根入口此前只长在空态里：一旦这条工作流真有稿件，列表把空态顶掉，手机上就没有
+ * 回队列的路了（只能靠手势或点底部 tab），带筛选进来时的队列状态随之丢失。
+ * 旧用例发现不了——mock 对作用域请求恒返回空列表，永远只走到空态那一支。
+ */
+test.describe('移动端作用域审核：有稿可审时也能按来源回队列', () => {
+  test.use({ viewport: MOBILE_VIEWPORT })
+
+  test.beforeEach(async ({ page }) => {
+    await setLoginState(page, 'admin')
+    await mockApi(page, {
+      scopedRows: [
+        {
+          id: 7,
+          title: '待审 #7',
+          episode_date: '2026-07-09',
+          workflow_id: '41',
+          status: 'pending',
+          channel_name: '科技前沿',
+          channel_type: 'news',
+        },
+      ],
+    })
+  })
+
+  test('列表非空时点「返回队列」仍按 from 回到带筛选的队列页', async ({ page }) => {
+    await page.goto(
+      '/news/m/review?workflow_id=41&channel_name=%E7%A7%91%E6%8A%80%E5%89%8D%E6%B2%BF&from=%2Fm%2Fmanage%2Fqueue%3Fstatus%3Dfailed',
+    )
+    await expectLong(page.locator('.m-review__item')).toHaveCount(1)
+    // 作用域是真的落到接口参数上，而不是把整队列拉下来前端再过滤
+    await expectLong.poll(() => page.__lastReviewQuery).toMatchObject({
+      workflow_id: '41',
+      status: 'pending',
+    })
+
+    const back = page.locator('[data-guide="m-review-back-queue"]')
+    await expectLong(back).toBeVisible()
+    await back.click()
+    // 写死 '/m/manage/queue' 会停在没有 status 的地址上，这一行就是那根线
+    await expectLong(page).toHaveURL('/news/m/manage/queue?status=failed')
   })
 })

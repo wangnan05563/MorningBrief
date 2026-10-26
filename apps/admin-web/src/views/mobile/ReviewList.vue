@@ -3,6 +3,18 @@
     <!-- 上下文标题区：同时标明当前频道 + 工作流，清晰呈现所属上下文 -->
     <header class="m-review__ctx">
       <div class="m-review__ctx-head">
+        <!-- T02779（FR-UX-603）：作用域模式的返回入口此前只在空态里出现，
+             有稿可审时手机上根本没有「返回队列」——只能靠手势或底部 tab 离开，
+             带筛选进来时的队列状态就这样丢了。固定在上下文区，空态/有数据都在。 -->
+        <button
+          v-if="scoped"
+          type="button"
+          class="m-review__back"
+          data-guide="m-review-back-queue"
+          @click="backToQueue"
+        >
+          <span aria-hidden="true">‹</span> 返回队列
+        </button>
         <span class="m-review__ctx-label">{{ scoped ? '审核上下文' : '全部待审' }}</span>
         <span v-if="list.length" class="m-review__ctx-count">待审 {{ list.length }}</span>
       </div>
@@ -203,9 +215,6 @@
       <template v-if="scoped">
         工作流「{{ scopedLabel }}」暂无待审稿件
         <div class="m-empty__hint">可能已通过 / 已打回，或该任务尚未生成待审内容</div>
-        <button type="button" class="m-empty__back" data-guide="m-review-back-queue" @click="backToQueue">
-          返回队列
-        </button>
       </template>
       <template v-else>暂无待审内容 🎉</template>
     </div>
@@ -227,8 +236,8 @@ import { returnTarget, readUrlState, SCOPED_REVIEW_SPECS } from '../../utils/url
 const route = useRoute()
 const router = useRouter()
 
-/** 作用域空态的「返回队列」：显式回来源页（`?from=`），而不是 router.back()——
- *  深链/新标签直接打开本页时没有历史栈，back() 会点了没反应（E12 同族问题）。
+/** 作用域模式的「返回队列」（上下文区常驻，空态/有数据时都在）：显式回来源页（`?from=`），
+ *  而不是 router.back()——深链/新标签直接打开本页时没有历史栈，back() 会点了没反应（E12 同族问题）。
  *  T02512（FR-UX-603）：优先按 `from` 回，队列页以后带筛选/分页也不会被抹平 */
 function backToQueue() {
   const target = returnTarget(route.query, '/m/manage/queue')
@@ -522,6 +531,7 @@ onUnmounted(() => {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: 8px;
 }
 
 .m-review__ctx-label {
@@ -900,27 +910,29 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
-/* 作用域空态：说明文字小一号，返回按钮必须是真的能点的按钮样式（不是灰字） */
+/* 作用域空态：说明文字小一号 */
 .m-empty__hint {
   margin-top: 6px;
   font-size: 12px;
   color: #b0b4bb;
 }
 
-.m-empty__back {
-  margin-top: 14px;
-  min-height: 36px;
-  padding: 0 18px;
-  border: 1px solid #c9433b;
-  border-radius: 6px;
-  background: #fff;
+/* 作用域模式的返回入口（T02779）：常驻上下文区，需看得见、点得到，
+   但要让位给标题，所以用小一号的纯文字按钮而不是空态里那块大按钮 */
+.m-review__back {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
   color: #c9433b;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 
-.m-empty__back:active {
-  background: rgba(201, 67, 59, 0.08);
+.m-review__back:active {
+  opacity: 0.6;
 }
 </style>
