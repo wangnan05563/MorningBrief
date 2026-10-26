@@ -4,6 +4,7 @@
 恢复是「用旧快照覆盖当前库」的危险操作，确认口径与数据库后台一致（T02592）：
 服务端 DB_ADMIN_CONFIRM_TOKEN 只作总开关，操作者须手输目标备份文件名。
 """
+import json
 import logging
 from pathlib import Path
 
@@ -83,7 +84,7 @@ async def create_backup(
         action="create",
         target="database",
         operator=admin.username,
-        detail=f'{{"path": "{backup_path}"}}',
+        detail=json.dumps({"path": backup_path}, ensure_ascii=False),
     ))
     await db.commit()
 
@@ -122,7 +123,7 @@ async def restore_backup(
         action="restore",
         target="database",
         operator=admin.username,
-        detail=f'{{"source": "{body.backup_path}"}}',
+        detail=json.dumps({"source": body.backup_path}, ensure_ascii=False),
     ))
     await db.commit()
 
@@ -163,7 +164,10 @@ async def cleanup_backups(
         action="cleanup",
         target="backup_files",
         operator=admin.username,
-        detail=f'{{"deleted": {deleted}, "keep_days": {keep_days}, "max_files": {max_files}}}',
+        detail=json.dumps(
+            {"deleted": deleted, "keep_days": keep_days, "max_files": max_files},
+            ensure_ascii=False,
+        ),
     ))
     await db.commit()
 
