@@ -39,6 +39,13 @@ const statsResponse = {
     total: 3, success_count: 2, failed_count: 1, success_rate: 0.6667,
     avg_time_saved_sec: 420, total_time_saved_sec: 840,
     fail_distribution: [{ reason: '内容安全检测命中违规', count: 1 }],
+    // T02708：成功率是 0~1 比值，×100 与小数位只写在 meta 里
+    meta: {
+      success_rate: {
+        label: '成功率', unit: 'ratio',
+        display: { unit: '%', factor: 100, precision: 2 },
+      },
+    },
   },
 }
 
@@ -123,6 +130,15 @@ const save = (page) => page.getByRole('button', { name: '保存配置' })
 const puts = (calls) => calls.filter((c) => c.method === 'PUT')
 
 test.describe('自动审批护栏', () => {
+
+  test('成功率按后端 meta 换算：页面不再自己乘 100（T02708）', async ({ page }) => {
+    await gotoPage(page)
+    // meta 给 precision=2、factor=100：0.6667 → 66.67%。
+    // 页面若仍保留 formatPercent（×100 后固定 1 位），这里只会显示 66.7%。
+    await expect(
+      page.locator('.stat-detail').filter({ hasText: '成功率 66.67%' }),
+    ).toBeVisible()
+  })
 
   test('关闭校验即点名「本项不再检查」，并给出生效/跳过清单', async ({ page }) => {
     await gotoPage(page)
@@ -209,7 +225,12 @@ test.describe('自动审批护栏', () => {
     await page.getByRole('button', { name: '添加' }).click()
     await ackCheckbox(page).click()
     await save(page).click()
-    await expect(page.getByText('保存失败：自动审批护栏未通过')).toBeVisible()
+    // T02629 起业务错误由拦截器弹后端原文，页面 notifyErrorOnce 不再补第二条
+    // （message-dedupe「页面 catch 与拦截器同一件事只留一条说明」锁的就是这个口径）；
+    // 这里守住「如实提示且只有一条」，仍然禁止报假成功。
+    const rejected = page.locator('.el-message').filter({ hasText: '自动审批护栏未通过' })
+    await expect(rejected).toHaveCount(1)
+    await expect(rejected.first()).toContainText('跳过的校验（内容安全检测、步骤一次成功）将不再检查')
     await expect(page.getByText('配置已保存')).toHaveCount(0)
     expect(puts(calls)).toHaveLength(1)
   })

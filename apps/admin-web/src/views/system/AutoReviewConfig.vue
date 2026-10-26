@@ -194,7 +194,7 @@
               <span class="stat-title">成功数</span>
             </div>
             <div class="stat-value">{{ stats?.success_count ?? 0 }}</div>
-            <div class="stat-detail">成功率 {{ formatPercent(stats?.success_rate) }}</div>
+            <div class="stat-detail">成功率 {{ metricText(stats?.success_rate, meta.success_rate) }}</div>
           </div>
         </el-col>
         <el-col :xs="12" :sm="12" :md="12" :lg="6">
@@ -343,7 +343,7 @@ import {
   retryFailedAutoReview,
 } from '../../api/autoReview'
 import { ruleLabel, formatTriggerReason } from '../../utils/autoReviewRules'
-import { formatDuration } from '../../utils/format'
+import { formatDuration, metricText } from '../../utils/format'
 
 // 配置数据
 const config = ref(null)
@@ -391,6 +391,8 @@ const needsAck = computed(() => {
 
 // 统计数据
 const stats = ref(null)
+// 单位换算只认后端下发的 meta（T02708）；缺失时不猜单位，显示 '-'
+const meta = ref({})
 const loadingStats = ref(true)
 const dateRange = ref(null)
 
@@ -522,6 +524,7 @@ async function loadStats() {
     }
     const res = await getAutoReviewStats(params)
     stats.value = res
+    meta.value = res?.meta || {}
   } catch (err) {
     notifyErrorOnce(err, '加载统计失败：' + (err.message || '未知错误'))
   } finally {
@@ -599,11 +602,6 @@ function formatTime(iso) {
   if (!iso) return '-'
   const d = new Date(iso)
   return d.toLocaleString('zh-CN', { hour12: false })
-}
-
-function formatPercent(rate) {
-  if (rate == null) return '-'
-  return (rate * 100).toFixed(1) + '%'
 }
 
 // I5（T02518）：本秒→时长副本已删除，改用 utils/format.js 的 formatDuration（唯一出口）

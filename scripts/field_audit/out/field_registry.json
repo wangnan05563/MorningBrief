@@ -2484,9 +2484,9 @@
     {
       "endpoint": "POST /users/*/toggle-status",
       "model": "UserToggleBody",
-      "modelSource": "backend/app/routers/admin/users.py:22",
+      "modelSource": "backend/app/routers/admin/users.py:23",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/users.py:75",
+      "handlerSource": "backend/app/routers/admin/users.py:77",
       "declared": [
         "disabled"
       ],
@@ -2494,7 +2494,7 @@
         "callSites": [
           {
             "file": "views/mobile/ManageUsers.vue",
-            "line": 90,
+            "line": 93,
             "fn": "toggleUserStatus",
             "fieldCount": 1,
             "unresolved": [
@@ -3010,7 +3010,7 @@
         "callSites": [
           {
             "file": "views/system/AutoReviewConfig.vue",
-            "line": 481,
+            "line": 483,
             "fn": "updateAutoReviewConfig",
             "fieldCount": 5,
             "unresolved": []

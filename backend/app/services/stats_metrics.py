@@ -96,6 +96,31 @@ METRIC_META: dict[str, dict] = {
         "unit": "count",
         "display": {"unit": "条", "factor": 1, "precision": 0},
     },
+    # ---- T02708：自动审核概览 ----
+    # 与三条 llm rate 刻意相反：success_rate 是 0~1 比值（auto_review_service.get_stats），
+    # 同名的 llm rate 是 0~100 百分数。页面原先自己 `(rate*100).toFixed(1)`，
+    # 一旦有人照抄「页面自己乘」到 llm 页就是 4700%；登记成 ratio 后换算只在这里定义。
+    "success_rate": {
+        "label": "成功率",
+        "unit": "ratio",
+        "display": {"unit": "%", "factor": 100, "precision": 1},
+    },
+    # ---- T02708：终端用户累计收听（/admin/api/v1/users 列表） ----
+    # 这两个是 DB 全生命周期累计，累计起点 = 该用户注册时间，不随服务重启清零；
+    # 与 llm-metrics / rss-health 的「进程内累计、重启清零」是两种口径，
+    # 所以 scope 必须随 meta 一起下发，页面才敢写「累计」。
+    "total_listen_count": {
+        "label": "累计收听",
+        "unit": "count",
+        "display": {"unit": "次", "factor": 1, "precision": 0},
+        "scope": {"kind": "lifetime", "since": "user.created_at", "resets_on_restart": False},
+    },
+    "total_listen_duration": {
+        "label": "累计收听时长",
+        "unit": "second",
+        "display": {"unit": "秒", "factor": 1, "precision": 0},
+        "scope": {"kind": "lifetime", "since": "user.created_at", "resets_on_restart": False},
+    },
 }
 
 # 概览卡片的固定顺序（展示端按此顺序渲染，避免各页面各自排一遍）
@@ -127,6 +152,20 @@ RSS_HEALTH_METRICS = [
 # 频道健康度折线（daily_trend[].count）的计数单位
 CHANNEL_HEALTH_METRICS = [
     "count",
+]
+
+# 自动审核概览（/auto-review/stats）带换算的字段。
+# total / success_count / failed_count 是纯计数，页面标签已经写明「总尝试/成功数/失败数」，
+# 不存在「秒当分钟」这类误读；avg_time_saved_sec / total_time_saved_sec 由 formatDuration
+# 转成人读时长（如「2 时 0 分」），换算口径也在那一处，不在这里重复登记。
+AUTO_REVIEW_METRICS = [
+    "success_rate",
+]
+
+# 终端用户列表（/admin/api/v1/users）里带单位的列
+USER_LISTEN_METRICS = [
+    "total_listen_count",
+    "total_listen_duration",
 ]
 
 

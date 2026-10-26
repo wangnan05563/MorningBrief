@@ -604,16 +604,6 @@ export const METRIC_UNIT_ALLOW = [
     reason: '「{{ count }} 次」是失败记录条数徽标，不是统计指标 meta',
   },
   {
-    file: 'views/system/AutoReviewConfig.vue',
-    lines: [606],
-    reason: '已知存量：自动审批成功率仍在前端 *100；归派生单「其余统计接口纳入单位元数据表」（T02508）',
-  },
-  {
-    file: 'views/mobile/ManageUsers.vue',
-    lines: [28],
-    reason: '已知存量：收听次数/时长仍是写死「次/秒」；T02508 派生单接入单位 meta 后删除本条',
-  },
-  {
     file: 'views/workflow/components/WorkflowProgressIndicator.vue',
     lines: [25],
     reason: '工作流进度百分比由前端按步骤数算，不是后端指标',

@@ -10,9 +10,13 @@ from datetime import date, datetime
 from pathlib import Path
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.models import Channel, Episode, PlayLog
-from app.services.stats_metrics import METRIC_META, OVERVIEW_METRICS
+from app.models import AutoReviewStat, Channel, Episode, PlayLog, User
+from app.services.auto_review_service import AutoReviewService
+from app.services.stats_metrics import (
+    METRIC_META, OVERVIEW_METRICS, USER_LISTEN_METRICS,
+)
 from app.services.stats_service import StatsService
 
 # 前端 e2e 夹具（由 scripts/gen_stats_metric_meta.py 从本表生成）
@@ -121,3 +125,57 @@ def test_dashboard_summary_endpoint_shares_the_same_meta(client, admin_token):
     assert resp.status_code == 200
     today = resp.json()["data"]["today"]
     assert list(today["meta"]) == OVERVIEW_METRICS
+
+
+# ---- T02708：自动审核概览 / 终端用户累计收听 ----
+
+@pytest.mark.asyncio
+async def test_auto_review_stats_publishes_ratio_meta(db_session, monkeypatch):
+    """成功率后端只给 0~1 小数，×100 与 1 位小数只写在 meta 里（页面不得再乘）。"""
+    import app.services.auto_review_service as ars
+
+    maker = async_sessionmaker(
+        db_session.bind, class_=AsyncSession, expire_on_commit=False, autoflush=False,
+    )
+    monkeypatch.setattr(ars, "AsyncSessionLocal", maker)
+    db_session.add_all([
+        AutoReviewStat(workflow_id="t2708-w1", success=True, time_saved_sec=120),
+        AutoReviewStat(workflow_id="t2708-w2", success=False, error_message="内容安全拦截"),
+    ])
+    await db_session.commit()
+
+    data = await AutoReviewService(db_session).get_stats()
+
+    assert data["success_rate"] == pytest.approx(0.5)
+    assert data["meta"] == {"success_rate": METRIC_META["success_rate"]}
+    assert data["meta"]["success_rate"]["display"] == {
+        "unit": "%", "factor": 100, "precision": 1,
+    }
+
+
+@pytest.mark.asyncio
+async def test_users_list_publishes_lifetime_meta(client, db_session, admin_token):
+    """累计收听是「注册以来」口径：单位与起点随列表下发，页面不再硬写「次/秒」。"""
+    db_session.add(User(
+        openid="t2708-openid", nickname="T02708 用户",
+        total_listen_count=12, total_listen_duration=3600,
+    ))
+    await db_session.commit()
+
+    resp = client.get("/admin/api/v1/users", headers=_headers(admin_token))
+
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert list(data["meta"]) == USER_LISTEN_METRICS
+    count_meta = data["meta"]["total_listen_count"]
+    duration_meta = data["meta"]["total_listen_duration"]
+    assert count_meta["display"] == {"unit": "次", "factor": 1, "precision": 0}
+    assert duration_meta["display"] == {"unit": "秒", "factor": 1, "precision": 0}
+    for meta in (count_meta, duration_meta):
+        assert meta["scope"] == {
+            "kind": "lifetime", "since": "user.created_at", "resets_on_restart": False,
+        }
+    # 原始值保持源单位，换算交给 meta
+    row = data["list"][0]
+    assert row["total_listen_count"] == 12
+    assert row["total_listen_duration"] == 3600

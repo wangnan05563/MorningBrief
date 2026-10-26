@@ -4675,7 +4675,7 @@
       "model": {
         "name": "UserToggleBody",
         "module": "app.routers.admin.users",
-        "source": "backend/app/routers/admin/users.py:22",
+        "source": "backend/app/routers/admin/users.py:23",
         "extra": "ignore",
         "fields": [
           "disabled"
@@ -4685,7 +4685,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/users.py:75",
+        "source": "backend/app/routers/admin/users.py:77",
         "refs": [
           "/{user_id}/toggle-status",
           "AdminPayload",

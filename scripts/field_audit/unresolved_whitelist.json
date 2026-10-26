@@ -99,7 +99,7 @@
     },
     {
       "endpoint": "POST /users/*/toggle-status",
-      "site": "views/mobile/ManageUsers.vue:90",
+      "site": "views/mobile/ManageUsers.vue:93",
       "reason_key": "value-scalar",
       "note": "next 是 0/1 状态开关值，由 row.status 取反得到；键名 status 由 api 包装体给出并在 UserToggleBody 声明内。"
     },

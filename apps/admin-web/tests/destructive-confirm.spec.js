@@ -602,8 +602,31 @@ test.describe('破坏性操作确认', () => {
           { id: 5, nickname: '张三', openid: 'o_abcdefghijklmn', disabled: 0,
             total_listen_count: 3, total_listen_duration: 120, created_at: '2026-07-01T00:00:00' },
         ],
+        // T02708：累计收听是 lifetime 口径，单位与起点都由后端下发
+        meta: {
+          total_listen_count: {
+            label: '累计收听', unit: 'count',
+            display: { unit: '次', factor: 1, precision: 0 },
+          },
+          total_listen_duration: {
+            label: '累计收听时长', unit: 'second',
+            display: { unit: '分钟', factor: 1 / 60, precision: 1 },
+          },
+        },
       },
     }
+
+    test('累计收听单位取自 meta，页面不再硬写「次 / 秒」（T02708）', async ({ page }) => {
+      await setLoginState(page, 'admin')
+      await useMobileViewport(page)
+      await page.route('**/admin/api/v1/users**', (route) => route.fulfill({ json: usersResponse }))
+
+      await page.goto('/m/manage/users')
+      // 120 秒按 meta 换算成 2.0 分钟：页面若仍写死「秒」，这里显示 120 秒
+      await expect(
+        page.getByText(/收听 3 次 · 2\.0 分钟 · 注册 2026-07-01/),
+      ).toBeVisible({ timeout: NAV_TIMEOUT })
+    })
 
     test('禁用前讲明登录与会话影响，取消不发请求', async ({ page }) => {
       await setLoginState(page, 'admin')

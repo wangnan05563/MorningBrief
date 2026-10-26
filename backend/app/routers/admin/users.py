@@ -15,6 +15,7 @@ from app.core.response import success, error
 from app.database import get_db
 from app.models import AuditLog
 from app.models.user import User
+from app.services.stats_metrics import USER_LISTEN_METRICS, meta_for
 
 router = APIRouter(prefix="/admin/api/v1/users", tags=["B端-终端用户管理"])
 
@@ -69,6 +70,7 @@ async def list_users(
         "list": [_to_dict(u) for u in users],
         "page": page,
         "size": size,
+        "meta": meta_for(*USER_LISTEN_METRICS),
     })
 
 

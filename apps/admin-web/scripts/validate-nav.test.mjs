@@ -595,6 +595,10 @@ test('单位门禁：插值后写死单位、视图里做秒→分换算都抓�
       'const m = Math.floor(sec / 60)\n' +
       'const r = sec % 60\n' +
       '</script>\n',
+    // T02708 后真实仓库已无 percent 类命中（自动审批成功率改走 meta），
+    // 规则的牙齿由这个合成样本继续守着
+    'views/Rate.vue':
+      '<script setup>\nconst pct = (rate * 100).toFixed(1) + \'%\'\n</script>\n',
     'views/Comment.vue':
       '<script setup>\n' +
       "// 不要再写 '平均收听(分钟)' 或 {{ x }} 次\n" +
@@ -608,6 +612,7 @@ test('单位门禁：插值后写死单位、视图里做秒→分换算都抓�
     [
       'views/Duration.vue:2:minute-conv',
       'views/Duration.vue:3:minute-conv',
+      'views/Rate.vue:2:percent',
       'views/Users.vue:1:unit-suffix',
     ],
   )
@@ -661,9 +666,12 @@ test('真实仓库的指标单位只剩白名单里的存量（T02709 / T02507�
   assert.deepEqual(checkMetricUnits(f).errors, [])
   // 抽取要能对上已知缺陷面，否则「0 违规」只是因为扫了个空气
   const kinds = new Set(f.metricUnits.map((v) => v.kind))
-  for (const kind of ['unit-label', 'unit-suffix', 'percent', 'minute-conv']) {
+  for (const kind of ['unit-label', 'unit-suffix', 'minute-conv']) {
     assert.ok(kinds.has(kind), `真实仓库没抽到 ${kind} 类命中，检查项等于没跑`)
   }
+  // T02708 修掉最后一处页面内百分比换算（自动审批成功率改走 meta）后应清零；
+  // 规则本身仍有合成样本守（见「插值后写死单位…」用例），所以这里可以直接断言缺席
+  assert.equal(kinds.has('percent'), false, '页面又出现了 *100 百分比换算，应改为消费后端 meta（T02708）')
   assert.equal(kinds.has('factor'), false, '视图里出现了 .factor 读取：第二处换算点')
 })
 

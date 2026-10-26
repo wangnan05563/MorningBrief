@@ -134,5 +134,42 @@
       "factor": 1,
       "precision": 0
     }
+  },
+  "success_rate": {
+    "label": "成功率",
+    "unit": "ratio",
+    "display": {
+      "unit": "%",
+      "factor": 100,
+      "precision": 1
+    }
+  },
+  "total_listen_count": {
+    "label": "累计收听",
+    "unit": "count",
+    "display": {
+      "unit": "次",
+      "factor": 1,
+      "precision": 0
+    },
+    "scope": {
+      "kind": "lifetime",
+      "since": "user.created_at",
+      "resets_on_restart": false
+    }
+  },
+  "total_listen_duration": {
+    "label": "累计收听时长",
+    "unit": "second",
+    "display": {
+      "unit": "秒",
+      "factor": 1,
+      "precision": 0
+    },
+    "scope": {
+      "kind": "lifetime",
+      "since": "user.created_at",
+      "resets_on_restart": false
+    }
   }
 }

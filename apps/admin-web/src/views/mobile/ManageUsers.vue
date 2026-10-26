@@ -25,7 +25,7 @@
         </div>
         <div class="m-users__meta">openid：{{ mask(u.openid) }}</div>
         <div class="m-users__meta">
-          收听 {{ fmt(u.total_listen_count) }} 次 · {{ fmt(u.total_listen_duration) }} 秒 · 注册 {{ fmtDate(u.created_at) }}
+          收听 {{ metricText(u.total_listen_count, meta.total_listen_count) }} · {{ metricText(u.total_listen_duration, meta.total_listen_duration) }} · 注册 {{ fmtDate(u.created_at) }}
         </div>
       </div>
       <button
@@ -44,12 +44,14 @@ import { ref, onMounted } from 'vue'
 import { listUsers, toggleUserStatus } from '../../api/users'
 import { ElMessage } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
+import { metricText } from '../../utils/format'
 
 const keyword = ref('')
 const list = ref([])
 const loading = ref(false)
+// 累计收听是「用户注册以来」的 lifetime 口径，单位与起点均来自后端 meta（T02708）
+const meta = ref({})
 
-const fmt = (v) => (v == null ? 0 : Number(v).toLocaleString('zh-CN'))
 const mask = (s) =>
   !s ? '-' : s.length > 12 ? s.slice(0, 6) + '****' + s.slice(-4) : s
 
@@ -63,6 +65,7 @@ async function reload() {
   try {
     const data = await listUsers({ keyword: keyword.value || undefined, page: 1, size: 50 })
     list.value = data.list || []
+    meta.value = data.meta || {}
   } catch {
     // 拦截器已提示
   } finally {

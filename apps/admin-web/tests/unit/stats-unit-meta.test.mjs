@@ -31,6 +31,14 @@ const CHANNEL_VIEW = readFileSync(
   new URL('../../src/views/stats/ChannelHealth.vue', import.meta.url),
   'utf8',
 )
+const AUTO_REVIEW_VIEW = readFileSync(
+  new URL('../../src/views/system/AutoReviewConfig.vue', import.meta.url),
+  'utf8',
+)
+const MOBILE_USERS_VIEW = readFileSync(
+  new URL('../../src/views/mobile/ManageUsers.vue', import.meta.url),
+  'utf8',
+)
 
 const PERCENT = { label: '触发率', unit: 'percent', display: { unit: '%', factor: 1, precision: 2 } }
 const MS = { label: '响应延迟', unit: 'millisecond', display: { unit: 'ms', factor: 1, precision: 0 } }
@@ -77,6 +85,8 @@ describe('INT-UX-03 两个统计页接的是 meta，不是写死单位', () => {
     const pages = [
       ['RSS_HEALTH_METRICS', RSS_VIEW],
       ['CHANNEL_HEALTH_METRICS', CHANNEL_VIEW],
+      ['AUTO_REVIEW_METRICS', AUTO_REVIEW_VIEW],
+      ['USER_LISTEN_METRICS', MOBILE_USERS_VIEW],
     ]
     for (const [listName, view] of pages) {
       const listed = registry.match(new RegExp(`${listName} = \\[([\\s\\S]*?)\\]`))?.[1]
@@ -117,5 +127,27 @@ describe('INT-UX-03 两个统计页接的是 meta，不是写死单位', () => {
     assert.match(CHANNEL_VIEW, /meta\.value\.count\?\.display\?\.unit/)
     assert.match(CHANNEL_VIEW, /\$\{ctx\.parsed\.y\} \$\{countUnit\.value\}/)
     assert.doesNotMatch(CHANNEL_VIEW, /峰值 \{\{ peakOf\(ch\) \}\} 条/, '文案写死单位')
+  })
+
+  it('自动审核成功率按 meta 换算，页面不得自己乘 100（T02708）', () => {
+    assert.match(AUTO_REVIEW_VIEW, /metricText\(stats\?\.success_rate, meta\.success_rate\)/)
+    assert.match(AUTO_REVIEW_VIEW, /meta\.value = res\?\.meta \|\| \{\}/)
+    // 页面自带换算/格式化函数一旦回来，meta 就只是装饰
+    assert.doesNotMatch(AUTO_REVIEW_VIEW, /formatPercent/)
+    assert.doesNotMatch(AUTO_REVIEW_VIEW, /rate\s*\*\s*100/, '页面又自己乘 100')
+  })
+
+  it('移动端累计收听的单位取自 meta，不再写死「次 / 秒」（T02708）', () => {
+    assert.match(
+      MOBILE_USERS_VIEW,
+      /metricText\(u\.total_listen_count, meta\.total_listen_count\)/,
+    )
+    assert.match(
+      MOBILE_USERS_VIEW,
+      /metricText\(u\.total_listen_duration, meta\.total_listen_duration\)/,
+    )
+    assert.match(MOBILE_USERS_VIEW, /meta\.value = data\.meta \|\| \{\}/)
+    assert.doesNotMatch(MOBILE_USERS_VIEW, /\}\}\s*次\s*·\s*\{\{/, '收听次数单位写死在页面里')
+    assert.doesNotMatch(MOBILE_USERS_VIEW, /\}\}\s*秒\s*·\s*注册/, '收听时长单位写死在页面里')
   })
 })

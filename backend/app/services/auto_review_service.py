@@ -26,6 +26,7 @@ from app.models import (
     Material, Workflow, Channel,
 )
 from app.models.review import ReviewStatus
+from app.services.stats_metrics import AUTO_REVIEW_METRICS, meta_for
 
 logger = logging.getLogger(__name__)
 
@@ -726,6 +727,7 @@ class AutoReviewService:
             "avg_time_saved_sec": avg_time,
             "total_time_saved_sec": total_time,
             "fail_distribution": fail_distribution,
+            "meta": meta_for(*AUTO_REVIEW_METRICS),
         }
 
     async def list_history(
