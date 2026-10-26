@@ -33,6 +33,29 @@ const orphanResult = (target, dryRun) => ok({
   total_deleted: dryRun ? 0 : 8,
 })
 
+// T02799：非预览执行改为后台任务——POST 只返回任务视图，结果从任务状态里取
+const taskSubmitted = (target) => ok({
+  task_id: `task-${target}`,
+  category: 'database',
+  target,
+  state: 'running',
+  merged: false,
+  elapsed_ms: 900,
+  result: null,
+  error: null,
+})
+
+const taskSucceeded = (target, cleaned) => ok({
+  task_id: `task-${target}`,
+  category: 'database',
+  target,
+  state: 'succeeded',
+  merged: false,
+  elapsed_ms: 1200,
+  result: { target, days: 0, dry_run: false, cleaned, errors: [], total_deleted: 8 },
+  error: null,
+})
+
 async function pickDbTarget(page, label) {
   const dbCard = page.locator('.cleanup-card').filter({ hasText: '数据库清理' })
   await dbCard.locator('.el-select').click()
@@ -69,9 +92,18 @@ test.describe('系统清理 · 无主素材治理', () => {
   test('解绑执行：确认框说的是解绑后果，不是「删除不可恢复」', async ({ page }) => {
     const calls = []
     await page.route(`${API}/maintenance/database`, async (route) => {
-      calls.push(JSON.parse(route.request().postData() || '{}'))
-      return route.fulfill({ json: orphanResult('orphan_materials_detach', false) })
+      const body = JSON.parse(route.request().postData() || '{}')
+      calls.push(body)
+      if (body.dry_run) {
+        return route.fulfill({ json: orphanResult('orphan_materials_detach', true) })
+      }
+      return route.fulfill({ json: taskSubmitted('orphan_materials_detach') })
     })
+    await page.route(`${API}/maintenance/tasks/**`, (route) => route.fulfill({
+      json: taskSucceeded('orphan_materials_detach', [
+        '无主素材解绑：已处理 8 条（channel_id 置空，素材回到全局池）；样例 ID 2134, 2135',
+      ]),
+    }))
 
     await page.goto('/maintenance')
     const dbCard = await pickDbTarget(page, '无主素材解绑')
@@ -99,10 +131,13 @@ test.describe('系统清理 · 无主素材治理', () => {
     const calls = []
     await page.route(`${API}/maintenance/database`, async (route) => {
       calls.push(JSON.parse(route.request().postData() || '{}'))
-      return route.fulfill({
-        json: orphanResult('orphan_materials_delete', false),
-      })
+      return route.fulfill({ json: taskSubmitted('orphan_materials_delete') })
     })
+    await page.route(`${API}/maintenance/tasks/**`, (route) => route.fulfill({
+      json: taskSucceeded('orphan_materials_delete', [
+        '无主素材删除：已处理 8 条（素材行连同正文一起删除）；样例 ID 2134, 2135',
+      ]),
+    }))
 
     await page.goto('/maintenance')
     const dbCard = await pickDbTarget(page, '无主素材删除')

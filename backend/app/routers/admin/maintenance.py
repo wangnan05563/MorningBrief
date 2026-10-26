@@ -2,6 +2,10 @@
 
 仅 admin 角色可访问。
 清理操作支持 dry_run 预览模式，非预览模式写入审计日志。
+
+T02799（FR-UX-702）：非预览的清理改为后台任务——POST 立即返回 `task_id`，
+前端轮询 `GET /maintenance/tasks/{task_id}` 看状态，不再挂一条 300s 的 HTTP 请求。
+dry_run 仍是同步返回（只统计不执行，秒级），预览结果要能直接拿来确认影响范围。
 """
 import logging
 
@@ -10,8 +14,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AdminPayload, require_admin
+from app.core.exceptions import NotFoundError
 from app.core.response import success
 from app.database import get_db
+from app.services import maintenance_task_service as task_service
 from app.services.maintenance_service import MaintenanceService
 
 logger = logging.getLogger(__name__)
@@ -81,13 +87,23 @@ async def cleanup_database(
     """清理数据库旧数据或 VACUUM 压缩。
 
     审计日志由服务层 _write_audit 内部写入，路由层无需重复处理。
+    dry_run 同步返回预览；真实执行转为后台任务（T02799）。
     """
-    svc = MaintenanceService(db)
-    result = await svc.cleanup_database(
-        target=body.target, days=body.days,
-        dry_run=body.dry_run, admin_name=admin.username,
+    if body.dry_run:
+        svc = MaintenanceService(db)
+        result = await svc.cleanup_database(
+            target=body.target, days=body.days,
+            dry_run=True, admin_name=admin.username,
+        )
+        return success(data=result)
+    data = await task_service.submit(
+        db,
+        category="database",
+        target=body.target,
+        params={"days": body.days},
+        admin_name=admin.username,
     )
-    return success(data=result)
+    return success(data=data)
 
 
 # ---- 指定工作流全链清理 ----
@@ -99,13 +115,22 @@ async def cleanup_workflow_chain(
     admin: AdminPayload = Depends(require_admin),
 ):
     """按工作流 ID 清理其全部子表（与按天清理共用同一套级联口径）。"""
-    svc = MaintenanceService(db)
-    result = await svc.cleanup_workflow_chain(
-        workflow_id=body.workflow_id,
-        dry_run=body.dry_run,
+    if body.dry_run:
+        svc = MaintenanceService(db)
+        result = await svc.cleanup_workflow_chain(
+            workflow_id=body.workflow_id,
+            dry_run=True,
+            admin_name=admin.username,
+        )
+        return success(data=result)
+    data = await task_service.submit(
+        db,
+        category="workflow_chain",
+        target=body.workflow_id,
+        params={},
         admin_name=admin.username,
     )
-    return success(data=result)
+    return success(data=data)
 
 
 # ---- 日志清理 ----
@@ -116,13 +141,22 @@ async def cleanup_logs(
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
-    """清理日志文件（按天数或按大小）。"""
-    svc = MaintenanceService(db)
-    result = await svc.cleanup_logs(
-        target=body.target, days=body.days,
-        dry_run=body.dry_run, admin_name=admin.username,
+    """清理日志文件（按天数或按大小）。dry_run 同步预览，真实执行走后台任务。"""
+    if body.dry_run:
+        svc = MaintenanceService(db)
+        result = await svc.cleanup_logs(
+            target=body.target, days=body.days,
+            dry_run=True, admin_name=admin.username,
+        )
+        return success(data=result)
+    data = await task_service.submit(
+        db,
+        category="logs",
+        target=body.target,
+        params={"days": body.days},
+        admin_name=admin.username,
     )
-    return success(data=result)
+    return success(data=data)
 
 
 # ---- 缓存清理 ----
@@ -133,10 +167,41 @@ async def cleanup_cache(
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
-    """清理缓存（TTLCache / __pycache__ / 临时文件）。"""
-    svc = MaintenanceService(db)
-    result = await svc.cleanup_cache(
-        target=body.target or "pycache",
-        dry_run=body.dry_run, admin_name=admin.username,
+    """清理缓存（TTLCache / __pycache__ / 临时文件）。
+
+    dry_run 同步返回预览；真实执行转为后台任务（T02799）。
+    """
+    target = body.target or "pycache"
+    if body.dry_run:
+        svc = MaintenanceService(db)
+        result = await svc.cleanup_cache(
+            target=target, dry_run=True, admin_name=admin.username,
+        )
+        return success(data=result)
+    data = await task_service.submit(
+        db,
+        category="cache",
+        target=target,
+        params={},
+        admin_name=admin.username,
     )
-    return success(data=result)
+    return success(data=data)
+
+
+# ---- 后台任务状态 ----
+
+@router.get("/tasks/{task_id}")
+async def get_task(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """查询清理任务状态（T02799）。
+
+    state: queued | running | succeeded | failed；执行中 elapsed_ms 按当前时间实时算，
+    结束后返回结果（result.total_deleted / cleaned / errors）或错误原因。
+    """
+    row = await task_service.get_task(db, task_id)
+    if row is None:
+        raise NotFoundError("清理任务不存在")
+    return success(data=task_service.serialize(row))

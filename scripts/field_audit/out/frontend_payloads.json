@@ -1175,8 +1175,23 @@
         },
         {
           "file": "views/maintenance/Maintenance.vue",
-          "line": 378,
+          "line": 499,
           "fn": "api.get",
+          "fieldCount": 0,
+          "unresolved": []
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "url": "/maintenance/tasks/*",
+      "fields": [],
+      "unresolved": [],
+      "sites": [
+        {
+          "file": "views/maintenance/Maintenance.vue",
+          "line": 433,
+          "fn": "getMaintenanceTask",
           "fieldCount": 0,
           "unresolved": []
         }
@@ -11259,6 +11274,21 @@
       }
     },
     {
+      "fn": "getMaintenanceTask",
+      "method": "get",
+      "url": "/maintenance/tasks/*",
+      "file": "api/maintenance.js",
+      "line": 67,
+      "argNames": [
+        "taskId"
+      ],
+      "payloadExpr": null,
+      "defIndex": {
+        "decls": [],
+        "assigns": []
+      }
+    },
+    {
       "fn": "aggregateMaterials",
       "method": "get",
       "url": "/materials/aggregate",
@@ -15212,5 +15242,5 @@
       }
     }
   ],
-  "rawSites": 224
+  "rawSites": 225
 }

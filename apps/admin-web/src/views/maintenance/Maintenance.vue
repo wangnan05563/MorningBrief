@@ -104,7 +104,7 @@
             <el-form-item>
               <IconButton
                 :type="cacheForm.dry_run ? 'primary' : 'danger'"
-                :loading="cacheLoading"
+                :loading="cacheLoading || isTaskActive('cache')"
                 :label="cacheForm.dry_run ? '预览清理' : '立即执行清理'"
                 :inline-text="cacheForm.dry_run ? '预览清理' : '立即执行清理（不可恢复）'"
                 :desc="cacheForm.dry_run ? '仅预览，不实际删除' : '执行真实删除，不可恢复'"
@@ -113,6 +113,11 @@
               />
             </el-form-item>
           </el-form>
+          <TaskProgress
+            v-if="tasks.cache"
+            :task="tasks.cache"
+            :target-label="targetLabel('cache', tasks.cache.target)"
+          />
           <CleanupResult v-if="cacheResult" :result="cacheResult" />
         </div>
       </el-col>
@@ -178,7 +183,7 @@
             <el-form-item>
               <IconButton
                 :type="dbForm.dry_run ? 'primary' : 'danger'"
-                :loading="dbLoading"
+                :loading="dbLoading || isTaskActive('database')"
                 :label="dbForm.dry_run ? '预览清理' : '立即执行清理'"
                 :inline-text="dbForm.dry_run ? '预览清理' : '立即执行清理（不可恢复）'"
                 :desc="dbForm.dry_run ? '仅预览，不实际删除' : '执行真实删除，不可恢复'"
@@ -187,6 +192,11 @@
               />
             </el-form-item>
           </el-form>
+          <TaskProgress
+            v-if="tasks.database"
+            :task="tasks.database"
+            :target-label="targetLabel('database', tasks.database.target)"
+          />
           <CleanupResult v-if="dbResult" :result="dbResult" />
         </div>
       </el-col>
@@ -227,7 +237,7 @@
             <el-form-item>
               <IconButton
                 :type="logForm.dry_run ? 'primary' : 'danger'"
-                :loading="logLoading"
+                :loading="logLoading || isTaskActive('logs')"
                 :label="logForm.dry_run ? '预览清理' : '立即执行清理'"
                 :inline-text="logForm.dry_run ? '预览清理' : '立即执行清理（不可恢复）'"
                 :desc="logForm.dry_run ? '仅预览，不实际删除' : '执行真实删除，不可恢复'"
@@ -236,6 +246,11 @@
               />
             </el-form-item>
           </el-form>
+          <TaskProgress
+            v-if="tasks.logs"
+            :task="tasks.logs"
+            :target-label="targetLabel('logs', tasks.logs.target)"
+          />
           <CleanupResult v-if="logResult" :result="logResult" />
         </div>
       </el-col>
@@ -250,6 +265,7 @@
         <li>审核记录仅清理已完结状态（approved/rejected/replaced），pending 状态不会被清理</li>
         <li>工作流记录仅清理已完结状态（success/failed/cancelled），running 状态不会被清理</li>
         <li>「指定工作流全链清理」按工作流 ID 删除其稿件/节目/审核/播放数据等子表，运行中的工作流会被拒绝</li>
+        <li>「立即执行清理」会提交后台任务并立刻返回：这里显示任务进度，结束后自动刷新存储状态；执行期间数据库可能被锁定，其他操作会变慢</li>
         <li>VACUUM 会锁定数据库直到压缩完成，建议在低峰期执行</li>
         <li class="text-muted">注意：清理操作不可逆，请谨慎操作</li>
       </ol>
@@ -258,12 +274,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, h } from 'vue'
+import { ref, computed, onMounted, onUnmounted, h } from 'vue'
 import { ElMessage } from '../../utils/message'
 import {
   Refresh, Coin, Document, Cpu, Delete,
 } from '@element-plus/icons-vue'
 import api from '../../api'
+import { getMaintenanceTask } from '../../api/maintenance'
+import { MAINTENANCE_TASK_STATE } from '../../constants/enums'
 import ListLoadError from '../../components/ListLoadError.vue'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import { LONG_TASK_TIMEOUT_MS, isRequestTimeout, longTaskTimeoutText } from '../../utils/requestTimeout'
@@ -324,6 +342,50 @@ const CleanupResult = {
   },
 }
 
+// 后台任务进度（T02799）：非预览执行不再等 HTTP 响应，改为「提交 → 轮询状态」。
+// 轮询间隔 2s：任务本身是分钟级，2s 足够让「已提交 / 执行中 / 已完成」的状态可信，
+// 又不会把这个页面变成压力源（这是任务态轮询，替代的正是原来那条挂 300s 的连接）。
+const TASK_POLL_INTERVAL_MS = 2000
+const TASK_TERMINAL_STATES = ['succeeded', 'failed']
+const TASK_LOCK_HINT = '执行期间数据库可能被锁定，其他操作会变慢'
+
+const TaskProgress = {
+  props: ['task', 'targetLabel'],
+  setup(props) {
+    return () => {
+      const task = props.task
+      if (!task) return null
+      const terminal = TASK_TERMINAL_STATES.includes(task.state)
+      return h('div', {
+        class: 'task-progress',
+        'data-guide': 'maintenance-task-progress',
+      }, [
+        h('div', { class: 'task-progress__head' }, [
+          h('span', { class: ['task-state', `is-${task.state}`] },
+            MAINTENANCE_TASK_STATE[task.state]?.label || task.state),
+          h('span', { class: 'task-progress__meta' },
+            `目标：${props.targetLabel}`),
+          task.elapsed_ms != null
+            ? h('span', { class: 'task-progress__meta' },
+                `已耗时 ${(task.elapsed_ms / 1000).toFixed(1)} 秒`)
+            : null,
+        ]),
+        task.merged && !terminal
+          ? h('div', { class: 'task-progress__merged' },
+              '该目标已有任务在执行：这里跟踪的是同一个任务，不会再跑第二份')
+          : null,
+        h('div', { class: 'task-progress__hint' }, TASK_LOCK_HINT),
+        task.pollError
+          ? h('div', { class: 'task-progress__warn' }, task.pollError)
+          : null,
+        task.state === 'failed'
+          ? h('div', { class: 'result-error' }, task.error || '清理任务执行失败')
+          : null,
+      ])
+    }
+  },
+}
+
 // 存储状态
 const status = ref(null)
 const loadingStatus = ref(true)
@@ -348,6 +410,65 @@ const logResult = ref(null)
 const cacheLoading = ref(false)
 const dbLoading = ref(false)
 const logLoading = ref(false)
+
+// 后台任务状态（每个分类各自跟踪；同一 target 重复提交由后端合并）
+const tasks = ref({ cache: null, database: null, logs: null })
+const taskTimers = { cache: null, database: null, logs: null }
+
+function isTaskActive(category) {
+  const task = tasks.value[category]
+  return !!task && !TASK_TERMINAL_STATES.includes(task.state)
+}
+
+function scheduleTaskPoll(category, taskId) {
+  clearTimeout(taskTimers[category])
+  taskTimers[category] = setTimeout(() => pollTask(category, taskId), TASK_POLL_INTERVAL_MS)
+}
+
+async function pollTask(category, taskId) {
+  const current = tasks.value[category]
+  // 任务被新提交替换或页面已离开：这一轮作废，避免旧响应覆盖新状态
+  if (!current || current.task_id !== taskId) return
+  try {
+    const data = await getMaintenanceTask(taskId)
+    tasks.value[category] = {
+      ...data,
+      merged: current.merged,
+      pollFailures: 0,
+      pollError: '',
+    }
+    if (TASK_TERMINAL_STATES.includes(data.state)) {
+      finishTask(category, data)
+      return
+    }
+  } catch (error) {
+    // 取不到进度 ≠ 任务失败：后台照常执行，继续按间隔重试；
+    // 连续失败才提示，避免一次抖动就把「正在执行」说成「出错了」。
+    const failures = (current.pollFailures || 0) + 1
+    tasks.value[category] = {
+      ...current,
+      pollFailures: failures,
+      pollError: failures >= 3
+        ? `已连续 ${failures} 次取不到任务进度（${error?.message || '请求失败'}）；后台任务不受影响，仍在重试`
+        : '',
+    }
+  }
+  scheduleTaskPoll(category, taskId)
+}
+
+async function finishTask(category, data) {
+  const loadingRefs = { cache: cacheLoading, database: dbLoading, logs: logLoading }
+  const resultRefs = { cache: cacheResult, database: dbResult, logs: logResult }
+  loadingRefs[category].value = false
+  if (data.state === 'succeeded') {
+    resultRefs[category].value = data.result
+    ElMessage.success('清理完成')
+    // 任务结束再刷新存储状态：执行中就刷只会拿到被锁住的旧值
+    await loadStatus()
+  } else {
+    ElMessage.error(data.error || '清理任务执行失败')
+  }
+}
 
 // VACUUM / expired_blacklist / 指定工作流全链清理 / 无主素材治理都不按天数执行
 const showDbDays = computed(
@@ -448,6 +569,11 @@ async function handleCleanup(category) {
     if (!ok) return
   }
 
+  if (isTaskActive(category)) {
+    ElMessage.info('该目标的任务还在执行，请先看进度；重复提交会合并到同一个任务')
+    return
+  }
+
   loading.value = true
   result.value = null
   try {
@@ -459,20 +585,31 @@ async function handleCleanup(category) {
     if (!chain && !orphan && category !== 'cache') {
       payload.days = form.days
     }
-    // 长任务专用超时（M62）：这一页的三个「立即执行」都是分钟级操作，
-    // 不能用 api/index.js 的 15s 全局值——否则后端在正常干活，前端先判死。
+    // 长任务专用超时（M62）：dry-run 预览是同步统计，仍可能超过全局 15s；
+    // 非预览现在只落一条任务记录，正常毫秒级返回，这条超时退化成兜底。
     const data = await api.post(url, payload, {
       timeout: LONG_TASK_TIMEOUT_MS,
       // 超时提示由本页按「后端仍在执行」的口径自己给，拦截器再叠一条「timeout of ...」只会误导重复提交
       silent: true,
     })
-    result.value = data
-    const msg = form.dry_run ? '预览完成' : '清理完成'
-    ElMessage.success(msg)
-    // 实际执行（非 dry_run）后刷新状态
-    if (!form.dry_run) {
-      await loadStatus()
+    if (form.dry_run) {
+      result.value = data
+      ElMessage.success('预览完成')
+      return
     }
+    // 非预览：后端返回的是任务视图（task_id/state），清理结果要等任务结束再取
+    tasks.value[category] = {
+      ...data,
+      merged: !!data.merged,
+      pollFailures: 0,
+      pollError: '',
+    }
+    if (data.merged) {
+      ElMessage.info('该目标已有任务在执行，正在跟踪同一个任务')
+    } else {
+      ElMessage.success('已提交后台任务')
+    }
+    scheduleTaskPoll(category, data.task_id)
   } catch (error) {
     if (isRequestTimeout(error)) {
       // 关键区分：请求断开 ≠ 任务失败。VACUUM 仍在后端执行且占着写锁，
@@ -483,12 +620,21 @@ async function handleCleanup(category) {
       ElMessage.error(resp?.message || '清理失败')
     }
   } finally {
-    loading.value = false
+    // 后台任务仍在执行时按钮保持 loading 态，由轮询结束时解除
+    if (form.dry_run || !isTaskActive(category)) loading.value = false
   }
 }
 
 onMounted(() => {
   loadStatus()
+})
+
+// 离开页面就停掉轮询：任务在后端继续，但前端不再空转
+onUnmounted(() => {
+  Object.keys(taskTimers).forEach((key) => {
+    clearTimeout(taskTimers[key])
+    taskTimers[key] = null
+  })
 })
 </script>
 
@@ -638,6 +784,58 @@ onMounted(() => {
     color: $color-text-secondary;
     text-align: center;
     padding: 8px 0;
+  }
+}
+
+.task-progress {
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: $radius-sm;
+  border: 1px solid $color-border;
+  background: $color-bg;
+  font-size: 13px;
+
+  .task-progress__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .task-state {
+    font-weight: 600;
+    color: $color-text-primary;
+
+    &.is-running { color: $color-info; }
+    &.is-succeeded { color: $color-primary-dark; }
+    &.is-failed { color: $color-secondary-dark; }
+  }
+
+  .task-progress__meta {
+    color: $color-text-secondary;
+    font-size: 12px;
+  }
+
+  .task-progress__merged,
+  .task-progress__hint {
+    color: $color-text-secondary;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .task-progress__warn {
+    margin-top: 6px;
+    color: $color-primary-dark;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .result-error {
+    margin-top: 6px;
+    color: $color-secondary-dark;
+    line-height: 1.6;
+    word-break: break-all;
   }
 }
 

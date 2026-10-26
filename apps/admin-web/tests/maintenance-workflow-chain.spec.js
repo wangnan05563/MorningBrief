@@ -81,8 +81,32 @@ test.describe('系统清理 · 指定工作流全链清理', () => {
     const calls = []
     await page.route(`${API}/maintenance/workflow-chain`, async (route) => {
       calls.push(JSON.parse(route.request().postData() || '{}'))
-      return route.fulfill({ json: chainResult(false) })
+      // T02799：非预览改为后台任务，POST 只返回任务视图
+      return route.fulfill({
+        json: ok({
+          task_id: 'task-wf-456',
+          category: 'workflow_chain',
+          target: 'wf-456',
+          state: 'running',
+          merged: false,
+          elapsed_ms: 300,
+          result: null,
+          error: null,
+        }),
+      })
     })
+    await page.route(`${API}/maintenance/tasks/**`, (route) => route.fulfill({
+      json: ok({
+        task_id: 'task-wf-456',
+        category: 'workflow_chain',
+        target: 'wf-456',
+        state: 'succeeded',
+        merged: false,
+        elapsed_ms: 800,
+        result: chainResult(false).data,
+        error: null,
+      }),
+    }))
 
     await page.goto('/maintenance')
     const dbCard = await pickWorkflowChain(page)

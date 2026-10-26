@@ -120,6 +120,19 @@ export const ADMIN_ROLE = {
   operator: { label: '运营', type: 'info' },
 }
 
+/**
+ * 系统清理后台任务状态（T02799）；键与 `MaintenanceTaskState` 一致。
+ *
+ * 这不是工作流状态：`succeeded` 在工作流里叫 `success`，两套枚举混用会让
+ * 「已完成」的任务在页面上漏出英文原值，所以单独一份字典并与模型对账。
+ */
+export const MAINTENANCE_TASK_STATE = {
+  queued: { label: '已提交，等待执行' },
+  running: { label: '执行中' },
+  succeeded: { label: '已完成' },
+  failed: { label: '执行失败' },
+}
+
 /** 供构建期门禁比对：字典名 → 后端模型枚举类名（None = 非模型枚举，跳过比对） */
 export const BACKEND_ENUM_OF = {
   WORKFLOW_STATUS: 'WorkflowStatus',
@@ -135,6 +148,7 @@ export const BACKEND_ENUM_OF = {
   CHANNEL_TYPE: 'ChannelType',
   FEEDBACK_STATUS: null,
   NOTIFICATION_DELIVERY_STATUS: 'NotificationDeliveryStatus',
+  MAINTENANCE_TASK_STATE: 'MaintenanceTaskState',
 }
 
 export function enumLabel(dict, value, fallback = value) {

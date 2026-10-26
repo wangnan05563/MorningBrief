@@ -77,6 +77,8 @@ from app.models.cos_config import CosConfig
 from app.models.mobile import AdminDevice, AdminInbox
 # 系统级键值标志（应急停服 / 维护态等复用，避免为单一布尔新建专用表）
 from app.models.system_flag import SystemFlag
+# 系统清理长任务（T02799：提交 → 后台执行 → 轮询状态）
+from app.models.maintenance_task import MaintenanceTask
 
 __all__ = [
     # 业务表
@@ -137,4 +139,6 @@ __all__ = [
     "AdminInbox",
     # 系统级键值标志
     "SystemFlag",
+    # 系统清理长任务
+    "MaintenanceTask",
 ]

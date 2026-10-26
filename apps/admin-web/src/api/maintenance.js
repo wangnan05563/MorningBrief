@@ -55,3 +55,14 @@ export function cleanupCache(target = 'pycache', dryRun = false) {
     { timeout: LONG_TASK_TIMEOUT_MS },
   )
 }
+
+/**
+ * 查询清理任务状态（T02799）
+ *
+ * 非预览的清理改为后台任务：POST 立刻返回 task_id，进度从这里取。
+ * 这是任务态轮询，替代的是原来那条挂 300s 的请求，不是「额外的轮询」。
+ * @param {string} taskId - POST 返回的 task_id
+ */
+export function getMaintenanceTask(taskId) {
+  return api.get(`/maintenance/tasks/${encodeURIComponent(taskId)}`)
+}

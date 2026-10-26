@@ -3415,7 +3415,7 @@
       "model": {
         "name": "CacheCleanupRequest",
         "module": "app.routers.admin.maintenance",
-        "source": "backend/app/routers/admin/maintenance.py:35",
+        "source": "backend/app/routers/admin/maintenance.py:41",
         "extra": "forbid",
         "fields": [
           "dry_run",
@@ -3427,7 +3427,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/maintenance.py:130",
+        "source": "backend/app/routers/admin/maintenance.py:164",
         "refs": [
           "/cache",
           "AdminPayload",
@@ -3438,21 +3438,26 @@
           "admin",
           "admin_name",
           "body",
+          "cache",
+          "category",
           "cleanup_cache",
           "data",
           "db",
           "dry_run",
           "get_db",
+          "params",
           "post",
           "pycache",
           "require_admin",
           "result",
           "router",
+          "submit",
           "success",
           "svc",
           "target",
+          "task_service",
           "username",
-          "清理缓存（TTLCache / __pycache__ / 临时文件）。"
+          "清理缓存（TTLCache / __pycache__ / 临时文件）。\n\n    dry_run 同步返回预览；真实执行转为后台任务（T02799）。\n    "
         ]
       }
     },
@@ -3462,7 +3467,7 @@
       "model": {
         "name": "CleanupRequest",
         "module": "app.routers.admin.maintenance",
-        "source": "backend/app/routers/admin/maintenance.py:22",
+        "source": "backend/app/routers/admin/maintenance.py:28",
         "extra": "forbid",
         "fields": [
           "days",
@@ -3476,7 +3481,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/maintenance.py:75",
+        "source": "backend/app/routers/admin/maintenance.py:81",
         "refs": [
           "/database",
           "AdminPayload",
@@ -3487,21 +3492,26 @@
           "admin",
           "admin_name",
           "body",
+          "category",
           "cleanup_database",
           "data",
+          "database",
           "days",
           "db",
           "dry_run",
           "get_db",
+          "params",
           "post",
           "require_admin",
           "result",
           "router",
+          "submit",
           "success",
           "svc",
           "target",
+          "task_service",
           "username",
-          "清理数据库旧数据或 VACUUM 压缩。\n\n    审计日志由服务层 _write_audit 内部写入，路由层无需重复处理。\n    "
+          "清理数据库旧数据或 VACUUM 压缩。\n\n    审计日志由服务层 _write_audit 内部写入，路由层无需重复处理。\n    dry_run 同步返回预览；真实执行转为后台任务（T02799）。\n    "
         ]
       }
     },
@@ -3511,7 +3521,7 @@
       "model": {
         "name": "CleanupRequest",
         "module": "app.routers.admin.maintenance",
-        "source": "backend/app/routers/admin/maintenance.py:22",
+        "source": "backend/app/routers/admin/maintenance.py:28",
         "extra": "forbid",
         "fields": [
           "days",
@@ -3525,7 +3535,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/maintenance.py:113",
+        "source": "backend/app/routers/admin/maintenance.py:138",
         "refs": [
           "/logs",
           "AdminPayload",
@@ -3536,21 +3546,26 @@
           "admin",
           "admin_name",
           "body",
+          "category",
           "cleanup_logs",
           "data",
           "days",
           "db",
           "dry_run",
           "get_db",
+          "logs",
+          "params",
           "post",
           "require_admin",
           "result",
           "router",
+          "submit",
           "success",
           "svc",
           "target",
+          "task_service",
           "username",
-          "清理日志文件（按天数或按大小）。"
+          "清理日志文件（按天数或按大小）。dry_run 同步预览，真实执行走后台任务。"
         ]
       }
     },
@@ -3560,7 +3575,7 @@
       "model": {
         "name": "WorkflowChainCleanupRequest",
         "module": "app.routers.admin.maintenance",
-        "source": "backend/app/routers/admin/maintenance.py:47",
+        "source": "backend/app/routers/admin/maintenance.py:53",
         "extra": "forbid",
         "fields": [
           "dry_run",
@@ -3572,7 +3587,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/maintenance.py:95",
+        "source": "backend/app/routers/admin/maintenance.py:111",
         "refs": [
           "/workflow-chain",
           "AdminPayload",
@@ -3583,18 +3598,24 @@
           "admin",
           "admin_name",
           "body",
+          "category",
           "cleanup_workflow_chain",
           "data",
           "db",
           "dry_run",
           "get_db",
+          "params",
           "post",
           "require_admin",
           "result",
           "router",
+          "submit",
           "success",
           "svc",
+          "target",
+          "task_service",
           "username",
+          "workflow_chain",
           "workflow_id",
           "按工作流 ID 清理其全部子表（与按天清理共用同一套级联口径）。"
         ]
@@ -6499,6 +6520,25 @@
         "jti",
         "token_type",
         "user_id"
+      ]
+    },
+    "MaintenanceTask": {
+      "table": "maintenance_task",
+      "source": "backend/app/models/maintenance_task.py:32",
+      "columns": [
+        "active_key",
+        "admin_name",
+        "category",
+        "created_at",
+        "elapsed_ms",
+        "error",
+        "finished_at",
+        "id",
+        "params",
+        "result",
+        "started_at",
+        "state",
+        "target"
       ]
     },
     "Material": {

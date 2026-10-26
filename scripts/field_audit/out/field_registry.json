@@ -1679,9 +1679,9 @@
     {
       "endpoint": "POST /maintenance/cache",
       "model": "CacheCleanupRequest",
-      "modelSource": "backend/app/routers/admin/maintenance.py:35",
+      "modelSource": "backend/app/routers/admin/maintenance.py:41",
       "modelExtra": "forbid",
-      "handlerSource": "backend/app/routers/admin/maintenance.py:130",
+      "handlerSource": "backend/app/routers/admin/maintenance.py:164",
       "declared": [
         "dry_run",
         "target"
@@ -1710,9 +1710,9 @@
     {
       "endpoint": "POST /maintenance/database",
       "model": "CleanupRequest",
-      "modelSource": "backend/app/routers/admin/maintenance.py:22",
+      "modelSource": "backend/app/routers/admin/maintenance.py:28",
       "modelExtra": "forbid",
-      "handlerSource": "backend/app/routers/admin/maintenance.py:75",
+      "handlerSource": "backend/app/routers/admin/maintenance.py:81",
       "declared": [
         "days",
         "dry_run",
@@ -1743,9 +1743,9 @@
     {
       "endpoint": "POST /maintenance/logs",
       "model": "CleanupRequest",
-      "modelSource": "backend/app/routers/admin/maintenance.py:22",
+      "modelSource": "backend/app/routers/admin/maintenance.py:28",
       "modelExtra": "forbid",
-      "handlerSource": "backend/app/routers/admin/maintenance.py:113",
+      "handlerSource": "backend/app/routers/admin/maintenance.py:138",
       "declared": [
         "days",
         "dry_run",
@@ -1776,9 +1776,9 @@
     {
       "endpoint": "POST /maintenance/workflow-chain",
       "model": "WorkflowChainCleanupRequest",
-      "modelSource": "backend/app/routers/admin/maintenance.py:47",
+      "modelSource": "backend/app/routers/admin/maintenance.py:53",
       "modelExtra": "forbid",
-      "handlerSource": "backend/app/routers/admin/maintenance.py:95",
+      "handlerSource": "backend/app/routers/admin/maintenance.py:111",
       "declared": [
         "dry_run",
         "workflow_id"

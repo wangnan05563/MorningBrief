@@ -119,6 +119,39 @@ describe('长任务超时与全局 CRUD 超时成对（M62）', () => {
   })
 })
 
+describe('长任务改后台作业：提交 + 任务态轮询（T02799）', () => {
+  const api = () => srcFile('api/maintenance.js')
+  const view = () => srcFile('views/maintenance/Maintenance.vue')
+
+  it('状态查询走独立 API：task_id 只进路径，不拼进查询串', () => {
+    assert.match(api(), /export function getMaintenanceTask\(taskId\)/, '缺少任务状态查询入口')
+    assert.match(api(), /\/maintenance\/tasks\/\$\{encodeURIComponent\(taskId\)\}/)
+  })
+
+  it('非预览返回的是任务视图，不能再当成清理结果直接渲染', () => {
+    // 只有预览分支才把响应写进 result；否则会把 {task_id,state} 喂给 CleanupResult
+    assert.match(view(), /if \(form\.dry_run\) \{\s*result\.value = data/, '预览与真实执行没有分流')
+    assert.match(view(), /tasks\.value\[category\] = \{\s*\.\.\.data/, '非预览响应没有按任务视图记录')
+  })
+
+  it('轮询是任务态而非常驻：有终态判定、结束后不再排下一轮、离开页面清定时器', () => {
+    const src = view()
+    assert.match(src, /TASK_TERMINAL_STATES = \['succeeded', 'failed'\]/, '缺少任务终态定义')
+    assert.match(src, /TASK_POLL_INTERVAL_MS = 2000/, '轮询间隔未显式声明')
+    assert.match(src, /scheduleTaskPoll\(category, taskId\)/, '轮询没有串成下一轮')
+    assert.match(src, /onUnmounted\(/, '离开页面没有清理轮询')
+    assert.match(src, /clearTimeout\(taskTimers\[key\]\)/)
+    assert.doesNotMatch(src, /setInterval\(/, '常驻 setInterval 会变成 NFR-UX-03 的额外轮询')
+  })
+
+  it('执行中给出锁库提示，且合并提交有专门说明', () => {
+    const src = view()
+    assert.match(src, /执行期间数据库可能被锁定，其他操作会变慢/)
+    assert.match(src, /不会再跑第二份/)
+    assert.match(src, /maintenance-task-progress/)
+  })
+})
+
 describe('SSE 连接状态对外可见（sse.js）', () => {
   const sse = () => srcFile('utils/sse.js')
 
