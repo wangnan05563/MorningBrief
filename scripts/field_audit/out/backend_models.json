@@ -252,7 +252,7 @@
       "endpoint": "delete_folder",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/cos.py:237",
+        "source": "backend/app/routers/admin/cos.py:246",
         "refs": [
           " 个对象",
           "/folder",
@@ -284,7 +284,7 @@
       "endpoint": "delete_object",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/cos.py:215",
+        "source": "backend/app/routers/admin/cos.py:224",
         "refs": [
           "/object",
           "AdminPayload",
@@ -2495,7 +2495,7 @@
       "model": {
         "name": "CosFolderBody",
         "module": "app.routers.admin.cos",
-        "source": "backend/app/routers/admin/cos.py:49",
+        "source": "backend/app/routers/admin/cos.py:50",
         "extra": "ignore",
         "fields": [
           "prefix"
@@ -2505,7 +2505,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/cos.py:226",
+        "source": "backend/app/routers/admin/cos.py:235",
         "refs": [
           "/folder",
           "AdminPayload",
@@ -2534,20 +2534,23 @@
       "model": {
         "name": "CosMoveBody",
         "module": "app.routers.admin.cos",
-        "source": "backend/app/routers/admin/cos.py:54",
-        "extra": "ignore",
+        "source": "backend/app/routers/admin/cos.py:55",
+        "extra": "forbid",
         "fields": [
           "dest_key",
+          "overwrite",
           "source_key"
         ],
         "flatFields": [
           "dest_key",
+          "overwrite",
           "source_key"
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/cos.py:248",
+        "source": "backend/app/routers/admin/cos.py:273",
         "refs": [
+          " 个同名对象，旧对象已备份到 .backup/ 目录",
           "/move",
           "AdminPayload",
           "CosMoveBody",
@@ -2556,8 +2559,11 @@
           "body",
           "data",
           "dest_key",
+          "get",
           "message",
           "move_object",
+          "overwrite",
+          "overwritten",
           "post",
           "require_admin",
           "result",
@@ -2566,7 +2572,8 @@
           "success",
           "svc",
           "移动成功",
-          "重命名 / 移动对象或文件夹。\n\n    source_key 以 '/' 结尾视为文件夹，递归移动。\n    "
+          "移动成功，已覆盖 ",
+          "重命名 / 移动对象或文件夹。\n\n    source_key 以 '/' 结尾视为文件夹，递归移动。\n    目标位置已有同名对象时默认拒绝（业务码 409），需带 overwrite=true 重做，\n    且覆盖前会把旧对象复制到 .backup/<时间戳>/（T02608 / H19）。\n    "
         ]
       }
     },
@@ -2575,7 +2582,7 @@
       "endpoint": "reset_config",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/cos.py:89",
+        "source": "backend/app/routers/admin/cos.py:98",
         "refs": [
           "/reset-config",
           "AdminPayload",
@@ -2621,7 +2628,7 @@
       "endpoint": "test_connection",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/cos.py:112",
+        "source": "backend/app/routers/admin/cos.py:121",
         "refs": [
           "/test-connection",
           "AdminPayload",
@@ -2647,7 +2654,7 @@
       "endpoint": "upload_file",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/cos.py:151",
+        "source": "backend/app/routers/admin/cos.py:160",
         "refs": [
           "",
           "/",
@@ -5606,7 +5613,7 @@
       "model": {
         "name": "CosConfigBody",
         "module": "app.routers.admin.cos",
-        "source": "backend/app/routers/admin/cos.py:40",
+        "source": "backend/app/routers/admin/cos.py:41",
         "extra": "ignore",
         "fields": [
           "bucket",
@@ -5624,7 +5631,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/cos.py:71",
+        "source": "backend/app/routers/admin/cos.py:80",
         "refs": [
           "/config",
           "AdminPayload",

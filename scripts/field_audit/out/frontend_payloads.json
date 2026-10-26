@@ -89,7 +89,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 424,
+          "line": 469,
           "fn": "deleteCosFolder",
           "fieldCount": 2,
           "unresolved": []
@@ -107,7 +107,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 427,
+          "line": 472,
           "fn": "deleteCosObject",
           "fieldCount": 2,
           "unresolved": []
@@ -769,7 +769,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 439,
+          "line": 484,
           "fn": "getCosDownloadUrl",
           "fieldCount": 3,
           "unresolved": []
@@ -790,11 +790,35 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 305,
+          "line": 306,
           "fn": "checkCosObject",
           "fieldCount": 3,
           "unresolved": [
             "变量 targetKey 无可解析的声明"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "url": "/cos/move-preview",
+      "fields": [
+        "params",
+        "params.dest_key",
+        "params.source_key",
+        "silent"
+      ],
+      "unresolved": [
+        "变量 destKey 无可解析的声明"
+      ],
+      "sites": [
+        {
+          "file": "views/cos/CosFiles.vue",
+          "line": 402,
+          "fn": "checkCosMoveConflict",
+          "fieldCount": 4,
+          "unresolved": [
+            "变量 destKey 无可解析的声明"
           ]
         }
       ]
@@ -810,7 +834,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 261,
+          "line": 262,
           "fn": "listCosObjects",
           "fieldCount": 2,
           "unresolved": []
@@ -832,7 +856,7 @@
         },
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 250,
+          "line": 251,
           "fn": "getCosStatus",
           "fieldCount": 0,
           "unresolved": []
@@ -2236,7 +2260,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 358,
+          "line": 359,
           "fn": "createCosFolder",
           "fieldCount": 1,
           "unresolved": []
@@ -2248,6 +2272,7 @@
       "url": "/cos/move",
       "fields": [
         "dest_key",
+        "overwrite",
         "source_key"
       ],
       "unresolved": [
@@ -2256,9 +2281,9 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 396,
+          "line": 437,
           "fn": "moveCosObject",
-          "fieldCount": 2,
+          "fieldCount": 3,
           "unresolved": [
             "变量 destKey 无可解析的声明"
           ]
@@ -2305,7 +2330,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 328,
+          "line": 329,
           "fn": "uploadCosFile",
           "fieldCount": 0,
           "unresolved": [
@@ -6681,63 +6706,332 @@
       }
     },
     {
-      "fn": "moveCosObject",
-      "method": "post",
-      "url": "/cos/move",
+      "fn": "checkCosMoveConflict",
+      "method": "get",
+      "url": "/cos/move-preview",
       "file": "api/cos.js",
-      "line": 68,
+      "line": 69,
       "argNames": [
         "sourceKey",
         "destKey"
       ],
       "payloadExpr": {
         "type": "ObjectExpression",
-        "start": 2177,
-        "end": 2221,
+        "start": 2232,
+        "end": 2313,
         "loc": {
           "start": {
-            "line": 68,
-            "column": 24,
-            "index": 2177
+            "line": 69,
+            "column": 31,
+            "index": 2232
           },
           "end": {
-            "line": 68,
-            "column": 68,
-            "index": 2221
+            "line": 72,
+            "column": 3,
+            "index": 2313
           }
         },
         "properties": [
           {
             "type": "ObjectProperty",
-            "start": 2179,
-            "end": 2200,
+            "start": 2238,
+            "end": 2290,
             "loc": {
               "start": {
-                "line": 68,
-                "column": 26,
-                "index": 2179
+                "line": 70,
+                "column": 4,
+                "index": 2238
               },
               "end": {
-                "line": 68,
-                "column": 47,
-                "index": 2200
+                "line": 70,
+                "column": 56,
+                "index": 2290
               }
             },
             "method": false,
             "key": {
               "type": "Identifier",
-              "start": 2179,
-              "end": 2189,
+              "start": 2238,
+              "end": 2244,
               "loc": {
                 "start": {
-                  "line": 68,
-                  "column": 26,
-                  "index": 2179
+                  "line": 70,
+                  "column": 4,
+                  "index": 2238
                 },
                 "end": {
-                  "line": 68,
-                  "column": 36,
-                  "index": 2189
+                  "line": 70,
+                  "column": 10,
+                  "index": 2244
+                },
+                "identifierName": "params"
+              },
+              "name": "params"
+            },
+            "computed": false,
+            "shorthand": false,
+            "value": {
+              "type": "ObjectExpression",
+              "start": 2246,
+              "end": 2290,
+              "loc": {
+                "start": {
+                  "line": 70,
+                  "column": 12,
+                  "index": 2246
+                },
+                "end": {
+                  "line": 70,
+                  "column": 56,
+                  "index": 2290
+                }
+              },
+              "properties": [
+                {
+                  "type": "ObjectProperty",
+                  "start": 2248,
+                  "end": 2269,
+                  "loc": {
+                    "start": {
+                      "line": 70,
+                      "column": 14,
+                      "index": 2248
+                    },
+                    "end": {
+                      "line": 70,
+                      "column": 35,
+                      "index": 2269
+                    }
+                  },
+                  "method": false,
+                  "key": {
+                    "type": "Identifier",
+                    "start": 2248,
+                    "end": 2258,
+                    "loc": {
+                      "start": {
+                        "line": 70,
+                        "column": 14,
+                        "index": 2248
+                      },
+                      "end": {
+                        "line": 70,
+                        "column": 24,
+                        "index": 2258
+                      },
+                      "identifierName": "source_key"
+                    },
+                    "name": "source_key"
+                  },
+                  "computed": false,
+                  "shorthand": false,
+                  "value": {
+                    "type": "Identifier",
+                    "start": 2260,
+                    "end": 2269,
+                    "loc": {
+                      "start": {
+                        "line": 70,
+                        "column": 26,
+                        "index": 2260
+                      },
+                      "end": {
+                        "line": 70,
+                        "column": 35,
+                        "index": 2269
+                      },
+                      "identifierName": "sourceKey"
+                    },
+                    "name": "sourceKey"
+                  }
+                },
+                {
+                  "type": "ObjectProperty",
+                  "start": 2271,
+                  "end": 2288,
+                  "loc": {
+                    "start": {
+                      "line": 70,
+                      "column": 37,
+                      "index": 2271
+                    },
+                    "end": {
+                      "line": 70,
+                      "column": 54,
+                      "index": 2288
+                    }
+                  },
+                  "method": false,
+                  "key": {
+                    "type": "Identifier",
+                    "start": 2271,
+                    "end": 2279,
+                    "loc": {
+                      "start": {
+                        "line": 70,
+                        "column": 37,
+                        "index": 2271
+                      },
+                      "end": {
+                        "line": 70,
+                        "column": 45,
+                        "index": 2279
+                      },
+                      "identifierName": "dest_key"
+                    },
+                    "name": "dest_key"
+                  },
+                  "computed": false,
+                  "shorthand": false,
+                  "value": {
+                    "type": "Identifier",
+                    "start": 2281,
+                    "end": 2288,
+                    "loc": {
+                      "start": {
+                        "line": 70,
+                        "column": 47,
+                        "index": 2281
+                      },
+                      "end": {
+                        "line": 70,
+                        "column": 54,
+                        "index": 2288
+                      },
+                      "identifierName": "destKey"
+                    },
+                    "name": "destKey"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "ObjectProperty",
+            "start": 2296,
+            "end": 2308,
+            "loc": {
+              "start": {
+                "line": 71,
+                "column": 4,
+                "index": 2296
+              },
+              "end": {
+                "line": 71,
+                "column": 16,
+                "index": 2308
+              }
+            },
+            "method": false,
+            "key": {
+              "type": "Identifier",
+              "start": 2296,
+              "end": 2302,
+              "loc": {
+                "start": {
+                  "line": 71,
+                  "column": 4,
+                  "index": 2296
+                },
+                "end": {
+                  "line": 71,
+                  "column": 10,
+                  "index": 2302
+                },
+                "identifierName": "silent"
+              },
+              "name": "silent"
+            },
+            "computed": false,
+            "shorthand": false,
+            "value": {
+              "type": "BooleanLiteral",
+              "start": 2304,
+              "end": 2308,
+              "loc": {
+                "start": {
+                  "line": 71,
+                  "column": 12,
+                  "index": 2304
+                },
+                "end": {
+                  "line": 71,
+                  "column": 16,
+                  "index": 2308
+                }
+              },
+              "value": true
+            }
+          }
+        ],
+        "extra": {
+          "trailingComma": 2308
+        }
+      },
+      "defIndex": {
+        "decls": [],
+        "assigns": []
+      }
+    },
+    {
+      "fn": "moveCosObject",
+      "method": "post",
+      "url": "/cos/move",
+      "file": "api/cos.js",
+      "line": 77,
+      "argNames": [
+        "sourceKey",
+        "destKey",
+        null
+      ],
+      "payloadExpr": {
+        "type": "ObjectExpression",
+        "start": 2510,
+        "end": 2593,
+        "loc": {
+          "start": {
+            "line": 77,
+            "column": 24,
+            "index": 2510
+          },
+          "end": {
+            "line": 81,
+            "column": 3,
+            "index": 2593
+          }
+        },
+        "properties": [
+          {
+            "type": "ObjectProperty",
+            "start": 2516,
+            "end": 2537,
+            "loc": {
+              "start": {
+                "line": 78,
+                "column": 4,
+                "index": 2516
+              },
+              "end": {
+                "line": 78,
+                "column": 25,
+                "index": 2537
+              }
+            },
+            "method": false,
+            "key": {
+              "type": "Identifier",
+              "start": 2516,
+              "end": 2526,
+              "loc": {
+                "start": {
+                  "line": 78,
+                  "column": 4,
+                  "index": 2516
+                },
+                "end": {
+                  "line": 78,
+                  "column": 14,
+                  "index": 2526
                 },
                 "identifierName": "source_key"
               },
@@ -6747,18 +7041,18 @@
             "shorthand": false,
             "value": {
               "type": "Identifier",
-              "start": 2191,
-              "end": 2200,
+              "start": 2528,
+              "end": 2537,
               "loc": {
                 "start": {
-                  "line": 68,
-                  "column": 38,
-                  "index": 2191
+                  "line": 78,
+                  "column": 16,
+                  "index": 2528
                 },
                 "end": {
-                  "line": 68,
-                  "column": 47,
-                  "index": 2200
+                  "line": 78,
+                  "column": 25,
+                  "index": 2537
                 },
                 "identifierName": "sourceKey"
               },
@@ -6767,35 +7061,35 @@
           },
           {
             "type": "ObjectProperty",
-            "start": 2202,
-            "end": 2219,
+            "start": 2543,
+            "end": 2560,
             "loc": {
               "start": {
-                "line": 68,
-                "column": 49,
-                "index": 2202
+                "line": 79,
+                "column": 4,
+                "index": 2543
               },
               "end": {
-                "line": 68,
-                "column": 66,
-                "index": 2219
+                "line": 79,
+                "column": 21,
+                "index": 2560
               }
             },
             "method": false,
             "key": {
               "type": "Identifier",
-              "start": 2202,
-              "end": 2210,
+              "start": 2543,
+              "end": 2551,
               "loc": {
                 "start": {
-                  "line": 68,
-                  "column": 49,
-                  "index": 2202
+                  "line": 79,
+                  "column": 4,
+                  "index": 2543
                 },
                 "end": {
-                  "line": 68,
-                  "column": 57,
-                  "index": 2210
+                  "line": 79,
+                  "column": 12,
+                  "index": 2551
                 },
                 "identifierName": "dest_key"
               },
@@ -6805,25 +7099,124 @@
             "shorthand": false,
             "value": {
               "type": "Identifier",
-              "start": 2212,
-              "end": 2219,
+              "start": 2553,
+              "end": 2560,
               "loc": {
                 "start": {
-                  "line": 68,
-                  "column": 59,
-                  "index": 2212
+                  "line": 79,
+                  "column": 14,
+                  "index": 2553
                 },
                 "end": {
-                  "line": 68,
-                  "column": 66,
-                  "index": 2219
+                  "line": 79,
+                  "column": 21,
+                  "index": 2560
                 },
                 "identifierName": "destKey"
               },
               "name": "destKey"
             }
+          },
+          {
+            "type": "ObjectProperty",
+            "start": 2566,
+            "end": 2588,
+            "loc": {
+              "start": {
+                "line": 80,
+                "column": 4,
+                "index": 2566
+              },
+              "end": {
+                "line": 80,
+                "column": 26,
+                "index": 2588
+              }
+            },
+            "method": false,
+            "key": {
+              "type": "Identifier",
+              "start": 2566,
+              "end": 2575,
+              "loc": {
+                "start": {
+                  "line": 80,
+                  "column": 4,
+                  "index": 2566
+                },
+                "end": {
+                  "line": 80,
+                  "column": 13,
+                  "index": 2575
+                },
+                "identifierName": "overwrite"
+              },
+              "name": "overwrite"
+            },
+            "computed": false,
+            "shorthand": false,
+            "value": {
+              "type": "UnaryExpression",
+              "start": 2577,
+              "end": 2588,
+              "loc": {
+                "start": {
+                  "line": 80,
+                  "column": 15,
+                  "index": 2577
+                },
+                "end": {
+                  "line": 80,
+                  "column": 26,
+                  "index": 2588
+                }
+              },
+              "operator": "!",
+              "prefix": true,
+              "argument": {
+                "type": "UnaryExpression",
+                "start": 2578,
+                "end": 2588,
+                "loc": {
+                  "start": {
+                    "line": 80,
+                    "column": 16,
+                    "index": 2578
+                  },
+                  "end": {
+                    "line": 80,
+                    "column": 26,
+                    "index": 2588
+                  }
+                },
+                "operator": "!",
+                "prefix": true,
+                "argument": {
+                  "type": "Identifier",
+                  "start": 2579,
+                  "end": 2588,
+                  "loc": {
+                    "start": {
+                      "line": 80,
+                      "column": 17,
+                      "index": 2579
+                    },
+                    "end": {
+                      "line": 80,
+                      "column": 26,
+                      "index": 2588
+                    },
+                    "identifierName": "overwrite"
+                  },
+                  "name": "overwrite"
+                }
+              }
+            }
           }
-        ]
+        ],
+        "extra": {
+          "trailingComma": 2588
+        }
       },
       "defIndex": {
         "decls": [],
@@ -6835,58 +7228,58 @@
       "method": "get",
       "url": "/cos/metadata",
       "file": "api/cos.js",
-      "line": 72,
+      "line": 85,
       "argNames": [
         "key"
       ],
       "payloadExpr": {
         "type": "ObjectExpression",
-        "start": 2324,
-        "end": 2343,
+        "start": 2696,
+        "end": 2715,
         "loc": {
           "start": {
-            "line": 72,
+            "line": 85,
             "column": 27,
-            "index": 2324
+            "index": 2696
           },
           "end": {
-            "line": 72,
+            "line": 85,
             "column": 46,
-            "index": 2343
+            "index": 2715
           }
         },
         "properties": [
           {
             "type": "ObjectProperty",
-            "start": 2326,
-            "end": 2341,
+            "start": 2698,
+            "end": 2713,
             "loc": {
               "start": {
-                "line": 72,
+                "line": 85,
                 "column": 29,
-                "index": 2326
+                "index": 2698
               },
               "end": {
-                "line": 72,
+                "line": 85,
                 "column": 44,
-                "index": 2341
+                "index": 2713
               }
             },
             "method": false,
             "key": {
               "type": "Identifier",
-              "start": 2326,
-              "end": 2332,
+              "start": 2698,
+              "end": 2704,
               "loc": {
                 "start": {
-                  "line": 72,
+                  "line": 85,
                   "column": 29,
-                  "index": 2326
+                  "index": 2698
                 },
                 "end": {
-                  "line": 72,
+                  "line": 85,
                   "column": 35,
-                  "index": 2332
+                  "index": 2704
                 },
                 "identifierName": "params"
               },
@@ -6896,52 +7289,52 @@
             "shorthand": false,
             "value": {
               "type": "ObjectExpression",
-              "start": 2334,
-              "end": 2341,
+              "start": 2706,
+              "end": 2713,
               "loc": {
                 "start": {
-                  "line": 72,
+                  "line": 85,
                   "column": 37,
-                  "index": 2334
+                  "index": 2706
                 },
                 "end": {
-                  "line": 72,
+                  "line": 85,
                   "column": 44,
-                  "index": 2341
+                  "index": 2713
                 }
               },
               "properties": [
                 {
                   "type": "ObjectProperty",
-                  "start": 2336,
-                  "end": 2339,
+                  "start": 2708,
+                  "end": 2711,
                   "loc": {
                     "start": {
-                      "line": 72,
+                      "line": 85,
                       "column": 39,
-                      "index": 2336
+                      "index": 2708
                     },
                     "end": {
-                      "line": 72,
+                      "line": 85,
                       "column": 42,
-                      "index": 2339
+                      "index": 2711
                     }
                   },
                   "method": false,
                   "key": {
                     "type": "Identifier",
-                    "start": 2336,
-                    "end": 2339,
+                    "start": 2708,
+                    "end": 2711,
                     "loc": {
                       "start": {
-                        "line": 72,
+                        "line": 85,
                         "column": 39,
-                        "index": 2336
+                        "index": 2708
                       },
                       "end": {
-                        "line": 72,
+                        "line": 85,
                         "column": 42,
-                        "index": 2339
+                        "index": 2711
                       },
                       "identifierName": "key"
                     },
@@ -6951,18 +7344,18 @@
                   "shorthand": true,
                   "value": {
                     "type": "Identifier",
-                    "start": 2336,
-                    "end": 2339,
+                    "start": 2708,
+                    "end": 2711,
                     "loc": {
                       "start": {
-                        "line": 72,
+                        "line": 85,
                         "column": 39,
-                        "index": 2336
+                        "index": 2708
                       },
                       "end": {
-                        "line": 72,
+                        "line": 85,
                         "column": 42,
-                        "index": 2339
+                        "index": 2711
                       },
                       "identifierName": "key"
                     },
@@ -14277,5 +14670,5 @@
       }
     }
   ],
-  "rawSites": 221
+  "rawSites": 222
 }

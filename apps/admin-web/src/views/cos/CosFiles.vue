@@ -188,6 +188,7 @@ import {
   createCosFolder,
   deleteCosFolder,
   moveCosObject,
+  checkCosMoveConflict,
 } from '../../api/cos'
 
 const loading = ref(false)
@@ -406,6 +407,9 @@ async function confirmRename() {
     }
     if (conflict) {
       const first = conflict.conflicts?.[0] || {}
+      const backupHint = row.isFolder
+        ? '各对象所在目录下的 .backup/<时间戳>/'
+        : `${currentPrefix.value || '/'}.backup/<时间戳>/${renameNewName.value}`
       const ok = await dangerConfirm({
         action: '重命名并覆盖同名对象',
         target: `「${row.name}」→ ${destKey}`,
@@ -413,7 +417,7 @@ async function confirmRename() {
           ? `目标位置已有 ${conflict.conflict_count} 个同名对象，移动整个文件夹会把它们逐个换掉`
           : `云端已存在同名对象（${formatSize(first.size)}${first.last_modified ? `，更新于 ${first.last_modified}` : ''}）`,
         lines: [
-          `覆盖前旧对象自动备份到 ${currentPrefix.value || '/'}${_MOVE_BACKUP_HINT(row)}，可在文件列表逐层找回`,
+          `覆盖前旧对象自动备份到 ${backupHint}，可在文件列表逐层找回`,
           ...(conflict.conflict_count > 1
             ? [
                 `将被覆盖的样例：${(conflict.conflicts || [])

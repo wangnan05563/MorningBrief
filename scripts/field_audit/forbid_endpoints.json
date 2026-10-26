@@ -29,6 +29,13 @@
       "probe_field": "days",
       "why": "按工作流 ID 的全链清理没有「保留 N 天」语义；页面若照抄数据库清理的 payload 多带 days，必须被拒而不是静默吞（T02599）",
       "evidence": "backend/app/routers/admin/maintenance.py:47 backend/app/services/maintenance_service.py:447 apps/admin-web/src/views/maintenance/Maintenance.vue:426"
+    },
+    {
+      "key": "POST /cos/move",
+      "model": "CosMoveBody",
+      "probe_field": "overwrote",
+      "why": "移动/重命名的覆盖开关是危险字段：拼成 overwrote 之类会被 extra=ignore 静默当成没带，用户点了「确认覆盖」却收到 409，或反过来以为没确认却被覆盖。字段名必须钉住",
+      "evidence": "backend/app/routers/admin/cos.py:55 apps/admin-web/src/api/cos.js:76"
     }
   ]
 }

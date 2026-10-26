@@ -422,7 +422,7 @@ class CosStorageService:
             return (source_prefix, dest_prefix, True, [], [])
         existing = await self._list_prefix_sizes(dest_prefix)
         conflicts = []
-        for dst in self._move_pairs(source_prefix, dest_prefix, keys):
+        for _src, dst in self._move_pairs(source_prefix, dest_prefix, keys):
             if dst in existing:
                 conflicts.append({"dest_key": dst, "size": existing[dst], "last_modified": ""})
         return (source_prefix, dest_prefix, True, keys, conflicts)
@@ -473,7 +473,7 @@ class CosStorageService:
         ]
         await _cos_call(cos_client.copy_object(SourceKey=source, Key=dest))
         await _cos_call(cos_client.delete_object(Key=source))
-        return {"moved": 1, "overwritten": bool(conflicts), "backup_keys": backup_keys}
+        return {"moved": 1, "overwritten": len(conflicts), "backup_keys": backup_keys}
 
     @staticmethod
     def _move_conflict_error(source: str, dest: str, conflicts: list[dict]) -> BizError:

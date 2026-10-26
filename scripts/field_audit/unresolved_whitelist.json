@@ -45,9 +45,9 @@
     },
     {
       "endpoint": "POST /cos/move",
-      "site": "views/cos/CosFiles.vue:396",
+      "site": "views/cos/CosFiles.vue:437",
       "reason_key": "value-scalar",
-      "note": "destKey 是目标对象键字符串，键名由 api 包装体给出；source_key/dest_key 均在 CosMoveBody 声明内。"
+      "note": "destKey 是重命名拼出的目标对象键字符串，overwrite 取的是同名预览结果的布尔判定，值不可静态定；键名 source_key/dest_key/overwrite 均由 api/cos.js 的 moveCosObject 包装体字面量给出，三个都在 CosMoveBody 声明内（T02608）。"
     },
     {
       "endpoint": "POST /queue/tasks/batch-delete",
