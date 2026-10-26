@@ -13,6 +13,9 @@
  * 4. 裸类只放行「全页唯一」的布局类（`.page-container` 等，清单见 validate-nav.mjs 的
  *    PAGE_UNIQUE_CLASSES）；`.el-table` 这类同页可能有多个实例（带弹窗表格的页面）必须打 data-guide。
  * 5. 文案必须与被锚定的元素一致：锚点是卡片列表就不要写「表格」，锚点是搜索表单就不要写「工具栏」。
+ * 6. 数据依赖的步骤用 `skipWhenEmpty: '<空态选择器>'` 声明空态行为（T02656）：目标因为数据为空
+ *    没渲染时跳过这一步，而不是居中展示一句对着空气的说明。选择器必须命中视图真正的空态分支；
+ *    目标与空态标记同时缺席仍按缺陷上报（居中 + data-guide-missing="broken"），不静默跳过。
  */
 export const GUIDE_STEPS = {
   '/review': [
@@ -38,7 +41,7 @@ export const GUIDE_STEPS = {
   ],
   '/stats/channel-health': [
     { s: ['[data-guide="channel-health-page"]'], t: '频道健康度', d: '各频道抓取与生成成功率，异常频道会高亮提示。' },
-    { s: ['[data-guide="channel-health-cards"]'], t: '频道卡片', d: '每个频道一张卡片，按成功率排列，便于定位需要关注的频道。' },
+    { s: ['[data-guide="channel-health-cards"]'], skipWhenEmpty: '[data-guide="channel-health-empty"]', t: '频道卡片', d: '每个频道一张卡片，按成功率排列，便于定位需要关注的频道。' },
   ],
   '/stats/rss-health': [
     { s: ['[data-guide="rss-health-page"]'], t: 'RSS 源状态', d: '每个 RSS 源的可达性与解析状态。' },
@@ -46,7 +49,7 @@ export const GUIDE_STEPS = {
   ],
   '/stats/llm-metrics': [
     { s: ['[data-guide="llm-metrics-page"]'], t: 'LLM 重试指标', d: 'LLM 调用重试与命中率指标，评估模型服务稳定性。' },
-    { s: ['[data-guide="llm-metrics-rates"]'], t: '重试率概览', d: '上方卡片是整体重试率，下方明细按模型/用途维度列出重试次数与字数。' },
+    { s: ['[data-guide="llm-metrics-rates"]'], skipWhenEmpty: '[data-guide="llm-metrics-empty"]', t: '重试率概览', d: '上方卡片是整体重试率，下方明细按模型/用途维度列出重试次数与字数。' },
   ],
   '/channels': [
     { s: ['[data-guide="channels-page"]'], t: '频道管理', d: '管理播报频道：增删改查、启停与各类开关。' },

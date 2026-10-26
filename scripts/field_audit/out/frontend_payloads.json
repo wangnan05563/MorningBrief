@@ -1446,7 +1446,7 @@
       "sites": [
         {
           "file": "views/stats/LlmMetrics.vue",
-          "line": 232,
+          "line": 233,
           "fn": "getLlmMetrics",
           "fieldCount": 0,
           "unresolved": []

@@ -34,9 +34,10 @@
     </el-alert>
 
     <div v-loading="loading">
-      <!-- 空态：服务刚启动尚未产生调用 -->
+      <!-- 空态：服务刚启动尚未产生调用（引导据此跳过「重试率概览」一步，T02656） -->
       <el-empty
         v-if="!loading && metrics.total_calls === 0"
+        data-guide="llm-metrics-empty"
         description="暂无 LLM 调用数据，工作流执行后将自动累计"
       />
 

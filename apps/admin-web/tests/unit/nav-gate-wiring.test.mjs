@@ -188,3 +188,93 @@ describe('导航门禁接入 CI', () => {
     }
   })
 })
+
+/**
+ * T02656：引导步骤的「空态跳过」判据。
+ *
+ * 引导的落空有两种：数据为空导致的「这一步此刻不该出现」（应跳过）与锚点被改名
+ * 导致的「指不到该指的东西」（应报缺陷）。把两者混在一起，空态实例上用户会看到
+ * 一句对着空气的说明，而真回归又会被「跳过」静默吞掉。这里锁纯函数判据、配置声明、
+ * 浮层接线与审计分级四层。
+ */
+const OVERLAY_SRC = readFileSync(
+  fileURLToPath(new URL('../../src/components/GuideOverlay.vue', import.meta.url)),
+  'utf8',
+)
+const AUDIT_SRC = readFileSync(
+  fileURLToPath(new URL('../../scripts/guide-anchor-audit.mjs', import.meta.url)),
+  'utf8',
+)
+const LLM_METRICS_SRC = readFileSync(
+  fileURLToPath(new URL('../../src/views/stats/LlmMetrics.vue', import.meta.url)),
+  'utf8',
+)
+const CHANNEL_HEALTH_SRC = readFileSync(
+  fileURLToPath(new URL('../../src/views/stats/ChannelHealth.vue', import.meta.url)),
+  'utf8',
+)
+const { GUIDE_STEPS } = await import('../../src/guide/guideConfig.js')
+const { decideGuideStep, GUIDE_MISSING_BROKEN, GUIDE_MISSING_TEXT } =
+  await import('../../src/guide/resolveStep.js')
+
+describe('引导空态步骤判据（T02656）', () => {
+  it('命中目标就高亮，空态标记不应抢走优先级', () => {
+    const r = decideGuideStep(
+      { s: ['[data-guide="x"]'], skipWhenEmpty: '[data-guide="x-empty"]' },
+      { targetFound: true, emptyFound: true },
+    )
+    assert.deepEqual(r, { action: 'highlight', reason: '' })
+  })
+
+  it('目标缺席且空态标记确实存在：跳过，而不是居中念一句空话', () => {
+    const r = decideGuideStep(
+      { s: ['[data-guide="x"]'], skipWhenEmpty: '[data-guide="x-empty"]' },
+      { targetFound: false, emptyFound: true },
+    )
+    assert.deepEqual(r, { action: 'skip', reason: 'empty' })
+  })
+
+  it('声明了空态但空态标记也不存在：仍按缺陷露出（锚点被改名不能被静默吞掉）', () => {
+    const r = decideGuideStep(
+      { s: ['[data-guide="x"]'], skipWhenEmpty: '[data-guide="x-empty"]' },
+      { targetFound: false, emptyFound: false },
+    )
+    assert.deepEqual(r, { action: 'center', reason: GUIDE_MISSING_BROKEN })
+    assert.equal(GUIDE_MISSING_BROKEN, 'broken')
+  })
+
+  it('没有选择器的纯文案步骤：设计性居中', () => {
+    const r = decideGuideStep({ t: '说明', d: '……' }, {})
+    assert.deepEqual(r, { action: 'center', reason: GUIDE_MISSING_TEXT })
+    assert.equal(GUIDE_MISSING_TEXT, 'text')
+  })
+
+  it('有选择器却没命中、也没声明空态：缺陷', () => {
+    const r = decideGuideStep({ s: ['[data-guide="gone"]'] }, {})
+    assert.deepEqual(r, { action: 'center', reason: GUIDE_MISSING_BROKEN })
+  })
+
+  it('两个数据依赖步骤都声明了空态选择器，且选择器在视图空态分支里真实存在', () => {
+    const rates = GUIDE_STEPS['/stats/llm-metrics'].find((s) => s.t === '重试率概览')
+    const cards = GUIDE_STEPS['/stats/channel-health'].find((s) => s.t === '频道卡片')
+    assert.equal(rates.skipWhenEmpty, '[data-guide="llm-metrics-empty"]')
+    assert.equal(cards.skipWhenEmpty, '[data-guide="channel-health-empty"]')
+    // 空态锚点必须挂在 el-empty 上（v-if 空态分支），否则跳过条件永远不成立
+    assert.match(LLM_METRICS_SRC, /<el-empty[\s\S]{0,220}data-guide="llm-metrics-empty"/)
+    assert.match(CHANNEL_HEALTH_SRC, /<el-empty[^>]*data-guide="channel-health-empty"/)
+  })
+
+  it('浮层按判据分流：skip 直接下一步，居中时把原因写进 data-guide-missing', () => {
+    assert.match(OVERLAY_SRC, /decideGuideStep\(step,/)
+    assert.match(OVERLAY_SRC, /decision\.action === 'skip'[\s\S]{0,200}guide\.next\(\)/)
+    assert.match(OVERLAY_SRC, /dataset\.guideMissing = decision\.reason/)
+    assert.doesNotMatch(OVERLAY_SRC, /dataset\.guideMissing = currentStep\.value\.s/)
+  })
+
+  it('审计只把 broken 计入未命中，跳过与设计性居中分开统计', () => {
+    assert.match(AUDIT_SRC, /s\.missing === 'broken'/)
+    assert.match(AUDIT_SRC, /s\.skipped/)
+    assert.match(AUDIT_SRC, /argv\.includes\('--empty'\)/)
+    assert.match(AUDIT_SRC, /skippedSteps/)
+  })
+})

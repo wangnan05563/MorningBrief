@@ -40,6 +40,7 @@
 import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { Close } from '@element-plus/icons-vue'
 import { useGuide } from '../guide/useGuide'
+import { decideGuideStep } from '../guide/resolveStep'
 
 const guide = useGuide()
 const bubbleEl = ref(null)
@@ -72,21 +73,37 @@ function clearHighlight() {
 
 function applyHighlight() {
   clearHighlight()
+  const step = currentStep.value
   const target = resolveTarget()
-  if (!target) {
-    // 目标未渲染（如数据未加载）：气泡居中展示，步骤仍可继续。
-    // 同时把「这一步没锚中任何元素」标到 DOM 上，供验收与门禁判定——
-    // 静默居中正是 T02500 抓到的「引导指错元素」能长期隐藏的原因（T02502）。
+  const decision = decideGuideStep(step, {
+    targetFound: Boolean(target),
+    // 只有声明的空态标记真的在页面上，才允许跳过这一步
+    emptyFound: Boolean(step.skipWhenEmpty && document.querySelector(step.skipWhenEmpty)),
+  })
+  if (decision.action === 'skip') {
+    // 数据依赖步骤在空态下不该出现（T02656）：直接跳到下一步；最后一步则结束引导，
+    // 不留一句对着空气的说明
+    guide.next()
+    return
+  }
+  if (decision.action === 'center') {
+    // 目标未渲染。data-guide-missing 现在带原因：
+    // - "broken"：声明了选择器却一个都没命中（锚点改名/数据缺失）——缺陷，审计计入未命中；
+    // - "text"：这一步本来就没有目标元素——设计，居中展示是预期行为。
     place.value = 'center'
     if (bubbleEl.value) {
       const el = bubbleEl.value
-      el.dataset.guideMissing = currentStep.value.s?.join(' | ') || 'no-selector'
+      el.dataset.guideMissing = decision.reason
+      el.dataset.guideTarget = step.s?.join(' | ') || 'no-selector'
       el.style.left = `${Math.max(16, (window.innerWidth - BUBBLE_W) / 2)}px`
       el.style.top = `${Math.max(16, window.innerHeight / 2 - 120)}px`
     }
     return
   }
-  if (bubbleEl.value) delete bubbleEl.value.dataset.guideMissing
+  if (bubbleEl.value) {
+    delete bubbleEl.value.dataset.guideMissing
+    delete bubbleEl.value.dataset.guideTarget
+  }
   target.classList.add('mb-guide-highlight')
   highlightEl = target
   // 即时定位目标到视口中央，避免 smooth 滚动过程中 rect 处于过渡态导致气泡错位/靠边

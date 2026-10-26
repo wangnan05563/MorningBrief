@@ -25,9 +25,9 @@
 
     <!-- 频道卡片网格：每卡片含基础信息 + mini 折线图 -->
     <div v-loading="loading" class="channel-grid">
-      <el-empty v-if="!loading && channels.length === 0" description="暂无频道数据" />
+      <el-empty v-if="!loading && channels.length === 0" data-guide="channel-health-empty" description="暂无频道数据" />
 
-      <el-row data-guide="channel-health-cards" :gutter="16">
+      <el-row v-if="!loading && channels.length > 0" data-guide="channel-health-cards" :gutter="16">
         <el-col
           v-for="ch in channels"
           :key="ch.channel_id"
