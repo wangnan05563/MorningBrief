@@ -36,6 +36,13 @@
       "probe_field": "overwrote",
       "why": "移动/重命名的覆盖开关是危险字段：拼成 overwrote 之类会被 extra=ignore 静默当成没带，用户点了「确认覆盖」却收到 409，或反过来以为没确认却被覆盖。字段名必须钉住",
       "evidence": "backend/app/routers/admin/cos.py:55 apps/admin-web/src/api/cos.js:76"
+    },
+    {
+      "key": "POST /cos/restore",
+      "model": "CosRestoreBody",
+      "probe_field": "overwrit",
+      "why": "快照恢复会用快照内容换掉线上对象：overwrite 拼错被静默当成 false，确认过覆盖的管理员会收到 409；backup_key 拼错则整个恢复到另一个对象上。字段名必须钉住（T02609）",
+      "evidence": "backend/app/routers/admin/cos.py:77 apps/admin-web/src/api/cos.js:98"
     }
   ]
 }

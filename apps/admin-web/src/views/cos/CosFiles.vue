@@ -60,6 +60,17 @@
       </template>
     </div>
 
+    <el-alert
+      v-if="configured && inSnapshotDir"
+      data-guide="cos-snapshot-notice"
+      type="warning"
+      :closable="false"
+      show-icon
+      title="当前位于 .backup 快照目录"
+      description="这里的对象是覆盖/恢复前自动备份的旧版本。删除后无法找回；需要回退时点对应行的「恢复」。"
+      style="margin-bottom: 12px"
+    />
+
     <el-card shadow="never" v-loading="loading">
       <el-empty v-if="configured && !loading && folders.length === 0 && files.length === 0" description="该目录下暂无内容" />
 
@@ -72,14 +83,30 @@
               <el-tooltip :content="row.name" placement="top" :fallback-placements="['bottom', 'left', 'right']">
                 <span :class="{ 'is-folder': row.isFolder }">{{ row.name }}</span>
               </el-tooltip>
+              <el-tag
+                v-if="row.isSnapshot"
+                class="snapshot-tag"
+                size="small"
+                type="warning"
+                effect="light"
+              >快照</el-tag>
             </div>
           </template>
         </el-table-column>
         <el-table-column prop="sizeText" label="大小" width="140" />
         <el-table-column prop="last_modified" label="最后修改" width="200" />
         <el-table-column prop="content_type" label="类型" width="160" />
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
+            <IconButton
+              v-if="row.isSnapshot"
+              type="warning"
+              link
+              label="恢复"
+              desc="用该快照替换当前对象"
+              :icon="RefreshLeft"
+              @click="handleRestore(row)"
+            />
             <IconButton
               v-if="!row.isFolder"
               type="primary"
@@ -90,6 +117,7 @@
               @click="handleDownload(row)"
             />
             <IconButton
+              v-if="!row.isSnapshot"
               type="primary"
               link
               label="重命名"
@@ -173,7 +201,7 @@
 import { ref, computed, onMounted } from 'vue'
 import {
   Upload, FolderOpened, Refresh, Download, Edit, Delete, Document,
-  Plus, Close, Check,
+  Plus, Close, Check, RefreshLeft,
 } from '@element-plus/icons-vue'
 import { ElMessage } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
@@ -189,6 +217,8 @@ import {
   deleteCosFolder,
   moveCosObject,
   checkCosMoveConflict,
+  previewCosRestore,
+  restoreCosObject,
 } from '../../api/cos'
 
 const loading = ref(false)
@@ -198,6 +228,10 @@ const currentPrefix = ref('')
 const folders = ref([])
 const files = ref([])
 const fileInput = ref(null)
+// 快照保留份数（0 = 覆盖/恢复不留快照）：确认框必须如实说「不可找回」
+const backupKeep = ref(5)
+// 当前是否就在 .backup 快照目录里（页面提示这些是旧版本）
+const inSnapshotDir = ref(false)
 
 // 对话框状态
 const newFolderVisible = ref(false)
@@ -230,6 +264,7 @@ const tableData = computed(() => {
     key: item.key,
     name: item.name,
     isFolder: false,
+    isSnapshot: !!item.is_snapshot,
     size: item.size,
     sizeText: formatSize(item.size),
     last_modified: item.last_modified,
@@ -250,6 +285,7 @@ async function loadStatus() {
   try {
     const st = await getCosStatus()
     configured.value = !!(st && st.configured)
+    backupKeep.value = Number(st?.backup_keep_count ?? 5)
   } catch (e) {
     configured.value = false
   }
@@ -262,6 +298,7 @@ async function loadList() {
     const data = await listCosObjects(currentPrefix.value)
     folders.value = data.folders || []
     files.value = data.files || []
+    inSnapshotDir.value = !!data.is_snapshot_dir
   } catch (e) {
     // 全局拦截器已提示
   } finally {
@@ -310,14 +347,19 @@ async function handleFileSelected(e) {
       return
     }
     if (exists) {
+      const denyBackup = backupKeep.value <= 0
       const ok = await dangerConfirm({
         action: '上传并覆盖同名文件',
         target: `${currentPrefix.value || '/'}${file.name}`,
         scope: `云端已存在同名对象（${formatSize(hit.size)}${hit.last_modified ? `，更新于 ${hit.last_modified}` : ''}）`,
         lines: [
-          `覆盖前旧文件自动备份到 ${currentPrefix.value}.backup/<时间戳>/${file.name}，可在文件列表逐层找回`,
+          denyBackup
+            ? '当前设置不保留覆盖前快照：旧文件会被直接覆盖，覆盖后无法找回'
+            : `覆盖前旧文件自动备份到 ${currentPrefix.value}.backup/<时间戳>/${file.name}，保留最近 ${backupKeep.value} 份`,
         ],
-        irreversible: '快照只保留覆盖前的那一份：如需长期保留多版本请为存储桶开启版本控制。',
+        irreversible: denyBackup
+          ? '「快照保留份数」为 0，本次覆盖不可回退。'
+          : '恢复旧版本需进入 .backup 目录点「恢复」；如需长期保留多版本请为存储桶开启版本控制。',
         confirmWord: '覆盖',
         confirmLabel: '确认覆盖上传',
       })
@@ -334,7 +376,9 @@ async function handleFileSelected(e) {
     ElMessage.success(
       result?.backup_key
         ? `已覆盖 ${file.name}，旧文件已备份至 ${result.backup_key}`
-        : `已上传 ${file.name}`,
+        : result?.overwritten
+          ? `已覆盖 ${file.name}（当前设置未保留快照）`
+          : `已上传 ${file.name}`,
     )
     await loadList()
   } finally {
@@ -407,6 +451,7 @@ async function confirmRename() {
     }
     if (conflict) {
       const first = conflict.conflicts?.[0] || {}
+      const denyBackup = backupKeep.value <= 0
       const backupHint = row.isFolder
         ? '各对象所在目录下的 .backup/<时间戳>/'
         : `${currentPrefix.value || '/'}.backup/<时间戳>/${renameNewName.value}`
@@ -417,7 +462,9 @@ async function confirmRename() {
           ? `目标位置已有 ${conflict.conflict_count} 个同名对象，移动整个文件夹会把它们逐个换掉`
           : `云端已存在同名对象（${formatSize(first.size)}${first.last_modified ? `，更新于 ${first.last_modified}` : ''}）`,
         lines: [
-          `覆盖前旧对象自动备份到 ${backupHint}，可在文件列表逐层找回`,
+          denyBackup
+            ? '当前设置不保留覆盖前快照：被换掉的对象无法找回'
+            : `覆盖前旧对象自动备份到 ${backupHint}，保留最近 ${backupKeep.value} 份`,
           ...(conflict.conflict_count > 1
             ? [
                 `将被覆盖的样例：${(conflict.conflicts || [])
@@ -427,7 +474,9 @@ async function confirmRename() {
               ]
             : []),
         ],
-        irreversible: '快照只保留覆盖前的那一份：如需长期保留多版本请为存储桶开启版本控制。',
+        irreversible: denyBackup
+          ? '「快照保留份数」为 0，本次覆盖不可回退。'
+          : '恢复旧版本需进入 .backup 目录点「恢复」；如需长期保留多版本请为存储桶开启版本控制。',
         confirmWord: '覆盖',
         confirmLabel: '确认覆盖重命名',
       })
@@ -442,6 +491,53 @@ async function confirmRename() {
     )
     renameVisible.value = false
     await loadList()
+  } finally {
+    opLoading.value = false
+  }
+}
+
+// 从快照恢复（T02609）：目标 Key 由服务端推出，确认框点名源/目标后再执行
+async function handleRestore(row) {
+  let preview
+  try {
+    preview = await previewCosRestore(row.key)
+  } catch {
+    ElMessage.error('快照信息读取失败，已取消恢复：无法确认原对象位置')
+    return
+  }
+  const target = preview?.target_key
+  if (!target) {
+    ElMessage.error('无法从快照 Key 推出原对象位置，已取消恢复')
+    return
+  }
+  const keep = Number(preview.backup_keep_count ?? 0)
+  const current = preview.target_exists
+    ? `云端当前对象（${formatSize(preview.target?.size)}${preview.target?.last_modified ? `，更新于 ${preview.target.last_modified}` : ''}）会被该快照替换`
+    : '云端当前没有这个对象，恢复等于把它重新放回原位置'
+  const ok = await dangerConfirm({
+    action: '从快照恢复文件',
+    target: `${row.key} → ${target}`,
+    scope: [
+      current,
+      `快照内容：${formatSize(preview.snapshot?.size)}${preview.snapshot?.last_modified ? `，备份于 ${preview.snapshot.last_modified}` : ''}`,
+    ],
+    lines: keep > 0
+      ? [`恢复前会先把当前对象备份到 .backup/<时间戳>/，保留最近 ${keep} 份，恢复本身也可回退`]
+      : ['当前「快照保留份数」为 0：不会为当前对象留备份，恢复后旧内容不可找回'],
+    irreversible: keep > 0
+      ? '恢复后如需回到恢复前的版本，可在 .backup 目录再点一次「恢复」。'
+      : '「快照保留份数」为 0，本次恢复会直接换掉当前对象且无法回退。',
+    confirmLabel: '确认恢复',
+  })
+  if (!ok) return
+  opLoading.value = true
+  try {
+    // overwrite 由服务端把关（绕过本页直接调接口同样会被 409 拒绝）
+    await restoreCosObject(row.key, target, { overwrite: !!preview.target_exists })
+    ElMessage.success(`已从快照恢复 ${target}`)
+    await loadList()
+  } catch {
+    // 全局拦截器已给出可读提示（409 等）
   } finally {
     opLoading.value = false
   }
@@ -543,6 +639,10 @@ onMounted(async () => {
       &:hover {
         text-decoration: underline;
       }
+    }
+
+    .snapshot-tag {
+      margin-left: 8px;
     }
   }
 }

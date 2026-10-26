@@ -1063,9 +1063,9 @@
     {
       "endpoint": "POST /cos/folder",
       "model": "CosFolderBody",
-      "modelSource": "backend/app/routers/admin/cos.py:50",
+      "modelSource": "backend/app/routers/admin/cos.py:58",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/cos.py:235",
+      "handlerSource": "backend/app/routers/admin/cos.py:292",
       "declared": [
         "prefix"
       ],
@@ -1073,7 +1073,7 @@
         "callSites": [
           {
             "file": "views/cos/CosFiles.vue",
-            "line": 359,
+            "line": 403,
             "fn": "createCosFolder",
             "fieldCount": 1,
             "unresolved": []
@@ -1103,9 +1103,9 @@
     {
       "endpoint": "POST /cos/move",
       "model": "CosMoveBody",
-      "modelSource": "backend/app/routers/admin/cos.py:55",
+      "modelSource": "backend/app/routers/admin/cos.py:63",
       "modelExtra": "forbid",
-      "handlerSource": "backend/app/routers/admin/cos.py:273",
+      "handlerSource": "backend/app/routers/admin/cos.py:330",
       "declared": [
         "dest_key",
         "overwrite",
@@ -1115,7 +1115,7 @@
         "callSites": [
           {
             "file": "views/cos/CosFiles.vue",
-            "line": 437,
+            "line": 486,
             "fn": "moveCosObject",
             "fieldCount": 3,
             "unresolved": [
@@ -1145,6 +1145,56 @@
           "dest_key",
           "overwrite",
           "source_key"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
+      "endpoint": "POST /cos/restore",
+      "model": "CosRestoreBody",
+      "modelSource": "backend/app/routers/admin/cos.py:77",
+      "modelExtra": "forbid",
+      "handlerSource": "backend/app/routers/admin/cos.py:380",
+      "declared": [
+        "backup_key",
+        "overwrite",
+        "target_key"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/cos/CosFiles.vue",
+            "line": 536,
+            "fn": "restoreCosObject",
+            "fieldCount": 3,
+            "unresolved": [
+              "变量 target 无可解析的声明"
+            ]
+          }
+        ],
+        "fields": [
+          "backup_key",
+          "overwrite",
+          "target_key"
+        ],
+        "unresolved": [
+          "变量 target 无可解析的声明"
+        ],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "backup_key",
+          "overwrite",
+          "target_key"
         ],
         "columnNotInModel": []
       },
@@ -3408,10 +3458,11 @@
     {
       "endpoint": "PUT /cos/config",
       "model": "CosConfigBody",
-      "modelSource": "backend/app/routers/admin/cos.py:41",
+      "modelSource": "backend/app/routers/admin/cos.py:47",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/cos.py:80",
+      "handlerSource": "backend/app/routers/admin/cos.py:128",
       "declared": [
+        "backup_keep_count",
         "bucket",
         "cdn_domain",
         "region",
@@ -3422,13 +3473,14 @@
         "callSites": [
           {
             "file": "views/cos/CosConfig.vue",
-            "line": 349,
+            "line": 364,
             "fn": "saveCosConfig",
-            "fieldCount": 5,
+            "fieldCount": 6,
             "unresolved": []
           }
         ],
         "fields": [
+          "backup_keep_count",
           "bucket",
           "cdn_domain",
           "region",
@@ -3447,6 +3499,7 @@
         "declaredButNotHandled": [],
         "modelNotSubmitted": [],
         "modelNotInColumn": [
+          "backup_keep_count",
           "bucket",
           "cdn_domain",
           "region",
@@ -3921,9 +3974,9 @@
     }
   ],
   "totals": {
-    "endpointsWithBodyModel": 67,
-    "forbidCount": 5,
-    "withFrontendCallSite": 59,
+    "endpointsWithBodyModel": 68,
+    "forbidCount": 6,
+    "withFrontendCallSite": 60,
     "noFrontendCallSite": [
       "POST /backups/restore",
       "POST /m/device/register",
@@ -3983,6 +4036,7 @@
       "POST /assistant/plan",
       "POST /channels",
       "POST /cos/move",
+      "POST /cos/restore",
       "POST /db-admin/tables/*/rows/batch-delete",
       "POST /queue/tasks/batch-delete",
       "POST /reviews/*/action",
@@ -4014,6 +4068,7 @@
       "POST /channels/*/icon/ai-generate",
       "POST /cos/folder",
       "POST /cos/move",
+      "POST /cos/restore",
       "POST /db-admin/tables/*/cascade-preview",
       "POST /db-admin/tables/*/import",
       "POST /db-admin/tables/*/import/preview",

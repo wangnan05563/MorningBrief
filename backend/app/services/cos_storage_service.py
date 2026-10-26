@@ -9,12 +9,15 @@
 - 新建文件夹（占位对象）
 - 删除文件夹（列举前缀后批量删除）
 - 重命名 / 移动（复制 + 删除，支持文件夹递归）
+- 快照恢复（.backup 快照 → 原 Key，恢复前先备份当前对象；T02609）
+- 快照保留份数清理（COS_BACKUP_KEEP_COUNT，默认每对象 5 份）
 - 对象元数据（大小 / 最后修改 / 类型）
 
 所有方法先用 is_cos_configured() 守卫：未配置 COS 时直接抛出可读业务异常，
 避免创建空客户端抛晦涩错误。KEY/Prefix 做路径穿越校验，拒绝绝对路径与 ".."。
 """
 import logging
+import re
 from datetime import datetime
 from functools import wraps
 from typing import Optional
@@ -44,6 +47,16 @@ _BACKUP_DIR_NAME = ".backup"
 
 # 快照重名探测上限：同一秒内连续覆盖到第 N 份即中止，避免探测无限循环
 _MAX_BACKUP_PROBES = 20
+
+# 快照 Key 的两处形态：桶根 ".backup/..." 与任意层级 "<dir>/.backup/..."
+_SNAPSHOT_ROOT_MARK = f"{_BACKUP_DIR_NAME}/"
+_SNAPSHOT_DIR_MARK = f"/{_BACKUP_DIR_NAME}/"
+
+# 同一秒内连续覆盖时快照名追加的序号后缀（"-1" / "-2" …）
+_SNAPSHOT_SEQ_SUFFIX = re.compile(r"-\d+$")
+
+# 快照保留份数的兜底默认值（Settings 读失败或配置表存了非数字时用）
+_DEFAULT_BACKUP_KEEP_COUNT = 5
 
 # 移动冲突预览最多列几条样例（确认框只用于点名，全量条数另有 conflict_count）
 _MOVE_CONFLICT_SAMPLE_LIMIT = 10
@@ -114,6 +127,58 @@ def _human_size(size) -> str:
             return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
         n /= 1024
     return f"{n:.1f} GB"
+
+
+def is_snapshot_key(key: str) -> bool:
+    """Key 是否位于 .backup 快照目录（桶根或任意层级）。"""
+    key = key or ""
+    return key.startswith(_SNAPSHOT_ROOT_MARK) or _SNAPSHOT_DIR_MARK in key
+
+
+def snapshot_parts(backup_key: str) -> tuple[str, str, str]:
+    """把快照 Key 拆成 (原对象目录前缀, 时间戳目录前缀, 快照文件名)。
+
+    "a/.backup/20260101-120000/a.mp3" → ("a/", "a/.backup/20260101-120000/", "a.mp3")
+    ".backup/20260101-120000/a.mp3"   → ("",   ".backup/20260101-120000/",   "a.mp3")
+
+    结构不完整（缺时间戳目录或文件名）视为非法 Key，抛业务错误而不是猜。
+    """
+    key = (backup_key or "").strip()
+    if not is_snapshot_key(key):
+        raise BizError(code=400, message=f"不是 .backup 快照对象：{backup_key}")
+    if key.startswith(_SNAPSHOT_ROOT_MARK):
+        head = ""
+        rest = key[len(_SNAPSHOT_ROOT_MARK):]
+    else:
+        # 取第一处 "/.backup/"：快照只会落在被备份对象所在目录下
+        idx = key.index(_SNAPSHOT_DIR_MARK) + 1
+        head = key[:idx]
+        rest = key[idx + len(_BACKUP_DIR_NAME) + 1:]
+    stamp, sep, stored = rest.partition("/")
+    if not stamp or not sep or not stored:
+        raise BizError(code=400, message=f"快照 Key 结构不完整：{backup_key}")
+    return head, f"{head}{_BACKUP_DIR_NAME}/{stamp}/", stored
+
+
+def _snapshot_is_of(stored: str, name: str, siblings: set[str]) -> bool:
+    """时间戳目录里的 stored 是不是对象 name 的快照。
+
+    -N 是同秒防重名后缀：只有当同目录里同时存在无后缀那份时，才把它算作 name 的副本；
+    否则「原文件名本身以 -1 结尾」会被误剥成另一个对象。
+    """
+    if stored == name:
+        return True
+    plain = _SNAPSHOT_SEQ_SUFFIX.sub("", stored)
+    return bool(plain) and plain == name and plain in siblings
+
+
+def backup_keep_count() -> int:
+    """当前快照保留份数（0 = 不备份）。配置表存的是字符串也要能读。"""
+    raw = getattr(get_settings(), "COS_BACKUP_KEEP_COUNT", _DEFAULT_BACKUP_KEEP_COUNT)
+    try:
+        return max(int(raw), 0)
+    except (TypeError, ValueError):
+        return _DEFAULT_BACKUP_KEEP_COUNT
 
 
 async def _cos_call(coro):
@@ -187,6 +252,9 @@ class CosStorageService:
                     "size": int(item.get("Size", 0) or 0),
                     "last_modified": _normalize_last_modified(item.get("LastModified")),
                     "content_type": item.get("ContentType") or "",
+                    # T02609：快照对象在列表里要能被认出来，否则「旧版本」与「现役文件」
+                    # 长得一样，误删就是永久丢失。
+                    "is_snapshot": is_snapshot_key(key),
                 })
 
             if not resp.get("IsTruncated"):
@@ -201,7 +269,13 @@ class CosStorageService:
         # 稳定排序：目录在前、文件在后，各自按名称
         folders.sort()
         files.sort(key=lambda f: f["name"])
-        return {"prefix": prefix, "folders": folders, "files": files}
+        return {
+            "prefix": prefix,
+            "folders": folders,
+            "files": files,
+            # 当前就在快照目录里：页面据此提示「这些是覆盖前的旧版本」
+            "is_snapshot_dir": is_snapshot_key(prefix) if prefix else False,
+        }
 
     # ---- 存在性检查 ----
 
@@ -275,11 +349,15 @@ class CosStorageService:
             "backup_key": backup_key,
         }
 
-    async def _snapshot_before_overwrite(self, key: str) -> str:
+    async def _snapshot_before_overwrite(self, key: str) -> Optional[str]:
         """把将被覆盖的旧对象复制到 .backup/<时间戳>/ 下，返回备份 Key。
 
+        backup_keep_count == 0 表示「不备份」，返回 None（调用方据此提示不可回退）。
         备份对象永不覆盖：同一秒内连续覆盖时依次追加 -1/-2 后缀。
+        备份成功后按保留份数清理更老的快照（T02609）。
         """
+        if backup_keep_count() == 0:
+            return None
         directory, _, name = key.rpartition("/")
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         base = f"{directory + '/' if directory else ''}{_BACKUP_DIR_NAME}/{stamp}"
@@ -300,6 +378,7 @@ class CosStorageService:
                 code=exc.code,
                 message=f"覆盖前快照备份失败，已中止覆盖：{exc.message}",
             ) from exc
+        await self._prune_snapshots(key)
         return backup_key
 
     # ---- 下载 ----
@@ -468,9 +547,11 @@ class CosStorageService:
         if conflicts and not overwrite:
             raise self._move_conflict_error(source, dest, conflicts)
 
-        backup_keys = [
-            await self._snapshot_before_overwrite(c["dest_key"]) for c in conflicts
-        ]
+        backup_keys = []
+        for conflict in conflicts:
+            key = await self._snapshot_before_overwrite(conflict["dest_key"])
+            if key:
+                backup_keys.append(key)
         await _cos_call(cos_client.copy_object(SourceKey=source, Key=dest))
         await _cos_call(cos_client.delete_object(Key=source))
         return {"moved": 1, "overwritten": len(conflicts), "backup_keys": backup_keys}
@@ -514,9 +595,11 @@ class CosStorageService:
         if not keys:
             return {"moved": 0, "overwritten": 0, "backup_keys": []}
         # 覆盖前逐个快照；这里失败会直接上抛中止，此时源尚未删除，不会两头空
-        backup_keys = [
-            await self._snapshot_before_overwrite(c["dest_key"]) for c in conflicts
-        ]
+        backup_keys = []
+        for conflict in conflicts:
+            key = await self._snapshot_before_overwrite(conflict["dest_key"])
+            if key:
+                backup_keys.append(key)
         for src, dst in self._move_pairs(source_prefix, dest_prefix, keys):
             await _cos_call(cos_client.copy_object(SourceKey=src, Key=dst))
         # 复制成功后删除源（分批）
@@ -524,6 +607,102 @@ class CosStorageService:
         for i in range(0, len(keys), batch_size):
             await _cos_call(cos_client.delete_objects(keys[i:i + batch_size]))
         return {"moved": len(keys), "overwritten": len(conflicts), "backup_keys": backup_keys}
+
+    # ---- 快照恢复（T02609） ----
+
+    async def restore_preview(self, backup_key: str) -> dict:
+        """恢复前的预览：快照元数据、被恢复的原对象 Key、目标当前状态。
+
+        target_key 由服务端从快照 Key 推出——前端手里没有「快照属于谁」的映射，
+        让调用方自己传目标 Key 才是把「恢复到哪」交给一个可能拼错的字符串。
+        """
+        if not is_cos_configured():
+            raise BizError(code=400, message=_ERROR_MESSAGE_COS_NOT_CONFIGURED)
+        _validate_key(backup_key)
+        target_key = await self._resolve_snapshot_target(backup_key)
+        if not await _cos_call(cos_client.object_exists(Key=backup_key)):
+            raise BizError(code=404, message=f"快照对象不存在：{backup_key}")
+
+        snapshot = await _cos_call(cos_client.head_object(Key=backup_key))
+        target_meta = None
+        if await _cos_call(cos_client.object_exists(Key=target_key)):
+            target_meta = await _cos_call(cos_client.head_object(Key=target_key))
+        return {
+            "backup_key": backup_key,
+            "target_key": target_key,
+            "snapshot": {
+                "size": snapshot.get("size", 0),
+                "last_modified": snapshot.get("last_modified", ""),
+            },
+            "target_exists": target_meta is not None,
+            "target": None if target_meta is None else {
+                "size": target_meta.get("size", 0),
+                "last_modified": target_meta.get("last_modified", ""),
+            },
+            "backup_keep_count": backup_keep_count(),
+        }
+
+    async def restore_snapshot(
+        self, backup_key: str, target_key: str = "", overwrite: bool = False
+    ) -> dict:
+        """把快照复制回原对象（恢复前先给当前对象留一份快照，恢复也可回退）。
+
+        - target_key 可留空（服务端推出）；显式传入时必须与推出值一致，
+          免得「恢复 a.mp3 的快照」变成「往 b.mp3 写 a.mp3 的内容」。
+        - 目标已存在且 overwrite=False → 业务码 409，与上传/移动同一口径
+          （前端确认框可被绕过，把关必须在服务端）。
+        - backup_keep_count == 0 时不留当前对象的快照，此时覆盖不可回退，
+          响应里 backup_key=None，由界面在确认框点名风险。
+        """
+        if not is_cos_configured():
+            raise BizError(code=400, message=_ERROR_MESSAGE_COS_NOT_CONFIGURED)
+        _validate_key(backup_key)
+        derived = await self._resolve_snapshot_target(backup_key)
+        if target_key and target_key != derived:
+            raise BizError(
+                code=400,
+                message=f"快照 {backup_key} 对应的原对象是 {derived}，不能恢复到 {target_key}",
+            )
+        _validate_key(derived)
+        if not await _cos_call(cos_client.object_exists(Key=backup_key)):
+            raise BizError(code=404, message=f"快照对象不存在：{backup_key}")
+
+        snapshot = await _cos_call(cos_client.head_object(Key=backup_key))
+        target_meta = None
+        if await _cos_call(cos_client.object_exists(Key=derived)):
+            target_meta = await _cos_call(cos_client.head_object(Key=derived))
+        if target_meta is not None and not overwrite:
+            raise BizError(
+                code=409,
+                message=(
+                    f"目标对象已存在：{derived}（{_human_size(target_meta.get('size', 0))}，"
+                    f"更新于 {target_meta.get('last_modified') or '时间未知'}）；"
+                    "已拒绝恢复该快照，请确认后再以覆盖方式恢复"
+                ),
+            )
+
+        current_backup = None
+        if target_meta is not None:
+            current_backup = await self._snapshot_before_overwrite(derived)
+        await _cos_call(cos_client.copy_object(SourceKey=backup_key, Key=derived))
+        return {
+            "restored_from": backup_key,
+            "target_key": derived,
+            "overwritten": target_meta is not None,
+            "backup_key": current_backup,
+            "size": snapshot.get("size", 0),
+            "last_modified": snapshot.get("last_modified", ""),
+            "backup_keep_count": backup_keep_count(),
+        }
+
+    async def _resolve_snapshot_target(self, backup_key: str) -> str:
+        """从快照 Key 推出原对象 Key（同秒序号后缀按同目录兄弟快照判定）。"""
+        head, stamp_dir, stored = snapshot_parts(backup_key)
+        plain = _SNAPSHOT_SEQ_SUFFIX.sub("", stored)
+        if plain and plain != stored and \
+                await _cos_call(cos_client.object_exists(Key=stamp_dir + plain)):
+            return head + plain
+        return head + stored
 
     # ---- 元数据 ----
 
@@ -537,6 +716,86 @@ class CosStorageService:
         return meta
 
     # ---- 内部工具 ----
+
+    async def _list_direct(self, prefix: str) -> tuple[list[str], list[dict]]:
+        """单层列举：返回 (子目录前缀列表, 当前层直接文件条目)。
+
+        COS 的前缀列举默认是递归的，必须带 delimiter="/" 才只看当前层——
+        快照保留策略按时间戳目录逐层清点，靠的就是这个区别。
+        """
+        subdirs: list[str] = []
+        items: list[dict] = []
+        marker = ""
+        for _ in range(_LIST_MAX_PAGES):
+            resp = await _cos_call(cos_client.list_objects_delimited(
+                prefix=prefix, delimiter="/", marker=marker, max_keys=_LIST_PAGE_SIZE
+            ))
+            for cp in resp.get("CommonPrefixes") or []:
+                sub = cp.get("Prefix", "")
+                if sub and sub != prefix:
+                    subdirs.append(sub)
+            for item in resp.get("Contents") or []:
+                if item.get("Key") and item.get("Key") != prefix:
+                    items.append(item)
+            if not resp.get("IsTruncated"):
+                break
+            next_marker = resp.get("NextMarker") or (
+                (resp.get("Contents") or [{}])[-1].get("Key") or ""
+            )
+            if not next_marker:
+                break
+            marker = next_marker
+        return subdirs, items
+
+    async def _list_snapshots(self, key: str) -> list[dict]:
+        """某对象的全部快照，新 → 旧；同秒内的 -1/-2 序号副本也归到该对象。"""
+        directory, _, name = key.rpartition("/")
+        base = f"{directory + '/' if directory else ''}{_BACKUP_DIR_NAME}/"
+        stamp_dirs, _ = await self._list_direct(base)
+        snaps: list[dict] = []
+        # 时间戳目录名 %Y%m%d-%H%M%S 的字典序即时间序，倒序就是「新 → 旧」
+        for stamp in sorted(stamp_dirs, reverse=True):
+            _, items = await self._list_direct(stamp)
+            stored_names = {
+                item["Key"][len(stamp):]
+                for item in items
+                if item["Key"].startswith(stamp)
+            }
+            for item in items:
+                if not item["Key"].startswith(stamp):
+                    continue
+                stored = item["Key"][len(stamp):]
+                if not _snapshot_is_of(stored, name, stored_names):
+                    continue
+                snaps.append({
+                    "key": item["Key"],
+                    "name": stored,
+                    "size": int(item.get("Size", 0) or 0),
+                    "last_modified": _normalize_last_modified(item.get("LastModified")),
+                })
+        return snaps
+
+    async def _prune_snapshots(self, key: str) -> list[str]:
+        """按 COS_BACKUP_KEEP_COUNT 删掉更老的快照，返回被删的 Key。
+
+        清理失败只记日志：覆盖已经写入成功，因为「旧版本没删干净」让上传接口报错，
+        调用方会误以为新文件没传上去。keep=0 表示此后不再产生快照，存量不动。
+        """
+        keep = backup_keep_count()
+        if keep <= 0:
+            return []
+        try:
+            snaps = await self._list_snapshots(key)
+        except BizError as exc:
+            logger.warning("快照清理：列举失败 key=%s: %s", key, exc.message)
+            return []
+        stale = [snap["key"] for snap in snaps[keep:]]
+        for stale_key in stale:
+            try:
+                await _cos_call(cos_client.delete_object(Key=stale_key))
+            except BizError as exc:
+                logger.warning("快照清理：删除失败 key=%s: %s", stale_key, exc.message)
+        return stale
 
     async def _list_prefix_objects(self, prefix: str) -> list[dict]:
         """列举某前缀下所有对象原始条目（不分页上限，最多 10 页）。"""

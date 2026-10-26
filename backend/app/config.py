@@ -329,6 +329,8 @@ class Settings(BaseSettings):
     COS_REGION: str = "ap-guangzhou"
     COS_BUCKET: str = ""
     COS_CDN_DOMAIN: str = ""
+    # 覆盖前快照（.backup/<时间戳>/）每个对象保留最近几份；0 = 不留快照（覆盖即不可回退）
+    COS_BACKUP_KEEP_COUNT: int = 5
     # UGC 直传对象是否公开读（默认 True）。C 端头像等 UGC 直传以"公开可读"为前提：
     #   True  → Bucket/对象公开读，build_object_url 返回公开直链（<image src> 直接可用）；
     #   False → Bucket 私有读，build_object_url 回退预签名私有 URL（有时效，

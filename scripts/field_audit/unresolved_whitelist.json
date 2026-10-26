@@ -45,9 +45,15 @@
     },
     {
       "endpoint": "POST /cos/move",
-      "site": "views/cos/CosFiles.vue:437",
+      "site": "views/cos/CosFiles.vue:486",
       "reason_key": "value-scalar",
       "note": "destKey 是重命名拼出的目标对象键字符串，overwrite 取的是同名预览结果的布尔判定，值不可静态定；键名 source_key/dest_key/overwrite 均由 api/cos.js 的 moveCosObject 包装体字面量给出，三个都在 CosMoveBody 声明内（T02608）。"
+    },
+    {
+      "endpoint": "POST /cos/restore",
+      "site": "views/cos/CosFiles.vue:536",
+      "reason_key": "value-scalar",
+      "note": "target 是按快照 Key 推导出的原对象键（restore-preview 返回的 target_key），overwrite 取预览里的 target_exists 布尔判定，值不可静态定；键名 backup_key/target_key/overwrite 均由 api/cos.js 的 restoreCosObject 包装体字面量给出，三个都在 CosRestoreBody 声明内（T02609）。"
     },
     {
       "endpoint": "POST /queue/tasks/batch-delete",

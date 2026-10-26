@@ -35,6 +35,7 @@ CONFIG_KEY_MAP = {
     "cos_region": "COS_REGION",
     "cos_bucket": "COS_BUCKET",
     "cos_cdn_domain": "COS_CDN_DOMAIN",
+    "cos_backup_keep_count": "COS_BACKUP_KEEP_COUNT",
 }
 
 # 需要脱敏的配置项（SecretId / SecretKey 类）
@@ -48,12 +49,37 @@ DEFAULT_KEYS = {
     "cos_region": "ap-guangzhou",
 }
 
+# 快照保留份数上限：保留几十份已远超运营排错需要，再大只是让列举变慢
+BACKUP_KEEP_MAX = 50
+
 
 def _mask_key(key: str) -> str:
     """敏感字段脱敏：保留后 4 位，前缀 ****。"""
     if not key:
         return ""
     return f"****{key[-4:]}" if len(key) > 4 else "****"
+
+
+def _safe_int(value, default: int) -> int:
+    """配置值转非负整数（库里的值可能是字符串或被手改成脏数据）。"""
+    try:
+        return max(int(str(value).strip()), 0)
+    except (TypeError, ValueError):
+        return default
+
+
+def _coerce_settings_value(attr: str, value):
+    """配置表里一律存字符串；回写 Settings 前按字段类型转换。
+
+    直接把 "5" 塞给 int 字段会让 `keep > 0` 在 Python 3 抛 TypeError，
+    或让 pydantic 之外的内存单例存下「看起来是数字」的字符串。
+    """
+    from app.config import Settings
+
+    field = Settings.model_fields.get(attr)
+    if field is None or field.annotation is not int:
+        return value
+    return _safe_int(value, field.default)
 
 
 def _is_masked(value: str) -> bool:
@@ -96,6 +122,7 @@ class CosConfigService:
             "region": "ap-guangzhou",
             "bucket": "",
             "cdn_domain": "",
+            "backup_keep_count": 5,       # 覆盖前快照保留份数（T02609，0 = 不备份）
             # ---- INT-UX-04 / T02527 ----
             "loaded": bool,               # 本次是否真的读到了配置表
             "load_error": str | None,     # 读表失败原因（已脱敏，不含配置值）
@@ -131,6 +158,9 @@ class CosConfigService:
         region = _get("region", "cos_region", "COS_REGION", "ap-guangzhou")
         bucket = _get("bucket", "cos_bucket", "COS_BUCKET")
         cdn_domain = _get("cdn_domain", "cos_cdn_domain", "COS_CDN_DOMAIN")
+        backup_keep = _get(
+            "backup_keep_count", "cos_backup_keep_count", "COS_BACKUP_KEEP_COUNT", "5"
+        )
 
         # 配置就绪口径与 is_cos_configured 保持一致：ID/KEY/BUCKET 三项齐全
         configured = bool(secret_id and secret_key and bucket)
@@ -142,6 +172,7 @@ class CosConfigService:
             "region": region,
             "bucket": bucket,
             "cdn_domain": cdn_domain,
+            "backup_keep_count": _safe_int(backup_keep, 5),
             "loaded": load_error is None,
             "load_error": load_error,
             "updated_at": await self._latest_updated_at(only_if_loaded=load_error is None),
@@ -170,6 +201,7 @@ class CosConfigService:
         region: str = "ap-guangzhou",
         bucket: str = "",
         cdn_domain: str = "",
+        backup_keep_count: Optional[int] = None,
     ) -> None:
         """保存 COS 配置到 SQLite 并热更新 Settings 单例。
 
@@ -177,6 +209,9 @@ class CosConfigService:
         换凭证直接填新值即可覆盖；要**作废**已存凭证走 `reset_credentials()`
         （`POST /cos/reset-config`，界面「清除凭证」），它会真正删行并把 Settings
         回退到 .env 默认值。保存后重置 COS 客户端缓存，使下一次调用用新凭证重新初始化。
+
+        backup_keep_count 为 None 表示不修改（老前端不带该字段时不至于把保留份数清零）；
+        0 是有效值（覆盖不再留快照），所以不能用「空值跳过」判断。
         """
         updates: dict[str, str] = {
             "cos_region": region or "ap-guangzhou",
@@ -188,6 +223,10 @@ class CosConfigService:
             updates["cos_secret_id"] = secret_id
         if secret_key and not _is_masked(secret_key):
             updates["cos_secret_key"] = secret_key
+        if backup_keep_count is not None:
+            updates["cos_backup_keep_count"] = str(
+                min(_safe_int(backup_keep_count, 5), BACKUP_KEEP_MAX)
+            )
 
         if not updates:
             return
@@ -238,13 +277,13 @@ class CosConfigService:
         return await self.get_config_for_frontend()
 
     def _apply_to_settings(self, updates: dict[str, str]) -> None:
-        """将更新同步到 Settings 内存单例。"""
+        """将更新同步到 Settings 内存单例（int 字段需转换，见 _coerce_settings_value）。"""
         settings = get_settings()
         for key, value in updates.items():
             attr = CONFIG_KEY_MAP.get(key)
             if not attr:
                 continue
-            setattr(settings, attr, value)
+            setattr(settings, attr, _coerce_settings_value(attr, value))
 
     async def _upsert_config(self, key: str, value: str) -> None:
         """插入或更新单个配置项。"""
@@ -274,7 +313,7 @@ class CosConfigService:
             attr = CONFIG_KEY_MAP.get(key)
             if not attr:
                 continue
-            setattr(settings, attr, value)
+            setattr(settings, attr, _coerce_settings_value(attr, value))
             applied.append(key)
 
         if applied:

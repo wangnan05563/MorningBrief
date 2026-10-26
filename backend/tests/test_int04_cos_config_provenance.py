@@ -21,7 +21,9 @@ from app.config import get_settings
 from app.models.cos_config import CosConfig
 from app.services.cos_config_service import CosConfigService
 
-FRONT_FIELDS = ["secret_id", "secret_key", "region", "bucket", "cdn_domain"]
+FRONT_FIELDS = [
+    "secret_id", "secret_key", "region", "bucket", "cdn_domain", "backup_keep_count",
+]
 SECRET_KEY = "sk-secret-value-8f3a2b"
 
 
@@ -31,10 +33,15 @@ def _isolate_settings():
     s = get_settings()
     saved = {
         a: getattr(s, a) for a in ("COS_SECRET_ID", "COS_SECRET_KEY", "COS_REGION",
-                                   "COS_BUCKET", "COS_CDN_DOMAIN")
+                                   "COS_BUCKET", "COS_CDN_DOMAIN", "COS_BACKUP_KEEP_COUNT")
     }
     for a in saved:
-        setattr(s, a, "" if a != "COS_REGION" else "ap-guangzhou")
+        if a == "COS_REGION":
+            setattr(s, a, "ap-guangzhou")
+        elif a == "COS_BACKUP_KEEP_COUNT":
+            setattr(s, a, 5)
+        else:
+            setattr(s, a, "")
     yield
     for a, v in saved.items():
         setattr(s, a, v)
@@ -48,6 +55,7 @@ async def _seed(db_session, **values):
         region=values.get("region", "ap-shanghai"),
         bucket=values.get("bucket", "mybucket"),
         cdn_domain=values.get("cdn_domain", ""),
+        backup_keep_count=values.get("backup_keep_count", 5),
     )
     return svc
 

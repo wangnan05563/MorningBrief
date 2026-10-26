@@ -83,3 +83,20 @@ export const moveCosObject = (sourceKey, destKey, { overwrite = false } = {}) =>
 // 获取对象元数据（大小 / 最后修改 / 类型 / ETag）
 export const getCosMetadata = (key) =>
   api.get('/cos/metadata', { params: { key } })
+
+// 快照恢复前的预览（T02609）：服务端回带原对象 Key、目标当前状态与保留份数
+// silent：预览失败由调用方给出「已取消恢复」的针对性提示，避免拦截器二次弹错
+export const previewCosRestore = (backupKey) =>
+  api.get('/cos/restore-preview', {
+    params: { backup_key: backupKey },
+    silent: true,
+  })
+
+// 从 .backup 快照恢复对象（服务端会先给当前对象留一份快照，恢复也可回退）
+// overwrite=false 时，目标已存在会被服务端拒绝（业务码 409）
+export const restoreCosObject = (backupKey, targetKey, { overwrite = false } = {}) =>
+  api.post('/cos/restore', {
+    backup_key: backupKey,
+    target_key: targetKey || '',
+    overwrite: !!overwrite,
+  })

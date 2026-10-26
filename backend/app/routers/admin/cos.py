@@ -15,11 +15,16 @@
 - DELETE /admin/api/v1/cos/folder        删除文件夹（递归）
 - POST /admin/api/v1/cos/move            重命名 / 移动（文件或文件夹，目标同名默认拒绝）
 - GET  /admin/api/v1/cos/move-preview    移动前的目标同名冲突预览（覆盖条数）
+- GET  /admin/api/v1/cos/restore-preview 快照恢复前的预览（原对象 Key、目标当前状态）
+- POST /admin/api/v1/cos/restore         从 .backup 快照恢复对象（恢复前先备份当前对象）
 - GET  /admin/api/v1/cos/metadata        获取对象元数据
 
 所有端点需要管理员权限。未配置 COS 时管理类接口返回可读的业务错误提示。
+覆盖上传、覆盖移动与快照恢复都会写审计日志（category=cos，含管理员名）。
 """
 import json
+import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel, ConfigDict
@@ -30,12 +35,13 @@ from app.core.response import success
 from app.database import get_db
 from app.models.audit_log import AuditLog
 from app.services.cos_config_service import CREDENTIAL_KEYS, CosConfigService
-from app.services.cos_storage_service import CosStorageService
+from app.services.cos_storage_service import CosStorageService, backup_keep_count
 
 
 
 _DESC_OBJECT_KEY = "对象 Key"
 router = APIRouter(prefix="/admin/api/v1/cos", tags=["B端-云端存储"])
+logger = logging.getLogger(__name__)
 
 
 class CosConfigBody(BaseModel):
@@ -45,6 +51,8 @@ class CosConfigBody(BaseModel):
     region: str = "ap-guangzhou"
     bucket: str = ""
     cdn_domain: str = ""
+    # None = 不修改（老前端不带该字段时不能把保留份数静默清零，T02609）
+    backup_keep_count: Optional[int] = None
 
 
 class CosFolderBody(BaseModel):
@@ -64,6 +72,46 @@ class CosMoveBody(BaseModel):
     source_key: str
     dest_key: str
     overwrite: bool = False
+
+
+class CosRestoreBody(BaseModel):
+    """快照恢复请求体（T02609）。
+
+    backup_key 指向 .backup/<时间戳>/ 下的快照对象；target_key 留空时由服务端
+    从快照 Key 推出原对象位置，显式传入则必须与推出值一致。
+    extra=forbid：覆盖开关拼错（如 overwrit）会被拒，而不是静默当作「不覆盖」。
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    backup_key: str
+    target_key: str = ""
+    overwrite: bool = False
+
+
+async def _audit(
+    db: AsyncSession,
+    admin: AdminPayload,
+    action: str,
+    target: str,
+    detail: dict,
+) -> None:
+    """写 COS 审计日志（category=cos）。
+
+    审计失败只记日志不抛：存储操作此时已经成功，因为审计写不进去就让接口报错，
+    会让调用方以为上传/恢复失败并重做一次。
+    """
+    try:
+        db.add(AuditLog(
+            category="cos",
+            action=action,
+            target=target,
+            operator=admin.username,
+            detail=json.dumps(detail, ensure_ascii=False),
+        ))
+        await db.commit()
+    except Exception:  # NOSONAR 审计是旁路，不能反噬主流程
+        logger.exception("COS 审计写入失败 action=%s target=%s", action, target)
+        await db.rollback()
 
 
 @router.get("/config")
@@ -91,6 +139,7 @@ async def save_config(
         region=body.region,
         bucket=body.bucket,
         cdn_domain=body.cdn_domain,
+        backup_keep_count=body.backup_keep_count,
     )
     return success(message="COS 配置已保存并热更新")
 
@@ -143,6 +192,7 @@ async def get_status(
         "bucket": settings.COS_BUCKET,
         "region": settings.COS_REGION,
         "cdn_domain": settings.COS_CDN_DOMAIN,
+        "backup_keep_count": backup_keep_count(),
     })
 
 
@@ -162,6 +212,7 @@ async def upload_file(
     file: UploadFile = File(...),
     prefix: str = Form("", description="上传目标前缀（目录），以 / 结尾"),
     overwrite: bool = Form(False, description="同名对象已存在时是否覆盖（覆盖前自动留快照）"),
+    db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
     """上传文件到 COS。
@@ -191,10 +242,16 @@ async def upload_file(
     backup_key = result.get("backup_key")
     message = "上传成功"
     if result.get("overwritten"):
-        message = (
-            f"已覆盖上传，旧文件已备份至 {backup_key}" if backup_key
-            else "已覆盖上传"
-        )
+        if backup_key:
+            message = f"已覆盖上传，旧文件已备份至 {backup_key}"
+        elif backup_keep_count() == 0:
+            message = "已覆盖上传（当前设置不保留快照，旧文件不可找回）"
+        else:
+            message = "已覆盖上传"
+        await _audit(db, admin, "overwrite_upload", key, {
+            "backup_key": backup_key,
+            "previous_size": (result.get("previous") or {}).get("size"),
+        })
     return success(data=result, message=message)
 
 
@@ -273,6 +330,7 @@ async def move_preview(
 @router.post("/move")
 async def move_object(
     body: CosMoveBody,
+    db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
     """重命名 / 移动对象或文件夹。
@@ -286,10 +344,66 @@ async def move_object(
         source_key=body.source_key, dest_key=body.dest_key, overwrite=body.overwrite
     )
     overwritten = result.get("overwritten") or 0
-    message = (
-        f"移动成功，已覆盖 {overwritten} 个同名对象，旧对象已备份到 .backup/ 目录"
-        if overwritten else "移动成功"
+    if overwritten:
+        backup_keys = result.get("backup_keys") or []
+        if backup_keys:
+            message = f"移动成功，已覆盖 {overwritten} 个同名对象，旧对象已备份到 .backup/ 目录"
+        elif backup_keep_count() == 0:
+            message = f"移动成功，已覆盖 {overwritten} 个同名对象（当前设置不保留快照，旧对象不可找回）"
+        else:
+            message = f"移动成功，已覆盖 {overwritten} 个同名对象"
+        await _audit(db, admin, "overwrite_move", body.dest_key, {
+            "source_key": body.source_key,
+            "overwritten": overwritten,
+            "backup_keys": backup_keys,
+        })
+    else:
+        message = "移动成功"
+    return success(data=result, message=message)
+
+
+@router.get("/restore-preview")
+async def restore_preview(
+    backup_key: str = Query(..., description="快照对象 Key（.backup/<时间戳>/ 下）"),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """快照恢复前的预览（T02609）。
+
+    原对象 Key 由服务端从快照 Key 推出并回给前端：确认框必须点名「从哪恢复到哪」，
+    而不是让用户在一个可能拼错的目标 Key 上确认。
+    """
+    svc = CosStorageService()
+    data = await svc.restore_preview(backup_key=backup_key)
+    return success(data=data)
+
+
+@router.post("/restore")
+async def restore_snapshot(
+    body: CosRestoreBody,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(require_admin),
+):
+    """从 .backup 快照恢复对象。
+
+    恢复前会先给当前对象留一份快照（恢复也可回退）；backup_keep_count=0 时不备份，
+    响应里 backup_key 为 null，界面据此在确认框点名「不可找回」。
+    """
+    svc = CosStorageService()
+    result = await svc.restore_snapshot(
+        backup_key=body.backup_key,
+        target_key=body.target_key,
+        overwrite=body.overwrite,
     )
+    await _audit(db, admin, "restore_snapshot", result["target_key"], {
+        "restored_from": result["restored_from"],
+        "backup_key": result.get("backup_key"),
+    })
+    if result.get("backup_key"):
+        message = f"已从快照恢复 {result['target_key']}，恢复前的对象已备份至 {result['backup_key']}"
+    elif result.get("overwritten"):
+        message = f"已从快照恢复 {result['target_key']}（当前设置不保留快照，恢复前的对象不可找回）"
+    else:
+        message = f"已从快照恢复 {result['target_key']}"
     return success(data=result, message=message)
 
 

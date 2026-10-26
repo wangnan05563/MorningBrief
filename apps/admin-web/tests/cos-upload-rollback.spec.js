@@ -29,13 +29,13 @@ const overwriteOf = (req) => {
   return m ? m[1] : null
 }
 
-const mockCos = (page, { exists = true, existsFails = false, uploadAlwaysRejects = false } = {}) =>
+const mockCos = (page, { exists = true, existsFails = false, uploadAlwaysRejects = false, keep = 5 } = {}) =>
   page.route('**/admin/api/v1/cos**', async (route) => {
     const url = route.request().url()
     const method = route.request().method()
 
     if (url.includes('/cos/status')) {
-      return route.fulfill({ json: { code: 0, message: 'ok', data: { configured: true, bucket: 'bkt', region: 'ap-guangzhou', cdn_domain: '' } } })
+      return route.fulfill({ json: { code: 0, message: 'ok', data: { configured: true, bucket: 'bkt', region: 'ap-guangzhou', cdn_domain: '', backup_keep_count: keep } } })
     }
     if (url.includes('/cos/objects')) {
       return route.fulfill({ json: objectsResponse })
@@ -98,11 +98,25 @@ test.describe('云端存储上传可回退', () => {
     await expect(box).toBeVisible({ timeout: NAV_TIMEOUT })
     await expect(box.getByText('上传并覆盖同名文件：/a.mp3')).toBeVisible()
     await expect(box.getByText(/云端已存在同名对象（2\.0 KB/)).toBeVisible()
-    await expect(box.getByText('覆盖前旧文件自动备份到 .backup/<时间戳>/a.mp3，可在文件列表逐层找回')).toBeVisible()
+    await expect(box.getByText('覆盖前旧文件自动备份到 .backup/<时间戳>/a.mp3，保留最近 5 份')).toBeVisible()
     // 直接点确认但不输入确认词：不得放行
     await box.getByRole('button', { name: '确认覆盖上传' }).click()
     await expect(box.getByText('请逐字输入 覆盖')).toBeVisible({ timeout: NAV_TIMEOUT })
     expect(uploads).toHaveLength(0)
+  })
+
+  test('保留份数为 0 时同名覆盖确认必须点名「不可找回」（T02609）', async ({ page }) => {
+    await setLoginState(page, 'admin')
+    await mockCos(page, { exists: true, keep: 0 })
+
+    await page.goto('/cos-files')
+    await expect(page.getByText('a.mp3').first()).toBeVisible({ timeout: NAV_TIMEOUT })
+    await chooseFile(page)
+
+    const box = page.locator('.el-message-box')
+    await expect(box).toBeVisible({ timeout: NAV_TIMEOUT })
+    await expect(box.getByText('当前设置不保留覆盖前快照：旧文件会被直接覆盖，覆盖后无法找回')).toBeVisible()
+    await expect(box.getByText('「快照保留份数」为 0，本次覆盖不可回退。')).toBeVisible()
   })
 
   test('输入确认词后按 overwrite=true 上传，成功提示点名快照位置', async ({ page }) => {

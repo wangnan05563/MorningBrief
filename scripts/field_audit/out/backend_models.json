@@ -252,7 +252,7 @@
       "endpoint": "delete_folder",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/cos.py:246",
+        "source": "backend/app/routers/admin/cos.py:303",
         "refs": [
           " 个对象",
           "/folder",
@@ -284,7 +284,7 @@
       "endpoint": "delete_object",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/cos.py:224",
+        "source": "backend/app/routers/admin/cos.py:281",
         "refs": [
           "/object",
           "AdminPayload",
@@ -2495,7 +2495,7 @@
       "model": {
         "name": "CosFolderBody",
         "module": "app.routers.admin.cos",
-        "source": "backend/app/routers/admin/cos.py:50",
+        "source": "backend/app/routers/admin/cos.py:58",
         "extra": "ignore",
         "fields": [
           "prefix"
@@ -2505,7 +2505,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/cos.py:235",
+        "source": "backend/app/routers/admin/cos.py:292",
         "refs": [
           "/folder",
           "AdminPayload",
@@ -2534,7 +2534,7 @@
       "model": {
         "name": "CosMoveBody",
         "module": "app.routers.admin.cos",
-        "source": "backend/app/routers/admin/cos.py:55",
+        "source": "backend/app/routers/admin/cos.py:63",
         "extra": "forbid",
         "fields": [
           "dest_key",
@@ -2548,21 +2548,31 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/cos.py:273",
+        "source": "backend/app/routers/admin/cos.py:330",
         "refs": [
+          " 个同名对象",
+          " 个同名对象（当前设置不保留快照，旧对象不可找回）",
           " 个同名对象，旧对象已备份到 .backup/ 目录",
           "/move",
           "AdminPayload",
+          "AsyncSession",
           "CosMoveBody",
           "CosStorageService",
           "Depends",
+          "_audit",
+          "admin",
+          "backup_keep_count",
+          "backup_keys",
           "body",
           "data",
+          "db",
           "dest_key",
           "get",
+          "get_db",
           "message",
           "move_object",
           "overwrite",
+          "overwrite_move",
           "overwritten",
           "post",
           "require_admin",
@@ -2582,7 +2592,7 @@
       "endpoint": "reset_config",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/cos.py:98",
+        "source": "backend/app/routers/admin/cos.py:147",
         "refs": [
           "/reset-config",
           "AdminPayload",
@@ -2623,12 +2633,67 @@
         ]
       }
     },
+    "POST /cos/restore": {
+      "raw_path": "/admin/api/v1/cos/restore",
+      "endpoint": "restore_snapshot",
+      "model": {
+        "name": "CosRestoreBody",
+        "module": "app.routers.admin.cos",
+        "source": "backend/app/routers/admin/cos.py:77",
+        "extra": "forbid",
+        "fields": [
+          "backup_key",
+          "overwrite",
+          "target_key"
+        ],
+        "flatFields": [
+          "backup_key",
+          "overwrite",
+          "target_key"
+        ]
+      },
+      "handler": {
+        "source": "backend/app/routers/admin/cos.py:380",
+        "refs": [
+          "/restore",
+          "AdminPayload",
+          "AsyncSession",
+          "CosRestoreBody",
+          "CosStorageService",
+          "Depends",
+          "_audit",
+          "admin",
+          "backup_key",
+          "body",
+          "data",
+          "db",
+          "get",
+          "get_db",
+          "message",
+          "overwrite",
+          "overwritten",
+          "post",
+          "require_admin",
+          "restore_snapshot",
+          "restored_from",
+          "result",
+          "router",
+          "success",
+          "svc",
+          "target_key",
+          "从 .backup 快照恢复对象。\n\n    恢复前会先给当前对象留一份快照（恢复也可回退）；backup_keep_count=0 时不备份，\n    响应里 backup_key 为 null，界面据此在确认框点名「不可找回」。\n    ",
+          "已从快照恢复 ",
+          "（当前设置不保留快照，恢复前的对象不可找回）",
+          "，恢复前的对象已备份至 "
+        ]
+      }
+    },
     "POST /cos/test-connection": {
       "raw_path": "/admin/api/v1/cos/test-connection",
       "endpoint": "test_connection",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/cos.py:121",
+        "source": "backend/app/routers/admin/cos.py:170",
         "refs": [
           "/test-connection",
           "AdminPayload",
@@ -2654,40 +2719,50 @@
       "endpoint": "upload_file",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/cos.py:160",
+        "source": "backend/app/routers/admin/cos.py:210",
         "refs": [
           "",
           "/",
           "/upload",
           "AdminPayload",
+          "AsyncSession",
           "CosStorageService",
           "Depends",
           "File",
           "Form",
           "ParamError",
           "UploadFile",
+          "_audit",
+          "admin",
+          "backup_keep_count",
           "backup_key",
           "basename",
           "bool",
           "content_type",
           "data",
+          "db",
           "description",
           "endswith",
           "file",
           "filename",
           "get",
+          "get_db",
           "key",
           "message",
           "os",
           "overwrite",
+          "overwrite_upload",
           "overwritten",
           "path",
           "post",
           "prefix",
+          "previous",
+          "previous_size",
           "read",
           "require_admin",
           "result",
           "router",
+          "size",
           "str",
           "strip",
           "success",
@@ -2698,6 +2773,7 @@
           "上传目标前缀（目录），以 / 结尾",
           "同名对象已存在时是否覆盖（覆盖前自动留快照）",
           "已覆盖上传",
+          "已覆盖上传（当前设置不保留快照，旧文件不可找回）",
           "已覆盖上传，旧文件已备份至 ",
           "文件名不能为空"
         ]
@@ -5613,9 +5689,10 @@
       "model": {
         "name": "CosConfigBody",
         "module": "app.routers.admin.cos",
-        "source": "backend/app/routers/admin/cos.py:41",
+        "source": "backend/app/routers/admin/cos.py:47",
         "extra": "ignore",
         "fields": [
+          "backup_keep_count",
           "bucket",
           "cdn_domain",
           "region",
@@ -5623,6 +5700,7 @@
           "secret_key"
         ],
         "flatFields": [
+          "backup_keep_count",
           "bucket",
           "cdn_domain",
           "region",
@@ -5631,7 +5709,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/cos.py:80",
+        "source": "backend/app/routers/admin/cos.py:128",
         "refs": [
           "/config",
           "AdminPayload",
@@ -5640,6 +5718,7 @@
           "CosConfigBody",
           "CosConfigService",
           "Depends",
+          "backup_keep_count",
           "body",
           "bucket",
           "cdn_domain",

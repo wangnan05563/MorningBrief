@@ -167,6 +167,19 @@
           </div>
         </el-form-item>
 
+        <el-form-item label="快照保留份数" prop="backup_keep_count">
+          <el-input-number
+            v-model="form.backup_keep_count"
+            :min="0"
+            :max="50"
+            :step="1"
+          />
+          <div class="field-tip">
+            覆盖上传 / 覆盖移动 / 快照恢复前，旧对象自动备份到同目录 .backup/，每个对象保留最近
+            N 份；填 0 = 不备份（覆盖与恢复都将不可回退，确认框会点名该风险）
+          </div>
+        </el-form-item>
+
         <el-form-item>
           <el-link
             href="https://console.cloud.tencent.com/cam/capi"
@@ -219,6 +232,7 @@ const form = ref({
   region: 'ap-guangzhou',
   bucket: '',
   cdn_domain: '',
+  backup_keep_count: 5,
 })
 // H2：桶名必须带 -{APPID} 数字后缀——后端把 COS_BUCKET 原样交给 SDK，全仓没有拼接逻辑，
 // 缺后缀保存后所有 COS 操作报「存储桶不存在」。这里在保存前就拦住并说明原因。
@@ -250,6 +264,7 @@ const fallbackLabels = {
   region: '地域',
   bucket: '存储桶',
   cdn_domain: 'CDN 域名',
+  backup_keep_count: '快照保留份数',
 }
 const fallbackNote = computed(() => {
   const fields = provenance.value.fallback_fields || []
@@ -352,6 +367,7 @@ async function handleSave() {
       region: form.value.region,
       bucket: form.value.bucket,
       cdn_domain: form.value.cdn_domain,
+      backup_keep_count: form.value.backup_keep_count,
     })
     ElMessage.success('COS 配置已保存并热更新')
     commitDraft()

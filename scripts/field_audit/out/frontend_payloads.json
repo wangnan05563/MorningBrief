@@ -89,7 +89,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 469,
+          "line": 565,
           "fn": "deleteCosFolder",
           "fieldCount": 2,
           "unresolved": []
@@ -107,7 +107,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 472,
+          "line": 568,
           "fn": "deleteCosObject",
           "fieldCount": 2,
           "unresolved": []
@@ -750,7 +750,7 @@
       "sites": [
         {
           "file": "views/cos/CosConfig.vue",
-          "line": 292,
+          "line": 307,
           "fn": "getCosConfig",
           "fieldCount": 0,
           "unresolved": []
@@ -769,7 +769,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 484,
+          "line": 580,
           "fn": "getCosDownloadUrl",
           "fieldCount": 3,
           "unresolved": []
@@ -790,7 +790,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 306,
+          "line": 343,
           "fn": "checkCosObject",
           "fieldCount": 3,
           "unresolved": [
@@ -814,7 +814,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 402,
+          "line": 446,
           "fn": "checkCosMoveConflict",
           "fieldCount": 4,
           "unresolved": [
@@ -834,9 +834,28 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 262,
+          "line": 298,
           "fn": "listCosObjects",
           "fieldCount": 2,
+          "unresolved": []
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "url": "/cos/restore-preview",
+      "fields": [
+        "params",
+        "params.backup_key",
+        "silent"
+      ],
+      "unresolved": [],
+      "sites": [
+        {
+          "file": "views/cos/CosFiles.vue",
+          "line": 503,
+          "fn": "previewCosRestore",
+          "fieldCount": 3,
           "unresolved": []
         }
       ]
@@ -849,14 +868,14 @@
       "sites": [
         {
           "file": "views/cos/CosConfig.vue",
-          "line": 292,
+          "line": 307,
           "fn": "getCosStatus",
           "fieldCount": 0,
           "unresolved": []
         },
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 251,
+          "line": 286,
           "fn": "getCosStatus",
           "fieldCount": 0,
           "unresolved": []
@@ -2260,7 +2279,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 359,
+          "line": 403,
           "fn": "createCosFolder",
           "fieldCount": 1,
           "unresolved": []
@@ -2281,7 +2300,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 437,
+          "line": 486,
           "fn": "moveCosObject",
           "fieldCount": 3,
           "unresolved": [
@@ -2298,10 +2317,33 @@
       "sites": [
         {
           "file": "views/cos/CosConfig.vue",
-          "line": 383,
+          "line": 399,
           "fn": "resetCosConfig",
           "fieldCount": 0,
           "unresolved": []
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "url": "/cos/restore",
+      "fields": [
+        "backup_key",
+        "overwrite",
+        "target_key"
+      ],
+      "unresolved": [
+        "变量 target 无可解析的声明"
+      ],
+      "sites": [
+        {
+          "file": "views/cos/CosFiles.vue",
+          "line": 536,
+          "fn": "restoreCosObject",
+          "fieldCount": 3,
+          "unresolved": [
+            "变量 target 无可解析的声明"
+          ]
         }
       ]
     },
@@ -2313,7 +2355,7 @@
       "sites": [
         {
           "file": "views/cos/CosConfig.vue",
-          "line": 398,
+          "line": 414,
           "fn": "testCosConnection",
           "fieldCount": 0,
           "unresolved": []
@@ -2330,7 +2372,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 329,
+          "line": 371,
           "fn": "uploadCosFile",
           "fieldCount": 0,
           "unresolved": [
@@ -3306,6 +3348,7 @@
       "method": "PUT",
       "url": "/cos/config",
       "fields": [
+        "backup_keep_count",
         "bucket",
         "cdn_domain",
         "region",
@@ -3316,9 +3359,9 @@
       "sites": [
         {
           "file": "views/cos/CosConfig.vue",
-          "line": 349,
+          "line": 364,
           "fn": "saveCosConfig",
-          "fieldCount": 5,
+          "fieldCount": 6,
           "unresolved": []
         }
       ]
@@ -7369,6 +7412,505 @@
             }
           }
         ]
+      },
+      "defIndex": {
+        "decls": [],
+        "assigns": []
+      }
+    },
+    {
+      "fn": "previewCosRestore",
+      "method": "get",
+      "url": "/cos/restore-preview",
+      "file": "api/cos.js",
+      "line": 90,
+      "argNames": [
+        "backupKey"
+      ],
+      "payloadExpr": {
+        "type": "ObjectExpression",
+        "start": 2889,
+        "end": 2951,
+        "loc": {
+          "start": {
+            "line": 90,
+            "column": 34,
+            "index": 2889
+          },
+          "end": {
+            "line": 93,
+            "column": 3,
+            "index": 2951
+          }
+        },
+        "properties": [
+          {
+            "type": "ObjectProperty",
+            "start": 2895,
+            "end": 2928,
+            "loc": {
+              "start": {
+                "line": 91,
+                "column": 4,
+                "index": 2895
+              },
+              "end": {
+                "line": 91,
+                "column": 37,
+                "index": 2928
+              }
+            },
+            "method": false,
+            "key": {
+              "type": "Identifier",
+              "start": 2895,
+              "end": 2901,
+              "loc": {
+                "start": {
+                  "line": 91,
+                  "column": 4,
+                  "index": 2895
+                },
+                "end": {
+                  "line": 91,
+                  "column": 10,
+                  "index": 2901
+                },
+                "identifierName": "params"
+              },
+              "name": "params"
+            },
+            "computed": false,
+            "shorthand": false,
+            "value": {
+              "type": "ObjectExpression",
+              "start": 2903,
+              "end": 2928,
+              "loc": {
+                "start": {
+                  "line": 91,
+                  "column": 12,
+                  "index": 2903
+                },
+                "end": {
+                  "line": 91,
+                  "column": 37,
+                  "index": 2928
+                }
+              },
+              "properties": [
+                {
+                  "type": "ObjectProperty",
+                  "start": 2905,
+                  "end": 2926,
+                  "loc": {
+                    "start": {
+                      "line": 91,
+                      "column": 14,
+                      "index": 2905
+                    },
+                    "end": {
+                      "line": 91,
+                      "column": 35,
+                      "index": 2926
+                    }
+                  },
+                  "method": false,
+                  "key": {
+                    "type": "Identifier",
+                    "start": 2905,
+                    "end": 2915,
+                    "loc": {
+                      "start": {
+                        "line": 91,
+                        "column": 14,
+                        "index": 2905
+                      },
+                      "end": {
+                        "line": 91,
+                        "column": 24,
+                        "index": 2915
+                      },
+                      "identifierName": "backup_key"
+                    },
+                    "name": "backup_key"
+                  },
+                  "computed": false,
+                  "shorthand": false,
+                  "value": {
+                    "type": "Identifier",
+                    "start": 2917,
+                    "end": 2926,
+                    "loc": {
+                      "start": {
+                        "line": 91,
+                        "column": 26,
+                        "index": 2917
+                      },
+                      "end": {
+                        "line": 91,
+                        "column": 35,
+                        "index": 2926
+                      },
+                      "identifierName": "backupKey"
+                    },
+                    "name": "backupKey"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "ObjectProperty",
+            "start": 2934,
+            "end": 2946,
+            "loc": {
+              "start": {
+                "line": 92,
+                "column": 4,
+                "index": 2934
+              },
+              "end": {
+                "line": 92,
+                "column": 16,
+                "index": 2946
+              }
+            },
+            "method": false,
+            "key": {
+              "type": "Identifier",
+              "start": 2934,
+              "end": 2940,
+              "loc": {
+                "start": {
+                  "line": 92,
+                  "column": 4,
+                  "index": 2934
+                },
+                "end": {
+                  "line": 92,
+                  "column": 10,
+                  "index": 2940
+                },
+                "identifierName": "silent"
+              },
+              "name": "silent"
+            },
+            "computed": false,
+            "shorthand": false,
+            "value": {
+              "type": "BooleanLiteral",
+              "start": 2942,
+              "end": 2946,
+              "loc": {
+                "start": {
+                  "line": 92,
+                  "column": 12,
+                  "index": 2942
+                },
+                "end": {
+                  "line": 92,
+                  "column": 16,
+                  "index": 2946
+                }
+              },
+              "value": true
+            }
+          }
+        ],
+        "extra": {
+          "trailingComma": 2946
+        }
+      },
+      "defIndex": {
+        "decls": [],
+        "assigns": []
+      }
+    },
+    {
+      "fn": "restoreCosObject",
+      "method": "post",
+      "url": "/cos/restore",
+      "file": "api/cos.js",
+      "line": 98,
+      "argNames": [
+        "backupKey",
+        "targetKey",
+        null
+      ],
+      "payloadExpr": {
+        "type": "ObjectExpression",
+        "start": 3154,
+        "end": 3247,
+        "loc": {
+          "start": {
+            "line": 98,
+            "column": 27,
+            "index": 3154
+          },
+          "end": {
+            "line": 102,
+            "column": 3,
+            "index": 3247
+          }
+        },
+        "properties": [
+          {
+            "type": "ObjectProperty",
+            "start": 3160,
+            "end": 3181,
+            "loc": {
+              "start": {
+                "line": 99,
+                "column": 4,
+                "index": 3160
+              },
+              "end": {
+                "line": 99,
+                "column": 25,
+                "index": 3181
+              }
+            },
+            "method": false,
+            "key": {
+              "type": "Identifier",
+              "start": 3160,
+              "end": 3170,
+              "loc": {
+                "start": {
+                  "line": 99,
+                  "column": 4,
+                  "index": 3160
+                },
+                "end": {
+                  "line": 99,
+                  "column": 14,
+                  "index": 3170
+                },
+                "identifierName": "backup_key"
+              },
+              "name": "backup_key"
+            },
+            "computed": false,
+            "shorthand": false,
+            "value": {
+              "type": "Identifier",
+              "start": 3172,
+              "end": 3181,
+              "loc": {
+                "start": {
+                  "line": 99,
+                  "column": 16,
+                  "index": 3172
+                },
+                "end": {
+                  "line": 99,
+                  "column": 25,
+                  "index": 3181
+                },
+                "identifierName": "backupKey"
+              },
+              "name": "backupKey"
+            }
+          },
+          {
+            "type": "ObjectProperty",
+            "start": 3187,
+            "end": 3214,
+            "loc": {
+              "start": {
+                "line": 100,
+                "column": 4,
+                "index": 3187
+              },
+              "end": {
+                "line": 100,
+                "column": 31,
+                "index": 3214
+              }
+            },
+            "method": false,
+            "key": {
+              "type": "Identifier",
+              "start": 3187,
+              "end": 3197,
+              "loc": {
+                "start": {
+                  "line": 100,
+                  "column": 4,
+                  "index": 3187
+                },
+                "end": {
+                  "line": 100,
+                  "column": 14,
+                  "index": 3197
+                },
+                "identifierName": "target_key"
+              },
+              "name": "target_key"
+            },
+            "computed": false,
+            "shorthand": false,
+            "value": {
+              "type": "LogicalExpression",
+              "start": 3199,
+              "end": 3214,
+              "loc": {
+                "start": {
+                  "line": 100,
+                  "column": 16,
+                  "index": 3199
+                },
+                "end": {
+                  "line": 100,
+                  "column": 31,
+                  "index": 3214
+                }
+              },
+              "left": {
+                "type": "Identifier",
+                "start": 3199,
+                "end": 3208,
+                "loc": {
+                  "start": {
+                    "line": 100,
+                    "column": 16,
+                    "index": 3199
+                  },
+                  "end": {
+                    "line": 100,
+                    "column": 25,
+                    "index": 3208
+                  },
+                  "identifierName": "targetKey"
+                },
+                "name": "targetKey"
+              },
+              "operator": "||",
+              "right": {
+                "type": "StringLiteral",
+                "start": 3212,
+                "end": 3214,
+                "loc": {
+                  "start": {
+                    "line": 100,
+                    "column": 29,
+                    "index": 3212
+                  },
+                  "end": {
+                    "line": 100,
+                    "column": 31,
+                    "index": 3214
+                  }
+                },
+                "extra": {
+                  "rawValue": "",
+                  "raw": "''"
+                },
+                "value": ""
+              }
+            }
+          },
+          {
+            "type": "ObjectProperty",
+            "start": 3220,
+            "end": 3242,
+            "loc": {
+              "start": {
+                "line": 101,
+                "column": 4,
+                "index": 3220
+              },
+              "end": {
+                "line": 101,
+                "column": 26,
+                "index": 3242
+              }
+            },
+            "method": false,
+            "key": {
+              "type": "Identifier",
+              "start": 3220,
+              "end": 3229,
+              "loc": {
+                "start": {
+                  "line": 101,
+                  "column": 4,
+                  "index": 3220
+                },
+                "end": {
+                  "line": 101,
+                  "column": 13,
+                  "index": 3229
+                },
+                "identifierName": "overwrite"
+              },
+              "name": "overwrite"
+            },
+            "computed": false,
+            "shorthand": false,
+            "value": {
+              "type": "UnaryExpression",
+              "start": 3231,
+              "end": 3242,
+              "loc": {
+                "start": {
+                  "line": 101,
+                  "column": 15,
+                  "index": 3231
+                },
+                "end": {
+                  "line": 101,
+                  "column": 26,
+                  "index": 3242
+                }
+              },
+              "operator": "!",
+              "prefix": true,
+              "argument": {
+                "type": "UnaryExpression",
+                "start": 3232,
+                "end": 3242,
+                "loc": {
+                  "start": {
+                    "line": 101,
+                    "column": 16,
+                    "index": 3232
+                  },
+                  "end": {
+                    "line": 101,
+                    "column": 26,
+                    "index": 3242
+                  }
+                },
+                "operator": "!",
+                "prefix": true,
+                "argument": {
+                  "type": "Identifier",
+                  "start": 3233,
+                  "end": 3242,
+                  "loc": {
+                    "start": {
+                      "line": 101,
+                      "column": 17,
+                      "index": 3233
+                    },
+                    "end": {
+                      "line": 101,
+                      "column": 26,
+                      "index": 3242
+                    },
+                    "identifierName": "overwrite"
+                  },
+                  "name": "overwrite"
+                }
+              }
+            }
+          }
+        ],
+        "extra": {
+          "trailingComma": 3242
+        }
       },
       "defIndex": {
         "decls": [],
@@ -14670,5 +15212,5 @@
       }
     }
   ],
-  "rawSites": 222
+  "rawSites": 224
 }
