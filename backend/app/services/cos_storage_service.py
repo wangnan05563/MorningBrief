@@ -427,9 +427,10 @@ class CosStorageService:
         await _cos_call(cos_client.delete_object(Key=key))
 
     async def delete_folder(self, prefix: str) -> int:
-        """删除整个文件夹（列举前缀下所有对象后批量删除）。
+        """删除整个文件夹及其下所有层级的对象（含子目录、含目录占位对象本身）。
 
-        返回删除的对象数量（含占位对象本身）。空文件夹（仅占位对象）也能删。
+        返回实际下发给 COS 删除的对象数量。列举口径见 _list_prefix_objects：
+        递归才能把 a/b/c.txt 这类深层对象一并删掉，否则只删顶层却照样报数。
         """
         if not is_cos_configured():
             raise BizError(code=400, message=_ERROR_MESSAGE_COS_NOT_CONFIGURED)
@@ -798,14 +799,21 @@ class CosStorageService:
         return stale
 
     async def _list_prefix_objects(self, prefix: str) -> list[dict]:
-        """列举某前缀下所有对象原始条目（不分页上限，最多 10 页）。"""
+        """递归列举前缀下**所有层级**的对象条目（分页，最多 10 页）。
+
+        T03313：这里必须显式传 delimiter=""。`list_objects_delimited` 的默认
+        delimiter 是 "/"，按目录分组后 Contents 只剩当前层的直接文件，子目录里的
+        对象全部落进 CommonPrefixes 被丢掉——删除文件夹只删顶层却报「已删 N 个」，
+        移动文件夹也只搬顶层，子目录原地留下成为无主对象。传空串才是真递归。
+        单层视图（list_path / 快照清点）仍走 _list_direct，两者不可互换。
+        """
         items: list[dict] = []
         marker = ""
         pages = 0
         while pages < _LIST_MAX_PAGES:
             pages += 1
             resp = await _cos_call(cos_client.list_objects_delimited(
-                prefix=prefix, marker=marker, max_keys=_LIST_PAGE_SIZE
+                prefix=prefix, delimiter="", marker=marker, max_keys=_LIST_PAGE_SIZE
             ))
             for item in resp.get("Contents", []) or []:
                 if item.get("Key"):
@@ -821,11 +829,11 @@ class CosStorageService:
         return items
 
     async def _list_all_keys(self, prefix: str) -> list[str]:
-        """列举某前缀下所有对象 Key。"""
+        """递归列举前缀下所有对象 Key（含各层子目录里的对象与目录占位对象）。"""
         return [item["Key"] for item in await self._list_prefix_objects(prefix)]
 
     async def _list_prefix_sizes(self, prefix: str) -> dict[str, int]:
-        """列举前缀下所有对象 → {key: size}。
+        """递归列举前缀下所有对象 → {key: size}。
 
         冲突预览要给出「覆盖哪个对象、它现在多大」，光有条数不够；
         与 _list_all_keys 共用同一份列举，预览所见即移动所为。
