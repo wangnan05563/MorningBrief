@@ -21,6 +21,8 @@
       />
       <!-- 失败原因常驻：移动端 toast 更容易被忽略，且键盘收起后用户看不到提示 -->
       <p v-if="loginError" class="m-login__error" role="alert" data-testid="login-error">{{ loginError }}</p>
+      <!-- 连续失败 ≥3 次后的下一步引导（T02634）：与 PC 同源文案，不新增 toast -->
+      <p v-if="retryGuide" class="m-login__guide" role="status" data-testid="login-retry-guide">{{ retryGuide }}</p>
       <button class="m-btn m-btn--primary" type="submit" :disabled="loading">
         {{ loading ? '登录中…' : '登 录' }}
       </button>
@@ -31,11 +33,11 @@
 </template>
 
 <script setup>
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../../stores/user'
 import { ElMessage } from '../../utils/message'
-import { describeLoginError } from '../../utils/loginError'
+import { describeLoginError, loginRetryGuide } from '../../utils/loginError'
 import { sanitizeRedirect, isMobilePath } from '../../utils/urlState'
 
 const router = useRouter()
@@ -46,6 +48,9 @@ const username = ref('')
 const password = ref('')
 const loading = ref(false)
 const loginError = ref('')
+// 连续失败次数（T02634）：后端无锁定策略，仅用于第 3 次起追加引导
+const failCount = ref(0)
+const retryGuide = computed(() => loginRetryGuide(failCount.value))
 const passwordRef = ref(null)
 
 async function onLogin() {
@@ -57,12 +62,14 @@ async function onLogin() {
   loginError.value = ''
   try {
     await userStore.login(username.value, password.value)
+    failCount.value = 0
     // 深链优先（T02511 / FR-UX-602）：只接受仍留在 /m 命名空间内的 redirect，
     // 否则手机上会被送回 PC 页再由 App.vue 反弹回来，出现一次无谓的闪烁。
     const back = sanitizeRedirect(route.query.redirect)
     router.replace(back && isMobilePath(back) ? back : '/m/home')
   } catch (e) {
     // 保留已输入内容，把原因常驻显示并聚焦密码框（FR-UX-304）
+    failCount.value += 1
     loginError.value = describeLoginError(e)
     await nextTick()
     passwordRef.value?.focus?.()
@@ -143,6 +150,18 @@ async function onLogin() {
   background: #fef0f0;
   color: #d54941;
   font-size: 14px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+/* 连续失败引导（T02634）：信息级配色，跟在错误条下方 */
+.m-login__guide {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f4f4f5;
+  color: #606266;
+  font-size: 13px;
   line-height: 1.5;
   text-align: left;
 }

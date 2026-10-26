@@ -66,3 +66,34 @@ describe('resolveLoginTarget', () => {
     assert.equal(resolveLoginTarget(at('/news/')).redirectUrl, '/news/login?redirect=%2F')
   })
 })
+
+// T02634：连续失败后的下一步引导。后端确认无失败计数 / 无锁定策略（AdminService.login
+// 只校验密码与 status），所以引导只能给「找管理员」与「不会锁定」，不能编造阈值。
+const { loginRetryGuide, LOGIN_RETRY_GUIDE_AFTER } =
+  await import('../../src/utils/loginError.js')
+
+describe('loginRetryGuide（T02634）', () => {
+  it('阈值是 3 次，前两次失败不打扰', () => {
+    assert.equal(LOGIN_RETRY_GUIDE_AFTER, 3)
+    assert.equal(loginRetryGuide(0), '')
+    assert.equal(loginRetryGuide(1), '')
+    assert.equal(loginRetryGuide(2), '')
+  })
+
+  it('第 3 次起给出「找管理员」与「不会锁定」', () => {
+    const guide = loginRetryGuide(3)
+    assert.match(guide, /联系管理员/)
+    assert.match(guide, /不会锁定/)
+    assert.match(guide, /可以继续重试/)
+  })
+
+  it('次数继续累加也不再变化（不出现「还可尝试 N 次」这类不存在的透出）', () => {
+    assert.equal(loginRetryGuide(4), loginRetryGuide(3))
+    assert.equal(loginRetryGuide(99), loginRetryGuide(3))
+  })
+
+  it('文案不含数字：后端没有阈值可透出，写死数字就是假承诺', () => {
+    assert.doesNotMatch(loginRetryGuide(3), /\d/)
+    assert.doesNotMatch(loginRetryGuide(3), /\d+\s*次/)
+  })
+})

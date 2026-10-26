@@ -40,6 +40,19 @@
         <template #title>{{ loginError }}</template>
       </el-alert>
 
+      <!-- 连续失败 ≥3 次的下一步引导（T02634）：只在横幅下方追加一行，
+           不新增 toast、不改横幅本身——两种提示并存会让用户不知道看哪个 -->
+      <el-alert
+        v-if="retryGuide"
+        class="login-guide"
+        type="info"
+        :closable="false"
+        show-icon
+        data-testid="login-retry-guide"
+      >
+        <template #title>{{ retryGuide }}</template>
+      </el-alert>
+
       <el-form
         ref="formRef"
         :model="form"
@@ -95,12 +108,12 @@
  * - 装饰元素缓慢浮动，营造柔和动态氛围
  * - 登录态由 useUserStore 管理，组件只负责表单与提交
  */
-import { ref, reactive, nextTick } from 'vue'
+import { ref, reactive, computed, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from '../../utils/message'
 import { User, Lock, Check } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
-import { describeLoginError } from '../../utils/loginError'
+import { describeLoginError, loginRetryGuide } from '../../utils/loginError'
 import { sanitizeRedirect } from '../../utils/urlState'
 
 // publicPath 跟随 Vite base：base='/news/' 时 publicPath='/news/'
@@ -115,6 +128,10 @@ const formRef = ref()
 const passwordRef = ref()
 const loading = ref(false)
 const loginError = ref('')
+// 连续失败次数：成功后清零。后端无锁定策略，所以这里只用于「第 3 次起追加引导」，
+// 不做退避、也不阻止重试（T02634）
+const failCount = ref(0)
+const retryGuide = computed(() => loginRetryGuide(failCount.value))
 const form = reactive({ username: '', password: '' })
 
 const rules = {
@@ -160,6 +177,7 @@ async function handleLogin() {
   loginError.value = ''
   try {
     await userStore.login(form.username, form.password)
+    failCount.value = 0
     ElMessage.success('登录成功')
     // 登录后优先回到深链真正指向的那一页（`?redirect=`，T02511 / FR-UX-602）；
     // 参数缺失或不是站内路径才落到审核页。redirect 的开放重定向校验在 sanitizeRedirect 里。
@@ -168,6 +186,7 @@ async function handleLogin() {
   } catch (e) {
     // 失败原因常驻在表单上方，同时保留已输入的用户名、聚焦密码框方便改；
     // 登录请求走 silent，不再叠一条会消失的 toast（FR-UX-304）
+    failCount.value += 1
     loginError.value = describeLoginError(e)
     await nextTick()
     passwordRef.value?.focus?.()
@@ -361,6 +380,12 @@ async function handleLogin() {
 
 /* 失败原因常驻条：与下方表单同宽，出现时把焦点交给密码框，改完可直接回车重试 */
 .login-error {
+  margin-bottom: 16px;
+  border-radius: var(--radius-md);
+}
+
+/* 连续失败引导条（T02634）：信息级而非错误级，紧跟在失败原因下方 */
+.login-guide {
   margin-bottom: 16px;
   border-radius: var(--radius-md);
 }

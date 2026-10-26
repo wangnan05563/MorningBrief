@@ -31,3 +31,19 @@ export function describeLoginError(err) {
   }
   return msg || '登录失败，请稍后重试'
 }
+
+/** 连续失败达到这个次数后，登录页追加「下一步怎么办」的引导（T02634） */
+export const LOGIN_RETRY_GUIDE_AFTER = 3
+
+/**
+ * 连续失败后的下一步引导。
+ *
+ * 事实依据：`AdminService.login` 只校验密码与 `status`，后端**没有任何失败计数与锁定策略**
+ * （全仓 grep 无 failed_attempts / lock_until 一类字段）。因此这里只能如实说「不会锁定、可继续重试」，
+ * 编造「N 次后锁定」会让用户在真出错时以为系统坏了。
+ * 文案里刻意不带数字：后端没有阈值可透出，写死一个「还可尝试 N 次」就是不存在的承诺。
+ */
+export function loginRetryGuide(failCount) {
+  if (!Number.isFinite(failCount) || failCount < LOGIN_RETRY_GUIDE_AFTER) return ''
+  return '账号密码由管理员分配，忘记密码请联系管理员；连续失败不会锁定账号，可以继续重试'
+}

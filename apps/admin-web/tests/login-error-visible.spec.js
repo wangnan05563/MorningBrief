@@ -129,3 +129,96 @@ test.describe('登录失败可见', () => {
     await expect(page.getByPlaceholder('密码')).toBeFocused()
   })
 })
+
+/**
+ * T02634：连续失败 ≥3 次的下一步引导。
+ *
+ * 事实依据见 `src/utils/loginError.js` 的注释：后端没有失败计数与锁定策略，
+ * 所以引导只说「找管理员 / 不会锁定」，且只在横幅下方追加一行——不新增 toast。
+ */
+const GUIDE = '[data-testid="login-retry-guide"]'
+const WRONG = { code: 401, message: '用户名或密码错误', data: null }
+
+test.describe('登录连续失败引导（T02634）', () => {
+  test.beforeEach(async ({ page }) => {
+    await keepPageVisible(page)
+    // toast 三秒自动消失，事后查 DOM 会漏（toHaveCount 还会一直重试到它消失为止）。
+    // 用 MutationObserver 把「出现过」记下来，才算真的证明没有第二条提示出口。
+    await page.addInitScript(() => {
+      window.__toastsSeen = 0
+      new MutationObserver((records) => {
+        for (const r of records) {
+          for (const n of r.addedNodes) {
+            if (n.nodeType !== 1) continue
+            if (n.classList?.contains('el-message') || n.querySelector?.('.el-message')) {
+              window.__toastsSeen += 1
+            }
+          }
+        }
+      }).observe(document, { childList: true, subtree: true })
+    })
+    await page.route('**/admin/api/v1/**', (route) =>
+      route.fulfill({ json: { code: 0, message: 'success', data: {} } }))
+  })
+
+  test('第 1/2 次不出现，第 3 次追加引导且不叠第二条提示', async ({ page }) => {
+    let attempts = 0
+    await mockLogin(page, (route) => {
+      attempts += 1
+      // 第 4 次（用正确密码）成功，用来验证成功后引导不再出现
+      return attempts < 4
+        ? route.fulfill({ json: WRONG })
+        : route.fulfill({ json: loginSuccessResponse })
+    })
+    await page.route('**/admin/api/v1/reviews*', (route) =>
+      route.fulfill({ json: { code: 0, message: 'success', data: { list: [], total: 0 } } }))
+
+    await page.goto('/login')
+    const btn = page.getByRole('button', { name: '登录' })
+    await page.getByPlaceholder('请输入用户名').fill('admin')
+    await page.getByPlaceholder('请输入密码').fill('wrong')
+
+    await btn.click()
+    await expect.poll(() => attempts).toBe(1)
+    await expect(page.locator(BANNER)).toContainText('用户名或密码错误')
+    await expect(page.locator(GUIDE)).toHaveCount(0)
+
+    await btn.click()
+    await expect.poll(() => attempts).toBe(2)
+    await expect(page.locator(GUIDE)).toHaveCount(0)
+
+    await btn.click()
+    await expect.poll(() => attempts).toBe(3)
+    await expect(page.locator(GUIDE)).toBeVisible({ timeout: 30000 })
+    await expect(page.locator(GUIDE)).toContainText('联系管理员')
+    await expect(page.locator(GUIDE)).toContainText('不会锁定')
+    // 不出现第二条提示出口：失败仍然只有常驻横幅一条
+    expect(await page.evaluate(() => window.__toastsSeen)).toBe(0)
+
+    // 成功后引导随离开登录页一起消失，且不会残留在列表页
+    await page.getByPlaceholder('请输入密码').fill('admin123')
+    await btn.click()
+    await expect(page).toHaveURL(/\/review$/, { timeout: 30000 })
+    await expect(page.locator(GUIDE)).toHaveCount(0)
+  })
+
+  test('移动端第 3 次失败同样追加引导', async ({ page }) => {
+    await mockLogin(page, (route) => route.fulfill({ json: WRONG }))
+    await useMobileViewport(page)
+    await page.goto('/m/login')
+
+    const btn = page.getByRole('button', { name: '登 录' })
+    await page.getByPlaceholder('账号').fill('admin')
+    await page.getByPlaceholder('密码').fill('wrong')
+
+    for (let i = 0; i < 2; i++) {
+      await btn.click()
+      await expect(page.locator(BANNER)).toBeVisible({ timeout: 30000 })
+    }
+    await expect(page.locator(GUIDE)).toHaveCount(0)
+
+    await btn.click()
+    await expect(page.locator(GUIDE)).toBeVisible({ timeout: 30000 })
+    await expect(page.locator(GUIDE)).toContainText('不会锁定')
+  })
+})
