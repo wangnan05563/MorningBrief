@@ -62,7 +62,7 @@ test.describe('破坏性操作确认', () => {
       // 影响条数（来自服务端预览，不是写死的「不可恢复」一句）
       await expect(box.getByText('书单 12 本 / 素材 340 条 / 工作流 5 条')).toBeVisible()
       await expect(box.getByText(/讲书稿书单 12 条随频道一并删除/)).toBeVisible()
-      await expect(box.getByText(/变成无主数据/)).toBeVisible()
+      await expect(box.getByText(/正文保留并回到全局素材池/)).toBeVisible()
       // 不可逆声明
       await expect(box.getByText('此操作不可恢复：频道及其书单没有回收站')).toBeVisible()
 

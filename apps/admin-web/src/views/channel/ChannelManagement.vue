@@ -1201,7 +1201,7 @@ async function handleDelete(row) {
     scope: `书单 ${preview.book_pool_items} 本 / 素材 ${preview.materials} 条 / 工作流 ${preview.workflows} 条`,
     lines: [
       `· 讲书稿书单 ${preview.book_pool_items} 条随频道一并删除（外键 ON DELETE CASCADE）；`,
-      `· 素材 ${preview.materials} 条的 channel_id 无外键约束，删除后变成无主数据，列表与聚合视图永久筛不到；`,
+      `· 素材 ${preview.materials} 条仅把 channel_id 置空（解绑），正文保留并回到全局素材池；`,
       `· 关联工作流 ${preview.workflows} 条仅把 channel_id 置空，记录本身保留。`,
     ],
     irreversible: '此操作不可恢复：频道及其书单没有回收站，只能靠事先备份还原。',

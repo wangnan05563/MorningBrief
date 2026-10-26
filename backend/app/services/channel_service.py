@@ -291,7 +291,8 @@ class ChannelService:
         口径与 delete_channel 的真实行为逐条对齐，避免确认框只说「不可恢复」
         而让人低估连带损失：
         - book_pool_item 带 ON DELETE CASCADE，随频道整本删除；
-        - material.channel_id 没有外键约束，删除后变成无主数据（列表与聚合永久筛不到）；
+        - material.channel_id 没有外键约束，由 delete_channel 显式置 NULL，
+          素材行保留并回到全局素材池（rewriter 的无频道回退口径）；
         - workflow.channel_id 由 delete_channel 显式置 NULL，工作流本身保留。
         """
         channel = await self.get_channel(channel_id)
@@ -313,10 +314,12 @@ class ChannelService:
         }
 
     async def delete_channel(self, channel_id: int) -> None:
-        """删除频道。关联 workflow 的 channel_id 手动置 NULL。
+        """删除频道。关联 workflow / material 的 channel_id 手动置 NULL。
 
         不依赖 SQLite 外键 ON DELETE SET NULL：测试环境默认未开启
         PRAGMA foreign_keys，手动 UPDATE 保证行为一致。
+        material.channel_id 连外键都没有（T02598：不置 NULL 就会留下指向
+        已删除频道的无主行，列表与聚合视图永久筛不到，只能手工捞表）。
         同时发布 schedule_changed 事件（schedule_time 置空），
         让调度器移除该频道的定时任务。
         """
@@ -329,11 +332,21 @@ class ChannelService:
             .where(Workflow.channel_id == channel_id)
             .values(channel_id=None)
         )
+        detached_materials = (
+            await self.db.execute(
+                update(Material)
+                .where(Material.channel_id == channel_id)
+                .values(channel_id=None)
+            )
+        ).rowcount
         await self.db.delete(channel)
         await self.db.commit()
         await self.invalidate_list_cache()
         # 移除该频道的定时任务（schedule_time 置空表示移除）
         self._publish_schedule_changed(channel_id, "", channel.is_active)
-        logger.info("删除频道 channel_id=%s name=%s", channel_id, channel.name)
+        logger.info(
+            "删除频道 channel_id=%s name=%s 解绑素材 %s 条",
+            channel_id, channel.name, detached_materials,
+        )
 
 

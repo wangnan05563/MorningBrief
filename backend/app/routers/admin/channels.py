@@ -577,7 +577,7 @@ async def delete_channel_preview(
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
-    """删除频道的影响面预览：书单条数、会变成无主的素材条数、会被置空的工作流条数。"""
+    """删除频道的影响面预览：书单条数、会被解绑的素材条数、会被置空的工作流条数。"""
     svc = ChannelService(db)
     try:
         data = await svc.delete_preview(channel_id=channel_id)

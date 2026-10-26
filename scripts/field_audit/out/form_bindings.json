@@ -122,6 +122,39 @@
       ]
     },
     {
+      "file": "views/maintenance/Maintenance.vue",
+      "object": "cacheForm",
+      "endpoints": [],
+      "boundCount": 2,
+      "missing": [
+        "dry_run",
+        "target"
+      ]
+    },
+    {
+      "file": "views/maintenance/Maintenance.vue",
+      "object": "dbForm",
+      "endpoints": [],
+      "boundCount": 4,
+      "missing": [
+        "days",
+        "dry_run",
+        "target",
+        "workflow_id"
+      ]
+    },
+    {
+      "file": "views/maintenance/Maintenance.vue",
+      "object": "logForm",
+      "endpoints": [],
+      "boundCount": 3,
+      "missing": [
+        "days",
+        "dry_run",
+        "target"
+      ]
+    },
+    {
       "file": "views/notification/NotificationConfig.vue",
       "object": "logFilter",
       "endpoints": [
@@ -144,6 +177,7 @@
         "POST /queue/tasks/*/cancel",
         "POST /queue/tasks/*/retry",
         "POST /queue/tasks/batch-delete",
+        "POST /workflows/batch-delete/preview",
         "PUT /queue/config",
         "PUT /queue/tasks/*/priority"
       ],
@@ -160,6 +194,7 @@
         "POST /queue/tasks/*/cancel",
         "POST /queue/tasks/*/retry",
         "POST /queue/tasks/batch-delete",
+        "POST /workflows/batch-delete/preview",
         "PUT /queue/config",
         "PUT /queue/tasks/*/priority"
       ],
@@ -175,8 +210,12 @@
       "endpoints": [
         "POST /reviews/batch-action"
       ],
-      "boundCount": 1,
+      "boundCount": 5,
       "missing": [
+        "channel_id",
+        "date_from",
+        "date_to",
+        "reviewer",
         "workflow_id"
       ]
     },

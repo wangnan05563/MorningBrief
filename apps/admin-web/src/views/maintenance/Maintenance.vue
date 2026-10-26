@@ -127,7 +127,7 @@
           <el-form :model="dbForm" label-position="top" class="cleanup-form">
             <el-form-item label="清理目标">
               <el-select v-model="dbForm.target" style="width: 100%">
-                <el-option label="全部清理" value="all" />
+                <el-option label="全部清理（不含无主素材治理）" value="all" />
                 <el-option label="旧播放日志" value="old_playlogs" />
                 <el-option label="旧工作流记录" value="old_workflows" />
                 <el-option label="旧审核记录（已完结）" value="old_reviews" />
@@ -136,7 +136,16 @@
                 <el-option label="旧 AI 用量日志" value="old_ai_usage" />
                 <el-option label="VACUUM 压缩" value="vacuum" />
                 <el-option label="指定工作流全链清理" value="workflow_chain" />
+                <el-option label="无主素材解绑（保留正文）" value="orphan_materials_detach" />
+                <el-option label="无主素材删除（连正文删）" value="orphan_materials_delete" />
               </el-select>
+            </el-form-item>
+            <el-form-item v-if="orphanAction" label="无主素材">
+              <div class="form-tip">
+                指 channel_id 仍写着某个频道、但该频道已被删除的素材行（旧版删频道没有解绑留下的存量，T02598）。
+                「解绑」只清空归属、正文保留并回到全局素材池；「删除」连正文一起删。
+                先按「预览清理」确认条数与样例 ID，再执行。
+              </div>
             </el-form-item>
             <el-form-item v-if="isWorkflowChain" label="工作流 ID">
               <el-input
@@ -267,12 +276,17 @@ const TARGET_LABELS = {
   expired_blacklist: '过期 JWT 黑名单', old_dedup: '旧爬虫去重记录', old_ai_usage: '旧 AI 用量日志',
   vacuum: 'VACUUM 压缩', old_logs: '旧日志文件', large_logs: '大日志文件（>10MB）',
   workflow_chain: '指定工作流全链清理',
+  orphan_materials_detach: '无主素材解绑', orphan_materials_delete: '无主素材删除',
 }
 const CATEGORY_TARGETS = {
   cache: ['all', 'ttlcache', 'pycache', 'temp'],
-  database: ['all', 'old_playlogs', 'old_workflows', 'old_reviews', 'expired_blacklist', 'old_dedup', 'old_ai_usage', 'vacuum', 'workflow_chain'],
+  database: ['all', 'old_playlogs', 'old_workflows', 'old_reviews', 'expired_blacklist', 'old_dedup', 'old_ai_usage', 'vacuum', 'workflow_chain',
+    'orphan_materials_detach', 'orphan_materials_delete'],
   logs: ['all', 'old_logs', 'large_logs'],
 }
+// 不按天数执行的数据库目标（解绑/删除都只按「channel_id 悬空」这一个条件筛）
+const DB_TARGETS_NO_DAYS = ['vacuum', 'expired_blacklist', 'workflow_chain',
+  'orphan_materials_detach', 'orphan_materials_delete']
 function targetLabel(category, target) {
   const known = (CATEGORY_TARGETS[category] || []).includes(target)
   return known ? `${TARGET_LABELS[target] || target}（${target}）` : target
@@ -280,7 +294,7 @@ function targetLabel(category, target) {
 function showDays(category, form) {
   if (category === 'cache') return false
   if (category === 'logs') return form.target !== 'large_logs'
-  return !['vacuum', 'expired_blacklist'].includes(form.target)
+  return !DB_TARGETS_NO_DAYS.includes(form.target)
 }
 
 const CleanupResult = {
@@ -335,11 +349,18 @@ const cacheLoading = ref(false)
 const dbLoading = ref(false)
 const logLoading = ref(false)
 
-// VACUUM / expired_blacklist / 指定工作流全链清理都不按天数执行
+// VACUUM / expired_blacklist / 指定工作流全链清理 / 无主素材治理都不按天数执行
 const showDbDays = computed(
-  () => !['vacuum', 'expired_blacklist', 'workflow_chain'].includes(dbForm.value.target)
+  () => !DB_TARGETS_NO_DAYS.includes(dbForm.value.target)
 )
 const isWorkflowChain = computed(() => dbForm.value.target === 'workflow_chain')
+// 无主素材的两个治理口径（T02598）：null 表示当前目标不是无主素材
+const orphanAction = computed(() => {
+  const target = dbForm.value.target
+  return target === 'orphan_materials_detach' || target === 'orphan_materials_delete'
+    ? target.replace('orphan_materials_', '')
+    : null
+})
 // large_logs 不需要天数输入
 const showLogDays = computed(() => logForm.value.target !== 'large_logs')
 
@@ -392,6 +413,8 @@ async function handleCleanup(category) {
     ElMessage.error('请填写要清理的工作流 ID')
     return
   }
+  // 无主素材治理（T02598）：只按「channel_id 悬空」这一个条件筛，没有天数语义
+  const orphan = category === 'database' ? orphanAction.value : null
 
   // 非预览模式二次确认：写清删什么、保留多久、预览到多少条、能否恢复（M59）
   if (!form.dry_run) {
@@ -409,11 +432,17 @@ async function handleCleanup(category) {
         : `${CATEGORY_NAMES[category]} · ${targetLabel(category, form.target)}`,
       scope: chain
         ? '仅删除该工作流及其稿件/节目/审核/播放数据等子表，其他工作流不受影响'
-        : showDays(category, form)
-          ? `仅保留最近 ${form.days} 天，早于该窗口的数据与文件会被删除`
-          : '该目标不受天数条件约束',
+        : orphan
+          ? orphan === 'detach'
+            ? '仅影响 channel_id 指向已删除频道的素材行：归属置空，正文保留并回到全局素材池；正常素材不受影响'
+            : '仅影响 channel_id 指向已删除频道的素材行：连同正文一起删除；正常素材不受影响'
+          : showDays(category, form)
+            ? `仅保留最近 ${form.days} 天，早于该窗口的数据与文件会被删除`
+            : '该目标不受天数条件约束',
       lines: previewLines,
-      irreversible: '删除后不可恢复：SQLite 没有回收站，只能靠事先备份还原。',
+      irreversible: orphan === 'detach'
+        ? '解绑后认不回原频道：那个频道已经不存在，只能重新手动指定归属。'
+        : '删除后不可恢复：SQLite 没有回收站，只能靠事先备份还原。',
       confirmLabel: '确认执行',
     })
     if (!ok) return
@@ -427,7 +456,7 @@ async function handleCleanup(category) {
     const payload = chain
       ? { workflow_id: workflowId, dry_run: form.dry_run }
       : { target: form.target, dry_run: form.dry_run }
-    if (!chain && category !== 'cache') {
+    if (!chain && !orphan && category !== 'cache') {
       payload.days = form.days
     }
     // 长任务专用超时（M62）：这一页的三个「立即执行」都是分钟级操作，

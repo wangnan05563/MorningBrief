@@ -3,7 +3,7 @@
 职责：
 1. 查询存储状态（数据库大小、日志大小、缓存条目数）
 2. 清理缓存（TTLCache 进程内缓存、__pycache__ 目录、临时文件）
-3. 清理数据库（旧播放日志、旧工作流、旧审核、过期黑名单、旧爬虫去重、旧 AI 用量、VACUUM）
+3. 清理数据库（旧播放日志、旧工作流、旧审核、过期黑名单、旧爬虫去重、旧 AI 用量、VACUUM、无主素材治理）
 4. 清理日志文件（旧日志、大日志）
 
 设计要点：
@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import delete, select, func, text, or_
+from sqlalchemy import delete, select, func, text, update, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache.manager import cache
@@ -33,11 +33,14 @@ from app.database import engine
 from app.models import (
     AIUsageLog,
     AutoReviewStat,
+    BookPoolItem,
+    Channel,
     Comment,
     CrawlerDedup,
     Episode,
     Favorite,
     JwtBlacklist,
+    Material,
     NotificationLog,
     PlayLog,
     PlayProgress,
@@ -54,6 +57,20 @@ settings = get_settings()
 
 # 大日志文件阈值（10MB），超过此大小可清理
 LARGE_LOG_THRESHOLD_BYTES = 10 * 1024 * 1024
+
+# 无主素材预览里列出的样例 ID 上限
+ORPHAN_MATERIAL_SAMPLE_LIMIT = 20
+# 单条 IN (...) 的 ID 数上限：SQLite 的绑定变量默认上限 999，超了整批清理会直接报错
+ORPHAN_MATERIAL_CHUNK = 500
+
+
+def _chunks(items: list[int]) -> list[list[int]]:
+    """切成不超过 ORPHAN_MATERIAL_CHUNK 的分片（空输入返回空列表，不发无意义语句）。"""
+    return [
+        items[i:i + ORPHAN_MATERIAL_CHUNK]
+        for i in range(0, len(items), ORPHAN_MATERIAL_CHUNK)
+    ]
+
 
 # 工作流全链清理的逐表口径：display 顺序 = 删除/统计顺序（子表在前，Workflow 最后）
 WORKFLOW_CHAIN_TABLES = {
@@ -245,6 +262,8 @@ class MaintenanceService:
         Args:
             target: old_playlogs | old_workflows | old_reviews | expired_blacklist
                     | old_dedup | old_ai_usage | vacuum | all
+                    | orphan_materials_detach | orphan_materials_delete
+                    （后两个是一次性数据治理，不参与 all）
             days: 保留天数（按时间清理时使用，最小值 1）
             dry_run: 仅预览不执行
             admin_name: 操作人（审计日志用）
@@ -279,6 +298,18 @@ class MaintenanceService:
                 lambda: self._cleanup_expired_blacklist(dry_run),
                 dry_run, cleaned, errors,
             )
+
+        # 无主素材治理（T02598）：按 channel_id 悬空这一条件清理，不按 days。
+        # 两个目标都刻意不纳入 all——「全部清理」是例行按时间瘦身，
+        # 把「删正文 / 改归属」这种一次性数据治理混进去，一次误点就是数据事故。
+        for orphan_key, orphan_action in (
+            ("orphan_materials_detach", "detach"),
+            ("orphan_materials_delete", "delete"),
+        ):
+            if target == orphan_key:
+                total_deleted += await self._db_step_orphan_materials(
+                    target, orphan_action, dry_run, cleaned, errors
+                )
 
         # VACUUM 步骤（消息格式不同）
         if target in ("vacuum", "all"):
@@ -343,6 +374,93 @@ class MaintenanceService:
         except Exception as e:
             errors.append(f"VACUUM 失败: {e}")
             logger.exception("VACUUM 失败")
+
+    # ===== 无主素材治理（T02598）=====
+
+    async def _orphan_material_ids(self) -> list[int]:
+        """channel_id 有值、但在 channel 表里查无此频道的素材 ID（升序）。
+
+        material.channel_id 没有外键约束（同文件的 workflow/episode 都有），
+        所以频道被删过就可能留下悬空值；这些行在按频道筛选的列表与聚合视图里
+        永远筛不到，既不展示也不删除，占着库还可能被后续任务误用。
+        """
+        result = await self.db.execute(
+            select(Material.id)
+            .where(Material.channel_id.is_not(None))
+            .where(Material.channel_id.notin_(select(Channel.id)))
+            .order_by(Material.id)
+        )
+        return [row[0] for row in result.all()]
+
+    async def _count_material_book_pool_refs(self, material_ids: list[int]) -> int:
+        """讲书稿书单里引用这批素材的池项数（book_pool_item.material_id 无外键）。"""
+        total = 0
+        for chunk in _chunks(material_ids):
+            result = await self.db.execute(
+                select(func.count())
+                .select_from(BookPoolItem)
+                .where(BookPoolItem.material_id.in_(chunk))
+            )
+            total += result.scalar() or 0
+        return total
+
+    async def _apply_orphan_materials(self, material_ids: list[int], action: str) -> int:
+        """按 ID 清单执行解绑或删除，返回实际处理的条数。"""
+        applied = 0
+        for chunk in _chunks(material_ids):
+            if action == "detach":
+                await self.db.execute(
+                    update(Material).where(Material.id.in_(chunk)).values(channel_id=None)
+                )
+            else:
+                await self.db.execute(delete(Material).where(Material.id.in_(chunk)))
+            applied += len(chunk)
+        await self.db.commit()
+        return applied
+
+    async def _db_step_orphan_materials(
+        self, target: str, action: str, dry_run: bool, cleaned: list, errors: list
+    ) -> int:
+        """无主素材治理步骤：detach 只解绑（素材保留），delete 连正文一起删。
+
+        先取 ID 清单、再按同一份清单执行，预览里的条数与样例和真正改动的行严格一致；
+        delete 额外报出书单引用数，避免删完才发现「原来书单还在指它」。
+        """
+        key = f"orphan_materials_{action}"
+        verb = "解绑" if action == "detach" else "删除"
+        if target != key:
+            return 0
+        try:
+            ids = await self._orphan_material_ids()
+            book_refs = (
+                await self._count_material_book_pool_refs(ids) if action == "delete" else 0
+            )
+            processed = 0 if dry_run else await self._apply_orphan_materials(ids, action)
+            head = (
+                f"无主素材{verb}：{'将影响' if dry_run else '已处理'} {len(ids)} 条"
+                f"（{'channel_id 置空，素材回到全局池' if action == 'detach' else '素材行连同正文一起删除'}）"
+            )
+            if ids:
+                shown = ids[:ORPHAN_MATERIAL_SAMPLE_LIMIT]
+                tail = (
+                    f"（共 {len(ids)} 条，此处列前 {len(shown)} 条）"
+                    if len(ids) > len(shown)
+                    else ""
+                )
+                head += f"；样例 ID {', '.join(map(str, shown))}{tail}"
+            else:
+                head += "；当前没有 channel_id 悬空的素材"
+            if book_refs:
+                head += (
+                    f"；另有 {book_refs} 条讲书稿书单指向这些素材"
+                    "（书单有标题快照，删后仍能展示，但取书范围会少这些书）"
+                )
+            cleaned.append(head)
+            return processed
+        except Exception as e:
+            errors.append(f"无主素材{verb}失败: {e}")
+            logger.exception("无主素材治理失败")
+            return 0
 
     # ===== 日志清理 =====
 
