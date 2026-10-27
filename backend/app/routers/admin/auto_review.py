@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit_reason import audit_detail
+from app.core import keyword_guard
 from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.response import success, error
 from app.database import get_db
@@ -54,6 +55,8 @@ def _config_payload(config: AutoReviewConfig, keywords: List[str]) -> dict:
         "require_content_safe": config.require_content_safe,
         "require_steps_first_success": config.require_steps_first_success,
         "keyword_whitelist": keywords,
+        # T02604：长度护栏的阈值随配置下发，界面提示与保存校验读同一份数
+        "keyword_limits": keyword_guard.limits_payload(),
         "risk_acknowledged": config.risk_acknowledged,
         "risk_acknowledged_by": config.risk_acknowledged_by,
         "risk_acknowledged_at": (

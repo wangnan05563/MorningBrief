@@ -18,6 +18,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit_reason import audit_detail
+from app.core import keyword_guard
 from app.core.exceptions import BizError
 from app.core.timeutil import localnow_naive
 from app.database import AsyncSessionLocal
@@ -157,6 +158,12 @@ class AutoReviewService:
         """
         config = await self.get_config()
         keywords = [str(k).strip() for k in (keyword_whitelist or []) if str(k).strip()]
+        # T02604 裁决方案1：匹配口径（子串包含）不动，改在录入侧拦住过短的关键词。
+        # 存量里已写死的短词会让下一次保存被点名，删掉即可——不静默改判定，
+        # 免得现有白名单突然全部不命中。
+        too_short = keyword_guard.find_too_short(keywords)
+        if too_short:
+            raise BizError(code=400, message=keyword_guard.reject_message(too_short))
         enforced, skipped = self.split_rules(
             require_content_safe, require_steps_first_success, keywords,
         )

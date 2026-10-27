@@ -1654,7 +1654,7 @@
       "endpoint": "retry_failed_auto_review",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/auto_review.py:138",
+        "source": "backend/app/routers/admin/auto_review.py:141",
         "refs": [
           "",
           "/retry/{stat_id}",
@@ -5507,7 +5507,7 @@
       "model": {
         "name": "ConfigUpdateRequest",
         "module": "app.routers.admin.auto_review",
-        "source": "backend/app/routers/admin/auto_review.py:28",
+        "source": "backend/app/routers/admin/auto_review.py:29",
         "extra": "ignore",
         "fields": [
           "enabled",
@@ -5525,7 +5525,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/auto_review.py:80",
+        "source": "backend/app/routers/admin/auto_review.py:83",
         "refs": [
           "/config",
           "AdminPayload",

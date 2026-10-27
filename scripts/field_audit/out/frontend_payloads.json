@@ -517,7 +517,7 @@
       "sites": [
         {
           "file": "views/system/AutoReviewConfig.vue",
-          "line": 441,
+          "line": 465,
           "fn": "getAutoReviewConfig",
           "fieldCount": 0,
           "unresolved": []
@@ -534,7 +534,7 @@
       "sites": [
         {
           "file": "views/system/AutoReviewConfig.vue",
-          "line": 573,
+          "line": 602,
           "fn": "listAutoReviewHistory",
           "fieldCount": 1,
           "unresolved": []
@@ -551,7 +551,7 @@
       "sites": [
         {
           "file": "views/system/AutoReviewConfig.vue",
-          "line": 546,
+          "line": 575,
           "fn": "getAutoReviewStats",
           "fieldCount": 1,
           "unresolved": []
@@ -2099,7 +2099,7 @@
       "sites": [
         {
           "file": "views/system/AutoReviewConfig.vue",
-          "line": 608,
+          "line": 637,
           "fn": "retryFailedAutoReview",
           "fieldCount": 0,
           "unresolved": []
@@ -3262,7 +3262,7 @@
       "sites": [
         {
           "file": "views/system/AutoReviewConfig.vue",
-          "line": 504,
+          "line": 528,
           "fn": "updateAutoReviewConfig",
           "fieldCount": 5,
           "unresolved": []

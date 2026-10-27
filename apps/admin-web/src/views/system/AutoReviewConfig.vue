@@ -30,11 +30,14 @@
         @retry="retryLoad"
       />
 
+    <!-- 本表单只有一个文本输入框（关键词），浏览器会把它当隐式提交目标：
+         回车会整页刷新（URL 变 ?），刚敲进白名单还没保存的词会被刷掉。T02604 实测到才补的。 -->
       <el-form
         :model="form"
         label-position="top"
         v-loading="loadingConfig"
         class="config-form"
+        @submit.prevent
       >
         <!-- 总开关 -->
         <el-form-item>
@@ -100,7 +103,7 @@
           <div class="keyword-input-wrap">
             <el-input
               v-model="keywordInput"
-              placeholder="输入关键词后按回车添加（留空表示不启用此规则）"
+              :placeholder="keywordPlaceholder"
               @keyup.enter="addKeyword"
             />
             <IconButton
@@ -115,6 +118,7 @@
               v-for="(kw, idx) in form.keyword_whitelist"
               :key="idx"
               closable
+              :type="keywordTooShort(kw) ? 'danger' : 'primary'"
               @close="removeKeyword(idx)"
               class="keyword-tag"
             >
@@ -122,6 +126,10 @@
             </el-tag>
             <span v-if="!form.keyword_whitelist.length" class="skip-warn">
               未配置关键词：本项不检查
+            </span>
+            <span v-else-if="shortKeywords.length" class="skip-warn">
+              「{{ shortKeywords.join('、') }}」过短：白名单按子串包含匹配，
+              这类词会把大量稿件一并放行，保存会被服务端拒绝，请先删除或改写。
             </span>
           </div>
         </el-form-item>
@@ -353,6 +361,7 @@ import { Refresh, Setting, Plus, DataLine, CircleCheck, CircleClose, Timer, List
 // 「隐藏期间不入 DOM」的窗口守卫（FR-UX-301/303）
 import { ElMessage, notifyErrorOnce } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
+import { filterTooShort, keywordTooShort as isKeywordTooShort, minLengthHint } from '../../utils/keywordGuard'
 import {
   getAutoReviewConfig,
   updateAutoReviewConfig,
@@ -379,6 +388,21 @@ const form = reactive({
 const { apply: applyDraft, peek: peekDraft, track: trackDraft, commit: commitDraft } = useDraft('auto-review-config')
 const enableDraft = trackDraft(form)
 const keywordInput = ref('')
+
+// T02604 裁决方案1：白名单是子串包含匹配，过短的关键词等于大面积放行。
+// 阈值只从配置接口的 keyword_limits 读，界面不另写一套数字，免得两侧漂移。
+const keywordLimits = computed(() => config.value?.keyword_limits || null)
+const shortKeywords = computed(() => filterTooShort(form.keyword_whitelist, keywordLimits.value))
+const keywordTooShort = (kw) => isKeywordTooShort(kw, keywordLimits.value)
+
+const keywordPlaceholder = computed(() => {
+  const lim = keywordLimits.value
+  if (!lim) return '输入关键词后按回车添加（留空表示不启用此规则）'
+  return (
+    '输入关键词后按回车添加（留空=不启用）；' +
+    `按子串包含匹配，词至少 ${lim.min_length} 个字、纯英文 ${lim.ascii_min_length} 个字母`
+  )
+})
 
 // T02492 / FR-UX-204：风险确认勾选——刻意不放进 form，避免断点续录把上次的勾选恢复出来
 // （恢复即等于替管理员预先确认，护栏失效）
@@ -524,6 +548,11 @@ function addKeyword() {
   if (!kw) return
   if (form.keyword_whitelist.includes(kw)) {
     ElMessage.warning('关键词已存在')
+    return
+  }
+  const lim = keywordLimits.value
+  if (keywordTooShort(kw)) {
+    ElMessage.warning(`关键词「${kw}」太短：白名单按子串包含匹配，${minLengthHint(kw, lim)}，过短等于大面积放行`)
     return
   }
   form.keyword_whitelist.push(kw)

@@ -3168,9 +3168,9 @@
     {
       "endpoint": "PUT /auto-review/config",
       "model": "ConfigUpdateRequest",
-      "modelSource": "backend/app/routers/admin/auto_review.py:28",
+      "modelSource": "backend/app/routers/admin/auto_review.py:29",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/auto_review.py:80",
+      "handlerSource": "backend/app/routers/admin/auto_review.py:83",
       "declared": [
         "enabled",
         "keyword_whitelist",
@@ -3182,7 +3182,7 @@
         "callSites": [
           {
             "file": "views/system/AutoReviewConfig.vue",
-            "line": 504,
+            "line": 528,
             "fn": "updateAutoReviewConfig",
             "fieldCount": 5,
             "unresolved": []

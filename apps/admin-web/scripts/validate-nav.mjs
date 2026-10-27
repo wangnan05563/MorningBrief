@@ -600,7 +600,7 @@ export const METRIC_UNIT_ALLOW = [
   },
   {
     file: 'views/system/AutoReviewConfig.vue',
-    lines: [254],
+    lines: [262],
     reason: '「{{ count }} 次」是失败记录条数徽标，不是统计指标 meta',
   },
   {
