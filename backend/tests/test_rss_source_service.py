@@ -145,18 +145,15 @@ async def test_check_all_sources_all_ok(fresh_service, mock_resolve_rss_path, mo
     mock_ac.__aenter__ = AsyncMock(return_value=mock_ac)
     mock_ac.__aexit__ = AsyncMock(return_value=None)
 
-    svc.httpx.AsyncClient = MagicMock(return_value=mock_ac)
+    # svc.httpx 就是全局 httpx 模块：直接赋值会让 mock 泄漏到整个进程，
+    # 且 finally 里的「恢复」读到的已是被换掉的值，等于没恢复。
+    monkeypatch.setattr(svc.httpx, "AsyncClient", MagicMock(return_value=mock_ac))
 
-    try:
-        result = await svc.check_all_sources()
-        assert result["total"] == 1, f"total={result['total']}"
-        assert result["ok"] == 1, f"ok={result['ok']} fail={result['fail']} sources={[s['status'] for s in result.get('sources', [])]}"
-        assert result["fail"] == 0
-        assert result["sources"][0]["status"] == "ok"
-    finally:
-        # Restore original
-        import httpx
-        svc.httpx.AsyncClient = httpx.AsyncClient
+    result = await svc.check_all_sources()
+    assert result["total"] == 1, f"total={result['total']}"
+    assert result["ok"] == 1, f"ok={result['ok']} fail={result['fail']} sources={[s['status'] for s in result.get('sources', [])]}"
+    assert result["fail"] == 0
+    assert result["sources"][0]["status"] == "ok"
 
 
 @pytest.mark.asyncio

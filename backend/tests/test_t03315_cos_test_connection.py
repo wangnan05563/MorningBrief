@@ -23,6 +23,9 @@ def cos_configured(monkeypatch):
     monkeypatch.setattr(s, "COS_SECRET_KEY", "skx")
     monkeypatch.setattr(s, "COS_BUCKET", "bkt")
     monkeypatch.setattr(s, "COS_REGION", "ap-guangzhou")
+    # app.cos.client 在导入时绑定了自己的 settings 实例；一旦别的测试
+    # cache_clear 过 get_settings，两者会分叉，只 patch get_settings() 会被忽略。
+    monkeypatch.setattr(cos_client_mod, "settings", s)
     return s
 
 
