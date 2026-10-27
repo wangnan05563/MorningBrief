@@ -1826,7 +1826,10 @@ class WorkflowScheduler:
         - sender 内部已处理开关检查、频次去重、模板渲染、日志记录
         - 任何异常都不向上抛出，避免中断工作流主流程
         - sender 返回 failed 时降级调用 _alert_operators 兜底，确保运维一定收到消息
+        - 站内收件箱（T03304）是独立通道：待审核/执行失败先落 admin_inbox，
+          不依赖外部渠道配置，也不跟随 sender 的成败
         """
+        await self._write_inbox_notification(event_type, workflow_id, extra_vars)
         try:
             from app.services.notification import get_notification_sender
             sender = get_notification_sender()
@@ -1847,6 +1850,34 @@ class WorkflowScheduler:
             )
             await self._alert_operators(
                 f"工作流 {workflow_id} 通知发送异常 (event={event_type}): {e}"
+            )
+
+    async def _write_inbox_notification(
+        self,
+        event_type: str,
+        workflow_id: str,
+        extra_vars: dict | None = None,
+    ) -> None:
+        """把需要人处置的工作流事件写进 admin 收件箱（T03304）。
+
+        只处理 WORKFLOW_INBOX_EVENTS 白名单里的事件，其余事件直接返回、不查库。
+        写在独立 session 里并吞掉异常：收件箱不可用不能反过来中断工作流主流程
+        （主流程此刻可能正在收尾失败处理）。
+        """
+        from app.services import mobile_service
+
+        if event_type not in mobile_service.WORKFLOW_INBOX_EVENTS:
+            return
+        try:
+            async with AsyncSessionLocal() as session:
+                await mobile_service.notify_workflow_event(
+                    session, event_type, workflow_id, extra_vars,
+                )
+                await session.commit()
+        except Exception as e:
+            logger.exception(
+                "收件箱写入失败 workflow_id=%s event_type=%s: %s",
+                workflow_id, event_type, e,
             )
 
     # ===== 告警 =====

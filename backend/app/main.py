@@ -990,6 +990,42 @@ async def _migrate_workflow_step_quality_check() -> None:
         conn.close()
 
 
+async def _migrate_admin_inbox_dedup_column() -> None:  # NOSONAR
+    """admin_inbox 追加 dedup_key 列 + (admin_id,msg_type,dedup_key) 唯一索引（T03304，幂等）。
+
+    create_all 不会给已存在的表补列或补索引，而幂等去重必须落在数据库约束上
+    （应用层「先查再插」在并发重放时会双写）。唯一索引含 admin_id：同一事件要发给
+    每个 admin 各一条，收件人不同不算重复；dedup_key 为 NULL 的行 SQLite 视为互不相等，
+    手工/测试写入不受影响。索引名与 models/mobile.py 的 Index 同名（ix_ 前缀不会被
+    normalize_metadata_for_sqlite 改写），新建库与历史库最终结构一致。
+    """
+    import sqlite3
+    from app.paths import resolve_db_path
+
+    db_path = str(resolve_db_path())
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(admin_inbox)")
+        cols = {row[1] for row in cur.fetchall()}
+        if not cols:
+            return  # 表还不存在（create_all 未建），无从迁移
+        if "dedup_key" not in cols:
+            cur.execute("ALTER TABLE admin_inbox ADD COLUMN dedup_key VARCHAR(128)")
+            logger.info("[startup] admin_inbox 表迁移完成，新增 dedup_key 列")
+        cur.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_admin_inbox_dedup "
+            "ON admin_inbox (admin_id, msg_type, dedup_key)"
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        # 索引建不起来等于去重失效，是功能性问题，按 error 记而不是 warning
+        log_key_failure(domain="startup", event="admin_inbox dedup_key 迁移失败", exc=e, level="error")
+    finally:
+        conn.close()
+
+
 async def _seed_default_channels() -> None:  # NOSONAR
     """首次启动自动 seed 默认频道（幂等）。
 
@@ -1252,6 +1288,12 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
             await _migrate_workflow_step_quality_check()
         except Exception as e:
             log_key_failure(domain="startup", event="workflow_step quality_check 约束迁移失败", exc=e, level="warning")
+
+        # T03304：admin_inbox 追加 dedup_key + (admin_id,msg_type,dedup_key) 唯一索引（幂等）
+        try:
+            await _migrate_admin_inbox_dedup_column()
+        except Exception as e:
+            log_key_failure(domain="startup", event="admin_inbox dedup_key 迁移失败", exc=e, level="error")
 
         # 自动 seed 默认频道（幂等，确保工作流监控页频道选项非空）
         try:

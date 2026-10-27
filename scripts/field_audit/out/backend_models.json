@@ -6399,6 +6399,7 @@
         "admin_id",
         "body",
         "created_at",
+        "dedup_key",
         "id",
         "level",
         "msg_type",

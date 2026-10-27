@@ -3,6 +3,7 @@
 承载移动端专属业务逻辑，复用现有 StatsService / Review / AuditLog / NotificationLog：
 - push_admin_message：向某运营人员写入收件箱消息，并记录触达日志（notification_log），
   最佳努力经已配置 IM 渠道（钉钉/企微）fan-out 真实下发（无渠道配置时优雅 no-op）
+- notify_workflow_event：把「待审核 / 执行失败」两个需要人处置的工作流事件写进全体 admin 的收件箱
 - get_inbox / mark_read：运营消息收件箱的读取与标记已读
 - register_device：设备登记 / 推送 token 注册（幂等 upsert，支撑推送与登录风控）
 - dashboard_summary：移动首页聚合（今日指标 + 待审数 + 未读数），减少首屏并发
@@ -22,6 +23,7 @@ from typing import Optional
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+from app.models.admin_user import AdminRole, AdminUser
 from app.models.audit_log import AuditLog
 from app.models.mobile import AdminDevice, AdminInbox
 from app.models.notification_log import NotificationLog
@@ -99,22 +101,52 @@ async def push_admin_message(
     title: str,
     body: Optional[str] = None,
     payload: Optional[dict] = None,
-) -> AdminInbox:
+    dedup_key: Optional[str] = None,
+    dispatch_im: bool = True,
+) -> Optional[AdminInbox]:
     """向某运营人员写入一条收件箱消息（内部可调用，供告警 / 审批待办触发）。
 
     真实触达：① 落地 AdminInbox；② 记 notification_log（inbox 渠道，success）；
-    ③ 最佳努力经已配置 IM 渠道（钉钉/企微）fan-out 实际下发（仅 critical 级穿透）。
+    ③ dispatch_im 且 level=critical 时，最佳努力经已配置 IM 渠道 fan-out。
+
+    幂等：dedup_key 非空时按 (admin_id, msg_type, dedup_key) 唯一索引去重。
+    重放命中已有消息返回 None——不写触达日志、也不重复 IM 下发，
+    调用方据此知道「这次没有真正新增」。NULL 键不参与去重（手工/测试写入）。
     """
-    row = AdminInbox(
-        admin_id=admin_id,
-        msg_type=msg_type,
-        level=level,
-        title=title,
-        body=body,
-        payload_json=json.dumps(payload, ensure_ascii=False) if payload else None,
-    )
-    db.add(row)
-    await db.flush()
+    values = {
+        "admin_id": admin_id,
+        "msg_type": msg_type,
+        "level": level,
+        "title": title,
+        "body": body,
+        "payload_json": json.dumps(payload, ensure_ascii=False) if payload else None,
+    }
+    if dedup_key:
+        values["dedup_key"] = dedup_key
+        inserted = (
+            await db.execute(
+                sqlite_insert(AdminInbox)
+                .values(**values)
+                .on_conflict_do_nothing(
+                    index_elements=["admin_id", "msg_type", "dedup_key"]
+                )
+            )
+        ).rowcount
+        if not inserted:
+            return None
+        row = (
+            await db.execute(
+                select(AdminInbox).where(
+                    AdminInbox.admin_id == admin_id,
+                    AdminInbox.msg_type == msg_type,
+                    AdminInbox.dedup_key == dedup_key,
+                )
+            )
+        ).scalars().one()
+    else:
+        row = AdminInbox(**values)
+        db.add(row)
+        await db.flush()
 
     # ① 收件箱触达日志
     db.add(
@@ -127,7 +159,7 @@ async def push_admin_message(
         )
     )
     # ② 最佳努力 IM fan-out（critical 级穿透；无渠道配置时 no-op）
-    if level == "critical":
+    if dispatch_im and level == "critical":
         try:
             dispatch = await _dispatch_admin_alert(db, title, body or "", level)
             logger.info("运营告警 IM 下发 admin_id=%s result=%s", admin_id, dispatch)
@@ -190,6 +222,118 @@ async def _dispatch_admin_alert(db, title: str, body: str, level: str) -> dict:
         )
     await db.flush()
     return {"dispatched": sum(1 for _, s, _ in log_entries if s == "success")}
+
+
+# ---- 工作流事件 → 收件箱（T03304）----
+
+# 与 workflow_scheduler._WORKFLOW_FAILED_KEY 同值。这里写字面量而不是 import，
+# 避免服务层反向依赖调度器（调度器才是调用方）。
+WORKFLOW_FAILED_EVENT = "workflow.failed"
+WORKFLOW_PENDING_REVIEW_EVENT = "workflow.pending_review"
+WORKFLOW_INBOX_EVENTS = (WORKFLOW_PENDING_REVIEW_EVENT, WORKFLOW_FAILED_EVENT)
+
+# 失败原因进正文只留首行并截断：异常串常把整个调用栈/上游响应塞进来，
+# 收件箱又没有保留窗口（另单处理），存全文只会让表无限膨胀。
+_FAILURE_REASON_MAX = 200
+
+
+def _first_line(text) -> str:
+    lines = str(text or "").strip().splitlines()
+    return lines[0][:_FAILURE_REASON_MAX] if lines else ""
+
+
+async def _admin_recipients(db) -> list[int]:
+    """收件人 = admin_user 里 role='admin' 且启用的账号（判词「全体 admin」）。
+
+    不含 operator：失败消息的深链落点是 /m/manage/queue，该页 requireRole=admin，
+    operator 点进去只会被守卫拦下——宁可不发，也不发一条点进去被拒的消息。
+    """
+    rows = await db.execute(
+        select(AdminUser.id).where(
+            AdminUser.role == AdminRole.admin.value,
+            AdminUser.status == 1,
+        )
+    )
+    return list(rows.scalars().all())
+
+
+async def notify_admins(
+    db,
+    msg_type: str,
+    level: str,
+    title: str,
+    body: Optional[str] = None,
+    payload: Optional[dict] = None,
+    dedup_key: Optional[str] = None,
+) -> int:
+    """把一条消息写给全体 admin，返回真正新增的条数（被幂等挡下的不计）。
+
+    dispatch_im 固定 False：这两个事件的外部触达由 workflow_scheduler 的结构化通知
+    （含 IM 渠道）负责，若这里再按 critical 逐人 fan-out，N 个 admin 会让同一件事
+    在钉钉/企微里重复 N 遍。收件箱只是站内通道，不重复外发。
+    """
+    created = 0
+    for admin_id in await _admin_recipients(db):
+        row = await push_admin_message(
+            db,
+            admin_id,
+            msg_type=msg_type,
+            level=level,
+            title=title,
+            body=body,
+            payload=payload,
+            dedup_key=dedup_key,
+            dispatch_im=False,
+        )
+        if row is not None:
+            created += 1
+    return created
+
+
+async def notify_workflow_event(
+    db,
+    event_type: str,
+    workflow_id: str,
+    extra_vars: Optional[dict] = None,
+) -> int:
+    """工作流事件 → admin 收件箱（本单只覆盖两个需要人处置的事件）。
+
+    幂等键 = 事件 + 工作流（失败再带上环节）：同一事件重放（cron 重试、进程重启后
+    重新入队）只入库一条；同一工作流换一个环节失败是新信息，会再发一条。
+
+    深链契约（与已上线口径对齐）：
+    - 待审核：payload 只给 workflow_id，Message.vue 拼 /m/review?workflow_id=...
+      刻意不写 payload.path——messageTarget 里 path 优先级更高，带上 path 会把
+      workflow_id 丢掉，落到「全部待审」而不是这条工作流。
+    - 失败：payload.path=/m/manage/queue。移动端只有队列页能重跑/处置失败任务；
+      /m/review 对失败工作流只会显示「暂无待审稿件」，是误导性落点。
+    """
+    extra = extra_vars or {}
+    if event_type == WORKFLOW_PENDING_REVIEW_EVENT:
+        return await notify_admins(
+            db,
+            "review",
+            "warning",
+            "有新的待审稿件",
+            f"工作流 {workflow_id} 已完成制作，等待人工审核。",
+            {"workflow_id": workflow_id},
+            f"workflow.pending_review:{workflow_id}",
+        )
+    if event_type == WORKFLOW_FAILED_EVENT:
+        step = extra.get("failed_step") or "unknown"
+        reason = _first_line(extra.get("error_message"))
+        body = f"工作流 {workflow_id} 在「{step}」环节失败"
+        body += f"：{reason}" if reason else "。"
+        return await notify_admins(
+            db,
+            "alert",
+            "critical",
+            "工作流执行失败",
+            body,
+            {"path": "/m/manage/queue"},
+            f"workflow.failed:{workflow_id}:{step}",
+        )
+    return 0
 
 
 async def get_inbox(

@@ -57,9 +57,16 @@ class AdminInbox(Base):
     # 深链目标 JSON：如 {"target":"review","id":123} → 移动端点击跳审批详情
     payload_json: Mapped[Optional[str]] = mapped_column(Text, comment="JSON：{target,id}")
     read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # 生产侧幂等键（T03304）：同一事件重放时同一条消息只入库一次。
+    # NULL 表示不参与去重（手工/测试写入）；SQLite 唯一索引把 NULL 视为互不相等。
+    dedup_key: Mapped[Optional[str]] = mapped_column(String(128), comment="幂等键；NULL=不去重")
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, server_default=func.now())
 
     __table_args__ = (
         Index("idx_admin_inbox_admin", "admin_id"),
         Index("idx_admin_inbox_unread", "admin_id", "read"),
+        # 唯一索引必须含 admin_id：同一事件要发给每个 admin 各一条，收件人不同不算重复。
+        # 索引名以 ix_admin_inbox_ 开头，normalize_metadata_for_sqlite 不会再加前缀，
+        # 与 _migrate_admin_inbox_dedup_column 里的 CREATE UNIQUE INDEX 同名对得上。
+        Index("ix_admin_inbox_dedup", "admin_id", "msg_type", "dedup_key", unique=True),
     )
