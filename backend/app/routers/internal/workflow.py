@@ -11,6 +11,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.audit_reason import audit_detail
 from app.core.response import success
 from app.database import get_db
 from app.models import AuditLog
@@ -70,7 +71,10 @@ async def trigger_workflow(
         action="internal_trigger",
         target=workflow_id,
         operator=f"internal:{source}",
-        detail=json.dumps({"episode_date": episode_date, "workflow_id": workflow_id}, ensure_ascii=False),
+        detail=audit_detail(
+            {"episode_date": episode_date, "workflow_id": workflow_id},
+            machine=f"内部接口触发 source={source}",
+        ),
     ))
     await db.commit()
     return success(data={"workflow_id": workflow_id, "status": "running"})
@@ -106,7 +110,10 @@ async def publish_workflow(
         action="force_publish",
         target=workflow_id,
         operator="internal",
-        detail=json.dumps({"review_id": review_id, "episode_id": episode_id}, ensure_ascii=False),
+        detail=audit_detail(
+            {"review_id": review_id, "episode_id": episode_id},
+            machine="审核通过后内部强制发布（无人工操作者）",
+        ),
     ))
     await db.commit()
     return success(data={"episode_id": episode_id, "status": "published"})

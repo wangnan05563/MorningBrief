@@ -191,7 +191,15 @@ export function notifyErrorOnce(err, text) {
 // confirm/prompt 被阻止时 reject，模拟用户点击"取消"；alert 被阻止时 resolve
 // 三者都不入队、不回放（FR-UX-301）
 
-const safeElMessageBox = Object.assign({}, _ElMessageBox)
+// 包装体本身必须保持可调用：dangerConfirmWithReason 走的是 ElMessageBox(message, title, options)
+// 这种「直接调用」形态（要传 VNode 正文），Object.assign({}, fn) 得到的是普通对象，调它会 TypeError。
+const safeElMessageBox = Object.assign(
+  (...args) => {
+    if (_shouldBlock()) return Promise.reject(new Error('页面隐藏时阻止弹窗'))
+    return _ElMessageBox(...args)
+  },
+  _ElMessageBox,
+)
 
 safeElMessageBox.alert = (...args) => {
   if (_shouldBlock()) return Promise.resolve()

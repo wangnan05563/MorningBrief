@@ -22,6 +22,7 @@ import logging
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_reason import audit_detail
 from app.cos.client import is_cos_configured
 from app.models import (
     AuditLog,
@@ -203,7 +204,9 @@ class AccountPurgeService:
                 action=AUDIT_ACTION,
                 target=openid_digest(openid),
                 operator=AUDIT_OPERATOR,
-                detail=json.dumps(detail, ensure_ascii=False),
+                detail=audit_detail(
+                    detail, machine="用户本人自助删除个人数据（隐私合规请求）"
+                ),
             )
         )
 

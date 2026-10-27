@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_reason import audit_detail
 from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.response import success, error
 from app.database import get_db
@@ -30,6 +31,7 @@ class BatchDeleteTasksRequest(BaseModel):
     workflow_ids: list[str] = Field(
         ..., min_length=1, max_length=100, description="待删除任务(workflow) ID 列表"
     )
+    reason: str = ""
 
     @field_validator("workflow_ids")
     @classmethod
@@ -110,8 +112,8 @@ async def batch_delete_tasks(
         action="batch_delete",
         target="tasks",
         operator=admin.username,
-        detail=json.dumps(
-            {"workflow_ids": req.workflow_ids, "result": data}, ensure_ascii=False
+        detail=audit_detail(
+            {"workflow_ids": req.workflow_ids, "result": data}, reason=req.reason
         ),
     ))
     await db.commit()
@@ -121,6 +123,7 @@ async def batch_delete_tasks(
 @router.post("/tasks/{workflow_id}/cancel")
 async def cancel_task(
     workflow_id: str,
+    reason: str = Query("", max_length=200, description="取消原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -136,7 +139,7 @@ async def cancel_task(
         action="cancel",
         target=workflow_id,
         operator=admin.username,
-        detail=json.dumps({"workflow_id": workflow_id}, ensure_ascii=False),
+        detail=audit_detail({"workflow_id": workflow_id}, reason=reason),
     ))
     await db.commit()
     return success(data={"cancelled": True})
@@ -170,6 +173,7 @@ async def update_priority(
 @router.post("/tasks/{workflow_id}/retry")
 async def retry_task(
     workflow_id: str,
+    reason: str = Query("", max_length=200, description="重试原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -191,7 +195,7 @@ async def retry_task(
         action="retry",
         target=wf_id,
         operator=admin.username,
-        detail=json.dumps({"workflow_id": wf_id}, ensure_ascii=False),
+        detail=audit_detail({"workflow_id": wf_id}, reason=reason),
     ))
     await db.commit()
     return success(data={"workflow_id": wf_id, "status": "queued"})

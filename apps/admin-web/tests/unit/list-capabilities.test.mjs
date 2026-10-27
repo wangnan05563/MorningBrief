@@ -380,7 +380,9 @@ describe('素材库批量删除（C52）前端接线', () => {
   it('批量删除有二次确认、影响条数、不可逆声明', () => {
     assert.match(vue, /async function onBatchDelete\(\)/)
     // 统一走 dangerConfirm（T02596）：动作 + 对象（含条数）+ 不可逆声明都在参数里，不再手写 confirm 文案
-    assert.match(vue, /dangerConfirm\(\{[\s\S]*?action: '批量删除素材'[\s\S]*?target: `\$\{ids\.length\} 条素材`/)
+    // T03321：删除类站点换 dangerConfirmWithReason，确认框里收的操作原因要随请求带出去
+    assert.match(vue, /dangerConfirmWithReason\(\{[\s\S]*?action: '批量删除素材'[\s\S]*?target: `\$\{ids\.length\} 条素材`/)
+    assert.match(vue, /batchDeleteMaterials\(\{ ids, reason \}\)/)
     assert.match(
       vue,
       /action: '批量删除整本书'[\s\S]*?target: `\$\{sources\.length\} 本书（共 \$\{selectedChapters\.value\} 章）`/,

@@ -287,7 +287,7 @@ import { getMaintenanceTask } from '../../api/maintenance'
 import { MAINTENANCE_TASK_STATE } from '../../constants/enums'
 import ListLoadError from '../../components/ListLoadError.vue'
 import AuditTrail from '../../components/AuditTrail.vue'
-import { dangerConfirm } from '../../utils/dangerConfirm'
+import { dangerConfirmWithReason } from '../../utils/dangerConfirm'
 import { LONG_TASK_TIMEOUT_MS, isRequestTimeout, longTaskTimeoutText } from '../../utils/requestTimeout'
 
 // 确认文案要给出中文对象名，英文 target 值只用于请求参数（M59）
@@ -542,6 +542,7 @@ async function handleCleanup(category) {
   const orphan = category === 'database' ? orphanAction.value : null
 
   // 非预览模式二次确认：写清删什么、保留多久、预览到多少条、能否恢复（M59）
+  let cleanupReason = ''
   if (!form.dry_run) {
     const previewLines = result.value?.cleaned?.length
       ? [
@@ -550,7 +551,7 @@ async function handleCleanup(category) {
           ...(result.value.cleaned.length > 5 ? ['…'] : []),
         ]
       : ['尚未做过 dry-run 预览，建议先切到「预览清理」确认影响范围。']
-    const ok = await dangerConfirm({
+    const { confirmed, reason } = await dangerConfirmWithReason({
       action: '立即执行清理',
       target: chain
         ? `${CATEGORY_NAMES[category]} · ${targetLabel(category, form.target)} · 工作流 ${workflowId}`
@@ -570,7 +571,8 @@ async function handleCleanup(category) {
         : '删除后不可恢复：SQLite 没有回收站，只能靠事先备份还原。',
       confirmLabel: '确认执行',
     })
-    if (!ok) return
+    if (!confirmed) return
+    cleanupReason = reason
   }
 
   if (isTaskActive(category)) {
@@ -589,6 +591,8 @@ async function handleCleanup(category) {
     if (!chain && !orphan && category !== 'cache') {
       payload.days = form.days
     }
+    // 非预览才收起原因；预览不写库也不落审计，带过去也没人读
+    if (cleanupReason) payload.reason = cleanupReason
     // 长任务专用超时（M62）：dry-run 预览是同步统计，仍可能超过全局 15s；
     // 非预览现在只落一条任务记录，正常毫秒级返回，这条超时退化成兜底。
     const data = await api.post(url, payload, {

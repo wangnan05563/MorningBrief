@@ -8,11 +8,12 @@ import json
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.audit_reason import audit_detail
 from app.core.auth import AdminPayload, require_admin
 from app.core.danger_op import validate_danger_op
 from app.core.exceptions import ParamError
@@ -34,6 +35,7 @@ class RestoreRequest(BaseModel):
     """恢复请求体。"""
     backup_path: str           # 备份文件路径（从 list_backups 返回的 path）
     confirm_text: str = ""     # 手输确认文本（须为目标备份文件名）
+    reason: str = ""           # 恢复原因（可选，写入审计）
 
 
 def _validate_restore(confirm_text: str, backup_path: str) -> None:
@@ -123,7 +125,7 @@ async def restore_backup(
         action="restore",
         target="database",
         operator=admin.username,
-        detail=json.dumps({"source": body.backup_path}, ensure_ascii=False),
+        detail=audit_detail({"source": body.backup_path}, reason=body.reason),
     ))
     await db.commit()
 
@@ -143,6 +145,7 @@ async def restore_backup(
 async def cleanup_backups(
     keep_days: int = 7,
     max_files: int = 7,
+    reason: str = Query("", max_length=200, description="清理原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -164,9 +167,9 @@ async def cleanup_backups(
         action="cleanup",
         target="backup_files",
         operator=admin.username,
-        detail=json.dumps(
+        detail=audit_detail(
             {"deleted": deleted, "keep_days": keep_days, "max_files": max_files},
-            ensure_ascii=False,
+            reason=reason,
         ),
     ))
     await db.commit()

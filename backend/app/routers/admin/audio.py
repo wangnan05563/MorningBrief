@@ -26,6 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.audit_reason import audit_detail
 from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
@@ -313,6 +314,7 @@ async def proxy_audio(
 async def delete_tts(
     workflow_id: str,
     filename: str,
+    reason: str = Query("", max_length=200, description="删除原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -329,7 +331,7 @@ async def delete_tts(
         action="delete_tts",
         target=f"{workflow_id}/{filename}",
         operator=admin.username,
-        detail=json.dumps({"workflow_id": workflow_id, "filename": filename}, ensure_ascii=False),
+        detail=audit_detail({"workflow_id": workflow_id, "filename": filename}, reason=reason),
     ))
     await db.commit()
     return success(data={"deleted": filename})
@@ -338,6 +340,7 @@ async def delete_tts(
 @router.delete("/{workflow_id}/audio/episode")
 async def delete_episode(
     workflow_id: str,
+    reason: str = Query("", max_length=200, description="删除原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -362,7 +365,7 @@ async def delete_episode(
         action="delete_episode",
         target=str(ep_path),
         operator=admin.username,
-        detail=json.dumps({"workflow_id": workflow_id, "path": str(ep_path)}, ensure_ascii=False),
+        detail=audit_detail({"workflow_id": workflow_id, "path": str(ep_path)}, reason=reason),
     ))
     await db.commit()
     return success(data={"deleted": _rel_path(ep_path)})

@@ -33,17 +33,20 @@ CONFIRM_TOKEN = settings.DB_ADMIN_CONFIRM_TOKEN
 class RowCreateRequest(BaseModel):
     """新增行请求体。"""
     values: dict
+    reason: str = ""  # 操作原因（可选，写入审计）
 
 
 class RowUpdateRequest(BaseModel):
     """更新行请求体。"""
     values: dict
+    reason: str = ""
 
 
 class BatchDeleteRequest(BaseModel):
     """批量删除请求体。"""
     ids: list
     confirm_text: str  # 手输确认文本（须为表名）
+    reason: str = ""
 
 
 class CascadePreviewRequest(BaseModel):
@@ -59,6 +62,7 @@ class ImportRequest(BaseModel):
     content: str | None = None  # 原始 CSV/JSON 文本，由后端统一解析
     format: str = "csv"
     dry_run: bool = False  # INT-UX-02：只算不写，走同一套解析与预览算法
+    reason: str = ""
 
 
 class ImportPreviewRequest(BaseModel):
@@ -133,7 +137,10 @@ async def create_row(
     """新增一行。"""
     svc = DbAdminService(db)
     result = await svc.create_row(table, body.values)
-    await svc.write_audit(action="create", target=table, operator=admin.username, detail=body.values)
+    await svc.write_audit(
+        action="create", target=table, operator=admin.username,
+        detail=body.values, reason=body.reason,
+    )
     await db.commit()
     return success(data=result)
 
@@ -151,7 +158,7 @@ async def update_row(
     result = await svc.update_row(table, pk_value, body.values)
     await svc.write_audit(
         action="update", target=table, operator=admin.username,
-        detail={"pk": pk_value, "values": body.values},
+        detail={"pk": pk_value, "values": body.values}, reason=body.reason,
     )
     await db.commit()
     return success(data=result)
@@ -162,6 +169,7 @@ async def delete_row(
     table: str,
     pk_value: str,
     confirm_text: str = Query(..., description="确认文本，须输入目标表名"),
+    reason: str = Query("", max_length=200, description="删除原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -171,7 +179,7 @@ async def delete_row(
     result = await svc.delete_row(table, pk_value)
     await svc.write_audit(
         action="delete", target=table, operator=admin.username,
-        detail={"pk": pk_value, "result": result},
+        detail={"pk": pk_value, "result": result}, reason=reason,
     )
     await db.commit()
     return success(data=result)
@@ -190,7 +198,7 @@ async def batch_delete(
     result = await svc.batch_delete(table, body.ids)
     await svc.write_audit(
         action="batch_delete", target=table, operator=admin.username,
-        detail={"ids": body.ids, "result": result},
+        detail={"ids": body.ids, "result": result}, reason=body.reason,
     )
     await db.commit()
     return success(data=result)
@@ -300,6 +308,7 @@ async def import_rows(
     await svc.write_audit(
         action="import", target=table, operator=admin.username,
         detail={"mode": body.mode, "total": len(rows), "result": result},
+        reason=body.reason,
     )
     await db.commit()
     return success(data=result)

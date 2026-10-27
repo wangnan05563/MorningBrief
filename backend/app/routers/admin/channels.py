@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.cache.keys import CHANNELS_LIST_ACTIVE, CHANNELS_LIST_ALL
 from app.cache.manager import cache as cache_manager
 from app.core.audio_modes import VALID_GAP_MODES
+from app.core.audit_reason import audit_detail
 from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success, error
@@ -590,6 +591,7 @@ async def delete_channel_preview(
 @router.delete("/{channel_id}")
 async def delete_channel(
     channel_id: int,
+    reason: str = Query("", max_length=200, description="删除原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -605,7 +607,7 @@ async def delete_channel(
         action="delete",
         target=str(channel_id),
         operator=admin.username,
-        detail=json.dumps({"channel_id": channel_id}, ensure_ascii=False),
+        detail=audit_detail({"channel_id": channel_id}, reason=reason),
     ))
     await db.commit()
     return success(data={"deleted": True})
@@ -728,6 +730,7 @@ async def upload_bgm(
 @router.delete("/bgm/{path:path}")
 async def delete_bgm(
     path: str,
+    reason: str = Query("", max_length=200, description="删除原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -756,7 +759,7 @@ async def delete_bgm(
         action="delete_bgm",
         target=path,
         operator=admin.username,
-        detail=json.dumps({"path": path}, ensure_ascii=False),
+        detail=audit_detail({"path": path}, reason=reason),
     ))
     await db.commit()
     return success(data={"deleted": path})

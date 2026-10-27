@@ -30,6 +30,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_reason import audit_detail
 from app.core.auth import AdminPayload, require_admin
 from app.core.response import success
 from app.database import get_db
@@ -72,6 +73,7 @@ class CosMoveBody(BaseModel):
     source_key: str
     dest_key: str
     overwrite: bool = False
+    reason: str = ""
 
 
 class CosRestoreBody(BaseModel):
@@ -86,6 +88,7 @@ class CosRestoreBody(BaseModel):
     backup_key: str
     target_key: str = ""
     overwrite: bool = False
+    reason: str = ""
 
 
 async def _audit(
@@ -94,6 +97,7 @@ async def _audit(
     action: str,
     target: str,
     detail: dict,
+    reason: str = "",
 ) -> None:
     """写 COS 审计日志（category=cos）。
 
@@ -106,7 +110,7 @@ async def _audit(
             action=action,
             target=target,
             operator=admin.username,
-            detail=json.dumps(detail, ensure_ascii=False),
+            detail=audit_detail(detail, reason=reason),
         ))
         await db.commit()
     except Exception:  # NOSONAR 审计是旁路，不能反噬主流程
@@ -146,6 +150,7 @@ async def save_config(
 
 @router.post("/reset-config")
 async def reset_config(
+    reason: str = Query("", max_length=200, description="清除原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -161,7 +166,7 @@ async def reset_config(
         action="reset_config",
         target="credentials",
         operator=admin.username,
-        detail=json.dumps({"cleared_keys": CREDENTIAL_KEYS}, ensure_ascii=False),
+        detail=audit_detail({"cleared_keys": CREDENTIAL_KEYS}, reason=reason),
     ))
     await db.commit()
     return success(data=config, message="COS 凭证已清除，回退到 .env 默认值")
@@ -212,6 +217,7 @@ async def upload_file(
     file: UploadFile = File(...),
     prefix: str = Form("", description="上传目标前缀（目录），以 / 结尾"),
     overwrite: bool = Form(False, description="同名对象已存在时是否覆盖（覆盖前自动留快照）"),
+    reason: str = Form("", description="覆盖原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -251,7 +257,7 @@ async def upload_file(
         await _audit(db, admin, "overwrite_upload", key, {
             "backup_key": backup_key,
             "previous_size": (result.get("previous") or {}).get("size"),
-        })
+        }, reason=reason)
     return success(data=result, message=message)
 
 
@@ -356,7 +362,7 @@ async def move_object(
             "source_key": body.source_key,
             "overwritten": overwritten,
             "backup_keys": backup_keys,
-        })
+        }, reason=body.reason)
     else:
         message = "移动成功"
     return success(data=result, message=message)
@@ -397,7 +403,7 @@ async def restore_snapshot(
     await _audit(db, admin, "restore_snapshot", result["target_key"], {
         "restored_from": result["restored_from"],
         "backup_key": result.get("backup_key"),
-    })
+    }, reason=body.reason)
     if result.get("backup_key"):
         message = f"已从快照恢复 {result['target_key']}，恢复前的对象已备份至 {result['backup_key']}"
     elif result.get("overwritten"):

@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache.manager import cache
 from app.config import get_settings
+from app.core.audit_reason import audit_detail
 from app.core.exceptions import NotFoundError, ParamError
 from app.core.timeutil import localnow_naive
 from app.database import engine
@@ -172,7 +173,7 @@ class MaintenanceService:
     # ===== 缓存清理 =====
 
     async def cleanup_cache(
-        self, target: str, dry_run: bool, admin_name: str
+        self, target: str, dry_run: bool, admin_name: str, reason: str = ""
     ) -> dict:
         """清理缓存。
 
@@ -193,7 +194,9 @@ class MaintenanceService:
         if target in ("temp", "all"):
             await self._cache_step_temp(dry_run, cleaned, errors)
 
-        await self._write_audit("cleanup_cache", target, admin_name, dry_run, cleaned, errors)
+        await self._write_audit(
+            "cleanup_cache", target, admin_name, dry_run, cleaned, errors, reason=reason
+        )
         return {
             "target": target,
             "dry_run": dry_run,
@@ -255,7 +258,7 @@ class MaintenanceService:
     # ===== 数据库清理 =====
 
     async def cleanup_database(
-        self, target: str, days: int, dry_run: bool, admin_name: str
+        self, target: str, days: int, dry_run: bool, admin_name: str, reason: str = ""
     ) -> dict:
         """清理数据库。
 
@@ -315,7 +318,10 @@ class MaintenanceService:
         if target in ("vacuum", "all"):
             await self._db_step_vacuum(dry_run, cleaned, errors)
 
-        await self._write_audit("cleanup_database", target, admin_name, dry_run, cleaned, errors, days=days)
+        await self._write_audit(
+            "cleanup_database", target, admin_name, dry_run, cleaned, errors,
+            days=days, reason=reason,
+        )
         return {
             "target": target,
             "days": days,
@@ -465,7 +471,7 @@ class MaintenanceService:
     # ===== 日志清理 =====
 
     async def cleanup_logs(
-        self, target: str, days: int, dry_run: bool, admin_name: str
+        self, target: str, days: int, dry_run: bool, admin_name: str, reason: str = ""
     ) -> dict:
         """清理日志文件。
 
@@ -484,7 +490,10 @@ class MaintenanceService:
         errors = result["errors"]
         total_freed_mb = result["total_freed_mb"]
 
-        await self._write_audit("cleanup_logs", target, admin_name, dry_run, cleaned, errors, days=days)
+        await self._write_audit(
+            "cleanup_logs", target, admin_name, dry_run, cleaned, errors,
+            days=days, reason=reason,
+        )
         return {
             "target": target,
             "days": days,
@@ -563,7 +572,7 @@ class MaintenanceService:
         return await self._delete_workflow_chain(wf_ids, script_ids, episode_ids)
 
     async def cleanup_workflow_chain(
-        self, workflow_id: str, dry_run: bool, admin_name: str
+        self, workflow_id: str, dry_run: bool, admin_name: str, reason: str = ""
     ) -> dict:
         """按工作流 ID 全链清理（稿件/节目/审核/播放数据等子表一并删除）。
 
@@ -602,7 +611,8 @@ class MaintenanceService:
             if counts[key] > 0
         ]
         await self._write_audit(
-            "cleanup_workflow_chain", workflow_id, admin_name, dry_run, cleaned, []
+            "cleanup_workflow_chain", workflow_id, admin_name, dry_run, cleaned, [],
+            reason=reason,
         )
         return {
             "target": "workflow_chain",
@@ -1038,6 +1048,7 @@ class MaintenanceService:
     async def _write_audit(
         self, action: str, target: str, operator: str,
         dry_run: bool, cleaned: list, errors: list, days: int | None = None,
+        reason: str = "",
     ) -> None:
         """写入审计日志到 audit_log 表（持久化，便于事后追溯）。
 
@@ -1059,7 +1070,7 @@ class MaintenanceService:
                 action=action,
                 target=target,
                 operator=operator,
-                detail=json.dumps(detail, ensure_ascii=False, default=str),
+                detail=audit_detail(detail, reason=reason),
             )
             self.db.add(log)
             await self.db.commit()

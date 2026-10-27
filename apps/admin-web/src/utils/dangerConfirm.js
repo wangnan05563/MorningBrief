@@ -5,7 +5,9 @@
  * 高风险/批量动作再要求输入确认词，预览失败禁止提交。
  * 之前每个页面各写一句 confirm，最常见的缺项是「影响条数」和「不可逆声明」。
  */
-import { ElMessageBox } from './message'
+import { h } from 'vue'
+import { ElInput } from 'element-plus'
+import { ElMessage, ElMessageBox } from './message'
 
 // 确认框正文里的对象名来自抓取内容（RSS 标题、素材名），必须转义后再走 HTML 渲染
 const escapeHtml = (v) =>
@@ -74,5 +76,87 @@ export async function dangerConfirm(opts) {
   } catch {
     // 取消与遮罩关闭都视为「不执行」
     return false
+  }
+}
+
+/**
+ * 带「操作原因」输入的高危确认（T03321）。
+ *
+ * 与 `dangerConfirm` 同一套正文规范，区别是在确认框里多一个可选文本域：
+ * 原因随请求一起提交，最终落进审计 `detail.reason`，与读口「原因」列对齐。
+ * 原因不是必填——缺省空串，避免打断「急着止损」的操作；但填了就必须带出去。
+ *
+ * @returns Promise<{confirmed: boolean, reason: string}>
+ */
+export async function dangerConfirmWithReason(opts) {
+  const {
+    confirmWord,
+    confirmLabel = '确认执行',
+    reasonLabel = '操作原因（可选，会写入审计日志）',
+    reasonPlaceholder = '例如：频道下线，素材不再使用',
+    ...rest
+  } = opts
+  const state = { reason: '', confirm: '' }
+  const message = buildDangerText(rest)
+
+  const children = [h('div', { innerHTML: message })]
+  children.push(
+    h('div', { style: 'margin-top:8px' }, [
+      h('div', { style: 'margin-bottom:4px' }, reasonLabel),
+      h(ElInput, {
+        type: 'textarea',
+        rows: 2,
+        maxlength: 200,
+        showWordLimit: true,
+        placeholder: reasonPlaceholder,
+        'onUpdate:modelValue': (v) => {
+          state.reason = v || ''
+        },
+      }),
+    ]),
+  )
+  if (confirmWord) {
+    children.push(
+      h('div', { style: 'margin-top:8px' }, [
+        `请输入 `,
+        h('b', null, confirmWord),
+        ` 以确认：`,
+        h(ElInput, {
+          placeholder: confirmWord,
+          'onUpdate:modelValue': (v) => {
+            state.confirm = v || ''
+          },
+        }),
+      ]),
+    )
+  }
+
+  try {
+    // 可调用形态的签名是 ElMessageBox(options, appContext)，不是 (message, title, options)；
+    // 按后者传会把 title 串当成 appContext，渲染时炸成「Object prototype may only be an Object or null」
+    await ElMessageBox({
+      title: '危险操作确认',
+      message: h('div', null, children),
+      type: 'error',
+      confirmButtonText: confirmLabel,
+      cancelButtonText: '取消',
+      closeOnClickModal: false,
+      beforeClose: (action, instance, done) => {
+        if (action !== 'confirm') return done()
+        if (confirmWord && state.confirm.trim() !== confirmWord) {
+          ElMessage.error(`请逐字输入 ${confirmWord}`)
+          return
+        }
+        done()
+      },
+    })
+    return { confirmed: true, reason: state.reason.trim() }
+  } catch (e) {
+    // Element Plus 用字符串 'cancel' / 'close' reject 表示用户放弃；
+    // 其它异常是确认框自身出错，一并当成「用户取消」会把故障伪装成一次正常放弃
+    if (e !== 'cancel' && e !== 'close') {
+      console.error('[dangerConfirmWithReason] 确认框未能弹出，按未确认处理：', e)
+    }
+    return { confirmed: false, reason: '' }
   }
 }

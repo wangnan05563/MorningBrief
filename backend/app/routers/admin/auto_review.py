@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_reason import audit_detail
 from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.response import success, error
 from app.database import get_db
@@ -137,6 +138,7 @@ async def list_history(
 @router.post("/retry/{stat_id}")
 async def retry_failed_auto_review(
     stat_id: int,
+    reason: str = Query("", max_length=200, description="重试原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -188,12 +190,12 @@ async def retry_failed_auto_review(
         action="retry_auto_review",
         target=str(stat_id),
         operator=admin.username,
-        detail=json.dumps({
+        detail=audit_detail({
             "stat_id": stat_id,
             "review_id": stat.review_id,
             "workflow_id": stat.workflow_id,
             "result": result_data,
-        }, ensure_ascii=False),
+        }, reason=reason),
     ))
     await db.commit()
     return success(data=result_data)

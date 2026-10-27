@@ -14,6 +14,7 @@ from sqlalchemy import select, func, case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_reason import audit_detail
 from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.exceptions import NotFoundError, BizError
 from pathlib import Path
@@ -616,6 +617,7 @@ async def delete_materials_by_source(
     source: str = Query(..., min_length=1, max_length=64,
                         description="按书名（来源）精确删除该本书的全部章节素材"),
     channel_id: int = Query(None, description="限定频道，聚合视图删除应传当前筛选频道"),
+    reason: str = Query("", max_length=200, description="删除原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -636,7 +638,7 @@ async def delete_materials_by_source(
         await db.delete(await db.get(Material, mid))
     db.add(AuditLog(
         category="material", action="delete", target=source, operator=admin.username,
-        detail=json.dumps({"source": source, "deleted_count": len(ids)}, ensure_ascii=False),
+        detail=audit_detail({"source": source, "deleted_count": len(ids)}, reason=reason),
     ))
     await db.commit()
     return success(data={"deleted": len(ids)})
@@ -645,6 +647,7 @@ async def delete_materials_by_source(
 @router.delete("/{material_id}")
 async def delete_material(
     material_id: int,
+    reason: str = Query("", max_length=200, description="删除原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -665,7 +668,7 @@ async def delete_material(
         action="delete",
         target=str(material_id),
         operator=admin.username,
-        detail=json.dumps({"material_id": material_id, "title": m.title}, ensure_ascii=False),
+        detail=audit_detail({"material_id": material_id, "title": m.title}, reason=reason),
     ))
     await db.commit()
     return success(data={"deleted": material_id})
@@ -686,6 +689,7 @@ class MaterialBatchDeleteRequest(BaseModel):
     ids: List[int] = []
     sources: List[str] = []
     channel_id: Optional[int] = None
+    reason: str = ""
 
 
 @router.post("/batch-delete")
@@ -737,14 +741,14 @@ async def batch_delete_materials(
         action="batch_delete",
         target=f"count={len(target_ids)}",
         operator=admin.username,
-        detail=json.dumps(
+        detail=audit_detail(
             {
                 "ids": ids,
                 "sources": sources,
                 "channel_id": req.channel_id,
                 "deleted_count": len(target_ids),
             },
-            ensure_ascii=False,
+            reason=req.reason,
         ),
     ))
     await db.commit()

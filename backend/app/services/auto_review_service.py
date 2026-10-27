@@ -17,6 +17,7 @@ from typing import Optional
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_reason import audit_detail
 from app.core.exceptions import BizError
 from app.core.timeutil import localnow_naive
 from app.database import AsyncSessionLocal
@@ -574,14 +575,14 @@ class AutoReviewService:
                 action="auto_approve",
                 target=str(review_id),
                 operator=_SYSTEM_OPERATOR,
-                detail=json.dumps({
+                detail=audit_detail({
                     "review_id": review_id,
                     "action": "approve",
                     "matched_rules": matched_rules,
                     "skipped_rules": skipped_rules,
                     "episode_id": episode_id,
                     "workflow_id": workflow_id,
-                }, ensure_ascii=False),
+                }, machine="自动审批命中规则，系统直接发布（无人工操作者）"),
             ))
             await session.commit()
 

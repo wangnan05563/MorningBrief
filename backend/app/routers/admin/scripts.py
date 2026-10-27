@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_reason import audit_detail
 from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.exceptions import BizError, NotFoundError
 from app.core.response import success
@@ -165,6 +166,7 @@ async def update_segments(
 @router.delete("/{script_id}")
 async def delete_script(
     script_id: int,
+    reason: str = Query("", max_length=200, description="删除原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -186,7 +188,7 @@ async def delete_script(
         action="delete",
         target=str(script_id),
         operator=admin.username,
-        detail=json.dumps({"script_id": script_id, "workflow_id": s.workflow_id}, ensure_ascii=False),
+        detail=audit_detail({"script_id": script_id, "workflow_id": s.workflow_id}, reason=reason),
     ))
     await db.commit()
     return success(data={"deleted": script_id})

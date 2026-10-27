@@ -294,5 +294,6 @@ async def test_backup_audit_details_parse_as_json(client, admin_token, db_sessio
         parsed = json.loads(log.detail)  # 历史 f-string 写法在这里会抛 JSONDecodeError
         details[log.action] = parsed
     assert details["create"] == {"path": WINDOWS_PATH}
-    assert details["restore"] == {"source": WINDOWS_PATH}
-    assert details["cleanup"] == {"deleted": 2, "keep_days": 7, "max_files": 7}
+    # T03321：口径内的写入点必须带 reason 键（未填时为空串，不是缺键）
+    assert details["restore"] == {"source": WINDOWS_PATH, "reason": ""}
+    assert details["cleanup"] == {"deleted": 2, "keep_days": 7, "max_files": 7, "reason": ""}

@@ -36,6 +36,7 @@ class CleanupRequest(BaseModel):
     target: str = "blacklist"       # 清理目标
     days: int = Field(0, ge=0, le=3650)  # 保留天数（0 用配置默认值）
     dry_run: bool = False           # 预览模式
+    reason: str = Field("", max_length=200)  # 清理原因（可选，写入审计）
 
 
 class CacheCleanupRequest(BaseModel):
@@ -48,6 +49,7 @@ class CacheCleanupRequest(BaseModel):
 
     target: str = "pycache"         # ttlcache | pycache | temp | all
     dry_run: bool = False
+    reason: str = Field("", max_length=200)
 
 
 class WorkflowChainCleanupRequest(BaseModel):
@@ -60,6 +62,7 @@ class WorkflowChainCleanupRequest(BaseModel):
 
     workflow_id: str = Field(min_length=1, max_length=64)
     dry_run: bool = False
+    reason: str = Field("", max_length=200)
 
 
 
@@ -93,14 +96,14 @@ async def cleanup_database(
         svc = MaintenanceService(db)
         result = await svc.cleanup_database(
             target=body.target, days=body.days,
-            dry_run=True, admin_name=admin.username,
+            dry_run=True, admin_name=admin.username, reason=body.reason,
         )
         return success(data=result)
     data = await task_service.submit(
         db,
         category="database",
         target=body.target,
-        params={"days": body.days},
+        params={"days": body.days, "reason": body.reason},
         admin_name=admin.username,
     )
     return success(data=data)
@@ -121,13 +124,14 @@ async def cleanup_workflow_chain(
             workflow_id=body.workflow_id,
             dry_run=True,
             admin_name=admin.username,
+            reason=body.reason,
         )
         return success(data=result)
     data = await task_service.submit(
         db,
         category="workflow_chain",
         target=body.workflow_id,
-        params={},
+        params={"reason": body.reason},
         admin_name=admin.username,
     )
     return success(data=data)
@@ -146,14 +150,14 @@ async def cleanup_logs(
         svc = MaintenanceService(db)
         result = await svc.cleanup_logs(
             target=body.target, days=body.days,
-            dry_run=True, admin_name=admin.username,
+            dry_run=True, admin_name=admin.username, reason=body.reason,
         )
         return success(data=result)
     data = await task_service.submit(
         db,
         category="logs",
         target=body.target,
-        params={"days": body.days},
+        params={"days": body.days, "reason": body.reason},
         admin_name=admin.username,
     )
     return success(data=data)
@@ -175,14 +179,14 @@ async def cleanup_cache(
     if body.dry_run:
         svc = MaintenanceService(db)
         result = await svc.cleanup_cache(
-            target=target, dry_run=True, admin_name=admin.username,
+            target=target, dry_run=True, admin_name=admin.username, reason=body.reason,
         )
         return success(data=result)
     data = await task_service.submit(
         db,
         category="cache",
         target=target,
-        params={},
+        params={"reason": body.reason},
         admin_name=admin.username,
     )
     return success(data=data)

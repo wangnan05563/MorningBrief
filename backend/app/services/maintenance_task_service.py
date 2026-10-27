@@ -154,12 +154,15 @@ def _dispatch(
     svc: MaintenanceService, category: str, target: str, params: dict, admin_name: str
 ):
     """按分类调用服务层；任务后台一律 dry_run=False（预览走同步路径）。"""
+    # 原因随任务参数一起落库：后台执行时操作者已不在请求上下文里（T03321）
+    reason = params.get("reason") or ""
     if category == "database":
         return svc.cleanup_database(
             target=target,
             days=int(params.get("days") or 0),
             dry_run=False,
             admin_name=admin_name,
+            reason=reason,
         )
     if category == "logs":
         return svc.cleanup_logs(
@@ -167,18 +170,21 @@ def _dispatch(
             days=int(params.get("days") or 0),
             dry_run=False,
             admin_name=admin_name,
+            reason=reason,
         )
     if category == "cache":
         return svc.cleanup_cache(
             target=target or "pycache",
             dry_run=False,
             admin_name=admin_name,
+            reason=reason,
         )
     if category == "workflow_chain":
         return svc.cleanup_workflow_chain(
             workflow_id=target,
             dry_run=False,
             admin_name=admin_name,
+            reason=reason,
         )
     raise ValueError(f"未知的清理分类：{category}")
 

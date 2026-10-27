@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_reason import audit_detail
 from app.core.auth import AdminPayload, get_current_admin, require_admin
 from app.core.response import success
 from app.database import get_db
@@ -23,6 +24,7 @@ router = APIRouter(prefix="/admin/api/v1/workflows", tags=["B端-工作流"])
 class RetryRequest(BaseModel):
     """重跑请求体。step 指定从哪一步重跑，Phase 3 生效。"""
     step: str
+    reason: str = ""
 
 
 class TriggerRequest(BaseModel):
@@ -34,15 +36,11 @@ class TriggerRequest(BaseModel):
     channel_id: int | None = None
     skip_crawl: bool = False
     episode_date: date | None = None
+    reason: str = ""
 
 
-class BatchDeleteRequest(BaseModel):
-    """批量删除请求体。
-
-    约束 1-100 个 ID 是为了：
-    - 下限 1：避免 no-op 调用掩盖上游 bug
-    - 上限 100：避免单次事务过大导致长事务/锁表
-    """
+class BatchIdsRequest(BaseModel):
+    """批量操作的 ID 集合（删除与预览共用同一套约束）。"""
     workflow_ids: list[str] = Field(..., min_length=1, max_length=100, description="待删除工作流 ID 列表")
 
     @field_validator("workflow_ids")
@@ -57,6 +55,11 @@ class BatchDeleteRequest(BaseModel):
         if len(unique) != len(cleaned):
             raise ValueError("workflow_ids 包含重复 ID")
         return unique
+
+
+class BatchDeleteRequest(BatchIdsRequest):
+    """批量删除请求体（比预览多一个原因字段，只进审计不参与推导）。"""
+    reason: str = ""
 
 
 @router.get("/today")
@@ -110,7 +113,9 @@ async def batch_delete_workflows(
         action="batch_delete",
         target="workflows",
         operator=admin.username,
-        detail=json.dumps({"workflow_ids": req.workflow_ids, "result": data}, ensure_ascii=False),
+        detail=audit_detail(
+            {"workflow_ids": req.workflow_ids, "result": data}, reason=req.reason
+        ),
     ))
     await db.commit()
     return success(data=data)
@@ -118,7 +123,7 @@ async def batch_delete_workflows(
 
 @router.post("/batch-delete/preview")
 async def batch_delete_workflows_preview(
-    req: BatchDeleteRequest,
+    req: BatchIdsRequest,
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -171,12 +176,12 @@ async def trigger_workflow(
         action="trigger",
         target=workflow_id,
         operator=admin.username,
-        detail=json.dumps({
+        detail=audit_detail({
             "channel_id": req.channel_id,
             "workflow_id": workflow_id,
             "skip_crawl": req.skip_crawl,
             "episode_date": (req.episode_date or date.today()).isoformat(),
-        }, ensure_ascii=False),
+        }, reason=req.reason),
     ))
     await db.commit()
     return success(data={"workflow_id": workflow_id, "status": "running"})
@@ -184,6 +189,7 @@ async def trigger_workflow(
 
 @router.post("/trigger-all")
 async def trigger_all_workflows(
+    reason: str = Query("", max_length=200, description="触发原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -273,7 +279,7 @@ async def trigger_all_workflows(
         action="trigger_all",
         target="channels",
         operator=admin.username,
-        detail=json.dumps(detail, ensure_ascii=False),
+        detail=audit_detail(detail, reason=reason),
     ))
     await db.commit()
 
@@ -318,7 +324,7 @@ async def retry_workflow(
         action="retry",
         target=wf_id,
         operator=admin.username,
-        detail=json.dumps({"from_step": req.step, "workflow_id": wf_id}, ensure_ascii=False),
+        detail=audit_detail({"from_step": req.step, "workflow_id": wf_id}, reason=req.reason),
     ))
     await db.commit()
     return success(data={

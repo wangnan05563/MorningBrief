@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_reason import audit_detail
 from app.core.auth import AdminPayload, get_current_admin
 from app.core.response import error, success
 from app.database import get_db
@@ -64,6 +65,7 @@ async def create_material(
 @router.delete("/materials/{material_id}")
 async def delete_material(
     material_id: int,
+    reason: str = Query("", max_length=200, description="删除原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(get_current_admin),
 ):
@@ -75,7 +77,7 @@ async def delete_material(
         action="delete_material",
         target=str(material_id),
         operator=admin.username,
-        detail=json.dumps({"material_id": material_id}, ensure_ascii=False),
+        detail=audit_detail({"material_id": material_id}, reason=reason),
     ))
     await db.commit()
     return success(data={"success": True})
@@ -151,6 +153,7 @@ async def create_placement(
 @router.delete("/placements/{placement_id}")
 async def delete_placement(
     placement_id: int,
+    reason: str = Query("", max_length=200, description="删除原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(get_current_admin),
 ):
@@ -162,7 +165,7 @@ async def delete_placement(
         action="delete_placement",
         target=str(placement_id),
         operator=admin.username,
-        detail=json.dumps({"placement_id": placement_id}, ensure_ascii=False),
+        detail=audit_detail({"placement_id": placement_id}, reason=reason),
     ))
     await db.commit()
     return success(data={"success": True})

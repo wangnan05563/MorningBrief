@@ -3,10 +3,11 @@
     {
       "endpoint": "PATCH /db-admin/tables/*/rows/*",
       "model": "RowUpdateRequest",
-      "modelSource": "backend/app/routers/admin/db_admin.py:38",
+      "modelSource": "backend/app/routers/admin/db_admin.py:39",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/db_admin.py:141",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:148",
       "declared": [
+        "reason",
         "values"
       ],
       "frontend": {
@@ -36,7 +37,9 @@
       "diffs": {
         "frontendNotInModel": [],
         "declaredButNotHandled": [],
-        "modelNotSubmitted": [],
+        "modelNotSubmitted": [
+          "reason"
+        ],
         "modelNotInColumn": [
           "values"
         ],
@@ -47,9 +50,9 @@
     {
       "endpoint": "POST /ads/materials",
       "model": "MaterialCreateRequest",
-      "modelSource": "backend/app/routers/admin/ads.py:19",
+      "modelSource": "backend/app/routers/admin/ads.py:20",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/ads.py:48",
+      "handlerSource": "backend/app/routers/admin/ads.py:49",
       "declared": [
         "description",
         "duration",
@@ -103,9 +106,9 @@
     {
       "endpoint": "POST /ads/placements",
       "model": "PlacementCreateRequest",
-      "modelSource": "backend/app/routers/admin/ads.py:27",
+      "modelSource": "backend/app/routers/admin/ads.py:28",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/ads.py:135",
+      "handlerSource": "backend/app/routers/admin/ads.py:137",
       "declared": [
         "end_date",
         "material_id",
@@ -159,9 +162,9 @@
     {
       "endpoint": "POST /ai/chat",
       "model": "ChatBody",
-      "modelSource": "backend/app/routers/admin/ai_config.py:241",
+      "modelSource": "backend/app/routers/admin/ai_config.py:242",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/ai_config.py:646",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:650",
       "declared": [
         "api_key",
         "base_url",
@@ -209,9 +212,9 @@
     {
       "endpoint": "POST /ai/download-tts-models",
       "model": "DownloadTTSModelsBody",
-      "modelSource": "backend/app/routers/admin/ai_config.py:216",
+      "modelSource": "backend/app/routers/admin/ai_config.py:217",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/ai_config.py:450",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:451",
       "declared": [
         "kokoro_lang",
         "kokoro_voice",
@@ -261,9 +264,9 @@
     {
       "endpoint": "POST /ai/models",
       "model": "FetchModelsBody",
-      "modelSource": "backend/app/routers/admin/ai_config.py:231",
+      "modelSource": "backend/app/routers/admin/ai_config.py:232",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/ai_config.py:627",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:631",
       "declared": [
         "api_key",
         "base_url"
@@ -311,9 +314,9 @@
     {
       "endpoint": "POST /ai/preview-tts",
       "model": "PreviewTTSBody",
-      "modelSource": "backend/app/routers/admin/ai_config.py:181",
+      "modelSource": "backend/app/routers/admin/ai_config.py:182",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/ai_config.py:401",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:402",
       "declared": [
         "aliyun_api_key",
         "aliyun_appkey",
@@ -426,9 +429,9 @@
     {
       "endpoint": "POST /ai/selected-model",
       "model": "SelectedModelBody",
-      "modelSource": "backend/app/routers/admin/ai_config.py:253",
+      "modelSource": "backend/app/routers/admin/ai_config.py:254",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/ai_config.py:686",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:690",
       "declared": [
         "model"
       ],
@@ -466,9 +469,9 @@
     {
       "endpoint": "POST /ai/test-image",
       "model": "TestImageBody",
-      "modelSource": "backend/app/routers/admin/ai_config.py:154",
+      "modelSource": "backend/app/routers/admin/ai_config.py:155",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/ai_config.py:361",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:362",
       "declared": [
         "api_key",
         "base_url",
@@ -512,9 +515,9 @@
     {
       "endpoint": "POST /ai/test-llm",
       "model": "TestLLMBody",
-      "modelSource": "backend/app/routers/admin/ai_config.py:148",
+      "modelSource": "backend/app/routers/admin/ai_config.py:149",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/ai_config.py:345",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:346",
       "declared": [
         "api_key",
         "base_url",
@@ -558,9 +561,9 @@
     {
       "endpoint": "POST /ai/test-tts",
       "model": "TestTTSBody",
-      "modelSource": "backend/app/routers/admin/ai_config.py:161",
+      "modelSource": "backend/app/routers/admin/ai_config.py:162",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/ai_config.py:376",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:377",
       "declared": [
         "api_key",
         "appkey",
@@ -631,9 +634,9 @@
     {
       "endpoint": "POST /ai/voices/sync",
       "model": "VoiceSyncBody",
-      "modelSource": "backend/app/routers/admin/ai_config.py:142",
+      "modelSource": "backend/app/routers/admin/ai_config.py:143",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/ai_config.py:600",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:604",
       "declared": [
         "provider"
       ],
@@ -804,12 +807,13 @@
     {
       "endpoint": "POST /backups/restore",
       "model": "RestoreRequest",
-      "modelSource": "backend/app/routers/admin/backup.py:33",
+      "modelSource": "backend/app/routers/admin/backup.py:34",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/backup.py:96",
+      "handlerSource": "backend/app/routers/admin/backup.py:98",
       "declared": [
         "backup_path",
-        "confirm_text"
+        "confirm_text",
+        "reason"
       ],
       "frontend": {
         "callSites": [],
@@ -835,9 +839,9 @@
     {
       "endpoint": "POST /channels",
       "model": "ChannelCreateRequest",
-      "modelSource": "backend/app/routers/admin/channels.py:64",
+      "modelSource": "backend/app/routers/admin/channels.py:66",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/channels.py:432",
+      "handlerSource": "backend/app/routers/admin/channels.py:434",
       "declared": [
         "auto_generate_prompts",
         "bgm_gap_mode",
@@ -1023,9 +1027,9 @@
     {
       "endpoint": "POST /channels/*/icon/ai-generate",
       "model": "ChannelIconAIRequest",
-      "modelSource": "backend/app/routers/admin/channels.py:948",
+      "modelSource": "backend/app/routers/admin/channels.py:952",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/channels.py:952",
+      "handlerSource": "backend/app/routers/admin/channels.py:956",
       "declared": [
         "prompt"
       ],
@@ -1063,9 +1067,9 @@
     {
       "endpoint": "POST /cos/folder",
       "model": "CosFolderBody",
-      "modelSource": "backend/app/routers/admin/cos.py:58",
+      "modelSource": "backend/app/routers/admin/cos.py:59",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/cos.py:292",
+      "handlerSource": "backend/app/routers/admin/cos.py:298",
       "declared": [
         "prefix"
       ],
@@ -1103,12 +1107,13 @@
     {
       "endpoint": "POST /cos/move",
       "model": "CosMoveBody",
-      "modelSource": "backend/app/routers/admin/cos.py:63",
+      "modelSource": "backend/app/routers/admin/cos.py:64",
       "modelExtra": "forbid",
-      "handlerSource": "backend/app/routers/admin/cos.py:330",
+      "handlerSource": "backend/app/routers/admin/cos.py:336",
       "declared": [
         "dest_key",
         "overwrite",
+        "reason",
         "source_key"
       ],
       "frontend": {
@@ -1140,7 +1145,9 @@
       "diffs": {
         "frontendNotInModel": [],
         "declaredButNotHandled": [],
-        "modelNotSubmitted": [],
+        "modelNotSubmitted": [
+          "reason"
+        ],
         "modelNotInColumn": [
           "dest_key",
           "overwrite",
@@ -1153,12 +1160,13 @@
     {
       "endpoint": "POST /cos/restore",
       "model": "CosRestoreBody",
-      "modelSource": "backend/app/routers/admin/cos.py:77",
+      "modelSource": "backend/app/routers/admin/cos.py:79",
       "modelExtra": "forbid",
-      "handlerSource": "backend/app/routers/admin/cos.py:380",
+      "handlerSource": "backend/app/routers/admin/cos.py:386",
       "declared": [
         "backup_key",
         "overwrite",
+        "reason",
         "target_key"
       ],
       "frontend": {
@@ -1190,7 +1198,9 @@
       "diffs": {
         "frontendNotInModel": [],
         "declaredButNotHandled": [],
-        "modelNotSubmitted": [],
+        "modelNotSubmitted": [
+          "reason"
+        ],
         "modelNotInColumn": [
           "backup_key",
           "overwrite",
@@ -1203,9 +1213,9 @@
     {
       "endpoint": "POST /db-admin/tables/*/cascade-preview",
       "model": "CascadePreviewRequest",
-      "modelSource": "backend/app/routers/admin/db_admin.py:49",
+      "modelSource": "backend/app/routers/admin/db_admin.py:52",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/db_admin.py:201",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:209",
       "declared": [
         "ids"
       ],
@@ -1250,15 +1260,16 @@
     {
       "endpoint": "POST /db-admin/tables/*/import",
       "model": "ImportRequest",
-      "modelSource": "backend/app/routers/admin/db_admin.py:54",
+      "modelSource": "backend/app/routers/admin/db_admin.py:57",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/db_admin.py:281",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:289",
       "declared": [
         "confirm_text",
         "content",
         "dry_run",
         "format",
         "mode",
+        "reason",
         "rows"
       ],
       "frontend": {
@@ -1289,6 +1300,7 @@
         "declaredButNotHandled": [],
         "modelNotSubmitted": [
           "dry_run",
+          "reason",
           "rows"
         ],
         "modelNotInColumn": [
@@ -1304,9 +1316,9 @@
     {
       "endpoint": "POST /db-admin/tables/*/import/preview",
       "model": "ImportPreviewRequest",
-      "modelSource": "backend/app/routers/admin/db_admin.py:64",
+      "modelSource": "backend/app/routers/admin/db_admin.py:68",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/db_admin.py:253",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:261",
       "declared": [
         "content",
         "format",
@@ -1356,8 +1368,9 @@
       "model": "RowCreateRequest",
       "modelSource": "backend/app/routers/admin/db_admin.py:33",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/db_admin.py:126",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:130",
       "declared": [
+        "reason",
         "values"
       ],
       "frontend": {
@@ -1383,7 +1396,9 @@
       "diffs": {
         "frontendNotInModel": [],
         "declaredButNotHandled": [],
-        "modelNotSubmitted": [],
+        "modelNotSubmitted": [
+          "reason"
+        ],
         "modelNotInColumn": [
           "values"
         ],
@@ -1394,12 +1409,13 @@
     {
       "endpoint": "POST /db-admin/tables/*/rows/batch-delete",
       "model": "BatchDeleteRequest",
-      "modelSource": "backend/app/routers/admin/db_admin.py:43",
+      "modelSource": "backend/app/routers/admin/db_admin.py:45",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/db_admin.py:180",
+      "handlerSource": "backend/app/routers/admin/db_admin.py:188",
       "declared": [
         "confirm_text",
-        "ids"
+        "ids",
+        "reason"
       ],
       "frontend": {
         "callSites": [
@@ -1429,7 +1445,9 @@
       "diffs": {
         "frontendNotInModel": [],
         "declaredButNotHandled": [],
-        "modelNotSubmitted": [],
+        "modelNotSubmitted": [
+          "reason"
+        ],
         "modelNotInColumn": [
           "ids"
         ],
@@ -1679,11 +1697,12 @@
     {
       "endpoint": "POST /maintenance/cache",
       "model": "CacheCleanupRequest",
-      "modelSource": "backend/app/routers/admin/maintenance.py:41",
+      "modelSource": "backend/app/routers/admin/maintenance.py:42",
       "modelExtra": "forbid",
-      "handlerSource": "backend/app/routers/admin/maintenance.py:164",
+      "handlerSource": "backend/app/routers/admin/maintenance.py:168",
       "declared": [
         "dry_run",
+        "reason",
         "target"
       ],
       "frontend": {
@@ -1712,10 +1731,11 @@
       "model": "CleanupRequest",
       "modelSource": "backend/app/routers/admin/maintenance.py:28",
       "modelExtra": "forbid",
-      "handlerSource": "backend/app/routers/admin/maintenance.py:81",
+      "handlerSource": "backend/app/routers/admin/maintenance.py:84",
       "declared": [
         "days",
         "dry_run",
+        "reason",
         "target"
       ],
       "frontend": {
@@ -1745,10 +1765,11 @@
       "model": "CleanupRequest",
       "modelSource": "backend/app/routers/admin/maintenance.py:28",
       "modelExtra": "forbid",
-      "handlerSource": "backend/app/routers/admin/maintenance.py:138",
+      "handlerSource": "backend/app/routers/admin/maintenance.py:142",
       "declared": [
         "days",
         "dry_run",
+        "reason",
         "target"
       ],
       "frontend": {
@@ -1776,11 +1797,12 @@
     {
       "endpoint": "POST /maintenance/workflow-chain",
       "model": "WorkflowChainCleanupRequest",
-      "modelSource": "backend/app/routers/admin/maintenance.py:53",
+      "modelSource": "backend/app/routers/admin/maintenance.py:55",
       "modelExtra": "forbid",
-      "handlerSource": "backend/app/routers/admin/maintenance.py:111",
+      "handlerSource": "backend/app/routers/admin/maintenance.py:114",
       "declared": [
         "dry_run",
+        "reason",
         "workflow_id"
       ],
       "frontend": {
@@ -1789,20 +1811,28 @@
         "unresolved": [],
         "hasCallSite": false
       },
-      "ormTable": "WorkflowStep",
-      "ormScore": 0.5,
+      "ormTable": "Review",
+      "ormScore": 0.667,
       "ormTied": [
-        "WorkflowStep"
+        "Review"
       ],
       "ormColumns": [
-        "error",
-        "finished_at",
+        "audio_url",
+        "auto_approved",
+        "auto_trigger_reason",
+        "created_at",
+        "episode_date",
+        "hls_url",
         "id",
-        "result",
-        "retry_count",
-        "started_at",
+        "measured_duration_sec",
+        "original_duration_sec",
+        "reason",
+        "reviewed_at",
+        "reviewer_id",
+        "reviewer_name",
+        "script_id",
         "status",
-        "step_name",
+        "supplement_sec",
         "workflow_id"
       ],
       "diffs": {
@@ -1811,13 +1841,19 @@
         "modelNotSubmitted": [],
         "modelNotInColumn": [],
         "columnNotInModel": [
-          "error",
-          "finished_at",
-          "result",
-          "retry_count",
-          "started_at",
+          "audio_url",
+          "auto_approved",
+          "auto_trigger_reason",
+          "episode_date",
+          "hls_url",
+          "measured_duration_sec",
+          "original_duration_sec",
+          "reviewed_at",
+          "reviewer_id",
+          "reviewer_name",
+          "script_id",
           "status",
-          "step_name"
+          "supplement_sec"
         ]
       },
       "verdict": null
@@ -1825,9 +1861,9 @@
     {
       "endpoint": "POST /materials",
       "model": "MaterialCreateRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:32",
+      "modelSource": "backend/app/routers/admin/materials.py:33",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:496",
+      "handlerSource": "backend/app/routers/admin/materials.py:497",
       "declared": [
         "category",
         "channel_id",
@@ -1929,12 +1965,13 @@
     {
       "endpoint": "POST /materials/batch-delete",
       "model": "MaterialBatchDeleteRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:679",
+      "modelSource": "backend/app/routers/admin/materials.py:682",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:691",
+      "handlerSource": "backend/app/routers/admin/materials.py:695",
       "declared": [
         "channel_id",
         "ids",
+        "reason",
         "sources"
       ],
       "frontend": {
@@ -1943,20 +1980,21 @@
             "file": "views/channel/MaterialLibrary.vue",
             "line": 719,
             "fn": "batchDeleteMaterials",
-            "fieldCount": 2,
+            "fieldCount": 3,
             "unresolved": []
           },
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 744,
+            "line": 745,
             "fn": "batchDeleteMaterials",
-            "fieldCount": 1,
+            "fieldCount": 2,
             "unresolved": []
           }
         ],
         "fields": [
           "channel_id",
           "ids",
+          "reason",
           "sources"
         ],
         "unresolved": [],
@@ -1982,9 +2020,9 @@
     {
       "endpoint": "POST /materials/import-cos",
       "model": "ImportCosRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:861",
+      "modelSource": "backend/app/routers/admin/materials.py:865",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:872",
+      "handlerSource": "backend/app/routers/admin/materials.py:876",
       "declared": [
         "category",
         "channel_id",
@@ -2068,9 +2106,9 @@
     {
       "endpoint": "POST /materials/import-url",
       "model": "ImportUrlRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:810",
+      "modelSource": "backend/app/routers/admin/materials.py:814",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:824",
+      "handlerSource": "backend/app/routers/admin/materials.py:828",
       "declared": [
         "category",
         "channel_id",
@@ -2152,9 +2190,9 @@
     {
       "endpoint": "POST /materials/share",
       "model": "SharePreviewRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:926",
+      "modelSource": "backend/app/routers/admin/materials.py:930",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:935",
+      "handlerSource": "backend/app/routers/admin/materials.py:939",
       "declared": [
         "channel_id",
         "url"
@@ -2237,10 +2275,11 @@
     {
       "endpoint": "POST /queue/tasks/batch-delete",
       "model": "BatchDeleteTasksRequest",
-      "modelSource": "backend/app/routers/admin/queue.py:28",
+      "modelSource": "backend/app/routers/admin/queue.py:29",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/queue.py:92",
+      "handlerSource": "backend/app/routers/admin/queue.py:94",
       "declared": [
+        "reason",
         "workflow_ids"
       ],
       "frontend": {
@@ -2270,7 +2309,9 @@
       "diffs": {
         "frontendNotInModel": [],
         "declaredButNotHandled": [],
-        "modelNotSubmitted": [],
+        "modelNotSubmitted": [
+          "reason"
+        ],
         "modelNotInColumn": [
           "workflow_ids"
         ],
@@ -2651,10 +2692,11 @@
     {
       "endpoint": "POST /workflows/*/retry",
       "model": "RetryRequest",
-      "modelSource": "backend/app/routers/admin/workflows.py:23",
+      "modelSource": "backend/app/routers/admin/workflows.py:24",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/workflows.py:293",
+      "handlerSource": "backend/app/routers/admin/workflows.py:299",
       "declared": [
+        "reason",
         "step"
       ],
       "frontend": {
@@ -2680,7 +2722,9 @@
       "diffs": {
         "frontendNotInModel": [],
         "declaredButNotHandled": [],
-        "modelNotSubmitted": [],
+        "modelNotSubmitted": [
+          "reason"
+        ],
         "modelNotInColumn": [
           "step"
         ],
@@ -2691,10 +2735,11 @@
     {
       "endpoint": "POST /workflows/batch-delete",
       "model": "BatchDeleteRequest",
-      "modelSource": "backend/app/routers/admin/workflows.py:39",
+      "modelSource": "backend/app/routers/admin/workflows.py:60",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/workflows.py:94",
+      "handlerSource": "backend/app/routers/admin/workflows.py:97",
       "declared": [
+        "reason",
         "workflow_ids"
       ],
       "frontend": {
@@ -2720,7 +2765,9 @@
       "diffs": {
         "frontendNotInModel": [],
         "declaredButNotHandled": [],
-        "modelNotSubmitted": [],
+        "modelNotSubmitted": [
+          "reason"
+        ],
         "modelNotInColumn": [
           "workflow_ids"
         ],
@@ -2730,10 +2777,10 @@
     },
     {
       "endpoint": "POST /workflows/batch-delete/preview",
-      "model": "BatchDeleteRequest",
-      "modelSource": "backend/app/routers/admin/workflows.py:39",
+      "model": "BatchIdsRequest",
+      "modelSource": "backend/app/routers/admin/workflows.py:42",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/workflows.py:119",
+      "handlerSource": "backend/app/routers/admin/workflows.py:124",
       "declared": [
         "workflow_ids"
       ],
@@ -2784,12 +2831,13 @@
     {
       "endpoint": "POST /workflows/trigger",
       "model": "TriggerRequest",
-      "modelSource": "backend/app/routers/admin/workflows.py:28",
+      "modelSource": "backend/app/routers/admin/workflows.py:30",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/workflows.py:147",
+      "handlerSource": "backend/app/routers/admin/workflows.py:152",
       "declared": [
         "channel_id",
         "episode_date",
+        "reason",
         "skip_crawl"
       ],
       "frontend": {
@@ -2817,36 +2865,55 @@
         "unresolved": [],
         "hasCallSite": true
       },
-      "ormTable": "Workflow",
-      "ormScore": 0.667,
+      "ormTable": "Review",
+      "ormScore": 0.5,
       "ormTied": [
+        "Review",
         "Workflow"
       ],
       "ormColumns": [
-        "channel_id",
+        "audio_url",
+        "auto_approved",
+        "auto_trigger_reason",
+        "created_at",
         "episode_date",
-        "error",
-        "finished_at",
+        "hls_url",
         "id",
-        "priority",
-        "source",
-        "started_at",
-        "status"
+        "measured_duration_sec",
+        "original_duration_sec",
+        "reason",
+        "reviewed_at",
+        "reviewer_id",
+        "reviewer_name",
+        "script_id",
+        "status",
+        "supplement_sec",
+        "workflow_id"
       ],
       "diffs": {
         "frontendNotInModel": [],
         "declaredButNotHandled": [],
-        "modelNotSubmitted": [],
+        "modelNotSubmitted": [
+          "reason"
+        ],
         "modelNotInColumn": [
+          "channel_id",
           "skip_crawl"
         ],
         "columnNotInModel": [
-          "error",
-          "finished_at",
-          "priority",
-          "source",
-          "started_at",
-          "status"
+          "audio_url",
+          "auto_approved",
+          "auto_trigger_reason",
+          "hls_url",
+          "measured_duration_sec",
+          "original_duration_sec",
+          "reviewed_at",
+          "reviewer_id",
+          "reviewer_name",
+          "script_id",
+          "status",
+          "supplement_sec",
+          "workflow_id"
         ]
       },
       "verdict": null
@@ -2854,9 +2921,9 @@
     {
       "endpoint": "PUT /ads/placements/*",
       "model": "PlacementUpdateRequest",
-      "modelSource": "backend/app/routers/admin/ads.py:97",
+      "modelSource": "backend/app/routers/admin/ads.py:99",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/ads.py:109",
+      "handlerSource": "backend/app/routers/admin/ads.py:111",
       "declared": [
         "enabled"
       ],
@@ -2925,9 +2992,9 @@
     {
       "endpoint": "PUT /ai/config",
       "model": "SaveConfigBody",
-      "modelSource": "backend/app/routers/admin/ai_config.py:133",
+      "modelSource": "backend/app/routers/admin/ai_config.py:134",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/ai_config.py:273",
+      "handlerSource": "backend/app/routers/admin/ai_config.py:274",
       "declared": [
         "image",
         "image.api_key",
@@ -3101,9 +3168,9 @@
     {
       "endpoint": "PUT /auto-review/config",
       "model": "ConfigUpdateRequest",
-      "modelSource": "backend/app/routers/admin/auto_review.py:27",
+      "modelSource": "backend/app/routers/admin/auto_review.py:28",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/auto_review.py:79",
+      "handlerSource": "backend/app/routers/admin/auto_review.py:80",
       "declared": [
         "enabled",
         "keyword_whitelist",
@@ -3164,9 +3231,9 @@
     {
       "endpoint": "PUT /channels/*",
       "model": "ChannelUpdateRequest",
-      "modelSource": "backend/app/routers/admin/channels.py:230",
+      "modelSource": "backend/app/routers/admin/channels.py:232",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/channels.py:495",
+      "handlerSource": "backend/app/routers/admin/channels.py:497",
       "declared": [
         "bgm_gap_mode",
         "bgm_path",
@@ -3461,9 +3528,9 @@
     {
       "endpoint": "PUT /cos/config",
       "model": "CosConfigBody",
-      "modelSource": "backend/app/routers/admin/cos.py:47",
+      "modelSource": "backend/app/routers/admin/cos.py:48",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/cos.py:128",
+      "handlerSource": "backend/app/routers/admin/cos.py:132",
       "declared": [
         "backup_keep_count",
         "bucket",
@@ -3575,9 +3642,9 @@
     {
       "endpoint": "PUT /materials/*",
       "model": "MaterialUpdateRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:60",
+      "modelSource": "backend/app/routers/admin/materials.py:61",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:546",
+      "handlerSource": "backend/app/routers/admin/materials.py:547",
       "declared": [
         "category",
         "content",
@@ -3841,9 +3908,9 @@
     {
       "endpoint": "PUT /queue/config",
       "model": "ConfigUpdateRequest",
-      "modelSource": "backend/app/routers/admin/queue.py:22",
+      "modelSource": "backend/app/routers/admin/queue.py:23",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/queue.py:211",
+      "handlerSource": "backend/app/routers/admin/queue.py:215",
       "declared": [
         "execution_mode",
         "max_concurrent"
@@ -3888,9 +3955,9 @@
     {
       "endpoint": "PUT /queue/tasks/*/priority",
       "model": "PriorityUpdateRequest",
-      "modelSource": "backend/app/routers/admin/queue.py:17",
+      "modelSource": "backend/app/routers/admin/queue.py:18",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/queue.py:145",
+      "handlerSource": "backend/app/routers/admin/queue.py:148",
       "declared": [
         "priority"
       ],
@@ -3928,9 +3995,9 @@
     {
       "endpoint": "PUT /scripts/*/segments",
       "model": "UpdateSegmentsRequest",
-      "modelSource": "backend/app/routers/admin/scripts.py:96",
+      "modelSource": "backend/app/routers/admin/scripts.py:97",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/scripts.py:101",
+      "handlerSource": "backend/app/routers/admin/scripts.py:102",
       "declared": [
         "segments",
         "segments.content",

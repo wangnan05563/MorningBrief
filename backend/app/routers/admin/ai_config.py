@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.ai_budget import get_today_summary, reset_budget
 from app.core.audio_profile import AUDIO_PROFILES, resolve_encoding
+from app.core.audit_reason import audit_detail
 from app.core.auth import require_admin, AdminPayload
 from app.core.response import error, success
 from app.config import get_settings
@@ -536,6 +537,7 @@ async def reset_config(
     scope: Literal["llm", "tts", "image", "all"] = Query(
         "llm", description="清除范围：llm（LLM 配置+预设）| tts | image | all"
     ),
+    reason: str = Query("", max_length=200, description="清除原因（可选，写入审计）"),
     db: AsyncSession = Depends(get_db),
     admin: AdminPayload = Depends(require_admin),
 ):
@@ -555,7 +557,9 @@ async def reset_config(
         action="reset_config",
         target=scope,
         operator=admin.username,
-        detail=json.dumps({"scope": scope, "cleared_keys": RESET_SCOPES[scope]}, ensure_ascii=False),
+        detail=audit_detail(
+            {"scope": scope, "cleared_keys": RESET_SCOPES[scope]}, reason=reason
+        ),
     ))
     await db.commit()
 

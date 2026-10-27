@@ -144,35 +144,41 @@
         "params.channel_id",
         "params.source"
       ],
-      "unresolved": [],
+      "unresolved": [
+        "展开 paramsConditionalExpression"
+      ],
       "sites": [
         {
           "file": "views/channel/MaterialLibrary.vue",
           "line": 680,
           "fn": "deleteMaterialsBySource",
           "fieldCount": 3,
-          "unresolved": []
+          "unresolved": [
+            "展开 paramsConditionalExpression"
+          ]
         }
       ]
     },
     {
       "method": "DELETE",
       "url": "/materials/*",
-      "fields": [],
+      "fields": [
+        "params"
+      ],
       "unresolved": [],
       "sites": [
         {
           "file": "views/channel/MaterialLibrary.vue",
           "line": 657,
           "fn": "deleteMaterial",
-          "fieldCount": 0,
+          "fieldCount": 1,
           "unresolved": []
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
           "line": 798,
           "fn": "deleteMaterial",
-          "fieldCount": 0,
+          "fieldCount": 1,
           "unresolved": []
         }
       ]
@@ -584,7 +590,7 @@
         },
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 768,
+          "line": 769,
           "fn": "listChannels",
           "fieldCount": 2,
           "unresolved": []
@@ -2663,6 +2669,7 @@
       "fields": [
         "channel_id",
         "ids",
+        "reason",
         "sources"
       ],
       "unresolved": [],
@@ -2671,14 +2678,14 @@
           "file": "views/channel/MaterialLibrary.vue",
           "line": 719,
           "fn": "batchDeleteMaterials",
-          "fieldCount": 2,
+          "fieldCount": 3,
           "unresolved": []
         },
         {
           "file": "views/channel/MaterialLibrary.vue",
-          "line": 744,
+          "line": 745,
           "fn": "batchDeleteMaterials",
-          "fieldCount": 1,
+          "fieldCount": 2,
           "unresolved": []
         }
       ]
@@ -11676,11 +11683,203 @@
       "method": "delete",
       "url": "/materials/*",
       "file": "api/materials.js",
-      "line": 20,
+      "line": 21,
       "argNames": [
-        "id"
+        "id",
+        null
       ],
-      "payloadExpr": null,
+      "payloadExpr": {
+        "type": "ObjectExpression",
+        "start": 729,
+        "end": 765,
+        "loc": {
+          "start": {
+            "line": 21,
+            "column": 33,
+            "index": 729
+          },
+          "end": {
+            "line": 21,
+            "column": 69,
+            "index": 765
+          }
+        },
+        "properties": [
+          {
+            "type": "ObjectProperty",
+            "start": 731,
+            "end": 763,
+            "loc": {
+              "start": {
+                "line": 21,
+                "column": 35,
+                "index": 731
+              },
+              "end": {
+                "line": 21,
+                "column": 67,
+                "index": 763
+              }
+            },
+            "method": false,
+            "key": {
+              "type": "Identifier",
+              "start": 731,
+              "end": 737,
+              "loc": {
+                "start": {
+                  "line": 21,
+                  "column": 35,
+                  "index": 731
+                },
+                "end": {
+                  "line": 21,
+                  "column": 41,
+                  "index": 737
+                },
+                "identifierName": "params"
+              },
+              "name": "params"
+            },
+            "computed": false,
+            "shorthand": false,
+            "value": {
+              "type": "ConditionalExpression",
+              "start": 739,
+              "end": 763,
+              "loc": {
+                "start": {
+                  "line": 21,
+                  "column": 43,
+                  "index": 739
+                },
+                "end": {
+                  "line": 21,
+                  "column": 67,
+                  "index": 763
+                }
+              },
+              "test": {
+                "type": "Identifier",
+                "start": 739,
+                "end": 745,
+                "loc": {
+                  "start": {
+                    "line": 21,
+                    "column": 43,
+                    "index": 739
+                  },
+                  "end": {
+                    "line": 21,
+                    "column": 49,
+                    "index": 745
+                  },
+                  "identifierName": "reason"
+                },
+                "name": "reason"
+              },
+              "consequent": {
+                "type": "ObjectExpression",
+                "start": 748,
+                "end": 758,
+                "loc": {
+                  "start": {
+                    "line": 21,
+                    "column": 52,
+                    "index": 748
+                  },
+                  "end": {
+                    "line": 21,
+                    "column": 62,
+                    "index": 758
+                  }
+                },
+                "properties": [
+                  {
+                    "type": "ObjectProperty",
+                    "start": 750,
+                    "end": 756,
+                    "loc": {
+                      "start": {
+                        "line": 21,
+                        "column": 54,
+                        "index": 750
+                      },
+                      "end": {
+                        "line": 21,
+                        "column": 60,
+                        "index": 756
+                      }
+                    },
+                    "method": false,
+                    "key": {
+                      "type": "Identifier",
+                      "start": 750,
+                      "end": 756,
+                      "loc": {
+                        "start": {
+                          "line": 21,
+                          "column": 54,
+                          "index": 750
+                        },
+                        "end": {
+                          "line": 21,
+                          "column": 60,
+                          "index": 756
+                        },
+                        "identifierName": "reason"
+                      },
+                      "name": "reason"
+                    },
+                    "computed": false,
+                    "shorthand": true,
+                    "value": {
+                      "type": "Identifier",
+                      "start": 750,
+                      "end": 756,
+                      "loc": {
+                        "start": {
+                          "line": 21,
+                          "column": 54,
+                          "index": 750
+                        },
+                        "end": {
+                          "line": 21,
+                          "column": 60,
+                          "index": 756
+                        },
+                        "identifierName": "reason"
+                      },
+                      "name": "reason"
+                    },
+                    "extra": {
+                      "shorthand": true
+                    }
+                  }
+                ]
+              },
+              "alternate": {
+                "type": "ObjectExpression",
+                "start": 761,
+                "end": 763,
+                "loc": {
+                  "start": {
+                    "line": 21,
+                    "column": 65,
+                    "index": 761
+                  },
+                  "end": {
+                    "line": 21,
+                    "column": 67,
+                    "index": 763
+                  }
+                },
+                "properties": []
+              }
+            }
+          }
+        ]
+      },
       "defIndex": {
         "decls": [],
         "assigns": []
@@ -11691,59 +11890,60 @@
       "method": "delete",
       "url": "/materials",
       "file": "api/materials.js",
-      "line": 23,
+      "line": 24,
       "argNames": [
         "source",
-        "channelId"
+        "channelId",
+        null
       ],
       "payloadExpr": {
         "type": "ObjectExpression",
-        "start": 851,
-        "end": 896,
+        "start": 917,
+        "end": 1000,
         "loc": {
           "start": {
-            "line": 23,
+            "line": 24,
             "column": 27,
-            "index": 851
+            "index": 917
           },
           "end": {
-            "line": 23,
-            "column": 72,
-            "index": 896
+            "line": 26,
+            "column": 3,
+            "index": 1000
           }
         },
         "properties": [
           {
             "type": "ObjectProperty",
-            "start": 853,
-            "end": 894,
+            "start": 923,
+            "end": 995,
             "loc": {
               "start": {
-                "line": 23,
-                "column": 29,
-                "index": 853
+                "line": 25,
+                "column": 4,
+                "index": 923
               },
               "end": {
-                "line": 23,
-                "column": 70,
-                "index": 894
+                "line": 25,
+                "column": 76,
+                "index": 995
               }
             },
             "method": false,
             "key": {
               "type": "Identifier",
-              "start": 853,
-              "end": 859,
+              "start": 923,
+              "end": 929,
               "loc": {
                 "start": {
-                  "line": 23,
-                  "column": 29,
-                  "index": 853
+                  "line": 25,
+                  "column": 4,
+                  "index": 923
                 },
                 "end": {
-                  "line": 23,
-                  "column": 35,
-                  "index": 859
+                  "line": 25,
+                  "column": 10,
+                  "index": 929
                 },
                 "identifierName": "params"
               },
@@ -11753,52 +11953,52 @@
             "shorthand": false,
             "value": {
               "type": "ObjectExpression",
-              "start": 861,
-              "end": 894,
+              "start": 931,
+              "end": 995,
               "loc": {
                 "start": {
-                  "line": 23,
-                  "column": 37,
-                  "index": 861
+                  "line": 25,
+                  "column": 12,
+                  "index": 931
                 },
                 "end": {
-                  "line": 23,
-                  "column": 70,
-                  "index": 894
+                  "line": 25,
+                  "column": 76,
+                  "index": 995
                 }
               },
               "properties": [
                 {
                   "type": "ObjectProperty",
-                  "start": 863,
-                  "end": 869,
+                  "start": 933,
+                  "end": 939,
                   "loc": {
                     "start": {
-                      "line": 23,
-                      "column": 39,
-                      "index": 863
+                      "line": 25,
+                      "column": 14,
+                      "index": 933
                     },
                     "end": {
-                      "line": 23,
-                      "column": 45,
-                      "index": 869
+                      "line": 25,
+                      "column": 20,
+                      "index": 939
                     }
                   },
                   "method": false,
                   "key": {
                     "type": "Identifier",
-                    "start": 863,
-                    "end": 869,
+                    "start": 933,
+                    "end": 939,
                     "loc": {
                       "start": {
-                        "line": 23,
-                        "column": 39,
-                        "index": 863
+                        "line": 25,
+                        "column": 14,
+                        "index": 933
                       },
                       "end": {
-                        "line": 23,
-                        "column": 45,
-                        "index": 869
+                        "line": 25,
+                        "column": 20,
+                        "index": 939
                       },
                       "identifierName": "source"
                     },
@@ -11808,18 +12008,18 @@
                   "shorthand": true,
                   "value": {
                     "type": "Identifier",
-                    "start": 863,
-                    "end": 869,
+                    "start": 933,
+                    "end": 939,
                     "loc": {
                       "start": {
-                        "line": 23,
-                        "column": 39,
-                        "index": 863
+                        "line": 25,
+                        "column": 14,
+                        "index": 933
                       },
                       "end": {
-                        "line": 23,
-                        "column": 45,
-                        "index": 869
+                        "line": 25,
+                        "column": 20,
+                        "index": 939
                       },
                       "identifierName": "source"
                     },
@@ -11831,35 +12031,35 @@
                 },
                 {
                   "type": "ObjectProperty",
-                  "start": 871,
-                  "end": 892,
+                  "start": 941,
+                  "end": 962,
                   "loc": {
                     "start": {
-                      "line": 23,
-                      "column": 47,
-                      "index": 871
+                      "line": 25,
+                      "column": 22,
+                      "index": 941
                     },
                     "end": {
-                      "line": 23,
-                      "column": 68,
-                      "index": 892
+                      "line": 25,
+                      "column": 43,
+                      "index": 962
                     }
                   },
                   "method": false,
                   "key": {
                     "type": "Identifier",
-                    "start": 871,
-                    "end": 881,
+                    "start": 941,
+                    "end": 951,
                     "loc": {
                       "start": {
-                        "line": 23,
-                        "column": 47,
-                        "index": 871
+                        "line": 25,
+                        "column": 22,
+                        "index": 941
                       },
                       "end": {
-                        "line": 23,
-                        "column": 57,
-                        "index": 881
+                        "line": 25,
+                        "column": 32,
+                        "index": 951
                       },
                       "identifierName": "channel_id"
                     },
@@ -11869,28 +12069,186 @@
                   "shorthand": false,
                   "value": {
                     "type": "Identifier",
-                    "start": 883,
-                    "end": 892,
+                    "start": 953,
+                    "end": 962,
                     "loc": {
                       "start": {
-                        "line": 23,
-                        "column": 59,
-                        "index": 883
+                        "line": 25,
+                        "column": 34,
+                        "index": 953
                       },
                       "end": {
-                        "line": 23,
-                        "column": 68,
-                        "index": 892
+                        "line": 25,
+                        "column": 43,
+                        "index": 962
                       },
                       "identifierName": "channelId"
                     },
                     "name": "channelId"
                   }
+                },
+                {
+                  "type": "SpreadElement",
+                  "start": 964,
+                  "end": 993,
+                  "loc": {
+                    "start": {
+                      "line": 25,
+                      "column": 45,
+                      "index": 964
+                    },
+                    "end": {
+                      "line": 25,
+                      "column": 74,
+                      "index": 993
+                    }
+                  },
+                  "argument": {
+                    "type": "ConditionalExpression",
+                    "start": 968,
+                    "end": 992,
+                    "loc": {
+                      "start": {
+                        "line": 25,
+                        "column": 49,
+                        "index": 968
+                      },
+                      "end": {
+                        "line": 25,
+                        "column": 73,
+                        "index": 992
+                      }
+                    },
+                    "test": {
+                      "type": "Identifier",
+                      "start": 968,
+                      "end": 974,
+                      "loc": {
+                        "start": {
+                          "line": 25,
+                          "column": 49,
+                          "index": 968
+                        },
+                        "end": {
+                          "line": 25,
+                          "column": 55,
+                          "index": 974
+                        },
+                        "identifierName": "reason"
+                      },
+                      "name": "reason"
+                    },
+                    "consequent": {
+                      "type": "ObjectExpression",
+                      "start": 977,
+                      "end": 987,
+                      "loc": {
+                        "start": {
+                          "line": 25,
+                          "column": 58,
+                          "index": 977
+                        },
+                        "end": {
+                          "line": 25,
+                          "column": 68,
+                          "index": 987
+                        }
+                      },
+                      "properties": [
+                        {
+                          "type": "ObjectProperty",
+                          "start": 979,
+                          "end": 985,
+                          "loc": {
+                            "start": {
+                              "line": 25,
+                              "column": 60,
+                              "index": 979
+                            },
+                            "end": {
+                              "line": 25,
+                              "column": 66,
+                              "index": 985
+                            }
+                          },
+                          "method": false,
+                          "key": {
+                            "type": "Identifier",
+                            "start": 979,
+                            "end": 985,
+                            "loc": {
+                              "start": {
+                                "line": 25,
+                                "column": 60,
+                                "index": 979
+                              },
+                              "end": {
+                                "line": 25,
+                                "column": 66,
+                                "index": 985
+                              },
+                              "identifierName": "reason"
+                            },
+                            "name": "reason"
+                          },
+                          "computed": false,
+                          "shorthand": true,
+                          "value": {
+                            "type": "Identifier",
+                            "start": 979,
+                            "end": 985,
+                            "loc": {
+                              "start": {
+                                "line": 25,
+                                "column": 60,
+                                "index": 979
+                              },
+                              "end": {
+                                "line": 25,
+                                "column": 66,
+                                "index": 985
+                              },
+                              "identifierName": "reason"
+                            },
+                            "name": "reason"
+                          },
+                          "extra": {
+                            "shorthand": true
+                          }
+                        }
+                      ]
+                    },
+                    "alternate": {
+                      "type": "ObjectExpression",
+                      "start": 990,
+                      "end": 992,
+                      "loc": {
+                        "start": {
+                          "line": 25,
+                          "column": 71,
+                          "index": 990
+                        },
+                        "end": {
+                          "line": 25,
+                          "column": 73,
+                          "index": 992
+                        }
+                      },
+                      "properties": []
+                    },
+                    "extra": {
+                      "parenthesized": true,
+                      "parenStart": 967
+                    }
+                  }
                 }
               ]
             }
           }
-        ]
+        ],
+        "extra": {
+          "trailingComma": 995
+        }
       },
       "defIndex": {
         "decls": [],
@@ -11902,24 +12260,24 @@
       "method": "post",
       "url": "/materials/batch-delete",
       "file": "api/materials.js",
-      "line": 27,
+      "line": 30,
       "argNames": [
         "payload"
       ],
       "payloadExpr": {
         "type": "Identifier",
-        "start": 1127,
-        "end": 1134,
+        "start": 1231,
+        "end": 1238,
         "loc": {
           "start": {
-            "line": 27,
+            "line": 30,
             "column": 85,
-            "index": 1127
+            "index": 1231
           },
           "end": {
-            "line": 27,
+            "line": 30,
             "column": 92,
-            "index": 1134
+            "index": 1238
           },
           "identifierName": "payload"
         },
@@ -11935,25 +12293,25 @@
       "method": "post",
       "url": "/materials/upload",
       "file": "api/materials.js",
-      "line": 38,
+      "line": 41,
       "argNames": [
         "file",
         null
       ],
       "payloadExpr": {
         "type": "Identifier",
-        "start": 1552,
-        "end": 1560,
+        "start": 1656,
+        "end": 1664,
         "loc": {
           "start": {
-            "line": 38,
+            "line": 41,
             "column": 39,
-            "index": 1552
+            "index": 1656
           },
           "end": {
-            "line": 38,
+            "line": 41,
             "column": 47,
-            "index": 1560
+            "index": 1664
           },
           "identifierName": "formData"
         },
@@ -11969,24 +12327,24 @@
       "method": "post",
       "url": "/materials/import-cos",
       "file": "api/materials.js",
-      "line": 42,
+      "line": 45,
       "argNames": [
         "payload"
       ],
       "payloadExpr": {
         "type": "Identifier",
-        "start": 1695,
-        "end": 1702,
+        "start": 1799,
+        "end": 1806,
         "loc": {
           "start": {
-            "line": 42,
+            "line": 45,
             "column": 76,
-            "index": 1695
+            "index": 1799
           },
           "end": {
-            "line": 42,
+            "line": 45,
             "column": 83,
-            "index": 1702
+            "index": 1806
           },
           "identifierName": "payload"
         },
@@ -12002,24 +12360,24 @@
       "method": "post",
       "url": "/materials/import-url",
       "file": "api/materials.js",
-      "line": 45,
+      "line": 48,
       "argNames": [
         "payload"
       ],
       "payloadExpr": {
         "type": "Identifier",
-        "start": 1832,
-        "end": 1839,
+        "start": 1936,
+        "end": 1943,
         "loc": {
           "start": {
-            "line": 45,
+            "line": 48,
             "column": 76,
-            "index": 1832
+            "index": 1936
           },
           "end": {
-            "line": 45,
+            "line": 48,
             "column": 83,
-            "index": 1839
+            "index": 1943
           },
           "identifierName": "payload"
         },
@@ -12035,24 +12393,24 @@
       "method": "post",
       "url": "/materials/share",
       "file": "api/materials.js",
-      "line": 48,
+      "line": 51,
       "argNames": [
         "payload"
       ],
       "payloadExpr": {
         "type": "Identifier",
-        "start": 1962,
-        "end": 1969,
+        "start": 2066,
+        "end": 2073,
         "loc": {
           "start": {
-            "line": 48,
+            "line": 51,
             "column": 70,
-            "index": 1962
+            "index": 2066
           },
           "end": {
-            "line": 48,
+            "line": 51,
             "column": 77,
-            "index": 1969
+            "index": 2073
           },
           "identifierName": "payload"
         },

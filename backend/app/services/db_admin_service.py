@@ -29,6 +29,7 @@ from sqlalchemy import bindparam, inspect, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.audit_reason import audit_detail
 from app.core.exceptions import BizError, NotFoundError, ParamError
 from app.core.logging_setup import log_key_failure, redact_credentials, unwrap_echo_exception
 from app.models.audit_log import AuditLog
@@ -1063,6 +1064,7 @@ class DbAdminService:
         target: Optional[str] = None,
         operator: Optional[str] = None,
         detail: Optional[dict] = None,
+        reason: str = "",
     ) -> None:
         """写入审计日志。失败不抛异常（审计不应阻断主流程）。"""
         try:
@@ -1071,7 +1073,7 @@ class DbAdminService:
                 action=action,
                 target=target,
                 operator=operator,
-                detail=json.dumps(_mask_audit_detail(detail, target), ensure_ascii=False, default=str) if detail else None,
+                detail=audit_detail(_mask_audit_detail(detail, target), reason=reason) if detail else None,
             )
             self.db.add(log)
             await self.db.flush()

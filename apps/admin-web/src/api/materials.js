@@ -17,10 +17,13 @@ export const listMaterials = (params) => api.get('/materials', { params })
 export const getMaterial = (id) => api.get(`/materials/${id}`)
 export const createMaterial = (payload) => api.post('/materials', payload)
 export const updateMaterial = (id, payload) => api.put(`/materials/${id}`, payload)
-export const deleteMaterial = (id) => api.delete(`/materials/${id}`)
+export const deleteMaterial = (id, reason = '') =>
+  api.delete(`/materials/${id}`, { params: reason ? { reason } : {} })
 // 按书名（source）批量删除整本书的章节素材（T00895，素材库「按书聚合」视图用）
-export const deleteMaterialsBySource = (source, channelId) =>
-  api.delete('/materials', { params: { source, channel_id: channelId } })
+export const deleteMaterialsBySource = (source, channelId, reason = '') =>
+  api.delete('/materials', {
+    params: { source, channel_id: channelId, ...(reason ? { reason } : {}) },
+  })
 
 // T02517（FR-UX-703 / C52）：一次事务内按素材 ID / 书名批量删除（素材库勾选批量删）
 // payload: { ids?: number[], sources?: string[], channel_id?: number|null }，两者至少给一个
