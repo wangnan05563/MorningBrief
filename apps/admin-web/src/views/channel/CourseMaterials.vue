@@ -284,8 +284,20 @@ async function doUpload() {
       source: uploadSource.value || '文档上传',
       category: uploadCategory.value,
     })
-    uploadResult.value = `解析完成，新增 ${res.count} 条素材`
-    ElMessage.success('上传成功')
+    // C91：整本改为单事务 + 断点续传，频道内已存在的章节会被跳过。
+    // 提示必须说清「新增几条、跳过几章」，否则重复上传整本时只显示「新增 0 条」，
+    // 用户无从判断是解析失败还是本来就都在库里。
+    const skipped = res.skipped || 0
+    uploadResult.value = skipped
+      ? `解析完成：新增 ${res.count} 条素材，跳过 ${skipped} 章（频道内已有相同内容）`
+      : `解析完成，新增 ${res.count} 条素材`
+    if (res.count) {
+      ElMessage.success('上传成功')
+    } else if (skipped) {
+      ElMessage.warning(`整本已存在：${skipped} 章均已在目标频道，未重复入库`)
+    } else {
+      ElMessage.warning('未解析出可入库的章节')
+    }
     fileList.value = []
     selectedFile.value = null
   } catch (e) {
@@ -311,8 +323,18 @@ async function doCos() {
       source: cosSource.value || 'COS导入',
       category: cosCategory.value,
     })
-    cosResult.value = `导入完成，新增 ${res.count} 条素材`
-    ElMessage.success('COS 导入成功')
+    // 与文档上传同一口径（C91）：跳过已存在章节时如实回报，不把「全跳过」说成导入成功
+    const skipped = res.skipped || 0
+    cosResult.value = skipped
+      ? `导入完成：新增 ${res.count} 条素材，跳过 ${skipped} 章（频道内已有相同内容）`
+      : `导入完成，新增 ${res.count} 条素材`
+    if (res.count) {
+      ElMessage.success('COS 导入成功')
+    } else if (skipped) {
+      ElMessage.warning(`整本已存在：${skipped} 章均已在目标频道，未重复入库`)
+    } else {
+      ElMessage.warning('未解析出可入库的章节')
+    }
     cosKey.value = ''
   } catch (e) {
     /* 拦截器已提示 */

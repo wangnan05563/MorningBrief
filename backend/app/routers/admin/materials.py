@@ -11,6 +11,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy import select, func, case
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AdminPayload, get_current_admin, require_admin
@@ -101,6 +102,78 @@ def _material_to_dict(m: Material) -> dict:
     }
 
 
+async def _make_material(
+    db: AsyncSession,
+    *,
+    channel_id: int | None,
+    source: str,
+    title: str,
+    content: str,
+    category: str | None = None,
+    source_type: str = MaterialSourceType.list.value,
+    url: str | None = None,
+    dedup_key: str | None = None,
+    media_type: str | None = None,
+    media_url: str | None = None,
+    media_thumb_url: str | None = None,
+    cover_url: str | None = None,
+    check_dup: bool = True,
+) -> Material:
+    """查重并构造素材对象，**不写库、不提交**。
+
+    单条入库由 `_persist_material` 紧接着提交；整本上传由 `_persist_materials_atomic`
+    预检后统一提交——C91 的根因就是批量入口复用了「自带 commit」的单条函数。
+    `check_dup=False` 仅供整本上传使用：它已一次性预检过整本的 dedup_key。
+    """
+    if source_type in (MaterialSourceType.list.value, MaterialSourceType.cos.value):
+        key = dedup_key or compute_content_hash(content)
+        if check_dup:
+            dup = await db.execute(
+                select(Material.id).where(
+                    Material.source_type == source_type,
+                    Material.channel_id == channel_id,
+                    Material.dedup_key == key,
+                )
+            )
+            if dup.scalar_one_or_none() is not None:
+                raise BizError(code=409, message="该频道已存在相同内容的素材（重复上传）")
+        synthetic_url = f"{source_type}://{channel_id or 0}/{key[:16]}"
+        return Material(
+            channel_id=channel_id,
+            source=source,
+            source_type=source_type,
+            title=title,
+            content=content,
+            url=synthetic_url,
+            dedup_key=key,
+            category=category,
+            media_type=media_type or MaterialMediaType.text.value,
+            media_url=media_url,
+            media_thumb_url=media_thumb_url,
+            cover_url=cover_url,
+        )
+
+    if not url:
+        raise BizError(code=400, message="非 list 类型素材（rss/book_rss/cos/api/qrcode）必须提供 url")
+    if check_dup:
+        dup = await db.execute(select(Material.id).where(Material.url == url))
+        if dup.scalar_one_or_none() is not None:
+            raise BizError(code=409, message="URL 已存在")
+    return Material(
+        channel_id=channel_id,
+        source=source,
+        source_type=source_type,
+        title=title,
+        content=content,
+        url=url,
+        category=category,
+        media_type=media_type or MaterialMediaType.text.value,
+        media_url=media_url,
+        media_thumb_url=media_thumb_url,
+        cover_url=cover_url,
+    )
+
+
 async def _persist_material(
     db: AsyncSession,
     *,
@@ -124,56 +197,111 @@ async def _persist_material(
     去重判定走 (source_type, channel_id, dedup_key)——T01521 频道级查重：
     同内容可录入不同频道（多频道分发），同频道内重复仍 409。
     rss/book_rss/api/qrcode 有真实 URL，走 url 唯一键（全局）。
+
+    单条语义保持不变（提交失败即整条不落库）；批量入口请走
+    `_persist_materials_atomic`，不要循环调用本函数。
     """
-    if source_type in (MaterialSourceType.list.value, MaterialSourceType.cos.value):
-        key = dedup_key or compute_content_hash(content)
-        dup = await db.execute(
-            select(Material.id).where(
-                Material.source_type == source_type,
-                Material.channel_id == channel_id,
-                Material.dedup_key == key,
-            )
-        )
-        if dup.scalar_one_or_none() is not None:
-            raise BizError(code=409, message="该频道已存在相同内容的素材（重复上传）")
-        synthetic_url = f"{source_type}://{channel_id or 0}/{key[:16]}"
-        m = Material(
-            channel_id=channel_id,
-            source=source,
-            source_type=source_type,
-            title=title,
-            content=content,
-            url=synthetic_url,
-            dedup_key=key,
-            category=category,
-            media_type=media_type or MaterialMediaType.text.value,
-            media_url=media_url,
-            media_thumb_url=media_thumb_url,
-            cover_url=cover_url,
-        )
-    else:
-        if not url:
-            raise BizError(code=400, message="非 list 类型素材（rss/book_rss/cos/api/qrcode）必须提供 url")
-        dup = await db.execute(select(Material.id).where(Material.url == url))
-        if dup.scalar_one_or_none() is not None:
-            raise BizError(code=409, message="URL 已存在")
-        m = Material(
-            channel_id=channel_id,
-            source=source,
-            source_type=source_type,
-            title=title,
-            content=content,
-            url=url,
-            category=category,
-            media_type=media_type or MaterialMediaType.text.value,
-            media_url=media_url,
-            media_thumb_url=media_thumb_url,
-            cover_url=cover_url,
-        )
+    m = await _make_material(
+        db,
+        channel_id=channel_id,
+        source=source,
+        title=title,
+        content=content,
+        category=category,
+        source_type=source_type,
+        url=url,
+        dedup_key=dedup_key,
+        media_type=media_type,
+        media_url=media_url,
+        media_thumb_url=media_thumb_url,
+        cover_url=cover_url,
+    )
     db.add(m)
     await db.commit()
     await db.refresh(m)
     return m
+
+
+# 预检分批大小：SQLite 单条语句的绑定变量有上限，整本几千章不能一次 IN。
+_DEDUP_LOOKUP_CHUNK = 500
+# 响应里回传的「已跳过章节标题」上限：前端提示只需要知道跳过几章、前几章叫什么。
+SKIPPED_PREVIEW_LIMIT = 10
+
+
+async def _existing_dedup_keys(
+    db: AsyncSession,
+    *,
+    source_type: str,
+    channel_id: int | None,
+    keys: list[str],
+) -> set[str]:
+    """一次查出频道内已存在的 dedup_key（与单条入库同一去重口径）。"""
+    existing: set[str] = set()
+    for start in range(0, len(keys), _DEDUP_LOOKUP_CHUNK):
+        rows = await db.execute(
+            select(Material.dedup_key).where(
+                Material.source_type == source_type,
+                Material.channel_id == channel_id,
+                Material.dedup_key.in_(keys[start:start + _DEDUP_LOOKUP_CHUNK]),
+            )
+        )
+        existing.update(k for k in rows.scalars().all() if k)
+    return existing
+
+
+async def _persist_materials_atomic(
+    db: AsyncSession,
+    items: list[dict],
+) -> tuple[list[Material], list[str]]:
+    """整本章节素材单事务入库，已存在的章节按章跳过（C91 预检 + 断点续传）。
+
+    此前批量入口循环调用 `_persist_material`，每章各提交一次：第 N 章命中重复时
+    前 N-1 章已落库，用户只收到一句与「整本上传」无关的 409，库里留下半本书。
+    现在先把整本的 dedup_key 一次性预检，再只把缺的章节写进同一个事务：
+      - 任一请求异常 → 整本回滚，不会出现「半本」；
+      - 已存在的章节按章跳过并回报标题，重新上传即从断点补齐（断点续传）；
+      - 批内重复（同一本书里正文完全相同的章）只入第一次出现的那条。
+    每个 item 是 `_make_material` 的 kwargs；调用方保证整批同一
+    source_type / channel_id（两个批量入口各自只有一种取值）。
+    返回 (新建素材, 被跳过的章节标题)。
+    """
+    if not items:
+        return [], []
+
+    existing = await _existing_dedup_keys(
+        db,
+        source_type=items[0]["source_type"],
+        channel_id=items[0].get("channel_id"),
+        keys=[it["dedup_key"] for it in items if it.get("dedup_key")],
+    )
+    created: list[Material] = []
+    skipped: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        key = item.get("dedup_key")
+        if key is not None:
+            if key in existing or key in seen:
+                skipped.append(item["title"])
+                continue
+            seen.add(key)
+        created.append(await _make_material(db, check_dup=False, **item))
+
+    for m in created:
+        db.add(m)
+    if not created:
+        return created, skipped
+    try:
+        await db.commit()
+    except IntegrityError:
+        # 预检之后才被并发写入相同内容：靠唯一约束兜底，整本回滚而不是留半本
+        await db.rollback()
+        raise BizError(
+            code=409,
+            message="整本入库失败：上传期间该频道已写入相同内容，本次未写入任何章节，请重新上传",
+        )
+    for m in created:
+        await db.refresh(m)
+    return created, skipped
 
 
 def _ensure_source_type_supported(source_type: str) -> None:
@@ -636,6 +764,8 @@ async def upload_document(
 
     支持 .txt / .md；.pdf / .docx / .html 需安装对应解析库（见 UnsupportedFormatError 提示）。
     每个章节作为一条 source_type=list 素材入库，按 content_hash 去重，避免重复上传。
+    整本**单事务**写入，频道内已存在的章节按章跳过并在响应里回报 skipped（C91），
+    中途失败不会留下「半本书」。
     """
     raw = await file.read()
     fname = file.filename or "document.txt"
@@ -652,20 +782,29 @@ async def upload_document(
     if source in ("", "文档上传"):
         source = book_name
 
-    created = []
-    for ch in chapters:
-        m = await _persist_material(
-            db,
-            channel_id=channel_id,
-            source=source,
-            title=f"{book_name} · {ch.title}"[:256],
-            content=ch.content,
-            category=category,
-            source_type=MaterialSourceType.list.value,
-            dedup_key=compute_content_hash(ch.content),
-        )
-        created.append(_material_to_dict(m))
-    return success(data={"count": len(created), "list": created})
+    created, skipped = await _persist_materials_atomic(
+        db,
+        [
+            dict(
+                channel_id=channel_id,
+                source=source,
+                title=f"{book_name} · {ch.title}"[:256],
+                content=ch.content,
+                category=category,
+                source_type=MaterialSourceType.list.value,
+                dedup_key=compute_content_hash(ch.content),
+            )
+            for ch in chapters
+        ],
+    )
+    return success(
+        data={
+            "count": len(created),
+            "skipped": len(skipped),
+            "skipped_titles": skipped[:SKIPPED_PREVIEW_LIMIT],
+            "list": [_material_to_dict(m) for m in created],
+        }
+    )
 
 
 class ImportUrlRequest(BaseModel):
@@ -739,6 +878,7 @@ async def import_from_cos(
     """从 COS 对象导入并解析为章节素材批量入库（source_type=cos）。
 
     每个章节作为一条素材入库，按 content_hash 去重，避免重复导入。
+    与文档上传同一口径（C91）：整本单事务写入，已存在的章节按章跳过并回报 skipped。
     COS 未配置时返回 400 提示先配置；不支持的扩展名返回 400。
     """
     from app.services.cos_storage_service import CosStorageService
@@ -758,20 +898,29 @@ async def import_from_cos(
     except UnsupportedFormatError as e:
         raise BizError(code=400, message=str(e))
 
-    created = []
-    for ch in chapters:
-        m = await _persist_material(
-            db,
-            channel_id=req.channel_id,
-            source=req.source,
-            title=ch.title,
-            content=ch.content,
-            category=req.category,
-            source_type=MaterialSourceType.cos.value,
-            dedup_key=compute_content_hash(ch.content),
-        )
-        created.append(_material_to_dict(m))
-    return success(data={"count": len(created), "list": created})
+    created, skipped = await _persist_materials_atomic(
+        db,
+        [
+            dict(
+                channel_id=req.channel_id,
+                source=req.source,
+                title=ch.title,
+                content=ch.content,
+                category=req.category,
+                source_type=MaterialSourceType.cos.value,
+                dedup_key=compute_content_hash(ch.content),
+            )
+            for ch in chapters
+        ],
+    )
+    return success(
+        data={
+            "count": len(created),
+            "skipped": len(skipped),
+            "skipped_titles": skipped[:SKIPPED_PREVIEW_LIMIT],
+            "list": [_material_to_dict(m) for m in created],
+        }
+    )
 
 
 class SharePreviewRequest(BaseModel):
