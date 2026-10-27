@@ -114,6 +114,91 @@ html, body {
   border-color: var(--el-border-color-lighter, #ebeef5) !important;
 }
 
+/* === 全局提示：正文/图形改用强语义 token（T03330） ===
+ * 根因：variables.scss 把 --el-color-success/warning/danger/info 指向主题粉彩，
+ *       而 EP 的 .el-message--success 用 --el-color-success 当**正文色**、light-9
+ *       （#F0F9EB）当**底色** —— 粉彩压浅底实测 1.24:1，文字几乎看不见。
+ * 处理：四类的正文、底色、描边都收进 --toast-* token（浅色主题见 variables.scss，
+ *       showcase 的反相见 themes.scss），不把 --el-color-* 再当正文色用。
+ *       消息框状态图标与 .el-alert--*.is-light 是同一映射，一并收口。
+ * 选择器加 html 前缀：EP 的分组件样式（el-alert 等）是按需 chunk 注入的，
+ * 在 global.scss 之后才进来；同权重会被它按加载顺序压掉（实测 alert 仍是粉彩）。
+ * 前缀把权重抬一级，与打包/开发两种加载顺序无关。
+ * alert 另加 !important：themes.scss 给 showcase 的 .el-alert 也用了 !important。
+ */
+html .el-message--success {
+  --el-message-bg-color: var(--toast-success-bg);
+  --el-message-border-color: var(--toast-success-border);
+  --el-message-text-color: var(--toast-success-fg);
+}
+
+html .el-message--warning {
+  --el-message-bg-color: var(--toast-warning-bg);
+  --el-message-border-color: var(--toast-warning-border);
+  --el-message-text-color: var(--toast-warning-fg);
+}
+
+html .el-message--error {
+  --el-message-bg-color: var(--toast-error-bg);
+  --el-message-border-color: var(--toast-error-border);
+  --el-message-text-color: var(--toast-error-fg);
+}
+
+html .el-message--info {
+  --el-message-bg-color: var(--toast-info-bg);
+  --el-message-border-color: var(--toast-info-border);
+  --el-message-text-color: var(--toast-info-fg);
+}
+
+html .el-alert--success.is-light {
+  background-color: var(--toast-success-bg) !important;
+  color: var(--toast-success-fg) !important;
+  .el-alert__description {
+    color: var(--toast-success-fg) !important;
+  }
+}
+
+html .el-alert--warning.is-light {
+  background-color: var(--toast-warning-bg) !important;
+  color: var(--toast-warning-fg) !important;
+  .el-alert__description {
+    color: var(--toast-warning-fg) !important;
+  }
+}
+
+html .el-alert--error.is-light {
+  background-color: var(--toast-error-bg) !important;
+  color: var(--toast-error-fg) !important;
+  .el-alert__description {
+    color: var(--toast-error-fg) !important;
+  }
+}
+
+html .el-alert--info.is-light {
+  background-color: var(--toast-info-bg) !important;
+  color: var(--toast-info-fg) !important;
+  .el-alert__description {
+    color: var(--toast-info-fg) !important;
+  }
+}
+
+/* 消息框的状态图标取自己的类型色（EP 同样指向 --el-color-* 粉彩），非文字需 3:1 */
+html .el-message-box__status.el-message-box-icon--success {
+  color: var(--toast-success-fg);
+}
+
+html .el-message-box__status.el-message-box-icon--warning {
+  color: var(--toast-warning-fg);
+}
+
+html .el-message-box__status.el-message-box-icon--error {
+  color: var(--toast-error-fg);
+}
+
+html .el-message-box__status.el-message-box-icon--info {
+  color: var(--toast-info-fg);
+}
+
 .el-dialog {
   border-radius: $radius-lg !important;
 }

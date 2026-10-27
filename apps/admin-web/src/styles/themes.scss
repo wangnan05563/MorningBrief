@@ -149,6 +149,17 @@
   --text-danger-strong: #FF1744;
   --text-success-strong: #00E676;
 
+  /* 全局提示（T03330）：EP 的 toast 底色是固定浅色，暗色页里就是四块白斑；
+     与 tag/按钮同一口径反相成深底 + 亮字（正文取上面的 --text-*-strong） */
+  --toast-success-bg: #10231A;
+  --toast-success-border: rgba(0, 230, 118, 0.35);
+  --toast-warning-bg: #241C08;
+  --toast-warning-border: rgba(255, 171, 0, 0.35);
+  --toast-error-bg: #2A0C12;
+  --toast-error-border: rgba(255, 23, 68, 0.35);
+  --toast-info-bg: #1E1E2A;
+  --toast-info-border: rgba(0, 229, 255, 0.25);
+
   /* 移动端（T02839）：暗底上的实底按钮用亮色 + 深字；浅色主题那套
      「深底白字」在暗色里既不好看也不是必须，这里按主题色反相 */
   --m-solid-primary: var(--color-primary);

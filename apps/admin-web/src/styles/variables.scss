@@ -36,6 +36,27 @@
   --text-danger-strong: #B3261E;
   --text-success-strong: #1F6B45;
 
+  /* === 全局提示语义色（T03330） ===
+     EP 的 .el-message--success 用 --el-color-success 当正文色、它自己的 light-9
+     （#F0F9EB）当底色；我们把 --el-color-success 映射成了马卡龙粉彩 #B5EAD7，
+     实测正文 1.24:1、warning 1.14:1，几乎不可读。
+     这里给四类各配一对「正文 + 底色/描边」：浅色主题沿用 EP 的浅底、正文改用
+     --text-*-strong（与暗色卡片同一组强色）；showcase（暗色）在 themes.scss
+     反相成深底 + 亮字，避免暗色页里冒出四块浅色孤岛。
+     .el-alert--*.is-light 用同一对 token，避免只修 toast 留着同源缺陷。 */
+  --toast-success-bg: #F0F9EB;
+  --toast-success-border: #E1F3D8;
+  --toast-success-fg: var(--text-success-strong);
+  --toast-warning-bg: #FDF6EC;
+  --toast-warning-border: #FAECD8;
+  --toast-warning-fg: var(--text-warning-strong);
+  --toast-error-bg: #FEF0F0;
+  --toast-error-border: #FDE2E2;
+  --toast-error-fg: var(--text-danger-strong);
+  --toast-info-bg: #F4F4F5;
+  --toast-info-border: #E9E9EB;
+  --toast-info-fg: var(--color-text-primary);
+
   /* === 移动端语义 token（T02839） ===
      /m/* 的外壳与 12 个视图原先全是硬编码浅色，暗色主题对移动端完全无效；
      这里统一映射到通用主题变量，不新增一套配色，6 套主题改 --color-* 时
