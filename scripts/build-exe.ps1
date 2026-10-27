@@ -456,7 +456,7 @@ if (Test-Path $seedScript) {
     # 2>&1：python seed 脚本的 stderr 合并，避免 Stop 首选项误杀
     & $buildPython "$seedScript" "$dbPath" 2>&1
     if ($LASTEXITCODE -eq 0) {
-        Write-OK "默认管理员已初始化（admin/admin123)"
+        Write-OK "默认管理员已初始化（口令取 ADMIN_INITIAL_PASSWORD，留空为 admin123）"
     } else {
         Write-Warn "默认管理员初始化失败（seed_admin.py 退出码 $LASTEXITCODE），请检查 .venv-build 依赖是否完整"
     }

@@ -356,12 +356,27 @@ describe('T02920 频道管理章节', () => {
 
 describe('T02920 快速开始与关于章节', () => {
   it('默认账号与端口按后端源码算', () => {
-    const user = SEED.match(/username=['"](\w+)['"]/)[1]
-    const pwd = SEED.match(/password=['"]([^'"]+)['"]/)[1]
+    const user = SEED.match(/def seed\(db_path, username=['"](\w+)['"]/)[1]
+    // T02845：口令不再写死在签名里，优先取 .env 的 ADMIN_INITIAL_PASSWORD，
+    // 兜底值仍在 seed_admin.py。文档必须两截都写——只写 admin123 又是假话。
+    const fallback = SEED.match(/ADMIN_INITIAL_PASSWORD or ['"]([^'"]+)['"]/)[1]
     const port = CONFIG.match(/^\s*APP_PORT:\s*int\s*=\s*(\d+)/m)[1]
     const sec = sectionText('quickstart')
-    assert.match(sec, new RegExp(`默认账号 ${user} / ${pwd}`))
-    assert.match(sec, new RegExp(`http://127\\.0\\.0\\.1:${port}/`))
+
+    // 按条目钉，不按整节：同一节里 steps 与 note 都在讲口令，
+    // 只断言「整节含某个词」时，另一条退回旧口径照样全绿（探针 G1/G2 实测过）。
+    const stepLine = sec.split('\n').find((l) => l.includes('访问运营后台'))
+    assert.ok(stepLine, '快速开始的步骤里没有「访问运营后台」')
+    assert.match(stepLine, new RegExp(`账号 ${user}`))
+    assert.match(stepLine, /ADMIN_INITIAL_PASSWORD/)
+    assert.match(stepLine, new RegExp(`留空为 ${fallback}`))
+    assert.match(stepLine, new RegExp(`http://127\\.0\\.0\\.1:${port}/`))
+
+    // 「请立即修改密码」曾是空头承诺（没有改密入口）；换成能执行的建库前设置说明
+    const noteLine = sec.split('\n').find((l) => l.includes('首次启动自动 seed'))
+    assert.ok(noteLine, '快速开始的注意事项块不见了')
+    assert.match(noteLine, /口令取 \.env 的 ADMIN_INITIAL_PASSWORD/)
+    assert.match(noteLine, /没有改密入口/)
   })
 
   it('自动检查更新的三个时间口径都有实现兜着', () => {

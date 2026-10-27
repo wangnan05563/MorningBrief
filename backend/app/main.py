@@ -241,15 +241,17 @@ async def _seed_default_admin() -> None:  # NOSONAR
         cur.execute('SELECT COUNT(*) FROM admin_user WHERE username = ?', ('admin',))
         if cur.fetchone()[0] > 0:
             return
+        # T02845：初始口令可由 .env 的 ADMIN_INITIAL_PASSWORD 指定，留空沿用 admin123。
+        # 只在「库里还没有 admin」时生效——已有账号不会被这条路径改口令。
+        initial_password = get_settings().ADMIN_INITIAL_PASSWORD or 'admin123'
         cur.execute(
             'INSERT INTO admin_user (username, password_hash, role, status, nickname) VALUES (?, ?, ?, 1, ?)',
-            ('admin', hash_password('admin123'), 'admin', 'Admin'),
+            ('admin', hash_password(initial_password), 'admin', 'Admin'),
         )
         conn.commit()
         # NFR-UX-05：原先这行是「默认 admin 用户已创建（admin/admin123）」——
         # 口令明文进日志文件，而日志默认留 7 天、还会被打包进诊断材料。
-        # 初始口令的告知归 config/文档，不归日志；ADMIN_INITIAL_PASSWORD 目前没接线
-        # 这件事另开单跟（见 T02523 派生）。
+        # 初始口令的出处归 config/文档，不归日志。
         logger.info("[startup] 默认 admin 用户已创建 username=admin（初始口令见配置说明，不入日志）")
     finally:
         conn.close()

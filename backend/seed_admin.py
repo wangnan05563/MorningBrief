@@ -9,7 +9,13 @@ from app.core.security import hash_password
 import sqlite3
 
 
-def seed(db_path, username='admin', password='admin123', role='admin', nickname='Admin'):
+def seed(db_path, username='admin', password=None, role='admin', nickname='Admin'):
+    # T02845：与启动时的 _seed_default_admin 用同一口径——.env 里设了
+    # ADMIN_INITIAL_PASSWORD 就用它，否则沿用 admin123。显式传 password 时以参数为准。
+    if password is None:
+        from app.config import get_settings
+
+        password = get_settings().ADMIN_INITIAL_PASSWORD or 'admin123'
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
     cur.execute('''CREATE TABLE IF NOT EXISTS admin_user (
@@ -39,7 +45,8 @@ def seed(db_path, username='admin', password='admin123', role='admin', nickname=
     )
     conn.commit()
     conn.close()
-    print(f'  [seed] Created admin user: {username}/{password}')
+    # 口令不打印：它可能是 .env 里的自定义值，构建日志/终端回滚都算外泄面
+    print(f'  [seed] Created admin user: {username}（口令取自 ADMIN_INITIAL_PASSWORD 或默认 admin123）')
     return True
 
 

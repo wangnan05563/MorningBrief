@@ -247,7 +247,7 @@ const docSections = [
           '安装依赖：pip install -r backend/requirements.txt',
           '复制配置：copy backend/.env.example backend/.env，填入 LLM API Key、TTS 配置、COS 凭证',
           '启动服务：双击 scripts/启动服务.bat 或 python backend/launcher.py',
-          '访问运营后台：浏览器打开 http://127.0.0.1:8000/，默认账号 admin / admin123',
+          '访问运营后台：浏览器打开 http://127.0.0.1:8000/，账号 admin，初始口令取 .env 的 ADMIN_INITIAL_PASSWORD（留空为 admin123）',
           '配置频道：在「频道管理」页面设置 RSS 源、关键词、调度时间',
           '创建工作流：在「工作流监控」页面新建工作流，关联频道',
           '审核内容：在「内容审核」页面审核 LLM 改写后的稿件',
@@ -262,7 +262,7 @@ const docSections = [
       {
         type: 'note',
         title: '注意事项',
-        content: '首次启动自动 seed 默认 admin 账户（admin/admin123），生产环境请立即修改密码。LLM/TTS API Key 必填，否则工作流会在对应步骤失败。',
+        content: '首次启动自动 seed 默认 admin 账户，口令取 .env 的 ADMIN_INITIAL_PASSWORD，留空为 admin123；只在库里还没有 admin 时生效。当前版本没有改密入口，请在建库前就设好 ADMIN_INITIAL_PASSWORD。LLM/TTS API Key 必填，否则工作流会在对应步骤失败。',
         noteType: 'warning',
       },
     ],

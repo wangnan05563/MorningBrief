@@ -350,7 +350,7 @@ describe('M88 帮助搜索覆盖正文', () => {
   })
 
   it('注意事项块可搜到', () => {
-    assert.ok(bodyOnly('生产环境请立即修改密码').some((s) => s.id === 'quickstart'))
+    assert.ok(bodyOnly('请在建库前就设好 ADMIN_INITIAL_PASSWORD').some((s) => s.id === 'quickstart'))
   })
 
   it('关键词按大小写不敏感与首尾空白归一匹配', () => {

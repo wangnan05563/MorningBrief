@@ -128,7 +128,8 @@ class Settings(BaseSettings):
     APP_HOST: str = "127.0.0.1"          # V1.2：单机部署仅监听本地
     APP_PORT: int = 8000
     APP_TIMEZONE: str = "Asia/Shanghai"
-    # 初始 admin 密码：为空时启动自动生成随机密码并打印到日志，避免硬编码弱密码
+    # 初始 admin 口令：仅「库里还没有 admin」时生效（首次启动 / 删库后重启），
+    # 留空沿用 admin123；口令不写日志，改它不会影响已存在的账号
     ADMIN_INITIAL_PASSWORD: str = ""
     # 音频/封面等静态资源的对外访问基础 URL
     # 留空时回退到 http://localhost:8000（仅开发工具可用）
