@@ -14,6 +14,11 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cache.keys import (
+    CHANNELS_LIST_ACTIVE,
+    CHANNELS_LIST_ALL,
+    C_CHANNELS_LIST_ACTIVE,
+)
 from app.cache.manager import cache as cache_manager
 from app.core.event_bus import Event, get_event_bus
 from app.core.timeutil import localnow_naive
@@ -54,12 +59,12 @@ class ChannelService:
     async def invalidate_list_cache(self) -> None:
         """频道增删改后失效列表缓存。
 
-        同时失效 C 端频道列表缓存（api:channels:list_active），
-        保证小程序 tab 在后台调整频道/排序后及时刷新（TTL 兜底 60s）。
+        三处键名一律取自 `app/cache/keys.py`：C 端那条曾经在这里写成没有 `:v2` 的旧串，
+        读到 `:v2` 的缓存因此从没被清过，后台改完只能等 60s TTL 自愈（T03322）。
         """
-        await self.cache.delete("channels:list:all")
-        await self.cache.delete("channels:list:active")
-        await self.cache.delete("api:channels:list_active")
+        await self.cache.delete(CHANNELS_LIST_ALL)
+        await self.cache.delete(CHANNELS_LIST_ACTIVE)
+        await self.cache.delete(C_CHANNELS_LIST_ACTIVE)
 
     async def create_channel(
         self, name: str, description: str = "",  # NOSONAR

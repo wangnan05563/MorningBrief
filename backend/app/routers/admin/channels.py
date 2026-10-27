@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cache.keys import CHANNELS_LIST_ACTIVE, CHANNELS_LIST_ALL
 from app.cache.manager import cache as cache_manager
 from app.core.audio_modes import VALID_GAP_MODES
 from app.core.auth import AdminPayload, get_current_admin, require_admin
@@ -417,7 +418,7 @@ async def list_channels(
 
     cache-aside：频道数据变更频率极低，缓存 5 分钟减少 DB 查询。
     """
-    cache_key = f"channels:list:{'active' if active_only else 'all'}"
+    cache_key = CHANNELS_LIST_ACTIVE if active_only else CHANNELS_LIST_ALL
     cached = await cache_manager.get(cache_key)
     if cached:
         return success(data=cached)

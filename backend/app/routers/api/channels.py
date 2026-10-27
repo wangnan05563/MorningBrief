@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cache.keys import C_CHANNELS_LIST_ACTIVE
 from app.cache.manager import cache
 from app.core.response import success
 from app.database import get_db
@@ -15,9 +16,7 @@ router = APIRouter(prefix="/api/v1/channels", tags=["C端-频道"])
 
 # 频道列表低频变更（运营手动改），60s 缓存可大幅减少 DB 查询
 # 压测显示该接口 P95 达 405ms，加缓存后预期 <20ms
-# v2：本次 cover_url/icon_url 改为绝对 URL（小程序 <image> 需完整地址）+ 新增 icon_url 下发，
-# 旧缓存存的是相对路径需失效
-_CHANNELS_CACHE_KEY = "api:channels:list_active:v2"
+# 键名与失效侧共用 app/cache/keys.py 的常量（T03322：两侧各写一份字面量必然漂移）
 _CHANNELS_CACHE_TTL = 60
 
 
@@ -41,7 +40,7 @@ async def list_channels(
 ):
     """频道列表：仅返回启用频道，不带订阅状态（未登录场景）。"""
     # 先查缓存：频道低频变更，命中缓存直接返回，避免 DB 全表扫描
-    cached = await cache.get(_CHANNELS_CACHE_KEY)
+    cached = await cache.get(C_CHANNELS_LIST_ACTIVE)
     if cached is not None:
         return success(data=cached)
 
@@ -76,5 +75,5 @@ async def list_channels(
 
     payload = {"list": list_data}
     # 写入缓存供后续请求复用
-    await cache.set(_CHANNELS_CACHE_KEY, payload, ttl=_CHANNELS_CACHE_TTL)
+    await cache.set(C_CHANNELS_LIST_ACTIVE, payload, ttl=_CHANNELS_CACHE_TTL)
     return success(data=payload)
