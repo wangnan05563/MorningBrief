@@ -72,6 +72,13 @@
       "note": "单条 DELETE 本身幂等。"
     },
     {
+      "caller": "backend/app/routers/api/account.py::purge_my_data",
+      "api": "write_lock",
+      "purpose": "个人数据双键清除（T02788）",
+      "atomicity_source": "database",
+      "note": "七张表删除 + 审计在同一事务内提交，原子性来自 DB 事务；锁只降低进程内 SQLITE_BUSY。"
+    },
+    {
       "caller": "backend/app/services/play_service.py::PlayService.flush_playlog_queue",
       "api": "write_lock",
       "purpose": "播放日志批量插入",

@@ -103,7 +103,7 @@ function throttle(key, ttl, fn) {
 
 /**
  * 统一请求函数（入口）
- * @param {Object} options - { url, method, data, header, _retried, cache, cacheTTL, _allowRetry }
+ * @param {Object} options - { url, method, data, header, _retried, cache, cacheTTL, _allowRetry, _netRetry }
  * @returns {Promise<any>} - resolve(data) 或 reject(Error)
  *
  * 三层加速策略（按优先级）：
@@ -224,7 +224,9 @@ function _rawRequest(options) {
       fail: (err) => {
         // 网络异常重试：仅对非业务错误（fail 回调）重试 1 次，指数退避 1s
         // _netRetried 标记防止重试无限递归；业务错误（success 中 code!=0）不重试
-        if (!_netRetried) {
+        // T02788：不可逆写操作可用 _netRetry=false 关掉——响应丢失时自动重发
+        // 会二次执行删除，而第二次只会得到「用户不存在」的歧义结果。
+        if (!_netRetried && options._netRetry !== false) {
           setTimeout(() => {
             // 直接调 _rawRequest 绕过 request 的 inflight 去重：
             // 重试是原请求的延续，复用原请求的 inflight Promise 即可
@@ -806,6 +808,28 @@ function uploadAvatar(filePath) {
   })();
 }
 
+// === 个人数据自助删除（T02788 / J98） ===
+
+/** 预览删除范围：各表条数 + 备份保留口径（确认框用真实条数说话，不写死数字） */
+const fetchMyDataSummary = () => request({ url: '/account/data' });
+
+/**
+ * 删除本人数据（服务端 + 云端镜像）。
+ *
+ * 两道自动重试都要关掉：
+ * - _allowRetry=false：账号删掉后这张 token 已被拉黑，401 分支会去 refreshToken→login，
+ *   等于把刚删的账号重新注册出来；
+ * - _netRetry=false：不可逆操作，响应丢失时自动重发只会二次执行。
+ */
+const purgeMyData = () =>
+  request({
+    url: '/account/data',
+    method: 'DELETE',
+    data: { confirm: true },
+    _allowRetry: false,
+    _netRetry: false,
+  });
+
 
 module.exports = {
   request,
@@ -853,4 +877,7 @@ module.exports = {
   fetchUserStats,
   updateUserProfile,
   uploadAvatar,
+  // 账号
+  fetchMyDataSummary,
+  purgeMyData,
 };

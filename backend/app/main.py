@@ -158,6 +158,7 @@ from app.routers.api.users import router as c_users_router
 from app.routers.api.cos import router as c_cos_router
 from app.routers.api.courses import router as c_courses_router
 from app.routers.api.client_report import router as c_client_report_router
+from app.routers.api.account import router as c_account_router
 
 # B 端路由（运营后台）
 from app.routers.admin.auth import router as b_auth_router
@@ -1449,6 +1450,8 @@ def create_app() -> FastAPI:  # NOSONAR
     app.include_router(c_courses_router)
     # C 端客户端告警上报（FR-MC-12 后续增强：未知 channel_type 等 best-effort 上报）
     app.include_router(c_client_report_router)
+    # C 端账号数据自助删除（T02788 / J98：把隐私政策第七条的承诺变成功能）
+    app.include_router(c_account_router)
 
     # B 端（运营后台）
     app.include_router(b_auth_router)

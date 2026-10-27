@@ -11,7 +11,14 @@ const { STATIC: STORAGE_KEYS, clearCacheKeys } = require('../../services/storage
 const STORAGE_KEY_SETTINGS = STORAGE_KEYS.SETTINGS;
 const { setPlaybackRate, setAutoPlayNext, setWifiOnlyAutoPlay, setTransitionEnabled } = require('../../services/audio');
 const { trackPageView, trackEvent, setTrackingEnabled } = require('../../utils/tracker');
-const { requestSubscribeMessageByType } = require('../../services/api');
+const {
+  requestSubscribeMessageByType,
+  fetchMyDataSummary,
+  purgeMyData,
+} = require('../../services/api');
+const { getToken, getUser, clearToken } = require('../../services/auth');
+const localData = require('../../services/local-data');
+const downloadStore = require('../../services/download');
 
 // 默认设置：用户首次进入时使用，避免空值导致 switch 显示异常
 const DEFAULT_SETTINGS = {
@@ -200,6 +207,88 @@ Page({
           console.error('清除缓存失败', err);
           wx.showToast({ title: '清除失败', icon: 'none' });
         }
+      },
+    });
+  },
+
+  /**
+   * T02788 / J98：删除我的数据（服务端 + 本机）。
+   *
+   * 顺序讲究：
+   * 1. 先取预览条数——「将删除收藏 3 条、播放记录 8 条…」比「确定删除？」更能说明后果，
+   *    条数与备份保留期都由后端返回，前端不写死数字（写死就会随配置调整变成第二处谎）；
+   * 2. 确认框用破坏性配色，并写明不可恢复；
+   * 3. 删除成功后只清本机登录态，绝不调 logout()——服务端已把这 token 拉黑，
+   *    logout 的 401 自动重登会把刚删掉的账号立刻重新注册出来。
+   */
+  async onPurgeMyData() {
+    if (!getToken()) {
+      wx.showToast({ title: '请先登录', icon: 'none' });
+      return;
+    }
+
+    let summary = null;
+    try {
+      summary = await fetchMyDataSummary();
+    } catch (err) {
+      wx.showToast({ title: (err && err.message) || '获取删除范围失败', icon: 'none' });
+      return;
+    }
+
+    const counts = (summary && summary.counts) || {};
+    const retention = (summary && summary.retention) || {};
+    const detail = [
+      ['收藏', counts.favorite],
+      ['评论', counts.comment],
+      ['点赞', counts.comment_like],
+      ['播放记录', counts.play_log],
+      ['播放进度', counts.play_progress],
+      ['频道订阅', counts.channel_subscription],
+      ['消息订阅', counts.subscription],
+    ]
+      .filter(([, n]) => n > 0)
+      .map(([label, n]) => `${label} ${n} 条`)
+      .join('、');
+    const scope = detail ? `将删除：${detail}。` : '服务器上没有查到您名下的数据。';
+    const keepDays = retention.db_backup_keep_days || 7;
+    const cosKeep = retention.cos_backup_keep_count || 5;
+
+    wx.showModal({
+      title: '删除我的数据',
+      content:
+        `${scope}\n` +
+        '同时清除本机登录态与离线副本；意见反馈记录不在删除范围内。\n' +
+        `数据库备份按 ${keepDays} 天保留周期自然过期，云端备份最多保留 ${cosKeep} 份，因此无法立即彻底抹除。\n` +
+        '此操作不可恢复。',
+      confirmText: '删除',
+      confirmColor: '#B0554A',
+      success: async (res) => {
+        if (!res.confirm) return;
+        // 先取 openid 再清登录态：本机数据按 openid 分区，登出后取不到
+        const user = getUser();
+        const openid = (user && user.openid) || '';
+        wx.showLoading({ title: '删除中...', mask: true });
+        try {
+          await purgeMyData();
+        } catch (err) {
+          wx.hideLoading();
+          wx.showToast({ title: (err && err.message) || '删除失败，请稍后重试', icon: 'none' });
+          return;
+        }
+        wx.hideLoading();
+        if (openid) {
+          localData.clearByOpenid(openid);
+          downloadStore.clearByOpenid(openid);
+        }
+        clearToken();
+        const app = getApp();
+        if (app && app.globalData) {
+          app.globalData.userInfo = null;
+          app.globalData.token = null;
+        }
+        trackEvent('settings', 'purge_my_data');
+        wx.showToast({ title: '已删除', icon: 'none' });
+        wx.reLaunch({ url: '/pages/index/index' });
       },
     });
   },

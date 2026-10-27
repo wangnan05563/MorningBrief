@@ -25,6 +25,8 @@
  *     第五条不得写「不会上传服务器」（收藏与进度确实双写）。
  *     同时开关必须三处齐：settings.wxml 的 switch 绑 usageTracking + bindchange、
  *     settings.js 的 handler 调 setTrackingEnabled、utils/tracker.js 的 track() 先判 isEnabled()。
+ *     T02788 起第七条还必须指向自助入口「删除我的数据」，且备份保留期数字要与服务端
+ *     常量（backup_service._DEFAULT_KEEP_DAYS / config.COS_BACKUP_KEEP_COUNT）逐字一致。
  *  6. J5 浮条纠偏：floating-player.js 必须既有 pageLifetimes.show，又在播放状态回调里调 this._refresh()
  *     （只留订阅回调 = tab 页常驻组件错过事件后浮条永远不出现；只留 show = 播放中状态不刷新）。
  *  7. 通用防「绑了个不存在的方法」：本轮涉及的 wxml 里字面量写法的 bind / catch 事件处理器名，
@@ -48,6 +50,10 @@
  *     已下架标签、检查更新等实现与文案的接线（逐条见下方代码注释）。
  * 21. T02787：字面量 storage key 只许出现在 services/storage-keys.js ——
  *     黑名单清缓存会抹数据，根因就是 key 散在各模块、静态列不全；这条堵住新增散 key。
+ * 22. T02788：「删除我的数据」必须入口、确认口径、拆除顺序三处齐：
+ *     wxml 入口在「数据与统计」分组内；handler 先取预览条数、破坏性配色、写明不可恢复、
+ *     只 clearToken 不调 logout（后者 401 自动重登会把刚删的账号注册回来）；
+ *     api.js 的 DELETE 带 confirm:true 且关掉 401/网络两类自动重试。
  *
  * 局限（如实声明，不假装查过）：只做文本抽取与配对，不解析 WXML/JS 语法树；
  * 动态方法名、跨页 getCurrentPages() 跳转不在能力范围内。
@@ -62,6 +68,21 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
+/**
+ * 读服务端备份保留常量（T02788）。隐私政策是静态文案，保留期必须与后端配置逐字一致：
+ * 只断言「文案里有个数字」证明不了「数字还对」，而配置一改，静态文案就成了第二处谎言。
+ */
+const BACKEND = resolve(ROOT, '../../backend/app')
+function backendConst(rel, name) {
+  try {
+    const src = readFileSync(join(BACKEND, rel), 'utf8')
+    const m = new RegExp(`^\\s*${name}\\s*(?::\\s*[A-Za-z_][\\w[\\], ]*)?=\\s*(\\d+)`, 'm').exec(src)
+    return m ? Number(m[1]) : null
+  } catch (err) {
+    return null
+  }
+}
 
 /** 需要交叉比对的文件（相对 apps/miniprogram） */
 const FILES = [
@@ -366,8 +387,28 @@ export function checkFacts(facts) {
     if (right.includes('退出登录即可')) {
       errors.push('隐私政策第七条仍写「要求删除个人信息（退出登录即可）」：退出登录只清本机，服务端数据一条不删（J98）')
     }
-    if (!/意见反馈/.test(right)) errors.push('隐私政策第七条没有可走的删除请求通道（意见反馈）（J98）')
+    if (!/意见反馈/.test(right)) {
+      errors.push('隐私政策第七条没有留「意见反馈」人工通道：意见反馈记录被排除在自助删除之外，这类数据只能人工处理（J98 / T02788）')
+    }
     if (!/数据与统计/.test(right)) errors.push('隐私政策第七条没把「关闭使用统计」指到设置页的真实分组（J99）')
+    // T02788：自助删除接口上线后，政策必须指向它；备份保留期必须与服务端常量一致
+    if (!/删除我的数据/.test(right)) {
+      errors.push('隐私政策第七条没有指向「设置 → 数据与统计 → 删除我的数据」：自助接口已上线，政策还停在人工通道（T02788）')
+    }
+    const keepDays = backendConst('services/backup_service.py', '_DEFAULT_KEEP_DAYS')
+    const cosKeep = backendConst('config.py', 'COS_BACKUP_KEEP_COUNT')
+    if (keepDays === null || cosKeep === null) {
+      // 读不到就报错而不是跳过：跨仓比对静默失效，等于保留期没人校验
+      errors.push('无法读取服务端备份保留常量（backend/app/services/backup_service.py / config.py）：' +
+        '隐私第七条的保留期失去同源校验（T02788）')
+    }
+    if (keepDays !== null && !right.includes(`${keepDays} 天`)) {
+      errors.push(`隐私政策第七条的数据库备份保留期与服务端 _DEFAULT_KEEP_DAYS=${keepDays} 不一致：` +
+        '文案写死数字，配置一改就成了第二处谎（T02788）')
+    }
+    if (cosKeep !== null && !right.includes(`${cosKeep} 份`)) {
+      errors.push(`隐私政策第七条的云端备份保留份数与服务端 COS_BACKUP_KEEP_COUNT=${cosKeep} 不一致（T02788）`)
+    }
   }
   const cache = privacySection(f('pages/privacy/privacy.js'), 'Cookie')
   if (cache && /不会上传服务器/.test(cache)) {
@@ -382,6 +423,49 @@ export function checkFacts(facts) {
     if (!/技术缓存/.test(cache) || !/不会删除服务器/.test(cache)) {
       errors.push('隐私政策第五条没有如实描述「清除缓存」现在的后果（只清可再生技术缓存、不动本机数据、不删服务端）（T02787）')
     }
+  }
+
+  // —— 22. T02788：删除我的数据——入口 / 确认口径 / 拆除顺序 ——
+  const statsStart = settingsWxml.indexOf('数据与统计')
+  const storageStart = settingsWxml.indexOf('存储管理')
+  const statsCard = statsStart >= 0
+    ? settingsWxml.slice(statsStart, storageStart > statsStart ? storageStart : undefined)
+    : ''
+  if (!/bindtap="onPurgeMyData"/.test(statsCard)) {
+    errors.push('settings.wxml 的「数据与统计」分组没有「删除我的数据」入口：隐私政策第七条又会指向一个不存在的地方（T02788）')
+  }
+  const purgeBody = methodBody(stripComments(settingsJs), 'onPurgeMyData')
+  if (!purgeBody) {
+    errors.push('settings.js 缺少 onPurgeMyData：入口绑到了不存在的处理器（T02788）')
+  } else {
+    if (!/fetchMyDataSummary\s*\(/.test(purgeBody)) {
+      errors.push('onPurgeMyData 没有先取预览条数：确认框只能说「确定删除？」，说不出会删掉多少（T02788）')
+    }
+    if (!/purgeMyData\s*\(/.test(purgeBody)) {
+      errors.push('onPurgeMyData 没有调用 purgeMyData：入口点了什么都不会删（T02788）')
+    }
+    if (!/confirmColor:\s*'#B0554A'/.test(purgeBody)) {
+      errors.push('删除我的数据没有用破坏性配色 #B0554A：不可逆动作与普通确认长得一样（T02788）')
+    }
+    if (!/不可恢复/.test(purgeBody)) {
+      errors.push('删除我的数据确认框没有写明不可恢复：用户无法判断这是不可逆操作（T02788）')
+    }
+    if (!/clearToken\s*\(/.test(purgeBody)) {
+      errors.push('删号后没有 clearToken()：本机还留着已被服务端拉黑的登录态（T02788）')
+    }
+    if (/\blogout\s*\(/.test(purgeBody)) {
+      errors.push('onPurgeMyData 用了 logout()：token 已被拉黑，401 自动重登会把刚删掉的账号重新注册出来（T02788）')
+    }
+  }
+  const apiJs = stripComments(f('services/api.js'))
+  if (!/const purgeMyData\s*=[\s\S]{0,400}?url:\s*'\/account\/data'[\s\S]{0,200}?method:\s*'DELETE'[\s\S]{0,200}?confirm:\s*true/.test(apiJs)) {
+    errors.push('services/api.js 的 purgeMyData 没落到 DELETE /account/data + confirm:true：后端会以缺少二次确认为由拒绝（T02788）')
+  }
+  if (!/const purgeMyData[\s\S]{0,600}?_allowRetry:\s*false[\s\S]{0,100}?_netRetry:\s*false/.test(apiJs)) {
+    errors.push('purgeMyData 没同时关掉两类自动重试：账号删掉后 401 会自动重登注册回来，网络抖动还会二次执行删除（T02788）')
+  }
+  if (!/if\s*\(!_netRetried\s*&&\s*options\._netRetry\s*!==\s*false\)/.test(apiJs)) {
+    errors.push('api.js 的网络重试分支不认 _netRetry：不可逆写操作照样会被自动重发（T02788）')
   }
 
   // —— 6. J5：浮条纠偏的两个时机都要在 ——

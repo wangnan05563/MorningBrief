@@ -229,7 +229,7 @@ describe('J99 隐私开关三处接线 + J98 承诺不撒谎', () => {
     expectHit({ 'utils/tracker.js': read('utils/tracker.js').replace(/if \(!isEnabled\(\)\) return;/, '') }, 'J99'))
 
   test('隐私第七条写回「退出登录即可」被抓', () =>
-    expectHit({ 'pages/privacy/privacy.js': mutate('pages/privacy/privacy.js', /3\) 要求删除个人信息——请注意：/, "3) 要求删除个人信息（退出登录即可）——") }, 'J98'))
+    expectHit({ 'pages/privacy/privacy.js': mutate('pages/privacy/privacy.js', /3\) 要求删除个人信息——/, "3) 要求删除个人信息（退出登录即可）——") }, 'J98'))
 
   test('隐私第七条不再给出真实通道（删掉意见反馈）被抓', () =>
     expectHit({ 'pages/privacy/privacy.js': mutate('pages/privacy/privacy.js', /意见反馈/g, '联系管理员邮箱') }, 'J98'))
@@ -485,6 +485,74 @@ describe('T02542 / M7：长任务收尾与逐菜单缺陷', () => {
     assert.notEqual(src, read('pages/settings/settings.js'), '坏样本没构造成功：onCheckUpdate 的兜底文案/时长已变化')
     return expectHit({ 'pages/settings/settings.js': src }, 'J81')
   })
+})
+
+describe('T02788 删除我的数据：入口、确认口径与拆除顺序', () => {
+  test('设置页「数据与统计」分组删掉删除入口被抓', () =>
+    expectHit(
+      { 'pages/settings/settings.wxml': mutate('pages/settings/settings.wxml', /bindtap="onPurgeMyData"/, '') },
+      'T02788',
+    ))
+
+  test('handler 改名后入口绑到不存在的处理器被抓', () =>
+    expectHit(
+      { 'pages/settings/settings.js': mutate('pages/settings/settings.js', /onPurgeMyData/g, 'onPurgeRemoved') },
+      'T02788',
+    ))
+
+  test('确认框不用破坏性配色被抓（不可逆动作与普通确认同貌）', () =>
+    expectHit(
+      { 'pages/settings/settings.js': mutate('pages/settings/settings.js', /confirmColor: '#B0554A'/, "confirmColor: '#3F6C8F'") },
+      'T02788',
+    ))
+
+  test('确认框不写「不可恢复」被抓', () =>
+    expectHit(
+      { 'pages/settings/settings.js': mutate('pages/settings/settings.js', /此操作不可恢复。/, '请确认。') },
+      'T02788',
+    ))
+
+  test('删除后改用 logout()（401 自动重登把账号注册回来）被抓', () =>
+    expectHit(
+      { 'pages/settings/settings.js': mutate('pages/settings/settings.js', /        clearToken\(\);/, '        await logout();') },
+      'T02788',
+    ))
+
+  test('api.js 的 DELETE 丢了 confirm:true 被抓', () =>
+    expectHit(
+      { 'services/api.js': mutate('services/api.js', /data: \{ confirm: true \},/, 'data: {},') },
+      'T02788',
+    ))
+
+  test('api.js 打开网络自动重试被抓（响应丢失会二次执行删除）', () =>
+    expectHit(
+      { 'services/api.js': mutate('services/api.js', /    _netRetry: false,/, '    _netRetry: true,') },
+      'T02788',
+    ))
+
+  test('api.js 的网络重试分支不认 _netRetry 被抓', () =>
+    expectHit(
+      {
+        'services/api.js': mutate(
+          'services/api.js',
+          /if \(!_netRetried && options\._netRetry !== false\) \{/,
+          'if (!_netRetried) {',
+        ),
+      },
+      'T02788',
+    ))
+
+  test('隐私第七条不指向自助入口被抓', () =>
+    expectHit(
+      { 'pages/privacy/privacy.js': mutate('pages/privacy/privacy.js', /删除我的数据/g, '联系客服') },
+      'T02788',
+    ))
+
+  test('隐私第七条的备份保留期与服务端常量不一致被抓（写死数字会随配置变成谎）', () =>
+    expectHit(
+      { 'pages/privacy/privacy.js': mutate('pages/privacy/privacy.js', /保留 7 天/, '保留 30 天') },
+      'T02788',
+    ))
 })
 
 describe('防误报：门禁不能红在自家注释与动态绑定上', () => {
