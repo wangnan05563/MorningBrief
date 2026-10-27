@@ -209,6 +209,10 @@
         </template>
 
         <el-empty v-else-if="!loadFailed" description="请从左侧选择一张表" />
+
+        <!-- T02909：备份/恢复写在 category=backup，此前只有 category=db_admin 读得到。
+             恢复是「用旧快照覆盖当前库」的操作，事后要能在本页直接看到是谁做的 -->
+        <AuditTrail category="backup" guide="backup-audit" title="最近备份/恢复审计" :limit="5" />
       </el-main>
     </el-container>
 
@@ -489,6 +493,7 @@ import {
 import { formatTime } from '../../utils/format'
 import { PANEL_PAGE_SIZE_OPTIONS } from '../../constants/pagination'
 import ListLoadError from '../../components/ListLoadError.vue'
+import AuditTrail from '../../components/AuditTrail.vue'
 
 // ---- 表列表 ----
 const tables = ref([])

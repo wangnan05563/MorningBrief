@@ -13,7 +13,7 @@
         "callSites": [
           {
             "file": "views/maintenance/DatabaseAdmin.vue",
-            "line": 760,
+            "line": 765,
             "fn": "updateRow",
             "fieldCount": 1,
             "unresolved": [
@@ -804,9 +804,9 @@
     {
       "endpoint": "POST /backups/restore",
       "model": "RestoreRequest",
-      "modelSource": "backend/app/routers/admin/backup.py:32",
+      "modelSource": "backend/app/routers/admin/backup.py:33",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/backup.py:95",
+      "handlerSource": "backend/app/routers/admin/backup.py:96",
       "declared": [
         "backup_path",
         "confirm_text"
@@ -1213,14 +1213,14 @@
         "callSites": [
           {
             "file": "views/maintenance/DatabaseAdmin.vue",
-            "line": 788,
+            "line": 793,
             "fn": "cascadePreview",
             "fieldCount": 1,
             "unresolved": []
           },
           {
             "file": "views/maintenance/DatabaseAdmin.vue",
-            "line": 808,
+            "line": 813,
             "fn": "cascadePreview",
             "fieldCount": 1,
             "unresolved": []
@@ -1265,7 +1265,7 @@
         "callSites": [
           {
             "file": "views/maintenance/DatabaseAdmin.vue",
-            "line": 912,
+            "line": 917,
             "fn": "importRows",
             "fieldCount": 4,
             "unresolved": []
@@ -1317,7 +1317,7 @@
         "callSites": [
           {
             "file": "views/maintenance/DatabaseAdmin.vue",
-            "line": 881,
+            "line": 886,
             "fn": "previewImport",
             "fieldCount": 3,
             "unresolved": []
@@ -1364,7 +1364,7 @@
         "callSites": [
           {
             "file": "views/maintenance/DatabaseAdmin.vue",
-            "line": 752,
+            "line": 757,
             "fn": "createRow",
             "fieldCount": 1,
             "unresolved": []
@@ -1405,7 +1405,7 @@
         "callSites": [
           {
             "file": "views/maintenance/DatabaseAdmin.vue",
-            "line": 828,
+            "line": 833,
             "fn": "batchDelete",
             "fieldCount": 2,
             "unresolved": [
@@ -1825,9 +1825,9 @@
     {
       "endpoint": "POST /materials",
       "model": "MaterialCreateRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:31",
+      "modelSource": "backend/app/routers/admin/materials.py:32",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:368",
+      "handlerSource": "backend/app/routers/admin/materials.py:496",
       "declared": [
         "category",
         "channel_id",
@@ -1845,7 +1845,7 @@
         "callSites": [
           {
             "file": "views/channel/CourseMaterials.vue",
-            "line": 336,
+            "line": 358,
             "fn": "createMaterial",
             "fieldCount": 8,
             "unresolved": []
@@ -1929,9 +1929,9 @@
     {
       "endpoint": "POST /materials/batch-delete",
       "model": "MaterialBatchDeleteRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:551",
+      "modelSource": "backend/app/routers/admin/materials.py:679",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:563",
+      "handlerSource": "backend/app/routers/admin/materials.py:691",
       "declared": [
         "channel_id",
         "ids",
@@ -1982,9 +1982,9 @@
     {
       "endpoint": "POST /materials/import-cos",
       "model": "ImportCosRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:722",
+      "modelSource": "backend/app/routers/admin/materials.py:861",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:733",
+      "handlerSource": "backend/app/routers/admin/materials.py:872",
       "declared": [
         "category",
         "channel_id",
@@ -1995,7 +1995,7 @@
         "callSites": [
           {
             "file": "views/channel/CourseMaterials.vue",
-            "line": 308,
+            "line": 320,
             "fn": "importFromCos",
             "fieldCount": 4,
             "unresolved": []
@@ -2068,9 +2068,9 @@
     {
       "endpoint": "POST /materials/import-url",
       "model": "ImportUrlRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:671",
+      "modelSource": "backend/app/routers/admin/materials.py:810",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:685",
+      "handlerSource": "backend/app/routers/admin/materials.py:824",
       "declared": [
         "category",
         "channel_id",
@@ -2082,7 +2082,7 @@
         "callSites": [
           {
             "file": "views/channel/CourseMaterials.vue",
-            "line": 369,
+            "line": 391,
             "fn": "importFromUrl",
             "fieldCount": 5,
             "unresolved": []
@@ -2152,9 +2152,9 @@
     {
       "endpoint": "POST /materials/share",
       "model": "SharePreviewRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:777",
+      "modelSource": "backend/app/routers/admin/materials.py:926",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:786",
+      "handlerSource": "backend/app/routers/admin/materials.py:935",
       "declared": [
         "channel_id",
         "url"
@@ -2163,7 +2163,7 @@
         "callSites": [
           {
             "file": "views/channel/CourseMaterials.vue",
-            "line": 393,
+            "line": 415,
             "fn": "sharePreview",
             "fieldCount": 2,
             "unresolved": []
@@ -2367,7 +2367,7 @@
           },
           {
             "file": "views/review/ReviewList.vue",
-            "line": 586,
+            "line": 591,
             "fn": "batchHandleReviewAction",
             "fieldCount": 3,
             "unresolved": [
@@ -2376,7 +2376,7 @@
           },
           {
             "file": "views/review/ReviewList.vue",
-            "line": 630,
+            "line": 635,
             "fn": "batchHandleReviewAction",
             "fieldCount": 3,
             "unresolved": [
@@ -2586,17 +2586,18 @@
     {
       "endpoint": "POST /users/*/toggle-status",
       "model": "UserToggleBody",
-      "modelSource": "backend/app/routers/admin/users.py:23",
+      "modelSource": "backend/app/routers/admin/users.py:24",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/users.py:77",
+      "handlerSource": "backend/app/routers/admin/users.py:83",
       "declared": [
-        "disabled"
+        "disabled",
+        "reason"
       ],
       "frontend": {
         "callSites": [
           {
             "file": "views/mobile/ManageUsers.vue",
-            "line": 93,
+            "line": 98,
             "fn": "toggleUserStatus",
             "fieldCount": 1,
             "unresolved": [
@@ -2613,7 +2614,7 @@
         "hasCallSite": true
       },
       "ormTable": "User",
-      "ormScore": 1.0,
+      "ormScore": 0.5,
       "ormTied": [
         "User"
       ],
@@ -2632,7 +2633,9 @@
       "diffs": {
         "frontendNotInModel": [],
         "declaredButNotHandled": [],
-        "modelNotSubmitted": [],
+        "modelNotSubmitted": [
+          "reason"
+        ],
         "modelNotInColumn": [],
         "columnNotInModel": [
           "avatar",
@@ -3572,9 +3575,9 @@
     {
       "endpoint": "PUT /materials/*",
       "model": "MaterialUpdateRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:59",
+      "modelSource": "backend/app/routers/admin/materials.py:60",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:418",
+      "handlerSource": "backend/app/routers/admin/materials.py:546",
       "declared": [
         "category",
         "content",

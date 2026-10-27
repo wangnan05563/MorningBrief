@@ -256,6 +256,9 @@
       </el-col>
     </el-row>
 
+    <!-- T02909：清理是 irreversible 的高危动作，最近几次「谁清的、清了什么」得在本页读得到 -->
+    <AuditTrail category="maintenance" guide="maintenance-audit" title="最近清理审计" />
+
     <!-- 使用说明 -->
     <el-alert type="info" :closable="false" show-icon class="alert-block">
       <template #title>使用说明</template>
@@ -283,6 +286,7 @@ import api from '../../api'
 import { getMaintenanceTask } from '../../api/maintenance'
 import { MAINTENANCE_TASK_STATE } from '../../constants/enums'
 import ListLoadError from '../../components/ListLoadError.vue'
+import AuditTrail from '../../components/AuditTrail.vue'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import { LONG_TASK_TIMEOUT_MS, isRequestTimeout, longTaskTimeoutText } from '../../utils/requestTimeout'
 

@@ -36,6 +36,10 @@
         {{ u.disabled ? '启用' : '禁用' }}
       </button>
     </div>
+
+    <!-- T02909：停用/启用终端用户写在 category=user，此前没有读口。
+         移动端就是用户管理的落地页，审计要挂在同一页 -->
+    <AuditTrail category="user" guide="user-audit" title="最近启停审计" :limit="5" />
   </div>
 </template>
 
@@ -45,6 +49,7 @@ import { listUsers, toggleUserStatus } from '../../api/users'
 import { ElMessage } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import { metricText } from '../../utils/format'
+import AuditTrail from '../../components/AuditTrail.vue'
 
 const keyword = ref('')
 const list = ref([])

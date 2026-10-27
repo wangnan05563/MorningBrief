@@ -192,6 +192,8 @@ from app.routers.admin.maintenance import router as b_maintenance_router
 # 自动审批模块（配置管理 + 统计 + 历史 + 重试）
 from app.routers.admin.auto_review import router as b_auto_review_router
 from app.routers.admin.backup import router as b_backup_router
+# 审计日志统一读口（T02909：全量管理员可读）
+from app.routers.admin.audit import router as b_audit_router
 # 通知管理（钉钉消息通知，仅 admin）
 from app.routers.admin.notification import router as b_notification_router
 from app.routers.admin.cos import router as b_cos_router
@@ -1469,6 +1471,8 @@ def create_app() -> FastAPI:  # NOSONAR
     app.include_router(b_maintenance_router)
     app.include_router(b_auto_review_router)
     app.include_router(b_backup_router)
+    # 审计日志统一读口（T02909）
+    app.include_router(b_audit_router)
     # 通知管理（钉钉消息通知）
     app.include_router(b_notification_router)
     # 云端存储 COS 配置与管理

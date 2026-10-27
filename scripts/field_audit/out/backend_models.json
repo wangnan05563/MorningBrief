@@ -355,7 +355,7 @@
       "endpoint": "delete_materials_by_source",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:486",
+        "source": "backend/app/routers/admin/materials.py:614",
         "refs": [
           "",
           "AdminPayload",
@@ -418,7 +418,7 @@
       "endpoint": "delete_material",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:517",
+        "source": "backend/app/routers/admin/materials.py:645",
         "refs": [
           "/{material_id}",
           "AdminPayload",
@@ -1684,10 +1684,9 @@
       "endpoint": "create_backup",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/backup.py:65",
+        "source": "backend/app/routers/admin/backup.py:66",
         "refs": [
           "",
-          "\"}",
           "AdminPayload",
           "AsyncSession",
           "AuditLog",
@@ -1708,19 +1707,22 @@
           "database",
           "db",
           "detail",
+          "dumps",
           "e",
+          "ensure_ascii",
           "exception",
           "get_db",
+          "json",
           "logger",
           "message",
           "operator",
+          "path",
           "post",
           "require_admin",
           "router",
           "success",
           "target",
           "username",
-          "{\"path\": \"",
           "备份失败: ",
           "备份成功",
           "手动备份失败 operator=%s",
@@ -1733,13 +1735,11 @@
       "endpoint": "cleanup_backups",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/backup.py:141",
+        "source": "backend/app/routers/admin/backup.py:142",
         "refs": [
           " 个过期备份（保留 ",
           " 份）",
           " 天 / 最多 ",
-          ", \"keep_days\": ",
-          ", \"max_files\": ",
           "/cleanup",
           "AdminPayload",
           "AsyncSession",
@@ -1759,8 +1759,11 @@
           "db",
           "deleted",
           "detail",
+          "dumps",
+          "ensure_ascii",
           "get_db",
           "int",
+          "json",
           "keep_days",
           "max",
           "max_files",
@@ -1772,8 +1775,6 @@
           "success",
           "target",
           "username",
-          "{\"deleted\": ",
-          "}",
           "已清理 ",
           "手动清理过期备份。\n\n    默认保留最近 7 天且最多 7 份（单库 30MB 时上限约 210MB）。\n    定时任务每日 04:00 已自动清理，此接口供运维主动清理或临时收紧窗口。\n\n    Args:\n        keep_days: 常规备份保留天数，下限 0（0 表示只按份数上限清）。\n        max_files: 常规备份最大份数，下限 1。\n    "
         ]
@@ -1785,7 +1786,7 @@
       "model": {
         "name": "RestoreRequest",
         "module": "app.routers.admin.backup",
-        "source": "backend/app/routers/admin/backup.py:32",
+        "source": "backend/app/routers/admin/backup.py:33",
         "extra": "ignore",
         "fields": [
           "backup_path",
@@ -1797,9 +1798,8 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/backup.py:95",
+        "source": "backend/app/routers/admin/backup.py:96",
         "refs": [
-          "\"}",
           "/restore",
           "AdminPayload",
           "AsyncSession",
@@ -1825,9 +1825,12 @@
           "database",
           "db",
           "detail",
+          "dumps",
           "e",
+          "ensure_ascii",
           "exception",
           "get_db",
+          "json",
           "logger",
           "message",
           "operator",
@@ -1837,12 +1840,12 @@
           "restore_backup",
           "restored_from",
           "router",
+          "source",
           "str",
           "success",
           "target",
           "username",
           "warning",
-          "{\"source\": \"",
           "从指定备份恢复数据库。\n\n    警告：恢复会覆盖当前数据库，丢失自备份以来所有数据。\n    需手输目标备份文件名作确认文本（服务端 DB_ADMIN_CONFIRM_TOKEN 只作总开关）。\n    恢复后应用需重启以重建 engine 连接池。\n    ",
           "恢复失败: ",
           "恢复成功，请重启应用以重建数据库连接",
@@ -3627,7 +3630,7 @@
       "model": {
         "name": "MaterialCreateRequest",
         "module": "app.routers.admin.materials",
-        "source": "backend/app/routers/admin/materials.py:31",
+        "source": "backend/app/routers/admin/materials.py:32",
         "extra": "ignore",
         "fields": [
           "category",
@@ -3657,7 +3660,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:368",
+        "source": "backend/app/routers/admin/materials.py:496",
         "refs": [
           "",
           ", ",
@@ -3718,7 +3721,7 @@
       "model": {
         "name": "MaterialBatchDeleteRequest",
         "module": "app.routers.admin.materials",
-        "source": "backend/app/routers/admin/materials.py:551",
+        "source": "backend/app/routers/admin/materials.py:679",
         "extra": "ignore",
         "fields": [
           "channel_id",
@@ -3732,7 +3735,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:563",
+        "source": "backend/app/routers/admin/materials.py:691",
         "refs": [
           " 条/本，当前 ",
           "/batch-delete",
@@ -3811,7 +3814,7 @@
       "model": {
         "name": "ImportCosRequest",
         "module": "app.routers.admin.materials",
-        "source": "backend/app/routers/admin/materials.py:722",
+        "source": "backend/app/routers/admin/materials.py:861",
         "extra": "ignore",
         "fields": [
           "category",
@@ -3827,7 +3830,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:733",
+        "source": "backend/app/routers/admin/materials.py:872",
         "refs": [
           "/",
           "/import-cos",
@@ -3840,10 +3843,10 @@
           "Exception",
           "ImportCosRequest",
           "MaterialSourceType",
+          "SKIPPED_PREVIEW_LIMIT",
           "UnsupportedFormatError",
           "_material_to_dict",
-          "_persist_material",
-          "append",
+          "_persist_materials_atomic",
           "category",
           "ch",
           "channel_id",
@@ -3858,6 +3861,7 @@
           "data",
           "db",
           "dedup_key",
+          "dict",
           "e",
           "filename",
           "get_db",
@@ -3874,6 +3878,8 @@
           "require_admin",
           "router",
           "rsplit",
+          "skipped",
+          "skipped_titles",
           "source",
           "source_type",
           "str",
@@ -3881,7 +3887,7 @@
           "svc",
           "title",
           "value",
-          "从 COS 对象导入并解析为章节素材批量入库（source_type=cos）。\n\n    每个章节作为一条素材入库，按 content_hash 去重，避免重复导入。\n    COS 未配置时返回 400 提示先配置；不支持的扩展名返回 400。\n    "
+          "从 COS 对象导入并解析为章节素材批量入库（source_type=cos）。\n\n    每个章节作为一条素材入库，按 content_hash 去重，避免重复导入。\n    与文档上传同一口径（C91）：整本单事务写入，已存在的章节按章跳过并回报 skipped。\n    COS 未配置时返回 400 提示先配置；不支持的扩展名返回 400。\n    "
         ]
       }
     },
@@ -3891,7 +3897,7 @@
       "model": {
         "name": "ImportUrlRequest",
         "module": "app.routers.admin.materials",
-        "source": "backend/app/routers/admin/materials.py:671",
+        "source": "backend/app/routers/admin/materials.py:810",
         "extra": "ignore",
         "fields": [
           "category",
@@ -3909,7 +3915,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:685",
+        "source": "backend/app/routers/admin/materials.py:824",
         "refs": [
           "/import-url",
           "AdminPayload",
@@ -3961,7 +3967,7 @@
       "model": {
         "name": "SharePreviewRequest",
         "module": "app.routers.admin.materials",
-        "source": "backend/app/routers/admin/materials.py:777",
+        "source": "backend/app/routers/admin/materials.py:926",
         "extra": "ignore",
         "fields": [
           "channel_id",
@@ -3973,7 +3979,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:786",
+        "source": "backend/app/routers/admin/materials.py:935",
         "refs": [
           "/share",
           "AdminPayload",
@@ -4010,7 +4016,7 @@
       "endpoint": "upload_document",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:626",
+        "source": "backend/app/routers/admin/materials.py:754",
         "refs": [
           "",
           " · ",
@@ -4024,11 +4030,11 @@
           "MaterialSourceType",
           "Optional",
           "Path",
+          "SKIPPED_PREVIEW_LIMIT",
           "UnsupportedFormatError",
           "UploadFile",
           "_material_to_dict",
-          "_persist_material",
-          "append",
+          "_persist_materials_atomic",
           "book_name",
           "category",
           "ch",
@@ -4043,6 +4049,7 @@
           "db",
           "dedup_key",
           "description",
+          "dict",
           "document.txt",
           "e",
           "file",
@@ -4060,6 +4067,8 @@
           "read",
           "require_admin",
           "router",
+          "skipped",
+          "skipped_titles",
           "source",
           "source_type",
           "stem",
@@ -4068,7 +4077,7 @@
           "success",
           "title",
           "value",
-          "上传专业资料文档，解析为章节素材批量入库（MVP 输入适配器）。\n\n    支持 .txt / .md；.pdf / .docx / .html 需安装对应解析库（见 UnsupportedFormatError 提示）。\n    每个章节作为一条 source_type=list 素材入库，按 content_hash 去重，避免重复上传。\n    ",
+          "上传专业资料文档，解析为章节素材批量入库（MVP 输入适配器）。\n\n    支持 .txt / .md；.pdf / .docx / .html 需安装对应解析库（见 UnsupportedFormatError 提示）。\n    每个章节作为一条 source_type=list 素材入库，按 content_hash 去重，避免重复上传。\n    整本**单事务**写入，频道内已存在的章节按章跳过并在响应里回报 skipped（C91），\n    中途失败不会留下「半本书」。\n    ",
           "可选分类",
           "文档上传",
           "未命名书稿",
@@ -4825,18 +4834,21 @@
       "model": {
         "name": "UserToggleBody",
         "module": "app.routers.admin.users",
-        "source": "backend/app/routers/admin/users.py:23",
+        "source": "backend/app/routers/admin/users.py:24",
         "extra": "ignore",
         "fields": [
-          "disabled"
+          "disabled",
+          "reason"
         ],
         "flatFields": [
-          "disabled"
+          "disabled",
+          "reason"
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/users.py:77",
+        "source": "backend/app/routers/admin/users.py:83",
         "refs": [
+          "",
           "/{user_id}/toggle-status",
           "AdminPayload",
           "AsyncSession",
@@ -4856,13 +4868,18 @@
           "db",
           "detail",
           "disabled",
+          "dumps",
+          "ensure_ascii",
           "error",
           "get",
           "get_db",
           "int",
+          "json",
           "message",
+          "nickname",
           "operator",
           "post",
+          "reason",
           "refresh",
           "require_admin",
           "router",
@@ -5813,7 +5830,7 @@
       "model": {
         "name": "MaterialUpdateRequest",
         "module": "app.routers.admin.materials",
-        "source": "backend/app/routers/admin/materials.py:59",
+        "source": "backend/app/routers/admin/materials.py:60",
         "extra": "ignore",
         "fields": [
           "category",
@@ -5839,7 +5856,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:418",
+        "source": "backend/app/routers/admin/materials.py:546",
         "refs": [
           "/{material_id}",
           "AdminPayload",

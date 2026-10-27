@@ -227,6 +227,10 @@
         @size-change="handleSizeChange"
       />
     </div>
+
+    <!-- T02909：审核直接决定节目是否上线，但这类审计此前在任何界面都读不到。
+         强制过审/批量打回后，值班要能在本页看到「谁在什么时候以什么理由做的」 -->
+    <AuditTrail category="review" guide="review-audit" title="最近审核审计" :limit="5" />
   </div>
 </template>
 
@@ -260,6 +264,7 @@ import { PAGE_SIZE_OPTIONS, MAX_PAGE_SIZE, clampPageSize } from '../../constants
 import { useUrlState } from '../../composables/useUrlState'
 import { detailLocation, validateIsoDate, validateDateRange } from '../../utils/urlState'
 import ListLoadError from '../../components/ListLoadError.vue'
+import AuditTrail from '../../components/AuditTrail.vue'
 
 const route = useRoute()
 const router = useRouter()

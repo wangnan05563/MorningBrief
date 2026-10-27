@@ -3,6 +3,7 @@
 仅 admin 角色可访问（require_admin）。终端用户表为 C 端 user，本路由提供运营侧
 受控视图：按昵称/openid 检索、按状态筛选、禁用/启用（二次确认 + 审计由前端/路由保证）。
 """
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -21,8 +22,13 @@ router = APIRouter(prefix="/admin/api/v1/users", tags=["B端-终端用户管理"
 
 
 class UserToggleBody(BaseModel):
-    """用户启停请求体：disabled=1 禁用，0 启用。"""
+    """用户启停请求体：disabled=1 禁用，0 启用。
+
+    reason 可空：审计的「为什么」只有操作者知道，接口先留出通道，
+    界面还没收集时留空，好过事后无从追溯。
+    """
     disabled: int
+    reason: str = ""
 
     @field_validator("disabled")
     @classmethod
@@ -87,12 +93,21 @@ async def toggle_user_status(
         return error(code=404, message=f"用户不存在: {user_id}")
 
     user.disabled = body.disabled
+    # T02909 第 3 点：detail 原本是 str(dict) —— 单引号的 Python repr，
+    # 读口按 JSON 解析不了，只能整串原样吐出，既进不了字段级检索也看不出原因
     db.add(AuditLog(
         category="user",
         action="toggle_status",
         target=str(user_id),
         operator=admin.username,
-        detail=str({"disabled": body.disabled}),
+        detail=json.dumps(
+            {
+                "disabled": body.disabled,
+                "nickname": user.nickname or "",
+                "reason": body.reason,
+            },
+            ensure_ascii=False,
+        ),
     ))
     await db.commit()
     await db.refresh(user)

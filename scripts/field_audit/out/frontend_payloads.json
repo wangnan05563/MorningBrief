@@ -127,7 +127,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 827,
+          "line": 832,
           "fn": "deleteRow",
           "fieldCount": 2,
           "unresolved": [
@@ -487,6 +487,24 @@
     },
     {
       "method": "GET",
+      "url": "/audit-logs",
+      "fields": [
+        "params",
+        "silent"
+      ],
+      "unresolved": [],
+      "sites": [
+        {
+          "file": "api/audit.js",
+          "line": 12,
+          "fn": "api.get",
+          "fieldCount": 2,
+          "unresolved": []
+        }
+      ]
+    },
+    {
+      "method": "GET",
       "url": "/auto-review/config",
       "fields": [],
       "unresolved": [],
@@ -559,7 +577,7 @@
         },
         {
           "file": "views/channel/CourseMaterials.vue",
-          "line": 424,
+          "line": 446,
           "fn": "listChannels",
           "fieldCount": 2,
           "unresolved": []
@@ -594,7 +612,7 @@
         },
         {
           "file": "views/review/ReviewList.vue",
-          "line": 499,
+          "line": 504,
           "fn": "listChannels",
           "fieldCount": 2,
           "unresolved": []
@@ -892,8 +910,15 @@
       "unresolved": [],
       "sites": [
         {
+          "file": "components/AuditTrail.vue",
+          "line": 78,
+          "fn": "listAuditLogs",
+          "fieldCount": 2,
+          "unresolved": []
+        },
+        {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 943,
+          "line": 948,
           "fn": "listAuditLogs",
           "fieldCount": 2,
           "unresolved": []
@@ -908,7 +933,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 587,
+          "line": 592,
           "fn": "listTables",
           "fieldCount": 0,
           "unresolved": []
@@ -927,7 +952,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 858,
+          "line": 863,
           "fn": "exportRows",
           "fieldCount": 3,
           "unresolved": []
@@ -944,7 +969,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 624,
+          "line": 629,
           "fn": "listRows",
           "fieldCount": 1,
           "unresolved": []
@@ -959,7 +984,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 610,
+          "line": 615,
           "fn": "getTableSchema",
           "fieldCount": 0,
           "unresolved": []
@@ -1175,7 +1200,7 @@
         },
         {
           "file": "views/maintenance/Maintenance.vue",
-          "line": 499,
+          "line": 503,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -1190,7 +1215,7 @@
       "sites": [
         {
           "file": "views/maintenance/Maintenance.vue",
-          "line": 433,
+          "line": 437,
           "fn": "getMaintenanceTask",
           "fieldCount": 0,
           "unresolved": []
@@ -1424,7 +1449,7 @@
         },
         {
           "file": "views/review/ReviewList.vue",
-          "line": 395,
+          "line": 400,
           "fn": "api.get",
           "fieldCount": 9,
           "unresolved": []
@@ -1633,7 +1658,7 @@
       "sites": [
         {
           "file": "views/mobile/ManageUsers.vue",
-          "line": 66,
+          "line": 71,
           "fn": "listUsers",
           "fieldCount": 1,
           "unresolved": []
@@ -1702,7 +1727,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 760,
+          "line": 765,
           "fn": "updateRow",
           "fieldCount": 1,
           "unresolved": [
@@ -2406,14 +2431,14 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 788,
+          "line": 793,
           "fn": "cascadePreview",
           "fieldCount": 1,
           "unresolved": []
         },
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 808,
+          "line": 813,
           "fn": "cascadePreview",
           "fieldCount": 1,
           "unresolved": []
@@ -2433,7 +2458,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 912,
+          "line": 917,
           "fn": "importRows",
           "fieldCount": 4,
           "unresolved": []
@@ -2452,7 +2477,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 881,
+          "line": 886,
           "fn": "previewImport",
           "fieldCount": 3,
           "unresolved": []
@@ -2469,7 +2494,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 752,
+          "line": 757,
           "fn": "createRow",
           "fieldCount": 1,
           "unresolved": []
@@ -2489,7 +2514,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 828,
+          "line": 833,
           "fn": "batchDelete",
           "fieldCount": 2,
           "unresolved": [
@@ -2611,7 +2636,7 @@
       "sites": [
         {
           "file": "views/channel/CourseMaterials.vue",
-          "line": 336,
+          "line": 358,
           "fn": "createMaterial",
           "fieldCount": 8,
           "unresolved": []
@@ -2671,7 +2696,7 @@
       "sites": [
         {
           "file": "views/channel/CourseMaterials.vue",
-          "line": 308,
+          "line": 320,
           "fn": "importFromCos",
           "fieldCount": 4,
           "unresolved": []
@@ -2692,7 +2717,7 @@
       "sites": [
         {
           "file": "views/channel/CourseMaterials.vue",
-          "line": 369,
+          "line": 391,
           "fn": "importFromUrl",
           "fieldCount": 5,
           "unresolved": []
@@ -2710,7 +2735,7 @@
       "sites": [
         {
           "file": "views/channel/CourseMaterials.vue",
-          "line": 393,
+          "line": 415,
           "fn": "sharePreview",
           "fieldCount": 2,
           "unresolved": []
@@ -2910,7 +2935,7 @@
         },
         {
           "file": "views/review/ReviewList.vue",
-          "line": 586,
+          "line": 591,
           "fn": "batchHandleReviewAction",
           "fieldCount": 3,
           "unresolved": [
@@ -2919,7 +2944,7 @@
         },
         {
           "file": "views/review/ReviewList.vue",
-          "line": 630,
+          "line": 635,
           "fn": "batchHandleReviewAction",
           "fieldCount": 3,
           "unresolved": [
@@ -3047,7 +3072,7 @@
       "sites": [
         {
           "file": "views/mobile/ManageUsers.vue",
-          "line": 93,
+          "line": 98,
           "fn": "toggleUserStatus",
           "fieldCount": 1,
           "unresolved": [
@@ -4308,6 +4333,265 @@
         "workflowId"
       ],
       "payloadExpr": null,
+      "defIndex": {
+        "decls": [],
+        "assigns": []
+      }
+    },
+    {
+      "fn": "listAuditLogs",
+      "method": "get",
+      "url": "/db-admin/audit-log",
+      "file": "api/dbAdmin.js",
+      "line": 114,
+      "argNames": [
+        null
+      ],
+      "payloadExpr": {
+        "type": "ObjectExpression",
+        "start": 2663,
+        "end": 2684,
+        "loc": {
+          "start": {
+            "line": 114,
+            "column": 40,
+            "index": 2663
+          },
+          "end": {
+            "line": 114,
+            "column": 61,
+            "index": 2684
+          }
+        },
+        "properties": [
+          {
+            "type": "ObjectProperty",
+            "start": 2665,
+            "end": 2682,
+            "loc": {
+              "start": {
+                "line": 114,
+                "column": 42,
+                "index": 2665
+              },
+              "end": {
+                "line": 114,
+                "column": 59,
+                "index": 2682
+              }
+            },
+            "method": false,
+            "key": {
+              "type": "Identifier",
+              "start": 2665,
+              "end": 2671,
+              "loc": {
+                "start": {
+                  "line": 114,
+                  "column": 42,
+                  "index": 2665
+                },
+                "end": {
+                  "line": 114,
+                  "column": 48,
+                  "index": 2671
+                },
+                "identifierName": "params"
+              },
+              "name": "params"
+            },
+            "computed": false,
+            "shorthand": false,
+            "value": {
+              "type": "ObjectExpression",
+              "start": 2673,
+              "end": 2682,
+              "loc": {
+                "start": {
+                  "line": 114,
+                  "column": 50,
+                  "index": 2673
+                },
+                "end": {
+                  "line": 114,
+                  "column": 59,
+                  "index": 2682
+                }
+              },
+              "properties": [
+                {
+                  "type": "ObjectProperty",
+                  "start": 2675,
+                  "end": 2680,
+                  "loc": {
+                    "start": {
+                      "line": 114,
+                      "column": 52,
+                      "index": 2675
+                    },
+                    "end": {
+                      "line": 114,
+                      "column": 57,
+                      "index": 2680
+                    }
+                  },
+                  "method": false,
+                  "key": {
+                    "type": "Identifier",
+                    "start": 2675,
+                    "end": 2680,
+                    "loc": {
+                      "start": {
+                        "line": 114,
+                        "column": 52,
+                        "index": 2675
+                      },
+                      "end": {
+                        "line": 114,
+                        "column": 57,
+                        "index": 2680
+                      },
+                      "identifierName": "limit"
+                    },
+                    "name": "limit"
+                  },
+                  "computed": false,
+                  "shorthand": true,
+                  "value": {
+                    "type": "Identifier",
+                    "start": 2675,
+                    "end": 2680,
+                    "loc": {
+                      "start": {
+                        "line": 114,
+                        "column": 52,
+                        "index": 2675
+                      },
+                      "end": {
+                        "line": 114,
+                        "column": 57,
+                        "index": 2680
+                      },
+                      "identifierName": "limit"
+                    },
+                    "name": "limit"
+                  },
+                  "extra": {
+                    "shorthand": true
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "defIndex": {
+        "decls": [],
+        "assigns": [
+          {
+            "base": "link",
+            "prop": "href",
+            "line": 81,
+            "scope": {
+              "start": 1600,
+              "end": 2034
+            }
+          },
+          {
+            "base": "link",
+            "prop": "download",
+            "line": 82,
+            "scope": {
+              "start": 1600,
+              "end": 2034
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fn": "listAuditCategories",
+      "method": "get",
+      "url": "/audit-logs/categories",
+      "file": "api/audit.js",
+      "line": 14,
+      "argNames": [],
+      "payloadExpr": {
+        "type": "ObjectExpression",
+        "start": 428,
+        "end": 444,
+        "loc": {
+          "start": {
+            "line": 14,
+            "column": 75,
+            "index": 428
+          },
+          "end": {
+            "line": 14,
+            "column": 91,
+            "index": 444
+          }
+        },
+        "properties": [
+          {
+            "type": "ObjectProperty",
+            "start": 430,
+            "end": 442,
+            "loc": {
+              "start": {
+                "line": 14,
+                "column": 77,
+                "index": 430
+              },
+              "end": {
+                "line": 14,
+                "column": 89,
+                "index": 442
+              }
+            },
+            "method": false,
+            "key": {
+              "type": "Identifier",
+              "start": 430,
+              "end": 436,
+              "loc": {
+                "start": {
+                  "line": 14,
+                  "column": 77,
+                  "index": 430
+                },
+                "end": {
+                  "line": 14,
+                  "column": 83,
+                  "index": 436
+                },
+                "identifierName": "silent"
+              },
+              "name": "silent"
+            },
+            "computed": false,
+            "shorthand": false,
+            "value": {
+              "type": "BooleanLiteral",
+              "start": 438,
+              "end": 442,
+              "loc": {
+                "start": {
+                  "line": 14,
+                  "column": 85,
+                  "index": 438
+                },
+                "end": {
+                  "line": 14,
+                  "column": 89,
+                  "index": 442
+                }
+              },
+              "value": true
+            }
+          }
+        ]
+      },
       "defIndex": {
         "decls": [],
         "assigns": []
@@ -9558,177 +9842,6 @@
         "extra": {
           "trailingComma": 2530
         }
-      },
-      "defIndex": {
-        "decls": [],
-        "assigns": [
-          {
-            "base": "link",
-            "prop": "href",
-            "line": 81,
-            "scope": {
-              "start": 1600,
-              "end": 2034
-            }
-          },
-          {
-            "base": "link",
-            "prop": "download",
-            "line": 82,
-            "scope": {
-              "start": 1600,
-              "end": 2034
-            }
-          }
-        ]
-      }
-    },
-    {
-      "fn": "listAuditLogs",
-      "method": "get",
-      "url": "/db-admin/audit-log",
-      "file": "api/dbAdmin.js",
-      "line": 114,
-      "argNames": [
-        null
-      ],
-      "payloadExpr": {
-        "type": "ObjectExpression",
-        "start": 2663,
-        "end": 2684,
-        "loc": {
-          "start": {
-            "line": 114,
-            "column": 40,
-            "index": 2663
-          },
-          "end": {
-            "line": 114,
-            "column": 61,
-            "index": 2684
-          }
-        },
-        "properties": [
-          {
-            "type": "ObjectProperty",
-            "start": 2665,
-            "end": 2682,
-            "loc": {
-              "start": {
-                "line": 114,
-                "column": 42,
-                "index": 2665
-              },
-              "end": {
-                "line": 114,
-                "column": 59,
-                "index": 2682
-              }
-            },
-            "method": false,
-            "key": {
-              "type": "Identifier",
-              "start": 2665,
-              "end": 2671,
-              "loc": {
-                "start": {
-                  "line": 114,
-                  "column": 42,
-                  "index": 2665
-                },
-                "end": {
-                  "line": 114,
-                  "column": 48,
-                  "index": 2671
-                },
-                "identifierName": "params"
-              },
-              "name": "params"
-            },
-            "computed": false,
-            "shorthand": false,
-            "value": {
-              "type": "ObjectExpression",
-              "start": 2673,
-              "end": 2682,
-              "loc": {
-                "start": {
-                  "line": 114,
-                  "column": 50,
-                  "index": 2673
-                },
-                "end": {
-                  "line": 114,
-                  "column": 59,
-                  "index": 2682
-                }
-              },
-              "properties": [
-                {
-                  "type": "ObjectProperty",
-                  "start": 2675,
-                  "end": 2680,
-                  "loc": {
-                    "start": {
-                      "line": 114,
-                      "column": 52,
-                      "index": 2675
-                    },
-                    "end": {
-                      "line": 114,
-                      "column": 57,
-                      "index": 2680
-                    }
-                  },
-                  "method": false,
-                  "key": {
-                    "type": "Identifier",
-                    "start": 2675,
-                    "end": 2680,
-                    "loc": {
-                      "start": {
-                        "line": 114,
-                        "column": 52,
-                        "index": 2675
-                      },
-                      "end": {
-                        "line": 114,
-                        "column": 57,
-                        "index": 2680
-                      },
-                      "identifierName": "limit"
-                    },
-                    "name": "limit"
-                  },
-                  "computed": false,
-                  "shorthand": true,
-                  "value": {
-                    "type": "Identifier",
-                    "start": 2675,
-                    "end": 2680,
-                    "loc": {
-                      "start": {
-                        "line": 114,
-                        "column": 52,
-                        "index": 2675
-                      },
-                      "end": {
-                        "line": 114,
-                        "column": 57,
-                        "index": 2680
-                      },
-                      "identifierName": "limit"
-                    },
-                    "name": "limit"
-                  },
-                  "extra": {
-                    "shorthand": true
-                  }
-                }
-              ]
-            }
-          }
-        ]
       },
       "defIndex": {
         "decls": [],
@@ -15242,5 +15355,5 @@
       }
     }
   ],
-  "rawSites": 225
+  "rawSites": 227
 }

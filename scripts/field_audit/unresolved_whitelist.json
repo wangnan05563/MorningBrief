@@ -3,13 +3,13 @@
   "entries": [
     {
       "endpoint": "PATCH /db-admin/tables/*/rows/*",
-      "site": "views/maintenance/DatabaseAdmin.vue:760",
+      "site": "views/maintenance/DatabaseAdmin.vue:765",
       "reason_key": "dynamic-columns",
       "note": "values 是通用表编辑器的「列名→值」映射，键集合由所选表的列决定，静态不可定；后端用 ALLOWED_TABLES/列白名单校验，越界列直接拒（M16 家族已钉）。"
     },
     {
       "endpoint": "POST /db-admin/tables/*/rows/batch-delete",
-      "site": "views/maintenance/DatabaseAdmin.vue:828",
+      "site": "views/maintenance/DatabaseAdmin.vue:833",
       "reason_key": "value-scalar",
       "note": "confirmText 是用户手打的确认字符串，键名来自包装体字面量；ids 与 confirm_text 均在 BatchDeleteRequest 声明内。"
     },
@@ -93,21 +93,21 @@
     },
     {
       "endpoint": "POST /reviews/batch-action",
-      "site": "views/review/ReviewList.vue:586",
+      "site": "views/review/ReviewList.vue:591",
       "reason_key": "value-scalar",
-      "note": "ids 是批量通过所选的 review_id 数组（apps/admin-web/src/views/review/ReviewList.vue:586），键名 review_ids 在 BatchActionRequest 声明内。"
+      "note": "ids 是批量通过所选的 review_id 数组（apps/admin-web/src/views/review/ReviewList.vue:591），键名 review_ids 在 BatchActionRequest 声明内。"
     },
     {
       "endpoint": "POST /reviews/batch-action",
-      "site": "views/review/ReviewList.vue:630",
+      "site": "views/review/ReviewList.vue:635",
       "reason_key": "value-scalar",
-      "note": "ids 是批量打回所选的 review_id 数组（apps/admin-web/src/views/review/ReviewList.vue:630），与批量通过共用 BatchActionRequest。"
+      "note": "ids 是批量打回所选的 review_id 数组（apps/admin-web/src/views/review/ReviewList.vue:635），与批量通过共用 BatchActionRequest。"
     },
     {
       "endpoint": "POST /users/*/toggle-status",
-      "site": "views/mobile/ManageUsers.vue:93",
+      "site": "views/mobile/ManageUsers.vue:98",
       "reason_key": "value-scalar",
-      "note": "next 是 0/1 状态开关值，由 row.status 取反得到；键名 status 由 api 包装体给出并在 UserToggleBody 声明内。"
+      "note": "next 是 0/1 禁用标记，由 row.status 取反得到；键名 disabled 由 apps/admin-web/src/api/users.js 的包装体给出并在 UserToggleBody 声明内（reason 为可选审计原因，界面暂未收集时留空，T02909）。"
     },
     {
       "endpoint": "PUT /ads/placements/*",
