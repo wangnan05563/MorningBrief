@@ -48,6 +48,15 @@ const PC_PAGES = [
 const M_PAGES = ['/m/home', '/m/review', '/m/message', '/m/mine', '/m/manage', '/m/manage/users', '/m/manage/alert']
 
 /**
+ * 挂了「最近审计」块的被测页。这个块有两条互斥分支（列表 / 空态提示），各自有自己的颜色，
+ * 只测其中一条时另一条改坏了也照样全绿（T03327 就是空态全绿、行内 3.08:1 没被发现）。
+ * 所以 mock 按 category 分流：下面这两页返两条记录量列表行，/db-admin 返空量提示；
+ * 每条断言都要求对应分支真的渲染出来了，mock 没命中时直接红，而不是退化成「量了个空页」。
+ */
+const AUDIT_ROWS_PAGES = new Set(['/review', '/m/manage/users'])
+const AUDIT_EMPTY_PAGES = new Set(['/db-admin'])
+
+/**
  * 移动端（T02839）：外壳与 12 个视图已改用 themes/variables 的 --m-* token，
  * 暗色下不再有白底孤岛；次级文字取 --color-text-secondary（浅色主题 ≥ 4.5:1）。
  * 这里不再保留「基线天花板」——任何一块孤岛或一处不达标文字都直接红。
@@ -68,6 +77,26 @@ async function mockShell(page) {
     if (path.endsWith('/m/dashboard-summary')) {
       return route.fulfill({
         json: { code: 0, message: 'success', data: { today: 2, pending_review: 3, unread_message: 5 } },
+      })
+    }
+    if (path.endsWith('/audit-logs')) {
+      // 空态与列表两个分支都要进测量，见 AUDIT_ROWS_PAGES / AUDIT_EMPTY_PAGES 的理由
+      const category = new URL(route.request().url()).searchParams.get('category')
+      if (category === 'backup') {
+        return route.fulfill({ json: { code: 0, message: 'success', data: { items: [], total: 0 } } })
+      }
+      return route.fulfill({
+        json: {
+          code: 0,
+          message: 'success',
+          data: {
+            items: [
+              { id: 2, created_at: '2026-10-27T10:00:00', operator: 'admin', action: '用户启用', target: 'u_1002', detail: { reason: '误封恢复' } },
+              { id: 1, created_at: '2026-10-27T09:30:00', operator: 'ops_a', action: '用户禁用', target: 'u_1001', detail: { reason: '异常登录' } },
+            ],
+            total: 2,
+          },
+        },
       })
     }
     return route.fulfill({ json: { code: 0, message: 'success', data: { items: [], list: [], total: 0 } } })
@@ -163,6 +192,8 @@ function measure() {
   return {
     theme: document.documentElement.getAttribute('data-theme'),
     overflowX: document.documentElement.scrollWidth - innerWidth,
+    auditRows: document.querySelectorAll('.audit-trail__item').length,
+    auditHints: document.querySelectorAll('.audit-trail__hint').length,
     islands,
     lowContrast,
   }
@@ -175,6 +206,18 @@ async function useTheme(page, theme) {
 
 const fmt = (rows) =>
   rows.map((x) => `${x.sel} cr=${x.cr}<${x.need} ${x.color} on ${x.bg}「${x.text}」`).join('\n      ')
+
+/** 审计块的两条分支必须各自真的渲染出来，否则「没报错」只是「没量到」 */
+function expectAuditCovered(m, path) {
+  if (AUDIT_ROWS_PAGES.has(path)) {
+    expect(m.auditRows, `${path} 的审计列表没渲染出来，本轮只量到空态，行内颜色等于没测`).toBeGreaterThan(0)
+    expect(m.auditHints, `${path} 同时出现了空态提示，列表分支不成立`).toBe(0)
+  }
+  if (AUDIT_EMPTY_PAGES.has(path)) {
+    expect(m.auditHints, `${path} 的审计空态没渲染出来，提示文字的颜色等于没测`).toBeGreaterThan(0)
+    expect(m.auditRows, `${path} 意外拿到了审计记录，空态分支不成立`).toBe(0)
+  }
+}
 
 test.describe('暗色主题（showcase）· PC 全页面', () => {
   test.use({ viewport: { width: 1280, height: 800 } })
@@ -191,6 +234,7 @@ test.describe('暗色主题（showcase）· PC 全页面', () => {
       await gotoReady(page, path)
       const m = await page.evaluate(measure)
       expect(m.theme, `${path} 暗色主题没生效（data-theme 不是 ${DARK_THEME}）`).toBe(DARK_THEME)
+      expectAuditCovered(m, path)
       if (m.islands.length || m.lowContrast.length) {
         offenders.push(`${path}\n      孤岛: ${fmt(m.islands) || '-'}\n      对比度: ${fmt(m.lowContrast) || '-'}`)
       }
@@ -251,6 +295,7 @@ test.describe('375px 移动宽度', () => {
       // 外壳必须真的按视口分流到移动端（否则量的是重定向后的 PC 页）
       await expect(page.locator('.m-app'), `${path} 没落在移动端外壳`).toBeVisible()
       const m = await page.evaluate(measure)
+      expectAuditCovered(m, path)
       if (m.overflowX > 0) overflow.push(`${path} 溢出 ${m.overflowX}px`)
       if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/_shot_t02522_m375_${path.replace(/\W+/g, '_')}.png`, fullPage: true })
     }
@@ -270,6 +315,7 @@ test.describe('375px 移动宽度', () => {
       await gotoReady(page, path)
       const m = await page.evaluate(measure)
       expect(m.theme, `${path} 暗色主题没生效`).toBe(DARK_THEME)
+      expectAuditCovered(m, path)
       expect(
         m.islands,
         `${path} 暗色下仍有白底孤岛：\n      ${fmt(m.islands)}`,
@@ -288,11 +334,24 @@ test.describe('375px 移动宽度', () => {
       await gotoReady(page, path)
       const m = await page.evaluate(measure)
       expect(m.theme, `${path} 没落在默认浅色主题`).toBe('macaron')
+      expectAuditCovered(m, path)
       expect(
         m.lowContrast,
         `${path} 浅色主题下有不达标文字：\n      ${fmt(m.lowContrast)}`,
       ).toEqual([])
       if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/_shot_t02839_light_m375_${path.replace(/\W+/g, '_')}.png`, fullPage: true })
     }
+  })
+
+  // 空态提示与列表行互斥：上面那条量的是列表分支，提示只在无记录时出现，得单独量一次才有覆盖
+  test('审计块空态提示在浅色主题下也达 AA（T03327）', async ({ page }) => {
+    // 后注册的 route 优先，所以这条能盖掉 mockShell 里返回记录的口径
+    await page.route('**/audit-logs**', (route) =>
+      route.fulfill({ json: { code: 0, message: 'success', data: { items: [], total: 0 } } }),
+    )
+    await gotoReady(page, '/m/manage/users')
+    const m = await page.evaluate(measure)
+    expect(m.auditHints, '空态提示没渲染出来，这条用例等于没量').toBeGreaterThan(0)
+    expect(m.lowContrast, '审计空态提示不达标：\n      ' + fmt(m.lowContrast)).toEqual([])
   })
 })

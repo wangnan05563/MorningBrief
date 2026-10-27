@@ -114,7 +114,9 @@ defineExpose({ reload: load })
   &__refresh {
     padding: 2px 10px;
     font-size: 12px;
-    color: var(--el-color-primary);
+    /* EP 的 --el-color-primary 在本主题里被调成浅青（rgb(126,206,193)），
+       白底上只有 1.83:1；--m-primary-strong 是同一品牌的深档，过 AA */
+    color: var(--m-primary-strong);
     background: none;
     border: 1px solid var(--el-border-color);
     border-radius: 4px;
@@ -129,7 +131,8 @@ defineExpose({ reload: load })
   &__hint {
     margin: 4px 0;
     font-size: 12px;
-    color: var(--el-text-color-secondary);
+    /* 次级文字统一走 --m-text-sub：EP 默认 #909399 在浅色底只有 3.08:1 */
+    color: var(--m-text-sub);
   }
 
   &__list {
@@ -154,7 +157,7 @@ defineExpose({ reload: load })
 
   &__time,
   &__who {
-    color: var(--el-text-color-secondary);
+    color: var(--m-text-sub);
     font-variant-numeric: tabular-nums;
   }
 
@@ -165,7 +168,7 @@ defineExpose({ reload: load })
   &__why {
     flex: 1;
     min-width: 120px;
-    color: var(--el-text-color-secondary);
+    color: var(--m-text-sub);
     word-break: break-all;
   }
 }
