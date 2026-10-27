@@ -262,7 +262,7 @@ const docSections = [
       {
         type: 'note',
         title: '注意事项',
-        content: '首次启动自动 seed 默认 admin 账户，口令取 .env 的 ADMIN_INITIAL_PASSWORD，留空为 admin123；只在库里还没有 admin 时生效。当前版本没有改密入口，请在建库前就设好 ADMIN_INITIAL_PASSWORD。LLM/TTS API Key 必填，否则工作流会在对应步骤失败。',
+        content: '首次启动自动 seed 默认 admin 账户，口令取 .env 的 ADMIN_INITIAL_PASSWORD，留空为 admin123；只在库里还没有 admin 时生效。登录后可在右上角用户菜单「修改密码」更换口令（新口令至少 8 位），改完需用新口令重新登录。LLM/TTS API Key 必填，否则工作流会在对应步骤失败。',
         noteType: 'warning',
       },
     ],

@@ -372,11 +372,41 @@ describe('T02920 快速开始与关于章节', () => {
     assert.match(stepLine, new RegExp(`留空为 ${fallback}`))
     assert.match(stepLine, new RegExp(`http://127\\.0\\.0\\.1:${port}/`))
 
-    // 「请立即修改密码」曾是空头承诺（没有改密入口）；换成能执行的建库前设置说明
+    // T03328：「请立即修改密码」曾是空头承诺（没有改密入口）。现在入口已落地，
+    // 文档的「可改密」必须能被代码证伪不了——菜单项、后端路由、长度口径三处都在才算数。
     const noteLine = sec.split('\n').find((l) => l.includes('首次启动自动 seed'))
     assert.ok(noteLine, '快速开始的注意事项块不见了')
     assert.match(noteLine, /口令取 \.env 的 ADMIN_INITIAL_PASSWORD/)
-    assert.match(noteLine, /没有改密入口/)
+    assert.doesNotMatch(noteLine, /没有改密入口/, '改密入口已补上，别再写不可执行的建议')
+
+    const layoutView = read('apps/admin-web/src/layouts/Layout.vue')
+    const authApi = read('backend/app/routers/admin/auth.py')
+    const securitySrc = read('backend/app/core/security.py')
+    const passwordConst = read('apps/admin-web/src/constants/password.js')
+    const minLen = Number(
+      securitySrc.match(/MIN_ADMIN_PASSWORD_LEN = (\d+)/)[1],
+    )
+    assert.match(layoutView, /command="change-password"/, '用户菜单里没有改密入口')
+    assert.match(
+      layoutView,
+      /新密码至少 \$\{MIN_ADMIN_PASSWORD_LEN\} 位/,
+      '前端表单没有按常量做最小长度校验',
+    )
+    assert.match(
+      authApi,
+      /@router\.post\("\/change-password"\)/,
+      '后端没有改密路由，文档不能宣称可改密',
+    )
+    assert.equal(
+      Number(passwordConst.match(/MIN_ADMIN_PASSWORD_LEN = (\d+)/)[1]),
+      minLen,
+      '前端最小长度常量与后端不一致',
+    )
+    assert.match(
+      noteLine,
+      new RegExp(`至少 ${minLen} 位`),
+      '帮助页写的长度与后端常量不一致',
+    )
   })
 
   it('自动检查更新的三个时间口径都有实现兜着', () => {

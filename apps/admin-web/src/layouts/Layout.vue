@@ -63,6 +63,7 @@
             </span>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item command="change-password">修改密码</el-dropdown-item>
                 <el-dropdown-item command="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -78,6 +79,64 @@
   </el-container>
   <!-- 主题切换对话框：通过 ref 暴露 open 方法 -->
   <ThemeSwitcher ref="themeSwitcherRef" />
+  <!-- 修改密码：顶栏用户菜单入口，成功后后端吊销当前 token，前端回登录页 -->
+  <el-dialog
+    v-model="pwdDialog"
+    title="修改密码"
+    width="420px"
+    :close-on-click-modal="false"
+    data-testid="change-password-dialog"
+    @closed="resetPasswordForm"
+  >
+    <el-form
+      ref="pwdFormRef"
+      :model="pwdForm"
+      :rules="pwdRules"
+      label-position="top"
+      data-testid="change-password-form"
+      @submit.prevent="submitPassword"
+    >
+      <el-form-item label="当前密码" prop="oldPassword">
+        <el-input
+          v-model="pwdForm.oldPassword"
+          type="password"
+          show-password
+          autocomplete="current-password"
+          placeholder="请输入当前密码"
+        />
+      </el-form-item>
+      <el-form-item label="新密码" prop="newPassword">
+        <el-input
+          v-model="pwdForm.newPassword"
+          type="password"
+          show-password
+          autocomplete="new-password"
+          :placeholder="`至少 ${MIN_ADMIN_PASSWORD_LEN} 位`"
+        />
+      </el-form-item>
+      <el-form-item label="确认新密码" prop="confirmPassword">
+        <el-input
+          v-model="pwdForm.confirmPassword"
+          type="password"
+          show-password
+          autocomplete="new-password"
+          placeholder="请再次输入新密码"
+          @keyup.enter="submitPassword"
+        />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="pwdDialog = false">取消</el-button>
+      <el-button
+        type="primary"
+        :loading="pwdSubmitting"
+        data-testid="change-password-submit"
+        @click="submitPassword"
+      >
+        确认修改
+      </el-button>
+    </template>
+  </el-dialog>
   <!-- 新手指引（T00863）：首次访问自动弹出，非首次通过右下角常驻按钮唤起 -->
   <GuideOverlay />
   <el-tooltip v-if="hasGuide" content="新手指引" placement="left">
@@ -88,11 +147,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useThemeStore } from '../stores/theme'
-import { ElMessageBox } from '../utils/message'
+import { ElMessage, ElMessageBox } from '../utils/message'
+import { MIN_ADMIN_PASSWORD_LEN } from '../constants/password'
 import ThemeSwitcher from '../components/ThemeSwitcher.vue'
 import GuideOverlay from '../components/GuideOverlay.vue'
 import { QuestionFilled } from '@element-plus/icons-vue'
@@ -251,11 +311,70 @@ onMounted(() => {
 const currentTitle = computed(() => route.meta.title || '')
 
 async function handleCommand(command) {
+  if (command === 'change-password') {
+    pwdDialog.value = true
+    return
+  }
   if (command === 'logout') {
     await ElMessageBox.confirm('确认退出登录？', '提示', { type: 'warning' })
     await userStore.logout()
     // 登出后跳转到登录页（公开路由）；catch 避免导航被拒绝时冒泡为 Uncaught
     router.push('/login').catch((err) => console.warn('[Layout] 跳转被拒绝（已静默处理）:', err?.message || err))
+  }
+}
+
+// ---- 修改密码（T03328）----
+const pwdDialog = ref(false)
+const pwdFormRef = ref()
+const pwdSubmitting = ref(false)
+const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
+
+const pwdRules = {
+  oldPassword: [{ required: true, message: '请输入当前密码', trigger: 'blur' }],
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    {
+      min: MIN_ADMIN_PASSWORD_LEN,
+      message: `新密码至少 ${MIN_ADMIN_PASSWORD_LEN} 位`,
+      trigger: 'blur',
+    },
+  ],
+  confirmPassword: [
+    { required: true, message: '请再次输入新密码', trigger: 'blur' },
+    {
+      validator: (_rule, value, callback) =>
+        value === pwdForm.newPassword
+          ? callback()
+          : callback(new Error('两次输入的新密码不一致')),
+      trigger: 'blur',
+    },
+  ],
+}
+
+function resetPasswordForm() {
+  pwdForm.oldPassword = ''
+  pwdForm.newPassword = ''
+  pwdForm.confirmPassword = ''
+  pwdFormRef.value?.clearValidate()
+}
+
+async function submitPassword() {
+  try {
+    await pwdFormRef.value.validate()
+  } catch {
+    return
+  }
+  pwdSubmitting.value = true
+  try {
+    // 成功后 store 已清本地非敏感态；后端同时吊销当前 token 并清 Cookie
+    await userStore.changePassword(pwdForm.oldPassword, pwdForm.newPassword)
+    pwdDialog.value = false
+    ElMessage.success('密码已修改，请用新密码重新登录')
+    router.push('/login').catch((err) => console.warn('[Layout] 跳转被拒绝（已静默处理）:', err?.message || err))
+  } catch {
+    // 失败原因已由请求拦截器经统一提示出口弹出，这里不再叠加第二条
+  } finally {
+    pwdSubmitting.value = false
   }
 }
 </script>

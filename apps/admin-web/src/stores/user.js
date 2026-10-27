@@ -40,6 +40,16 @@ export const useUserStore = defineStore('user', {
       }
     },
 
+    async changePassword(oldPassword, newPassword) {
+      // 口令只放请求体，不进 localStorage/日志；失败原因由拦截器统一出口提示
+      await api.post('/auth/change-password', {
+        old_password: oldPassword,
+        new_password: newPassword,
+      })
+      // 后端已吊销当前 token 并清 Cookie，本地非敏感态也要一并清掉
+      this.clearToken()
+    },
+
     clearToken() {
       this.username = ''
       this.role = ''

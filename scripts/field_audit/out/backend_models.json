@@ -1567,13 +1567,77 @@
         ]
       }
     },
+    "POST /auth/change-password": {
+      "raw_path": "/admin/api/v1/auth/change-password",
+      "endpoint": "change_password",
+      "model": {
+        "name": "ChangePasswordRequest",
+        "module": "app.routers.admin.auth",
+        "source": "backend/app/routers/admin/auth.py:29",
+        "extra": "ignore",
+        "fields": [
+          "new_password",
+          "old_password"
+        ],
+        "flatFields": [
+          "new_password",
+          "old_password"
+        ]
+      },
+      "handler": {
+        "source": "backend/app/routers/admin/auth.py:66",
+        "refs": [
+          "/change-password",
+          "AdminPayload",
+          "AdminService",
+          "AsyncSession",
+          "AuditLog",
+          "ChangePasswordRequest",
+          "Depends",
+          "Request",
+          "Response",
+          "action",
+          "add",
+          "admin",
+          "admin_id",
+          "audit_detail",
+          "category",
+          "change_password",
+          "clear_admin_token_cookie",
+          "commit",
+          "data",
+          "db",
+          "detail",
+          "exp",
+          "get_current_admin",
+          "get_db",
+          "jti",
+          "logout",
+          "new_password",
+          "old_password",
+          "operator",
+          "post",
+          "relogin_required",
+          "req",
+          "request",
+          "response",
+          "router",
+          "success",
+          "svc",
+          "target",
+          "user",
+          "username",
+          "自助改密：校验旧口令 → 写新哈希 → 审计 → 吊销当前 token。"
+        ]
+      }
+    },
     "POST /auth/login": {
       "raw_path": "/admin/api/v1/auth/login",
       "endpoint": "login",
       "model": {
         "name": "LoginRequest",
         "module": "app.routers.admin.auth",
-        "source": "backend/app/routers/admin/auth.py:20",
+        "source": "backend/app/routers/admin/auth.py:23",
         "extra": "ignore",
         "fields": [
           "password",
@@ -1585,7 +1649,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/auth.py:26",
+        "source": "backend/app/routers/admin/auth.py:35",
         "refs": [
           "/login",
           "AdminService",
@@ -1621,7 +1685,7 @@
       "endpoint": "logout",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/auth.py:42",
+        "source": "backend/app/routers/admin/auth.py:51",
         "refs": [
           "/logout",
           "AdminPayload",

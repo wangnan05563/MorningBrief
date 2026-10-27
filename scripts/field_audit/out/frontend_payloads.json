@@ -258,7 +258,7 @@
       "sites": [
         {
           "file": "layouts/Layout.vue",
-          "line": 138,
+          "line": 198,
           "fn": "checkUpdate",
           "fieldCount": 0,
           "unresolved": []
@@ -2055,6 +2055,24 @@
           "unresolved": [
             "变量 text 无可解析的声明"
           ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "url": "/auth/change-password",
+      "fields": [
+        "new_password",
+        "old_password"
+      ],
+      "unresolved": [],
+      "sites": [
+        {
+          "file": "stores/user.js",
+          "line": 45,
+          "fn": "api.post",
+          "fieldCount": 2,
+          "unresolved": []
         }
       ]
     },
@@ -15713,5 +15731,5 @@
       }
     }
   ],
-  "rawSites": 227
+  "rawSites": 228
 }

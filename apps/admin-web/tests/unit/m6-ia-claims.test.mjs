@@ -350,7 +350,8 @@ describe('M88 帮助搜索覆盖正文', () => {
   })
 
   it('注意事项块可搜到', () => {
-    assert.ok(bodyOnly('请在建库前就设好 ADMIN_INITIAL_PASSWORD').some((s) => s.id === 'quickstart'))
+    // T03328：改密入口落地后注意事项改写成可执行建议，关键词随之换成新正文里的句子
+    assert.ok(bodyOnly('改完需用新口令重新登录').some((s) => s.id === 'quickstart'))
   })
 
   it('关键词按大小写不敏感与首尾空白归一匹配', () => {

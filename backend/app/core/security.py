@@ -68,6 +68,11 @@ def decode_token(token: str) -> dict:
 
 # ---- bcrypt 密码哈希 ----
 
+# 改密最小长度（《详细设计说明书》change-password 的 minLength 8）。
+# 后端校验、前端表单与帮助页共用这一口径，help-fact-claims 门禁会比对三者。
+MIN_ADMIN_PASSWORD_LEN = 8
+
+
 def hash_password(plain: str) -> str:
     """bcrypt 加盐哈希。"""
     salt = bcrypt.gensalt()

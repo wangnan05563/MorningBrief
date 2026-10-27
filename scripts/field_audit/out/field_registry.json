@@ -762,11 +762,54 @@
       "verdict": null
     },
     {
+      "endpoint": "POST /auth/change-password",
+      "model": "ChangePasswordRequest",
+      "modelSource": "backend/app/routers/admin/auth.py:29",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/auth.py:66",
+      "declared": [
+        "new_password",
+        "old_password"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "stores/user.js",
+            "line": 45,
+            "fn": "api.post",
+            "fieldCount": 2,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "new_password",
+          "old_password"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": null,
+      "ormScore": 0.0,
+      "ormTied": [],
+      "ormColumns": [],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "new_password",
+          "old_password"
+        ],
+        "columnNotInModel": []
+      },
+      "verdict": null
+    },
+    {
       "endpoint": "POST /auth/login",
       "model": "LoginRequest",
-      "modelSource": "backend/app/routers/admin/auth.py:20",
+      "modelSource": "backend/app/routers/admin/auth.py:23",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/auth.py:26",
+      "handlerSource": "backend/app/routers/admin/auth.py:35",
       "declared": [
         "password",
         "username"
@@ -4044,9 +4087,9 @@
     }
   ],
   "totals": {
-    "endpointsWithBodyModel": 68,
+    "endpointsWithBodyModel": 69,
     "forbidCount": 6,
-    "withFrontendCallSite": 60,
+    "withFrontendCallSite": 61,
     "noFrontendCallSite": [
       "POST /backups/restore",
       "POST /m/device/register",
@@ -4132,6 +4175,7 @@
       "POST /ai/voices/sync",
       "POST /assistant/execute",
       "POST /assistant/plan",
+      "POST /auth/change-password",
       "POST /auth/login",
       "POST /backups/restore",
       "POST /channels/*/book-pool/items",

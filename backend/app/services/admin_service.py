@@ -5,7 +5,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BizError
-from app.core.security import create_access_token, verify_password, hash_password
+from app.core.security import (
+    MIN_ADMIN_PASSWORD_LEN,
+    create_access_token,
+    hash_password,
+    verify_password,
+)
 from app.core.timeutil import localnow_naive
 from app.models import AdminUser
 from app.services.blacklist_service import add_to_blacklist
@@ -78,6 +83,13 @@ class AdminService:
 
         if not verify_password(old_pwd, admin.password_hash):
             raise BizError(code=400, message="原密码错误")
+
+        # 长度口径与路由层 schema 同源：直接调服务方法的调用方也不会绕过
+        if len(new_pwd or "") < MIN_ADMIN_PASSWORD_LEN:
+            raise BizError(
+                code=400,
+                message=f"新密码至少 {MIN_ADMIN_PASSWORD_LEN} 位",
+            )
 
         admin.password_hash = hash_password(new_pwd)
         await self.db.commit()

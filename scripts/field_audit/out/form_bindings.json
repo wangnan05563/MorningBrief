@@ -1,6 +1,17 @@
 {
   "rows": [
     {
+      "file": "layouts/Layout.vue",
+      "object": "pwdForm",
+      "endpoints": [],
+      "boundCount": 3,
+      "missing": [
+        "confirmPassword",
+        "newPassword",
+        "oldPassword"
+      ]
+    },
+    {
       "file": "views/ad/AdPlacements.vue",
       "object": "form",
       "endpoints": [
