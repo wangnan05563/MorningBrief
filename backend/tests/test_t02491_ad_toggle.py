@@ -11,12 +11,22 @@ import pytest
 from sqlalchemy import select
 
 from app.cache.manager import cache as cache_manager
+from app.cache.version import AD_PLACEMENT_CACHE, current_version
 from app.models import AdMaterial, AdPlacement
-from app.services.ad_service import AdService
+from app.services.ad_service import AdService, placement_cache_key
 
 # 与其它广告测试错开的日期，避免共享进程内 TTLCache 相互污染
 TARGET = date(2026, 9, 15)
 OTHER = date(2026, 9, 16)
+
+
+async def _warm_key(db, target):
+    """取「此刻正在被读」的缓存键（T02600 后键名带共享版本号）。
+
+    必须在写入/停用**之前**求值并留存：写操作会把版本跳上去，事后再算键名
+    得到的是新键，旧键是否被清掉就查不出来了——那正是本文件要防的事。
+    """
+    return placement_cache_key(await current_version(db, AD_PLACEMENT_CACHE), target)
 
 
 async def _material(db, name="启停测试素材"):
@@ -70,13 +80,14 @@ async def test_toggle_effective_immediately_after_cache_invalidation(db_session)
 
     svc = AdService(db_session)
     assert (await svc.get_active_placements(TARGET))["head"] is not None
-    assert await cache_manager.get(f"ad:placement:{TARGET.isoformat()}") is not None
+    warm_key = await _warm_key(db_session, TARGET)
+    assert await cache_manager.get(warm_key) is not None
 
     await svc.set_placement_enabled(p.id, 0)
     await db_session.commit()
     await svc.invalidate_active_cache()
 
-    assert await cache_manager.get(f"ad:placement:{TARGET.isoformat()}") is None
+    assert await cache_manager.get(warm_key) is None
     assert (await svc.get_active_placements(TARGET))["head"] is None
 
     # 重新启用后恢复播放（可逆）
@@ -94,12 +105,14 @@ async def test_invalidate_active_cache_clears_all_dates(db_session):
     svc = AdService(db_session)
     await svc.get_active_placements(TARGET)
     await svc.get_active_placements(OTHER)
-    assert await cache_manager.get(f"ad:placement:{TARGET.isoformat()}") is not None
-    assert await cache_manager.get(f"ad:placement:{OTHER.isoformat()}") is not None
+    target_key = await _warm_key(db_session, TARGET)
+    other_key = await _warm_key(db_session, OTHER)
+    assert await cache_manager.get(target_key) is not None
+    assert await cache_manager.get(other_key) is not None
 
     await svc.invalidate_active_cache()
-    assert await cache_manager.get(f"ad:placement:{TARGET.isoformat()}") is None
-    assert await cache_manager.get(f"ad:placement:{OTHER.isoformat()}") is None
+    assert await cache_manager.get(target_key) is None
+    assert await cache_manager.get(other_key) is None
 
 
 @pytest.mark.asyncio
@@ -110,8 +123,9 @@ async def test_delete_placement_invalidates_cache(db_session):
 
     svc = AdService(db_session)
     await svc.get_active_placements(TARGET)
+    warm_key = await _warm_key(db_session, TARGET)
     await svc.delete_placement(p.id)
-    assert await cache_manager.get(f"ad:placement:{TARGET.isoformat()}") is None
+    assert await cache_manager.get(warm_key) is None
     res = await db_session.execute(select(AdPlacement).where(AdPlacement.id == p.id))
     assert res.scalar_one_or_none() is None
 
@@ -137,7 +151,8 @@ async def test_update_placement_endpoint_toggles_and_clears_cache(client, admin_
 
     svc = AdService(db_session)
     await svc.get_active_placements(TARGET)
-    assert await cache_manager.get(f"ad:placement:{TARGET.isoformat()}") is not None
+    warm_key = await _warm_key(db_session, TARGET)
+    assert await cache_manager.get(warm_key) is not None
 
     resp = client.put(
         f"/admin/api/v1/ads/placements/{p.id}",
@@ -148,7 +163,7 @@ async def test_update_placement_endpoint_toggles_and_clears_cache(client, admin_
     assert resp.json()["data"]["enabled"] == 0
 
     # 路由提交后失效缓存：停用即时生效
-    assert await cache_manager.get(f"ad:placement:{TARGET.isoformat()}") is None
+    assert await cache_manager.get(warm_key) is None
     assert (await svc.get_active_placements(TARGET))["head"] is None
 
 

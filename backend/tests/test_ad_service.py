@@ -12,9 +12,10 @@ import pytest
 from sqlalchemy import select
 
 from app.cache.manager import cache as cache_manager
+from app.cache.version import AD_PLACEMENT_CACHE, current_version
 from app.core.exceptions import BizError
 from app.models import AdMaterial, AdPlacement
-from app.services.ad_service import AdService
+from app.services.ad_service import AdService, placement_cache_key
 
 
 async def _create_material(db, name="测试素材", duration=15):
@@ -258,7 +259,9 @@ async def test_get_active_placements_cache(db_session):
     assert r1["head"] is not None
 
     # 缓存 key 应存在：get 返回非 None 即表示命中
-    cache_key = f"ad:placement:{target.isoformat()}"
+    cache_key = placement_cache_key(
+        await current_version(db_session, AD_PLACEMENT_CACHE), target
+    )
     assert await cache_manager.get(cache_key) is not None
 
     # 第二次 hit（即使删 DB 数据也返回缓存）

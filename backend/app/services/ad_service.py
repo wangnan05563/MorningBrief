@@ -7,6 +7,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache.manager import cache
+from app.cache.version import AD_PLACEMENT_CACHE, bump_version, current_version
 from app.core.exceptions import BizError, NotFoundError
 from app.models import AdMaterial, AdPlacement
 from app.models.ad_placement import AdPosition
@@ -51,6 +52,11 @@ def _placement_status(p: "AdPlacement", today: date) -> str:
     return derive_placement_status(enabled, p.start_date, p.end_date, today)
 
 
+def placement_cache_key(version: int, target_date: date) -> str:
+    """「生效投放」缓存键，带共享版本号（T02600）。"""
+    return f"ad:placement:v{version}:{target_date.isoformat()}"
+
+
 class AdService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -58,11 +64,15 @@ class AdService:
         self.cache = cache
 
     async def invalidate_active_cache(self) -> None:
-        """清空「生效投放」缓存（T02491 / FR-UX-203 D14）。
+        """清掉**本进程**的「生效投放」缓存（T02491 / FR-UX-203 D14）。
 
-        生效投放按日期缓存 25 小时，任何投放/素材变更都必须主动失效，
-        否则「停用」要等到次日才生效——开关不可信。
-        必须在数据库提交之后调用，否则并发读会把旧数据重新写回缓存。
+        跨进程的正确性不靠它：TTLCache 是进程内单例，`delete_pattern` 只能清当前 worker，
+        `UVICORN_WORKERS>1` 或 launcher 的 sched/api 角色分裂时，别的 worker 仍会命中旧键
+        最长 25h（T02600）。跨进程失效由 `app.cache.version` 的版本号承担——写操作与数据
+        同事务 bump 版本，读方按版本取键，旧键自然没人再读。
+
+        这里保留本地清理，只做两件事：本进程立刻省掉一次无谓的 miss-回源-写回，
+        以及把已经没人读的旧键从 maxsize 里腾出来。必须在数据库提交之后调用。
         """
         await self.cache.delete_pattern("ad:placement:*")
 
@@ -212,6 +222,10 @@ class AdService:
             )
         p.enabled = enabled
         await self.db.flush()
+        # T02600：与 create/delete 同口径，版本 bump 交给调用方（routers/admin/ads.py）
+        # 的那次 commit 一起提交；这里不 commit，否则启停与版本跳变会分成两个事务，
+        # 留下「数据已改、版本未跳」的窗口。
+        await bump_version(self.db, AD_PLACEMENT_CACHE)
         # 启停后回传由服务端派生的状态：前端不做二次推算，切换即落位（T02602）
         return {
             "id": p.id,
@@ -346,6 +360,8 @@ class AdService:
         )
         self.db.add(placement)
         await self.db.flush()
+        # T02600：版本与数据同事务跳，commit 前 bump（分开提交会留「数据已改、版本未跳」窗口）
+        await bump_version(self.db, AD_PLACEMENT_CACHE)
         await self.db.commit()
         await self.invalidate_active_cache()
         return placement.id
@@ -360,6 +376,7 @@ class AdService:
             raise NotFoundError("投放规则不存在")
 
         await self.db.delete(placement)
+        await bump_version(self.db, AD_PLACEMENT_CACHE)
         await self.db.commit()
         await self.invalidate_active_cache()
 
@@ -408,8 +425,16 @@ class AdService:
 
         C 端每期播放都会读此接口，缓存避免高频查库。
         V1.2 改造：TTLCache 直接存 dict，无需 json 序列化/反序列化。
+
+        T02600：缓存键带**共享版本号**。`invalidate_active_cache()` 只能清本进程的
+        TTLCache，多 worker（`launcher.py` workers>1 走 sched/api 双进程）下别的
+        进程仍会命中旧值直到 25h TTL 到期——停用一条广告要等一天才对全端生效。
+        键里带上 DB 里的版本号后，任何进程的写操作 bump 一次，所有进程的下一次读
+        就落到新键上，旧键随 TTL 自然淘汰。版本号是一行主键 SELECT，比下面的
+        join 便宜一个数量级，「缓存省掉查库」变成「省掉复杂查库」而不是不查库。
         """
-        cache_key = f"ad:placement:{target_date.isoformat()}"
+        version = await current_version(self.db, AD_PLACEMENT_CACHE)
+        cache_key = placement_cache_key(version, target_date)
         cached = await self.cache.get(cache_key)
         if cached:
             return cached
