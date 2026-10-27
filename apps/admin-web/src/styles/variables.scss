@@ -57,6 +57,28 @@
   --toast-info-border: #E9E9EB;
   --toast-info-fg: var(--color-text-primary);
 
+  /* === 状态标签语义色（T03331） ===
+     同一映射缺陷：EP 的 .el-tag.el-tag--success 把 --el-color-success（本项目的粉彩）
+     当正文色，配 light-9 浅底，实测 1.24:1；默认 primary 标签是 1.37:1。
+     四类沿用 toast 的「浅底 + 强字」口径；primary 另配一对：底色仍取主色浅调
+     （EP 原 light-9），正文取 --color-primary-dark（六套浅色主题实测 4.65–6.80:1）。
+     plain / dark 变体在 global.scss 里单独接，避免把「透明底」也刷成实底。 */
+  --tag-success-bg: #F0F9EB;
+  --tag-success-border: #E1F3D8;
+  --tag-success-fg: var(--text-success-strong);
+  --tag-warning-bg: #FDF6EC;
+  --tag-warning-border: #FAECD8;
+  --tag-warning-fg: var(--text-warning-strong);
+  --tag-danger-bg: #FEF0F0;
+  --tag-danger-border: #FDE2E2;
+  --tag-danger-fg: var(--text-danger-strong);
+  --tag-info-bg: #F4F4F5;
+  --tag-info-border: #E9E9EB;
+  --tag-info-fg: var(--color-text-primary);
+  --tag-primary-bg: var(--color-primary-light);
+  --tag-primary-border: var(--color-primary);
+  --tag-primary-fg: var(--color-primary-dark);
+
   /* === 移动端语义 token（T02839） ===
      /m/* 的外壳与 12 个视图原先全是硬编码浅色，暗色主题对移动端完全无效；
      这里统一映射到通用主题变量，不新增一套配色，6 套主题改 --color-* 时

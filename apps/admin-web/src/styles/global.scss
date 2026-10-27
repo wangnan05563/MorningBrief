@@ -199,6 +199,90 @@ html .el-message-box__status.el-message-box-icon--info {
   color: var(--toast-info-fg);
 }
 
+/* === 状态标签：正文/底色/描边改用 --tag-*（T03331） ===
+ * EP 的类型规则是 `.el-tag.el-tag--success`（权重 0,2,0），比单类高一档；这里统一用
+ * `html .el-tag.el-tag--<type>`（0,2,1）：既压过类型规则，也与加载顺序无关
+ * （el-tag.css 按需注入，可能晚于本文件）。
+ * plain / dark 变体由 EP 用同一组变量重设底色，必须再多挂一个类（0,3,1）才留得住：
+ *   - plain 要保持「页面底 + 描边」的观感，不能刷成实底；
+ *   - dark 在粉彩主题里原本是「粉彩实底 + 白字」，一并收成与实底标签同一对配色。
+ * showcase 的 .el-tag--* 用了 !important 背景，变量层改不到，但那边已改成消费同一组 token。
+ */
+html .el-tag.el-tag--success {
+  --el-tag-text-color: var(--tag-success-fg);
+  --el-tag-bg-color: var(--tag-success-bg);
+  --el-tag-border-color: var(--tag-success-border);
+}
+
+html .el-tag.el-tag--warning {
+  --el-tag-text-color: var(--tag-warning-fg);
+  --el-tag-bg-color: var(--tag-warning-bg);
+  --el-tag-border-color: var(--tag-warning-border);
+}
+
+html .el-tag.el-tag--danger {
+  --el-tag-text-color: var(--tag-danger-fg);
+  --el-tag-bg-color: var(--tag-danger-bg);
+  --el-tag-border-color: var(--tag-danger-border);
+}
+
+html .el-tag.el-tag--info {
+  --el-tag-text-color: var(--tag-info-fg);
+  --el-tag-bg-color: var(--tag-info-bg);
+  --el-tag-border-color: var(--tag-info-border);
+}
+
+html .el-tag.el-tag--primary {
+  --el-tag-text-color: var(--tag-primary-fg);
+  --el-tag-bg-color: var(--tag-primary-bg);
+  --el-tag-border-color: var(--tag-primary-border);
+}
+
+html .el-tag.el-tag--plain.el-tag--success {
+  --el-tag-bg-color: var(--el-fill-color-blank);
+}
+
+html .el-tag.el-tag--plain.el-tag--warning {
+  --el-tag-bg-color: var(--el-fill-color-blank);
+}
+
+html .el-tag.el-tag--plain.el-tag--danger {
+  --el-tag-bg-color: var(--el-fill-color-blank);
+}
+
+html .el-tag.el-tag--plain.el-tag--info {
+  --el-tag-bg-color: var(--el-fill-color-blank);
+}
+
+html .el-tag.el-tag--plain.el-tag--primary {
+  --el-tag-bg-color: var(--el-fill-color-blank);
+}
+
+html .el-tag.el-tag--dark.el-tag--success {
+  --el-tag-bg-color: var(--tag-success-bg);
+  --el-tag-border-color: var(--tag-success-border);
+}
+
+html .el-tag.el-tag--dark.el-tag--warning {
+  --el-tag-bg-color: var(--tag-warning-bg);
+  --el-tag-border-color: var(--tag-warning-border);
+}
+
+html .el-tag.el-tag--dark.el-tag--danger {
+  --el-tag-bg-color: var(--tag-danger-bg);
+  --el-tag-border-color: var(--tag-danger-border);
+}
+
+html .el-tag.el-tag--dark.el-tag--info {
+  --el-tag-bg-color: var(--tag-info-bg);
+  --el-tag-border-color: var(--tag-info-border);
+}
+
+html .el-tag.el-tag--dark.el-tag--primary {
+  --el-tag-bg-color: var(--tag-primary-bg);
+  --el-tag-border-color: var(--tag-primary-border);
+}
+
 .el-dialog {
   border-radius: $radius-lg !important;
 }

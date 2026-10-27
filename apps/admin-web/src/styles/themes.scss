@@ -160,6 +160,26 @@
   --toast-info-bg: #1E1E2A;
   --toast-info-border: rgba(0, 229, 255, 0.25);
 
+  /* 状态标签（T03331）：沿用 .el-tag 原有的「低透明度实色底 + 亮字」口径，
+     收进 token 后与浅色主题同一来源；正文实测 5.13–12.84:1。
+     danger 例外：#FF1744 压 12% 红底只剩 4.32:1（红底本身被抬亮了），
+     正文改用移动端那支提亮红（--m-danger 同色），其余三类仍取状态色。 */
+  --tag-success-bg: rgba(0, 230, 118, 0.12);
+  --tag-success-border: rgba(0, 230, 118, 0.12);
+  --tag-success-fg: #00E676;
+  --tag-warning-bg: rgba(255, 171, 0, 0.12);
+  --tag-warning-border: rgba(255, 171, 0, 0.12);
+  --tag-warning-fg: #FFAB00;
+  --tag-danger-bg: rgba(255, 23, 68, 0.12);
+  --tag-danger-border: rgba(255, 23, 68, 0.12);
+  --tag-danger-fg: #FF8A9B;
+  --tag-info-bg: rgba(0, 229, 255, 0.12);
+  --tag-info-border: rgba(0, 229, 255, 0.12);
+  --tag-info-fg: var(--color-primary);
+  --tag-primary-bg: rgba(0, 229, 255, 0.12);
+  --tag-primary-border: rgba(0, 229, 255, 0.12);
+  --tag-primary-fg: var(--color-primary);
+
   /* 移动端（T02839）：暗底上的实底按钮用亮色 + 深字；浅色主题那套
      「深底白字」在暗色里既不好看也不是必须，这里按主题色反相 */
   --m-solid-primary: var(--color-primary);
@@ -314,30 +334,27 @@
     color: var(--color-text-secondary) !important;
   }
 
-  /* 标签：使用低透明度实色背景 + 亮色文字 */
+  /* 标签：底色/描边交给 global.scss 的 --el-tag-* 变量（同一组 --tag-* token），
+     这里只钉住正文色。此前用 background-color:!important 直接刷底，会让
+     plain 变体也变成实底、与变量层口径打架（T03331）。 */
   .el-tag {
     --el-tag-bg-color: transparent;
     border: 1px solid currentColor;
   }
   .el-tag--success {
-    color: #00E676;
-    background-color: rgba(0, 230, 118, 0.12) !important;
+    color: var(--tag-success-fg);
   }
   .el-tag--warning {
-    color: #FFAB00;
-    background-color: rgba(255, 171, 0, 0.12) !important;
+    color: var(--tag-warning-fg);
   }
   .el-tag--danger {
-    color: #FF1744;
-    background-color: rgba(255, 23, 68, 0.12) !important;
+    color: var(--tag-danger-fg);
   }
   .el-tag--info {
-    color: var(--color-primary);
-    background-color: rgba(0, 229, 255, 0.12) !important;
+    color: var(--tag-info-fg);
   }
   .el-tag--primary {
-    color: var(--color-primary);
-    background-color: rgba(0, 229, 255, 0.12) !important;
+    color: var(--tag-primary-fg);
   }
 
   /* 按钮：实底按钮 + 暗色文字 */
