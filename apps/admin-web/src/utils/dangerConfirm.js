@@ -86,6 +86,9 @@ export async function dangerConfirm(opts) {
  * 原因随请求一起提交，最终落进审计 `detail.reason`，与读口「原因」列对齐。
  * 原因不是必填——缺省空串，避免打断「急着止损」的操作；但填了就必须带出去。
  *
+ * @param reasonLabel 原因文本域上方的说明
+ * @param requireReason 置真则原因必填（留空不给提交）；缺省假——急停场景下
+ *                      不能因为「忘了写原因」把人挡在门外，所以按调用方逐单决定
  * @returns Promise<{confirmed: boolean, reason: string}>
  */
 export async function dangerConfirmWithReason(opts) {
@@ -94,6 +97,7 @@ export async function dangerConfirmWithReason(opts) {
     confirmLabel = '确认执行',
     reasonLabel = '操作原因（可选，会写入审计日志）',
     reasonPlaceholder = '例如：频道下线，素材不再使用',
+    requireReason = false,
     ...rest
   } = opts
   const state = { reason: '', confirm: '' }
@@ -143,6 +147,10 @@ export async function dangerConfirmWithReason(opts) {
       closeOnClickModal: false,
       beforeClose: (action, instance, done) => {
         if (action !== 'confirm') return done()
+        if (requireReason && !state.reason.trim()) {
+          ElMessage.error('请填写操作原因（必填）')
+          return
+        }
         if (confirmWord && state.confirm.trim() !== confirmWord) {
           ElMessage.error(`请逐字输入 ${confirmWord}`)
           return

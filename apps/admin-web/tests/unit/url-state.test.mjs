@@ -206,6 +206,25 @@ describe('crossEndTarget：跨端重定向保留 path 与 query', () => {
     assert.equal(t.path, null)
     assert.equal(t.query.status, 'failed')
   })
+
+  // T02613：应急停服在 PC 有了落点（系统维护页的卡片小节），跨端表必须跟着指过去——
+  // 此前 PC 视口打开 /m/manage/alert 按一级段 `manage` 落到队列页，值班要找的开关直接不见了。
+  it('T02613：PC 视口打开 /m/manage/alert 落到 /maintenance', () => {
+    const t = crossEndTarget('/m/manage/alert', { tab: 'x' }, 'desktop')
+    assert.equal(t.path, '/maintenance')
+    assert.deepEqual(t.query, { tab: 'x' })
+  })
+
+  it('精确键只吃它自己那一条：manage 段的其他子页仍按一级段落 /queue', () => {
+    for (const p of ['/m/manage/queue', '/m/manage/users', '/m/manage']) {
+      assert.equal(crossEndTarget(p, {}, 'desktop').path, '/queue', `${p} 不该被精确键带走`)
+    }
+  })
+
+  it('反向：手机视口打开 /maintenance 落到 /m/manage/alert', () => {
+    const t = crossEndTarget('/maintenance', {}, 'mobile')
+    assert.equal(t.path, '/m/manage/alert')
+  })
 })
 
 describe('isMobilePath：移动端命名空间只有 /m 与 /m/…', () => {

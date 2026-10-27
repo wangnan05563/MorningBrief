@@ -1121,8 +1121,8 @@
       "unresolved": [],
       "sites": [
         {
-          "file": "views/mobile/ManageAlert.vue",
-          "line": 170,
+          "file": "components/EmergencyStopCard.vue",
+          "line": 177,
           "fn": "getEmergencyAudit",
           "fieldCount": 3,
           "unresolved": []
@@ -1155,8 +1155,8 @@
       "unresolved": [],
       "sites": [
         {
-          "file": "views/mobile/ManageAlert.vue",
-          "line": 156,
+          "file": "components/EmergencyStopCard.vue",
+          "line": 163,
           "fn": "getMaintenanceStatus",
           "fieldCount": 1,
           "unresolved": []
@@ -1206,7 +1206,7 @@
         },
         {
           "file": "views/maintenance/Maintenance.vue",
-          "line": 503,
+          "line": 515,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -1221,7 +1221,7 @@
       "sites": [
         {
           "file": "views/maintenance/Maintenance.vue",
-          "line": 437,
+          "line": 449,
           "fn": "getMaintenanceTask",
           "fieldCount": 0,
           "unresolved": []
@@ -2572,8 +2572,8 @@
       "unresolved": [],
       "sites": [
         {
-          "file": "views/mobile/ManageAlert.vue",
-          "line": 228,
+          "file": "components/EmergencyStopCard.vue",
+          "line": 239,
           "fn": "emergencyResume",
           "fieldCount": 0,
           "unresolved": []
@@ -2589,8 +2589,8 @@
       "unresolved": [],
       "sites": [
         {
-          "file": "views/mobile/ManageAlert.vue",
-          "line": 198,
+          "file": "components/EmergencyStopCard.vue",
+          "line": 208,
           "fn": "emergencyStop",
           "fieldCount": 1,
           "unresolved": []

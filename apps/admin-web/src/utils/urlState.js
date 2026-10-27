@@ -229,7 +229,9 @@ export function crossEndTarget(path, query, to) {
     return { path: mapped || '/m/home', query: mapped ? clean : withFrom(clean, p) }
   }
   if (isMobilePath(p)) {
-    const mapped = MOBILE_TO_PC[exactSegment(p)]
+    // 先按「段/子段」查精确落点，再退回一级段（T02613：manage→/queue，但 manage/alert→/maintenance）
+    const rest = p.slice(2).replace(/^\//, '')
+    const mapped = MOBILE_TO_PC[rest] || MOBILE_TO_PC[exactSegment(p)]
     return { path: mapped || '/review', query: mapped ? clean : withFrom(clean, p) }
   }
   return { path: null, query: clean }
@@ -279,7 +281,11 @@ const PC_TO_MOBILE = {
   queue: '/m/manage/queue',
   channels: '/m/manage/channels',
   ads: '/m/manage/ads',
+  // T02613：应急停服在 PC 的落点是系统维护页的小节，移动端那一页就在 /m/manage/alert
+  maintenance: '/m/manage/alert',
 }
+// 键有两种形态：一级段名（`manage`）与「段/子段」（`manage/alert`）。查表先长后短，
+// 于是同一个一级段下可以对某一子页做精确落点，其余子页仍走一级段的默认落点。
 const MOBILE_TO_PC = {
   '': '/review',
   home: '/review',
@@ -287,6 +293,8 @@ const MOBILE_TO_PC = {
   message: '/review',
   mine: '/about',
   manage: '/queue',
+  // T02613：PC 视口打开 /m/manage/alert 原先按一级段落到队列页——值班要找的停服卡片没了
+  'manage/alert': '/maintenance',
 }
 
 /**

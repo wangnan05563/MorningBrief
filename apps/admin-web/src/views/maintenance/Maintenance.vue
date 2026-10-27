@@ -256,6 +256,17 @@
       </el-col>
     </el-row>
 
+    <!-- T02613：应急停服原先只有移动端入口（/m/manage/alert），PC 值班要停服得先切到移动布局
+         或掏手机——高危动作的操作路径反而最长。这里挂的是同一份卡片组件，两端共用状态口径、
+         确认强度与审计记录，不存在「PC 上一套、手机上一套」的漂移可能。 -->
+    <div class="card-soft cleanup-card emergency-stop-section" data-guide="emergency-stop">
+      <div class="card-header">
+        <el-icon class="header-icon stop-icon"><Warning /></el-icon>
+        <span>应急停服</span>
+      </div>
+      <EmergencyStopCard />
+    </div>
+
     <!-- T02909：清理是 irreversible 的高危动作，最近几次「谁清的、清了什么」得在本页读得到 -->
     <AuditTrail category="maintenance" guide="maintenance-audit" title="最近清理审计" />
 
@@ -280,13 +291,14 @@
 import { ref, computed, onMounted, onUnmounted, h } from 'vue'
 import { ElMessage } from '../../utils/message'
 import {
-  Refresh, Coin, Document, Cpu, Delete,
+  Refresh, Coin, Document, Cpu, Delete, Warning,
 } from '@element-plus/icons-vue'
 import api from '../../api'
 import { getMaintenanceTask } from '../../api/maintenance'
 import { MAINTENANCE_TASK_STATE } from '../../constants/enums'
 import ListLoadError from '../../components/ListLoadError.vue'
 import AuditTrail from '../../components/AuditTrail.vue'
+import EmergencyStopCard from '../../components/EmergencyStopCard.vue'
 import { dangerConfirmWithReason } from '../../utils/dangerConfirm'
 import { LONG_TASK_TIMEOUT_MS, isRequestTimeout, longTaskTimeoutText } from '../../utils/requestTimeout'
 
@@ -716,6 +728,11 @@ onUnmounted(() => {
   margin-top: 4px;
 }
 
+/* 停服卡片不并入三列栅格：它自带计时器与审计列表，压缩到 1/3 宽会挤掉「已停服」那行 */
+.emergency-stop-section {
+  margin-top: 16px;
+}
+
 .cleanup-card {
   padding: 20px 24px;
   height: 100%;
@@ -737,6 +754,7 @@ onUnmounted(() => {
       &.db-icon { color: $color-primary-dark; }
       &.log-icon { color: $color-secondary-dark; }
       &.cache-icon { color: $color-info; }
+      &.stop-icon { color: $color-danger; }
     }
   }
 

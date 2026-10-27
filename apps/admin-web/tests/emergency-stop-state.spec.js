@@ -53,6 +53,22 @@ async function mockMobile(page, { status, stop, resume, audit = { items: [] }, r
 // getByRole 的 name 默认按子串匹配，'应急停服' 会命中 '解除应急停服'，故一律 exact
 const btn = (page, name) => page.getByRole('button', { name, exact: true })
 
+/**
+ * T02613：停服确认框是「原因 + 确认词」同一道闸门（dangerConfirmWithReason），
+ * 恢复确认框走 dangerConfirm 的 confirmWord 档。两端共用同一份卡片组件，
+ * 所以这套交互在移动端页与 PC 维护页上完全一致。
+ */
+async function dialogBox(page) {
+  const box = page.locator('.el-message-box')
+  await expect(box).toBeVisible()
+  return box
+}
+const reasonField = (box) => box.locator('textarea')
+// 确认词输入框按 placeholder 精确锁定：停服框里同时还有原因输入框等别的 el-input，
+// 裸 `input.el-input__inner` 会命中多个而触发 strict mode violation。
+// 两种确认框（dangerConfirmWithReason / dangerConfirm 的 prompt 档）都把确认词写进 placeholder。
+const wordField = (box, word) => box.getByPlaceholder(word, { exact: true })
+
 test.describe('应急停服 · 状态可信与可用性', () => {
   // 本组全部是移动端外壳页面（`/m/manage/alert`）：视口必须是手机宽度，
   // 否则按 IDD-M104 的跨端策略会被换到 PC 侧，断言落在错误的页面上（T02511 口径）
@@ -107,9 +123,9 @@ test.describe('应急停服 · 状态可信与可用性', () => {
     await expect(btn(page, '应急停服')).toBeVisible({ timeout: NAV_TIMEOUT })
 
     await btn(page, '应急停服').click()
-    const box = page.locator('.el-message-box')
-    await expect(box).toBeVisible()
-    await box.locator('textarea').fill('  上游 TTS 全部超时  ')
+    const box = await dialogBox(page)
+    await reasonField(box).fill('  上游 TTS 全部超时  ')
+    await wordField(box, '停服').fill('停服')
     await box.getByRole('button', { name: '确认停服' }).click()
 
     await expect.poll(() => requests.length).toBe(1)
@@ -124,17 +140,36 @@ test.describe('应急停服 · 状态可信与可用性', () => {
     await expect(page.locator('.el-message', { hasText: '已应急停服' })).toBeVisible()
   })
 
-  test('原因为空时不提交', async ({ page }) => {
+  test('原因为空时不提交（T02613 后原因与确认词在同一道闸门里）', async ({ page }) => {
     const requests = []
     await mockMobile(page, { status: { data: OFF }, stop: { data: OFF }, resume: { data: OFF }, requests })
     await page.goto('/m/manage/alert')
     await expect(btn(page, '应急停服')).toBeVisible({ timeout: NAV_TIMEOUT })
 
     await btn(page, '应急停服').click()
-    const box = page.locator('.el-message-box')
-    await box.locator('textarea').fill('   ')
+    const box = await dialogBox(page)
+    await reasonField(box).fill('   ')
+    // 确认词填对也不放过空原因：两档校验是「与」关系，不是先过一档就完事
+    await wordField(box, '停服').fill('停服')
     await box.getByRole('button', { name: '确认停服' }).click()
-    await expect(box.getByText('原因不能为空')).toBeVisible()
+    await expect(page.locator('.el-message', { hasText: '请填写操作原因（必填）' })).toBeVisible()
+    await expect(box).toBeVisible()
+    await expect.poll(() => requests.length, { timeout: 2000 }).toBe(0)
+  })
+
+  test('确认词不逐字正确时不提交', async ({ page }) => {
+    const requests = []
+    await mockMobile(page, { status: { data: OFF }, stop: { data: OFF }, resume: { data: OFF }, requests })
+    await page.goto('/m/manage/alert')
+    await expect(btn(page, '应急停服')).toBeVisible({ timeout: NAV_TIMEOUT })
+
+    await btn(page, '应急停服').click()
+    const box = await dialogBox(page)
+    await reasonField(box).fill('上游超时，先止血')
+    await wordField(box, '停服').fill('停')
+    await box.getByRole('button', { name: '确认停服' }).click()
+    await expect(page.locator('.el-message', { hasText: '请逐字输入 停服' })).toBeVisible()
+    await expect(box).toBeVisible()
     await expect.poll(() => requests.length, { timeout: 2000 }).toBe(0)
   })
 
@@ -168,10 +203,14 @@ test.describe('应急停服 · 状态可信与可用性', () => {
 
     await btn(page, '解除应急停服').click()
     // T02596：恢复走统一危险确认，点名调度开关与停服期间的缺口
+    const box = await dialogBox(page)
     await expect(page.getByText('解除应急停服：生产调度（当前为停服态）')).toBeVisible()
     await expect(page.getByText('影响范围：调度开关 1 项（恢复新任务触发）')).toBeVisible()
     await expect(page.getByText('停服期间未触发的任务不会自动补跑')).toBeVisible()
-    await page.locator('.el-message-box').getByRole('button', { name: '确认恢复' }).click()
+    // T02613：解除 = 放行全部新任务，按高危档要逐字输入确认词
+    await expect(page.getByText('请输入 解除停服 以确认')).toBeVisible()
+    await wordField(box, '解除停服').fill('解除停服')
+    await box.getByRole('button', { name: '确认恢复' }).click()
 
     await expect.poll(() => requests.length).toBe(1)
     expect(requests[0].url).toContain('/m/emergency/resume')
@@ -215,8 +254,9 @@ test.describe('应急停服 · 状态可信与可用性', () => {
     await expect.poll(() => auditCalls.length).toBe(1)
 
     await btn(page, '应急停服').click()
-    const box = page.locator('.el-message-box')
-    await box.locator('textarea').fill('上游异常')
+    const box = await dialogBox(page)
+    await reasonField(box).fill('上游异常')
+    await wordField(box, '停服').fill('停服')
     await box.getByRole('button', { name: '确认停服' }).click()
 
     await expect.poll(() => auditCalls.length).toBe(2)
@@ -230,8 +270,9 @@ test.describe('应急停服 · 状态可信与可用性', () => {
     await expect(btn(page, '应急停服')).toBeVisible({ timeout: NAV_TIMEOUT })
 
     await btn(page, '应急停服').click()
-    const box = page.locator('.el-message-box')
-    await box.locator('textarea').fill('第二次点错了')
+    const box = await dialogBox(page)
+    await reasonField(box).fill('第二次点错了')
+    await wordField(box, '停服').fill('停服')
     await box.getByRole('button', { name: '确认停服' }).click()
 
     await expect(page.locator('.el-message', { hasText: '本次未重复记录' })).toBeVisible()
@@ -248,7 +289,9 @@ test.describe('应急停服 · 状态可信与可用性', () => {
     await expect(btn(page, '解除应急停服')).toBeVisible({ timeout: NAV_TIMEOUT })
 
     await btn(page, '解除应急停服').click()
-    await page.locator('.el-message-box').getByRole('button', { name: '确认恢复' }).click()
+    const box = await dialogBox(page)
+    await wordField(box, '解除停服').fill('解除停服')
+    await box.getByRole('button', { name: '确认恢复' }).click()
 
     await expect(page.locator('.el-message', { hasText: '本次未重复记录' })).toBeVisible()
   })
@@ -267,5 +310,104 @@ test.describe('应急停服 · 状态可信与可用性', () => {
     await expect(page.locator('.m-alert__banner')).toContainText('生产运行正常', { timeout: NAV_TIMEOUT })
     await expect(page.locator('[data-guide="emergency-audit"]')).toContainText('记录读取失败')
     await expect(btn(page, '应急停服')).toBeVisible()
+  })
+})
+
+/**
+ * T02613：PC 端应急停服入口
+ *
+ * 改前：停服入口只在移动端路由 `/m/manage/alert` 上，PC 值班要停服得先切到 `/m/` 布局（或掏手机）——
+ * 越是高危动作，操作路径反而越长。现在 PC 的「系统维护」页挂同一份 EmergencyStopCard，
+ * 这一组验的是「入口真的在 PC 上可用」，而不是只把组件 import 进来。
+ */
+test.describe('应急停服 · PC 端入口（/maintenance）', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(document, 'hidden', { get: () => false, configurable: true })
+      Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true })
+    })
+    await setLoginState(page, 'admin')
+  })
+
+  test('PC 维护页给出三态横幅与停服入口', async ({ page }) => {
+    const requests = []
+    await mockMobile(page, { status: { data: OFF }, stop: { data: OFF }, resume: { data: OFF }, requests })
+    await page.goto('/maintenance')
+
+    const card = page.locator('[data-guide="emergency-stop"]')
+    await expect(card.locator('.m-alert__banner')).toContainText('生产运行正常', { timeout: NAV_TIMEOUT })
+    await expect(card.getByRole('button', { name: '应急停服', exact: true })).toBeVisible()
+    // 移动端页与 PC 页共用一份卡片：审计块也在 PC 上就地可读，不必切页面去查是谁停的服
+    await expect(card.locator('[data-guide="emergency-audit"]')).toBeVisible()
+  })
+
+  test('PC 上填原因 + 确认词即可真实停服，横幅当场转停服态', async ({ page }) => {
+    const stopped = { enabled: true, reason: '上游抓取全挂', by: 'admin', at: localIso(new Date()), already: false }
+    const requests = []
+    await mockMobile(page, { status: { data: OFF }, stop: { data: stopped }, resume: { data: OFF }, requests })
+    await page.goto('/maintenance')
+
+    const card = page.locator('[data-guide="emergency-stop"]')
+    await card.getByRole('button', { name: '应急停服', exact: true }).click()
+    const box = await dialogBox(page)
+    await reasonField(box).fill('上游抓取全挂')
+    await wordField(box, '停服').fill('停服')
+    await box.getByRole('button', { name: '确认停服' }).click()
+
+    await expect.poll(() => requests.length).toBe(1)
+    expect(requests[0].url).toContain('/m/emergency/stop')
+    expect(JSON.parse(requests[0].body)).toEqual({ reason: '上游抓取全挂' })
+    await expect(card.locator('.m-alert__banner')).toContainText('系统处于维护 / 应急停服态')
+    await expect(card.locator('.m-alert__banner')).toContainText('原因：上游抓取全挂')
+  })
+
+  test('PC 与移动端确认强度一致：解除同样要逐字输入确认词', async ({ page }) => {
+    const stopped = { enabled: true, reason: '磁盘写满', by: 'admin', at: localIso(new Date()), already: false }
+    const requests = []
+    await mockMobile(page, { status: { data: stopped }, stop: { data: stopped }, resume: { data: OFF }, requests })
+    await page.goto('/maintenance')
+
+    const card = page.locator('[data-guide="emergency-stop"]')
+    await card.getByRole('button', { name: '解除应急停服', exact: true }).click()
+    const box = await dialogBox(page)
+    // 只点确认不输词：不放行（两端同一档，不存在「PC 更松」或「手机更松」）。
+    // 恢复走 dangerConfirm 的 prompt 档，校验失败是**框内红字**（inputValidator 的返回串），
+    // 不是停服那种 ElMessage 浮层——两端提示形态本就不同，这里断言的是「不放行」这个事实。
+    await box.getByRole('button', { name: '确认恢复' }).click()
+    await expect(box.locator('.el-message-box__errormsg')).toContainText('请逐字输入 解除停服')
+    await expect(box).toBeVisible()
+    await expect.poll(() => requests.length, { timeout: 2000 }).toBe(0)
+
+    await wordField(box, '解除停服').fill('解除停服')
+    await box.getByRole('button', { name: '确认恢复' }).click()
+    await expect.poll(() => requests.length).toBe(1)
+    expect(requests[0].url).toContain('/m/emergency/resume')
+    await expect(card.locator('.m-alert__banner')).toContainText('生产运行正常')
+  })
+
+  test('桌面视口打开移动端的 /m/manage/alert 会被换到 PC 小节', async ({ page }) => {
+    // 跨端等价表原先把 `manage` 段整体落到队列页：PC 视口打开 /m/manage/alert 看的是队列，
+    // 停服卡片（T02613 的新落点）够不着。这一条守住「表指对了地方」。
+    const requests = []
+    await mockMobile(page, { status: { data: OFF }, stop: { data: OFF }, resume: { data: OFF }, requests })
+    await page.goto('/m/manage/alert')
+    await expect(page.locator('[data-guide="emergency-stop"]')).toBeVisible({ timeout: NAV_TIMEOUT })
+    expect(page.url()).toContain('/maintenance')
+  })
+
+  test('非 admin 进不了这个页面：停服入口不会摆给必然 403 的角色', async ({ page }) => {
+    // 后端 /m/emergency/stop 是 require_admin，路由侧 /maintenance 也是 requireRole:'admin'，
+    // 两边口径必须对得上，否则 operator 会看到一个点了必失败的按钮。
+    // 守卫用的是 next(false)：首次导航被中止时浏览器地址栏仍停在被请求的 URL（SPA 改不了它），
+    // 真正可信的判据是「页面没渲染出来 + 给了权限提示」，不是 URL。
+    await setLoginState(page, 'operator')
+    const requests = []
+    await mockMobile(page, { status: { data: OFF }, stop: { data: OFF }, resume: { data: OFF }, requests })
+    await page.goto('/maintenance')
+
+    await expect(page.locator('.el-message', { hasText: '仅管理员可访问' })).toBeVisible({ timeout: NAV_TIMEOUT })
+    await expect(page.locator('[data-guide="emergency-stop"]')).toHaveCount(0)
+    await expect(btn(page, '应急停服')).toHaveCount(0)
+    expect(requests.filter((r) => r.url.includes('/emergency/'))).toHaveLength(0)
   })
 })

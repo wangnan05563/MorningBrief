@@ -123,6 +123,8 @@ export const GUIDE_STEPS = {
   '/maintenance': [
     { s: ['[data-guide="maintenance-page"]'], t: '系统清理', d: '清理过期数据与临时文件，释放磁盘空间。' },
     { s: ['[data-guide="maintenance-form"]'], t: '清理项', d: '勾选清理目标后执行，建议先用预览模式；不可恢复项会有提示。' },
+    // T02613：应急停服原先只有移动端入口，PC 值班要停服得先切 /m/ 布局；入口补在本页后引导要跟上一条
+    { s: ['[data-guide="emergency-stop"]'], t: '应急停服', d: '上游出事就在这里停：新任务不再触发，已在跑的不受影响；解除同样点这里，两端确认口径一致。' },
   ],
   '/help': [
     { s: ['[data-guide="help-page"]'], t: '帮助文档', d: '平台使用说明与常见问题，按需查阅。' },

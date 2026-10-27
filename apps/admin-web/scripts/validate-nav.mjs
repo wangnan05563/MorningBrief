@@ -584,8 +584,8 @@ export const METRIC_UNIT_ALLOW = [
     reason: '队列任务的耗时列（后端返回秒），该接口没有指标 meta；列入派生单统一',
   },
   {
-    file: 'views/mobile/ManageAlert.vue',
-    lines: [110, 111],
+    file: 'components/EmergencyStopCard.vue',
+    lines: [117, 118],
     reason: '本地 hh:mm:ss 排版（不产出单位标签），与 formatDuration 显示形不同；统一口径见派生单',
   },
   {

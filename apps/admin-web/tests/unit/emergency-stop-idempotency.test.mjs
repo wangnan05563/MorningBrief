@@ -27,7 +27,12 @@ const repoFile = (rel) => readFileSync(new URL(`../../../../${rel}`, import.meta
 const svc = () => repoFile('backend/app/services/mobile_service.py')
 const router = () => repoFile('backend/app/routers/admin/mobile.py')
 const apiMobile = () => repoFile('apps/admin-web/src/api/mobile.js')
-const view = () => repoFile('apps/admin-web/src/views/mobile/ManageAlert.vue')
+// T02613：卡片本体从 views/mobile/ManageAlert.vue 抽到 components/EmergencyStopCard.vue，
+// 由移动端页与 PC 系统维护页共用。下面的判据跟着搬到组件上——
+// 判据留在旧页面文件里就等于「测的还是那份已经不存在的代码」。
+const view = () => repoFile('apps/admin-web/src/components/EmergencyStopCard.vue')
+const mobilePage = () => repoFile('apps/admin-web/src/views/mobile/ManageAlert.vue')
+const pcPage = () => repoFile('apps/admin-web/src/views/maintenance/Maintenance.vue')
 
 /** 取某个 async def 的函数体（到下一个顶层 def / 常量声明为止），便于按函数断言 */
 function pyFn(name) {
@@ -170,6 +175,48 @@ describe('管理端把记录读出来', () => {
     // T02839：移动端统一走 --m-* 语义 token（--el-border-color-lighter 的浅色默认值在暗色下不吃主题）
     assert.match(css, /var\(--m-border\)/, '边框没走主题变量')
     assert.ok(!/#fff\b/.test(css), `记录块写死了浅色底：${css}`)
+  })
+})
+
+describe('T02613：一份卡片，移动端与 PC 两端共用', () => {
+  it('移动端页与 PC 系统维护页都挂同一份 EmergencyStopCard', () => {
+    for (const [name, src] of [['移动端 /m/manage/alert', mobilePage()], ['PC /maintenance', pcPage()]]) {
+      assert.match(src, /components\/EmergencyStopCard\.vue/, `${name} 没有引用共用卡片`)
+      assert.match(src, /<EmergencyStopCard\s*\/>/, `${name} 没有渲染共用卡片`)
+    }
+  })
+
+  it('停服逻辑只有卡片这一份，两个页面不再各自打接口（否则改一端必漏另一端）', () => {
+    for (const [name, src] of [['移动端页', mobilePage()], ['PC 维护页', pcPage()]]) {
+      assert.doesNotMatch(src, /emergencyStop\(|emergencyResume\(|getMaintenanceStatus\(/, `${name} 里还留着自己调停服接口的代码`)
+    }
+    const src = view()
+    assert.match(src, /await emergencyStop\(\{ reason \}\)/)
+    assert.match(src, /await emergencyResume\(\)/)
+  })
+
+  it('两端同强度：停服与解除都要逐字输入确认词', () => {
+    const src = view()
+    assert.match(src, /^const STOP_CONFIRM_WORD = '停服'$/m, '停服确认词')
+    assert.match(src, /^const RESUME_CONFIRM_WORD = '解除停服'$/m, '解除确认词')
+    assert.match(src, /requireReason: true/, '停服原因不再是必填（requireReason 没传）')
+    assert.match(src, /dangerConfirmWithReason\(\{[\s\S]*?confirmWord: STOP_CONFIRM_WORD/, '停服没走确认词')
+    assert.match(src, /dangerConfirm\(\{[\s\S]*?confirmWord: RESUME_CONFIRM_WORD/, '解除没走确认词')
+  })
+
+  it('dangerConfirmWithReason 的 requireReason 是 opt-in，存量调用点行为不变', () => {
+    const src = repoFile('apps/admin-web/src/utils/dangerConfirm.js')
+    assert.match(src, /requireReason = false,/, '默认值不是假——存量 5 处「原因可选」的确认会被改成必填')
+    assert.match(src, /if \(requireReason && !state\.reason\.trim\(\)\)/, 'requireReason 没有真的挡住空原因')
+  })
+
+  it('PC 入口有显式锚点，且引导指得到它（否则气泡落空居中）', () => {
+    assert.match(pcPage(), /data-guide="emergency-stop"/)
+    const guide = repoFile('apps/admin-web/src/guide/guideConfig.js')
+    const at = guide.indexOf("'/maintenance': [")
+    assert.notEqual(at, -1, 'guideConfig 里没有 /maintenance')
+    const block = guide.slice(at, guide.indexOf('\n  ],', at))
+    assert.match(block, /\[data-guide="emergency-stop"\]/, '新入口没进引导步骤，或步骤锚点拼错')
   })
 })
 

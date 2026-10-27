@@ -1576,8 +1576,8 @@
       "frontend": {
         "callSites": [
           {
-            "file": "views/mobile/ManageAlert.vue",
-            "line": 198,
+            "file": "components/EmergencyStopCard.vue",
+            "line": 208,
             "fn": "emergencyStop",
             "fieldCount": 1,
             "unresolved": []
