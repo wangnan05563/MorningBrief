@@ -31,11 +31,16 @@ Page({
     // T00726 双层 Tab：第一层＝频道类型过滤；第二层＝功能入口选中态
     firstTab: "audiobook",
     secondTab: "recent",
-    secondEntry: null,     // J20：第二层只做入口 {text, url}
-    secondPage: "",
+    secondEntry: null,     // J20：第二层只做入口 {text, url}，url 即唯一跳转源（T02735）
     filteredCourses: [],
     firstTabLabel: "有声读物",
     firstTabEmptyText: "尚未订阅听书类频道，去首页发现喜欢的书吧",
+  },
+
+  onLoad() {
+    // 默认第二层选中「最近」，首屏就得有对应入口文案。
+    // 只在用户点第二层 Tab 时才填 secondEntry，会让首屏出现一张空白可点卡片（T02735）。
+    this.loadSecondContent(this.data.secondTab);
   },
 
   onShow() {
@@ -539,7 +544,7 @@ Page({
   onSecondTab(e) {
     const tab = e.currentTarget.dataset.tab;
     if (!tab || tab === this.data.secondTab) return;
-    this.setData({ secondTab: tab, secondEntry: null });
+    this.setData({ secondTab: tab });
     this.loadSecondContent(tab);
   },
 
@@ -553,18 +558,17 @@ Page({
       preferred: { url: "/pages/preferred-settings/preferred-settings", text: "前往偏爱频道设置，定制首页关注列表 ↗" },
     };
     const entry = SECOND_PAGES[tab];
-    this.setData({
-      secondPage: entry ? entry.url : "",
-      secondEntry: entry ? { text: entry.text, url: entry.url } : null,
-    });
+    // 键缺失时置 null 而不是留旧值：留旧值会让「收藏」页签显示「最近」的入口，
+    // 比一张空卡更糟——空卡至少会被门禁点名（T02735 扩的 tab↔entry 双向校验）。
+    this.setData({ secondEntry: entry ? { text: entry.text, url: entry.url } : null });
   },
 
   goSecondPage() {
-    const url = this.data.secondPage;
-    if (!url) return;
+    const entry = this.data.secondEntry;
+    if (!entry || !entry.url) return;
     wx.navigateTo({
-      url,
-      fail: () => wx.reLaunch({ url }),
+      url: entry.url,
+      fail: () => wx.reLaunch({ url: entry.url }),
     });
   },
 

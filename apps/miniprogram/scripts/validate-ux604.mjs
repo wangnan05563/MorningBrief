@@ -87,6 +87,8 @@ function backendConst(rel, name) {
 /** 需要交叉比对的文件（相对 apps/miniprogram） */
 const FILES = [
   'app.js',
+  // T02735：第二层入口路由必须在 app.json.pages 注册过，否则 navigateTo 静默失败
+  'app.json',
   'pages/channels/channels.js',
   'pages/channels/channels.json',
   'pages/channels/channels.wxml',
@@ -127,6 +129,9 @@ const FILES = [
   'pages/search/search.js',
   'pages/feedback/feedback.js',
 ]
+
+/** app.json.pages 与 navigateTo url 的前导斜杠归一（T02735） */
+const normPage = (p) => String(p || '').replace(/^\/+/, '').replace(/\/+$/, '')
 
 /** wxml 里绑定 → 同页 js 方法必须存在（跳过动态绑定值） */
 const BIND_RE = /\b(?:bind|catch)[:]?([a-z]+)="([A-Za-z0-9_]+)"/g
@@ -599,11 +604,62 @@ export function checkFacts(facts) {
   }
 
   // —— 15. J20：个人中心第二层只做入口 ——
+  const profileJs = f('pages/profile/profile.js')
   if (!/second-entry-card/.test(profileWxml) || !/bindtap="goSecondPage"/.test(profileWxml)) {
     errors.push('profile 第二层没有收敛为单入口 second-entry-card → goSecondPage（J20）')
   }
-  if (/secondList/.test(profileWxml) || /secondList/.test(f('pages/profile/profile.js'))) {
+  if (/secondList/.test(profileWxml) || /secondList/.test(profileJs)) {
     errors.push('profile 仍保留 secondList 内嵌列表：与 recent/favorites/channels/download/preferred 整页形成第二套取数与渲染（J20）')
+  }
+  // T02735：上面两条挡不住「换个变量名把列表搬回来」和「页签与入口对不上」。
+  // 入口卡内部再出现 wx:for 即视为列表回流；第二层五枚页签必须与 SECOND_PAGES 一一对应，
+  // 每条路由要真的注册在 app.json、且落到该页签自己的整页（否则点了跳不动或跳错页）。
+  const panelStart = profileWxml.indexOf('second-panel')
+  const panelEnd = panelStart < 0 ? -1 : profileWxml.indexOf('course-card', panelStart)
+  const panelBody = panelEnd > panelStart ? profileWxml.slice(panelStart, panelEnd) : ''
+  if (!panelBody) {
+    errors.push('profile 第二层入口卡（second-panel）定位失败：结构被改名后无法校验是否退回内嵌列表（J20/T02735）')
+  } else if (/wx:for/.test(panelBody)) {
+    errors.push('profile 第二层入口卡里又出现 wx:for：列表渲染搬回了「我的」页（J20/T02735）')
+  }
+  const subBarStart = profileWxml.indexOf('tab-bar-sub')
+  const subBar = subBarStart < 0 ? '' : profileWxml.slice(subBarStart, panelStart > subBarStart ? panelStart : undefined)
+  const tabKeys = [...subBar.matchAll(/data-tab="([A-Za-z0-9_]+)"/g)].map((m) => m[1])
+  const pagesBlock = (profileJs.match(/const SECOND_PAGES = \{[\s\S]*?\n {2}\}/) || [''])[0]
+  const entries = [...pagesBlock.matchAll(/^\s{4,8}([A-Za-z0-9_]+):\s*\{\s*url:\s*"([^"]+)"/gm)]
+    .map((m) => ({ key: m[1], url: m[2] }))
+  if (!tabKeys.length || !entries.length) {
+    errors.push('profile 第二层页签或 SECOND_PAGES 解析不到：tab↔入口一致性没有被校验（J20/T02735）')
+  } else {
+    const entryKeys = entries.map((e) => e.key)
+    for (const key of tabKeys.filter((k) => !entryKeys.includes(k))) {
+      errors.push(`profile 第二层页签 ${key} 没有对应入口：点进去是一张空白卡片（J20/T02735）`)
+    }
+    for (const key of entryKeys.filter((k) => !tabKeys.includes(k))) {
+      errors.push(`SECOND_PAGES 里的 ${key} 没有对应页签：这段入口永远点不到（J20/T02735）`)
+    }
+    const pageRoutes = (() => {
+      try {
+        return (JSON.parse(f('app.json')).pages || []).map(normPage)
+      } catch (err) {
+        return []
+      }
+    })()
+    for (const { key, url } of entries) {
+      const target = normPage(url)
+      if (!pageRoutes.includes(target)) {
+        errors.push(`SECOND_PAGES.${key} 指向未注册页面 ${url}：goSecondPage 的 navigateTo 必然失败（J20/T02735）`)
+      }
+      // 接错对象：入口必须落到该页签自己的整页，而不是「随便哪个已注册页面」
+      // downloads → download 这类单复数差异用去 s 的词干兜住
+      const stems = key.endsWith('s') ? [key, key.slice(0, -1)] : [key]
+      if (!stems.some((stem) => target.includes(stem))) {
+        errors.push(`SECOND_PAGES.${key} 指向 ${url}，与该页签不对应：入口把用户带到了别的页（J20/T02735）`)
+      }
+    }
+  }
+  if (/\bsecondPage\b/.test(profileJs)) {
+    errors.push('profile.js 又把第二层跳转拆成 secondPage 与 secondEntry.url 两份状态（J20/T02735）')
   }
 
   // —— 16. J27：缓冲态必须真的呈现 ——

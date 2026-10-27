@@ -384,6 +384,36 @@ describe('T02540 / M6 信息架构：文案与入口的回归锁', () => {
       { 'pages/profile/profile.wxml': read('pages/profile/profile.wxml').replace('<view class="card second-panel">', '<view class="card second-panel" wx:for="{{secondList}}">') },
       'J20',
     ))
+
+  test('J20 换个变量名把列表搬进入口卡（wx:for 不看变量名）被抓', () =>
+    expectHit(
+      { 'pages/profile/profile.wxml': read('pages/profile/profile.wxml').replace('<view class="card second-panel">', '<view class="card second-panel" wx:for="{{items}}">') },
+      'J20',
+    ))
+
+  test('J20 第二层页签删掉一个、入口仍留着（tab↔entry 单向残留）被抓', () =>
+    expectHit(
+      { 'pages/profile/profile.wxml': read('pages/profile/profile.wxml').replace(/\s*<view\s+class="tab-item \{\{secondTab === 'favorites' \? 'tab-sub-active' : ''\}\}"\s+bindtap="onSecondTab"\s+data-tab="favorites"\s*>/g, '') },
+      'J20',
+    ))
+
+  test('J20 页签与入口接错对象（favorites 指向 channels 页）被抓', () =>
+    expectHit(
+      { 'pages/profile/profile.js': read('pages/profile/profile.js').replace('favorites: { url: "/pages/favorites/favorites"', 'favorites: { url: "/pages/channels/channels"') },
+      'J20',
+    ))
+
+  test('J20 入口指向未注册页面被抓（navigateTo 必然失败）', () =>
+    expectHit(
+      { 'pages/profile/profile.js': read('pages/profile/profile.js').replace('channels: { url: "/pages/channels/channels"', 'channels: { url: "/pages/channel-list/channel-list"') },
+      'J20',
+    ))
+
+  test('J20 跳转状态又拆成 secondPage + secondEntry.url 两份被抓', () =>
+    expectHit(
+      { 'pages/profile/profile.js': read('pages/profile/profile.js').replace('  goSecondPage() {', '  goSecondPage() {\n    const secondPage = this.data.secondEntry && this.data.secondEntry.url;') },
+      'J20',
+    ))
 })
 
 describe('T02542 / M7：长任务收尾与逐菜单缺陷', () => {
