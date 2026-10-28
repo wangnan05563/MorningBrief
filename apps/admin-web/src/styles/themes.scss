@@ -4,7 +4,7 @@
  * 对比度原则（WCAG AA 4.5:1）：
  * - 浅色主题：深色文字（#1A202C / #2D3748）on 浅色背景（白/极浅色），对比度 7:1+
  * - 暗色主题：浅色文字（#E2E8F0）on 深色背景（#0A0A0F），对比度 13:1+
- * - 次级文字统一采用更浅但仍满足 3:1 的色值
+ * - 次级文字取 --color-text-secondary，对卡片与页面底均 ≥ 4.5:1（T03588 六主题实测 5.39–8.76）
  */
 @use './variables.scss' as *;
 
@@ -15,7 +15,9 @@
  * ============================================ */
 :root,
 [data-theme='macaron'] {
-  --on-primary: #2D6B5F;
+  /* 压在主色实底上的字：#7ECEC1 上的白字只有 1.83:1，旧值 #2D6B5F 也只有 3.40:1；
+     #1B4A42 实测 5.46:1（T03588，真实数据抽查 ADR）。改值只会更深，不动主色本身。 */
+  --on-primary: #1B4A42;
   --color-primary: #7ECEC1;
   --color-primary-light: #B5EAD7;
   --color-primary-dark: #2D6B5F;
@@ -543,15 +545,8 @@
     background-color: var(--color-primary) !important;
   }
 
-  /* 压在主色实底上的文字：Element Plus 把头像与单选按钮选中态的字色写死为白，
-     而 showcase 的 primary 是亮青 #00E5FF —— 白字实测只有 1.54:1（NFR-UX-04 暗色截图验收，
-     头像在壳层右上角，每一页都中招）。改吃 --on-primary，与上面日期格 #0A0A0F 同一口径。 */
-  .el-avatar {
-    color: var(--on-primary) !important;
-  }
-  .el-radio-button__original-radio:checked + .el-radio-button__inner {
-    color: var(--on-primary) !important;
-  }
+  /* 压在主色实底上的文字（头像 / 单选按钮选中态）：规则已提到文件末尾的全主题段——
+     原来只写在 showcase 块内，浅色主题拿不到，默认 macaron 上白字 on #7ECEC1 实测 1.83:1（T03588）。 */
 
   /* 空状态插画：Element Plus 默认那幅纸盒 SVG 是白底灰面，暗色下就是一块白斑。
      它既没有 background-color 也没有文字，前面两类指标（白底孤岛 / 文字对比度）都抓不到它，
@@ -571,6 +566,64 @@
       color: var(--color-primary-dark);
     }
   }
+}
+
+/* === 全主题：主色当文字 / 主色实底上的文字 ===
+ * Element Plus 把链接写死成 --el-color-primary、把头像与单选按钮选中态的字写死成白。
+ * 主色是浅薄荷（macaron #7ECEC1）时：链接字 on 卡片 1.78:1、白字 on 主色 1.83:1，
+ * 实测来自 T03588（真实数据副本跑 nfr04 量法）。两处都改吃语义 token：
+ * 浅底上的文字用 --color-primary-dark（六套主题实测 6.06–10.87:1），
+ * 主色实底上的文字用 --on-primary（各主题自带，浅色 ≥5.42:1）。 */
+.el-avatar,
+.el-radio-button__original-radio:checked + .el-radio-button__inner {
+  color: var(--on-primary) !important;
+}
+.el-link.el-link--primary,
+.el-link.el-link--primary:hover {
+  color: var(--color-primary-dark);
+}
+.el-radio__input.is-checked + .el-radio__label {
+  color: var(--color-text-primary) !important;
+}
+
+/* EP 其余「选中态把主色当文字」的组件：同一类问题，一并改吃语义 token。
+ * 表格列头 / 空态提示 / 下拉占位由下一段 token 覆盖。
+ * 选择器带 html 前缀：EP 按需 chunk 在 global.scss 之后注入，同权重会被加载顺序压掉。 */
+html .el-tabs__item.is-active,
+html .el-tabs__item:hover {
+  color: var(--color-primary-dark);
+}
+html .el-checkbox__input.is-checked + .el-checkbox__label {
+  color: var(--color-text-primary);
+}
+html .el-select-dropdown__item.is-selected {
+  color: var(--color-primary-dark);
+}
+/* 分页选中页是「主色实底」，字色跟 --on-primary；hover 是「主色当文字」。
+ * background 模式下 EP 的选择器多一层 .is-background（0,4,0），必须同样点出来，
+ * 否则页面普遍开了 background 属性时这条规则根本不生效（T03588 复测踩到）。 */
+html .el-pagination .el-pager li.is-active,
+html .el-pagination.is-background .el-pager li.is-active {
+  background-color: var(--color-primary);
+  color: var(--on-primary);
+}
+html .el-pagination .el-pager li:hover,
+html .el-pagination.is-background .el-pager li:not(.is-disabled):hover {
+  color: var(--color-primary-dark);
+}
+
+/* === 浅色主题：EP 的次级文字 / 占位符 ===
+ * EP 默认 #909399（压 macaron 页面底 3.00:1）、#A8ABB2（2.24:1），表头与下拉占位全不达 AA
+ * （T03588 真实数据抽查 59 处里 57 处是这两类）。改用各主题的 --color-text-secondary
+ * （六主题实测 5.39–8.76）。showcase 的深色化块已有自己的取值（secondary #A0AEC0 8.03、
+ * placeholder #718096 4.51–4.92），本来达标，不在此列。 */
+[data-theme='macaron'],
+[data-theme='enterprise'],
+[data-theme='creative'],
+[data-theme='commerce'],
+[data-theme='portfolio'] {
+  --el-text-color-secondary: var(--color-text-secondary);
+  --el-text-color-placeholder: var(--color-text-secondary);
 }
 
 /* === v-loading mask transition 禁用 ===

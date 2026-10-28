@@ -532,7 +532,8 @@ async function submitPassword() {
 
   .user-avatar {
     background: $color-primary;
-    color: white;
+    /* 主色是浅薄荷时白字只有 1.83:1（T03588 实测），改吃各主题自带的 --on-primary */
+    color: var(--on-primary);
     font-weight: 600;
   }
 

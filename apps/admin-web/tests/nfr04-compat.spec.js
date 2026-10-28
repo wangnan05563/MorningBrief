@@ -207,6 +207,19 @@ async function useTheme(page, theme) {
 const fmt = (rows) =>
   rows.map((x) => `${x.sel} cr=${x.cr}<${x.need} ${x.color} on ${x.bg}「${x.text}」`).join('\n      ')
 
+/** WCAG 比值（量法见 measure 里的 lum/ratio，这里给源码层探针用） */
+function contrastOf(fg, bg) {
+  const lum = (c) => {
+    const f = (v) => {
+      v /= 255
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+    }
+    return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b)
+  }
+  const [hi, lo] = [lum(fg), lum(bg)].sort((x, y) => y - x)
+  return +((hi + 0.05) / (lo + 0.05)).toFixed(2)
+}
+
 /** 审计块的两条分支必须各自真的渲染出来，否则「没报错」只是「没量到」 */
 function expectAuditCovered(m, path) {
   if (AUDIT_ROWS_PAGES.has(path)) {
@@ -277,6 +290,71 @@ test.describe('暗色主题（showcase）· PC 全页面', () => {
     })
     const color = await page.locator('.user-info .el-avatar').first().evaluate((el) => getComputedStyle(el).color)
     expect(color).not.toBe('rgb(10, 10, 15)')
+  })
+})
+
+/**
+ * 浅色主题（macaron）的「主色当文字 / 主色实底上的文字」（T03588）
+ *
+ * 暗色用例只测 showcase，浅色主题一直没有人量过：T02549 拿真实数据副本跑同一套量法，
+ * macaron 的 10 个 PC 页全部不达标——白字压浅薄荷 1.83:1、主色链接 1.78:1。
+ * 这里不等整页低对比清单为空（表头/占位的次级文字另有切片），而是逐个钉住本次改动
+ * 直接负责的三处，探针节点挂在真实页面里，量的是级联之后的 computed color。
+ */
+test.describe('浅色主题（macaron）· 主色文字对比度', () => {
+  test.use({ viewport: { width: 1280, height: 800 } })
+
+  test.beforeEach(async ({ page }) => {
+    await setLoginState(page, 'admin')
+    await useTheme(page, 'macaron')
+    await mockShell(page)
+  })
+
+  test('壳层头像 / 选中单选 / 主色链接在浅色主题下都达 AA', async ({ page }) => {
+    await gotoReady(page, '/review')
+    const probe = await page.evaluate(() => {
+      const rgb = (s) => {
+        const m = /rgba?\(([^)]+)\)/.exec(s)
+        if (!m) return null
+        const p = m[1].split(/[,\s/]+/).filter(Boolean).map(Number)
+        return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }
+      }
+      const bgOf = (el) => {
+        let n = el
+        while (n && n.nodeType === 1) {
+          const c = rgb(getComputedStyle(n).backgroundColor)
+          if (c && c.a >= 0.9) return c
+          n = n.parentElement
+        }
+        return { r: 255, g: 255, b: 255, a: 1 }
+      }
+      // 挂进真实页面：链接与单选标签的样式来自全局 EP + themes.scss 的级联，
+      // 不能靠读源码里的字面量来「证明」界面上读得清
+      const tray = document.createElement('div')
+      tray.innerHTML =
+        '<label class="el-radio"><span class="el-radio__input is-checked"></span>' +
+        '<span class="el-radio__label">探针单选</span></label>' +
+        '<a class="el-link el-link--primary" href="#">探针链接</a>'
+      document.body.appendChild(tray)
+
+      const avatar = document.querySelector('.user-info .el-avatar')
+      const label = tray.querySelector('.el-radio__label')
+      const link = tray.querySelector('.el-link')
+      return {
+        avatar: { fg: rgb(getComputedStyle(avatar).color), bg: rgb(getComputedStyle(avatar).backgroundColor) },
+        radioLabel: { fg: rgb(getComputedStyle(label).color), bg: bgOf(label) },
+        link: { fg: rgb(getComputedStyle(link).color), bg: bgOf(link) },
+      }
+    })
+
+    for (const [name, v] of Object.entries(probe)) {
+      expect(v.fg, `${name} 的前景色没解析出来`).toBeTruthy()
+      const cr = contrastOf(v.fg, v.bg)
+      expect(
+        cr,
+        `${name} 只有 ${cr}:1（rgb(${v.fg.r},${v.fg.g},${v.fg.b}) on rgb(${v.bg.r},${v.bg.g},${v.bg.b})）`,
+      ).toBeGreaterThanOrEqual(4.5)
+    }
   })
 })
 
