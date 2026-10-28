@@ -442,6 +442,23 @@
   line-height: 1;
 }
 
+/* J13：排序与队列同款胶囊，文字给出当前顺序（图标上下翻转只表示方向） */
+.sort-chip {
+  width: auto;
+  min-width: 88rpx;
+  padding: 0 16rpx;
+  border-radius: 44rpx;
+  gap: 4rpx;
+  flex-direction: row;
+}
+
+.sort-chip-label {
+  font-size: 22rpx;
+  color: var(--accent);
+  line-height: 1;
+  white-space: nowrap;
+}
+
 /* === 骨架屏：与节目行布局对齐（封面 + 标题 + 副标题 + 播放按钮占位） === */
 @keyframes shimmer {
   0% { background-position: -200% 0; }

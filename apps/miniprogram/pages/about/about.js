@@ -6,16 +6,20 @@
  *
  * 隐藏入口：连续点击版本号 5 次（1.5s 内）触发后端地址手动配置。
  * 用于自动探测失败时的兜底（如设备与后端不在同一网段、网段候选未覆盖等）。
+ * J92：该入口只在开发版/体验版生效，正式版连点无反应。
  */
 const app = getApp();
 const { trackPageView, trackEvent } = require('../../utils/tracker');
-const { getManualBaseUrl, setManualBaseUrl, normalizeBaseUrl } = require('../../utils/server-discovery');
+// getEnvVersion：J92 的入口守卫，与自动探测用同一套版本判定（避免又写一份 __wxConfig 反推）
+const { getManualBaseUrl, setManualBaseUrl, normalizeBaseUrl, getEnvVersion } = require('../../utils/server-discovery');
 // 复制邮箱走隐私封装：未授权时先弹隐私协议再复制，避免真机 setClipboardData 静默失败（FE-200）
 const { copyText } = require('../../utils/clipboard');
 
 // 版本号连点触发手动配置的阈值与时间窗口
 const TAP_THRESHOLD = 5;
 const TAP_RESET_MS = 1500;
+// J92：服务器地址编辑是排障兜底，正式版不得暴露；取不到版本号时按正式版处理
+const EDIT_ENV_VERSIONS = ['develop', 'trial'];
 
 Page({
   data: {
@@ -60,6 +64,8 @@ Page({
    * 用于自动探测失效时的兜底（如设备与后端跨网段、候选未覆盖等）
    */
   onVersionTap() {
+    // J92：正式版不认连续点击，避免排障入口随包上线
+    if (EDIT_ENV_VERSIONS.indexOf(getEnvVersion()) < 0) return;
     this._versionTapCount += 1;
     if (this._versionTapTimer) clearTimeout(this._versionTapTimer);
     this._versionTapTimer = setTimeout(() => {

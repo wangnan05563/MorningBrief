@@ -105,3 +105,30 @@
   font-size: 26rpx;
   color: var(--text-muted);
 }
+
+/* J44：空态给出两件可做的事（改关键词/调筛选）+ 一条去频道页的出口 */
+.empty-title {
+  font-size: 28rpx;
+  color: var(--text-secondary);
+  margin-bottom: 12rpx;
+}
+
+.empty-hint {
+  max-width: 560rpx;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.empty-action {
+  margin-top: 28rpx;
+  min-height: 72rpx;
+  padding: 0 32rpx;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-btn);
+  background: var(--accent-soft);
+  font-size: 26rpx;
+  color: var(--accent);
+}

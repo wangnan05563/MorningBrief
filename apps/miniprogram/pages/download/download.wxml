@@ -62,7 +62,7 @@
   <view class="empty-state" wx:else>
     <image class="empty-icon-img" src="/images/icons/headphones.png" mode="aspectFit" />
     <text class="empty-title">还没有离线下载</text>
-    <text class="empty-desc">在课程页点击「下载整门课程」或单章「下载」，\n即可离线收听～</text>
+    <text class="empty-desc">在课程页点「下载整门课程」或单章「下载」，即可离线收听～</text>
   </view>
 
 </view>

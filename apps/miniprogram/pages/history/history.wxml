@@ -38,12 +38,14 @@
     </view>
     <view class="history-tools">
       <!-- T00384：排序/列表改为图标即按钮；排序方向靠图标上下翻转（.asc）表达 -->
+      <!-- J13：图标翻转只表达方向，不表达含义；按 T02336 修订口径在图标旁补「最新/最早」 -->
       <view
-        class="tool-chip {{sortOrder === 'asc' ? 'asc' : ''}}"
+        class="tool-chip sort-chip {{sortOrder === 'asc' ? 'asc' : ''}}"
         bindtap="onToggleSort"
         aria-label="{{sortOrder === 'desc' ? '当前最新优先，点击切换为最早优先' : '当前最早优先，点击切换为最新优先'}}"
       >
         <image class="tool-icon" lazy-load src="/images/icons/arrows-sort.png" mode="aspectFit" />
+        <text class="sort-chip-label">{{sortOrder === 'desc' ? '最新' : '最早'}}</text>
       </view>
       <view class="tool-chip queue-chip" bindtap="onOpenQueue" aria-label="打开播放队列">
         <image class="tool-icon" lazy-load src="/images/icons/list.png" mode="aspectFit" />

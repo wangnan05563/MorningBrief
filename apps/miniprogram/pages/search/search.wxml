@@ -59,9 +59,12 @@
   ></load-error>
 
   <!-- 空状态 -->
+  <!-- J44：只说「未找到」不给出路；把上方的类型筛选与频道页两条既有路径点明 -->
   <view class="empty-state" wx:elif="{{!loading && keyword && results.length === 0}}">
     <image class="empty-icon-img" lazy-load src="/images/icons/search.png" mode="aspectFit" />
-    <text>未找到相关节目</text>
+    <text class="empty-title">未找到相关节目</text>
+    <text class="empty-hint">换个关键词试试；也可以调整上方的「全部 / 资讯 / 课程」筛选范围。</text>
+    <view class="empty-action" bindtap="onGoChannels" aria-label="去频道页按频道浏览">去频道页浏览</view>
   </view>
 
   <!-- 搜索结果 -->

@@ -132,6 +132,12 @@ Page({
     }
   },
 
+  /** J44：搜不到时给一条可走的路——空态直连频道页，不让用户自己找入口 */
+  onGoChannels() {
+    trackEvent('search', 'empty_go_channels');
+    wx.navigateTo({ url: '/pages/channels/channels' });
+  },
+
   /** J39：失败态的重试——用当前关键词与筛选重新搜第 1 页 */
   onRetryLoad() {
     if (!this.data.keyword) return;

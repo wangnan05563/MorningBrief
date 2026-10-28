@@ -254,6 +254,18 @@ Page({
     this.loadDetail(id);
   },
 
+  /**
+   * J33：详情页此前标题恒为「节目详情」，从列表/队列进来后看不出正在听哪一集
+   * （课程页会动态设标题，详情页没有）。课程类按章节信息，缺章节用课程名。
+   */
+  applyNavTitle(episode) {
+    if (!episode) return;
+    const title = this.data.isCourse
+      ? (this.data.chapterLabel || this.data.courseName || episode.title || '节目详情')
+      : (episode.title || '节目详情');
+    wx.setNavigationBarTitle({ title });
+  },
+
   async loadDetail(id) {
     try {
       const episode = await fetchEpisodeDetail(id);
@@ -269,6 +281,7 @@ Page({
       });
       this.syncPlayingState();
       this.refreshDownloadState();
+      this.applyNavTitle(episode);
     } catch (err) {
       // J59（FR-UX-704）：「已下载」必须真的能离线播。下载记录里已有标题/时长/封面，
       // 音频用本机 localPath 起播；失败时不能只留一句错误文案。
@@ -293,6 +306,8 @@ Page({
         });
         this.syncPlayingState();
         this.refreshDownloadState();
+        // 兜底播放也要标题——否则离线时页面又退回「节目详情」，与正在播的内容对不上
+        this.applyNavTitle(offlineEpisode);
         wx.showToast({ title: '网络不可用，已切换本机下载', icon: 'none' });
         return;
       }

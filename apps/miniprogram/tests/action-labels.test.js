@@ -144,6 +144,8 @@ describe('J90 detail.loadDetail：断网时已下载节目走本机音频', () =
     page.syncPlayingState = () => {};
     page.refreshDownloadState = () => {};
     page.formatDuration = (d) => `${d}s`;
+    // J33（T02544）给 loadDetail 加了导航标题回写；标题本身由 mini-copy-guards.test.js 单独验证
+    page.applyNavTitle = () => {};
     return { page, toasts, wx: { showToast: (o) => toasts.push(o.title) } };
   }
 
