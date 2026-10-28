@@ -140,3 +140,66 @@ def test_import_preview_endpoint(client, admin_token):
     assert data["to_insert"] == 1
     assert data["conflicts"] == 1
     assert data["error_rows"] == 0
+
+
+# ---------------------------------------------------------------- T03603 计数口径
+
+
+async def test_import_counts_each_failed_row_once(db_session):
+    """T03603：真实导入里 skipped 已包含错误行，前端不得再叠加 errors.length。
+
+    原先 1 行哨兵被拒时 skipped=1 且 errors 长度 1，前端 ``skipped + errors.length``
+    算成「未写入 2 行」，与概览面板的「未写入 1 行」同屏矛盾。
+    """
+    svc = DbAdminService(db_session)
+    result = await svc.import_rows("admin_user", [{"id": 901, "password_hash": "***"}], "replace")
+    assert (result["inserted"], result["updated"]) == (0, 0)
+    assert result["skipped"] == 1
+    assert len(result["errors"]) == 1
+    assert result["skipped"] == len(result["errors"]), "skipped 与逐行原因必须一一对应"
+
+
+async def test_import_unknown_only_row_keeps_a_reason(db_session):
+    """整行都没有可识别列时，不能只是 skipped+1 而查不到原因。"""
+    svc = DbAdminService(db_session)
+    result = await svc.import_rows("admin_user", [{"nope": "x"}], "insert")
+    assert result["skipped"] == 1
+    assert len(result["errors"]) == 1
+    assert "没有匹配当前表的列" in result["errors"][0]["error"]
+
+
+async def test_preview_buckets_sum_to_total(db_session):
+    """T03603：新增+更新+错误 == 总数；「冲突」是子集，不参与相加。
+
+    replace 下命中已有主键的行既算 to_update 又曾算 conflicts，四个数字相加 2 > 总行数 1。
+    """
+    svc = DbAdminService(db_session)
+    replace_preview = await svc.preview_import(
+        "admin_user",
+        [
+            {"id": 901, "nickname": "a"},
+            {"id": 902, "username": "u902", "password_hash": REAL_HASH, "role": "operator"},
+        ],
+        "replace",
+    )
+    assert replace_preview["total"] == 2
+    assert (
+        replace_preview["to_insert"] + replace_preview["to_update"] + replace_preview["error_rows"]
+        == replace_preview["total"]
+    )
+    assert replace_preview["conflicts"] == 1, "冲突只标记「主键已存在」，不是独立分桶"
+
+    insert_preview = await svc.preview_import(
+        "admin_user",
+        [
+            {"id": 901, "username": "x", "password_hash": REAL_HASH, "role": "admin"},
+            {"nope": "x"},
+        ],
+        "insert",
+    )
+    assert insert_preview["total"] == 2
+    assert (
+        insert_preview["to_insert"] + insert_preview["to_update"] + insert_preview["error_rows"]
+        == insert_preview["total"]
+    )
+    assert insert_preview["conflicts"] == 1

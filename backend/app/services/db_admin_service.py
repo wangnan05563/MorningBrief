@@ -640,6 +640,10 @@ class DbAdminService:
             try:
                 filtered = {k: v for k, v in row.items() if k in valid_cols}
                 if not filtered:
+                    # T03603：这一行确实没写进去，就必须留下原因——预览对同一行报的是
+                    # 「该行没有匹配当前表的列」，导入侧不提原因会让「未写入 N 行，其中
+                    # M 行给出了原因」里的 M 永远小于 N，坏行在明细里无从追溯。
+                    errors.append({"row": i + 1, "error": "该行没有匹配当前表的列"})
                     skipped += 1
                     continue
 

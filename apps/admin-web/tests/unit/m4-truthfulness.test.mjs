@@ -176,6 +176,36 @@ test('M49：导入失败必须留明细，且「未全部成功」时不得再�
   assert.match(open, /importResult\.value = null/, '接错对象：上一次粘贴的失败明细还挂在面板上')
 })
 
+// ============================================================ T03603 导入计数去重
+
+test('T03603：toast 的「未写入」只取 skipped，不再叠加 errors.length', () => {
+  const dba = read(`${SRC}views/maintenance/DatabaseAdmin.vue`)
+  const handle = slice(dba, 'async function handleImport', ['\nasync function ', '\nfunction '], 'handleImport')
+  assert.match(handle, /const dropped = result\.skipped \|\| 0/, '未写入行数没走单一事实源')
+  assert.doesNotMatch(
+    handle,
+    /skipped\s*\|\|\s*0\)\s*\+\s*\(result\.errors/,
+    '同一行数被两遍：skipped 已包含错误行',
+  )
+  // 接错对象：改读 errors.length 会漏掉「整行无匹配列」这类只 skipped 不报错的历史分支
+  assert.match(dba, /未写入 \{\{ importResult\.skipped \|\| 0 \}\} 行/, '面板口径被改成别的字段')
+})
+
+test('T03603：预览把「冲突」标成子集，不与新增/更新/错误并列相加', () => {
+  const dba = read(`${SRC}views/maintenance/DatabaseAdmin.vue`)
+  assert.doesNotMatch(
+    dba,
+    /冲突 \{\{ importPreview\.conflicts \}\}、错误/,
+    '冲突仍是并列计数 → replace 下 1 行会读成 2 行',
+  )
+  assert.match(dba, /其中主键已存在/, '冲突子集没有在界面上说清楚')
+  assert.match(dba, /importPreview\.mode === 'insert'/, '两种模式的计数拆分没有区分')
+  // insert 分支只讲新增/跳过，混进更新计数等于把 replace 的口径串到另一模式
+  const insertBranch = slice(dba, "v-if=\"importPreview.mode === 'insert'\"", ['<div v-else>'], 'insert 分支')
+  assert.match(insertBranch, /预计跳过/, 'insert 模式没把跳过行数讲出来')
+  assert.doesNotMatch(insertBranch, /\{\{ importPreview\.to_update \}\}/, 'insert 模式混入了更新计数')
+})
+
 // ============================================================ M20 系统维护列只读
 
 test('M20：时间戳列由后端标记 auto_maintained，前端只读且不参与提交', () => {

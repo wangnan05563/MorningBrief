@@ -361,11 +361,19 @@
           <el-radio value="replace">替换（仅更新本次提供的列，其余保持原值）</el-radio>
         </el-radio-group>
       </div>
+      <!-- T03603：「冲突」是子集而非独立桶（insert 下 ⊆ 错误，replace 下 ⊆ 更新），
+           与新增/更新/错误并列相加会让 1 行读成 2 行，故只在括号里点名、不参与总数拆分 -->
       <div v-if="importPreview" class="import-preview">
-        <div>
+        <div v-if="importPreview.mode === 'insert'">
+          共 {{ importPreview.total }} 行：预计新增 {{ importPreview.to_insert }}、预计跳过
+          {{ importPreview.error_rows }} 行<template v-if="importPreview.conflicts">（其中主键已存在
+            {{ importPreview.conflicts }} 行）</template>（预览不写库）
+        </div>
+        <div v-else>
           共 {{ importPreview.total }} 行：预计新增 {{ importPreview.to_insert }}、更新
-          {{ importPreview.to_update }}、冲突 {{ importPreview.conflicts }}、错误
-          {{ importPreview.error_rows }}（预览不写库）
+          {{ importPreview.to_update }}<template v-if="importPreview.conflicts">（其中主键已存在
+            {{ importPreview.conflicts }} 行）</template>、错误
+          {{ importPreview.error_rows }} 行（预览不写库）
         </div>
         <ul v-if="importPreview.errors.length" class="import-preview-errors">
           <li v-for="err in importPreview.errors.slice(0, 10)" :key="err.row">
@@ -931,7 +939,9 @@ async function handleImport() {
     // 三种语义。有行没写进去时不再声称导入完成，明细留在面板里，粘贴内容也不清空。
     importResult.value = result
     await loadRows()
-    const dropped = (result.skipped || 0) + (result.errors?.length || 0)
+    // T03603：skipped 已经包含错误行（后端每条错误分支都同时 +1），再加 errors.length
+    // 就是把同一行数两遍——1 行失败曾报「未写入 2 行」，与下方面板的「未写入 1 行」同屏矛盾。
+    const dropped = result.skipped || 0
     if (dropped) {
       ElMessage.warning(
         `导入未全部成功：新增 ${result.inserted}，未写入 ${dropped} 行，明细见下方`,
