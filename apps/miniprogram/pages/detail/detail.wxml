@@ -161,7 +161,8 @@
       </view>
 
       <!-- 操作按钮区：倍速 + 收藏 + 列表 + 下载 + 睡眠定时器
-           T00384：移除中文按钮文案，图标即按钮；仅保留倍速值与睡眠倒计时这类动态状态
+           J112：主操作区不能只靠图标——每个 chip 图标下方补一行文字，状态写在文字里
+           （已收藏/取消下载等），aria-label 继续保留给读屏
            T00387：下载按钮位于列表图标右侧，下载中显示进度/再次点击取消 -->
       <view class="action-row">
         <view
@@ -170,6 +171,7 @@
           aria-label="{{isWaiting ? '缓冲中，暂不可切换倍速' : '切换播放倍速'}}"
         >
           <text class="chip-rate">{{currentRate}}x</text>
+          <text class="chip-label">倍速</text>
         </view>
         <view
           class="action-chip {{favorited ? 'active' : ''}}"
@@ -177,9 +179,11 @@
           aria-label="{{favorited ? '取消收藏' : '收藏'}}"
         >
           <image class="chip-icon" lazy-load src="{{favorited ? '/images/icons/favorite-filled-white.png' : '/images/icons/favorite.png'}}" mode="aspectFit" />
+          <text class="chip-label">{{favorited ? '已收藏' : '收藏'}}</text>
         </view>
         <view class="action-chip" bindtap="onOpenQueue" aria-label="打开播放队列">
           <image class="chip-icon" lazy-load src="/images/icons/list.png" mode="aspectFit" />
+          <text class="chip-label">队列</text>
         </view>
         <!-- T00753：完整文稿（位于下载之前），与其他按钮同一行；T00753 反馈：点击切换显示/收起 -->
         <view
@@ -188,6 +192,7 @@
           aria-label="{{scriptVisible ? '收起完整文稿' : '查看完整文稿'}}"
         >
           <image class="chip-icon" lazy-load src="/images/icons/btn-script-mint.png" mode="aspectFit" />
+          <text class="chip-label">{{scriptVisible ? '收起' : '文稿'}}</text>
         </view>
         <!-- 下载（T00387）：空闲→download / 已下载→download-done / 下载中→百分比（点按取消） -->
         <view
@@ -203,6 +208,7 @@
             mode="aspectFit"
           />
           <text class="chip-status" wx:else>{{downloadState === 'saving' ? '···' : downloadProgress + '%'}}</text>
+          <text class="chip-label">{{downloadState === 'downloading' ? '取消' : (isDownloaded ? '已下载' : '下载')}}</text>
         </view>
         <view
           class="action-chip {{sleepActive ? 'active' : ''}}"
@@ -210,7 +216,7 @@
           aria-label="睡眠定时器"
         >
           <image class="chip-icon" lazy-load src="{{sleepActive ? '/images/icons/alarm-white.png' : '/images/icons/moon.png'}}" mode="aspectFit" />
-          <text class="chip-status" wx:if="{{sleepActive}}">{{sleepLabel}}</text>
+          <text class="chip-label">{{sleepActive ? sleepLabel : '睡眠'}}</text>
         </view>
       </view>
     </view>

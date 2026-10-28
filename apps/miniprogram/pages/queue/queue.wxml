@@ -4,9 +4,10 @@
   <view class="queue-modal-header" wx:if="{{queue.length > 0}}">
     <text class="queue-modal-title">播放队列</text>
     <text class="queue-modal-count">{{queue.length}} 首</text>
-    <!-- T00384：清空改为图标按钮 -->
+    <!-- J112：清空是破坏性主操作，恢复「清空」文字，图标仅作辅助 -->
     <view class="queue-modal-close clear-btn" bindtap="onClear" aria-label="清空播放队列">
       <image class="clear-btn-icon" lazy-load src="/images/icons/trash.png" mode="aspectFit" />
+      <text class="clear-btn-label">清空</text>
     </view>
   </view>
 

@@ -31,7 +31,8 @@ Page({
       { icon: '/images/icons/headphones.png', title: 'AI 播报', desc: '自然语音合成播报' },
       { icon: '/images/icons/duration.png', title: '断点续播', desc: '自动记录上次进度' },
       { icon: '/images/icons/play.png', title: '倍速播放', desc: '支持多种倍速切换' },
-      { icon: '/images/icons/play-mini.png', title: '离线收听', desc: '下载后无网络也能听' },
+      // J90：只承诺已实现的路径——详情页取数失败时会自动切到本机下载音频（J59）
+      { icon: '/images/icons/play-mini.png', title: '离线收听', desc: '下载后断网也能听本机音频' },
     ],
     author: '南屿轻舟',
     contact: '107038953@qq.com',

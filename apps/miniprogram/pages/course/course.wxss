@@ -81,9 +81,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 88rpx;
+  gap: 8rpx;
+  min-width: 88rpx;
   height: 88rpx;
   margin-left: 16rpx;
+  padding: 0 20rpx;
   border-radius: var(--radius-btn);
   background: var(--accent);
 }
@@ -92,8 +94,17 @@
   /* T00753 全局统一：按钮无边框 */
 }
 .sub-btn-icon {
-  width: 40rpx;
-  height: 40rpx;
+  width: 36rpx;
+  height: 36rpx;
+}
+/* J112：订阅状态写成文字，图标只作辅助 */
+.sub-btn-label {
+  font-size: 26rpx;
+  color: var(--text-inverse);
+  white-space: nowrap;
+}
+.sub-btn.subscribed .sub-btn-label {
+  color: var(--accent);
 }
 
 /* === 学习进度卡 === */
@@ -136,7 +147,7 @@
   margin-top: 24rpx;
   gap: 20rpx;
 }
-/* T00384：图标即按钮，触控区抬到 88rpx */
+/* T00384：触控区抬到 88rpx；J112：恢复「继续学习/从头播放」文字 */
 .btn-primary,
 .btn-ghost {
   flex: 1;
@@ -155,6 +166,20 @@
 }
 .btn-ghost .btn-icon {
   margin-right: 0;
+}
+.progress-btn {
+  gap: 10rpx;
+}
+.progress-btn-label {
+  font-size: 28rpx;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.btn-primary.progress-btn .progress-btn-label {
+  color: #ffffff;
+}
+.btn-ghost.progress-btn .progress-btn-label {
+  color: var(--accent);
 }
 
 /* === 合规提示（FR-MC-11） === */
@@ -314,9 +339,21 @@
 .download-all-bar.loading {
   opacity: 0.85;
 }
+/* J112：恢复「下载整门课程」文案；图标与文字成组靠左，进度靠右 */
+.download-all-main {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
 .download-all-icon {
-  width: 44rpx;
-  height: 44rpx;
+  width: 40rpx;
+  height: 40rpx;
+}
+.download-all-label {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: var(--accent);
+  white-space: nowrap;
 }
 .download-all-sub {
   font-size: 22rpx;

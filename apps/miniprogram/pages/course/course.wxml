@@ -35,7 +35,7 @@
         <text class="course-desc">{{channel.description || '专业资料语音课，随时随地听学。'}}</text>
       </view>
       <!-- 订阅/取消订阅（FR-MC-06）：课程类频道订阅后可接收新章节推送
-           T00384：图标即按钮，checks/check 区分已订阅态 -->
+           J112：主操作恢复文字，图标只作辅助（订阅/已订阅两种状态写在文案里） -->
       <view
         class="sub-btn {{isSubscribed ? 'subscribed' : ''}}"
         bindtap="onToggleSubscribe"
@@ -43,6 +43,7 @@
         aria-label="{{isSubscribed ? '取消订阅' : '订阅课程'}}"
       >
         <image class="sub-btn-icon" lazy-load src="{{isSubscribed ? '/images/icons/checks.png' : '/images/icons/check.png'}}" mode="aspectFit" />
+        <text class="sub-btn-label">{{isSubscribed ? '已订阅' : '订阅'}}</text>
       </view>
     </view>
 
@@ -55,20 +56,25 @@
       <view class="progress-track">
         <view class="progress-fill" style="width: {{percent}}%;"></view>
       </view>
-      <!-- T00384：继续学习/从头播放改为图标按钮 -->
+      <!-- J112：继续学习/从头播放是相反的两个动作，恢复文字，不能只靠图标 -->
       <view class="progress-actions">
-        <view class="btn-primary btn-icon-only" bindtap="onContinue" aria-label="继续学习">
+        <view class="btn-primary progress-btn" bindtap="onContinue" aria-label="继续学习">
           <image class="btn-icon" lazy-load src="/images/icons/play.png" mode="aspectFit" />
+          <text class="progress-btn-label">继续学习</text>
         </view>
-        <view class="btn-ghost btn-icon-only" bindtap="onPlayFromStart" aria-label="从头播放">
+        <view class="btn-ghost progress-btn" bindtap="onPlayFromStart" aria-label="从头播放">
           <image class="btn-icon" lazy-load src="/images/icons/skip-back.png" mode="aspectFit" />
+          <text class="progress-btn-label">从头播放</text>
         </view>
       </view>
 
       <!-- 整课离线下载（FR-MC-09）：点击下载全部未下载章节
-           T00384：图标即按钮，进度/已下载数量作为状态角标保留 -->
+           J112：恢复「下载整门课程」文案；进度/已下载数量仍作状态紧跟其后 -->
       <view class="download-all-bar {{batchDownloading ? 'loading' : ''}}" bindtap="onDownloadAll" wx:if="{{totalCount > 0}}" aria-label="下载整门课程">
-        <image class="download-all-icon" lazy-load src="/images/icons/download.png" mode="aspectFit" />
+        <view class="download-all-main">
+          <image class="download-all-icon" lazy-load src="/images/icons/download.png" mode="aspectFit" />
+          <text class="download-all-label">下载整门课程</text>
+        </view>
         <text class="download-all-sub">{{batchDownloading ? (batchProgress + '%') : (downloadedCount + '/' + totalCount)}}</text>
       </view>
     </view>

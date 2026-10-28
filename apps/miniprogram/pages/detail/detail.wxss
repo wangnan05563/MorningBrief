@@ -545,16 +545,18 @@
   flex-wrap: nowrap;
 }
 
-/* T00753：扁平化——去掉外边框与阴影，仅保留 88rpx 点击区与激活色 */
+/* T00753：扁平化——去掉外边框与阴影，仅保留 88rpx 点击区与激活色
+   J112：改为「图标在上、文字在下」的竖排，六个 chip 平分一行，主操作区重新可见文字 */
 .action-chip {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6rpx;
+  gap: 2rpx;
   flex: 1 1 0;
   min-width: 0;
-  min-height: 88rpx;
-  padding: 12rpx 6rpx;
+  min-height: 96rpx;
+  padding: 10rpx 2rpx;
   border-radius: var(--radius-btn);
   background: transparent;
   color: var(--accent);
@@ -564,6 +566,14 @@
   box-shadow: none;
   transition: background-color 0.2s ease;
   overflow: hidden;
+}
+
+/* J112：chip 文字标签（状态也写在这里：已收藏/已下载/取消/收起） */
+.chip-label {
+  font-size: 20rpx;
+  line-height: 1.1;
+  color: inherit;
+  white-space: nowrap;
 }
 
 .action-chip:active {

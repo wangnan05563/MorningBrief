@@ -101,14 +101,16 @@
   z-index: 100;
 }
 
-/* T00384：全选/暂不设置改为图标按钮，触控区 88rpx */
+/* T00384 → J64：保留图标，但恢复文字；触控区仍 ≥ 88rpx，宽度随文案自适应 */
 .select-all-btn {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 88rpx;
+  gap: 8rpx;
+  min-width: 88rpx;
   height: 88rpx;
+  padding: 0 20rpx;
   border-radius: var(--radius-btn);
   background: var(--accent-soft);
   /* T00753 全局统一：按钮无边框 */
@@ -119,45 +121,44 @@
 }
 
 .bar-icon {
-  width: 40rpx;
-  height: 40rpx;
+  width: 36rpx;
+  height: 36rpx;
 }
 
-/* 保存按钮：图标 + 已选数量角标（数量是状态而非按钮文案） */
+.bar-label {
+  font-size: 26rpx;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* 保存按钮：图标 + 「保存」文案（J64），已选数量是状态，跟在文案后 */
 .save-btn {
   position: relative;
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 10rpx;
   margin-left: 16rpx;
   min-height: 88rpx;
-  padding: 0;
+  padding: 0 24rpx;
   background: var(--accent);
   color: var(--text-inverse);
   border-radius: var(--radius-btn);
 }
 
 .save-btn-icon {
-  width: 44rpx;
-  height: 44rpx;
+  width: 40rpx;
+  height: 40rpx;
 }
 
-.save-count {
-  position: absolute;
-  top: 8rpx;
-  right: 16rpx;
-  min-width: 32rpx;
-  height: 32rpx;
-  padding: 0 8rpx;
-  border-radius: var(--radius-pill);
-  background: var(--bg-card);
-  color: var(--accent);
-  font-size: 20rpx;
+.save-btn-label {
+  font-size: 30rpx;
   font-weight: 600;
-  line-height: 32rpx;
-  text-align: center;
+  color: inherit;
+  white-space: nowrap;
 }
+
 .save-btn.disabled {
   background: var(--border);
   color: var(--text-muted);

@@ -22,6 +22,8 @@ Page({
     isOnboarding: false,
     // J106：取数失败与「暂无可用频道」是两件事（失败态由 load-error 渲染并自带重试）
     loadError: '',
+    // J64：底部栏要有「全选/全不选」文字，判定必须覆盖全部频道而不是只看第一项
+    allSelected: false,
   },
 
   onLoad(query) {
@@ -47,6 +49,7 @@ Page({
         channels,
         loading: false,
         selectedCount: preferredIds.length,
+        allSelected: this.computeAllSelected(channels),
         loadError: '',
       });
     } catch (err) {
@@ -72,7 +75,13 @@ Page({
     this.setData({
       [`channels[${idx}].selected`]: newSelected,
       selectedCount: newSelected ? this.data.selectedCount + 1 : this.data.selectedCount - 1,
+      allSelected: this.data.channels.every((ch, i) => (i === idx ? newSelected : ch.selected)),
     });
+  },
+
+  /** J64：「全选/全不选」文案要反映真实全选态（空列表不算已全选） */
+  computeAllSelected(channels) {
+    return channels.length > 0 && channels.every((ch) => ch.selected);
   },
 
   /**
@@ -84,10 +93,24 @@ Page({
       .filter((ch) => ch.selected)
       .map((ch) => ch.id);
     // A5：未登录时 setPreferredChannels 返回 false（openid 缺失，存储无目标 key）。
-    // 此时不能静默当成功——拦截并提示登录，避免用户误以为已保存偏爱。
+    // J63：只 toast 一句会把从首启引导进来的新用户卡死——这里说清为什么必须登录，
+    // 并给出直达「我的」登录的按钮，而不是让用户自己找底部 tab。
     const saved = localData.setPreferredChannels(selectedIds);
     if (!saved) {
-      wx.showToast({ title: '请先登录后再设置偏爱', icon: 'none' });
+      trackEvent('preferred', 'save_blocked_login');
+      wx.showModal({
+        title: '需要先登录',
+        content: '偏爱频道保存在你的账号里，换设备后也能恢复。未登录时无法保存，请先到「我的」完成登录再回来设置。',
+        confirmText: '去登录',
+        cancelText: '留在此页',
+        confirmColor: '#3F6C8F',
+        success: (res) => {
+          if (res.confirm) {
+            trackEvent('preferred', 'save_goto_login');
+            wx.switchTab({ url: '/pages/profile/profile' });
+          }
+        },
+      });
       return;
     }
     // 标记已完成首次引导（即使用户选0个也视为已完成）
@@ -104,12 +127,13 @@ Page({
    * 全选/全不选
    */
   onSelectAll() {
-    const allSelected = this.data.channels.every((ch) => ch.selected);
-    const newSelected = !allSelected;
+    // J64：以 data.allSelected 为单一判定源，避免 wxml 里另算一套（此前只看第一项的写法是错的）
+    const newSelected = !this.data.allSelected;
     const channels = this.data.channels.map((ch) => ({ ...ch, selected: newSelected }));
     this.setData({
       channels,
       selectedCount: newSelected ? channels.length : 0,
+      allSelected: this.computeAllSelected(channels),
     });
   },
 

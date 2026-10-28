@@ -49,20 +49,22 @@
       </view>
     </view>
 
-    <!-- 底部操作栏：T00384 图标即按钮，去掉中文文案
-         全选/全不选用 checks/x 图标区分，选中数量以角标保留 -->
+    <!-- 底部操作栏：J64 ——「保存」与「暂不设置」是相反动作，必须带文字，不能只靠图标区分；
+         全选/全不选同理，文案与 data.allSelected 单一判定源保持一致，数量仍作状态角标保留 -->
     <view class="bottom-bar">
       <!-- 首次引导模式显示"暂不设置"，普通入口显示全选/全不选 -->
       <view
         class="select-all-btn"
         wx:if="{{!isOnboarding}}"
         bindtap="onSelectAll"
-        aria-label="{{channels.length > 0 && channels[0].selected ? '全不选' : '全选'}}"
+        aria-label="{{allSelected ? '全不选' : '全选'}}"
       >
-        <image class="bar-icon" lazy-load src="{{channels.length > 0 && channels[0].selected ? '/images/icons/x.png' : '/images/icons/checks.png'}}" mode="aspectFit" />
+        <image class="bar-icon" lazy-load src="{{allSelected ? '/images/icons/x.png' : '/images/icons/checks.png'}}" mode="aspectFit" />
+        <text class="bar-label">{{allSelected ? '全不选' : '全选'}}</text>
       </view>
       <view class="select-all-btn" wx:else bindtap="onSkip" aria-label="暂不设置">
         <image class="bar-icon" lazy-load src="/images/icons/x.png" mode="aspectFit" />
+        <text class="bar-label">暂不设置</text>
       </view>
       <view
         class="save-btn {{selectedCount > 0 ? '' : 'disabled'}}"
@@ -70,7 +72,7 @@
         aria-label="保存偏爱频道"
       >
         <image class="save-btn-icon" lazy-load src="/images/icons/btn-check.png" mode="aspectFit" />
-        <text class="save-count" wx:if="{{selectedCount > 0}}">{{selectedCount}}</text>
+        <text class="save-btn-label">{{selectedCount > 0 ? '保存（' + selectedCount + '）' : '保存'}}</text>
       </view>
     </view>
   </block>
