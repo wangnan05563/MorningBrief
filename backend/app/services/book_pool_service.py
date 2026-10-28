@@ -51,6 +51,9 @@ async def get_state(db: AsyncSession, channel_id: int) -> dict:
         "exists": True,
         "enabled": (ch.script_mode or "") == MODE_BOOK_POOL,
         "mode": ch.script_mode or MODE_CHANNEL,
+        # C67：讲书稿模式对任意频道类型都生效，但改写模板只有 audiobook 会注入书籍
+        # 解读约束；前端要按类型提示「这本书将被当资讯讲」，所以类型必须随状态返回。
+        "channel_type": ch.channel_type,
         "pool_total": int(total),
         "cursor": int(ch.book_pool_cursor or 0),
         "interval_days": int(ch.book_pool_interval_days or 1),

@@ -73,7 +73,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1214,
+          "line": 1270,
           "fn": "deleteChannel",
           "fieldCount": 0,
           "unresolved": []
@@ -88,7 +88,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 403,
+          "line": 425,
           "fn": "removeBookFromPool",
           "fieldCount": 0,
           "unresolved": []
@@ -610,7 +610,7 @@
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 739,
+          "line": 756,
           "fn": "listChannels",
           "fieldCount": 2,
           "unresolved": []
@@ -631,7 +631,7 @@
         },
         {
           "file": "views/ebooks/BookFinder.vue",
-          "line": 398,
+          "line": 429,
           "fn": "listChannels",
           "fieldCount": 2,
           "unresolved": []
@@ -674,7 +674,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 311,
+          "line": 316,
           "fn": "listBookPool",
           "fieldCount": 0,
           "unresolved": []
@@ -694,7 +694,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 423,
+          "line": 445,
           "fn": "listBookCandidates",
           "fieldCount": 4,
           "unresolved": []
@@ -711,7 +711,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1193,
+          "line": 1249,
           "fn": "deleteChannelPreview",
           "fieldCount": 1,
           "unresolved": []
@@ -726,14 +726,14 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 297,
+          "line": 302,
           "fn": "getScriptMode",
           "fieldCount": 0,
           "unresolved": []
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 944,
+          "line": 958,
           "fn": "getScriptMode",
           "fieldCount": 0,
           "unresolved": []
@@ -748,7 +748,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 764,
+          "line": 781,
           "fn": "listBgmFiles",
           "fieldCount": 0,
           "unresolved": []
@@ -763,7 +763,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 782,
+          "line": 799,
           "fn": "listBookRssSources",
           "fieldCount": 0,
           "unresolved": []
@@ -778,7 +778,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 869,
+          "line": 883,
           "fn": "listCoverPresets",
           "fieldCount": 0,
           "unresolved": []
@@ -793,7 +793,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 773,
+          "line": 790,
           "fn": "listRssSources",
           "fieldCount": 0,
           "unresolved": []
@@ -1042,7 +1042,7 @@
       "sites": [
         {
           "file": "views/ebooks/BookFinder.vue",
-          "line": 236,
+          "line": 258,
           "fn": "getEbookCategories",
           "fieldCount": 2,
           "unresolved": []
@@ -1057,7 +1057,7 @@
       "sites": [
         {
           "file": "views/ebooks/BookFinder.vue",
-          "line": 364,
+          "line": 395,
           "fn": "getEbookIndexStatus",
           "fieldCount": 0,
           "unresolved": []
@@ -1075,7 +1075,7 @@
       "sites": [
         {
           "file": "views/ebooks/BookFinder.vue",
-          "line": 306,
+          "line": 337,
           "fn": "getRandomEbooks",
           "fieldCount": 2,
           "unresolved": []
@@ -1096,7 +1096,7 @@
       "sites": [
         {
           "file": "views/ebooks/BookFinder.vue",
-          "line": 333,
+          "line": 364,
           "fn": "searchEbooks",
           "fieldCount": 3,
           "unresolved": [
@@ -2213,7 +2213,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1117,
+          "line": 1173,
           "fn": "createChannel",
           "fieldCount": 23,
           "unresolved": [
@@ -2232,7 +2232,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 474,
+          "line": 496,
           "fn": "addBooksToPool",
           "fieldCount": 1,
           "unresolved": []
@@ -2249,7 +2249,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 387,
+          "line": 409,
           "fn": "moveBookInPool",
           "fieldCount": 0,
           "unresolved": [
@@ -2266,7 +2266,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 364,
+          "line": 386,
           "fn": "previewNextBook",
           "fieldCount": 0,
           "unresolved": []
@@ -2281,7 +2281,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 380,
+          "line": 402,
           "fn": "resetBookPoolProgress",
           "fieldCount": 0,
           "unresolved": []
@@ -2296,7 +2296,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1228,
+          "line": 1284,
           "fn": "generateChannelPrompts",
           "fieldCount": 0,
           "unresolved": []
@@ -2313,7 +2313,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 912,
+          "line": 926,
           "fn": "uploadChannelIcon",
           "fieldCount": 0,
           "unresolved": [
@@ -2332,7 +2332,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 926,
+          "line": 940,
           "fn": "generateChannelIcon",
           "fieldCount": 1,
           "unresolved": []
@@ -2347,7 +2347,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1305,
+          "line": 1361,
           "fn": "recommendChannelBgm",
           "fieldCount": 0,
           "unresolved": []
@@ -2362,7 +2362,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1333,
+          "line": 1389,
           "fn": "recommendChannelSources",
           "fieldCount": 0,
           "unresolved": []
@@ -2379,7 +2379,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1286,
+          "line": 1342,
           "fn": "uploadBgmFile",
           "fieldCount": 0,
           "unresolved": [
@@ -2616,7 +2616,7 @@
       "sites": [
         {
           "file": "views/ebooks/BookFinder.vue",
-          "line": 263,
+          "line": 285,
           "fn": "createDraftMaterial",
           "fieldCount": 5,
           "unresolved": []
@@ -2631,7 +2631,7 @@
       "sites": [
         {
           "file": "views/ebooks/BookFinder.vue",
-          "line": 384,
+          "line": 415,
           "fn": "rebuildEbookIndex",
           "fieldCount": 0,
           "unresolved": []
@@ -3414,7 +3414,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1084,
+          "line": 1140,
           "fn": "updateChannel",
           "fieldCount": 26,
           "unresolved": [
@@ -3423,21 +3423,21 @@
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1178,
+          "line": 1234,
           "fn": "updateChannel",
           "fieldCount": 1,
           "unresolved": []
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1311,
+          "line": 1367,
           "fn": "updateChannel",
           "fieldCount": 2,
           "unresolved": []
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1350,
+          "line": 1406,
           "fn": "updateChannel",
           "fieldCount": 2,
           "unresolved": []
@@ -3463,7 +3463,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 339,
+          "line": 361,
           "fn": "setScriptMode",
           "fieldCount": 1,
           "unresolved": [
@@ -3472,7 +3472,7 @@
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 961,
+          "line": 993,
           "fn": "setScriptMode",
           "fieldCount": 1,
           "unresolved": [
@@ -3492,7 +3492,7 @@
       "sites": [
         {
           "file": "views/channel/BookPoolPanel.vue",
-          "line": 351,
+          "line": 373,
           "fn": "updateBookPoolSchedule",
           "fieldCount": 2,
           "unresolved": []

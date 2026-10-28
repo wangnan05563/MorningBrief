@@ -982,7 +982,7 @@
         "callSites": [
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1117,
+            "line": 1173,
             "fn": "createChannel",
             "fieldCount": 23,
             "unresolved": [
@@ -1104,7 +1104,7 @@
         "callSites": [
           {
             "file": "views/channel/BookPoolPanel.vue",
-            "line": 474,
+            "line": 496,
             "fn": "addBooksToPool",
             "fieldCount": 1,
             "unresolved": []
@@ -1144,7 +1144,7 @@
         "callSites": [
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 926,
+            "line": 940,
             "fn": "generateChannelIcon",
             "fieldCount": 1,
             "unresolved": []
@@ -1579,7 +1579,7 @@
         "callSites": [
           {
             "file": "views/ebooks/BookFinder.vue",
-            "line": 263,
+            "line": 285,
             "fn": "createDraftMaterial",
             "fieldCount": 5,
             "unresolved": []
@@ -3451,7 +3451,7 @@
         "callSites": [
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1084,
+            "line": 1140,
             "fn": "updateChannel",
             "fieldCount": 26,
             "unresolved": [
@@ -3460,21 +3460,21 @@
           },
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1178,
+            "line": 1234,
             "fn": "updateChannel",
             "fieldCount": 1,
             "unresolved": []
           },
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1311,
+            "line": 1367,
             "fn": "updateChannel",
             "fieldCount": 2,
             "unresolved": []
           },
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1350,
+            "line": 1406,
             "fn": "updateChannel",
             "fieldCount": 2,
             "unresolved": []
@@ -3627,7 +3627,7 @@
         "callSites": [
           {
             "file": "views/channel/BookPoolPanel.vue",
-            "line": 339,
+            "line": 361,
             "fn": "setScriptMode",
             "fieldCount": 1,
             "unresolved": [
@@ -3636,7 +3636,7 @@
           },
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 961,
+            "line": 993,
             "fn": "setScriptMode",
             "fieldCount": 1,
             "unresolved": [
@@ -3681,7 +3681,7 @@
         "callSites": [
           {
             "file": "views/channel/BookPoolPanel.vue",
-            "line": 351,
+            "line": 373,
             "fn": "updateBookPoolSchedule",
             "fieldCount": 2,
             "unresolved": []

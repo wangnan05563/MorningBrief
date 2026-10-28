@@ -94,6 +94,20 @@
     <!-- 新增/编辑弹窗：复用同一 Dialog，通过 editing 标志区分 -->
     <el-dialog v-model="dialogVisible" :title="editing ? '编辑频道' : '新增频道'" width="720px" :close-on-click-modal="false">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+        <!-- C24：恢复草稿必须看得见——否则表单显示的值和库里不一致，用户没有任何线索
+             知道这些改动来自上次未保存的编辑，也不知道保存前不会生效。 -->
+        <el-alert
+          v-if="draftRestored"
+          class="draft-restored"
+          type="warning"
+          show-icon
+          :closable="false"
+        >
+          <template #title>
+            已恢复上次未保存的修改，保存后才会写入服务器。
+            <el-button link type="primary" size="small" @click="discardDraft">放弃草稿，载入服务器值</el-button>
+          </template>
+        </el-alert>
         <!-- T00732 布局重构：高频核心字段前置「基础信息」，低频高级字段按语义拆入
              「采集与选题 / 提示词与合规 / 音频与 BGM」三个页签，消除单页长滚动；
              所有字段、校验与提交逻辑保持不变，仅重排分组 -->
@@ -614,6 +628,9 @@ const listError = ref('')
 const retryingList = ref(false)
 const dialogVisible = ref(false)
 const editing = ref(false)
+// C24：当前编辑的那一行（「放弃草稿」据此重新载入服务器值），以及草稿是否真的被套用
+const editingRow = ref(null)
+const draftRestored = ref(false)
 const submitting = ref(false)
 const generating = ref(false)
 const formRef = ref()
@@ -836,17 +853,14 @@ function resetForm() {
 
 function openCreate() {
   editing.value = false
+  editingRow.value = null
+  draftRestored.value = false
   resetForm()
   loadBgmList()
   loadRssSources()
   loadBookRssSources()
   // C18（FR-UX-704）：每次开弹窗重新计「已即时生效」清单，避免把上一频道的推荐项带过来
   immediateSaved.value = []
-  // T00828：断点续录——同频道的未保存草稿恢复（不同频道/新增不套用）
-  try {
-    const draft = JSON.parse(localStorage.getItem('mb_channel_draft') || 'null')
-    if (draft && draft.id === form.id) Object.assign(form, draft)
-  } catch { /* 草稿损坏则忽略 */ }
   dialogVisible.value = true
 }
 
@@ -956,6 +970,24 @@ async function onToggleBookPool(val) {
     ElMessage.warning('请先保存频道，再配置讲书稿模式')
     return
   }
+  // C67：讲书稿模式对任何频道类型都生效，但改写模板只有 audiobook 会注入书籍解读专项
+  // 约束；非有声读物开启后，书稿按该频道的默认提示词改写。用**已保存**的频道类型判断
+  // （改写读的是库里的值，本弹窗里改完类型还没保存时不算数）。
+  const persistedType = editingRow.value?.channel_type || form.channel_type
+  if (val && persistedType !== 'audiobook') {
+    const label = CHANNEL_TYPE[persistedType]?.label || persistedType
+    const goOn = await ElMessageBox.confirm(
+      `当前频道类型是「${label}」，不是有声读物。开启后仍会按书单顺序逐日取书，`
+        + `但改写沿用该频道类型的默认提示词（资讯频道即资讯风格），不会注入书籍解读专项约束。\n\n`
+        + '如果这个频道是给听书准备的，建议先保存并把类型改为「有声读物」，再开启。',
+      '该频道不是有声读物',
+      { type: 'warning', confirmButtonText: '仍然开启', cancelButtonText: '暂不开启' },
+    ).then(() => true).catch(() => false)
+    if (!goOn) {
+      bookPoolOn.value = false
+      return
+    }
+  }
   bookPoolLoading.value = true
   try {
     const res = await setScriptMode(form.id, val)
@@ -970,6 +1002,8 @@ async function onToggleBookPool(val) {
 
 function openEdit(row) {
   editing.value = true
+  editingRow.value = row
+  draftRestored.value = false
   form.id = row.id
   form.name = row.name
   form.description = row.description || ''
@@ -1043,7 +1077,29 @@ function openEdit(row) {
   loadBookRssSources()
   // C18（FR-UX-704）：每次开弹窗重新计「已即时生效」清单，避免把上一频道的推荐项带过来
   immediateSaved.value = []
+  // C24：T00828 的草稿恢复原本写在 openCreate 里，而那里 form.id 恒为 null，
+  // 编辑态关窗存下的草稿（id=真实频道）永远匹配不上——写了等于没写。
+  // 这里按行 id 恢复，并且只套用与服务器值确实不同的字段：一个「无改动草稿」
+  // 不该让表单看起来被改过。
+  try {
+    const draft = JSON.parse(localStorage.getItem('mb_channel_draft') || 'null')
+    if (draft && draft.id === row.id) {
+      const changed = Object.keys(draft).filter(
+        (k) => k in form && JSON.stringify(draft[k]) !== JSON.stringify(form[k]),
+      )
+      if (changed.length) {
+        Object.assign(form, draft)
+        draftRestored.value = true
+      }
+    }
+  } catch { /* 草稿损坏则忽略 */ }
   dialogVisible.value = true
+}
+
+function discardDraft() {
+  localStorage.removeItem('mb_channel_draft')
+  const row = editingRow.value
+  if (row) openEdit(row)
 }
 
 async function handleSubmit() {
@@ -1369,6 +1425,11 @@ onMounted(() => {
 
 <style scoped lang="scss">
 @use '../../styles/variables.scss' as *;
+
+// C24：恢复草稿的提示条压在页签上方，和表单一起滚动
+.draft-restored {
+  margin-bottom: 12px;
+}
 
 // T00732 编辑弹窗页签布局：内容区限高内部滚动，弹窗不再随表单无限拉长
 .edit-tabs {

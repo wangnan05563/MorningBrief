@@ -119,6 +119,26 @@
           未选频道时「加入书单」不会提交；书稿仍需到「素材录入」上传后才会进入该频道的讲书稿书单。
         </span>
       </div>
+      <!-- C106：加入书单后端已返回 material_id，此前只弹一句「已加入」，
+           用户没有任何可点的地方去补齐书稿。这里落一条带链接的去向。 -->
+      <el-alert
+        v-if="lastAdded"
+        class="last-added"
+        :type="lastAdded.created ? 'success' : 'info'"
+        show-icon
+        @close="lastAdded = null"
+      >
+        <template #title>
+          《{{ lastAdded.title }}》{{ lastAdded.created ? '已加入待讲书单' : '已在素材库中' }}<template v-if="lastAdded.materialId">（素材 #{{ lastAdded.materialId }}）</template>
+          <router-link
+            v-if="lastAdded.materialId"
+            class="last-added-link"
+            :to="{ path: '/channels/material-library', query: { materialId: lastAdded.materialId } }"
+          >
+            去素材库补齐书稿 →
+          </router-link>
+        </template>
+      </el-alert>
       <!-- T02626：检索/随机失败上屏错误态 + 重试；已有旧结果时标注为上次成功的数据 -->
       <ListLoadError
         v-if="searchError"
@@ -222,6 +242,8 @@ const indexReadyForQuery = ref(false)
 const indexStaleForQuery = ref(false)
 // T00626：正在加入待讲书单的 url（按钮 loading 用）
 const draftingUrl = ref('')
+// C106：最近一次加入书单的结果（含后端返回的 material_id），渲染成可点击的去向
+const lastAdded = ref(null)
 const indexAgeDays = ref(null)
 let pollTimer = null
 
@@ -272,6 +294,12 @@ async function onAddToBookList(row) {
     } else {
       ElMessage.success(data?.message || '已加入待讲书单')
     }
+    // C106：接口一直有 material_id，只弹 toast 等于把「去哪儿补齐书稿」这条线索丢了。
+    lastAdded.value = {
+      materialId: data?.material_id ?? null,
+      title: row.title,
+      created: data?.created !== false,
+    }
   } catch (e) {
     // 错误提示由拦截器统一处理
   } finally {
@@ -285,6 +313,9 @@ async function onAddToBookList(row) {
  */
 function applyResult(data) {
   hits.value = data?.hits || []
+  // C106：结果表换了，「上一本加入去向」指向的素材行可能已不在当前列表里，
+  // 留着会让人以为它属于这次检索结果。
+  lastAdded.value = null
   scannedCount.value = (data?.scanned_categories || []).length
   failedCategories.value = data?.failed_categories || []
   indexReadyForQuery.value = !!data?.index_ready
@@ -436,5 +467,17 @@ onUnmounted(() => {
 .book-finder .meta-hint {
   color: var(--el-text-color-secondary, #909399);
   font-size: 12px;
+}
+/* C106：加入书单后的去向条，紧跟频道选择行，不挤占结果表 */
+.book-finder .last-added {
+  margin-bottom: 12px;
+}
+.book-finder .last-added-link {
+  margin-left: 8px;
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+.book-finder .last-added-link:hover {
+  text-decoration: underline;
 }
 </style>

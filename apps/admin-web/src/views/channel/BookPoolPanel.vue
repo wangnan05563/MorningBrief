@@ -198,9 +198,11 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { View, RefreshLeft, Plus, ArrowUp, ArrowDown, Delete, Search, Close, Check } from '@element-plus/icons-vue'
-import { ElMessage } from '../../utils/message'
+import { ElMessage, ElMessageBox } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import ListLoadError from '../../components/ListLoadError.vue'
+// C67：频道类型字典（判断是否需要在开启讲书稿模式前二次确认）
+import { CHANNEL_TYPE } from '../../constants/enums'
 // C84：候选分页页长档位与素材库面板共用同一常量
 import { PANEL_PAGE_SIZE_OPTIONS } from '../../constants/pagination'
 import {
@@ -230,6 +232,8 @@ const items = ref([])
 const state = reactive({
   enabled: false, cursor: 0, pool_total: 0, interval_days: 1, loop: false,
   last_run_date: null, last_title: null, rss_sources: [], book_rss_sources: [],
+  // C67：后端随状态返回频道类型，用于「非有声读物开启讲书稿模式」的二次确认
+  channel_type: null,
 })
 const schedule = reactive({ interval_days: 1, loop: false })
 const scriptMode = ref(false)
@@ -284,6 +288,7 @@ function resetPoolView() {
   Object.assign(state, {
     enabled: false, cursor: 0, pool_total: 0, interval_days: 1, loop: false,
     last_run_date: null, last_title: null, rss_sources: [], book_rss_sources: [],
+    channel_type: null,
   })
   items.value = []
   scriptMode.value = false
@@ -334,6 +339,23 @@ function retryLoadAll() {
 }
 
 async function onToggleMode(val) {
+  // C67：讲书稿模式对任何频道类型都生效，但改写模板只有 audiobook 会注入书籍解读
+  // 专项约束；资讯/课程频道开启后，书稿会按该类频道的默认提示词改写。开启前说清楚，
+  // 取消必须把开关拨回去——v-model 已经先行切换，不回滚等于界面声称已开启。
+  if (val && state.channel_type && state.channel_type !== 'audiobook') {
+    const label = CHANNEL_TYPE[state.channel_type]?.label || state.channel_type
+    const goOn = await ElMessageBox.confirm(
+      `当前频道类型是「${label}」，不是有声读物。开启后仍会按书单顺序逐日取书，`
+        + `但改写沿用该频道类型的默认提示词（资讯频道即资讯风格），不会注入书籍解读专项约束。\n\n`
+        + '如果这个频道是给听书准备的，建议先到「频道管理」把类型改为「有声读物」。',
+      '该频道不是有声读物',
+      { type: 'warning', confirmButtonText: '仍然开启', cancelButtonText: '暂不开启' },
+    ).then(() => true).catch(() => false)
+    if (!goOn) {
+      scriptMode.value = false
+      return
+    }
+  }
   modeLoading.value = true
   try {
     const res = await setScriptMode(props.channelId, val)

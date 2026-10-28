@@ -560,7 +560,7 @@ export const METRIC_UNIT_ALLOW = [
   },
   {
     file: 'views/channel/ChannelManagement.vue',
-    lines: [483, 505],
+    lines: [497, 519],
     reason: '频道级停顿时长/最短时长的输入单位，字段以秒存储且没有 meta',
   },
   {
