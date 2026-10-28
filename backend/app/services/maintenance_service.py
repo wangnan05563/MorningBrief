@@ -60,6 +60,8 @@ settings = get_settings()
 
 # 大日志文件阈值（10MB），超过此大小可清理
 LARGE_LOG_THRESHOLD_BYTES = 10 * 1024 * 1024
+# 活动日志分片的命名（与 logging_setup 的文件 sink 模板一致）
+ACTIVE_LOG_GLOB = "MorningBrief_*.log"
 
 # 无主素材预览里列出的样例 ID 上限
 ORPHAN_MATERIAL_SAMPLE_LIMIT = 20
@@ -1007,10 +1009,18 @@ class MaintenanceService:
         errors: list[str] = []
         total_freed_mb = 0.0
         cutoff_mtime = (datetime.now() - timedelta(days=days)).timestamp()
+        # M66：活动分片（loguru 正在写的最新 MorningBrief_*.log）永远不删。
+        # 删它不只是「删了正在用的文件」：Windows 上 unlink 直接 PermissionError，
+        # POSIX 上句柄继续写但目录里已无此文件，日志静默丢失。
+        # 预览与执行走同一函数，所以预览也不会再把它列进「将删除」。
+        active_log = self._active_log_file(log_dir)
+        active_name = active_log.name if active_log is not None else ""
 
         try:
             for entry in log_dir.iterdir():
                 if not self._is_log_file(entry):
+                    continue
+                if entry.name == active_name:
                     continue
                 should_delete, reason = self._check_log_deletion(
                     entry, target, cutoff_mtime, days
@@ -1034,6 +1044,32 @@ class MaintenanceService:
         if not entry.is_file():
             return False
         return entry.name.endswith(".log") or ".log." in entry.name
+
+    @staticmethod
+    def _active_log_file(log_dir: Path):
+        """当前正在写入的日志分片：目录里 mtime 最新的 MorningBrief_*.log。
+
+        与 `logging_setup._enforce_dir_quota` 的「保留最新那个」是同一判定口径。
+        返回 None 表示目录不可读或没有本系统的日志分片。
+        """
+        try:
+            shards = [
+                p for p in log_dir.glob(ACTIVE_LOG_GLOB)
+                if p.is_file() and not p.is_symlink()
+            ]
+        except OSError:
+            return None
+        if not shards:
+            return None
+
+        def _key(p):
+            try:
+                st = p.stat()
+            except OSError:
+                return (0.0, p.name)
+            return (st.st_mtime, p.name)
+
+        return max(shards, key=_key)
 
     def _check_log_deletion(
         self, entry, target: str, cutoff_mtime: float, days: int

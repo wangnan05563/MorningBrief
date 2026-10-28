@@ -63,11 +63,29 @@
         <input
           ref="fileInput"
           type="file"
+          multiple
           style="display: none"
           @change="handleFileSelected"
         />
       </template>
     </div>
+
+    <!-- H11：批量上传的汇总（成功 N / 失败 M + 失败清单）。
+         逐条 toast 会互相覆盖，失败项等于没有交代；清单必须留在页面上直到用户关掉。 -->
+    <el-alert
+      v-if="uploadReport"
+      data-guide="cos-upload-report"
+      :type="uploadReport.failed.length ? 'warning' : 'success'"
+      show-icon
+      :closable="true"
+      style="margin-bottom: 12px"
+      :title="`本次上传：成功 ${uploadReport.ok} 个，失败 ${uploadReport.failed.length} 个${uploadReport.canceled ? `，取消 ${uploadReport.canceled} 个` : ''}`"
+      @close="uploadReport = null"
+    >
+      <ul v-if="uploadReport.failed.length" class="upload-report__list">
+        <li v-for="f in uploadReport.failed" :key="f.name">{{ f.name }}：{{ f.reason }}</li>
+      </ul>
+    </el-alert>
 
     <el-alert
       v-if="configured && inSnapshotDir"
@@ -246,6 +264,8 @@ const currentPrefix = ref('')
 const folders = ref([])
 const files = ref([])
 const fileInput = ref(null)
+// H11：批量上传结果（成功数/失败清单），留在页面上直到用户关闭
+const uploadReport = ref(null)
 // 快照保留份数（0 = 覆盖/恢复不留快照）：确认框必须如实说「不可找回」
 const backupKeep = ref(5)
 // 当前是否就在 .backup 快照目录里（页面提示这些是旧版本）
@@ -363,58 +383,99 @@ function navigateTo() {
 function triggerUpload() {
   fileInput.value?.click()
 }
+
+/**
+ * 上传单个文件：同名检测 →（命中时）覆盖确认 → 上传。
+ * notify=true 保持单文件时代的提示口径（cos-upload-rollback e2e 依赖这些文案）；
+ * 批量时交给调用方汇总，避免 N 条 toast 互相覆盖。
+ */
+async function uploadOne(file, { notify = false } = {}) {
+  const targetKey = currentPrefix.value + file.name
+  // 同名检测以服务端 HEAD 为准（列表是进入目录时的快照，可能已过期）。
+  // 检测失败就中止：不知道会不会覆盖时不允许盲传（FR-UX-205 / H9）
+  let exists = false
+  let hit = null
+  try {
+    hit = await checkCosObject(targetKey)
+    exists = !!hit?.exists
+  } catch {
+    if (notify) ElMessage.error('同名检测失败，已取消上传：无法确认是否会覆盖已有文件')
+    return { name: file.name, status: 'failed', reason: '同名检测失败，无法确认是否会覆盖已有文件' }
+  }
+  if (exists) {
+    const denyBackup = backupKeep.value <= 0
+    const ok = await dangerConfirm({
+      action: '上传并覆盖同名文件',
+      target: `${currentPrefix.value || '/'}${file.name}`,
+      scope: `云端已存在同名对象（${formatSize(hit.size)}${hit.last_modified ? `，更新于 ${hit.last_modified}` : ''}）`,
+      lines: [
+        denyBackup
+          ? '当前设置不保留覆盖前快照：旧文件会被直接覆盖，覆盖后无法找回'
+          : `覆盖前旧文件自动备份到 ${currentPrefix.value}.backup/<时间戳>/${file.name}，保留最近 ${backupKeep.value} 份`,
+      ],
+      irreversible: denyBackup
+        ? '「快照保留份数」为 0，本次覆盖不可回退。'
+        : '恢复旧版本需进入 .backup 目录点「恢复」；如需长期保留多版本请为存储桶开启版本控制。',
+      confirmWord: '覆盖',
+      confirmLabel: '确认覆盖上传',
+    })
+    if (!ok) return { name: file.name, status: 'canceled', reason: '已取消覆盖' }
+  }
+  // overwrite 由服务端把关：绕过本页直接调接口时，同名上传会被拒绝而不是静默覆盖
+  try {
+    const result = await uploadCosFile(file, currentPrefix.value, { overwrite: exists })
+    if (notify) {
+      ElMessage.success(
+        result?.backup_key
+          ? `已覆盖 ${file.name}，旧文件已备份至 ${result.backup_key}`
+          : result?.overwritten
+            ? `已覆盖 ${file.name}（当前设置未保留快照）`
+            : `已上传 ${file.name}`,
+      )
+    }
+    return { name: file.name, status: 'ok' }
+  } catch (e) {
+    // 服务端同名检测兜底命中（业务码 409）等错误，全局拦截器已给出可读提示
+    return {
+      name: file.name,
+      status: 'failed',
+      reason: e?.response?.data?.message || e?.message || '上传失败',
+    }
+  }
+}
+
 async function handleFileSelected(e) {
-  const file = e.target.files?.[0]
-  if (!file) return
+  const picked = Array.from(e.target.files || [])
+  if (!picked.length) return
+  uploadReport.value = null
   opLoading.value = true
   try {
-    const targetKey = currentPrefix.value + file.name
-    // 同名检测以服务端 HEAD 为准（列表是进入目录时的快照，可能已过期）。
-    // 检测失败就中止：不知道会不会覆盖时不允许盲传（FR-UX-205 / H9）
-    let exists = false
-    let hit = null
-    try {
-      hit = await checkCosObject(targetKey)
-      exists = !!hit?.exists
-    } catch {
-      ElMessage.error('同名检测失败，已取消上传：无法确认是否会覆盖已有文件')
+    if (picked.length === 1) {
+      const r = await uploadOne(picked[0], { notify: true })
+      if (r.status === 'ok') await loadList()
       return
     }
-    if (exists) {
-      const denyBackup = backupKeep.value <= 0
-      const ok = await dangerConfirm({
-        action: '上传并覆盖同名文件',
-        target: `${currentPrefix.value || '/'}${file.name}`,
-        scope: `云端已存在同名对象（${formatSize(hit.size)}${hit.last_modified ? `，更新于 ${hit.last_modified}` : ''}）`,
-        lines: [
-          denyBackup
-            ? '当前设置不保留覆盖前快照：旧文件会被直接覆盖，覆盖后无法找回'
-            : `覆盖前旧文件自动备份到 ${currentPrefix.value}.backup/<时间戳>/${file.name}，保留最近 ${backupKeep.value} 份`,
-        ],
-        irreversible: denyBackup
-          ? '「快照保留份数」为 0，本次覆盖不可回退。'
-          : '恢复旧版本需进入 .backup 目录点「恢复」；如需长期保留多版本请为存储桶开启版本控制。',
-        confirmWord: '覆盖',
-        confirmLabel: '确认覆盖上传',
-      })
-      if (!ok) return
+    const results = []
+    for (let i = 0; i < picked.length; i += 1) {
+      const r = await uploadOne(picked[i], { notify: false })
+      results.push(r)
+      // 用户在覆盖确认处取消 = 这批先停：剩下逐个弹确认只会变成连续骚扰
+      if (r.status === 'canceled') {
+        for (const rest of picked.slice(i + 1)) {
+          results.push({ name: rest.name, status: 'canceled', reason: '未处理（上一项已取消）' })
+        }
+        break
+      }
     }
-    // overwrite 由服务端把关：绕过本页直接调接口时，同名上传会被拒绝而不是静默覆盖
-    let result
-    try {
-      result = await uploadCosFile(file, currentPrefix.value, { overwrite: exists })
-    } catch {
-      // 服务端同名检测兜底命中（业务码 409）等错误，全局拦截器已给出可读提示
-      return
-    }
-    ElMessage.success(
-      result?.backup_key
-        ? `已覆盖 ${file.name}，旧文件已备份至 ${result.backup_key}`
-        : result?.overwritten
-          ? `已覆盖 ${file.name}（当前设置未保留快照）`
-          : `已上传 ${file.name}`,
-    )
-    await loadList()
+    const okCount = results.filter((r) => r.status === 'ok').length
+    const failed = results.filter((r) => r.status === 'failed')
+    const canceled = results.filter((r) => r.status === 'canceled').length
+    // H11：批量必须给出「成功 N / 失败 M + 失败清单」
+    uploadReport.value = { ok: okCount, failed, canceled }
+    const summary = `上传完成：成功 ${okCount} 个，失败 ${failed.length} 个${canceled ? `，取消 ${canceled} 个` : ''}`
+    if (failed.length) ElMessage.warning(summary)
+    else ElMessage.success(summary)
+    if (okCount) await loadList()
   } finally {
     opLoading.value = false
     e.target.value = '' // 允许重复选择同名文件
@@ -651,8 +712,14 @@ onMounted(async () => {
     overflow-x: auto;
   }
 
-  .name-cell {
-    display: flex;
+  .upload-report__list {
+    margin: 4px 0 0;
+    padding-left: 18px;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .name-cell {    display: flex;
     align-items: center;
     cursor: default;
 

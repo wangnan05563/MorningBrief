@@ -19,6 +19,9 @@
       <span class="m-appbar__title">{{ title }}</span>
     </header>
 
+    <!-- I59：跨端切换到移动端后提示一次，附带回原页面的链接 -->
+    <CrossEndNotice />
+
     <main class="m-content">
       <router-view />
     </main>
@@ -52,6 +55,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { getDashboardSummary } from '../api/mobile'
 import { subscribe } from '../utils/sse'
+import CrossEndNotice from '../components/CrossEndNotice.vue'
 
 const route = useRoute()
 const router = useRouter()

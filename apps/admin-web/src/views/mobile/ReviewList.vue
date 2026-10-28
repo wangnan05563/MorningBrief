@@ -222,7 +222,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { listReviews, getReview, handleReviewAction, batchHandleReviewAction } from '../../api/reviews'
 import { getEpisodeAudioUrl } from '../../api/audio'
@@ -231,6 +231,7 @@ import { dangerConfirm } from '../../utils/dangerConfirm'
 import { formatTriggerReason } from '../../utils/autoReviewRules'
 import { formatDuration } from '../../utils/format'
 import { resolveReviewAudio } from '../../utils/audioSource'
+import { mergeReviewRows } from '../../utils/reviewListState'
 import { returnTarget, readUrlState, SCOPED_REVIEW_SPECS } from '../../utils/urlState'
 
 const route = useRoute()
@@ -265,7 +266,12 @@ const list = ref([])
 const loading = ref(false)
 const approving = ref(false)
 
-async function load() {
+async function load({ keepState = false } = {}) {
+  // I6：处理一条后重载时保留展开态/详情/音频与滚动位置。滚动容器是移动端外壳的
+  // `.m-content`（overflow-y:auto），不是 window——滚 window 一点效果都没有。
+  const scroller = keepState ? document.querySelector('.m-content') : null
+  const scrollTop = scroller ? scroller.scrollTop : 0
+  const prevRows = keepState ? list.value : []
   loading.value = true
   try {
     // size 对齐后端 BATCH_MAX_SIZE=50（批量操作入口上限）。后端 list_reviews
@@ -279,25 +285,17 @@ async function load() {
       // 作用域模式按工作流过滤，使顶部上下文与卡片一致
       if (scopedValues.value.workflow_id) params.workflow_id = scopedValues.value.workflow_id
       const data = await listReviews(params)
-      const items = (data.list || []).map((it) => ({
-        ...it,
-        busy: false,
-        expanded: false,
-        detail: null,
-        loadingDetail: false,
-        // B12：语音内容的三种来源与播放态，展开时按 detail 判定
-        audioMode: 'none',
-        audioSrc: '',
-        audioError: '',
-        audioLoading: false,
-        audioToken: 0,
-      }))
+      const items = mergeReviewRows(prevRows, data.list || [])
       all.push(...items)
       // 已取满全部(total) 或本页不足 size（末页）→ 停止；page>=4 防御异常无限循环
       if (all.length >= (data.total || all.length) || items.length < size || page >= 4) break
       page += 1
     }
     list.value = all
+    if (keepState) {
+      await nextTick()
+      if (scroller) scroller.scrollTop = scrollTop
+    }
   } catch {
     // 错误提示由拦截器统一处理
   } finally {
@@ -435,7 +433,8 @@ async function act(item, action) {
   try {
     await handleReviewAction(item.id, action, reason)
     ElMessage.success(action === 'approve' ? '已通过' : '已驳回')
-    await load()
+    // I6：只重载数据，不重置其它行的展开态与滚动位置
+    await load({ keepState: true })
   } catch {
     // 拦截器已提示
   } finally {
@@ -488,7 +487,7 @@ async function approveAll() {
     } else {
       ElMessage.success(`批量审批完成：${summary}`)
     }
-    await load()
+    await load({ keepState: true })
   } catch {
     // 拦截器已提示
   } finally {

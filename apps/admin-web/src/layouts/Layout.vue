@@ -72,6 +72,7 @@
       </el-header>
 
       <!-- 主内容区 -->
+      <CrossEndNotice />
       <el-main class="main-content">
         <router-view />
       </el-main>
@@ -155,6 +156,7 @@ import { ElMessage, ElMessageBox } from '../utils/message'
 import { MIN_ADMIN_PASSWORD_LEN } from '../constants/password'
 import ThemeSwitcher from '../components/ThemeSwitcher.vue'
 import GuideOverlay from '../components/GuideOverlay.vue'
+import CrossEndNotice from '../components/CrossEndNotice.vue'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { useGuide } from '../guide/useGuide'
 import { GUIDE_STEPS } from '../guide/guideConfig'

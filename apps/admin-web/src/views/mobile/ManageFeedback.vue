@@ -111,7 +111,8 @@ onMounted(reload)
 
 .m-fb__tab {
   flex: 1;
-  height: 34px;
+  /* I39：34px 低于移动端 44px 命中区；375px 下每段约 80px 宽，加高不会截断文案 */
+  height: 44px;
   border-radius: 8px;
   border: 1px solid var(--m-border);
   background: var(--m-surface);

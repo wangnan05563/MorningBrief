@@ -35,7 +35,8 @@
         <el-table-column label="定时触发" width="110">
           <template #default="{ row }">
             <span v-if="row.schedule_time">{{ row.schedule_time }}</span>
-            <span v-else class="text-muted">默认</span>
+            <!-- C7：只写「默认」看不出实际触发时刻，排障时必须在列表上就能读到 05:00 -->
+            <span v-else class="text-muted">默认 {{ DEFAULT_CRON_LABEL }}</span>
           </template>
         </el-table-column>
         <el-table-column label="段间静音" width="120">
@@ -214,7 +215,7 @@
           <el-tab-pane label="采集与选题" name="collect">
         <el-form-item label="定时触发">
           <el-input v-model="form.schedule_time" placeholder="HH:MM:SS 或 HH:MM（如 04:00:00 / 4:00），留空使用全局默认" style="width: 280px" />
-          <span class="form-tip">为空则使用全局 cron（05:00）触发</span>
+          <span class="form-tip">为空则使用全局 cron（{{ DEFAULT_CRON_LABEL }}）触发</span>
         </el-form-item>
         <el-form-item label="素材回溯">
           <div class="lookback-wrap">
@@ -615,6 +616,7 @@ import { formatTime } from '../../utils/format'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import { withAppPrefix } from '../../utils/appPath'
 import { CHANNEL_TYPE, enumLabel, enumTagType, enumOptions } from '../../constants/enums'
+import { DEFAULT_CRON_LABEL } from '../../constants/schedule'
 
 const channelTypeOptions = enumOptions(CHANNEL_TYPE)
 // 角色控制：直接读 localStorage，operator 隐藏增删改操作

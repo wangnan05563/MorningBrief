@@ -93,7 +93,9 @@ export const GUIDE_STEPS = {
     { s: ['[data-guide="ai-config-form"]'], t: '服务商配置', d: '支持多服务商切换，密钥类字段不会写入本地草稿。' },
   ],
   '/ai-qa': [
-    { s: ['[data-guide="assistant-page"]'], t: '智能助手', d: '基于知识库问答，可切换模型并选择会话来源。' },
+    // F22：此前写「选择会话来源 / 跟随最新会话」——本页没有「会话来源」概念，
+    // 自动刷新刷的是模型列表（KnowledgeQA.vue 的 AUTO_REFRESH_MS = 90s），照实写。
+    { s: ['[data-guide="assistant-page"]'], t: '智能助手', d: '基于知识库问答，可切换模型；开启自动刷新后每 90 秒重新拉取模型列表。' },
     { s: ['[data-guide="assistant-input"]'], t: '提问输入', d: '输入问题后 Enter 发送、Shift+Enter 换行；模型在上方选择。' },
   ],
   '/cos-config': [

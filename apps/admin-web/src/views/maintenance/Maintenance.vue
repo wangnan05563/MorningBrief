@@ -221,6 +221,8 @@
                 <el-option label="旧日志文件（按天数）" value="old_logs" />
                 <el-option label="大日志文件（>10MB）" value="large_logs" />
               </el-select>
+              <!-- M66：活动分片是系统正在写的文件，预览与执行都会跳过它 -->
+              <div class="form-tip">正在写入的最新日志文件（MorningBrief_*.log）不会被清理</div>
             </el-form-item>
             <el-form-item v-if="showLogDays" label="保留天数">
               <el-input-number

@@ -73,7 +73,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1270,
+          "line": 1272,
           "fn": "deleteChannel",
           "fieldCount": 0,
           "unresolved": []
@@ -106,7 +106,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 599,
+          "line": 660,
           "fn": "deleteCosFolder",
           "fieldCount": 2,
           "unresolved": []
@@ -124,7 +124,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 602,
+          "line": 663,
           "fn": "deleteCosObject",
           "fieldCount": 2,
           "unresolved": []
@@ -275,7 +275,7 @@
       "sites": [
         {
           "file": "layouts/Layout.vue",
-          "line": 198,
+          "line": 200,
           "fn": "checkUpdate",
           "fieldCount": 0,
           "unresolved": []
@@ -610,7 +610,7 @@
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 756,
+          "line": 758,
           "fn": "listChannels",
           "fieldCount": 2,
           "unresolved": []
@@ -711,7 +711,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1249,
+          "line": 1251,
           "fn": "deleteChannelPreview",
           "fieldCount": 1,
           "unresolved": []
@@ -733,7 +733,7 @@
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 958,
+          "line": 960,
           "fn": "getScriptMode",
           "fieldCount": 0,
           "unresolved": []
@@ -748,7 +748,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 781,
+          "line": 783,
           "fn": "listBgmFiles",
           "fieldCount": 0,
           "unresolved": []
@@ -763,7 +763,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 799,
+          "line": 801,
           "fn": "listBookRssSources",
           "fieldCount": 0,
           "unresolved": []
@@ -778,7 +778,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 883,
+          "line": 885,
           "fn": "listCoverPresets",
           "fieldCount": 0,
           "unresolved": []
@@ -793,7 +793,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 790,
+          "line": 792,
           "fn": "listRssSources",
           "fieldCount": 0,
           "unresolved": []
@@ -827,7 +827,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 614,
+          "line": 675,
           "fn": "getCosDownloadUrl",
           "fieldCount": 3,
           "unresolved": []
@@ -848,7 +848,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 377,
+          "line": 399,
           "fn": "checkCosObject",
           "fieldCount": 3,
           "unresolved": [
@@ -872,7 +872,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 480,
+          "line": 541,
           "fn": "checkCosMoveConflict",
           "fieldCount": 4,
           "unresolved": [
@@ -892,7 +892,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 325,
+          "line": 345,
           "fn": "listCosObjects",
           "fieldCount": 2,
           "unresolved": []
@@ -911,7 +911,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 537,
+          "line": 598,
           "fn": "previewCosRestore",
           "fieldCount": 3,
           "unresolved": []
@@ -933,7 +933,7 @@
         },
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 304,
+          "line": 324,
           "fn": "getCosStatus",
           "fieldCount": 0,
           "unresolved": []
@@ -1130,7 +1130,7 @@
       "sites": [
         {
           "file": "layouts/MobileLayout.vue",
-          "line": 99,
+          "line": 103,
           "fn": "getDashboardSummary",
           "fieldCount": 0,
           "unresolved": []
@@ -1240,7 +1240,7 @@
         },
         {
           "file": "views/maintenance/Maintenance.vue",
-          "line": 522,
+          "line": 524,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -1255,7 +1255,7 @@
       "sites": [
         {
           "file": "views/maintenance/Maintenance.vue",
-          "line": 456,
+          "line": 458,
           "fn": "getMaintenanceTask",
           "fieldCount": 0,
           "unresolved": []
@@ -1501,7 +1501,7 @@
       "sites": [
         {
           "file": "views/mobile/ReviewList.vue",
-          "line": 281,
+          "line": 287,
           "fn": "listReviews",
           "fieldCount": 1,
           "unresolved": []
@@ -1530,7 +1530,7 @@
       "sites": [
         {
           "file": "views/mobile/ReviewList.vue",
-          "line": 313,
+          "line": 311,
           "fn": "getReview",
           "fieldCount": 0,
           "unresolved": []
@@ -2232,7 +2232,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1173,
+          "line": 1175,
           "fn": "createChannel",
           "fieldCount": 23,
           "unresolved": [
@@ -2326,7 +2326,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1284,
+          "line": 1286,
           "fn": "generateChannelPrompts",
           "fieldCount": 0,
           "unresolved": []
@@ -2343,7 +2343,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 926,
+          "line": 928,
           "fn": "uploadChannelIcon",
           "fieldCount": 0,
           "unresolved": [
@@ -2362,7 +2362,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 940,
+          "line": 942,
           "fn": "generateChannelIcon",
           "fieldCount": 1,
           "unresolved": []
@@ -2377,7 +2377,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1361,
+          "line": 1363,
           "fn": "recommendChannelBgm",
           "fieldCount": 0,
           "unresolved": []
@@ -2392,7 +2392,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1389,
+          "line": 1391,
           "fn": "recommendChannelSources",
           "fieldCount": 0,
           "unresolved": []
@@ -2409,7 +2409,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1342,
+          "line": 1344,
           "fn": "uploadBgmFile",
           "fieldCount": 0,
           "unresolved": [
@@ -2428,7 +2428,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 437,
+          "line": 498,
           "fn": "createCosFolder",
           "fieldCount": 1,
           "unresolved": []
@@ -2449,7 +2449,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 520,
+          "line": 581,
           "fn": "moveCosObject",
           "fieldCount": 3,
           "unresolved": [
@@ -2487,7 +2487,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 570,
+          "line": 631,
           "fn": "restoreCosObject",
           "fieldCount": 3,
           "unresolved": [
@@ -2521,7 +2521,7 @@
       "sites": [
         {
           "file": "views/cos/CosFiles.vue",
-          "line": 405,
+          "line": 426,
           "fn": "uploadCosFile",
           "fieldCount": 0,
           "unresolved": [
@@ -2997,7 +2997,7 @@
       "sites": [
         {
           "file": "views/mobile/ReviewList.vue",
-          "line": 436,
+          "line": 434,
           "fn": "handleReviewAction",
           "fieldCount": 3,
           "unresolved": [
@@ -3036,7 +3036,7 @@
       "sites": [
         {
           "file": "views/mobile/ReviewList.vue",
-          "line": 483,
+          "line": 482,
           "fn": "batchHandleReviewAction",
           "fieldCount": 3,
           "unresolved": [
@@ -3444,7 +3444,7 @@
       "sites": [
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1140,
+          "line": 1142,
           "fn": "updateChannel",
           "fieldCount": 26,
           "unresolved": [
@@ -3453,21 +3453,21 @@
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1234,
+          "line": 1236,
           "fn": "updateChannel",
           "fieldCount": 1,
           "unresolved": []
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1367,
+          "line": 1369,
           "fn": "updateChannel",
           "fieldCount": 2,
           "unresolved": []
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 1406,
+          "line": 1408,
           "fn": "updateChannel",
           "fieldCount": 2,
           "unresolved": []
@@ -3502,7 +3502,7 @@
         },
         {
           "file": "views/channel/ChannelManagement.vue",
-          "line": 993,
+          "line": 995,
           "fn": "setScriptMode",
           "fieldCount": 1,
           "unresolved": [

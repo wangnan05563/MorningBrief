@@ -982,7 +982,7 @@
         "callSites": [
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1173,
+            "line": 1175,
             "fn": "createChannel",
             "fieldCount": 23,
             "unresolved": [
@@ -1155,7 +1155,7 @@
         "callSites": [
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 940,
+            "line": 942,
             "fn": "generateChannelIcon",
             "fieldCount": 1,
             "unresolved": []
@@ -1195,7 +1195,7 @@
         "callSites": [
           {
             "file": "views/cos/CosFiles.vue",
-            "line": 437,
+            "line": 498,
             "fn": "createCosFolder",
             "fieldCount": 1,
             "unresolved": []
@@ -1238,7 +1238,7 @@
         "callSites": [
           {
             "file": "views/cos/CosFiles.vue",
-            "line": 520,
+            "line": 581,
             "fn": "moveCosObject",
             "fieldCount": 3,
             "unresolved": [
@@ -1291,7 +1291,7 @@
         "callSites": [
           {
             "file": "views/cos/CosFiles.vue",
-            "line": 570,
+            "line": 631,
             "fn": "restoreCosObject",
             "fieldCount": 3,
             "unresolved": [
@@ -2452,7 +2452,7 @@
         "callSites": [
           {
             "file": "views/mobile/ReviewList.vue",
-            "line": 436,
+            "line": 434,
             "fn": "handleReviewAction",
             "fieldCount": 3,
             "unresolved": [
@@ -2517,7 +2517,7 @@
         "callSites": [
           {
             "file": "views/mobile/ReviewList.vue",
-            "line": 483,
+            "line": 482,
             "fn": "batchHandleReviewAction",
             "fieldCount": 3,
             "unresolved": [
@@ -3462,7 +3462,7 @@
         "callSites": [
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1140,
+            "line": 1142,
             "fn": "updateChannel",
             "fieldCount": 26,
             "unresolved": [
@@ -3471,21 +3471,21 @@
           },
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1234,
+            "line": 1236,
             "fn": "updateChannel",
             "fieldCount": 1,
             "unresolved": []
           },
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1367,
+            "line": 1369,
             "fn": "updateChannel",
             "fieldCount": 2,
             "unresolved": []
           },
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1406,
+            "line": 1408,
             "fn": "updateChannel",
             "fieldCount": 2,
             "unresolved": []
@@ -3647,7 +3647,7 @@
           },
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 993,
+            "line": 995,
             "fn": "setScriptMode",
             "fieldCount": 1,
             "unresolved": [

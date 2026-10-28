@@ -22,7 +22,14 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { ElMessage } from '../utils/message'
 import { APP_BASE } from '../utils/appPath'
 import { crossEndTarget, isMobilePath } from '../utils/urlState'
-import { resolveMode } from '../composables/useIsMobile'
+import { resolveMode, setForcedMode } from '../composables/useIsMobile'
+import {
+  buildCrossEndNotice,
+  clearCrossEndNotice,
+  readCrossEndNotice,
+  saveCrossEndNotice,
+  shouldClearCrossEndNotice,
+} from '../utils/crossEndNotice'
 
 const routes = [
   {
@@ -319,6 +326,11 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const role = localStorage.getItem('admin_role')
 
+  // I59：跨端切换提示只在落点页有效。离开落点（含点「仍要查看原页面」）后清掉，
+  // 否则几天后回到别的页面还会冒出一条与当前页面无关的「已自动切换」。
+  const staleNotice = readCrossEndNotice(sessionStorage)
+  if (shouldClearCrossEndNotice(staleNotice, to.path)) clearCrossEndNotice(sessionStorage)
+
   // 公开页面直接放行
   if (to.meta.public) {
     next()
@@ -354,10 +366,19 @@ router.beforeEach((to, from, next) => {
   // 登录页（meta.public）不在这里换端——它由 App.vue 按视口处理，避免与 redirect 参数互相打乱。
   // 端归属走 isMobilePath：`startsWith('/m')` 会把 PC 的 `/materials`、`/maintenance` 误判成移动端。
   const onMobileRoute = isMobilePath(to.path)
+  // I59：带 `mode=` 的回链必须在这里就生效——App.vue 的 watcher 在导航解析之后才跑，
+  // 晚一步就会先用旧模式判定一次，把「回原页面」的链接再切回当前端（点了没反应）。
+  const qMode = to.query.mode
+  if (qMode === 'mobile' || qMode === 'desktop' || qMode === 'auto') setForcedMode(qMode)
   const wantMobile = resolveMode()
   if (wantMobile !== onMobileRoute) {
     const target = crossEndTarget(to.path, to.query, wantMobile ? 'mobile' : 'desktop')
     if (target?.path && target.path !== to.path) {
+      // I59：换端后在落点页提示一次，并给出「仍要查看原页面」的带 mode 回链
+      saveCrossEndNotice(
+        sessionStorage,
+        buildCrossEndNotice(to.path, to.query, target.path),
+      )
       next({ path: target.path, query: target.query })
       return
     }
