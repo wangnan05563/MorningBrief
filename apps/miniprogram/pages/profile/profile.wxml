@@ -82,7 +82,7 @@
           bindtap="onSecondTab" data-tab="recent"
         >
           <image class="tab-icon-sm" src="/images/icons/radio.png" mode="aspectFit" />
-          <text>最近</text>
+          <text>收听</text>
         </view>
         <view
           class="tab-item {{secondTab === 'favorites' ? 'tab-sub-active' : ''}}"

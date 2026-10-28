@@ -427,7 +427,7 @@ Page({
     wx.navigateTo({ url: '/pages/queue/queue' });
   },
 
-  /** J14：本页是「频道更新」，播放记录在「最近播放」——顶部入口直达，不再要求回"我的"绕路 */
+  /** J14：本页是「频道更新」，播放记录在「收听记录」——顶部入口直达，不再要求回"我的"绕路 */
   onOpenRecent() {
     trackEvent('history', 'open_recent');
     wx.navigateTo({ url: '/pages/recent/recent' });

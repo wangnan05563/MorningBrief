@@ -1,8 +1,9 @@
 /**
- * 最近播放页：按播放时间倒序展示，点击断点续播
+ * 收听记录页：按播放时间倒序展示，点击断点续播
  *
  * V1.3 新增（FR-SUP-13）
  * 后端 /playlogs/recent 已按 episode 去重（每个 episode 仅展示最新一条）
+ * T02785：与「频道更新」（节目库）互斥命名，数据源为本机收听记录
  */
 // localData 封装播放历史的双写（本地+后端），按 openid 隔离，读取优先本地
 const localData = require('../../services/local-data');
@@ -67,6 +68,14 @@ Page({
     this.loadRecent(true).then(() => {
       wx.stopPullDownRefresh();
     });
+  },
+
+  /**
+   * J14：「频道更新」是 tab 页，只能用 switchTab 回跳（navigateTo 到 tab 页会失败）
+   */
+  onOpenHistory() {
+    trackEvent('recent', 'open_history');
+    wx.switchTab({ url: '/pages/history/history' });
   },
 
   /**

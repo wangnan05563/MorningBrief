@@ -39,7 +39,7 @@
       },
       {
         "pagePath": "pages/history/history",
-        "text": "历史",
+        "text": "更新",
         "iconPath": "images/icons/tab-history-inactive.png",
         "selectedIconPath": "images/icons/tab-history-active.png"
       },

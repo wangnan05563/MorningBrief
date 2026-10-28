@@ -1,5 +1,12 @@
-<!-- 最近播放页 -->
+<!-- 收听记录页（T02785 裁决 B：原名「最近播放」，与「频道更新」互斥命名） -->
 <view class="page-recent">
+  <!-- J14：与「频道更新」是两份数据，首屏常驻互斥命名 + 数据来源说明 + 回链 -->
+  <view class="view-switch">
+    <view class="view-switch-item active">收听记录</view>
+    <view class="view-switch-item" bindtap="onOpenHistory" aria-label="查看各频道更新">频道更新 ›</view>
+  </view>
+  <view class="view-switch-hint">数据来源：本机收听记录（按最近播放时间倒序）；找各频道的往期节目请点「频道更新」</view>
+
   <!-- 空状态 -->
   <view class="empty-state" wx:if="{{!loading && list.length === 0}}">
     <image class="empty-icon-img" lazy-load src="/images/icons/headphones.png" mode="aspectFit" />

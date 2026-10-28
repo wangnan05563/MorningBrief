@@ -391,32 +391,7 @@
   margin-bottom: 8rpx;
 }
 
-/* J14：历史页与「最近播放」的数据来源不同，分段入口常驻顶部说明分工 */
-.view-switch {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  padding: 16rpx 32rpx 0;
-}
-
-.view-switch-item {
-  padding: 10rpx 20rpx;
-  border-radius: 32rpx;
-  font-size: 26rpx;
-  color: var(--text-muted);
-}
-
-.view-switch-item.active {
-  background: var(--accent-soft, rgba(63, 108, 143, 0.12));
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.view-switch-hint {
-  padding: 8rpx 32rpx 0;
-  font-size: 22rpx;
-  color: var(--border-strong);
-}
+/* J14：.view-switch / .view-switch-hint 已提到 app.wxss（与「收听记录」页共用） */
 
 /* 工具按钮（排序 / 播放列表）：T00753 反馈——去边框与背景，纯图标简洁风格 */
 .tool-chip {

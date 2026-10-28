@@ -43,7 +43,7 @@
  * 12. J69 最近播放 onShow 只能首次加载：无保护地重载会重置分页与滚动位置。
  * 13. J77 队列单项管理单源：services/audio.js 提供 removeQueueAt/moveQueueItem，
  *     队列页与详情页 modal 各自绑定移出/上移下移（此前两处都只能整表清空）。
- * 14. J14/J12 历史的两个出口：页内分段入口直达「我的播放记录」，队列 chip 带可见「队列」文字。
+ * 14. J14/J12：「频道更新」↔「收听记录」互斥命名、双向入口与数据来源说明，队列 chip 带可见「队列」文字。
  * 15. J20 个人中心第二层只做入口：不得再出现 secondList 内嵌列表（与整页重复取数/渲染）。
  *
  * 16-20. J27/J28/J32/J59/J73/J81：详情页缓冲态与课程语境、失败可重试、离线兜底、
@@ -111,7 +111,11 @@ const FILES = [
   'pages/webview/webview.wxss',
   'pages/history/history.js',
   'pages/history/history.wxml',
+  // T02785：两页的互斥命名与数据来源说明要做交叉断言，标题与模板都要进门禁
+  'pages/history/history.json',
   'pages/recent/recent.js',
+  'pages/recent/recent.wxml',
+  'pages/recent/recent.json',
   'pages/queue/queue.js',
   'pages/queue/queue.wxml',
   'pages/detail/detail.js',
@@ -588,13 +592,36 @@ export function checkFacts(facts) {
     errors.push('app.js 没把 onQueueChange 接到 refreshTabBadge：队列删除/重排后「历史」tab 角标停在旧数字（J77）')
   }
 
-  // —— 14. J14/J12：历史的两个出口 ——
+  // —— 14. J14/J12：频道更新 ↔ 收听记录 互斥命名 + 双向出口 + 数据来源说明（T02785 裁决 B） ——
   const historyWxml = wf('pages/history/history.wxml')
-  if (!/我的播放记录/.test(historyWxml) || !/bindtap="onOpenRecent"/.test(historyWxml)) {
-    errors.push('history.wxml 没有直达「我的播放记录」的可见入口：两份"过去"数据仍然分不清（J14）')
+  const recentWxml = wf('pages/recent/recent.wxml')
+  const navTitle = (rel) => /"navigationBarTitleText"\s*:\s*"([^"]*)"/.exec(f(rel))?.[1] || ''
+  const historyTitle = navTitle('pages/history/history.json')
+  const recentTitle = navTitle('pages/recent/recent.json')
+  if (historyTitle !== '频道更新') {
+    errors.push(`history 页标题是「${historyTitle || '（缺失）'}」：应与「收听记录」互斥命名为「频道更新」（J14）`)
+  }
+  if (recentTitle !== '收听记录') {
+    errors.push(`recent 页标题是「${recentTitle || '（缺失）'}」：应与「频道更新」互斥命名为「收听记录」（J14）`)
+  }
+  if (!/收听记录/.test(historyWxml) || !/bindtap="onOpenRecent"/.test(historyWxml)) {
+    errors.push('history.wxml 没有直达「收听记录」的可见入口：两份"过去"数据仍然分不清（J14）')
+  }
+  if (!/数据来源[^<]{0,40}节目库/.test(historyWxml)) {
+    errors.push('history.wxml 没写明数据来源是节目库：用户无法判断这页装的是频道更新还是本机播放记录（J14）')
   }
   if (!/pages\/recent\/recent/.test(f('pages/history/history.js'))) {
-    errors.push('history.js 的「我的播放记录」入口没有指向 recent 页（J14）')
+    errors.push('history.js 的「收听记录」入口没有指向 recent 页（J14）')
+  }
+  if (!/频道更新/.test(recentWxml) || !/bindtap="onOpenHistory"/.test(recentWxml)) {
+    errors.push('recent.wxml 没有回「频道更新」的可见入口：进到收听记录后无法回到另一份数据（J14）')
+  }
+  if (!/数据来源[^<]{0,40}本机/.test(recentWxml)) {
+    errors.push('recent.wxml 没写明数据来源是本机收听记录：与「频道更新」（节目库）仍然分不清（J14）')
+  }
+  // 「频道更新」是 tab 页，只能用 switchTab；navigateTo 到 tab 页会静默失败
+  if (!/switchTab\(\s*\{\s*url:\s*['"]\/pages\/history\/history['"]/.test(f('pages/recent/recent.js'))) {
+    errors.push('recent.js 回「频道更新」没有走 switchTab：history 是 tab 页，navigateTo 会跳不过去（J14）')
   }
   if (!/class="[^"]*queue-chip[^"]*"[\s\S]{0,300}?<text[^>]*>\s*队列\s*<\/text>/.test(historyWxml)) {
     errors.push('history.wxml 的队列入口仍是纯图标 chip：全站唯一队列整页入口没有文字（J12）')

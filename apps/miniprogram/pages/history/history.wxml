@@ -1,13 +1,12 @@
 <!-- 历史列表页 -->
 <view class="container">
-  <!-- J14：底部「历史」tab 进来看的是各频道更新的节目（节目库），与「最近播放」（本机播放记录）
-       是两份数据。此前两页都叫"过去"，用户在这里找不到「昨天听的那一集」。
-       用可见的分段入口把两份数据分开，并给出直达另一页的出口。 -->
+  <!-- J14 / T02785（裁决 B）：「更新」tab 进来看到的是各频道往期节目（节目库），
+       与「收听记录」（本机播放记录）是两份数据。分段入口常驻首屏，并各自点明数据来源。 -->
   <view class="view-switch">
     <view class="view-switch-item active">频道更新</view>
-    <view class="view-switch-item" bindtap="onOpenRecent" aria-label="查看我的播放记录">我的播放记录 ›</view>
+    <view class="view-switch-item" bindtap="onOpenRecent" aria-label="查看收听记录">收听记录 ›</view>
   </view>
-  <view class="view-switch-hint">本页按频道列出往期节目；找刚听过的节目请点「我的播放记录」</view>
+  <view class="view-switch-hint">数据来源：节目库（各频道往期更新）；找刚听过的节目请点「收听记录」</view>
 
   <!-- 顶部工具栏：搜索 + 频道切换 -->
   <view class="top-bar">
@@ -82,7 +81,7 @@
   <!-- 空状态：已设置偏爱频道但过滤后无节目，或非偏爱模式下无历史 -->
   <view class="empty-state" wx:elif="{{!loading && list.length === 0}}">
     <image class="empty-icon-img" lazy-load src="/images/icons/newspaper.png" mode="aspectFit" />
-    <text>{{isPreferredMode ? '偏爱频道暂无历史节目' : '暂无历史节目'}}</text>
+    <text>{{isPreferredMode ? '偏爱频道暂无往期节目' : '暂无往期节目'}}</text>
   </view>
 
   <!-- 骨架屏：首次加载时显示，与节目行布局对齐 -->

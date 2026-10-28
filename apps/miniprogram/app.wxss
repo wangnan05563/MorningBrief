@@ -200,6 +200,35 @@ page {
 .text-large { font-size: 36rpx; font-weight: 600; }
 .text-small { font-size: 24rpx; }
 
+/* === J14 / T02785：频道更新 ↔ 收听记录 的分段导航（history / recent 两页共用） === */
+.view-switch {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 16rpx 32rpx 0;
+}
+
+.view-switch-item {
+  padding: 10rpx 20rpx;
+  border-radius: 32rpx;
+  font-size: 26rpx;
+  color: var(--text-muted);
+}
+
+.view-switch-item.active {
+  background: var(--accent-soft, rgba(63, 108, 143, 0.12));
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* 数据来源说明是两页分工的唯一常驻解释，用正文次级色而不是描边色，保证读得清 */
+.view-switch-hint {
+  padding: 8rpx 32rpx 0;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
 /* === 加载状态 === */
 .loading-mask {
   display: flex;

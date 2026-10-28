@@ -3,7 +3,7 @@
  *
  * V1.3：
  * - 接入 /users/stats 接口获取真实收听统计（累计时长/期数/完播数/收藏数）
- * - 新增"最近播放"、"我的收藏"、"我的频道"、"意见反馈"等功能入口
+ * - 新增"收听记录"、"我的收藏"、"我的频道"、"意见反馈"等功能入口
  * - 接入埋点（FR-SUP-10）
  */
 const { logout, getUser, login, getToken, setToken, isLoginCoolingDown } = require('../../services/auth');
@@ -551,7 +551,7 @@ Page({
   /** J20：第二层只做入口，最近/收藏/频道/下载/偏爱各自只有整页一份实现 */
   loadSecondContent(tab) {
     const SECOND_PAGES = {
-      recent: { url: "/pages/recent/recent", text: "前往最近播放，找刚听过的节目 ↗" },
+      recent: { url: "/pages/recent/recent", text: "前往收听记录，找刚听过的节目 ↗" },
       favorites: { url: "/pages/favorites/favorites", text: "前往我的收藏，查看收藏的节目 ↗" },
       channels: { url: "/pages/channels/channels", text: "前往全部频道，管理订阅与偏爱 ↗" },
       downloads: { url: "/pages/download/download", text: "前往我的下载，查看已缓存节目 ↗" },

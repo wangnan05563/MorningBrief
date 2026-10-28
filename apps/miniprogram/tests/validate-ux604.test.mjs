@@ -367,9 +367,27 @@ describe('T02540 / M6 信息架构：文案与入口的回归锁', () => {
       'J77',
     ))
 
-  test('J14 历史页删掉「我的播放记录」出口被抓', () =>
+  test('J14 历史页删掉「收听记录」出口被抓', () =>
     expectHit(
-      { 'pages/history/history.wxml': read('pages/history/history.wxml').replace(/我的播放记录/g, '最近') },
+      { 'pages/history/history.wxml': read('pages/history/history.wxml').replace(/收听记录/g, '记录') },
+      'J14',
+    ))
+
+  test('J14 历史页丢掉数据来源说明被抓', () =>
+    expectHit(
+      { 'pages/history/history.wxml': read('pages/history/history.wxml').replace(/数据来源：节目库/, '本页') },
+      'J14',
+    ))
+
+  test('J14 收听记录页删掉回「频道更新」的入口被抓', () =>
+    expectHit(
+      { 'pages/recent/recent.wxml': read('pages/recent/recent.wxml').replace('bindtap="onOpenHistory"', '') },
+      'J14',
+    ))
+
+  test('J14 收听记录页回链改回 navigateTo（tab 页跳不过去）被抓', () =>
+    expectHit(
+      { 'pages/recent/recent.js': read('pages/recent/recent.js').replace("wx.switchTab({ url: '/pages/history/history' })", "wx.navigateTo({ url: '/pages/history/history' })") },
       'J14',
     ))
 
