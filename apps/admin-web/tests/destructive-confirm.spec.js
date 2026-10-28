@@ -150,6 +150,11 @@ test.describe('破坏性操作确认', () => {
     }
 
     test.beforeEach(async ({ page }) => {
+      // 兜底先注册（后注册的 route 优先）：未列出的后台接口一律成功，
+      // 否则请求会穿透 vite 代理打到本机 8000 上的真实后端，401 后整页跳登录
+      await page.route('**/admin/api/v1/**', (route) =>
+        route.fulfill({ json: { code: 0, message: 'success', data: {} } }),
+      )
       await page.route('**/admin/api/v1/db-admin/tables/workflow/cascade-preview', (route) =>
         route.fulfill({ json: cascadeResponse }),
       )
@@ -187,6 +192,23 @@ test.describe('破坏性操作确认', () => {
       await expect(dlg.getByText(/合计受影响 4 行（主表 1 \+ 级联 3）/)).toBeVisible()
       await expect(dlg.getByText(/未声明的下游|script \/ review \/ episode/).first()).toBeVisible()
       await expect(dlg.getByText('此操作不可恢复：SQLite 没有回收站')).toBeVisible()
+
+      // M30（T02544 切片 5 复核）：确认凭据是操作者手输的目标表名，不是前端自动带上的令牌
+      const confirmBtn = dlg.getByRole('button', { name: '确认删除' })
+      const nameInput = dlg.getByPlaceholder('workflow')
+      await expect(confirmBtn).toBeDisabled()
+      await nameInput.fill('wrong_table')
+      await expect(confirmBtn).toBeDisabled()
+      await nameInput.fill('workflow')
+      await expect(confirmBtn).toBeEnabled()
+
+      const delPromise = page.waitForRequest(
+        (r) => r.method() === 'DELETE' && r.url().includes('/db-admin/tables/workflow/rows/wf-001'),
+        { timeout: NAV_TIMEOUT },
+      )
+      await confirmBtn.click()
+      const req = await delPromise
+      expect(new URL(req.url()).searchParams.get('confirm_text')).toBe('workflow')
     })
 
     test('级联预览失败时不打开删除弹窗', async ({ page }) => {
