@@ -1327,6 +1327,17 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
             domain="config_load", event="加载 COS 配置（已回退 .env 默认值）", exc=e, level="warning"
         )
 
+    # T02603 裁决3：存量「已开启但从未风险确认」的自动审批配置点名。
+    # 运行期护栏只拦三条全关，老配置仍会零确认自动发布——只在启动日志点名，不改行为。
+    try:
+        from app.services.auto_review_service import log_legacy_unacknowledged
+        async with AsyncSessionLocal() as session:
+            await log_legacy_unacknowledged(session)
+    except Exception as e:
+        log_key_failure(
+            domain="startup", event="自动审批存量风险确认点名失败", exc=e, level="warning"
+        )
+
     # 以下三步都属「整个应用只需跑一次」：模板 seed 写库、APScheduler 定时任务、
     # 启动补跑清理（会真实删除文件）——api 进程跳过，避免重复执行与竞态
     if singleton:

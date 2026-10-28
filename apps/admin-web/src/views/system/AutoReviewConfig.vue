@@ -30,6 +30,22 @@
         @retry="retryLoad"
       />
 
+      <!-- T02603 裁决3：升级前已开启的存量配置不会被运行期护栏拦下（只拦三条全关），
+           这里点名提示；只提示不阻断保存，避免升级即停自动发布。 -->
+      <el-alert
+        v-if="legacyUnacked"
+        class="legacy-ack-alert"
+        data-guide="auto-review-legacy-ack"
+        type="warning"
+        :closable="false"
+        show-icon
+      >
+        <template #title>本配置在风险确认机制上线前已开启，从未做过风险确认</template>
+        <div>
+          自动审批仍按现有校验自动通过并发布。如需补确认，勾选下方「我已确认风险」并保存即可。
+        </div>
+      </el-alert>
+
     <!-- 本表单只有一个文本输入框（关键词），浏览器会把它当隐式提交目标：
          回车会整页刷新（URL 变 ?），刚敲进白名单还没保存的词会被刷掉。T02604 实测到才补的。 -->
       <el-form
@@ -431,6 +447,12 @@ const needsAck = computed(() => {
   return !carried
 })
 
+// T02603 裁决3：升级前已开启的存量配置 migration 后 risk_acknowledged=0，
+// 运行期护栏只拦三条全关，不会拦它；这里点名，但不阻断保存（避免升级即停自动发布）。
+const legacyUnacked = computed(() => (
+  !!config.value?.enabled && config.value?.risk_acknowledged === false
+))
+
 // 统计数据
 const stats = ref(null)
 // 单位换算只认后端下发的 meta（T02708）；缺失时不猜单位，显示 '-'
@@ -687,6 +709,10 @@ onMounted(() => {
 .config-section,
 .stats-section {
   padding: 16px;
+}
+
+.legacy-ack-alert {
+  margin-bottom: 12px;
 }
 
 .toolbar {

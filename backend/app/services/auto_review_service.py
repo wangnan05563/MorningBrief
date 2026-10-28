@@ -37,6 +37,28 @@ logger = logging.getLogger(__name__)
 _SYSTEM_OPERATOR = "system_auto_review"
 
 
+async def log_legacy_unacknowledged(db: AsyncSession) -> int:
+    """T02603 裁决 3：启动时点名「已开启但从未风险确认」的存量配置。
+
+    风险确认做在保存层，运行期护栏只拒绝「三条校验全关」；升级前已
+    enabled=1 的配置 migration 后 risk_acknowledged=0，仍会照原规则自动
+    通过并发布。裁决取「维持现状 + 点名提示」：这里只读并写启动日志，
+    不改运行期行为，也不替管理员补确认。
+    """
+    row = (await db.execute(
+        select(AutoReviewConfig).where(AutoReviewConfig.id == 1)
+    )).scalar_one_or_none()
+    if row is None or not row.enabled or row.risk_acknowledged:
+        return 0
+    logger.warning(
+        "[startup] 自动审批配置 enabled=true 但从未做风险确认（升级前遗留）："
+        "运行期仍按现有校验自动通过并发布；"
+        "管理员在配置页勾选风险确认并保存后解除。updated_by=%s updated_at=%s",
+        row.updated_by, row.updated_at,
+    )
+    return 1
+
+
 def evaluate_audiobook_consistency(
     channel_type: str | None,
     sources: list[str] | None,

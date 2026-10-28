@@ -75,7 +75,7 @@ const historyResponse = {
   },
 }
 
-async function mockAutoReview(page, { rejectGuard = false } = {}) {
+async function mockAutoReview(page, { rejectGuard = false, config = initialConfig } = {}) {
   const calls = []
   await page.route('**/admin/api/v1/auto-review/**', async (route) => {
     const url = route.request().url()
@@ -97,7 +97,7 @@ async function mockAutoReview(page, { rejectGuard = false } = {}) {
         json: {
           code: 0, message: 'success',
           data: {
-            ...initialConfig, ...body,
+            ...config, ...body,
             risk_acknowledged_at: body.risk_acknowledged ? '2026-10-19T00:00:00' : null,
             enforced_rules: ['content_safe', 'steps_first_success', 'keyword_whitelist']
               .filter((r) => !skipped.includes(r)),
@@ -107,7 +107,7 @@ async function mockAutoReview(page, { rejectGuard = false } = {}) {
       })
     }
     if (url.includes('/config')) {
-      return route.fulfill({ json: { code: 0, message: 'success', data: initialConfig } })
+      return route.fulfill({ json: { code: 0, message: 'success', data: config } })
     }
     if (url.includes('/stats')) return route.fulfill({ json: statsResponse })
     if (url.includes('/history')) return route.fulfill({ json: historyResponse })
@@ -128,6 +128,18 @@ const switches = (page) => page.locator('.config-form .el-switch')
 const ackCheckbox = (page) => page.locator('.el-checkbox', { hasText: '我已确认风险' })
 const save = (page) => page.getByRole('button', { name: '保存配置' })
 const puts = (calls) => calls.filter((c) => c.method === 'PUT')
+
+/**
+ * T02603：负向断言「横幅不存在」必须与「页面还在配置页」同时成立。
+ * 本机 dev 代理指向 8000 端口，若有别的后端实例在跑会回 401，拦截器随后清登录态
+ * 直接跳登录页——那时页面上什么都没有，toHaveCount(0) 会假绿。取一次原子快照，
+ * 页面已被踢走就直接判红。
+ */
+const bannerSnapshot = (page) => page.evaluate(() => ({
+  path: window.location.pathname,
+  onPage: !!document.querySelector('[data-guide="auto-review-page"]'),
+  banners: document.querySelectorAll('[data-guide="auto-review-legacy-ack"]').length,
+}))
 
 test.describe('自动审批护栏', () => {
 
@@ -240,5 +252,47 @@ test.describe('自动审批护栏', () => {
     const rows = page.locator('.el-table__row')
     await expect(rows.nth(0)).toContainText('命中：内容安全检测 / 跳过：步骤一次成功、关键词白名单')
     await expect(rows.nth(1)).toContainText('无生效校验规则')
+  })
+
+  // T02603 裁决3：存量「已开启但从未风险确认」只点名、不停用、不阻断保存
+  test('存量未确认配置在页顶点名，勾选确认保存后提示消失', async ({ page }) => {
+    const legacy = { ...initialConfig, enabled: true, risk_acknowledged: false }
+    const calls = await gotoPage(page, { config: legacy })
+    const banner = page.locator('[data-guide="auto-review-legacy-ack"]')
+    await expect(banner).toBeVisible()
+    await expect(banner).toContainText('从未做过风险确认')
+    await expect(banner).toContainText('自动审批仍按现有校验自动通过并发布')
+    // 只提示不阻断：保存可用，且勾选确认后即可补上
+    await expect(save(page)).toBeEnabled()
+    await ackCheckbox(page).click()
+    await save(page).click()
+    await expect(page.getByText('配置已保存')).toBeVisible()
+    expect(puts(calls)).toHaveLength(1)
+    expect(puts(calls)[0].body.risk_acknowledged).toBe(true)
+    const after = await bannerSnapshot(page)
+    expect(after.onPage).toBe(true)
+    expect(after.banners).toBe(0)
+  })
+
+  test('已确认的开启配置不点名', async ({ page }) => {
+    const acked = {
+      ...initialConfig, enabled: true, risk_acknowledged: true,
+      risk_acknowledged_by: 'admin', risk_acknowledged_at: '2026-10-18T10:00:00',
+    }
+    await gotoPage(page, { config: acked })
+    // 先等配置真正落到页面（「上次更新」标签只在 config 到手后渲染），再取横幅快照
+    await expect(page.locator('.config-section .section-header .el-tag')).toContainText('上次更新')
+    const snap = await bannerSnapshot(page)
+    expect(snap.path).toContain('/auto-review')
+    expect(snap).toMatchObject({ onPage: true, banners: 0 })
+  })
+
+  test('关闭状态的配置不点名（升级后不该满屏黄条）', async ({ page }) => {
+    await gotoPage(page)
+    // 同「已确认」用例：配置到手后才有「上次更新」标签，避免在配置未到达前取快照
+    await expect(page.locator('.config-section .section-header .el-tag')).toContainText('上次更新')
+    const snap = await bannerSnapshot(page)
+    expect(snap.path).toContain('/auto-review')
+    expect(snap).toMatchObject({ onPage: true, banners: 0 })
   })
 })
