@@ -540,7 +540,7 @@ const METRIC_HELPER_RE = /\bmetric(?:Label|Value|Text|Number)\s*\(/
 export const METRIC_UNIT_ALLOW = [
   {
     file: 'views/ad/AdMaterials.vue',
-    lines: [33, 103],
+    lines: [44, 120],
     reason: '素材时长是表格列/表单输入，duration 字段本身以秒存储且接口没有 meta',
   },
   {

@@ -88,8 +88,9 @@
             />
           </template>
         </el-table-column>
-        <!-- T02626：失败态不出「暂无投放规则，点击右上角创建」 -->
-        <template #empty><el-empty v-if="!listError" description="暂无投放规则，点击右上角「新增规则」创建" :image-size="90" /></template>
+        <!-- T02626：失败态不出「暂无投放规则」；T02544 / D83：按钮在工具栏左侧且叫
+             「新建投放」，文案不能再说「右上角新增规则」 -->
+        <template #empty><el-empty v-if="!listError" description="暂无投放规则，点击左上角「新建投放」创建" :image-size="90" /></template>
       </el-table>
 
       <div class="pagination-wrap">
@@ -149,7 +150,11 @@
               :value="m.id"
             />
           </el-select>
-          <div class="material-count-hint">
+          <div v-if="materialLoadError" class="material-count-hint material-load-error" data-guide="ads-material-load-error">
+            素材列表加载失败：{{ materialLoadError }}
+            <el-button link type="primary" @click="fetchMaterials">重试</el-button>
+          </div>
+          <div v-else class="material-count-hint">
             <template v-if="materialTotal > materialOptions.length">
               已显示 {{ materialOptions.length }} 条 / 素材库共 {{ materialTotal }} 条——请按名称搜索，或到「广告素材」页确认素材是否已上传
             </template>
@@ -373,6 +378,9 @@ function onFilterChange() {
 // 改为服务端关键词搜索 + 回显总数，让「搜不到」和「没上传」可区分。
 const materialTotal = ref(0)
 const materialSearching = ref(false)
+// D20（T02544）：素材下拉请求失败此前会把异常抛给 openCreateDialog，
+// 弹窗根本打不开——用户点了「新建投放」却毫无反应。失败必须在弹窗内可见、可重试。
+const materialLoadError = ref('')
 
 async function searchMaterials(keyword = '') {
   materialSearching.value = true
@@ -382,6 +390,12 @@ async function searchMaterials(keyword = '') {
     })
     materialOptions.value = data.list || []
     materialTotal.value = data.total || 0
+    materialLoadError.value = ''
+  } catch (e) {
+    // 失败时清空选项：留着上一次的结果会被当成「刚加载成功」
+    materialOptions.value = []
+    materialTotal.value = 0
+    materialLoadError.value = e?.message || '素材列表加载失败'
   } finally {
     materialSearching.value = false
   }
@@ -426,8 +440,11 @@ async function handleToggle(row, next) {
 async function openCreateDialog() {
   Object.assign(form, { material_id: null, position: '', dateRange: [] })
   submitError.value = null
-  await fetchMaterials()
+  materialLoadError.value = ''
+  // D20（T02544）：弹窗先开，素材在弹窗内异步加载；失败显示在表单里可重试，
+  // 不能因为素材接口失败就让「新建投放」看起来点了没反应
   dialogVisible.value = true
+  fetchMaterials()
 }
 
 async function handleSubmit() {

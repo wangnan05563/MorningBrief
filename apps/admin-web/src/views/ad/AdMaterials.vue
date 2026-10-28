@@ -2,6 +2,17 @@
   <div data-guide="ads-materials-page" class="page-container ad-materials">
     <!-- 顶部工具栏：主操作按钮（T00811：移除与导航栏重复的页面标题） -->
     <div class="toolbar">
+      <!-- D6（T02544）：素材量大时只能翻页找名字；后端 /ads/materials 早已支持
+           keyword，这里接上，检索走服务端而不是只筛当前页 -->
+      <el-input
+        v-model="keyword"
+        data-guide="ads-materials-search"
+        placeholder="按素材名称搜索"
+        clearable
+        style="width: 220px"
+        @keyup.enter="onSearch"
+        @clear="onSearch"
+      />
       <IconButton
         type="primary"
         label="新增素材"
@@ -31,6 +42,11 @@
           show-overflow-tooltip
         />
         <el-table-column prop="duration" label="时长(秒)" width="100" align="center" />
+        <!-- D6（T02544）：后端一直下发 created_at，列表却没有这列，运营无法判断
+             「这条素材是什么时候传的」——补列，格式与全站时间列一致 -->
+        <el-table-column label="创建时间" width="170" align="center">
+          <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+        </el-table-column>
         <el-table-column label="默认占位" width="100" align="center">
           <template #default="{ row }">
             <el-tag v-if="row.is_default" type="success" size="small">默认</el-tag>
@@ -59,8 +75,9 @@
             />
           </template>
         </el-table-column>
-        <!-- T02626：失败态不出「暂无广告素材，点击右上角上传」——那会把接口挂了说成还没上传 -->
-        <template #empty><el-empty v-if="!listLoadError" description="暂无广告素材，点击右上角「新增素材」上传" :image-size="90" /></template>
+        <!-- T02626：失败态不出「暂无广告素材」——那会把接口挂了说成还没上传；
+             T02544 / D83：按钮在工具栏左侧，文案不能再说「右上角」 -->
+        <template #empty><el-empty v-if="!listLoadError" description="暂无广告素材，点击左上角「新增素材」上传" :image-size="90" /></template>
       </el-table>
 
       <!-- 分页：素材量可能较大，必须支持分页 -->
@@ -141,6 +158,7 @@ import { Plus, VideoPlay, Delete, Close, Check } from '@element-plus/icons-vue'
 import api from '../../api'
 import ListLoadError from '../../components/ListLoadError.vue'
 import { useLoadState } from '../../composables/useLoadState'
+import { formatTime } from '../../utils/format'
 
 const tableData = ref([])
 // T02626（FR-UX-302）：列表三态收敛到 useLoadState；失败时保留上次成功的行，
@@ -148,7 +166,12 @@ const tableData = ref([])
 const listLoad = useLoadState(
   async () => {
     const data = await api.get('/ads/materials', {
-      params: { page: page.value, size: size.value },
+      params: {
+        page: page.value,
+        size: size.value,
+        // D6（T02544）：检索必须落到服务端，否则只筛当前页等于撒谎
+        keyword: keyword.value.trim() || undefined,
+      },
     })
     tableData.value = data.list || []
     total.value = data.total || 0
@@ -168,6 +191,8 @@ const loading = listLoad.isLoading
 const page = ref(1)
 const size = ref(20)
 const total = ref(0)
+// D6（T02544）：按名称检索；条件变化时回到第 1 页，避免停在第 5 页看到空表
+const keyword = ref('')
 
 const dialogVisible = ref(false)
 const submitting = ref(false)
@@ -189,6 +214,11 @@ const rules = {
 
 async function fetchList() {
   await listLoad.load()
+}
+
+function onSearch() {
+  page.value = 1
+  fetchList()
 }
 
 function openCreateDialog() {

@@ -31,6 +31,16 @@
         </div>
       </div>
 
+      <!-- T02544 / D83：整月没有排期时，日历满屏「—」与「接口失败」在视觉上无从区分。
+           加载成功但确为空，就明说空，并给出下一步（去投放规则新建） -->
+      <div
+        v-if="!loadError && !loading && !hasMonthData"
+        data-guide="ads-month-empty"
+        class="month-empty-hint"
+      >
+        {{ selectedMonth }} 暂无排期。可到「广告 → 投放规则」新建投放，或切换月份查看其他排期。
+      </div>
+
       <el-calendar v-if="!loadError" data-guide="ads-schedule-calendar" v-model="calendarDate" v-loading="loading">
         <template #date-cell="{ data }">
           <div class="date-cell" :class="{ 'other-month': data.type !== 'current-month' }">
@@ -114,7 +124,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import dayjs from 'dayjs'
 import api from '../../api'
 import { ElMessage } from '../../utils/message'
@@ -135,6 +145,12 @@ const selectedMonth = ref(dayjs().format('YYYY-MM'))
 const calendarDate = ref(dayjs().startOf('month').toDate())
 
 const scheduleMap = ref({})
+
+// D83（T02544）：排期表按天分桶，整月无排期时日历全是「—」；
+// 用数据本身判断空月，而不是拿「—」的多少去猜
+const hasMonthData = computed(() =>
+  Object.keys(scheduleMap.value).some((day) => day.startsWith(selectedMonth.value)),
+)
 
 // 广告位文案与投放规则页同源（src/constants/enums.js，FR-UX-405 / T02504）
 const positionOptions = enumOptions(AD_POSITION)
@@ -274,6 +290,14 @@ watch(
 
   .calendar-card {
     padding: 16px;
+  }
+
+  .month-empty-hint {
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    color: $color-text-secondary;
+    background: $color-bg;
+    border-radius: $radius-sm;
   }
 
   .legend {

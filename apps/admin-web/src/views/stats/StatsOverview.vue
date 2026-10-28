@@ -51,18 +51,18 @@
         <span class="trend-title">趋势分析</span>
         <div class="trend-controls">
           <!-- 指标切换：仅这 3 个指标有意义做趋势 -->
-          <el-radio-group v-model="metric" @change="loadTrend">
+          <el-radio-group v-model="metric" @change="onTrendParamChange">
             <el-radio-button value="dau">DAU</el-radio-button>
             <el-radio-button value="play_count">播放量</el-radio-button>
             <el-radio-button value="completion_rate">完播率</el-radio-button>
           </el-radio-group>
-          <el-radio-group v-model="range" @change="loadTrend">
+          <el-radio-group v-model="range" @change="onTrendParamChange">
             <el-radio-button value="7d">7 天</el-radio-button>
             <el-radio-button value="30d">30 天</el-radio-button>
           </el-radio-group>
         </div>
       </div>
-      <div class="trend-canvas">
+      <div class="trend-canvas" v-loading="trendLoading && !trendError">
         <!-- T02496（FR-UX-302）：失败态优先于空态；空档期（values 全为 null）不画 0 折线 -->
         <ListLoadError
           v-if="trendError"
@@ -141,9 +141,24 @@ const metrics = computed(() =>
 )
 
 // 趋势查询参数
-const metric = ref('dau')
-const range = ref('7d')
+// D53（T02544）：指标与区间此前只活在组件内存里，刷新后回到 DAU/7 天，
+// 运营每天重新点一遍。选择结果落 localStorage，并在读取时校验取值。
+const TREND_PREF_KEY = 'admin_stats_trend_pref'
+const trendPref = (() => {
+  try {
+    return JSON.parse(localStorage.getItem(TREND_PREF_KEY) || 'null') || {}
+  } catch {
+    return {}
+  }
+})()
+const metric = ref(
+  ['dau', 'play_count', 'completion_rate'].includes(trendPref.metric) ? trendPref.metric : 'dau',
+)
+const range = ref(['7d', '30d'].includes(trendPref.range) ? trendPref.range : '7d')
 const trend = ref({ dates: [], values: [] })
+// D38（T02544）：趋势请求此前与整页共用一个 spinner（页面级 v-loading），
+// 切换指标时既看不出「趋势在刷新」，也会把整页盖住。拆出趋势自己的加载态。
+const trendLoading = ref(false)
 
 // T02496（FR-UX-302）：后端现在对没有记录的日期返回 null（而不是补 0），
 // 因此「有没有趋势」要看实际数据点，而不是 dates 长度——dates 恒等于区间天数，
@@ -286,13 +301,29 @@ async function loadOverview() {
 }
 
 async function loadTrend() {
+  trendLoading.value = true
   try {
     // 失败时保留上一份数据（图上仍是旧曲线），但错误态必须显示出来
     trend.value = await getTrend(metric.value, range.value)
     trendError.value = ''
   } catch (e) {
     trendError.value = e?.message || '趋势数据加载失败'
+  } finally {
+    trendLoading.value = false
   }
+}
+
+// D53（T02544）：切换指标/区间时记住选择；刷新、离开再回来都保持同一口径
+function onTrendParamChange() {
+  try {
+    localStorage.setItem(
+      TREND_PREF_KEY,
+      JSON.stringify({ metric: metric.value, range: range.value }),
+    )
+  } catch {
+    /* 隐私模式/配额满：记住失败不影响本次查询 */
+  }
+  loadTrend()
 }
 
 async function retryOverview() {
