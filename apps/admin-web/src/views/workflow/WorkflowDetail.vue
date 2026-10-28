@@ -160,6 +160,9 @@
             <span class="panel-title">LLM改写 · 稿件</span>
           </template>
           <div class="panel-content">
+            <div class="panel-toolbar">
+              <IconButton size="small" :icon="Refresh" label="刷新" desc="重新加载稿件" @click="loadScript" />
+            </div>
             <div v-loading="script.loading">
               <ListLoadError
                 v-if="script.error"
@@ -342,6 +345,9 @@
             <span class="panel-title">创建审核 · 审核记录</span>
           </template>
           <div class="panel-content">
+            <div class="panel-toolbar">
+              <IconButton size="small" :icon="Refresh" label="刷新" desc="重新加载审核记录" @click="loadReview" />
+            </div>
             <div v-loading="review.loading">
               <ListLoadError
                 v-if="review.error"

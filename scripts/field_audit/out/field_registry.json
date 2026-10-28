@@ -63,7 +63,7 @@
         "callSites": [
           {
             "file": "views/ad/AdMaterials.vue",
-            "line": 204,
+            "line": 234,
             "fn": "api.post",
             "fieldCount": 4,
             "unresolved": []
@@ -119,7 +119,7 @@
         "callSites": [
           {
             "file": "views/ad/AdPlacements.vue",
-            "line": 439,
+            "line": 456,
             "fn": "api.post",
             "fieldCount": 4,
             "unresolved": []
@@ -275,7 +275,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1540,
+            "line": 1544,
             "fn": "api.post",
             "fieldCount": 2,
             "unresolved": []
@@ -349,7 +349,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1683,
+            "line": 1687,
             "fn": "api.post",
             "fieldCount": 26,
             "unresolved": []
@@ -481,7 +481,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1453,
+            "line": 1457,
             "fn": "api.post",
             "fieldCount": 3,
             "unresolved": []
@@ -527,7 +527,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1563,
+            "line": 1567,
             "fn": "api.post",
             "fieldCount": 3,
             "unresolved": []
@@ -582,7 +582,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1600,
+            "line": 1604,
             "fn": "api.post",
             "fieldCount": 12,
             "unresolved": []
@@ -644,7 +644,7 @@
         "callSites": [
           {
             "file": "components/VoiceSyncButton.vue",
-            "line": 103,
+            "line": 108,
             "fn": "api.post",
             "fieldCount": 1,
             "unresolved": []
@@ -2002,7 +2002,7 @@
           },
           {
             "file": "views/workflow/WorkflowDetail.vue",
-            "line": 768,
+            "line": 774,
             "fn": "createMaterial",
             "fieldCount": 6,
             "unresolved": []
@@ -2457,7 +2457,7 @@
           },
           {
             "file": "views/workflow/WorkflowDetail.vue",
-            "line": 1070,
+            "line": 1076,
             "fn": "handleReviewAction",
             "fieldCount": 3,
             "unresolved": [
@@ -2515,7 +2515,7 @@
           },
           {
             "file": "views/review/ReviewList.vue",
-            "line": 591,
+            "line": 616,
             "fn": "batchHandleReviewAction",
             "fieldCount": 3,
             "unresolved": [
@@ -2524,7 +2524,7 @@
           },
           {
             "file": "views/review/ReviewList.vue",
-            "line": 635,
+            "line": 660,
             "fn": "batchHandleReviewAction",
             "fieldCount": 3,
             "unresolved": [
@@ -2810,7 +2810,7 @@
         "callSites": [
           {
             "file": "views/workflow/WorkflowDetail.vue",
-            "line": 1091,
+            "line": 1097,
             "fn": "api.post",
             "fieldCount": 1,
             "unresolved": []
@@ -3038,14 +3038,14 @@
         "callSites": [
           {
             "file": "views/ad/AdPlacements.vue",
-            "line": 414,
+            "line": 428,
             "fn": "api.put",
             "fieldCount": 1,
             "unresolved": []
           },
           {
             "file": "views/ad/AdSchedule.vue",
-            "line": 197,
+            "line": 213,
             "fn": "api.put",
             "fieldCount": 1,
             "unresolved": []
@@ -3154,7 +3154,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1426,
+            "line": 1428,
             "fn": "api.put",
             "fieldCount": 4,
             "unresolved": []
@@ -3852,7 +3852,7 @@
           },
           {
             "file": "views/workflow/WorkflowDetail.vue",
-            "line": 757,
+            "line": 763,
             "fn": "updateMaterial",
             "fieldCount": 5,
             "unresolved": []
@@ -4193,7 +4193,7 @@
         "callSites": [
           {
             "file": "views/workflow/WorkflowDetail.vue",
-            "line": 887,
+            "line": 893,
             "fn": "updateSegments",
             "fieldCount": 1,
             "unresolved": []

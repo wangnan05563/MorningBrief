@@ -15,12 +15,12 @@
         @click="onSync"
       />
       <!-- 官方同步缓存角标：绿点=当前列表来自官方同步，悬停显示同步时间 -->
-      <span v-if="meta.is_custom && !props.disabled" class="voice-sync-dot" :title="metaTitle"></span>
+      <span v-if="meta.is_custom && !props.disabled && !metaError" class="voice-sync-dot" :title="metaTitle"></span>
     </span>
   </el-tooltip>
 
   <!-- 重置入口：仅已同步过的引擎展示，用于回退内置清单 -->
-  <el-dropdown v-if="meta.is_custom && !syncing" trigger="click" @command="onCommand">
+  <el-dropdown v-if="meta.is_custom && !syncing && !metaError" trigger="click" @command="onCommand">
     <el-button link type="info" class="voice-sync-more">
       <el-icon><MoreFilled /></el-icon>
     </el-button>
@@ -69,14 +69,17 @@ const PROVIDER_LABEL = {
 
 const syncing = ref(false)
 const meta = reactive({ is_custom: false, synced_at: '', count: 0, source: '' })
+// A18：meta 读取失败不能当成「尚未同步」——那会让「内置清单」成为一个没被证实的事实
+const metaError = ref('')
 
 const syncSupported = computed(() => !props.disabled && SYNC_SUPPORTED.includes(props.provider))
 const unsupportedTip = computed(() => PROVIDER_LABEL[props.provider] || '该引擎不支持官方音色同步')
-const metaTitle = computed(() =>
-  meta.is_custom
+const metaTitle = computed(() => {
+  if (metaError.value) return `同步状态未知：${metaError.value}（不影响试听与保存）`
+  return meta.is_custom
     ? `来自官方同步：${meta.count} 个音色（${formatTime(meta.synced_at)}）`
     : '内置静态清单，点击按钮可从官方接口同步'
-)
+})
 
 function formatTime(iso) {
   if (!iso) return ''
@@ -89,10 +92,12 @@ async function loadMeta() {
   try {
     const data = await api.get('/ai/voices/meta', { params: { provider: props.provider } })
     Object.assign(meta, data || {})
+    metaError.value = ''
     emit('meta', { ...meta })
   } catch (e) {
-    // 拦截器已提示；角标静默回退为内置态
-    Object.assign(meta, { is_custom: false, synced_at: '', count: 0, source: '' })
+    // A18：保留上次读到的 meta（可能是同步态），只把「读到什么」标为未知；
+    // 角标与重置入口在未知时隐藏，避免把请求失败说成「内置清单」
+    metaError.value = e?.response?.data?.message || e?.message || '读取失败'
   }
 }
 
@@ -108,6 +113,7 @@ async function onSync() {
       count,
       source: (data && data.source) || '',
     })
+    metaError.value = ''
     emit('meta', { ...meta })
     emit('synced', (data && data.items) || [])
     ElMessage.success(`已同步官方音色 ${count} 个`)
@@ -134,6 +140,7 @@ async function onCommand(cmd) {
   try {
     await api.delete('/ai/voices/sync', { params: { provider: props.provider } })
     Object.assign(meta, { is_custom: false, synced_at: '', count: 0, source: '' })
+    metaError.value = ''
     emit('meta', { ...meta })
     emit('synced', null) // null = 让父组件重新走 loadVoices 拉内置清单
     ElMessage.success('已恢复内置音色清单')

@@ -8,7 +8,7 @@
       "sites": [
         {
           "file": "views/ad/AdMaterials.vue",
-          "line": 225,
+          "line": 255,
           "fn": "api.delete",
           "fieldCount": 0,
           "unresolved": []
@@ -23,7 +23,7 @@
       "sites": [
         {
           "file": "views/ad/AdPlacements.vue",
-          "line": 478,
+          "line": 495,
           "fn": "api.delete",
           "fieldCount": 0,
           "unresolved": []
@@ -41,7 +41,7 @@
       "sites": [
         {
           "file": "components/VoiceSyncButton.vue",
-          "line": 135,
+          "line": 141,
           "fn": "api.delete",
           "fieldCount": 2,
           "unresolved": []
@@ -193,7 +193,7 @@
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 798,
+          "line": 804,
           "fn": "deleteMaterial",
           "fieldCount": 1,
           "unresolved": []
@@ -208,7 +208,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 855,
+          "line": 861,
           "fn": "deleteScript",
           "fieldCount": 0,
           "unresolved": []
@@ -223,7 +223,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 1016,
+          "line": 1022,
           "fn": "deleteEpisodeAudio",
           "fieldCount": 0,
           "unresolved": []
@@ -238,7 +238,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 995,
+          "line": 1001,
           "fn": "deleteTtsAudio",
           "fieldCount": 0,
           "unresolved": []
@@ -317,14 +317,14 @@
       "sites": [
         {
           "file": "views/ad/AdMaterials.vue",
-          "line": 150,
+          "line": 168,
           "fn": "api.get",
-          "fieldCount": 3,
+          "fieldCount": 4,
           "unresolved": []
         },
         {
           "file": "views/ad/AdPlacements.vue",
-          "line": 380,
+          "line": 388,
           "fn": "api.get",
           "fieldCount": 4,
           "unresolved": []
@@ -344,7 +344,7 @@
       "sites": [
         {
           "file": "views/ad/AdPlacements.vue",
-          "line": 325,
+          "line": 330,
           "fn": "api.get",
           "fieldCount": 4,
           "unresolved": []
@@ -369,7 +369,7 @@
       "sites": [
         {
           "file": "views/ad/AdSchedule.vue",
-          "line": 211,
+          "line": 227,
           "fn": "api.get",
           "fieldCount": 2,
           "unresolved": []
@@ -465,7 +465,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1714,
+          "line": 1718,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -501,7 +501,7 @@
       "sites": [
         {
           "file": "components/VoiceSyncButton.vue",
-          "line": 90,
+          "line": 93,
           "fn": "api.get",
           "fieldCount": 2,
           "unresolved": []
@@ -652,7 +652,7 @@
         },
         {
           "file": "views/review/ReviewList.vue",
-          "line": 504,
+          "line": 529,
           "fn": "listChannels",
           "fieldCount": 2,
           "unresolved": []
@@ -1288,7 +1288,7 @@
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 687,
+          "line": 693,
           "fn": "listMaterials",
           "fieldCount": 4,
           "unresolved": []
@@ -1310,14 +1310,14 @@
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 727,
+          "line": 733,
           "fn": "getMaterial",
           "fieldCount": 0,
           "unresolved": []
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 805,
+          "line": 811,
           "fn": "getMaterial",
           "fieldCount": 0,
           "unresolved": []
@@ -1489,14 +1489,14 @@
         },
         {
           "file": "views/review/ReviewList.vue",
-          "line": 400,
+          "line": 412,
           "fn": "api.get",
           "fieldCount": 9,
           "unresolved": []
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 1032,
+          "line": 1038,
           "fn": "listReviews",
           "fieldCount": 1,
           "unresolved": []
@@ -1536,7 +1536,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 826,
+          "line": 832,
           "fn": "getScriptByWorkflow",
           "fieldCount": 2,
           "unresolved": []
@@ -1587,7 +1587,7 @@
       "sites": [
         {
           "file": "views/stats/StatsOverview.vue",
-          "line": 278,
+          "line": 293,
           "fn": "getOverview",
           "fieldCount": 2,
           "unresolved": []
@@ -1634,7 +1634,7 @@
       "sites": [
         {
           "file": "views/stats/StatsOverview.vue",
-          "line": 291,
+          "line": 307,
           "fn": "getTrend",
           "fieldCount": 3,
           "unresolved": []
@@ -1733,7 +1733,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 622,
+          "line": 628,
           "fn": "api.get",
           "fieldCount": 1,
           "unresolved": []
@@ -1748,7 +1748,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 908,
+          "line": 914,
           "fn": "listAudioFiles",
           "fieldCount": 0,
           "unresolved": []
@@ -1804,7 +1804,7 @@
       "sites": [
         {
           "file": "views/ad/AdMaterials.vue",
-          "line": 204,
+          "line": 234,
           "fn": "api.post",
           "fieldCount": 4,
           "unresolved": []
@@ -1824,7 +1824,7 @@
       "sites": [
         {
           "file": "views/ad/AdPlacements.vue",
-          "line": 439,
+          "line": 456,
           "fn": "api.post",
           "fieldCount": 4,
           "unresolved": []
@@ -1881,7 +1881,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1540,
+          "line": 1544,
           "fn": "api.post",
           "fieldCount": 2,
           "unresolved": []
@@ -1930,7 +1930,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1683,
+          "line": 1687,
           "fn": "api.post",
           "fieldCount": 26,
           "unresolved": []
@@ -1945,7 +1945,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1506,
+          "line": 1510,
           "fn": "api.post",
           "fieldCount": 0,
           "unresolved": []
@@ -1981,7 +1981,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1453,
+          "line": 1457,
           "fn": "api.post",
           "fieldCount": 3,
           "unresolved": []
@@ -2000,7 +2000,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1563,
+          "line": 1567,
           "fn": "api.post",
           "fieldCount": 3,
           "unresolved": []
@@ -2028,7 +2028,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1600,
+          "line": 1604,
           "fn": "api.post",
           "fieldCount": 12,
           "unresolved": []
@@ -2045,7 +2045,7 @@
       "sites": [
         {
           "file": "components/VoiceSyncButton.vue",
-          "line": 103,
+          "line": 108,
           "fn": "api.post",
           "fieldCount": 1,
           "unresolved": []
@@ -2729,7 +2729,7 @@
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 768,
+          "line": 774,
           "fn": "createMaterial",
           "fieldCount": 6,
           "unresolved": []
@@ -2983,7 +2983,7 @@
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 1070,
+          "line": 1076,
           "fn": "handleReviewAction",
           "fieldCount": 3,
           "unresolved": [
@@ -3015,7 +3015,7 @@
         },
         {
           "file": "views/review/ReviewList.vue",
-          "line": 591,
+          "line": 616,
           "fn": "batchHandleReviewAction",
           "fieldCount": 3,
           "unresolved": [
@@ -3024,7 +3024,7 @@
         },
         {
           "file": "views/review/ReviewList.vue",
-          "line": 635,
+          "line": 660,
           "fn": "batchHandleReviewAction",
           "fieldCount": 3,
           "unresolved": [
@@ -3171,7 +3171,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 1091,
+          "line": 1097,
           "fn": "api.post",
           "fieldCount": 1,
           "unresolved": []
@@ -3278,14 +3278,14 @@
       "sites": [
         {
           "file": "views/ad/AdPlacements.vue",
-          "line": 414,
+          "line": 428,
           "fn": "api.put",
           "fieldCount": 1,
           "unresolved": []
         },
         {
           "file": "views/ad/AdSchedule.vue",
-          "line": 197,
+          "line": 213,
           "fn": "api.put",
           "fieldCount": 1,
           "unresolved": []
@@ -3314,7 +3314,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1426,
+          "line": 1428,
           "fn": "api.put",
           "fieldCount": 4,
           "unresolved": []
@@ -3566,7 +3566,7 @@
         },
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 757,
+          "line": 763,
           "fn": "updateMaterial",
           "fieldCount": 5,
           "unresolved": []
@@ -3680,7 +3680,7 @@
       "sites": [
         {
           "file": "views/workflow/WorkflowDetail.vue",
-          "line": 887,
+          "line": 893,
           "fn": "updateSegments",
           "fieldCount": 1,
           "unresolved": []

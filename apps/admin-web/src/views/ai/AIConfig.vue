@@ -1396,6 +1396,8 @@ async function handleProviderChange(provider) {
 function applyPreset(key) {
   const preset = presets.value.find((p) => p.key === key)
   if (!preset) return
+  // F5：换了地址/模型，上一次连接测试的结论不再适用于当前表单
+  llmTestResult.value = null
   selectedPreset.value = key
   // 优先使用该预设之前保存的配置，未保存过则用预设默认值
   const saved = presetConfigs.value[key]
@@ -1430,6 +1432,8 @@ async function handleSave() {
       image: imageForm.value,
     })
     ElMessage.success('配置已保存并热更新')
+    // F5：保存后配置来源已变，旧测试标签必须清掉
+    llmTestResult.value = null
     commitDraft()
     draftTts.commit()
     draftImage.commit()
@@ -1748,12 +1752,17 @@ function applyCalculatorParams() {
 
   const notices = buildSyncNotices(d, r)
   if (applied.length > 0) {
+    // M13：计算器只带入这两个字段，不能顺手清掉页面上其他未保存修改
+    const draftKept = hasAnyDraft()
+    const suffix = draftKept
+      ? '；其余未保存修改仍保留为草稿，保存后一并生效'
+      : ''
     ElMessage({
       type: notices.length ? 'warning' : 'info',
       duration: notices.length ? 8000 : 3000,
-      message: notices.length
+      message: (notices.length
         ? `已从参数计算器同步，但有 ${notices.length} 项落在本页面可设范围之外，已调整：${notices.join('；')}。请点击保存配置持久化`
-        : `已从参数计算器同步：${applied.join('、')}，请点击保存配置持久化`,
+        : `已从参数计算器同步：${applied.join('、')}，请点击保存配置持久化`) + suffix,
     })
   }
 
