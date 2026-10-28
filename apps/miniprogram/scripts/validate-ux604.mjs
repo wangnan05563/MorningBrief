@@ -48,6 +48,8 @@
  *
  * 16-20. J27/J28/J32/J59/J73/J81：详情页缓冲态与课程语境、失败可重试、离线兜底、
  *     已下架标签、检查更新等实现与文案的接线（逐条见下方代码注释）。
+ * 23. J107：从后台回前台必须重新对齐播放态——detail.onShow 调 syncPlayingState；
+ *     浮条的 pageLifetimes.show 由第 6 条（J5）同源锁住，两处都是「错过订阅事件」的纠偏点。
  * 21. T02787：字面量 storage key 只许出现在 services/storage-keys.js ——
  *     黑名单清缓存会抹数据，根因就是 key 散在各模块、静态列不全；这条堵住新增散 key。
  * 22. T02788：「删除我的数据」必须入口、确认口径、拆除顺序三处齐：
@@ -751,6 +753,15 @@ export function checkFacts(facts) {
   }
   if (!/检查超时/.test(checkUpdateBody) || /\},\s*2000\)/.test(checkUpdateBody)) {
     errors.push('检查更新仍用 2s 固定兜底并冒充「已是最新」：应等回调，超时如实说「检查超时」（J81）')
+  }
+
+  // —— 23. J107：从后台回前台要重新对齐播放态 ——
+  // 后台音频不受页面生命周期管辖：在其它页起播/播完再回本页，订阅回调可能早就错过了。
+  const detailOnShow = methodBody(detailJsForWaiting, 'onShow')
+  if (!detailOnShow) {
+    errors.push('detail.js 找不到 onShow：从后台回前台没有纠偏时机（J107）')
+  } else if (!/syncPlayingState\s*\(/.test(detailOnShow)) {
+    errors.push('detail.onShow 不再调用 syncPlayingState：后台播完/切集后回前台，按钮与进度停在旧状态（J107）')
   }
 
   return { errors, facts }

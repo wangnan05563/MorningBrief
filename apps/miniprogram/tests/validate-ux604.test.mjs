@@ -603,6 +603,20 @@ describe('T02788 删除我的数据：入口、确认口径与拆除顺序', () 
     ))
 })
 
+describe('J107：回前台纠偏（detail.onShow → syncPlayingState）', () => {
+  test('onShow 删掉 syncPlayingState 被抓', () =>
+    expectHit(
+      { 'pages/detail/detail.js': mutate('pages/detail/detail.js', /\n\s*this\.syncPlayingState\(\);\n/, '\n') },
+      'J107',
+    ))
+
+  test('接错对象：换成组件里的 syncFromPlayer（页面上不存在）被抓', () =>
+    expectHit(
+      { 'pages/detail/detail.js': mutate('pages/detail/detail.js', /this\.syncPlayingState\(\)/, 'this.syncFromPlayer()') },
+      'J107',
+    ))
+})
+
 describe('防误报：门禁不能红在自家注释与动态绑定上', () => {
   test('被禁句子写在注释里不算违规', async () => {
     const src = read('pages/privacy/privacy.js').replace(
@@ -620,5 +634,14 @@ describe('防误报：门禁不能红在自家注释与动态绑定上', () => {
     )
     const { errors } = await validate({ 'pages/favorites/favorites.wxml': src })
     assert.ok(!errors.some((e) => e.includes('noopHandler')), errors.join('\n'))
+  })
+
+  test('onShow 里只写注释提到 syncPlayingState 不算接线（J107）', async () => {
+    const src = read('pages/detail/detail.js').replace(
+      /\n\s*this\.syncPlayingState\(\);\n/,
+      '\n      // 曾经在这里 this.syncPlayingState(); 回前台纠偏\n',
+    )
+    const { errors } = await validate({ 'pages/detail/detail.js': src })
+    assert.ok(errors.some((e) => e.includes('J107')), errors.join('\n'))
   })
 })
