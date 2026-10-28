@@ -26,6 +26,7 @@ const MAINTENANCE = read('../../src/views/maintenance/Maintenance.vue')
 const DB_ADMIN = read('../../src/views/maintenance/DatabaseAdmin.vue')
 const REVIEW = read('../../src/views/review/ReviewList.vue')
 const MANAGE_USERS = read('../../src/views/mobile/ManageUsers.vue')
+const ADMIN_USERS = read('../../src/views/system/AdminUsers.vue')
 
 /** 后端 AUDIT_CATEGORIES 元组里的字面量，作为前端可请求类别的唯一来源 */
 function registeredCategories() {
@@ -75,7 +76,7 @@ test('分页与倒序：最近一条在最前', () => {
   assert.match(BACKEND_ROUTER, /page_size: int = Query\(20, ge=1, le=100\)/, '接口层 page_size 未限幅')
 })
 
-test('四个页面挂载的 category 都在后端登记表内', () => {
+test('各页面挂载的 category 都在后端登记表内', () => {
   const registry = registeredCategories()
   assert.ok(registry.length >= 15, `登记表类别数异常（${registry.length}）`)
   const mounts = [
@@ -83,6 +84,7 @@ test('四个页面挂载的 category 都在后端登记表内', () => {
     ['DatabaseAdmin.vue', DB_ADMIN],
     ['ReviewList.vue', REVIEW],
     ['ManageUsers.vue', MANAGE_USERS],
+    ['AdminUsers.vue', ADMIN_USERS],
   ]
   const used = []
   for (const [name, source] of mounts) {

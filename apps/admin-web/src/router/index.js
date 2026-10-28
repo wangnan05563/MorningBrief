@@ -11,7 +11,7 @@
  *   数据分析  - 数据统计、频道健康度、RSS 源状态、LLM 重试指标
  *   AI 自动化 - 工作流监控（仅 admin）、AI 服务（仅 admin）、智能助手（仅 admin）
  *   云端存储  - 云端配置（仅 admin）、文件管理（仅 admin）
- *   系统配置  - 内网穿透（仅 admin）、通知管理（仅 admin）、自动审批（仅 admin）
+ *   系统配置  - 内网穿透（仅 admin）、通知管理（仅 admin）、自动审批（仅 admin）、用户管理（仅 admin）
  *   维护工具  - 参数计算器（仅 admin）、数据库维护（仅 admin）、系统清理（仅 admin）
  *   帮助      - 帮助文档、关于
  *
@@ -182,6 +182,13 @@ const routes = [
         name: 'AutoReviewConfig',
         component: () => import('../views/system/AutoReviewConfig.vue'),
         meta: { title: '自动审批', icon: 'CircleCheck', group: '系统配置', requireRole: 'admin' },
+      },
+      {
+        // T03439：可登录后台的账号（管理员/运营）管理，与移动端终端用户管理分开
+        path: 'system/users',
+        name: 'AdminUsers',
+        component: () => import('../views/system/AdminUsers.vue'),
+        meta: { title: '用户管理', icon: 'UserFilled', group: '系统配置', requireRole: 'admin' },
       },
       {
         path: 'tools/calculator',

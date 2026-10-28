@@ -24,6 +24,7 @@ from app.services.db_admin_service import _mask_audit_detail
 # 所有 `category="..."`，漏登记的类别直接红。新增写入口时请同步这里。
 AUDIT_CATEGORIES: tuple[str, ...] = (
     "ad",
+    "admin_user",
     "ai",
     "audio",
     "backup",

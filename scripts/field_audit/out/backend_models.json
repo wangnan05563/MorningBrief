@@ -118,6 +118,56 @@
         ]
       }
     },
+    "DELETE /auth/users/*": {
+      "raw_path": "/admin/api/v1/auth/users/{admin_id}",
+      "endpoint": "delete_admin_user",
+      "model": null,
+      "handler": {
+        "source": "backend/app/routers/admin/auth.py:203",
+        "refs": [
+          "",
+          "/users/{admin_id}",
+          "AdminPayload",
+          "AdminService",
+          "AsyncSession",
+          "AuditLog",
+          "Depends",
+          "Query",
+          "action",
+          "actor_id",
+          "add",
+          "admin",
+          "admin_id",
+          "admin_user",
+          "audit_detail",
+          "category",
+          "commit",
+          "data",
+          "db",
+          "delete",
+          "delete_admin",
+          "description",
+          "detail",
+          "get_db",
+          "id",
+          "int",
+          "max_length",
+          "operator",
+          "reason",
+          "require_admin",
+          "role",
+          "router",
+          "row",
+          "status",
+          "str",
+          "success",
+          "svc",
+          "target",
+          "username",
+          "删除原因（可选，写入审计）"
+        ]
+      }
+    },
     "DELETE /channels/*": {
       "raw_path": "/admin/api/v1/channels/{channel_id}",
       "endpoint": "delete_channel",
@@ -1573,7 +1623,7 @@
       "model": {
         "name": "ChangePasswordRequest",
         "module": "app.routers.admin.auth",
-        "source": "backend/app/routers/admin/auth.py:29",
+        "source": "backend/app/routers/admin/auth.py:31",
         "extra": "ignore",
         "fields": [
           "new_password",
@@ -1585,7 +1635,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/auth.py:66",
+        "source": "backend/app/routers/admin/auth.py:91",
         "refs": [
           "/change-password",
           "AdminPayload",
@@ -1637,7 +1687,7 @@
       "model": {
         "name": "LoginRequest",
         "module": "app.routers.admin.auth",
-        "source": "backend/app/routers/admin/auth.py:23",
+        "source": "backend/app/routers/admin/auth.py:25",
         "extra": "ignore",
         "fields": [
           "password",
@@ -1649,7 +1699,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/auth.py:35",
+        "source": "backend/app/routers/admin/auth.py:60",
         "refs": [
           "/login",
           "AdminService",
@@ -1685,7 +1735,7 @@
       "endpoint": "logout",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/auth.py:51",
+        "source": "backend/app/routers/admin/auth.py:76",
         "refs": [
           "/logout",
           "AdminPayload",
@@ -1710,6 +1760,73 @@
           "router",
           "success",
           "svc"
+        ]
+      }
+    },
+    "POST /auth/users": {
+      "raw_path": "/admin/api/v1/auth/users",
+      "endpoint": "create_admin_user",
+      "model": {
+        "name": "AdminCreateRequest",
+        "module": "app.routers.admin.auth",
+        "source": "backend/app/routers/admin/auth.py:37",
+        "extra": "ignore",
+        "fields": [
+          "nickname",
+          "password",
+          "reason",
+          "role",
+          "username"
+        ],
+        "flatFields": [
+          "nickname",
+          "password",
+          "reason",
+          "role",
+          "username"
+        ]
+      },
+      "handler": {
+        "source": "backend/app/routers/admin/auth.py:136",
+        "refs": [
+          "/users",
+          "AdminCreateRequest",
+          "AdminPayload",
+          "AdminService",
+          "AsyncSession",
+          "AuditLog",
+          "Depends",
+          "action",
+          "add",
+          "admin",
+          "admin_id",
+          "admin_user",
+          "audit_detail",
+          "category",
+          "commit",
+          "create",
+          "create_admin",
+          "data",
+          "db",
+          "detail",
+          "get_db",
+          "id",
+          "nickname",
+          "operator",
+          "password",
+          "post",
+          "reason",
+          "req",
+          "require_admin",
+          "role",
+          "router",
+          "row",
+          "serialize",
+          "status",
+          "success",
+          "svc",
+          "target",
+          "username"
         ]
       }
     },
@@ -5580,6 +5697,82 @@
           "保存 AI 配置（热更新 Settings 单例）。\n\n    当 selected_preset 非空时，同步将当前 LLM 配置保存到预设配置 JSON，\n    实现切换预设时返显之前保存的 API Key/Base URL/Model。\n\n    问答超时先校验再落库（INT-UX-05 / T02528）：原先区间只写在管理端输入框上，\n    直接调接口写 600 会热更进 Settings，之后每次问答先到点的是浏览器 130s，\n    用户拿回一句没有重试入口的网络错误。校验放在整份配置写入之前，越界时\n    tts/image 等其余字段也一并不写，避免「半份新配置生效」。\n    ",
           "配置已保存",
           "问答超时需在 "
+        ]
+      }
+    },
+    "PUT /auth/users/*": {
+      "raw_path": "/admin/api/v1/auth/users/{admin_id}",
+      "endpoint": "update_admin_user",
+      "model": {
+        "name": "AdminUpdateRequest",
+        "module": "app.routers.admin.auth",
+        "source": "backend/app/routers/admin/auth.py:50",
+        "extra": "ignore",
+        "fields": [
+          "nickname",
+          "password",
+          "reason",
+          "role",
+          "status"
+        ],
+        "flatFields": [
+          "nickname",
+          "password",
+          "reason",
+          "role",
+          "status"
+        ]
+      },
+      "handler": {
+        "source": "backend/app/routers/admin/auth.py:163",
+        "refs": [
+          "/users/{admin_id}",
+          "AdminPayload",
+          "AdminService",
+          "AdminUpdateRequest",
+          "AsyncSession",
+          "AuditLog",
+          "BizError",
+          "Depends",
+          "action",
+          "actor_id",
+          "add",
+          "admin",
+          "admin_id",
+          "admin_user",
+          "audit_detail",
+          "category",
+          "changes",
+          "code",
+          "commit",
+          "data",
+          "db",
+          "detail",
+          "dict",
+          "get_db",
+          "id",
+          "int",
+          "message",
+          "nickname",
+          "operator",
+          "password",
+          "password_reset",
+          "put",
+          "reason",
+          "req",
+          "require_admin",
+          "role",
+          "router",
+          "row",
+          "serialize",
+          "status",
+          "success",
+          "svc",
+          "target",
+          "update",
+          "update_admin",
+          "username",
+          "没有需要修改的字段"
         ]
       }
     },

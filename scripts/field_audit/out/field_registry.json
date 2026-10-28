@@ -764,9 +764,9 @@
     {
       "endpoint": "POST /auth/change-password",
       "model": "ChangePasswordRequest",
-      "modelSource": "backend/app/routers/admin/auth.py:29",
+      "modelSource": "backend/app/routers/admin/auth.py:31",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/auth.py:66",
+      "handlerSource": "backend/app/routers/admin/auth.py:91",
       "declared": [
         "new_password",
         "old_password"
@@ -807,9 +807,9 @@
     {
       "endpoint": "POST /auth/login",
       "model": "LoginRequest",
-      "modelSource": "backend/app/routers/admin/auth.py:23",
+      "modelSource": "backend/app/routers/admin/auth.py:25",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/auth.py:35",
+      "handlerSource": "backend/app/routers/admin/auth.py:60",
       "declared": [
         "password",
         "username"
@@ -846,6 +846,70 @@
         "columnNotInModel": []
       },
       "verdict": "设计如此：password 只用于校验，落库列是 password_hash；last_login_at/nickname/role/status 由注册与管理端点写，登录请求体不声明它们是正确的窄接口（backend/app/models/admin_user.py:27 backend/app/models/admin_user.py:33）"
+    },
+    {
+      "endpoint": "POST /auth/users",
+      "model": "AdminCreateRequest",
+      "modelSource": "backend/app/routers/admin/auth.py:37",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/auth.py:136",
+      "declared": [
+        "nickname",
+        "password",
+        "reason",
+        "role",
+        "username"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/system/AdminUsers.vue",
+            "line": 384,
+            "fn": "createAdminUser",
+            "fieldCount": 5,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "nickname",
+          "password",
+          "reason",
+          "role",
+          "username"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": "AdminUser",
+      "ormScore": 0.6,
+      "ormTied": [
+        "AdminUser"
+      ],
+      "ormColumns": [
+        "created_at",
+        "id",
+        "last_login_at",
+        "nickname",
+        "password_hash",
+        "role",
+        "status",
+        "updated_at",
+        "username"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "password"
+        ],
+        "columnNotInModel": [
+          "last_login_at",
+          "password_hash",
+          "status"
+        ]
+      },
+      "verdict": null
     },
     {
       "endpoint": "POST /backups/restore",
@@ -3209,6 +3273,84 @@
       "verdict": "设计如此：PUT /ai/config 的字段是嵌套结构（llm./tts./image.），前端按子表单展开提交，落库到按 provider 分组的配置行；顶层字段名与列名天然不同，(a)−(c) 命中为结构差异不是漏字段（apps/admin-web/src/views/ai/AIConfig.vue:1595 apps/admin-web/src/views/ai/AIConfig.vue:1660）"
     },
     {
+      "endpoint": "PUT /auth/users/*",
+      "model": "AdminUpdateRequest",
+      "modelSource": "backend/app/routers/admin/auth.py:50",
+      "modelExtra": "ignore",
+      "handlerSource": "backend/app/routers/admin/auth.py:163",
+      "declared": [
+        "nickname",
+        "password",
+        "reason",
+        "role",
+        "status"
+      ],
+      "frontend": {
+        "callSites": [
+          {
+            "file": "views/system/AdminUsers.vue",
+            "line": 469,
+            "fn": "updateAdminUser",
+            "fieldCount": 4,
+            "unresolved": []
+          },
+          {
+            "file": "views/system/AdminUsers.vue",
+            "line": 503,
+            "fn": "updateAdminUser",
+            "fieldCount": 2,
+            "unresolved": []
+          },
+          {
+            "file": "views/system/AdminUsers.vue",
+            "line": 535,
+            "fn": "updateAdminUser",
+            "fieldCount": 2,
+            "unresolved": []
+          }
+        ],
+        "fields": [
+          "nickname",
+          "password",
+          "reason",
+          "role",
+          "status"
+        ],
+        "unresolved": [],
+        "hasCallSite": true
+      },
+      "ormTable": "AdminUser",
+      "ormScore": 0.6,
+      "ormTied": [
+        "AdminUser"
+      ],
+      "ormColumns": [
+        "created_at",
+        "id",
+        "last_login_at",
+        "nickname",
+        "password_hash",
+        "role",
+        "status",
+        "updated_at",
+        "username"
+      ],
+      "diffs": {
+        "frontendNotInModel": [],
+        "declaredButNotHandled": [],
+        "modelNotSubmitted": [],
+        "modelNotInColumn": [
+          "password"
+        ],
+        "columnNotInModel": [
+          "last_login_at",
+          "password_hash",
+          "username"
+        ]
+      },
+      "verdict": null
+    },
+    {
       "endpoint": "PUT /auto-review/config",
       "model": "ConfigUpdateRequest",
       "modelSource": "backend/app/routers/admin/auto_review.py:29",
@@ -4087,9 +4229,9 @@
     }
   ],
   "totals": {
-    "endpointsWithBodyModel": 69,
+    "endpointsWithBodyModel": 71,
     "forbidCount": 6,
-    "withFrontendCallSite": 61,
+    "withFrontendCallSite": 63,
     "noFrontendCallSite": [
       "POST /backups/restore",
       "POST /m/device/register",

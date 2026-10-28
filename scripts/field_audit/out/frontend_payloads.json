@@ -50,6 +50,23 @@
     },
     {
       "method": "DELETE",
+      "url": "/auth/users/*",
+      "fields": [
+        "params"
+      ],
+      "unresolved": [],
+      "sites": [
+        {
+          "file": "views/system/AdminUsers.vue",
+          "line": 554,
+          "fn": "deleteAdminUser",
+          "fieldCount": 1,
+          "unresolved": []
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
       "url": "/channels/*",
       "fields": [],
       "unresolved": [],
@@ -505,6 +522,23 @@
           "line": 12,
           "fn": "api.get",
           "fieldCount": 2,
+          "unresolved": []
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "url": "/auth/users",
+      "fields": [
+        "params"
+      ],
+      "unresolved": [],
+      "sites": [
+        {
+          "file": "views/system/AdminUsers.vue",
+          "line": 348,
+          "fn": "listAdminUsers",
+          "fieldCount": 1,
           "unresolved": []
         }
       ]
@@ -2111,6 +2145,27 @@
     },
     {
       "method": "POST",
+      "url": "/auth/users",
+      "fields": [
+        "nickname",
+        "password",
+        "reason",
+        "role",
+        "username"
+      ],
+      "unresolved": [],
+      "sites": [
+        {
+          "file": "views/system/AdminUsers.vue",
+          "line": 384,
+          "fn": "createAdminUser",
+          "fieldCount": 5,
+          "unresolved": []
+        }
+      ]
+    },
+    {
+      "method": "POST",
       "url": "/auto-review/retry/*",
       "fields": [],
       "unresolved": [],
@@ -3268,6 +3323,41 @@
     },
     {
       "method": "PUT",
+      "url": "/auth/users/*",
+      "fields": [
+        "nickname",
+        "password",
+        "reason",
+        "role",
+        "status"
+      ],
+      "unresolved": [],
+      "sites": [
+        {
+          "file": "views/system/AdminUsers.vue",
+          "line": 469,
+          "fn": "updateAdminUser",
+          "fieldCount": 4,
+          "unresolved": []
+        },
+        {
+          "file": "views/system/AdminUsers.vue",
+          "line": 503,
+          "fn": "updateAdminUser",
+          "fieldCount": 2,
+          "unresolved": []
+        },
+        {
+          "file": "views/system/AdminUsers.vue",
+          "line": 535,
+          "fn": "updateAdminUser",
+          "fieldCount": 2,
+          "unresolved": []
+        }
+      ]
+    },
+    {
+      "method": "PUT",
       "url": "/auto-review/config",
       "fields": [
         "enabled",
@@ -3646,6 +3736,374 @@
       "line": 67,
       "argNames": [],
       "payloadExpr": null,
+      "defIndex": {
+        "decls": [],
+        "assigns": []
+      }
+    },
+    {
+      "fn": "listAdminUsers",
+      "method": "get",
+      "url": "/auth/users",
+      "file": "api/adminUsers.js",
+      "line": 9,
+      "argNames": [
+        null
+      ],
+      "payloadExpr": {
+        "type": "ObjectExpression",
+        "start": 225,
+        "end": 235,
+        "loc": {
+          "start": {
+            "line": 9,
+            "column": 70,
+            "index": 225
+          },
+          "end": {
+            "line": 9,
+            "column": 80,
+            "index": 235
+          }
+        },
+        "properties": [
+          {
+            "type": "ObjectProperty",
+            "start": 227,
+            "end": 233,
+            "loc": {
+              "start": {
+                "line": 9,
+                "column": 72,
+                "index": 227
+              },
+              "end": {
+                "line": 9,
+                "column": 78,
+                "index": 233
+              }
+            },
+            "method": false,
+            "key": {
+              "type": "Identifier",
+              "start": 227,
+              "end": 233,
+              "loc": {
+                "start": {
+                  "line": 9,
+                  "column": 72,
+                  "index": 227
+                },
+                "end": {
+                  "line": 9,
+                  "column": 78,
+                  "index": 233
+                },
+                "identifierName": "params"
+              },
+              "name": "params"
+            },
+            "computed": false,
+            "shorthand": true,
+            "value": {
+              "type": "Identifier",
+              "start": 227,
+              "end": 233,
+              "loc": {
+                "start": {
+                  "line": 9,
+                  "column": 72,
+                  "index": 227
+                },
+                "end": {
+                  "line": 9,
+                  "column": 78,
+                  "index": 233
+                },
+                "identifierName": "params"
+              },
+              "name": "params"
+            },
+            "extra": {
+              "shorthand": true
+            }
+          }
+        ]
+      },
+      "defIndex": {
+        "decls": [],
+        "assigns": []
+      }
+    },
+    {
+      "fn": "createAdminUser",
+      "method": "post",
+      "url": "/auth/users",
+      "file": "api/adminUsers.js",
+      "line": 11,
+      "argNames": [
+        "payload"
+      ],
+      "payloadExpr": {
+        "type": "Identifier",
+        "start": 306,
+        "end": 313,
+        "loc": {
+          "start": {
+            "line": 11,
+            "column": 68,
+            "index": 306
+          },
+          "end": {
+            "line": 11,
+            "column": 75,
+            "index": 313
+          },
+          "identifierName": "payload"
+        },
+        "name": "payload"
+      },
+      "defIndex": {
+        "decls": [],
+        "assigns": []
+      }
+    },
+    {
+      "fn": "updateAdminUser",
+      "method": "put",
+      "url": "/auth/users/*",
+      "file": "api/adminUsers.js",
+      "line": 13,
+      "argNames": [
+        "id",
+        "payload"
+      ],
+      "payloadExpr": {
+        "type": "Identifier",
+        "start": 393,
+        "end": 400,
+        "loc": {
+          "start": {
+            "line": 13,
+            "column": 77,
+            "index": 393
+          },
+          "end": {
+            "line": 13,
+            "column": 84,
+            "index": 400
+          },
+          "identifierName": "payload"
+        },
+        "name": "payload"
+      },
+      "defIndex": {
+        "decls": [],
+        "assigns": []
+      }
+    },
+    {
+      "fn": "deleteAdminUser",
+      "method": "delete",
+      "url": "/auth/users/*",
+      "file": "api/adminUsers.js",
+      "line": 16,
+      "argNames": [
+        "id",
+        null
+      ],
+      "payloadExpr": {
+        "type": "ObjectExpression",
+        "start": 489,
+        "end": 525,
+        "loc": {
+          "start": {
+            "line": 16,
+            "column": 34,
+            "index": 489
+          },
+          "end": {
+            "line": 16,
+            "column": 70,
+            "index": 525
+          }
+        },
+        "properties": [
+          {
+            "type": "ObjectProperty",
+            "start": 491,
+            "end": 523,
+            "loc": {
+              "start": {
+                "line": 16,
+                "column": 36,
+                "index": 491
+              },
+              "end": {
+                "line": 16,
+                "column": 68,
+                "index": 523
+              }
+            },
+            "method": false,
+            "key": {
+              "type": "Identifier",
+              "start": 491,
+              "end": 497,
+              "loc": {
+                "start": {
+                  "line": 16,
+                  "column": 36,
+                  "index": 491
+                },
+                "end": {
+                  "line": 16,
+                  "column": 42,
+                  "index": 497
+                },
+                "identifierName": "params"
+              },
+              "name": "params"
+            },
+            "computed": false,
+            "shorthand": false,
+            "value": {
+              "type": "ConditionalExpression",
+              "start": 499,
+              "end": 523,
+              "loc": {
+                "start": {
+                  "line": 16,
+                  "column": 44,
+                  "index": 499
+                },
+                "end": {
+                  "line": 16,
+                  "column": 68,
+                  "index": 523
+                }
+              },
+              "test": {
+                "type": "Identifier",
+                "start": 499,
+                "end": 505,
+                "loc": {
+                  "start": {
+                    "line": 16,
+                    "column": 44,
+                    "index": 499
+                  },
+                  "end": {
+                    "line": 16,
+                    "column": 50,
+                    "index": 505
+                  },
+                  "identifierName": "reason"
+                },
+                "name": "reason"
+              },
+              "consequent": {
+                "type": "ObjectExpression",
+                "start": 508,
+                "end": 518,
+                "loc": {
+                  "start": {
+                    "line": 16,
+                    "column": 53,
+                    "index": 508
+                  },
+                  "end": {
+                    "line": 16,
+                    "column": 63,
+                    "index": 518
+                  }
+                },
+                "properties": [
+                  {
+                    "type": "ObjectProperty",
+                    "start": 510,
+                    "end": 516,
+                    "loc": {
+                      "start": {
+                        "line": 16,
+                        "column": 55,
+                        "index": 510
+                      },
+                      "end": {
+                        "line": 16,
+                        "column": 61,
+                        "index": 516
+                      }
+                    },
+                    "method": false,
+                    "key": {
+                      "type": "Identifier",
+                      "start": 510,
+                      "end": 516,
+                      "loc": {
+                        "start": {
+                          "line": 16,
+                          "column": 55,
+                          "index": 510
+                        },
+                        "end": {
+                          "line": 16,
+                          "column": 61,
+                          "index": 516
+                        },
+                        "identifierName": "reason"
+                      },
+                      "name": "reason"
+                    },
+                    "computed": false,
+                    "shorthand": true,
+                    "value": {
+                      "type": "Identifier",
+                      "start": 510,
+                      "end": 516,
+                      "loc": {
+                        "start": {
+                          "line": 16,
+                          "column": 55,
+                          "index": 510
+                        },
+                        "end": {
+                          "line": 16,
+                          "column": 61,
+                          "index": 516
+                        },
+                        "identifierName": "reason"
+                      },
+                      "name": "reason"
+                    },
+                    "extra": {
+                      "shorthand": true
+                    }
+                  }
+                ]
+              },
+              "alternate": {
+                "type": "ObjectExpression",
+                "start": 521,
+                "end": 523,
+                "loc": {
+                  "start": {
+                    "line": 16,
+                    "column": 66,
+                    "index": 521
+                  },
+                  "end": {
+                    "line": 16,
+                    "column": 68,
+                    "index": 523
+                  }
+                },
+                "properties": []
+              }
+            }
+          }
+        ]
+      },
       "defIndex": {
         "decls": [],
         "assigns": []
@@ -15731,5 +16189,5 @@
       }
     }
   ],
-  "rawSites": 228
+  "rawSites": 234
 }

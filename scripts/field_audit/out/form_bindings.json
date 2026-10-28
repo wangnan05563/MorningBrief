@@ -231,6 +231,18 @@
       ]
     },
     {
+      "file": "views/system/AdminUsers.vue",
+      "object": "resetForm",
+      "endpoints": [
+        "POST /auth/users",
+        "PUT /auth/users/*"
+      ],
+      "boundCount": 3,
+      "missing": [
+        "confirm"
+      ]
+    },
+    {
       "file": "views/workflow/WorkflowDetail.vue",
       "object": "materialDialog",
       "endpoints": [
