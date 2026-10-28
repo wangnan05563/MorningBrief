@@ -190,6 +190,11 @@ class Settings(BaseSettings):
     # 若 api 进程不启动它们，本进程缓冲的进度写与发布的事件将无人消费（丢失或无限延迟）。
     APP_ROLE: str = "all"
 
+    # ---- 运营收件箱保留窗口（T03329） ----
+    # 例行清理由 sched/all 进程的每日任务执行；系统清理页的 old_inbox 目标
+    # 使用同一张表与同一时间字段，手动清理只是兜底入口。
+    ADMIN_INBOX_KEEP_DAYS: int = 90
+
     # ---- 缓存（V1.2 替代 Redis，进程内 TTLCache 无需外部配置） ----
     CACHE_DEFAULT_TTL_SEC: int = 300     # 默认 TTL 5 分钟
     CACHE_MAXSIZE: int = 10000           # 单桶最大条目数

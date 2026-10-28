@@ -42,6 +42,7 @@
               <span>工作流 {{ status?.db?.workflow_count ?? 0 }} 条</span>
               <span>审核 {{ status?.db?.review_count ?? 0 }} 条</span>
               <span>黑名单 {{ status?.db?.blacklist_count ?? 0 }} 条</span>
+              <span>收件箱 {{ status?.db?.inbox_count ?? 0 }} 条</span>
             </div>
           </div>
         </el-col>
@@ -139,6 +140,7 @@
                 <el-option label="过期 JWT 黑名单" value="expired_blacklist" />
                 <el-option label="旧爬虫去重记录" value="old_dedup" />
                 <el-option label="旧 AI 用量日志" value="old_ai_usage" />
+                <el-option label="旧运营收件箱" value="old_inbox" />
                 <el-option label="VACUUM 压缩" value="vacuum" />
                 <el-option label="指定工作流全链清理" value="workflow_chain" />
                 <el-option label="无主素材解绑（保留正文）" value="orphan_materials_detach" />
@@ -170,6 +172,10 @@
                 style="width: 100%"
               />
               <div class="form-tip">清理超过此天数的记录（1-365）</div>
+              <div v-if="dbForm.target === 'old_inbox'" class="form-tip">
+                后台每日按 {{ status?.retention?.admin_inbox_days ?? 90 }} 天自动清理（读没读都清）；
+                这里只是手动兜底，可指定更短窗口。
+              </div>
             </el-form-item>
             <el-form-item label="预览模式">
               <div class="dry-run-wrap">
@@ -308,13 +314,14 @@ const TARGET_LABELS = {
   all: '全部', ttlcache: 'TTLCache（进程内缓存）', pycache: '__pycache__ 目录', temp: '临时文件',
   old_playlogs: '旧播放日志', old_workflows: '旧工作流记录', old_reviews: '旧审核记录（已完结）',
   expired_blacklist: '过期 JWT 黑名单', old_dedup: '旧爬虫去重记录', old_ai_usage: '旧 AI 用量日志',
+  old_inbox: '旧运营收件箱',
   vacuum: 'VACUUM 压缩', old_logs: '旧日志文件', large_logs: '大日志文件（>10MB）',
   workflow_chain: '指定工作流全链清理',
   orphan_materials_detach: '无主素材解绑', orphan_materials_delete: '无主素材删除',
 }
 const CATEGORY_TARGETS = {
   cache: ['all', 'ttlcache', 'pycache', 'temp'],
-  database: ['all', 'old_playlogs', 'old_workflows', 'old_reviews', 'expired_blacklist', 'old_dedup', 'old_ai_usage', 'vacuum', 'workflow_chain',
+  database: ['all', 'old_playlogs', 'old_workflows', 'old_reviews', 'expired_blacklist', 'old_dedup', 'old_ai_usage', 'old_inbox', 'vacuum', 'workflow_chain',
     'orphan_materials_detach', 'orphan_materials_delete'],
   logs: ['all', 'old_logs', 'large_logs'],
 }

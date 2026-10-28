@@ -456,6 +456,17 @@ class WorkflowScheduler:
             id="cleanup_crawler_dedup",
             replace_existing=True,
         )
+        # 每日 03:30 清理运营收件箱（T03329）：保留窗口见 ADMIN_INBOX_KEEP_DAYS，
+        # 与系统清理页 old_inbox 目标同一张表、同一时间字段。只注册在承担
+        # singleton 职责的进程（all/sched），api 进程不会重复执行。
+        self.scheduler.add_job(
+            self._cleanup_admin_inbox,
+            trigger="cron",
+            hour=3,
+            minute=30,
+            id="cleanup_admin_inbox",
+            replace_existing=True,
+        )
         # 每日 04:00 执行 SQLite 数据库备份（在 05:00 cron 工作流触发前 1 小时）
         # 选择 04:00 是因为此时系统空闲（无工作流执行），VACUUM INTO 不会与工作流写入竞争
         self.scheduler.add_job(
@@ -1719,6 +1730,28 @@ class WorkflowScheduler:
         except Exception as e:
             # 清理失败不中断调度器，下次调度继续处理
             logger.exception("清理爬虫去重表失败: %s", e)
+
+    async def _cleanup_admin_inbox(self) -> None:
+        """每日 03:30 按保留窗口清理运营收件箱（T03329）。
+
+        窗口来自 ADMIN_INBOX_KEEP_DAYS，清理实现与系统清理页的 old_inbox 目标
+        共用 mobile_service.purge_inbox_before，避免两处各写一套 age 条件。
+        读没读都按时间清：过了窗口的提醒不再占位。失败只记日志，下一天继续。
+        """
+        days = max(1, settings.ADMIN_INBOX_KEEP_DAYS)
+        cutoff = localnow_naive() - timedelta(days=days)
+        try:
+            from app.services import mobile_service
+
+            async with AsyncSessionLocal() as session:
+                deleted = await mobile_service.purge_inbox_before(session, cutoff)
+                await session.commit()
+            if deleted > 0:
+                logger.info(
+                    "清理运营收件箱：删除 %d 条（保留窗口 %d 天）", deleted, days
+                )
+        except Exception as e:
+            logger.exception("清理运营收件箱失败: %s", e)
 
     async def _daily_backup(self) -> None:
         """每日 04:00 执行数据库备份 + 过期备份清理。

@@ -3,7 +3,7 @@
 职责：
 1. 查询存储状态（数据库大小、日志大小、缓存条目数）
 2. 清理缓存（TTLCache 进程内缓存、__pycache__ 目录、临时文件）
-3. 清理数据库（旧播放日志、旧工作流、旧审核、过期黑名单、旧爬虫去重、旧 AI 用量、VACUUM、无主素材治理）
+3. 清理数据库（旧播放日志、旧工作流、旧审核、过期黑名单、旧爬虫去重、旧 AI 用量、旧运营收件箱、VACUUM、无主素材治理）
 4. 清理日志文件（旧日志、大日志）
 
 设计要点：
@@ -33,6 +33,7 @@ from app.core.timeutil import localnow_naive
 from app.database import engine
 from app.models import (
     AIUsageLog,
+    AdminInbox,
     AutoReviewStat,
     BookPoolItem,
     Channel,
@@ -52,6 +53,7 @@ from app.models import (
 )
 from app.models.audit_log import AuditLog
 from app.paths import get_app_root, resolve_data_dir, resolve_db_path, resolve_log_dir
+from app.services import mobile_service
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -114,6 +116,10 @@ class MaintenanceService:
             "db": db_stats,
             "logs": log_stats,
             "cache": cache_stats,
+            # 保留窗口交给前端展示，避免页面再写死一个天数（T03329）
+            "retention": {
+                "admin_inbox_days": max(1, settings.ADMIN_INBOX_KEEP_DAYS),
+            },
         }
 
     async def _get_db_stats(self) -> dict:
@@ -135,10 +141,11 @@ class MaintenanceService:
             blacklist_count = await self._count_table(JwtBlacklist)
             dedup_count = await self._count_table(CrawlerDedup)
             ai_usage_count = await self._count_table(AIUsageLog)
+            inbox_count = await self._count_table(AdminInbox)
         except Exception as e:
             logger.warning("统计数据库表行数失败: %s", e)
             playlog_count = workflow_count = review_count = 0
-            blacklist_count = dedup_count = ai_usage_count = 0
+            blacklist_count = dedup_count = ai_usage_count = inbox_count = 0
 
         return {
             "db_size_mb": round(db_size_mb, 2),
@@ -148,6 +155,7 @@ class MaintenanceService:
             "blacklist_count": blacklist_count,
             "dedup_count": dedup_count,
             "ai_usage_count": ai_usage_count,
+            "inbox_count": inbox_count,
         }
 
     async def _get_cache_stats(self) -> dict:
@@ -264,7 +272,7 @@ class MaintenanceService:
 
         Args:
             target: old_playlogs | old_workflows | old_reviews | expired_blacklist
-                    | old_dedup | old_ai_usage | vacuum | all
+                    | old_dedup | old_ai_usage | old_inbox | vacuum | all
                     | orphan_materials_detach | orphan_materials_delete
                     （后两个是一次性数据治理，不参与 all）
             days: 保留天数（按时间清理时使用，最小值 1）
@@ -293,6 +301,28 @@ class MaintenanceService:
                 key, name, model, time_field, cutoff, dry_run, days, suffix, errors, cleaned
             )
             total_deleted += deleted
+
+        # 运营收件箱（T03329）：按 created_at 清理，读没读都清——保留窗口的意义是
+        # 「过了窗口的提醒不再占位」，与读态无关。与 sched 进程每日任务共用
+        # mobile_service.purge_inbox_before，窗口与时间字段只有一处实现。
+        if target in ("old_inbox", "all"):
+            try:
+                if dry_run:
+                    deleted = (
+                        await self.db.execute(
+                            select(func.count(AdminInbox.id)).where(
+                                AdminInbox.created_at < cutoff
+                            )
+                        )
+                    ).scalar() or 0
+                else:
+                    deleted = await mobile_service.purge_inbox_before(self.db, cutoff)
+                action = "将删除" if dry_run else "已删除"
+                cleaned.append(f"运营收件箱 {action} {deleted} 条（{days} 天前）")
+                total_deleted += deleted
+            except Exception as e:
+                errors.append(f"运营收件箱清理失败: {e}")
+                logger.exception("运营收件箱清理失败")
 
         # 黑名单按 expires_at 清理（不按 days）
         if target in ("expired_blacklist", "all"):

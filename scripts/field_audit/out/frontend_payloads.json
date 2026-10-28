@@ -1206,7 +1206,7 @@
         },
         {
           "file": "views/maintenance/Maintenance.vue",
-          "line": 515,
+          "line": 522,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -1221,7 +1221,7 @@
       "sites": [
         {
           "file": "views/maintenance/Maintenance.vue",
-          "line": 449,
+          "line": 456,
           "fn": "getMaintenanceTask",
           "fieldCount": 0,
           "unresolved": []

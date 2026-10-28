@@ -20,6 +20,7 @@ from app.core.write_gate import write_lock
 from app.core.timeutil import localnow_naive
 from app.database import get_db
 from app.models import Feedback
+from app.services import mobile_service
 from app.services.user_service import get_user_openid
 
 router = APIRouter(prefix="/api/v1/feedbacks", tags=["C端-反馈"])
@@ -62,5 +63,13 @@ async def submit_feedback(
     async with write_lock():
         db.add(feedback)
         await db.commit()
+
+    # 反馈已落库；收件箱通知失败不影响提交结果（T03329）
+    await mobile_service.notify_isolated(
+        db,
+        lambda session: mobile_service.notify_feedback_created(
+            session, feedback.id, feedback.category, feedback.content
+        ),
+    )
 
     return success(data={"success": True, "feedback_id": feedback.id})

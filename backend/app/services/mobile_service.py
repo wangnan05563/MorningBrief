@@ -17,12 +17,14 @@ import json
 import logging
 import threading
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.timeutil import localnow_naive
 from app.models.admin_user import AdminRole, AdminUser
 from app.models.audit_log import AuditLog
 from app.models.mobile import AdminDevice, AdminInbox
@@ -120,6 +122,10 @@ async def push_admin_message(
         "title": title,
         "body": body,
         "payload_json": json.dumps(payload, ensure_ascii=False) if payload else None,
+        # 显式写本地时间：列的 server_default CURRENT_TIMESTAMP 是 UTC，与按天清理的
+        # cutoff、移动端展示都对不上（同 Workflow 模型的既有结论）。存量行仍是 UTC，
+        # 90 天窗口下 8 小时偏差不影响保留语义。
+        "created_at": localnow_naive(),
     }
     if dedup_key:
         values["dedup_key"] = dedup_key
@@ -224,17 +230,32 @@ async def _dispatch_admin_alert(db, title: str, body: str, level: str) -> dict:
     return {"dispatched": sum(1 for _, s, _ in log_entries if s == "success")}
 
 
-# ---- 工作流事件 → 收件箱（T03304）----
+# ---- 工作流事件 → 收件箱（T03304 / T03329）----
 
 # 与 workflow_scheduler._WORKFLOW_FAILED_KEY 同值。这里写字面量而不是 import，
 # 避免服务层反向依赖调度器（调度器才是调用方）。
 WORKFLOW_FAILED_EVENT = "workflow.failed"
 WORKFLOW_PENDING_REVIEW_EVENT = "workflow.pending_review"
-WORKFLOW_INBOX_EVENTS = (WORKFLOW_PENDING_REVIEW_EVENT, WORKFLOW_FAILED_EVENT)
+WORKFLOW_PUBLISHED_EVENT = "workflow.published"
+# T03329 事件清单裁决（按 AI 建议执行）：
+# - 待审核 / 执行失败：需要人处置，T03304 已上线；
+# - 发布成功：结果告知，进收件箱但不外发 IM（发布链路自己的结构化通知负责外部触达）；
+# - 抓取异常：不单列——crawl 环节失败已由 workflow.failed 落库（dedup 含环节），
+#   再立一个事件会让同一事故出现两条消息；
+# - 审核驳回 / 用户反馈：走非工作流入口（notify_review_rejected / notify_feedback_created）。
+WORKFLOW_INBOX_EVENTS = (
+    WORKFLOW_PENDING_REVIEW_EVENT,
+    WORKFLOW_FAILED_EVENT,
+    WORKFLOW_PUBLISHED_EVENT,
+)
 
 # 失败原因进正文只留首行并截断：异常串常把整个调用栈/上游响应塞进来，
-# 收件箱又没有保留窗口（另单处理），存全文只会让表无限膨胀。
+# 收件箱又有保留窗口（90 天，见 ADMIN_INBOX_KEEP_DAYS），存全文只会让表无谓膨胀。
 _FAILURE_REASON_MAX = 200
+
+# 反馈同步可能一次带回积压（COS 里存量的旧对象），只通知最近 N 天的反馈，
+# 避免首次同步把历史反馈一次性灌进收件箱；存量反馈仍可在反馈页查看。
+FEEDBACK_NOTIFY_MAX_AGE_DAYS = 7
 
 
 def _first_line(text) -> str:
@@ -242,18 +263,20 @@ def _first_line(text) -> str:
     return lines[0][:_FAILURE_REASON_MAX] if lines else ""
 
 
-async def _admin_recipients(db) -> list[int]:
+async def _admin_recipients(db, exclude_admin_ids=None) -> list[int]:
     """收件人 = admin_user 里 role='admin' 且启用的账号（判词「全体 admin」）。
 
     不含 operator：失败消息的深链落点是 /m/manage/queue，该页 requireRole=admin，
     operator 点进去只会被守卫拦下——宁可不发，也不发一条点进去被拒的消息。
+    exclude_admin_ids 用于「操作者不必收自己刚做的事」（如审核驳回）。
     """
-    rows = await db.execute(
-        select(AdminUser.id).where(
-            AdminUser.role == AdminRole.admin.value,
-            AdminUser.status == 1,
-        )
+    stmt = select(AdminUser.id).where(
+        AdminUser.role == AdminRole.admin.value,
+        AdminUser.status == 1,
     )
+    if exclude_admin_ids:
+        stmt = stmt.where(AdminUser.id.not_in(list(exclude_admin_ids)))
+    rows = await db.execute(stmt)
     return list(rows.scalars().all())
 
 
@@ -265,15 +288,16 @@ async def notify_admins(
     body: Optional[str] = None,
     payload: Optional[dict] = None,
     dedup_key: Optional[str] = None,
+    exclude_admin_ids=None,
 ) -> int:
     """把一条消息写给全体 admin，返回真正新增的条数（被幂等挡下的不计）。
 
-    dispatch_im 固定 False：这两个事件的外部触达由 workflow_scheduler 的结构化通知
+    dispatch_im 固定 False：这些事件的外部触达由发布/失败链路的结构化通知
     （含 IM 渠道）负责，若这里再按 critical 逐人 fan-out，N 个 admin 会让同一件事
     在钉钉/企微里重复 N 遍。收件箱只是站内通道，不重复外发。
     """
     created = 0
-    for admin_id in await _admin_recipients(db):
+    for admin_id in await _admin_recipients(db, exclude_admin_ids):
         row = await push_admin_message(
             db,
             admin_id,
@@ -296,7 +320,7 @@ async def notify_workflow_event(
     workflow_id: str,
     extra_vars: Optional[dict] = None,
 ) -> int:
-    """工作流事件 → admin 收件箱（本单只覆盖两个需要人处置的事件）。
+    """工作流事件 → admin 收件箱（白名单见 WORKFLOW_INBOX_EVENTS）。
 
     幂等键 = 事件 + 工作流（失败再带上环节）：同一事件重放（cron 重试、进程重启后
     重新入队）只入库一条；同一工作流换一个环节失败是新信息，会再发一条。
@@ -307,6 +331,8 @@ async def notify_workflow_event(
       workflow_id 丢掉，落到「全部待审」而不是这条工作流。
     - 失败：payload.path=/m/manage/queue。移动端只有队列页能重跑/处置失败任务；
       /m/review 对失败工作流只会显示「暂无待审稿件」，是误导性落点。
+    - 发布成功：不带 payload。移动端没有「已发布节目」详情页，硬塞 /m/review 会
+      落到待审列表并显示「暂无待审内容」——结果告知不需要一个点进去就打脸的链接。
     """
     extra = extra_vars or {}
     if event_type == WORKFLOW_PENDING_REVIEW_EVENT:
@@ -318,6 +344,16 @@ async def notify_workflow_event(
             f"工作流 {workflow_id} 已完成制作，等待人工审核。",
             {"workflow_id": workflow_id},
             f"workflow.pending_review:{workflow_id}",
+        )
+    if event_type == WORKFLOW_PUBLISHED_EVENT:
+        return await notify_admins(
+            db,
+            "system",
+            "info",
+            "节目已发布上线",
+            f"工作流 {workflow_id} 的节目已发布上线。",
+            None,
+            f"workflow.published:{workflow_id}",
         )
     if event_type == WORKFLOW_FAILED_EVENT:
         step = extra.get("failed_step") or "unknown"
@@ -334,6 +370,111 @@ async def notify_workflow_event(
             f"workflow.failed:{workflow_id}:{step}",
         )
     return 0
+
+
+async def notify_review_rejected(
+    db,
+    workflow_id: str,
+    review_id: int,
+    reviewer_name: str,
+    reason: Optional[str],
+    actor_admin_id: Optional[int] = None,
+) -> int:
+    """审核驳回 → 收件箱（T03329），排除刚点驳回的操作者。
+
+    收件人仍是全体启用 admin：Workflow 没有发起人/频道 owner 字段，
+    不为了通知臆造一条归属关系；被驳回的稿件需要任何一位编导接手修改，
+    但「你刚做的动作」不必再回给你一条消息。理由必填（ReviewService 校验），
+    正文只留首行并截断——修改意见可能是整段文字，收件箱不是编辑器。
+    """
+    reason_line = _first_line(reason)
+    body = f"{reviewer_name or '管理员'} 驳回了工作流 {workflow_id} 的稿件"
+    body += f"：{reason_line}" if reason_line else "。"
+    exclude = {actor_admin_id} if actor_admin_id is not None else None
+    return await notify_admins(
+        db,
+        "review",
+        "warning",
+        "稿件被驳回",
+        body,
+        # 移动端审核页固定请求 status=pending，带 workflow_id 也只会显示「暂无待审」；
+        # 不给 payload 是避免一个点进去就打脸的深链（同发布成功的口径）。
+        None,
+        f"review.rejected:{review_id}",
+        exclude_admin_ids=exclude,
+    )
+
+
+async def notify_feedback_created(
+    db,
+    feedback_id: str,
+    category: str,
+    content: str,
+    created_at=None,
+) -> int:
+    """用户反馈 → 收件箱（T03329）。
+
+    收件人 = 全体启用 admin；深链指向移动端反馈页（真实存在的 /m/manage/feedback）。
+    存量积压只通知最近 FEEDBACK_NOTIFY_MAX_AGE_DAYS 天：首次从 COS 同步时可能
+    一次带回大量历史反馈，全部灌进收件箱会把真正的新反馈淹掉。
+    created_at 按 feedback_sync 的存储口径是 naive UTC；本地 now 直接相减会多算
+    8 小时，临界值附近会误伤，统一按 UTC 比较。
+    """
+    if created_at is not None:
+        utc_now = datetime.now(timezone.utc).replace(tzinfo=None)
+        if (utc_now - created_at).days > FEEDBACK_NOTIFY_MAX_AGE_DAYS:
+            return 0
+    snippet = _first_line(content)
+    if len(snippet) > 80:
+        snippet = snippet[:80] + "…"
+    category_text = category or "other"
+    body = f"{category_text}：{snippet}" if snippet else category_text
+    return await notify_admins(
+        db,
+        "system",
+        "info",
+        "收到新的用户反馈",
+        f"{body}（{feedback_id}）",
+        {"path": "/m/manage/feedback"},
+        f"feedback.created:{feedback_id}",
+    )
+
+
+async def notify_isolated(db, notify_callable) -> None:
+    """在派生会话里执行一次收件箱写入，失败只记日志、不影响主流程。
+
+    调用时机是业务事务已提交之后：站内消息不可用不能反过来让审核/发布/反馈失败。
+    会话从请求 session 的 bind 派生，测试覆盖 get_db 时也写进同一个测试库
+    （与 maintenance_task_service 同一做法）。
+    """
+    bind = getattr(db, "bind", None)
+    try:
+        if bind is None:
+            await notify_callable(db)
+            await db.commit()
+            return
+        factory = async_sessionmaker(
+            bind=bind, class_=AsyncSession, expire_on_commit=False, autoflush=False
+        )
+        async with factory() as session:
+            await notify_callable(session)
+            await session.commit()
+    except Exception:
+        logger.exception("收件箱写入失败（已忽略，不影响主流程）")
+
+
+async def purge_inbox_before(db, cutoff) -> int:
+    """删除 cutoff 之前的收件箱消息，返回删除条数（调用方负责 commit）。
+
+    读没读都按时间清：保留窗口的意义是「过了窗口的提醒不再占位」，与读态无关。
+    系统清理页与 sched 进程的每日任务共用本函数，保证两边删的是同一张表、
+    同一个时间字段（created_at）。
+    """
+    result = await db.execute(
+        delete(AdminInbox).where(AdminInbox.created_at < cutoff)
+    )
+    await db.flush()
+    return result.rowcount or 0
 
 
 async def get_inbox(

@@ -2365,9 +2365,9 @@
     {
       "endpoint": "POST /reviews/*/action",
       "model": "ActionRequest",
-      "modelSource": "backend/app/routers/admin/reviews.py:20",
+      "modelSource": "backend/app/routers/admin/reviews.py:21",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/reviews.py:134",
+      "handlerSource": "backend/app/routers/admin/reviews.py:156",
       "declared": [
         "action",
         "reason",
@@ -2430,9 +2430,9 @@
     {
       "endpoint": "POST /reviews/batch-action",
       "model": "BatchActionRequest",
-      "modelSource": "backend/app/routers/admin/reviews.py:31",
+      "modelSource": "backend/app/routers/admin/reviews.py:32",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/reviews.py:75",
+      "handlerSource": "backend/app/routers/admin/reviews.py:76",
       "declared": [
         "action",
         "reason",

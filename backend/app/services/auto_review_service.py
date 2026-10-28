@@ -28,6 +28,7 @@ from app.models import (
     Material, Workflow, Channel,
 )
 from app.models.review import ReviewStatus
+from app.services import mobile_service
 from app.services.stats_metrics import AUTO_REVIEW_METRICS, meta_for
 
 logger = logging.getLogger(__name__)
@@ -614,6 +615,15 @@ class AutoReviewService:
                 }, machine="自动审批命中规则，系统直接发布（无人工操作者）"),
             ))
             await session.commit()
+
+            # 自动发布同样进收件箱（T03329）：与人工审批统一为「发布成功」事件，
+            # 幂等键按 workflow_id 去重；写在独立会话，失败不影响发布结果。
+            await mobile_service.notify_isolated(
+                session,
+                lambda s: mobile_service.notify_workflow_event(
+                    s, mobile_service.WORKFLOW_PUBLISHED_EVENT, workflow_id
+                ),
+            )
 
         # 计算节省时间：从 review 创建到自动审批完成
         time_saved = int((now - review_created_at).total_seconds()) if review_created_at else 0

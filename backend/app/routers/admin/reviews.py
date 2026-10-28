@@ -11,6 +11,7 @@ from app.core.auth import AdminPayload, get_current_admin
 from app.core.response import success
 from app.database import get_db
 from app.models import AuditLog
+from app.services import mobile_service
 from app.services.content_service import ContentService
 from app.services.review_service import ReviewService
 
@@ -106,9 +107,30 @@ async def batch_handle_action(
                     review_id=item["id"],
                 )
                 published.append({"id": item["id"], "episode_id": episode_id})
+                # 批量发布同样算「发布成功」：逐条写收件箱，幂等键按 workflow_id 去重
+                await mobile_service.notify_isolated(
+                    db,
+                    lambda s, wf=item["workflow_id"]: mobile_service.notify_workflow_event(
+                        s, mobile_service.WORKFLOW_PUBLISHED_EVENT, wf
+                    ),
+                )
             except Exception as exc:
                 # 发布失败记录原因，不影响已通过的审核状态
                 publish_failed.append({"id": item["id"], "reason": str(exc)})
+
+    if req.action == "reject":
+        for item in batch_result["succeeded"]:
+            await mobile_service.notify_isolated(
+                db,
+                lambda s, it=item: mobile_service.notify_review_rejected(
+                    s,
+                    workflow_id=it["workflow_id"],
+                    review_id=it["id"],
+                    reviewer_name=admin.username,
+                    reason=req.reason,
+                    actor_admin_id=admin.admin_id,
+                ),
+            )
 
     batch_result["published"] = published
     batch_result["publish_failed"] = publish_failed
@@ -171,6 +193,26 @@ async def handle_action(
             logging.getLogger(__name__).exception(
                 "发布通知发送失败 workflow_id=%s", result.get("workflow_id"),
             )
+        # 站内收件箱与外部渠道是独立通道：发布成功进收件箱，不依赖 IM 成败（T03329）
+        await mobile_service.notify_isolated(
+            db,
+            lambda s: mobile_service.notify_workflow_event(
+                s, mobile_service.WORKFLOW_PUBLISHED_EVENT, result["workflow_id"]
+            ),
+        )
+    elif req.action == "reject":
+        # 驳回给全体 admin（排除操作者本人）；理由已由 service 校验必填
+        await mobile_service.notify_isolated(
+            db,
+            lambda s: mobile_service.notify_review_rejected(
+                s,
+                workflow_id=result["workflow_id"],
+                review_id=review_id,
+                reviewer_name=admin.username,
+                reason=req.reason,
+                actor_admin_id=admin.admin_id,
+            ),
+        )
     # 审计日志：审核操作直接决定节目是否上线，记录审核人/动作/原因便于事后追溯
     db.add(AuditLog(
         category="review",

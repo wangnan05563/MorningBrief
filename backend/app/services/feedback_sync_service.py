@@ -23,6 +23,7 @@ from app.core.timeutil import localnow_naive
 from app.cos.client import cos_client
 from app.database import AsyncSessionLocal
 from app.models.feedback import Feedback
+from app.services import mobile_service
 
 logger = logging.getLogger(__name__)
 
@@ -110,20 +111,32 @@ class FeedbackSyncService:
 
                 # 3. INSERT OR IGNORE 写入（主键冲突跳过，保证幂等）
                 # 用 sqlite_insert 而非 ORM merge：单条 INSERT 语义更清晰且性能更优
+                created_at_value = _parse_created_at(payload.get("created_at"))
+                category = payload.get("category", "other")
+                content = payload.get("content", "")
                 stmt = sqlite_insert(Feedback).values(
                     id=str(feedback_id),
                     user_id=str(payload.get("user_id", "")),
-                    category=payload.get("category", "other"),
-                    content=payload.get("content", ""),
+                    category=category,
+                    content=content,
                     contact=payload.get("contact"),
                     status="pending",
-                    created_at=_parse_created_at(payload.get("created_at")),
+                    created_at=created_at_value,
                     synced_at=localnow_naive(),
                 ).on_conflict_do_nothing(index_elements=["id"])
 
                 async with AsyncSessionLocal() as session:
-                    await session.execute(stmt)
+                    inserted = (await session.execute(stmt)).rowcount
                     await session.commit()
+                    # 只有真正新增的反馈才进收件箱；幂等跳过的重放不再打扰（T03329）
+                    if inserted:
+                        await mobile_service.notify_isolated(
+                            session,
+                            lambda s: mobile_service.notify_feedback_created(
+                                s, feedback_id, category, content,
+                                created_at=created_at_value,
+                            ),
+                        )
 
                 # 4. 写入成功后删除 COS 源对象，避免下次重复同步
                 # 即使此处删除失败，下次同步也会因主键冲突而跳过，幂等
