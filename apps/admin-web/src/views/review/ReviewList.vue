@@ -6,6 +6,16 @@
       <el-tab-pane label="已打回" name="rejected" />
     </el-tabs>
 
+    <!-- DEC-UX-001 方案 B（T02643）：第 4 态 replaced 不单开 tab（SRS 仍是三栏），
+         并入「已通过」做子筛选，让 replaced 记录有可见去向。
+         子筛选只做单选：后端 status 是等值过滤，单参数无法同时返回 approved+replaced -->
+    <div v-if="activeTab === 'approved'" class="sub-filter" aria-label="已通过子筛选">
+      <el-radio-group v-model="approvedSub" size="small" @change="handleSubFilterChange">
+        <el-radio-button value="approved">仅已通过</el-radio-button>
+        <el-radio-button value="replaced">仅已替换</el-radio-button>
+      </el-radio-group>
+    </div>
+
     <!-- 地址栏带来的非法参数（如 ?tab=xxx / ?page=abc）已按默认值渲染，这里如实点名，
          不静默吞掉——用户分享链接后看到的数据与链接写明的不一致，必须可见（T02511） -->
     <el-alert
@@ -271,6 +281,8 @@ const router = useRouter()
 
 const loading = ref(false)
 const activeTab = ref('pending')
+// T02643（DEC-UX-001 方案 B）：已通过 tab 内的子筛选，默认仍只看 approved
+const approvedSub = ref('approved')
 const list = ref([])
 const total = ref(0)
 const page = ref(1)
@@ -399,7 +411,7 @@ async function loadList() {
     for (let attempt = 0; attempt < 2; attempt++) {
       const data = await api.get('/reviews', {
         params: {
-          status: activeTab.value,
+          status: effectiveStatus(),
           page: page.value,
           size: size.value,
           // T02517（B4）/ T02804：四类定位条件都交给后端过滤，
@@ -485,9 +497,22 @@ function onFilterReset() {
   onFilterSearch()
 }
 
+/** T02643（方案 B）：已通过 tab 由子筛选决定真正请求的 status；后端等值过滤天然支持 */
+function effectiveStatus() {
+  return activeTab.value === 'approved' ? approvedSub.value : activeTab.value
+}
+
+function handleSubFilterChange() {
+  page.value = 1
+  selectedRows.value = []
+  tableRef.value?.clearSelection()
+  loadList()
+}
+
 // 切换 tab 重置分页再加载
 function handleTabChange() {
   page.value = 1
+  approvedSub.value = 'approved'
   // 切换 tab 时清空选中状态，避免选中其他 tab 的记录
   selectedRows.value = []
   tableRef.value?.clearSelection()
@@ -651,6 +676,10 @@ async function handleBatchReject() {
 
 <style scoped lang="scss">
 @use '../../styles/variables.scss' as *;
+
+.sub-filter {
+  margin: 4px 0 8px;
+}
 
 .batch-bar {
   display: flex;
