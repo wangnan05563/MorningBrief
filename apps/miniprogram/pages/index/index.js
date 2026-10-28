@@ -4,20 +4,20 @@
  * V1.3 新增：
  * - 频道切换（FR-SUP-03）：顶部胶囊切换不同频道今日节目
  * - 搜索入口（FR-SUP-04）：右上角搜索图标跳转搜索页
- * - 倍速控制（FR-SUP-06）：点击倍速按钮循环切换
  * - 睡眠定时器（FR-SUP-08）：预设时长快捷启动
  * - 收藏（FR-SUP-02）：收藏/取消收藏当前节目
  * - 埋点（FR-SUP-10）
  *
  * 数据流：globalData.todayEpisode（预加载）→ 页面 data → WXML 渲染
- * 播放器：使用 app.globalData.player（全局单例），页面只负责 UI 状态同步
+ * 播放器：使用 app.globalData.player（全局单例），页面只负责 UI 状态同步；
+ * 播放/进度/倍速/文稿的交互入口统一在详情页，首页只保留节目列表与行内播放按钮（T02736）
  */
-const { fetchTodayEpisode, fetchEpisodeScript, fetchChannels, channelType } = require('../../services/api');
+const { fetchTodayEpisode, fetchChannels, channelType } = require('../../services/api');
 // localData 封装收藏/进度/历史的双写（本地+后端），按 openid 隔离
 const localData = require('../../services/local-data');
 // 频道类型 → 文案/皮肤映射（FR-MC-08）：分组标题按类型取值
 const skin = require('../../utils/skin');
-const { playEpisode, safePlay, setQueue, setPendingSeek, seek, getPlaybackRate, setPlaybackRate, getSleepStatus, startSleepTimer, stopSleepTimer, onSleepChange, onError, getCurrentEpisode, onPlaybackChange, onTimeUpdateChange, offTimeUpdateChange } = require('../../services/audio');
+const { playEpisode, safePlay, setQueue, setPendingSeek, getSleepStatus, startSleepTimer, stopSleepTimer, onSleepChange, onError, getCurrentEpisode, onPlaybackChange, onTimeUpdateChange, offTimeUpdateChange } = require('../../services/audio');
 const { trackPageView, trackEvent } = require('../../utils/tracker');
 const durationFormat = require('../../utils/format');
 // T00599：加载态控制器（最短骨架展示 600ms + 慢加载提示 2s + 超时重试 8s）
@@ -34,9 +34,6 @@ const { refreshTabBadge } = require('../../utils/tab-badge');
 const LAST_PLAYED_TTL_MS = 7 * 24 * 3600 * 1000;
 
 const app = getApp();
-
-// 倍速选项：循环切换顺序
-const RATE_OPTIONS = [0.75, 1.0, 1.25, 1.5, 2.0];
 
 // 睡眠定时器预设（秒）
 const SLEEP_PRESETS = [
@@ -62,7 +59,6 @@ Page({
     channels: [],         // 频道列表
     currentChannelId: null, // 当前选中频道（null 表示全部）
     favorited: false,     // 当前节目是否已收藏
-    currentRate: 1.0,     // 当前倍速
     sleepActive: false,   // 睡眠定时器是否激活
     sleepRemaining: 0,    // 睡眠剩余秒数
     sleepLabel: '',       // 睡眠定时器展示文案
@@ -76,12 +72,6 @@ Page({
     currentEpisodeId: null,
     // 已播放过的节目 id 集合（{ [id]: true }），用于列表行渲染"已播放"视觉标注
     playedSet: {},
-    // 任务4：首页本地展开文稿
-    showScript: false,
-    scriptLoaded: false,
-    scriptLoading: false,
-    script: '',
-    segments: [],
     // "我的偏爱"模式：channel-pill 末尾的"我的偏爱"项用特殊 id 'preferred' 标识
     // 切换到该项时 isPreferredMode=true，currentChannelId 同步设为 'preferred'（仅用于 pill 高亮）
     // 数据拉取走 loadPreferred()：拉全部频道今日节目 + 本地按 preferredIds 过滤
@@ -164,7 +154,7 @@ Page({
       this.loadPreferred();
       return;
     }
-    this.initData(true);
+    this.initData();
   },
 
   /**
@@ -182,7 +172,6 @@ Page({
     refreshTabBadge();
     // 每次显示页面时同步播放器状态（从其他页返回时播放状态可能已变化）
     this.syncPlayerState();
-    this.setData({ currentRate: getPlaybackRate() });
     // 从详情页返回时可能改了收藏态，需重新检查
     if (this.data.episode) this.checkFavorited(this.data.episode.id);
     // 从详情页返回时刷新已播放标记（详情页可能播完了新节目）
@@ -323,11 +312,6 @@ Page({
       isPreferredMode: channelId === 'preferred',
       todayList: [],
       episode: null,
-      showScript: false,
-      scriptLoaded: false,
-      scriptLoading: false,
-      script: '',
-      segments: [],
       error: '',
       preferredEmpty: false,
       scrollIntoViewId: idx >= 0 ? 'pill-' + idx : this.data.scrollIntoViewId,
@@ -337,7 +321,7 @@ Page({
     if (channelId === 'preferred') {
       await this.loadPreferred();
     } else {
-      await this.initData(true);
+      await this.initData();
     }
   },
 
@@ -446,23 +430,11 @@ Page({
    * 加载今日节目
    * 全部模式：拉取所有频道的今日节目（每个频道最新一期）
    * 单频道模式：拉取指定频道的今日节目
-   * @param {boolean} force - 强制刷新（频道切换时）
    */
-  async initData(force) {
+  async initData() {
     this._lc.start();
     this.setData({ error: '' });
     const channelId = this.data.currentChannelId;
-    // 切换频道/强制刷新时清空旧文稿与状态，避免新节目详情仍残留上一节目的文稿和图片
-    // 任务1+2+10：节目详情、文稿、分段封面图需随频道切换同步刷新
-    if (force) {
-      this.setData({
-        showScript: false,
-        scriptLoaded: false,
-        scriptLoading: false,
-        script: '',
-        segments: [],
-      });
-    }
     try {
       const data = await fetchTodayEpisode(channelId);
       this._applyTodayData(data);
@@ -748,74 +720,12 @@ Page({
     });
   },
 
-  /* gate-allow: 首页迷你播放控制条残留下（同文件同名方法在 pages/detail 有真实入口），当前 wxml 无宿主控件；清理见派生单 T02736，勿随手删——删前先确认 UI 不回摆 */
-  onTogglePlay() {
-    const { episode, isPlaying } = this.data;
-    if (!episode) return;
-    const player = app.globalData.player;
-    if (!player) return;
-    // 重新发起播放时清空上次的播放错误提示
-    if (this.data.playError) this.setData({ playError: '' });
-    if (isPlaying) {
-      player.pause();
-    } else {
-      playEpisode(episode);
-      trackEvent('index', 'play', 'episode_' + episode.id);
-    }
-  },
-
-  /* gate-allow: 同 onTogglePlay（首页播放控制条残留簇，派生单 T02736） */
-  onSeek(e) {
-    const player = app.globalData.player;
-    if (!player) return;
-    const position = e.detail.value;
-    // 调用 services/audio 的 seek 函数：处理暂停状态下 seek 不生效的问题
-    seek(position);
-    this.setData({ currentTime: position });
-  },
-
-  /* gate-allow: 同 onTogglePlay——showScript/scriptLoaded/loadScript 整条「首页本地展开文稿」链在 wxml 里没有宿主控件，功能当前不可达（非本单范围，派生单 T02736） */
-  onViewScript() {
-    // 任务1：首页本地展开文稿
-    // setData 异步，先计算目标态再触发，避免读取 this.data.showScript 仍是旧值导致漏加载
-    const { episode, showScript, scriptLoaded } = this.data;
-    if (!episode) return;
-    trackEvent('index', 'view_script', 'episode_' + episode.id);
-    const willShow = !showScript;
-    this.setData({ showScript: willShow });
-    if (willShow && !scriptLoaded) {
-      this.loadScript();
-    }
-  },
-
   /**
    * 任务3：打开播放队列页
    */
   onOpenQueue() {
     trackEvent('index', 'open_queue');
     wx.navigateTo({ url: '/pages/queue/queue' });
-  },
-
-  async loadScript() {
-    const { episode } = this.data;
-    if (!episode) return;
-    this.setData({ scriptLoading: true });
-    try {
-      const res = await fetchEpisodeScript(episode.id);
-      const content = typeof res === 'string'
-        ? res
-        : (res && (res.script || res.content)) || '';
-      const segments = (res && Array.isArray(res.segments)) ? res.segments : [];
-      this.setData({
-        script: content,
-        segments,
-        scriptLoaded: true,
-        scriptLoading: false,
-      });
-    } catch (err) {
-      this.setData({ scriptLoading: false });
-      wx.showToast({ title: '文稿加载失败', icon: 'none' });
-    }
   },
 
   /**
@@ -921,20 +831,6 @@ Page({
   onTapPreferredSettings() {
     wx.navigateTo({ url: '/pages/preferred-settings/preferred-settings' });
     trackEvent('index', 'tap_preferred_settings');
-  },
-
-  /**
-   * 倍速循环切换：1.0 → 1.25 → 1.5 → 0.75 → 2.0 → 1.0
-   */
-  /* gate-allow: 同 onTogglePlay（首页播放控制条残留簇；currentRate 仍会在 onShow 同步，属「有状态无入口」，派生单 T02736） */
-  onCycleRate() {
-    const current = getPlaybackRate();
-    const idx = RATE_OPTIONS.indexOf(current);
-    const next = RATE_OPTIONS[(idx + 1) % RATE_OPTIONS.length];
-    setPlaybackRate(next);
-    this.setData({ currentRate: next });
-    wx.showToast({ title: next + 'x 倍速', icon: 'none' });
-    trackEvent('index', 'change_rate', '', next);
   },
 
   /**
