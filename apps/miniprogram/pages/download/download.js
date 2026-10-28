@@ -14,6 +14,8 @@ Page({
     totalSize: 0,        // 字节
     totalSizeLabel: '0 B',
     totalCount: 0,
+    // J106：本机下载索引读取失败与「还没有下载」是两件事（失败态由 load-error 渲染并自带重试）
+    loadError: '',
   },
 
   onShow() {
@@ -22,26 +24,37 @@ Page({
   },
 
   refresh() {
-    const all = downloadStore.listDownloads();
-    // 按频道分组
-    const map = {};
-    all.forEach((r) => {
-      const cid = r.channelId || 0;
-      if (!map[cid]) {
-        map[cid] = { channelId: cid, channelName: r.channelName || '未命名课程', items: [] };
-      }
-      r.titleText = this.formatItemTitle(r);
-      r.subText = this.formatItemSub(r);
-      map[cid].items.push(r);
-    });
-    const groups = Object.keys(map).map((k) => map[k]);
-    const totalSize = downloadStore.computeTotalSize();
-    this.setData({
-      groups,
-      totalSize,
-      totalSizeLabel: this.formatSize(totalSize),
-      totalCount: all.length,
-    });
+    try {
+      const all = downloadStore.listDownloads();
+      // 按频道分组
+      const map = {};
+      all.forEach((r) => {
+        const cid = r.channelId || 0;
+        if (!map[cid]) {
+          map[cid] = { channelId: cid, channelName: r.channelName || '未命名课程', items: [] };
+        }
+        r.titleText = this.formatItemTitle(r);
+        r.subText = this.formatItemSub(r);
+        map[cid].items.push(r);
+      });
+      const groups = Object.keys(map).map((k) => map[k]);
+      const totalSize = downloadStore.computeTotalSize();
+      this.setData({
+        groups,
+        totalSize,
+        totalSizeLabel: this.formatSize(totalSize),
+        totalCount: all.length,
+        loadError: '',
+      });
+    } catch (err) {
+      // J106：索引读坏时不能说成「还没有离线下载」——两者对用户的含义完全不同
+      this.setData({ loadError: err.message || '读取本机下载记录失败' });
+    }
+  },
+
+  /** J106：失败态的重试入口 */
+  onRetryLoad() {
+    this.refresh();
   },
 
   formatSize(bytes) {

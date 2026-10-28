@@ -17,6 +17,8 @@ Page({
     total: 0,
     loading: true,
     hasMore: true,
+    // J106：取数失败与「还没有播放记录」是两件事（失败态由 load-error 渲染并自带重试）
+    loadError: '',
   },
 
   onLoad() {
@@ -35,7 +37,7 @@ Page({
   async loadRecent(first) {
     if (this.data.loading && !first) return;
     if (first) {
-      this.setData({ list: [], page: 1, hasMore: true });
+      this.setData({ list: [], page: 1, hasMore: true, loadError: '' });
     }
     if (!this.data.hasMore && !first) return;
 
@@ -53,11 +55,23 @@ Page({
         hasMore: newList.length < (res.total || 0),
         page: this.data.page + 1,
         loading: false,
+        loadError: '',
       });
     } catch (err) {
+      const msg = err.message || '加载失败';
       this.setData({ loading: false });
-      wx.showToast({ title: err.message || '加载失败', icon: 'none' });
+      // J106：首屏失败说「没取到」并给重试；翻页失败时列表还在，toast 即可
+      if (first || this.data.list.length === 0) {
+        this.setData({ loadError: msg });
+      } else {
+        wx.showToast({ title: msg, icon: 'none' });
+      }
     }
+  },
+
+  /** J106：失败态的重试入口 */
+  onRetryLoad() {
+    this.loadRecent(true);
   },
 
   onReachBottom() {

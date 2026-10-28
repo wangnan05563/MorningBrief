@@ -35,6 +35,8 @@ Page({
     hasMore: false,
     filterType: 'all',   // 当前类型筛选（FR-MC-07）
     filterOptions: FILTER_OPTIONS,
+    // J39：搜索失败与「未找到相关节目」是两件事（失败态由 load-error 渲染并自带重试）
+    loadError: '',
   },
 
   onLoad() {
@@ -74,7 +76,8 @@ Page({
 
   onInput(e) {
     const keyword = (e.detail.value || '').trim();
-    this.setData({ keyword, showHistory: !keyword });
+    // 换关键词/清空关键词时，上一次的失败结论不再成立
+    this.setData({ keyword, showHistory: !keyword, loadError: '' });
     // 防抖：避免每次按键都发请求
     if (this._debounceTimer) clearTimeout(this._debounceTimer);
     if (!keyword) {
@@ -92,6 +95,8 @@ Page({
    * @param {number} page - 1 表示首页，>1 表示加载更多
    */
   async doSearch(keyword, page) {
+    // 重试/换词：先把上一次的失败结论撤掉，加载态（J38 的「搜索中…」）才有机会出现
+    if (page === 1) this.setData({ loadError: '' });
     this.setData({ loading: true });
     try {
       // FR-MC-07：按当前类型筛选透传后端 channel_type（全部则不传）
@@ -108,15 +113,29 @@ Page({
         loading: false,
         page,
         hasMore: newList.length < (res.total || 0),
+        loadError: '',
       });
       // 仅首页搜索时保存到历史
       if (page === 1 && items.length > 0) {
         this.saveHistory(keyword);
       }
     } catch (err) {
+      const msg = err.message || '搜索失败';
       this.setData({ loading: false });
-      wx.showToast({ title: err.message || '搜索失败', icon: 'none' });
+      // J39：失败不能说成「未找到相关节目」。首页失败走失败态（自带重试）；
+      // 加载更多失败时已有结果还在，用 toast 即可，不把结果区换成错误块
+      if (page === 1 || this.data.results.length === 0) {
+        this.setData({ loadError: msg });
+      } else {
+        wx.showToast({ title: msg, icon: 'none' });
+      }
     }
+  },
+
+  /** J39：失败态的重试——用当前关键词与筛选重新搜第 1 页 */
+  onRetryLoad() {
+    if (!this.data.keyword) return;
+    this.doSearch(this.data.keyword, 1);
   },
 
   /**

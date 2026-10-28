@@ -31,6 +31,13 @@
     </view>
   </view>
 
+  <!-- J47：失败态独立成支并自带重试；空态只说「确实没有频道」 -->
+  <load-error
+    wx:elif="{{loadError}}"
+    message="{{loadError}}"
+    bind:retry="onRetryLoad"
+  ></load-error>
+
   <!-- 空状态 -->
   <view class="empty-state" wx:elif="{{channels.length === 0}}">
     <image class="empty-icon-img" src="/images/icons/radio.png" mode="aspectFit" />

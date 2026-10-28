@@ -573,3 +573,28 @@
   width: 64rpx;
   height: 64rpx;
 }
+
+/* J4：已有内容时的刷新失败提示条（不替换列表，只把「这次没取到」说出来） */
+.load-error-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 16rpx 32rpx;
+  padding: 16rpx 24rpx;
+  border-radius: 16rpx;
+  background: var(--danger-soft);
+}
+
+.load-error-bar-text {
+  flex: 1;
+  font-size: 24rpx;
+  color: var(--danger);
+}
+
+.load-error-bar-btn {
+  padding: 8rpx 24rpx;
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  color: var(--danger);
+  border: 1rpx solid var(--danger);
+}

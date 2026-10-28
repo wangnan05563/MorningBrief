@@ -42,6 +42,8 @@ Page({
     // T00599：分级加载态（由 utils/loading.js 控制器维护；仅首屏骨架期有效）
     loadingSlow: false,
     loadingTimedOut: false,
+    // J16：首屏取数失败与「暂无往期节目」是两件事（失败态由 load-error 渲染并自带重试）
+    loadError: '',
     hasMore: true,
     // V1.3 新增
     channels: [],
@@ -158,6 +160,7 @@ Page({
       page: 1,
       hasMore: true,
       preferredEmpty: false,
+      loadError: '',
     });
     trackEvent('history', 'switch_channel', '', String(channelId || ''));
     await this.loadHistory(true);
@@ -196,6 +199,7 @@ Page({
         hasMore: false,
         preferredEmpty: true,
         filterEmpty: false,
+        loadError: '',
       });
       // 本地即刻决策、无网络等待：不留最短展示时长
       this._lc.finish(true);
@@ -205,7 +209,7 @@ Page({
     if (first) {
       // 重置渲染状态：renderList 清空、renderCount 回到初始步长
       this._allList = []; // T00767：首屏重置同步清空全量列表
-      this.setData({ list: [], renderList: [], renderCount: RENDER_STEP, page: 1, hasMore: true, preferredEmpty: false, filterEmpty: false });
+      this.setData({ list: [], renderList: [], renderCount: RENDER_STEP, page: 1, hasMore: true, preferredEmpty: false, filterEmpty: false, loadError: '' });
     }
     if (!this.data.hasMore && !first) return;
 
@@ -241,6 +245,7 @@ Page({
         page: this.data.page + 1,
         // 偏爱模式下过滤后为空，显示"偏爱频道暂无历史节目"空状态（preferredEmpty=false时走通用空态）
         preferredEmpty: this.data.isPreferredMode && newList.length === 0,
+        loadError: '',
       });
       // T00767：视图列表/渲染子集/过滤空态统一由 _applyFilter 计算
       this._applyFilter();
@@ -248,10 +253,14 @@ Page({
       this._lc.finish(!first);
     } catch (err) {
       this._lc.fail();
-      wx.showToast({
-        title: err.message || '加载失败',
-        icon: 'none',
-      });
+      const msg = err.message || '加载失败';
+      // J16：首屏失败必须说「没取到」并给重试；上拉加载更多失败时已有列表还在，
+      // 用 toast 提示即可（滚到底部，顶部的错误块用户根本看不到）
+      if (first || this.data.list.length === 0) {
+        this.setData({ loadError: msg });
+      } else {
+        wx.showToast({ title: msg, icon: 'none' });
+      }
     }
   },
 
@@ -319,10 +328,25 @@ Page({
   },
 
   /**
+   * J11：整行点击 = 「打开这条历史」（只跳详情，不发声）。
+   * 之前整行和行内播放按钮共用 onPlay，点标题/封面/空白都会先外放再跳页，
+   * 公共场合误触即出声；现在「只看不听」终于有入口，起播只由右侧播放按钮触发。
+   */
+  onOpenDetail(e) {
+    const { id } = e.currentTarget.dataset;
+    if (!id) return;
+    trackEvent('history', 'open_detail', 'episode_' + id);
+    wx.navigateTo({
+      url: `/pages/detail/detail?id=${id}`,
+    });
+  },
+
+  /**
    * 点击节目：设置播放队列（自动连播）+ 立即播放 + 跳转详情页
    *
    * 队列从当前列表当前项开始，便于顺序连播后续节目。
    * playEpisode 内部会查询上次进度并断点续播（pendingSeek 机制）。
+   * 只有行尾播放按钮绑到这里（J11）；整行走 onOpenDetail，不发声。
    */
   onPlay(e) {
     const { id, index } = e.currentTarget.dataset;

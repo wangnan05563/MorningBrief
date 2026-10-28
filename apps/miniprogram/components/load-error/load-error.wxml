@@ -1,0 +1,8 @@
+<!-- 加载失败态：图标 + 「加载失败」+ 具体原因 + 重试 -->
+<view class="load-error">
+  <image class="load-error-icon" lazy-load src="/images/icons/alert.png" mode="aspectFit" />
+  <text class="load-error-title">加载失败</text>
+  <text class="load-error-reason" wx:if="{{message}}">{{message}}</text>
+  <text class="load-error-desc" wx:if="{{description}}">{{description}}</text>
+  <button class="load-error-btn" wx:if="{{retry}}" bindtap="onRetry" hover-class="none">重试</button>
+</view>

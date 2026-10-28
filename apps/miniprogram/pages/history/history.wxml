@@ -72,6 +72,14 @@
     </view>
   </view>
 
+  <!-- J16：取数失败与「暂无往期节目」分成两支；失败态自带重试。
+       首屏失败走整块失败态；已有列表时（加载更多/刷新失败）只加一条顶部提示，不吞掉已加载内容。 -->
+  <load-error
+    wx:if="{{loadError && list.length === 0}}"
+    message="{{loadError}}"
+    bind:retry="onRetryLoad"
+  ></load-error>
+
   <!-- T00767：过滤模式下无匹配（全量列表有数据，但当前 未播/已播 过滤为空） -->
   <view class="empty-state" wx:elif="{{filterEmpty}}">
     <image class="empty-icon-img" lazy-load src="/images/icons/newspaper.png" mode="aspectFit" />
@@ -112,7 +120,7 @@
         wx:key="id"
         data-id="{{item.id}}"
         data-index="{{index}}"
-        bindtap="onPlay"
+        bindtap="onOpenDetail"
       >
         <view class="row-cover">
           <!-- 缩略图：频道封面（后端 /episodes/history 附带 channel_cover）；无封面回退文字占位，与今日页同款 -->

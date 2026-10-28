@@ -1,8 +1,16 @@
 <!-- 我的下载：离线缓存管理（FR-MC-09） -->
 <view class="download-page">
 
+  <!-- J106：本机索引读取失败独立成支并自带重试；空态只说「确实没有下载」 -->
+  <load-error
+    wx:if="{{loadError}}"
+    message="{{loadError}}"
+    description="本机下载记录读取失败，与是否下载过无关"
+    bind:retry="onRetryLoad"
+  ></load-error>
+
   <!-- 顶部统计条 -->
-  <view class="stat-bar" wx:if="{{totalCount > 0}}">
+  <view class="stat-bar" wx:elif="{{totalCount > 0}}">
     <view class="stat-info">
       <text class="stat-count">共 {{totalCount}} 章</text>
       <text class="stat-size">占用 {{totalSizeLabel}}</text>
@@ -15,7 +23,7 @@
   </view>
 
   <!-- 分组列表 -->
-  <block wx:if="{{totalCount > 0}}">
+  <block wx:elif="{{totalCount > 0}}">
     <view class="dl-group" wx:for="{{groups}}" wx:key="channelId" wx:for-item="group">
       <view class="group-head">
         <text class="group-name">{{group.channelName}}</text>

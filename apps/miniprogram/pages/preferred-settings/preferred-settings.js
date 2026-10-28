@@ -20,6 +20,8 @@ Page({
     // 首次引导模式：从 query.from=onboarding 进入时为 true，显示"暂不设置"按钮
     // 为什么单独一个标志：避免普通入口（profile → 偏爱频道设置）也出现跳过按钮
     isOnboarding: false,
+    // J106：取数失败与「暂无可用频道」是两件事（失败态由 load-error 渲染并自带重试）
+    loadError: '',
   },
 
   onLoad(query) {
@@ -29,7 +31,7 @@ Page({
   },
 
   async loadChannels() {
-    this.setData({ loading: true });
+    this.setData({ loading: true, loadError: '' });
     try {
       const res = await fetchChannels();
       const allChannels = (res && res.list) || [];
@@ -45,11 +47,17 @@ Page({
         channels,
         loading: false,
         selectedCount: preferredIds.length,
+        loadError: '',
       });
     } catch (err) {
-      this.setData({ loading: false });
-      wx.showToast({ title: err.message || '加载失败', icon: 'none' });
+      // J106：失败态自带重试；不再 toast 一句后落到「暂无可用频道」
+      this.setData({ loading: false, loadError: err.message || '加载失败' });
     }
+  },
+
+  /** J106：失败态的重试入口 */
+  onRetryLoad() {
+    this.loadChannels();
   },
 
   /**

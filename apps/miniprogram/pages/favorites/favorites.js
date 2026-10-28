@@ -17,6 +17,8 @@ Page({
     list: [],          // 已拼装详情的收藏列表
     loading: true,     // 首次加载态
     removing: false,   // 删除请求中（防重复）
+    // J106：取数失败与「还没有收藏」是两件事（失败态由 load-error 渲染并自带重试）
+    loadError: '',
   },
 
   onLoad() {
@@ -51,18 +53,29 @@ Page({
    * @param {boolean} silent - 静默刷新（不展示 loading 遮罩）
    */
   async loadFavorites(silent) {
-    if (!silent) this.setData({ loading: true });
+    if (!silent) this.setData({ loading: true, loadError: '' });
     try {
       const items = await localData.getFavoriteList();
       // 本地收藏项存的是 id（见 local-data.addFavorite），后端项带 episode_id；
       // 而 wxml 的 data-id 与 wx:key 都绑 item.episode_id，本地项 episode_id 缺失会导致
       // 点击/长按整行失效、列表 key 不稳定（评审 HIGH #2）。统一归一化 episode_id。
       const list = items.map((it) => ({ ...it, episode_id: it.episode_id ?? it.id }));
-      this.setData({ list, loading: false });
+      this.setData({ list, loading: false, loadError: '' });
     } catch (err) {
+      const msg = err.message || '加载失败';
       this.setData({ loading: false });
-      wx.showToast({ title: err.message || '加载失败', icon: 'none' });
+      // J106：空列表时是「没取到」，要给失败态与重试；已有收藏时静默失败即可，不必吞掉列表
+      if (this.data.list.length === 0) {
+        this.setData({ loadError: msg });
+      } else {
+        wx.showToast({ title: msg, icon: 'none' });
+      }
     }
+  },
+
+  /** J106：失败态的重试入口 */
+  onRetryLoad() {
+    this.loadFavorites();
   },
 
   /**

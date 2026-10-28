@@ -14,10 +14,14 @@
     </view>
   </view>
 
-  <!-- 错误态 -->
-  <view class="error-wrap" wx:elif="{{error}}">
-    <text class="error-text">{{error}}</text>
-  </view>
+  <!-- 错误态（J106）：失败与「章节尚未生成」是两支，失败态自带重试；
+       缺课程参数这类不可重试的失败不给按钮（点了仍会失败） -->
+  <load-error
+    wx:elif="{{error}}"
+    message="{{error}}"
+    retry="{{channelId ? true : false}}"
+    bind:retry="onRetryLoad"
+  ></load-error>
 
   <block wx:else>
     <!-- 课程头部 -->

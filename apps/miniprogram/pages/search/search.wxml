@@ -46,6 +46,18 @@
     </view>
   </block>
 
+  <!-- J38：首次搜索期间给明确加载态，不再整屏空白 -->
+  <view class="search-loading" wx:elif="{{loading && results.length === 0}}">
+    <text>正在搜索…</text>
+  </view>
+
+  <!-- J39：取数失败是「没取到」，与「未找到相关节目」分成两支；失败态自带重试 -->
+  <load-error
+    wx:elif="{{loadError && results.length === 0}}"
+    message="{{loadError}}"
+    bind:retry="onRetryLoad"
+  ></load-error>
+
   <!-- 空状态 -->
   <view class="empty-state" wx:elif="{{!loading && keyword && results.length === 0}}">
     <image class="empty-icon-img" lazy-load src="/images/icons/search.png" mode="aspectFit" />

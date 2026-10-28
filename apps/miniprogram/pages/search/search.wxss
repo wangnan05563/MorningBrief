@@ -96,3 +96,12 @@
   width: 36rpx;
   height: 36rpx;
 }
+
+/* J38：首次搜索的加载态（原先期间整屏空白，用户以为没反应） */
+.search-loading {
+  display: flex;
+  justify-content: center;
+  padding: 60rpx 0;
+  font-size: 26rpx;
+  color: var(--text-muted);
+}

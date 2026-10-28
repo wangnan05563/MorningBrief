@@ -16,6 +16,13 @@
     <text>加载中...</text>
   </view>
 
+  <!-- J106：失败态独立成支并自带重试 -->
+  <load-error
+    wx:elif="{{loadError}}"
+    message="{{loadError}}"
+    bind:retry="onRetryLoad"
+  ></load-error>
+
   <!-- 空状态 -->
   <view class="empty-state" wx:elif="{{channels.length === 0}}">
     <text>暂无可用频道</text>

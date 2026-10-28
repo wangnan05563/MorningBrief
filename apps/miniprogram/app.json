@@ -57,6 +57,7 @@
   "sitemapLocation": "sitemap.json",
   "__usePrivacyCheck__": true,
   "usingComponents": {
-    "floating-player": "/components/floating-player/floating-player"
+    "floating-player": "/components/floating-player/floating-player",
+    "load-error": "/components/load-error/load-error"
   }
 }

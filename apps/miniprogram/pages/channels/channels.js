@@ -16,6 +16,8 @@ Page({
     // T00599：分级加载态（由 utils/loading.js 控制器维护）
     loadingSlow: false,
     loadingTimedOut: false,
+    // J47：取数失败与「暂无可用频道」是两件事（失败态由 load-error 渲染并自带重试）
+    loadError: '',
   },
 
   onLoad() {
@@ -39,12 +41,12 @@ Page({
     this._lc.start();
     try {
       const res = await fetchChannels();
-      this.setData({ channels: res.list || [] });
+      this.setData({ channels: res.list || [], loadError: '' });
       this._lc.finish();
     } catch (err) {
-      // 失败：立即收起骨架（toast 提示），不被最短展示时长拖住
+      // 失败：立即收起骨架，交给失败态（带重试）——不再 toast 一句后落到「暂无可用频道」
       this._lc.fail();
-      wx.showToast({ title: err.message || '加载失败', icon: 'none' });
+      this.setData({ loadError: err.message || '加载失败' });
     }
   },
 

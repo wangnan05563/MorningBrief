@@ -7,8 +7,15 @@
   </view>
   <view class="view-switch-hint">数据来源：本机收听记录（按最近播放时间倒序）；找各频道的往期节目请点「频道更新」</view>
 
+  <!-- J106：失败态独立成支并自带重试；空态只说「确实还没有播放记录」 -->
+  <load-error
+    wx:if="{{loadError && list.length === 0}}"
+    message="{{loadError}}"
+    bind:retry="onRetryLoad"
+  ></load-error>
+
   <!-- 空状态 -->
-  <view class="empty-state" wx:if="{{!loading && list.length === 0}}">
+  <view class="empty-state" wx:elif="{{!loading && list.length === 0}}">
     <image class="empty-icon-img" lazy-load src="/images/icons/headphones.png" mode="aspectFit" />
     <text>还没有播放记录</text>
     <text class="empty-desc">收听节目后会在这里显示</text>

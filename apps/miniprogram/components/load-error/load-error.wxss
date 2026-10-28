@@ -1,0 +1,48 @@
+.load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 100rpx 48rpx;
+  text-align: center;
+}
+
+.load-error-icon {
+  width: 96rpx;
+  height: 96rpx;
+  margin-bottom: 20rpx;
+  opacity: 0.75;
+}
+
+.load-error-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.load-error-reason {
+  margin-top: 10rpx;
+  font-size: 26rpx;
+  color: var(--text-secondary);
+}
+
+.load-error-desc {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.load-error-btn {
+  min-height: 72rpx;
+  line-height: 72rpx !important;
+  padding: 0 56rpx !important;
+  margin: 32rpx 0 0 !important;
+  border-radius: var(--radius-btn) !important;
+  background: var(--accent-soft) !important;
+  color: var(--accent) !important;
+  font-size: 28rpx !important;
+}
+
+.load-error-btn::after {
+  border: none !important;
+}

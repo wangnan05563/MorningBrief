@@ -55,6 +55,18 @@
 
   <!-- === 今日节目列表（统一布局，点击跳转 detail 页） === -->
   <block wx:elif="{{!loading}}">
+    <!-- J4：取数失败不再借用空态标题说「节目暂未上线」，失败态自带重试；
+         已有列表时（下拉刷新失败）降级为一条提示条，不把用户正在看的节目吞掉 -->
+    <load-error
+      wx:if="{{error && todayList.length === 0}}"
+      message="{{error}}"
+      bind:retry="onRetryLoad"
+    ></load-error>
+    <view class="load-error-bar" wx:elif="{{error}}">
+      <text class="load-error-bar-text">刷新失败：{{error}}</text>
+      <view class="load-error-bar-btn" bindtap="onRetryLoad">重试</view>
+    </view>
+
     <!-- "我的偏爱"未设置时的引导设置提示 -->
     <view class="card preferred-empty-card" wx:if="{{isPreferredMode && preferredEmpty}}">
       <image class="preferred-empty-icon" lazy-load src="/images/icons/radio.png" mode="aspectFit" />
@@ -138,11 +150,12 @@
       </view>
     </view>
 
+    <!-- 空态只说「没有」：失败已由上面的 load-error 分支承接，两者不再共用一支 -->
     <empty-state
-      wx:if="{{todayList.length === 0}}"
+      wx:if="{{!error && todayList.length === 0}}"
       icon="/images/icons/headphones.png"
       icon-type="image"
-      title="{{error || '今日节目暂未上线'}}"
+      title="今日节目暂未上线"
       description="节目通常每天上午更新，下拉刷新试试或稍后再来看看～"
     ></empty-state>
   </block>

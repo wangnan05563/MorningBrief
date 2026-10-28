@@ -41,16 +41,6 @@
   100% { background-position: 0 0; }
 }
 
-/* === 错误态 === */
-.error-wrap {
-  padding: 120rpx 48rpx;
-  text-align: center;
-}
-.error-text {
-  color: var(--danger);
-  font-size: 28rpx;
-}
-
 /* === 课程头部 === */
 .course-head {
   display: flex;
