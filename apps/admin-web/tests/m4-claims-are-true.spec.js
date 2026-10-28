@@ -233,6 +233,30 @@ test.describe('M4 界面的说法必须是真的', () => {
     await expect(page.locator('.el-message').filter({ hasText: '导入完成' })).toHaveCount(0)
   })
 
+  test('M50 CSV/JSON 两个 Tab 各用各的输入框，且不再声称 5000 行', async ({ page }) => {
+    await stubDbAdmin(page)
+    await page.goto('/db-admin')
+    await page.locator('.table-item').filter({ hasText: '广告素材' }).click({ timeout: NAV })
+    await page.getByRole('button', { name: '导入' }).click()
+
+    const dlg = page.locator('.el-dialog').filter({ hasText: '导入数据' })
+    // 后端没有 5000 行上限，界面不许再写一个不存在的约束
+    await expect(dlg.getByText('5000 行')).toHaveCount(0)
+
+    const csv = dlg.getByPlaceholder('粘贴 CSV 内容（首行为列名，支持引号内逗号与换行）')
+    const json = dlg.getByPlaceholder('粘贴 JSON 数组，如 [{"id":1,"name":"test"}]')
+    await csv.fill('id,name\n1,素材A')
+    await dlg.getByRole('tab', { name: 'JSON 粘贴' }).click()
+
+    // 修复前两个 Tab 共用 importContent：切到 JSON 会看到 CSV 原文，按 JSON 解析直接报错
+    await expect(json).toHaveValue('')
+    await json.fill('[{"id":1,"name":"素材A"}]')
+    await dlg.getByRole('tab', { name: 'CSV 粘贴' }).click()
+    await expect(csv).toHaveValue('id,name\n1,素材A')
+    await dlg.getByRole('tab', { name: 'JSON 粘贴' }).click()
+    await expect(json).toHaveValue('[{"id":1,"name":"素材A"}]')
+  })
+
   test('M20 时间戳列：界面只读，编辑与新增都不把它写回去', async ({ page }) => {
     await stubDbAdmin(page)
     await page.goto('/db-admin')

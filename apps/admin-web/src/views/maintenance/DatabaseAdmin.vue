@@ -332,12 +332,12 @@
     <!-- 导入弹窗 -->
     <el-dialog v-model="importDialogVisible" title="导入数据" width="600px">
       <el-alert type="warning" :closable="false" class="import-alert">
-        导入将直接写入数据库，敏感字段会被忽略。单次最多导入 5000 行。
+        导入将直接写入数据库，敏感字段会被忽略。
       </el-alert>
       <el-tabs v-model="importFormat" class="import-tabs" @tab-change="importPreview = null">
         <el-tab-pane label="CSV 粘贴" name="csv">
           <el-input
-            v-model="importContent"
+            v-model="importCsvContent"
             type="textarea"
             :rows="8"
             placeholder="粘贴 CSV 内容（首行为列名，支持引号内逗号与换行）"
@@ -346,7 +346,7 @@
         </el-tab-pane>
         <el-tab-pane label="JSON 粘贴" name="json">
           <el-input
-            v-model="importContent"
+            v-model="importJsonContent"
             type="textarea"
             :rows="8"
             placeholder='粘贴 JSON 数组，如 [{"id":1,"name":"test"}]'
@@ -558,7 +558,13 @@ const auditLogs = ref([])
 
 const importDialogVisible = ref(false)
 const importFormat = ref('csv')
-const importContent = ref('')
+// M50：CSV/JSON 各用各的输入框。共用一份时，切到另一种格式会把上一段文本
+// 按新格式再解析——CSV 在 JSON 页报解析失败，JSON 在 CSV 页则可能切成垃圾行
+const importCsvContent = ref('')
+const importJsonContent = ref('')
+const importContent = computed(() =>
+  importFormat.value === 'json' ? importJsonContent.value : importCsvContent.value,
+)
 const importMode = ref('insert')
 
 const deleteDialogVisible = ref(false)
@@ -777,7 +783,7 @@ async function submitForm() {
   }
 }
 
-// ---- 删除（含级联预览 + 令牌确认） ----
+// ---- 删除（含级联预览 + 表名确认） ----
 async function handleDelete(row) {
   const pkCol = columns.value.find((c) => c.primary_key)
   if (!pkCol) {
@@ -934,7 +940,8 @@ async function handleImport() {
     }
     ElMessage.success(`导入完成：新增 ${result.inserted}，更新 ${result.updated ?? 0}`)
     importDialogVisible.value = false
-    importContent.value = ''
+    importCsvContent.value = ''
+    importJsonContent.value = ''
     importPreview.value = null
     importResult.value = null
   } catch (e) {
