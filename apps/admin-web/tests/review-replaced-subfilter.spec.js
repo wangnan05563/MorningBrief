@@ -14,7 +14,8 @@ import {
  * 后端零改动——list_reviews 的 status 是等值过滤，`status=replaced` 现在就查得到。
  */
 test.describe('已通过子筛选（DEC-UX-001 方案 B）', () => {
-  test.use({ expect: { timeout: 30000 } })
+  // 首次按需编译路由组件可能超过默认 5s；test.use({ expect }) 在 Playwright 1.61 是空选项（T02778）
+  const expectLong = expect.configure({ timeout: 30000 })
 
   test.beforeEach(async ({ page }) => {
     await setLoginState(page, 'admin')
@@ -37,9 +38,9 @@ test.describe('已通过子筛选（DEC-UX-001 方案 B）', () => {
   test('「已通过」tab 出现子筛选，默认仍只看 approved', async ({ page }) => {
     await page.goto('/review')
     await page.getByRole('tab', { name: '已通过' }).click()
-    await expect(page.locator('[aria-label="已通过子筛选"]')).toBeVisible()
-    await expect(page.getByRole('row').filter({ hasText: 'wf-003' })).toBeVisible()
-    await expect(page.getByRole('row').filter({ hasText: 'wf-005' })).toHaveCount(0)
+    await expectLong(page.locator('[aria-label="已通过子筛选"]')).toBeVisible()
+    await expectLong(page.getByRole('row').filter({ hasText: 'wf-003' })).toBeVisible()
+    await expectLong(page.getByRole('row').filter({ hasText: 'wf-005' })).toHaveCount(0)
   })
 
   test('切到「仅已替换」后 replaced 记录可见且文案为中文', async ({ page }) => {
@@ -48,8 +49,8 @@ test.describe('已通过子筛选（DEC-UX-001 方案 B）', () => {
     const sub = page.locator('[aria-label="已通过子筛选"]')
     await sub.getByText('仅已替换').click()
     const row = page.getByRole('row').filter({ hasText: 'wf-005' })
-    await expect(row.getByText('已替换')).toBeVisible()
-    await expect(page.getByText('replaced', { exact: true })).toHaveCount(0)
+    await expectLong(row.getByText('已替换')).toBeVisible()
+    await expectLong(page.getByText('replaced', { exact: true })).toHaveCount(0)
   })
 
   test('切走 tab 时子筛选复位，不会把 replaced 泄漏到别的 tab', async ({ page }) => {
@@ -57,21 +58,21 @@ test.describe('已通过子筛选（DEC-UX-001 方案 B）', () => {
     await page.getByRole('tab', { name: '已通过' }).click()
     await page.locator('[aria-label="已通过子筛选"]').getByText('仅已替换').click()
     await page.getByRole('tab', { name: '待审核' }).click()
-    await expect(page.locator('[aria-label="已通过子筛选"]')).toHaveCount(0)
+    await expectLong(page.locator('[aria-label="已通过子筛选"]')).toHaveCount(0)
     // 子筛选复位后待审核 tab 请求的 status 必须是 pending（列表里出现 wf-001、无 wf-005）
-    await expect(page.getByRole('row').filter({ hasText: 'wf-001' })).toBeVisible()
-    await expect(page.getByRole('row').filter({ hasText: 'wf-005' })).toHaveCount(0)
+    await expectLong(page.getByRole('row').filter({ hasText: 'wf-001' })).toBeVisible()
+    await expectLong(page.getByRole('row').filter({ hasText: 'wf-005' })).toHaveCount(0)
   })
 
   test('再回到「已通过」时子筛选回到默认的仅已通过', async ({ page }) => {
     await page.goto('/review')
     await page.getByRole('tab', { name: '已通过' }).click()
     await page.locator('[aria-label="已通过子筛选"]').getByText('仅已替换').click()
-    await expect(page.getByRole('row').filter({ hasText: 'wf-005' })).toBeVisible()
+    await expectLong(page.getByRole('row').filter({ hasText: 'wf-005' })).toBeVisible()
     await page.getByRole('tab', { name: '待审核' }).click()
     await page.getByRole('tab', { name: '已通过' }).click()
     // 复位若丢失，这里会继续停在 replaced 子筛选、把 wf-005 当成「已通过」的默认结果
-    await expect(page.getByRole('row').filter({ hasText: 'wf-003' })).toBeVisible()
-    await expect(page.getByRole('row').filter({ hasText: 'wf-005' })).toHaveCount(0)
+    await expectLong(page.getByRole('row').filter({ hasText: 'wf-003' })).toBeVisible()
+    await expectLong(page.getByRole('row').filter({ hasText: 'wf-005' })).toHaveCount(0)
   })
 })
