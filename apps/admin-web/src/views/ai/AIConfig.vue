@@ -12,6 +12,14 @@
       />
     </div>
 
+    <!-- T02534 / F2：草稿恢复必须明示，并给出「丢弃并载入服务器值」的出口 -->
+    <DraftRestoredBanner
+      :visible="draftNotice > 0"
+      :count="draftNotice"
+      @keep="keepLocalDraft"
+      @discard="discardLocalDraft"
+    />
+
     <!-- T02487（FR-UX-104）：配置加载失败态 -->
     <ConfigLoadError
       :visible="configError"
@@ -915,6 +923,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDraft } from '../../composables/useDraft'
+import DraftRestoredBanner from '../../components/DraftRestoredBanner.vue'
 import { useConfigLoad } from '../../composables/useConfigLoad'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -948,7 +957,13 @@ const llmForm = ref({
   llm_max_script_segments: 10,
 })
 // T00828：断点续录——LLM 主配置表单（api_key 敏感字段不落盘）
-const { apply: applyDraft, peek: peekDraft, track: trackDraft, commit: commitDraft } = useDraft('ai-config-llm')
+const {
+  apply: applyDraft,
+  peek: peekDraft,
+  track: trackDraft,
+  commit: commitDraft,
+  discard: discardLlMDraft,
+} = useDraft('ai-config-llm')
 const enableDraft = trackDraft(llmForm, { excludePaths: ['api_key'] })
 const showLlmKey = ref(false)
 
@@ -1040,6 +1055,7 @@ const configError = cfgLoad.isError
 const configErrorMsg = cfgLoad.errorMessage
 const configRetrying = cfgLoad.retrying
 const draftBlocked = ref(false)
+const draftNotice = ref(0)
 
 // T02898（复用 INT-UX-04 口径）：请求成功 ≠ 屏上这几个值是库里存的。
 // get_config_for_frontend 对取不到的字段回落到 Settings(.env)，旧响应里
@@ -1063,12 +1079,29 @@ const fallbackNote = computed(() => {
 })
 
 function restoreDrafts() {
-  applyDraft(llmForm)
+  const llmRestored = applyDraft(llmForm)
   enableDraft()
-  draftTts.apply(ttsForm)
+  const ttsRestored = draftTts.apply(ttsForm)
   enableDraftTts()
-  draftImage.apply(imageForm)
+  const imageRestored = draftImage.apply(imageForm)
   enableDraftImage()
+  // 三段是同一页的三个草稿，横幅只报一个总数
+  draftNotice.value =
+    (llmRestored?.changed ?? 0) + (ttsRestored?.changed ?? 0) + (imageRestored?.changed ?? 0)
+}
+
+function keepLocalDraft() {
+  draftNotice.value = 0
+}
+
+async function discardLocalDraft() {
+  await Promise.all([
+    discardLlMDraft(llmForm),
+    draftTts.discard(ttsForm),
+    draftImage.discard(imageForm),
+  ])
+  draftNotice.value = 0
+  ElMessage.info('已丢弃本地草稿，表单已恢复为服务器值')
 }
 
 function hasAnyDraft() {
@@ -1437,6 +1470,7 @@ async function handleSave() {
     commitDraft()
     draftTts.commit()
     draftImage.commit()
+    draftNotice.value = 0
     // 保存后重新加载配置，刷新 presetConfigs 中的脱敏值
     await cfgLoad.load()
     saving.value = false

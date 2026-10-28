@@ -35,6 +35,14 @@
       />
     </div>
 
+    <!-- T02534 / F2：草稿恢复必须明示，并给出「丢弃并载入服务器值」的出口 -->
+    <DraftRestoredBanner
+      :visible="draftNotice > 0"
+      :count="draftNotice"
+      @keep="keepLocalDraft"
+      @discard="discardLocalDraft"
+    />
+
     <ConfigLoadError
       :visible="configError"
       :message="configErrorMsg"
@@ -208,6 +216,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useDraft } from '../../composables/useDraft'
 import { useConfigLoad } from '../../composables/useConfigLoad'
+import DraftRestoredBanner from '../../components/DraftRestoredBanner.vue'
 import { Check, Connection, Delete, View, Hide } from '@element-plus/icons-vue'
 import { ElMessage } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
@@ -245,7 +254,13 @@ const bucketSuffixError = computed(() => {
 })
 
 // T00828：断点续录（SecretId/SecretKey 敏感字段不落盘）
-const { apply: applyDraft, peek: peekDraft, track: trackDraft, commit: commitDraft } = useDraft('cos-config')
+const {
+  apply: applyDraft,
+  peek: peekDraft,
+  track: trackDraft,
+  commit: commitDraft,
+  discard: discardDraft,
+} = useDraft('cos-config')
 const enableDraft = trackDraft(form, { excludePaths: ['secret_id', 'secret_key'] })
 
 // 配置就绪状态（进入页面快速判断）
@@ -330,10 +345,23 @@ const configError = configLoad.isError
 const configErrorMsg = configLoad.errorMessage
 const configRetrying = configLoad.retrying
 const draftBlocked = ref(false)
+const draftNotice = ref(0)
 
 function restoreDraft() {
-  applyDraft(form)
+  const restored = applyDraft(form)
   enableDraft()
+  draftNotice.value = restored?.changed ?? 0
+}
+
+function keepLocalDraft() {
+  // 保留草稿：只是不再提示，localStorage 里仍留着，下次进入会再次带出
+  draftNotice.value = 0
+}
+
+async function discardLocalDraft() {
+  await discardDraft(form)
+  draftNotice.value = 0
+  ElMessage.info('已丢弃本地草稿，表单已恢复为服务器值')
 }
 
 async function retryLoad() {
@@ -371,6 +399,7 @@ async function handleSave() {
     })
     ElMessage.success('COS 配置已保存并热更新')
     commitDraft()
+    draftNotice.value = 0
     await configLoad.load()
   } finally {
     saving.value = false
@@ -399,6 +428,7 @@ async function handleClearCredentials() {
     await resetCosConfig()
     ElMessage.success('COS 凭证已清除，回退到 .env 默认值')
     commitDraft()
+    draftNotice.value = 0
     await configLoad.load()
   } catch {
     // 失败提示由拦截器统一给出；按钮不卡在 loading

@@ -226,7 +226,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1217,
+            "line": 1250,
             "fn": "api.post",
             "fieldCount": 5,
             "unresolved": []
@@ -275,7 +275,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1544,
+            "line": 1578,
             "fn": "api.post",
             "fieldCount": 2,
             "unresolved": []
@@ -349,7 +349,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1687,
+            "line": 1721,
             "fn": "api.post",
             "fieldCount": 26,
             "unresolved": []
@@ -481,7 +481,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1457,
+            "line": 1491,
             "fn": "api.post",
             "fieldCount": 3,
             "unresolved": []
@@ -527,7 +527,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1567,
+            "line": 1601,
             "fn": "api.post",
             "fieldCount": 3,
             "unresolved": []
@@ -582,7 +582,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1604,
+            "line": 1638,
             "fn": "api.post",
             "fieldCount": 12,
             "unresolved": []
@@ -2363,7 +2363,7 @@
         "callSites": [
           {
             "file": "views/notification/NotificationConfig.vue",
-            "line": 825,
+            "line": 853,
             "fn": "previewNotificationTemplate",
             "fieldCount": 1,
             "unresolved": []
@@ -2583,7 +2583,7 @@
         "callSites": [
           {
             "file": "views/tunnel/Tunnel.vue",
-            "line": 646,
+            "line": 674,
             "fn": "api.post",
             "fieldCount": 1,
             "unresolved": []
@@ -2628,7 +2628,7 @@
         "callSites": [
           {
             "file": "views/tunnel/Tunnel.vue",
-            "line": 666,
+            "line": 694,
             "fn": "api.post",
             "fieldCount": 2,
             "unresolved": []
@@ -2683,7 +2683,7 @@
         "callSites": [
           {
             "file": "views/tunnel/Tunnel.vue",
-            "line": 565,
+            "line": 592,
             "fn": "api.post",
             "fieldCount": 11,
             "unresolved": []
@@ -3165,7 +3165,7 @@
         "callSites": [
           {
             "file": "views/ai/AIConfig.vue",
-            "line": 1428,
+            "line": 1461,
             "fn": "api.put",
             "fieldCount": 4,
             "unresolved": []
@@ -3281,7 +3281,7 @@
         ],
         "columnNotInModel": []
       },
-      "verdict": "设计如此：PUT /ai/config 的字段是嵌套结构（llm./tts./image.），前端按子表单展开提交，落库到按 provider 分组的配置行；顶层字段名与列名天然不同，(a)−(c) 命中为结构差异不是漏字段（apps/admin-web/src/views/ai/AIConfig.vue:1595 apps/admin-web/src/views/ai/AIConfig.vue:1660）"
+      "verdict": "设计如此：PUT /ai/config 的字段是嵌套结构（llm./tts./image.），前端按子表单展开提交，落库到按 provider 分组的配置行；顶层字段名与列名天然不同，(a)−(c) 命中为结构差异不是漏字段（apps/admin-web/src/views/ai/AIConfig.vue:1628 apps/admin-web/src/views/ai/AIConfig.vue:1693）"
     },
     {
       "endpoint": "PUT /auth/users/*",
@@ -3378,7 +3378,7 @@
         "callSites": [
           {
             "file": "views/system/AutoReviewConfig.vue",
-            "line": 550,
+            "line": 577,
             "fn": "updateAutoReviewConfig",
             "fieldCount": 5,
             "unresolved": []
@@ -3739,7 +3739,7 @@
         "callSites": [
           {
             "file": "views/cos/CosConfig.vue",
-            "line": 364,
+            "line": 392,
             "fn": "saveCosConfig",
             "fieldCount": 6,
             "unresolved": []
@@ -3965,7 +3965,7 @@
         "callSites": [
           {
             "file": "views/notification/NotificationConfig.vue",
-            "line": 717,
+            "line": 744,
             "fn": "saveNotificationConfig",
             "fieldCount": 13,
             "unresolved": [
@@ -3974,7 +3974,7 @@
           },
           {
             "file": "views/notification/NotificationConfig.vue",
-            "line": 747,
+            "line": 775,
             "fn": "saveNotificationConfig",
             "fieldCount": 13,
             "unresolved": [
@@ -4059,7 +4059,7 @@
         "callSites": [
           {
             "file": "views/notification/NotificationConfig.vue",
-            "line": 788,
+            "line": 816,
             "fn": "updateNotificationTemplate",
             "fieldCount": 4,
             "unresolved": []

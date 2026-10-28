@@ -21,6 +21,14 @@
         </el-tag>
       </div>
 
+      <!-- T02534 / F2：草稿恢复必须明示，并给出「丢弃并载入服务器值」的出口 -->
+      <DraftRestoredBanner
+        :visible="draftNotice > 0"
+        :count="draftNotice"
+        @keep="keepLocalDraft"
+        @discard="discardLocalDraft"
+      />
+
       <!-- T02594（FR-UX-104）：加载失败必须说出来，保存禁用，草稿不恢复 -->
       <ConfigLoadError
         :visible="configError"
@@ -371,6 +379,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useDraft } from '../../composables/useDraft'
 import { useConfigLoad } from '../../composables/useConfigLoad'
 import ConfigLoadError from '../../components/ConfigLoadError.vue'
+import DraftRestoredBanner from '../../components/DraftRestoredBanner.vue'
 import ListLoadError from '../../components/ListLoadError.vue'
 import { Refresh, Setting, Plus, DataLine, CircleCheck, CircleClose, Timer, List, WarningFilled, Check } from '@element-plus/icons-vue'
 // 提示必须走统一出口：直接从 element-plus 取 ElMessage 会绕过 2 秒去重与
@@ -401,7 +410,13 @@ const form = reactive({
   keyword_whitelist: [],
 })
 // T00828：断点续录——表单变化自动持久化，重新进入恢复
-const { apply: applyDraft, peek: peekDraft, track: trackDraft, commit: commitDraft } = useDraft('auto-review-config')
+const {
+  apply: applyDraft,
+  peek: peekDraft,
+  track: trackDraft,
+  commit: commitDraft,
+  discard: discardDraft,
+} = useDraft('auto-review-config')
 const enableDraft = trackDraft(form)
 const keywordInput = ref('')
 
@@ -505,10 +520,22 @@ const configError = configLoad.isError
 const configErrorMsg = configLoad.errorMessage
 const configRetrying = configLoad.retrying
 const draftBlocked = ref(false)
+const draftNotice = ref(0)
 
 function restoreDraft() {
-  applyDraft(form)
+  const restored = applyDraft(form)
   enableDraft()
+  draftNotice.value = restored?.changed ?? 0
+}
+
+function keepLocalDraft() {
+  draftNotice.value = 0
+}
+
+async function discardLocalDraft() {
+  await discardDraft(form)
+  draftNotice.value = 0
+  ElMessage.info('已丢弃本地草稿，表单已恢复为服务器值')
 }
 
 // 只有首次成功加载才恢复草稿：之后的刷新不能把旧草稿重新叠加到用户当前输入上
@@ -557,6 +584,7 @@ async function saveConfig() {
     config.value = res
     ElMessage.success('配置已保存，下次工作流创建审核记录时按新配置判定')
     commitDraft()
+    draftNotice.value = 0
   } catch (err) {
     notifyErrorOnce(err, '保存失败：' + (err.message || '未知错误'))
   } finally {

@@ -79,7 +79,7 @@
     "endpoint": "PUT /ai/config",
     "kind": "设计如此",
     "note": "PUT /ai/config 的字段是嵌套结构（llm./tts./image.），前端按子表单展开提交，落库到按 provider 分组的配置行；顶层字段名与列名天然不同，(a)−(c) 命中为结构差异不是漏字段",
-    "evidence": "apps/admin-web/src/views/ai/AIConfig.vue:1595 apps/admin-web/src/views/ai/AIConfig.vue:1660"
+    "evidence": "apps/admin-web/src/views/ai/AIConfig.vue:1628 apps/admin-web/src/views/ai/AIConfig.vue:1693"
   },
   {
     "endpoint": "POST /auth/login",

@@ -384,7 +384,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1313,
+          "line": 1346,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -399,7 +399,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1308,
+          "line": 1341,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -418,7 +418,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1231,
+          "line": 1264,
           "fn": "api.get",
           "fieldCount": 3,
           "unresolved": []
@@ -433,7 +433,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1309,
+          "line": 1342,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -465,7 +465,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1718,
+          "line": 1752,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -483,7 +483,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1361,
+          "line": 1394,
           "fn": "api.get",
           "fieldCount": 2,
           "unresolved": []
@@ -551,7 +551,7 @@
       "sites": [
         {
           "file": "views/system/AutoReviewConfig.vue",
-          "line": 487,
+          "line": 502,
           "fn": "getAutoReviewConfig",
           "fieldCount": 0,
           "unresolved": []
@@ -568,7 +568,7 @@
       "sites": [
         {
           "file": "views/system/AutoReviewConfig.vue",
-          "line": 624,
+          "line": 652,
           "fn": "listAutoReviewHistory",
           "fieldCount": 1,
           "unresolved": []
@@ -585,7 +585,7 @@
       "sites": [
         {
           "file": "views/system/AutoReviewConfig.vue",
-          "line": 597,
+          "line": 625,
           "fn": "getAutoReviewStats",
           "fieldCount": 1,
           "unresolved": []
@@ -808,7 +808,7 @@
       "sites": [
         {
           "file": "views/cos/CosConfig.vue",
-          "line": 307,
+          "line": 322,
           "fn": "getCosConfig",
           "fieldCount": 0,
           "unresolved": []
@@ -926,7 +926,7 @@
       "sites": [
         {
           "file": "views/cos/CosConfig.vue",
-          "line": 307,
+          "line": 322,
           "fn": "getCosStatus",
           "fieldCount": 0,
           "unresolved": []
@@ -1373,7 +1373,7 @@
       "sites": [
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 671,
+          "line": 698,
           "fn": "getNotificationConfig",
           "fieldCount": 0,
           "unresolved": []
@@ -1390,7 +1390,7 @@
       "sites": [
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 857,
+          "line": 885,
           "fn": "listNotificationLogs",
           "fieldCount": 1,
           "unresolved": []
@@ -1405,7 +1405,7 @@
       "sites": [
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 770,
+          "line": 798,
           "fn": "listNotificationTemplates",
           "fieldCount": 0,
           "unresolved": []
@@ -1668,7 +1668,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 618,
+          "line": 646,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -1683,7 +1683,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 467,
+          "line": 494,
           "fn": "api.get",
           "fieldCount": 0,
           "unresolved": []
@@ -1700,7 +1700,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 455,
+          "line": 482,
           "fn": "api.get",
           "fieldCount": 1,
           "unresolved": []
@@ -1882,7 +1882,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1217,
+          "line": 1250,
           "fn": "api.post",
           "fieldCount": 5,
           "unresolved": []
@@ -1900,7 +1900,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1544,
+          "line": 1578,
           "fn": "api.post",
           "fieldCount": 2,
           "unresolved": []
@@ -1949,7 +1949,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1687,
+          "line": 1721,
           "fn": "api.post",
           "fieldCount": 26,
           "unresolved": []
@@ -1964,7 +1964,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1510,
+          "line": 1544,
           "fn": "api.post",
           "fieldCount": 0,
           "unresolved": []
@@ -2000,7 +2000,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1457,
+          "line": 1491,
           "fn": "api.post",
           "fieldCount": 3,
           "unresolved": []
@@ -2019,7 +2019,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1567,
+          "line": 1601,
           "fn": "api.post",
           "fieldCount": 3,
           "unresolved": []
@@ -2047,7 +2047,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1604,
+          "line": 1638,
           "fn": "api.post",
           "fieldCount": 12,
           "unresolved": []
@@ -2191,7 +2191,7 @@
       "sites": [
         {
           "file": "views/system/AutoReviewConfig.vue",
-          "line": 659,
+          "line": 687,
           "fn": "retryFailedAutoReview",
           "fieldCount": 0,
           "unresolved": []
@@ -2466,7 +2466,7 @@
       "sites": [
         {
           "file": "views/cos/CosConfig.vue",
-          "line": 399,
+          "line": 428,
           "fn": "resetCosConfig",
           "fieldCount": 0,
           "unresolved": []
@@ -2504,7 +2504,7 @@
       "sites": [
         {
           "file": "views/cos/CosConfig.vue",
-          "line": 414,
+          "line": 444,
           "fn": "testCosConnection",
           "fieldCount": 0,
           "unresolved": []
@@ -2879,7 +2879,7 @@
       "sites": [
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 899,
+          "line": 927,
           "fn": "resendNotificationLog",
           "fieldCount": 0,
           "unresolved": []
@@ -2896,7 +2896,7 @@
       "sites": [
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 825,
+          "line": 853,
           "fn": "previewNotificationTemplate",
           "fieldCount": 1,
           "unresolved": []
@@ -2911,7 +2911,7 @@
       "sites": [
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 749,
+          "line": 777,
           "fn": "sendTestNotification",
           "fieldCount": 0,
           "unresolved": []
@@ -3073,7 +3073,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 646,
+          "line": 674,
           "fn": "api.post",
           "fieldCount": 1,
           "unresolved": []
@@ -3088,7 +3088,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 597,
+          "line": 625,
           "fn": "api.post",
           "fieldCount": 0,
           "unresolved": []
@@ -3106,7 +3106,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 666,
+          "line": 694,
           "fn": "api.post",
           "fieldCount": 2,
           "unresolved": []
@@ -3133,7 +3133,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 565,
+          "line": 592,
           "fn": "api.post",
           "fieldCount": 11,
           "unresolved": []
@@ -3148,7 +3148,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 518,
+          "line": 545,
           "fn": "api.post",
           "fieldCount": 0,
           "unresolved": []
@@ -3163,7 +3163,7 @@
       "sites": [
         {
           "file": "views/tunnel/Tunnel.vue",
-          "line": 546,
+          "line": 573,
           "fn": "api.post",
           "fieldCount": 0,
           "unresolved": []
@@ -3344,7 +3344,7 @@
       "sites": [
         {
           "file": "views/ai/AIConfig.vue",
-          "line": 1428,
+          "line": 1461,
           "fn": "api.put",
           "fieldCount": 4,
           "unresolved": []
@@ -3400,7 +3400,7 @@
       "sites": [
         {
           "file": "views/system/AutoReviewConfig.vue",
-          "line": 550,
+          "line": 577,
           "fn": "updateAutoReviewConfig",
           "fieldCount": 5,
           "unresolved": []
@@ -3544,7 +3544,7 @@
       "sites": [
         {
           "file": "views/cos/CosConfig.vue",
-          "line": 364,
+          "line": 392,
           "fn": "saveCosConfig",
           "fieldCount": 6,
           "unresolved": []
@@ -3627,7 +3627,7 @@
       "sites": [
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 717,
+          "line": 744,
           "fn": "saveNotificationConfig",
           "fieldCount": 13,
           "unresolved": [
@@ -3636,7 +3636,7 @@
         },
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 747,
+          "line": 775,
           "fn": "saveNotificationConfig",
           "fieldCount": 13,
           "unresolved": [
@@ -3658,7 +3658,7 @@
       "sites": [
         {
           "file": "views/notification/NotificationConfig.vue",
-          "line": 788,
+          "line": 816,
           "fn": "updateNotificationTemplate",
           "fieldCount": 4,
           "unresolved": []

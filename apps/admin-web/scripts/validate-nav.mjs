@@ -545,17 +545,17 @@ export const METRIC_UNIT_ALLOW = [
   },
   {
     file: 'views/ai/AIConfig.vue',
-    lines: [106, 172, 182, 410],
+    lines: [114, 180, 190, 418],
     reason: '配置项的输入单位（留白/超时），写的是用户要填的量纲，不是后端指标的展示口径',
   },
   {
     file: 'views/ai/AIConfig.vue',
-    lines: [1288],
+    lines: [1321],
     reason: '字数反算公式（总字数 = 目标时长 × 210 × 倍率 / 60），换算的是字数而不是展示单位',
   },
   {
     file: 'views/ai/AIConfig.vue',
-    lines: [626, 717],
+    lines: [634, 725],
     reason: '下载进度百分比由前端按已下载/总字节算，不是后端指标 meta',
   },
   {
@@ -600,7 +600,7 @@ export const METRIC_UNIT_ALLOW = [
   },
   {
     file: 'views/system/AutoReviewConfig.vue',
-    lines: [278],
+    lines: [286],
     reason: '「{{ count }} 次」是失败记录条数徽标，不是统计指标 meta',
   },
   {

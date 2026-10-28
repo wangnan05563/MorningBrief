@@ -13,6 +13,14 @@
       />
     </div>
 
+    <!-- T02534 / F2：草稿恢复必须明示，并给出「丢弃并载入服务器值」的出口 -->
+    <DraftRestoredBanner
+      :visible="draftNotice > 0"
+      :count="draftNotice"
+      @keep="keepLocalDraft"
+      @discard="discardLocalDraft"
+    />
+
     <ConfigLoadError
       :visible="configError"
       :message="configErrorMsg"
@@ -539,6 +547,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useDraft } from '../../composables/useDraft'
 import { useConfigLoad } from '../../composables/useConfigLoad'
+import DraftRestoredBanner from '../../components/DraftRestoredBanner.vue'
 import { Check, View, Refresh, Hide, Connection, Close } from '@element-plus/icons-vue'
 import { ElMessage } from '../../utils/message'
 import {
@@ -605,7 +614,13 @@ const dingtalkMasked = computed(() => MASKED_VALUE.test(configForm.dingtalk_webh
 const wecomMasked = computed(() => MASKED_VALUE.test(configForm.wecom_webhook))
 // T00828：断点续录——表单变化自动持久化，重新进入页面恢复未提交输入（密钥字段不落盘）
 // T01834：钉钉/企微 webhook URL 含 access_token 等密钥参数，一并排除不落盘
-const { apply: applyDraft, peek: peekDraft, track: trackDraft, commit: commitDraft } = useDraft('notification-config')
+const {
+  apply: applyDraft,
+  peek: peekDraft,
+  track: trackDraft,
+  commit: commitDraft,
+  discard: discardDraft,
+} = useDraft('notification-config')
 const enableDraft = trackDraft(configForm, {
   excludePaths: ['dingtalk_webhook', 'dingtalk_secret', 'wecom_webhook', 'email_smtp_password'],
 })
@@ -617,6 +632,23 @@ const configError = cfgLoad.isError
 const configErrorMsg = cfgLoad.errorMessage
 const configRetrying = cfgLoad.retrying
 const draftBlocked = ref(false)
+const draftNotice = ref(0)
+
+function restoreDraft() {
+  const restored = applyDraft(configForm)
+  enableDraft()
+  draftNotice.value = restored?.changed ?? 0
+}
+
+function keepLocalDraft() {
+  draftNotice.value = 0
+}
+
+async function discardLocalDraft() {
+  await discardDraft(configForm)
+  draftNotice.value = 0
+  ElMessage.info('已丢弃本地草稿，表单已恢复为服务器值')
+}
 
 // T02898（复用 INT-UX-04 口径）：请求成功 ≠ 屏上这些值是库里存的。
 // 旧响应里「表是空的（用的是默认值）」与「表里有记录」长得一模一样；
@@ -647,11 +679,6 @@ const fallbackNote = computed(() => {
     .map((f) => fallbackLabels[f] || f)
     .join('、')}`
 })
-
-function restoreDraft() {
-  applyDraft(configForm)
-  enableDraft()
-}
 
 async function retryLoad() {
   const ok = await cfgLoad.retry()
@@ -721,6 +748,7 @@ async function handleSaveConfig() {
         : '配置已保存',
     )
     commitDraft()
+    draftNotice.value = 0
     // 重新加载以刷新脱敏显示与 detected_base_url
     await cfgLoad.load()
   } catch (e) {

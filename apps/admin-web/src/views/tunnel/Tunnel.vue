@@ -123,6 +123,14 @@
       </div>
     </el-alert>
 
+    <!-- T02534 / F2：草稿恢复必须明示，并给出「丢弃并载入服务器值」的出口 -->
+    <DraftRestoredBanner
+      :visible="draftNotice > 0"
+      :count="draftNotice"
+      @keep="keepLocalDraft"
+      @discard="discardLocalDraft"
+    />
+
     <!-- T02487（FR-UX-104）：配置加载失败态 -->
     <ConfigLoadError
       :visible="configError"
@@ -357,6 +365,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useDraft } from '../../composables/useDraft'
+import DraftRestoredBanner from '../../components/DraftRestoredBanner.vue'
 import { useConfigLoad } from '../../composables/useConfigLoad'
 import { ElMessage, notifyErrorOnce } from '../../utils/message'
 import {
@@ -393,7 +402,13 @@ const form = ref({
   cert_file: '',
 })
 // T00828：断点续录（cpolar_authtoken 为令牌，不落盘）
-const { apply: applyDraft, peek: peekDraft, track: trackDraft, commit: commitDraft } = useDraft('tunnel-config')
+const {
+  apply: applyDraft,
+  peek: peekDraft,
+  track: trackDraft,
+  commit: commitDraft,
+  discard: discardDraft,
+} = useDraft('tunnel-config')
 const enableDraft = trackDraft(form, { excludePaths: ['cpolar_authtoken'] })
 
 // T02487（FR-UX-104）：加载失败 → 页内错误态 + 重试 + 禁用保存，草稿默认不恢复
@@ -403,10 +418,22 @@ const configError = configLoad.isError
 const configErrorMsg = configLoad.errorMessage
 const configRetrying = configLoad.retrying
 const draftBlocked = ref(false)
+const draftNotice = ref(0)
 
 function restoreDraft() {
-  applyDraft(form)
+  const restored = applyDraft(form)
   enableDraft()
+  draftNotice.value = restored?.changed ?? 0
+}
+
+function keepLocalDraft() {
+  draftNotice.value = 0
+}
+
+async function discardLocalDraft() {
+  await discardDraft(form)
+  draftNotice.value = 0
+  ElMessage.info('已丢弃本地草稿，表单已恢复为服务器值')
 }
 
 async function retryLoad() {
@@ -578,6 +605,7 @@ async function handleSaveConfig() {
     })
     ElMessage.success('配置已保存，下次启动隧道时生效')
     commitDraft()
+    draftNotice.value = 0
     await configLoad.load()
   } catch (error) {
     const resp = readBizError(error)
