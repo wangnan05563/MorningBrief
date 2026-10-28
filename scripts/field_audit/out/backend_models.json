@@ -425,7 +425,7 @@
       "endpoint": "delete_materials_by_source",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:615",
+        "source": "backend/app/routers/admin/materials.py:699",
         "refs": [
           "",
           "AdminPayload",
@@ -488,7 +488,7 @@
       "endpoint": "delete_material",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:647",
+        "source": "backend/app/routers/admin/materials.py:731",
         "refs": [
           "",
           "/{material_id}",
@@ -3897,7 +3897,7 @@
       "model": {
         "name": "MaterialCreateRequest",
         "module": "app.routers.admin.materials",
-        "source": "backend/app/routers/admin/materials.py:33",
+        "source": "backend/app/routers/admin/materials.py:36",
         "extra": "ignore",
         "fields": [
           "category",
@@ -3927,7 +3927,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:497",
+        "source": "backend/app/routers/admin/materials.py:581",
         "refs": [
           "",
           ", ",
@@ -3988,7 +3988,7 @@
       "model": {
         "name": "MaterialBatchDeleteRequest",
         "module": "app.routers.admin.materials",
-        "source": "backend/app/routers/admin/materials.py:682",
+        "source": "backend/app/routers/admin/materials.py:766",
         "extra": "ignore",
         "fields": [
           "channel_id",
@@ -4004,7 +4004,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:695",
+        "source": "backend/app/routers/admin/materials.py:779",
         "refs": [
           " 条/本，当前 ",
           "/batch-delete",
@@ -4082,7 +4082,7 @@
       "model": {
         "name": "ImportCosRequest",
         "module": "app.routers.admin.materials",
-        "source": "backend/app/routers/admin/materials.py:865",
+        "source": "backend/app/routers/admin/materials.py:949",
         "extra": "ignore",
         "fields": [
           "category",
@@ -4098,7 +4098,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:876",
+        "source": "backend/app/routers/admin/materials.py:960",
         "refs": [
           "/",
           "/import-cos",
@@ -4165,7 +4165,7 @@
       "model": {
         "name": "ImportUrlRequest",
         "module": "app.routers.admin.materials",
-        "source": "backend/app/routers/admin/materials.py:814",
+        "source": "backend/app/routers/admin/materials.py:898",
         "extra": "ignore",
         "fields": [
           "category",
@@ -4183,7 +4183,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:828",
+        "source": "backend/app/routers/admin/materials.py:912",
         "refs": [
           "/import-url",
           "AdminPayload",
@@ -4235,7 +4235,7 @@
       "model": {
         "name": "SharePreviewRequest",
         "module": "app.routers.admin.materials",
-        "source": "backend/app/routers/admin/materials.py:930",
+        "source": "backend/app/routers/admin/materials.py:1014",
         "extra": "ignore",
         "fields": [
           "channel_id",
@@ -4247,7 +4247,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:939",
+        "source": "backend/app/routers/admin/materials.py:1023",
         "refs": [
           "/share",
           "AdminPayload",
@@ -4284,7 +4284,7 @@
       "endpoint": "upload_document",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:758",
+        "source": "backend/app/routers/admin/materials.py:842",
         "refs": [
           "",
           " · ",
@@ -6207,7 +6207,7 @@
       "model": {
         "name": "MaterialUpdateRequest",
         "module": "app.routers.admin.materials",
-        "source": "backend/app/routers/admin/materials.py:61",
+        "source": "backend/app/routers/admin/materials.py:64",
         "extra": "ignore",
         "fields": [
           "category",
@@ -6233,7 +6233,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:547",
+        "source": "backend/app/routers/admin/materials.py:631",
         "refs": [
           "/{material_id}",
           "AdminPayload",

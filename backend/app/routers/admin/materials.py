@@ -5,10 +5,13 @@
 - 详情查询：返回单条素材全文
 - 新增/编辑/删除：手动维护素材，需 admin 权限
 """
+import csv
+import io
 import json
+from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query, UploadFile, File, Form
+from fastapi import APIRouter, Depends, Query, Response, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy import select, func, case
 from sqlalchemy.exc import IntegrityError
@@ -325,6 +328,41 @@ def _ensure_media_type_supported(media_type: str) -> None:
         )
 
 
+def _filtered_material_query(
+    query,
+    *,
+    workflow_id: str | None = None,
+    channel_id: int | None = None,
+    keyword: str | None = None,
+    status: str | None = None,
+    material_id: int | None = None,
+    source: str | None = None,
+    source_type: str | None = None,
+    media_type: str | None = None,
+):
+    """列表与导出共用同一套过滤条件（C117：导出口径必须与当前筛选一致）。"""
+    if workflow_id:
+        query = query.where(Material.workflow_id == workflow_id)
+    if channel_id is not None:
+        query = query.where(Material.channel_id == channel_id)
+    if keyword and keyword.strip():
+        like = f"%{keyword.strip()}%"
+        query = query.where(Material.title.like(like) | Material.source.like(like))
+    if status:
+        query = query.where(Material.status == status)
+    if material_id is not None:
+        query = query.where(Material.id == material_id)
+    if source and source.strip():
+        query = query.where(Material.source == source.strip())
+    if source_type:
+        _ensure_source_type_supported(source_type)
+        query = query.where(Material.source_type == source_type)
+    if media_type:
+        _ensure_media_type_supported(media_type)
+        query = query.where(Material.media_type == media_type)
+    return query
+
+
 @router.get("")
 async def list_materials(
     workflow_id: str = Query(None, description="按工作流 ID 过滤（运行期临时关联，终态后释放，详情页改用 channel_id）"),
@@ -350,41 +388,30 @@ async def list_materials(
     爬虫素材时，应传 channel_id 查询该频道素材库，而非 workflow_id——否则已完成
     工作流的素材因 workflow_id 被释放而全部落空，导致面板空白。
     """
-    # 基础查询条件：workflow_id / channel_id 可选过滤（AND）
-    base_query = select(Material)
-    count_query = select(func.count(Material.id))
-    if workflow_id:
-        base_query = base_query.where(Material.workflow_id == workflow_id)
-        count_query = count_query.where(Material.workflow_id == workflow_id)
-    if channel_id is not None:
-        base_query = base_query.where(Material.channel_id == channel_id)
-        count_query = count_query.where(Material.channel_id == channel_id)
-    # T00716：素材库管理页的查询能力（标题/来源模糊 + 状态过滤）
-    if keyword and keyword.strip():
-        like = f"%{keyword.strip()}%"
-        base_query = base_query.where(Material.title.like(like) | Material.source.like(like))
-        count_query = count_query.where(Material.title.like(like) | Material.source.like(like))
-    if status:
-        base_query = base_query.where(Material.status == status)
-        count_query = count_query.where(Material.status == status)
-    # T00775：精确过滤优先于模糊 keyword（两者同时传时取交集）
-    if material_id is not None:
-        base_query = base_query.where(Material.id == material_id)
-        count_query = count_query.where(Material.id == material_id)
-    if source and source.strip():
-        base_query = base_query.where(Material.source == source.strip())
-        count_query = count_query.where(Material.source == source.strip())
-    # T00775：按录入渠道过滤——「书稿素材」（list/cos）常被海量 RSS 资讯挤出前几页，
-    # 素材库管理页据此提供「只看书稿」筛选，避免"翻不到素材"。非法值显式报 400。
-    if source_type:
-        _ensure_source_type_supported(source_type)
-        base_query = base_query.where(Material.source_type == source_type)
-        count_query = count_query.where(Material.source_type == source_type)
-    # T00716：按媒体类型过滤（text/image/video）；非法值显式 400，不做静默忽略
-    if media_type:
-        _ensure_media_type_supported(media_type)
-        base_query = base_query.where(Material.media_type == media_type)
-        count_query = count_query.where(Material.media_type == media_type)
+    # 基础查询条件：workflow_id / channel_id / 关键词 / 状态 / 精确 source / 类型等
+    # （C117：与导出接口共用 _filtered_material_query，避免两处口径漂移）
+    base_query = _filtered_material_query(
+        select(Material),
+        workflow_id=workflow_id,
+        channel_id=channel_id,
+        keyword=keyword,
+        status=status,
+        material_id=material_id,
+        source=source,
+        source_type=source_type,
+        media_type=media_type,
+    )
+    count_query = _filtered_material_query(
+        select(func.count(Material.id)),
+        workflow_id=workflow_id,
+        channel_id=channel_id,
+        keyword=keyword,
+        status=status,
+        material_id=material_id,
+        source=source,
+        source_type=source_type,
+        media_type=media_type,
+    )
 
     total = (await db.execute(count_query)).scalar() or 0
 
@@ -414,6 +441,63 @@ async def list_materials(
             for m in items
         ],
     })
+
+
+@router.get("/export")
+async def export_materials_csv(
+    workflow_id: str = Query(None, description="按工作流 ID 过滤"),
+    channel_id: int = Query(None, description="按频道 ID 过滤"),
+    keyword: str = Query(None, description="按标题/来源模糊搜索"),
+    status: str = Query(None, description="按状态过滤"),
+    material_id: int = Query(None, description="按素材 ID 精确过滤"),
+    source: str = Query(None, description="按来源（书名）精确过滤"),
+    source_type: str = Query(None, description="按录入渠道过滤"),
+    media_type: str = Query(None, description="按素材媒体类型过滤"),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminPayload = Depends(get_current_admin),
+):
+    """按当前筛选导出素材 CSV（C117）。
+
+    与列表接口共用 `_filtered_material_query`，保证「导出」不会悄悄放宽/收窄筛选；
+    不分页，一次导出全部命中行。UTF-8 BOM 开头，Excel 直接双击不乱码。
+    """
+    query = _filtered_material_query(
+        select(Material),
+        workflow_id=workflow_id,
+        channel_id=channel_id,
+        keyword=keyword,
+        status=status,
+        material_id=material_id,
+        source=source,
+        source_type=source_type,
+        media_type=media_type,
+    )
+    rows = (await db.execute(query.order_by(Material.crawled_at.desc()))).scalars().all()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["素材ID", "标题", "来源", "来源类型", "媒体类型", "状态", "分类", "频道ID", "发布时间", "入库时间", "URL"])
+    for m in rows:
+        writer.writerow([
+            m.id,
+            m.title,
+            m.source,
+            m.source_type,
+            m.media_type,
+            m.status,
+            m.category,
+            m.channel_id,
+            m.published_at.isoformat() if m.published_at else "",
+            m.crawled_at.isoformat() if m.crawled_at else "",
+            m.url,
+        ])
+
+    filename = f"materials_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+    return Response(
+        content="\ufeff" + buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/aggregate")

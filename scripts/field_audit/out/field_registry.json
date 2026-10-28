@@ -1104,7 +1104,16 @@
         "callSites": [
           {
             "file": "views/channel/BookPoolPanel.vue",
-            "line": 496,
+            "line": 461,
+            "fn": "addBooksToPool",
+            "fieldCount": 1,
+            "unresolved": [
+              "变量 keys 无可解析的声明"
+            ]
+          },
+          {
+            "file": "views/channel/BookPoolPanel.vue",
+            "line": 584,
             "fn": "addBooksToPool",
             "fieldCount": 1,
             "unresolved": []
@@ -1113,7 +1122,9 @@
         "fields": [
           "book_sources"
         ],
-        "unresolved": [],
+        "unresolved": [
+          "变量 keys 无可解析的声明"
+        ],
         "hasCallSite": true
       },
       "ormTable": null,
@@ -1968,9 +1979,9 @@
     {
       "endpoint": "POST /materials",
       "model": "MaterialCreateRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:33",
+      "modelSource": "backend/app/routers/admin/materials.py:36",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:497",
+      "handlerSource": "backend/app/routers/admin/materials.py:581",
       "declared": [
         "category",
         "channel_id",
@@ -1995,7 +2006,7 @@
           },
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 625,
+            "line": 672,
             "fn": "createMaterial",
             "fieldCount": 10,
             "unresolved": []
@@ -2072,9 +2083,9 @@
     {
       "endpoint": "POST /materials/batch-delete",
       "model": "MaterialBatchDeleteRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:682",
+      "modelSource": "backend/app/routers/admin/materials.py:766",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:695",
+      "handlerSource": "backend/app/routers/admin/materials.py:779",
       "declared": [
         "channel_id",
         "ids",
@@ -2085,14 +2096,14 @@
         "callSites": [
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 719,
+            "line": 766,
             "fn": "batchDeleteMaterials",
             "fieldCount": 3,
             "unresolved": []
           },
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 745,
+            "line": 792,
             "fn": "batchDeleteMaterials",
             "fieldCount": 2,
             "unresolved": []
@@ -2127,9 +2138,9 @@
     {
       "endpoint": "POST /materials/import-cos",
       "model": "ImportCosRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:865",
+      "modelSource": "backend/app/routers/admin/materials.py:949",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:876",
+      "handlerSource": "backend/app/routers/admin/materials.py:960",
       "declared": [
         "category",
         "channel_id",
@@ -2213,9 +2224,9 @@
     {
       "endpoint": "POST /materials/import-url",
       "model": "ImportUrlRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:814",
+      "modelSource": "backend/app/routers/admin/materials.py:898",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:828",
+      "handlerSource": "backend/app/routers/admin/materials.py:912",
       "declared": [
         "category",
         "channel_id",
@@ -2297,9 +2308,9 @@
     {
       "endpoint": "POST /materials/share",
       "model": "SharePreviewRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:930",
+      "modelSource": "backend/app/routers/admin/materials.py:1014",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:939",
+      "handlerSource": "backend/app/routers/admin/materials.py:1023",
       "declared": [
         "channel_id",
         "url"
@@ -3627,7 +3638,7 @@
         "callSites": [
           {
             "file": "views/channel/BookPoolPanel.vue",
-            "line": 361,
+            "line": 376,
             "fn": "setScriptMode",
             "fieldCount": 1,
             "unresolved": [
@@ -3681,7 +3692,7 @@
         "callSites": [
           {
             "file": "views/channel/BookPoolPanel.vue",
-            "line": 373,
+            "line": 388,
             "fn": "updateBookPoolSchedule",
             "fieldCount": 2,
             "unresolved": []
@@ -3827,9 +3838,9 @@
     {
       "endpoint": "PUT /materials/*",
       "model": "MaterialUpdateRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:61",
+      "modelSource": "backend/app/routers/admin/materials.py:64",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:547",
+      "handlerSource": "backend/app/routers/admin/materials.py:631",
       "declared": [
         "category",
         "content",
@@ -3845,7 +3856,7 @@
         "callSites": [
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 588,
+            "line": 635,
             "fn": "updateMaterial",
             "fieldCount": 8,
             "unresolved": []
@@ -4290,6 +4301,7 @@
       "PATCH /db-admin/tables/*/rows/*",
       "POST /assistant/plan",
       "POST /channels",
+      "POST /channels/*/book-pool/items",
       "POST /cos/move",
       "POST /cos/restore",
       "POST /db-admin/tables/*/rows/batch-delete",

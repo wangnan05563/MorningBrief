@@ -117,9 +117,15 @@
     },
     {
       "endpoint": "PUT /channels/*/script-mode",
-      "site": "views/channel/BookPoolPanel.vue:361",
+      "site": "views/channel/BookPoolPanel.vue:376",
       "reason_key": "value-scalar",
       "note": "val 是讲书稿模式开关的布尔值；api/bookPool.js 的包装体提交 {enabled}，在 ScriptModeRequest 声明内。"
+    },
+    {
+      "endpoint": "POST /channels/*/book-pool/items",
+      "site": "views/channel/BookPoolPanel.vue:461",
+      "reason_key": "value-scalar",
+      "note": "keys 是 CSV 第一列解析出的书名数组（值不可静态定，C117 书单导入）；键名 book_sources 由 api/bookPool.js 的包装体给出，在 AddBooksRequest 声明内。"
     },
     {
       "endpoint": "PUT /channels/*/script-mode",

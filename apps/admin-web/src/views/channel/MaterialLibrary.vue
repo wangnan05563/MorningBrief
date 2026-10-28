@@ -75,6 +75,15 @@
           <IconButton type="primary" :loading="loading" :icon="Search" label="搜索" desc="按当前条件查询素材" @click="onSearch" />
           <IconButton :loading="loading" :icon="Refresh" label="刷新" desc="重新加载当前条件下的素材（跨页改动需手动刷新）" @click="load" />
           <IconButton :icon="RefreshLeft" label="重置" desc="重置筛选条件" @click="onReset" />
+          <!-- C117：导出必须与当前筛选同口径（列表/聚合视图支持的筛选项不同） -->
+          <IconButton
+            data-guide="materials-export"
+            :loading="exporting"
+            :icon="Download"
+            label="导出 CSV"
+            desc="按当前筛选导出全部匹配素材（不受分页限制）"
+            @click="onExportCsv"
+          />
         </el-form-item>
         <el-form-item label="视图">
           <el-radio-group v-model="viewMode" size="small" @change="onViewModeChange">
@@ -345,7 +354,7 @@
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Plus, Close, Search, Refresh, RefreshLeft, Edit, Delete, View, Check, Picture } from '@element-plus/icons-vue'
+import { Plus, Close, Search, Refresh, RefreshLeft, Edit, Delete, View, Check, Picture, Download } from '@element-plus/icons-vue'
 import { ElMessage } from '../../utils/message'
 import { dangerConfirmWithReason } from '../../utils/dangerConfirm'
 import { readUrlState, MATERIALS_QUERY_SPECS } from '../../utils/urlState'
@@ -369,6 +378,7 @@ import {
   createMaterial,
   deleteMaterial,
   deleteMaterialsBySource,
+  exportMaterialsCsv,
   getMaterial,
   listMaterials,
   updateMaterial,
@@ -393,6 +403,8 @@ const total = ref(0)
 const page = ref(1)
 const size = ref(20)
 const loading = ref(false)
+// C117：导出走「当前筛选 + 全量」，只在这一颗按钮上防重复点击
+const exporting = ref(false)
 // T02626（FR-UX-302）：此前 load() 只有 try/finally，失败时既无页内错误态也无留痕，
 // 首屏失败直接落「没有匹配的素材」——把接口挂了说成筛选没命中。
 const loadError = ref('')
@@ -530,6 +542,41 @@ async function load() {
 function onSearch() {
   page.value = 1
   load()
+}
+
+// C117：导出参数与当前视图的筛选保持同口径——聚合视图不接受 source_type/media_type，
+// 多传会让用户以为筛过，实际导出了全集。
+function currentExportParams() {
+  const params = {
+    channel_id: filters.channel_id || undefined,
+    status: filters.status || undefined,
+    keyword: filters.keyword || undefined,
+    material_id: materialIdFilter.value || undefined,
+    source: sourceFilter.value || undefined,
+  }
+  if (viewMode.value === 'list') {
+    params.source_type = filters.source_type || undefined
+    params.media_type = filters.media_type || undefined
+  }
+  return params
+}
+
+async function onExportCsv() {
+  exporting.value = true
+  try {
+    const blob = await exportMaterialsCsv(currentExportParams())
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `素材库_${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    ElMessage.success('已按当前筛选导出 CSV（全部匹配行，不受分页限制）')
+  } finally {
+    exporting.value = false
+  }
 }
 
 function onReset() {

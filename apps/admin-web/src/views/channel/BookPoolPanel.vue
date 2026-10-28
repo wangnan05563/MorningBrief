@@ -74,7 +74,19 @@
     <!-- 书单（顺序即取书顺序） -->
     <div class="pool-header">
       <span class="pool-title">书单（顺序即取书顺序）</span>
-      <IconButton type="primary" size="small" :icon="Plus" label="从素材库加入" desc="从素材库按书聚合选择加入书单" @click="openCandidates" />
+      <span class="pool-actions">
+        <IconButton type="primary" size="small" :icon="Plus" label="从素材库加入" desc="从素材库按书聚合选择加入书单" @click="openCandidates" />
+        <!-- C117：CSV 导入只取第一列书名，且只匹配该频道素材库已入库的 source -->
+        <IconButton
+          size="small"
+          :loading="importing"
+          :icon="Upload"
+          label="CSV 导入书单"
+          desc="CSV 第一列为书名/来源，表头可留；只匹配该频道素材库已有来源，未匹配的会被跳过"
+          @click="csvInput?.click()"
+        />
+        <input ref="csvInput" type="file" accept=".csv,text/csv" class="csv-import-input" @change="onImportCsv" />
+      </span>
     </div>
     <el-table :data="items" v-loading="loading" stripe style="width: 100%">
       <el-table-column label="顺序" width="86">
@@ -197,7 +209,7 @@
  */
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { View, RefreshLeft, Plus, ArrowUp, ArrowDown, Delete, Search, Close, Check } from '@element-plus/icons-vue'
+import { View, RefreshLeft, Plus, ArrowUp, ArrowDown, Delete, Search, Close, Check, Upload } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from '../../utils/message'
 import { dangerConfirm } from '../../utils/dangerConfirm'
 import ListLoadError from '../../components/ListLoadError.vue'
@@ -252,6 +264,9 @@ const candidateSize = ref(20)
 const candidateTotal = ref(0)
 const selectedCandidates = ref([])
 const adding = ref(false)
+// C117：书单 CSV 导入（第一列书名/来源）
+const csvInput = ref(null)
+const importing = ref(false)
 
 const previewType = computed(() => {
   if (!preview.value) return 'info'
@@ -378,6 +393,79 @@ async function onScheduleChange() {
   // C80：间隔/循环直接影响「下次是否取书、取哪本」，改完必须让旧预览作废
   preview.value = null
   ElMessage.success('调度参数已保存')
+}
+
+// C117：只取 CSV 第一列的书名/来源。支持引号包裹（书名里可能有逗号）、CRLF 与 UTF-8 BOM；
+// 表头（书名/title/source/book）与空行跳过。
+function parseCsvFirstColumn(text) {
+  const rows = []
+  let field = ''
+  let row = []
+  let quoted = false
+  const src = String(text || '').replace(/^\ufeff/, '')
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i]
+    if (quoted) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') {
+          field += '"'
+          i += 1
+        } else {
+          quoted = false
+        }
+      } else {
+        field += ch
+      }
+    } else if (ch === '"') {
+      quoted = true
+    } else if (ch === ',') {
+      row.push(field)
+      field = ''
+    } else if (ch === '\n') {
+      row.push(field)
+      rows.push(row)
+      row = []
+      field = ''
+    } else if (ch !== '\r') {
+      field += ch
+    }
+  }
+  if (field || row.length) {
+    row.push(field)
+    rows.push(row)
+  }
+  return rows
+}
+
+async function onImportCsv(event) {
+  const file = event.target.files?.[0]
+  // 清空 value，保证同一个文件改完内容后还能再次选择
+  event.target.value = ''
+  if (!file) return
+  importing.value = true
+  try {
+    const rows = parseCsvFirstColumn(await file.text())
+    const keys = []
+    const seen = new Set()
+    for (const [first] of rows) {
+      const key = (first || '').trim()
+      if (!key || /^(书名|title|source|book)$/i.test(key) || seen.has(key)) continue
+      seen.add(key)
+      keys.push(key)
+    }
+    if (!keys.length) {
+      ElMessage.warning('CSV 第一列没有可导入的书名')
+      return
+    }
+    // 后端 add_books 只认该频道素材库里已存在的 source，未匹配的计入 skipped 并在 message 里说明
+    const res = await addBooksToPool(props.channelId, keys)
+    ElMessage[res?.added ? 'success' : 'info'](res?.message || `CSV 导入完成：新增 ${res?.added ?? 0} 本`)
+    await loadAll()
+  } catch {
+    // 错误提示已由 api 拦截器统一弹出
+  } finally {
+    importing.value = false
+  }
 }
 
 async function onPreview() {
@@ -536,6 +624,14 @@ async function onAddSelected() {
 }
 .pool-title {
   font-weight: 600;
+}
+.pool-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.csv-import-input {
+  display: none;
 }
 .tips {
   margin-top: 10px;

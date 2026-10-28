@@ -14,6 +14,9 @@ import api from '../api'
 
 // ===== 素材 CRUD =====
 export const listMaterials = (params) => api.get('/materials', { params })
+// C117：按当前筛选导出全部命中素材（后端不分页，返回 text/csv；拦截器对 blob 原样透传）
+export const exportMaterialsCsv = (params) =>
+  api.get('/materials/export', { params, responseType: 'blob', timeout: 60000 })
 export const getMaterial = (id) => api.get(`/materials/${id}`)
 export const createMaterial = (payload) => api.post('/materials', payload)
 export const updateMaterial = (id, payload) => api.put(`/materials/${id}`, payload)
