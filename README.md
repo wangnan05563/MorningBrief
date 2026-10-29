@@ -8,7 +8,9 @@
 ![SQLite](https://img.shields.io/badge/SQLite-WAL-003B57?logo=sqlite&logoColor=white)
 ![TTS](https://img.shields.io/badge/TTS-5%20%E5%BC%95%E6%93%8E-3F6C8F)
 
-![MorningBrief](docs/github-social-preview.png)
+![项目预览](docs/github-social-preview.png)
+
+## 项目概述
 
 一个把「新闻资讯 / 专业资料」自动转成**可订阅语音节目**的完整内容生产系统：
 抓取 → AI 改写 → 语音合成 → 拼接混音 → 人工审核 → 定时发布，全链路内置，
@@ -22,7 +24,7 @@
 - **跨端交付**：Vue 3 管理后台（Element Plus）+ 微信小程序（收听/订阅/下载/课程学习）+ 云函数。
 - **单机零运维**：SQLite（WAL）+ TTLCache 进程内缓存替代 MySQL/Redis，全局写序列化，单 worker 即可稳定运行。
 - **合规与安全**：内容分级提示（disclaimer）、敏感词内容安全、管理员审计日志、小程序隐私授权（`__usePrivacyCheck__`）。
-- **工程化**：pytest 全量回归（620+ 用例）、小程序 `node:test` 单测、JMeter 压测脚本、SonarQube 接入。
+- **工程化**：pytest 全量回归（1694 个用例）、管理后台 / 小程序 `node:test` 单测、Playwright e2e、JMeter 压测、SonarQube 接入、GitHub Actions CI。
 
 ## 架构
 
@@ -43,6 +45,17 @@
 │  SQLite(WAL) + TTLCache    │        │  微信小程序           │
 └────────────────────────────┘        └─────────────────────┘
 ```
+
+## 技术栈
+
+| 层 | 选型 |
+| --- | --- |
+| 后端 | Python 3.12 · FastAPI 0.110 · Uvicorn · SQLAlchemy 2.0（async）· Pydantic Settings · APScheduler |
+| 数据与缓存 | SQLite（WAL，aiosqlite）+ cachetools TTLCache，全局写序列化（`app/core/write_gate.py`）替代 MySQL / Redis |
+| 内容生产 | httpx + feedparser + selectolax 抓取 · OpenAI 兼容协议接 LLM · 5 引擎 TTS · ffmpeg 拼接混音 · jieba + pyahocorasick 敏感词 |
+| 管理后台 | Vue 3.4 · Element Plus 2.14 · Pinia · Vue Router 4 · Vite 5 · Chart.js |
+| 小程序 | 微信小程序原生（基础库 3.3.4）+ 腾讯云函数（`apps/scf`） |
+| 交付与质量 | PyInstaller 单 exe + Inno Setup · GitHub Actions CI · pytest 8 · node:test · Playwright 1.61（e2e）· JMeter 5.6.3（压测）· SonarQube |
 
 ## 安装
 
@@ -132,13 +145,21 @@ scripts/build-frontend.ps1   # 构建管理后台 SPA
 scripts/build-exe.ps1        # PyInstaller 打包 + Inno Setup 安装包
 ```
 
-产物位于 `release/dist/`；安装器由 `installer.iss` 生成。
+产物（版本号取自 `backend/VERSION`）：
+
+| 路径 | 说明 |
+| --- | --- |
+| `release/MorningBrief/MorningBrief.exe` | PyInstaller COLLECT 目录，同目录含 `.env`、`admin-web/dist/`、`data/`、`logs/` |
+| `release/MorningBrief-Setup-v<版本>.exe` | Inno Setup 安装包，由 `installer.iss` 定义 |
 
 ## 测试
 
 ```bash
-# 后端全量回归（940+ 用例）
+# 后端全量回归（1694 个用例，本地 Python 3.12）
 cd backend && .venv\Scripts\python -m pytest tests/ -q
+
+# 管理后台单元/契约测试（node --test，tests/unit/*.test.mjs）
+cd apps/admin-web && npm run test:unit
 
 # 小程序工具层单测
 cd apps/miniprogram && node --test "tests/*.test.js"
@@ -181,15 +202,27 @@ Windows PowerShell 里显式指定渠道为 `$env:PW_CHANNEL="chrome"; npm run t
 ## 目录结构
 
 ```
-├── apps/                 # 前端：admin-web / miniprogram / scf 云函数
+├── apps/                 # 前端：admin-web（Vue 3 后台）/ miniprogram（微信小程序）/ scf（云函数）
 ├── backend/              # FastAPI 服务（app/ + tests/ + data/ + ffmpeg/）
 │   └── app/workflow/     #   内容生产流水线（含 tts/ 五引擎、stitch/ 拼接）
 ├── docs/                 # 文档与设计源稿（assets-src/ 为社交预览图源文件）
-├── release/              # 构建产物（dist / assets）
+├── release/              # 构建产物：MorningBrief/（PyInstaller 目录）、MorningBrief-Setup-v*.exe、assets/
 ├── runtime/              # 运行时：内网穿透二进制、日志
-├── scripts/              # 构建 / 启停 / 压测脚本
-└── installer.iss         # Inno Setup 安装包脚本
+├── scripts/              # 构建 / 启停 / 压测 / 发布脚本
+├── MorningBrief.spec     # PyInstaller 打包配置
+├── installer.iss         # Inno Setup 安装包脚本
+└── .github/workflows/    # CI 流水线（后端测试 / 前端构建+e2e / 小程序门禁 / 打包验证）
 ```
+
+## 贡献指南
+
+1. Fork 仓库并从 `main` 切出分支，分支名建议带票号（如 `feat/T03626-readme-sync`）。
+2. 改动后跑通对应侧回归（见「测试」）：后端 `pytest tests/ -q`、管理后台 `npm run test:unit`、小程序 `node --test "tests/*.test.js"`；动到界面再跑 `npm run test:e2e`。
+3. 提交信息沿用仓库格式 `<type>(<票号>): <摘要>`，例如 `fix(T03603): 导入失败行只计一次`。
+4. 提 PR 时写清动机与验证方式；涉及配置项同步更新 `backend/.env.example`，涉及界面措辞同步更新对应的构建期门禁断言。
+5. 不要把 `.env`、真实 API Key、`backend/data/` 下的数据库带进提交。
+
+PR 需通过 `backend-test`、`frontend-build-test`、`miniprogram-check` 三个 CI job；push 到 `main` 时还会额外跑 `pyinstaller-build` 打包验证（见 `.github/workflows/ci.yml`）。
 
 ## 致谢
 
