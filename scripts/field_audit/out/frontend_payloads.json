@@ -951,7 +951,7 @@
       "sites": [
         {
           "file": "components/AuditTrail.vue",
-          "line": 78,
+          "line": 75,
           "fn": "listAuditLogs",
           "fieldCount": 2,
           "unresolved": []

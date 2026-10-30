@@ -27,7 +27,7 @@
         <span class="audit-trail__time">{{ formatTime(row.created_at) }}</span>
         <span class="audit-trail__who">{{ row.operator || '系统' }}</span>
         <span class="audit-trail__what">{{ row.action }}{{ row.target ? ` · ${row.target}` : '' }}</span>
-        <span class="audit-trail__why">{{ summarize(row.detail) }}</span>
+        <span class="audit-trail__why">{{ summarizeAuditDetail(row.detail) }}</span>
       </li>
     </ul>
   </section>
@@ -42,10 +42,15 @@
  * 让值班不用离开当前页面就能回答「刚才那次是谁做的」。
  *
  * 只做只读展示：详情里的密钥形状字段由后端读侧脱敏（`***`），前端不再猜哪些算敏感。
+ *
+ * 摘要拍平逻辑住在 `utils/format.js` 的 `summarizeAuditDetail`（T03670）：
+ * 原先这里是本地函数，用模板串直取 detail 的属性值，结构化值一律变 `[object Object]`；
+ * 抽成公共函数既让「嵌套/数组/深层/大对象」四类输入可单测，也让移动端复用同一口径。
  */
 import { onMounted, ref } from 'vue'
 import { listAuditLogs } from '../api/audit'
 import ListLoadError from './ListLoadError.vue'
+import { summarizeAuditDetail } from '../utils/format'
 
 const props = defineProps({
   category: { type: String, required: true },
@@ -61,14 +66,6 @@ const error = ref('')
 function formatTime(iso) {
   if (!iso) return '-'
   return iso.replace('T', ' ').slice(0, 19)
-}
-
-function summarize(detail) {
-  if (!detail || typeof detail !== 'object') return String(detail ?? '')
-  const keys = ['reason', 'note', 'message', 'days', 'count', 'deleted', 'cleaned_count']
-  const picked = keys.filter((k) => detail[k] !== undefined && detail[k] !== null && detail[k] !== '')
-  const shown = (picked.length ? picked : Object.keys(detail)).slice(0, 3)
-  return shown.map((k) => `${k}=${detail[k]}`).join(' · ')
 }
 
 async function load() {
@@ -168,6 +165,9 @@ defineExpose({ reload: load })
   &__why {
     flex: 1;
     min-width: 120px;
+    /* T03670：摘要本身有字符上限，这里再兜一层——无空格长串（URL/ID 连排）也不许撑破行 */
+    max-width: 100%;
+    overflow-wrap: anywhere;
     color: var(--m-text-sub);
     word-break: break-all;
   }

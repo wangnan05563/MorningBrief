@@ -91,3 +91,59 @@ export function metricText(raw, meta) {
   if (v === '-' || !unit) return v
   return unit === '%' ? `${v}${unit}` : `${v} ${unit}`
 }
+
+/**
+ * 审计详情摘要（T03670）——从 AuditTrail.vue 抽出，让"拍平"这件事可单测。
+ *
+ * 原实现只判断顶层是不是对象，取值用模板串 `${detail[k]}`：k 命中 result/before/after
+ * 这类结构化值时 JS 默认转成 `[object Object]`，生产库快照里值班速读的那一行整条失效
+ * （现场形态：`result=[object Object],[object Object]`）。
+ *
+ * 口径：
+ * - 结构化值递归拍平成紧凑形态（`{k:v,…}` / `[a,b,…]`），任何深度都不落到默认 String()；
+ * - 嵌套过深（>3 层）给省略形态 `…`，不为了"全"牺牲可读性；
+ * - 整行有字符上限，超出补省略号——摘要区不是 JSON 查看器，长尾看详情弹窗/原始记录。
+ */
+const AUDIT_SUMMARY_KEYS = ['reason', 'note', 'message', 'days', 'count', 'deleted', 'cleaned_count']
+const AUDIT_SUMMARY_MAX_CHARS = 200
+const AUDIT_VALUE_MAX_DEPTH = 3
+const AUDIT_VALUE_MAX_ITEMS = 3
+
+function clampAuditSummary(text, maxChars) {
+  if (text.length <= maxChars) return text
+  return `${text.slice(0, Math.max(1, maxChars - 1))}…`
+}
+
+function renderAuditValue(value, depth) {
+  if (value === null) return 'null'
+  const type = typeof value
+  if (type === 'string' || type === 'number' || type === 'boolean' || type === 'bigint') {
+    return String(value)
+  }
+  if (type !== 'object') return ''
+  if (depth >= AUDIT_VALUE_MAX_DEPTH) return '…'
+  if (Array.isArray(value)) {
+    if (!value.length) return '[]'
+    const head = value.slice(0, AUDIT_VALUE_MAX_ITEMS).map((v) => renderAuditValue(v, depth + 1))
+    const tail = value.length > AUDIT_VALUE_MAX_ITEMS ? `,…+${value.length - AUDIT_VALUE_MAX_ITEMS}项` : ''
+    return `[${head.join(',')}${tail}]`
+  }
+  const entries = Object.entries(value)
+  if (!entries.length) return '{}'
+  const head = entries
+    .slice(0, AUDIT_VALUE_MAX_ITEMS)
+    .map(([k, v]) => `${k}:${renderAuditValue(v, depth + 1)}`)
+  const tail = entries.length > AUDIT_VALUE_MAX_ITEMS ? ',…' : ''
+  return `{${head.join(',')}${tail}}`
+}
+
+export function summarizeAuditDetail(detail, { maxChars = AUDIT_SUMMARY_MAX_CHARS } = {}) {
+  if (detail === undefined || detail === null) return ''
+  if (typeof detail !== 'object') return clampAuditSummary(String(detail), maxChars)
+  const picked = AUDIT_SUMMARY_KEYS.filter(
+    (k) => detail[k] !== undefined && detail[k] !== null && detail[k] !== '',
+  )
+  const shown = (picked.length ? picked : Object.keys(detail)).slice(0, AUDIT_VALUE_MAX_ITEMS)
+  const text = shown.map((k) => `${k}=${renderAuditValue(detail[k], 0)}`).join(' · ')
+  return clampAuditSummary(text, maxChars)
+}
