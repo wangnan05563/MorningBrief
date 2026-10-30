@@ -127,7 +127,7 @@
 | 原路径 | 新路径 | 说明 |
 |---|---|---|
 | `jmeter_test/` | `scripts/jmeter_test/` | 性能压测工具归入脚本目录；仅 `docs` 两处引用同步更新 |
-| `reports/` | `docs/reports/` | 评审/复盘纪要归入文档目录 |
+| `reports/` | （已删除） | 评审/复盘纪要属过程文档，已于 2026-10 文档清理（T03686）移除，不再长期保留 |
 | `canvas-design/` | `scripts/canvas-design/` | 素材生成工具（脚本 + 图片）归入脚本目录 |
 | `scf/` | **保留根目录** | 独立部署的云函数，设计文档明确为项目根目录且有 `scf/xxx.handler` 部署契约，移入 `backend/` 会破坏该契约（与 `miniprogram` 同类） |
 | `miniprogram/`、`assets/`、`data/`、`node_modules/`、`installer.iss`、`MorningBrief.spec` | **保留根目录** | 各有引用（installer.iss 引用 `assets\`、运行时二进制、依赖）或属运行时/依赖，不可移动 |
@@ -143,7 +143,7 @@
 | 脚本 | `scripts/`（含 `scripts/jmeter_test/`、`scripts/canvas-design/`） | 构建/打包/压测/素材生成工具 |
 | 构建产物 | `dist/`（含 `dist/MorningBrief/` 打包 exe）、`build/` | 交付物，运行时伺服根 |
 | 日志 | `logs/` | 运行态日志（gitignore），运行时 `paths.py` 解析 |
-| 文档 | `docs/`（含 `docs/reports/`、`docs/test-reports/`、`docs/sonar-reports/`、`docs/standards/`） | 设计/测试/评审/规范 |
+| 文档 | `docs/`（含 `docs/standards/` 规范、`docs/legal/` 法律、`docs/产品介绍/` 产品交付物等） | 需求/设计/规范/法律/产品介绍 |
 | 独立部署/运行时 | `miniprogram/`、`scf/`、`data/`、`assets/`、`node_modules/` | 各有部署或运行契约，保留根目录 |
 | 根配置 | `installer.iss`、`MorningBrief.spec`、`sonar-project.properties`、`.gitignore`、`cleanup-config.yaml` | 构建/扫描/清理配置 |
 
@@ -182,7 +182,7 @@
 | 脚本 | `scripts/`（含 `scripts/jmeter_test/`、`scripts/canvas-design/`） | 构建/打包/压测/素材生成/运维工具 |
 | 构建产物/打包 | `release/MorningBrief/`（打包 exe + 安装包 `MorningBrief-Setup-v*.exe`）、`release/build/`（PyInstaller 中间目录）、`release/assets/`（安装包图标 `MorningBrief.ico`） | 交付物与安装包资源 |
 | 运行时数据/日志 | `runtime/data/`（隧道二进制 + audio_cache）、`runtime/logs/`（运行态日志，gitignore） | 运行时产物，被 `paths.py`/`start.ps1`/`cleanup-config.yaml` 解析 |
-| 文档 | `docs/`（含 `docs/reports/`、`docs/test-reports/`、`docs/sonar-reports/`、`docs/standards/`） | 设计/测试/评审/规范 |
+| 文档 | `docs/`（含 `docs/standards/` 规范、`docs/legal/` 法律、`docs/产品介绍/` 产品交付物等） | 需求/设计/规范/法律/产品介绍 |
 | 根配置 | `installer.iss`、`MorningBrief.spec`、`sonar-project.properties`、`.gitignore`、`cleanup-config.yaml` | 构建/扫描/清理配置 |
 
 ### 根目录最终形态
