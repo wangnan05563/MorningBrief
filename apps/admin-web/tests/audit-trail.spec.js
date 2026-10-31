@@ -201,6 +201,56 @@ const ASCII_ROW = auditRow({
   detail: { checksum: `sha256_${'ab'.repeat(96)}` },
 })
 
+/**
+ * T03702：中英混排一行（有正常断行机会）。
+ *
+ * 这行是用来「反证 word-break: break-all 不该回来」的：break-all 会把 `confirm`
+ * 这种英文词从行尾中间硬拆，而只留 overflow-wrap 时它整词换到下一行。
+ * 字符串本身短于 200 字符上限，拍平后不会被截断，量到的就是排版行为。
+ */
+const MIXED_ROW = auditRow({
+  id: 15,
+  action: 'cleanup',
+  target: 'snapshot',
+  detail: { reason: '本次清理涉及 episodeCatalogSnapshot 缓存，bucket=news-prod 的 snapshot-20261030 归档后需要人工 confirm 再回滚' },
+})
+
+/**
+ * 在浏览器里按字符取 rect：top 变化即一次换行，断点两侧都是裸字母数字
+ * （且前一个字符不是 - _ . / 这类正常断行机会）就是「把词从中间硬拆」。
+ */
+function measureWhy(el) {
+  return [...el.querySelectorAll('.audit-trail__why')].map((cell) => {
+    const node = cell.firstChild
+    const text = node && node.nodeType === 3 ? node.data : ''
+    const range = document.createRange()
+    const starts = []
+    let curTop = null
+    for (let i = 0; i < text.length; i += 1) {
+      range.setStart(node, i)
+      range.setEnd(node, i + 1)
+      const r = range.getBoundingClientRect()
+      if (r.width === 0 && r.height === 0) continue
+      const top = Math.round(r.top)
+      if (curTop === null || top !== curTop) {
+        starts.push(i)
+        curTop = top
+      }
+    }
+    const breaks = starts.slice(1)
+    const hard = breaks.filter((idx) => /[A-Za-z0-9]/.test(text[idx - 1]) && /[A-Za-z0-9]/.test(text[idx]) && !/[-_./:]/.test(text[idx - 1]))
+    const item = cell.closest('.audit-trail__item').getBoundingClientRect()
+    const box = cell.getBoundingClientRect()
+    return {
+      chars: text.length,
+      lines: starts.length,
+      hardSplits: hard.map((idx) => `${text.slice(Math.max(0, idx - 12), idx)}|${text.slice(idx, idx + 12)}`),
+      selfOverflow: cell.scrollWidth - cell.clientWidth,
+      escapesItem: +(box.right - item.right).toFixed(1),
+    }
+  })
+}
+
 test.describe('审计摘要的嵌套值与行宽（T03670）', () => {
   test.beforeEach(async ({ page }) => {
     await setLoginState(page, 'admin')
@@ -237,6 +287,46 @@ test.describe('审计摘要的嵌套值与行宽（T03670）', () => {
     })
     expect(overflow.selfOverflow).toBeLessThanOrEqual(0)
     expect(overflow.escapesItem).toBe(false)
+  })
+
+  /**
+   * T03702：布局断言要能证伪它守着的那条声明。
+   *
+   * `&__why` 原先同时挂着 `word-break: break-all` 与 `overflow-wrap: anywhere`，
+   * 其一即足以断开无空格长串——实测（组合 B：只留 break-all）四类样本的行数与溢出
+   * 与现状完全一致，所以拆掉 `anywhere` 一条腿都不会红（T03670 变异腿 M6：单测红、e2e 绿）。
+   * 收敛成一条后，两条断言各只依赖剩下的那条声明：
+   * - 中英混排行：有正常断行机会时不许把英文词从中间硬拆（break-all 会，anywhere 不会）；
+   * - 无断行机会的长 ASCII：必须真的断开（≥2 行）且不溢出（删掉 anywhere 就撑破容器，
+   *   实测两条都删时该行 1 行、自身溢出 778px）。
+   */
+  test('中英混排不硬拆英文词；长 ASCII 的断开确实只由 overflow-wrap 提供', async ({ page }) => {
+    await auditRoute(page, (route) => route.fulfill({ json: auditList([MIXED_ROW, ASCII_ROW]) }))
+
+    await page.goto('/maintenance')
+    const block = page.locator('[data-guide="maintenance-audit"]')
+    await expect(block.locator('.audit-trail__item')).toHaveCount(2)
+
+    const [mixed, ascii] = await block.evaluate(measureWhy)
+    expect(mixed.chars, '混排行应整条呈现（未触发 200 字符截断）').toBeLessThanOrEqual(200)
+    expect(mixed.lines, `混排行应换行：${JSON.stringify(mixed)}`).toBeGreaterThan(1)
+    expect(mixed.hardSplits, `中英混排被从词中间硬拆（word-break: break-all 回来了）：${mixed.hardSplits.join(' / ')}`).toEqual([])
+    expect(mixed.selfOverflow, '混排行不该被裁切').toBeLessThanOrEqual(0)
+
+    // break-all 只在「词正好压在行尾」时才露出硬拆，单一宽度会漏（实测 684px 下加回
+    // break-all 也不拆，645px 才拆）。扫几个宽度，任一宽度硬拆即判红。
+    for (const width of [1200, 1120, 1040, 960]) {
+      await page.setViewportSize({ width, height: 900 })
+      const [atWidth] = await block.evaluate(measureWhy)
+      expect(atWidth.lines, `@${width}px 混排行应换行：${JSON.stringify(atWidth)}`).toBeGreaterThan(1)
+      expect(atWidth.hardSplits, `@${width}px 中英混排被从词中间硬拆（word-break: break-all 回来了）：${atWidth.hardSplits.join(' / ')}`).toEqual([])
+      expect(atWidth.selfOverflow, `@${width}px 混排行被裁切`).toBeLessThanOrEqual(0)
+    }
+
+    expect(ascii.lines, `长 ASCII 未断开成多行，说明 overflow-wrap 没生效：${JSON.stringify(ascii)}`).toBeGreaterThan(1)
+    expect(ascii.hardSplits.length, '这一行本就没有断行机会，断开点必须落在词内部，否则守卫是空跑').toBeGreaterThan(0)
+    expect(ascii.selfOverflow, '长串兜底失效：摘要自身被裁切').toBeLessThanOrEqual(0)
+    expect(ascii.escapesItem, '长串兜底失效：摘要撑出审计行').toBeLessThanOrEqual(0)
   })
 
   test('移动端复用同一组件：启停审计同样不出现 [object Object]', async ({ page }) => {

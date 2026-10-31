@@ -144,7 +144,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 838,
+          "line": 846,
           "fn": "deleteRow",
           "fieldCount": 2,
           "unresolved": [
@@ -958,7 +958,7 @@
         },
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 955,
+          "line": 965,
           "fn": "listAuditLogs",
           "fieldCount": 2,
           "unresolved": []
@@ -973,7 +973,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 598,
+          "line": 606,
           "fn": "listTables",
           "fieldCount": 0,
           "unresolved": []
@@ -992,7 +992,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 869,
+          "line": 877,
           "fn": "exportRows",
           "fieldCount": 3,
           "unresolved": []
@@ -1009,7 +1009,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 635,
+          "line": 643,
           "fn": "listRows",
           "fieldCount": 1,
           "unresolved": []
@@ -1024,7 +1024,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 621,
+          "line": 629,
           "fn": "getTableSchema",
           "fieldCount": 0,
           "unresolved": []
@@ -1786,7 +1786,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 771,
+          "line": 779,
           "fn": "updateRow",
           "fieldCount": 1,
           "unresolved": [
@@ -2540,14 +2540,14 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 799,
+          "line": 807,
           "fn": "cascadePreview",
           "fieldCount": 1,
           "unresolved": []
         },
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 819,
+          "line": 827,
           "fn": "cascadePreview",
           "fieldCount": 1,
           "unresolved": []
@@ -2567,7 +2567,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 923,
+          "line": 931,
           "fn": "importRows",
           "fieldCount": 4,
           "unresolved": []
@@ -2586,7 +2586,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 892,
+          "line": 900,
           "fn": "previewImport",
           "fieldCount": 3,
           "unresolved": []
@@ -2603,7 +2603,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 763,
+          "line": 771,
           "fn": "createRow",
           "fieldCount": 1,
           "unresolved": []
@@ -2623,7 +2623,7 @@
       "sites": [
         {
           "file": "views/maintenance/DatabaseAdmin.vue",
-          "line": 839,
+          "line": 847,
           "fn": "batchDelete",
           "fieldCount": 2,
           "unresolved": [

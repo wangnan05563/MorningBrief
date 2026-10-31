@@ -165,11 +165,21 @@ defineExpose({ reload: load })
   &__why {
     flex: 1;
     min-width: 120px;
-    /* T03670：摘要本身有字符上限，这里再兜一层——无空格长串（URL/ID 连排）也不许撑破行 */
+    /* T03670：摘要本身有字符上限，这里再兜一层——无空格长串（URL/ID 连排）也不许撑破行。
+       T03702 收敛为一条声明：原先这里 `break-all` 与 `anywhere` 并存，量测
+       （`_validate/news2/t03702/wrap_matrix_desktop.json`）显示两件事——
+       ① 二者行为重复：只留 break-all（组合 B）四类样本的行数/溢出与现状（组合 A）完全一致，
+          所以拆掉 `anywhere` 没有任何断言会红，等于这条声明长期无人守；
+       ② 代价是真的：break-all 会在中英混排里把英文词从中间硬拆，实测拆点
+          「人工 c|onfirm 再回滚」（组合 A/B），去掉它后同一行不再硬拆（组合 C），
+          而无断行机会的长串仍靠 `anywhere` 断开（组合 C 与 E「两条都删」的
+          自身溢出 778px 差出结果，说明收敛后 `anywhere` 是有牙的那一条）。
+       留 `anywhere` 而不是 `break-word`：本轮两种写法量测一致（组合 C/D，行宽 605~645px
+       下都不溢出），但 `anywhere` 参与 min-content 计算，将来 `min-width: 120px` 这类
+       显式下限一旦改动，flex 收缩仍然兜得住；`break-word` 不参与，兜不住。 */
     max-width: 100%;
     overflow-wrap: anywhere;
     color: var(--m-text-sub);
-    word-break: break-all;
   }
 }
 </style>

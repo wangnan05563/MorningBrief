@@ -123,5 +123,32 @@ describe('接线守卫：摘要逻辑只有一份（T03670）', () => {
   it('长串兜底样式在位：字符上限之外还要能换行', () => {
     assert.match(source, /overflow-wrap: anywhere/)
   })
+
+  /**
+   * T03702：断行声明只留一条。
+   *
+   * `word-break: break-all` 与 `overflow-wrap: anywhere` 并存时，二者其一就足以断开
+   * 无空格长串——实测删掉 `anywhere` 后 6 主题布局用例仍全绿（T03670 变异腿 M6），
+   * 也就是这条声明长期没有断言在守。收敛成一条以后必须把它钉住，否则下一次
+   * 「顺手补个 break-all」就会把可证伪性再吃掉，而这在界面上只会表现为
+   * 中英混排把英文词从中间硬拆（实测拆点「人工 c|onfirm 再回滚」）。
+   *
+   * 守卫只看声明行：注释里允许出现「原先怎么写过」的字样做说明。
+   */
+  it('断行声明不得再并存（T03702：两条并存会让 overflow-wrap 无人可守）', () => {
+    const raw = source.split('<style')[1]?.split('</style>')[0] ?? ''
+    assert.ok(raw.includes('overflow-wrap'), '没取到 <style> 段，守卫等于失效')
+    const declarationsOnly = raw.replace(/\/\*[\s\S]*?\*\//g, '')
+    assert.doesNotMatch(
+      declarationsOnly,
+      /word-break:\s*break-all/,
+      'break-all 会硬拆中英混排里的英文词，且让 overflow-wrap: anywhere 失去可证伪性（见 T03702 量测）',
+    )
+    assert.equal(
+      (declarationsOnly.match(/overflow-wrap:/g) ?? []).length,
+      1,
+      '兜底换行声明应当只有一条，多条即回到互相掩盖的老问题',
+    )
+  })
 })
 
