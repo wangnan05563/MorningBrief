@@ -378,6 +378,8 @@ onMounted(reload)
 .m-alert__audit-reason {
   margin-top: 2px;
   color: var(--m-text);
-  word-break: break-all;
+  /* T03714：与 AuditTrail 的 __why 同类（值班速读的人写原因），只留 overflow-wrap：
+     无空格长串照样断开，中英混排里 confirm 这类英文词不再被 break-all 从行尾硬拆 */
+  overflow-wrap: anywhere;
 }
 </style>

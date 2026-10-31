@@ -796,7 +796,9 @@ onUnmounted(() => {
   margin: 0;
   font-size: 13px;
   color: var(--m-text);
-  word-break: break-all;
+  /* T03714：字段值是人写的工作流名/日期等，可能混排英文；只留 anywhere，
+     长串仍会断开，但整词优先换到下一行，不再从词中间硬拆 */
+  overflow-wrap: anywhere;
 }
 
 .m-detail__section {
@@ -862,7 +864,8 @@ onUnmounted(() => {
   border-radius: 6px;
   padding: 4px 10px;
   max-width: 100%;
-  word-break: break-all;
+  /* T03714：标签 / 素材链接；窄屏下链接必须能断开，但只在必要时断，避免把短标签切成两截 */
+  overflow-wrap: anywhere;
 }
 
 .m-chip2--link {

@@ -480,7 +480,9 @@ onBeforeUnmount(() => {
   li a {
     color: $color-primary-dark;
     text-decoration: none;
-    word-break: break-all;
+    // T03714：引用素材是 URL，`/ - .` 本身就是断行机会；只留 anywhere 时优先在这些位置断，
+    // 过窄时才进到词内部，比 break-all 的「任意字符都断」更可读
+    overflow-wrap: anywhere;
     font-size: 13px;
 
     &:hover {

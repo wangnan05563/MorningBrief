@@ -798,7 +798,14 @@ onUnmounted(() => {
   .result-item {
     line-height: 1.6;
     color: $color-text-secondary;
-    word-break: break-all;
+  }
+
+  // T03714：清理结果是人读的一句话（可能含文件路径/表名），只留 anywhere。
+  // 用 :deep 是因为 CleanupResult 是脚本里用 h() 渲染的组件，它的子元素拿不到
+  // 本文件的 scoped 属性——写成 `.result-item` 时这条声明一直是死规则（实测
+  // computed overflow-wrap 仍是 normal，199 字符的长串直接撑破结果块 1519px）。
+  :deep(.result-item) {
+    overflow-wrap: anywhere;
   }
 
   .result-success {
@@ -870,7 +877,13 @@ onUnmounted(() => {
     margin-top: 6px;
     color: $color-secondary-dark;
     line-height: 1.6;
-    word-break: break-all;
+  }
+
+  // T03714：后台任务的错误摘要（含异常文案与路径），只留 anywhere：
+  // 无空格长串仍断开，正常的英文词不再被从中间硬拆。同 .result-item，TaskProgress
+  // 也是 h() 渲染的组件，子元素只有用 :deep 才吃得到这条声明。
+  :deep(.result-error) {
+    overflow-wrap: anywhere;
   }
 }
 

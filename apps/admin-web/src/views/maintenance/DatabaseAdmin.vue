@@ -1172,6 +1172,8 @@ onMounted(() => {
 .detail-json {
   font-size: 12px;
   white-space: pre-wrap;
+  // T03714：这里是机器原文转储（原始 JSON，含长键名/哈希），「任意位置都能断」正是想要的；
+  // 换成 overflow-wrap 只会让长键名先撑出宽度，不适用于本处
   word-break: break-all;
   max-height: 100px;
   overflow-y: auto;
