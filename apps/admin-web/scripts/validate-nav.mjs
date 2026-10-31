@@ -565,7 +565,7 @@ export const METRIC_UNIT_ALLOW = [
   },
   {
     file: 'views/help/Help.vue',
-    lines: [319, 511],
+    lines: [353, 901],
     reason: '帮助正文讲解公式与填写说明，单位是文档语义，不是页面渲染值',
   },
   {
