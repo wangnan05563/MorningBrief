@@ -471,14 +471,7 @@ onMounted(async () => {
     margin-bottom: 16px;
   }
 
-  .config-provenance {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
-    font-size: 12px;
-    color: $color-text-secondary;
-  }
+  // 版面与文字色在 styles/global.scss 的 .config-provenance 统一（三页共用）
 
   .config-form {
     max-width: 640px;

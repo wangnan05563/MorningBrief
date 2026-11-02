@@ -83,6 +83,38 @@ html, body {
   }
 }
 
+/* === 配置页「来源提示」行（AI 服务 / 通知配置 / 云端存储共用同一段写法） ===
+ * 回落字段点名是一条长文案，而 el-tag 默认 white-space: nowrap + 固定高度：
+ * 既不换行也压不下去，整条提示会冲出容器右缘（实测 1600px 宽时冲出 124px），
+ * 窄屏时左侧「库里最后一次修改」还会被挤成竖排。
+ * 只需改 .el-tag 这一层：EP 的 .el-tag__content nowrap 规则挂在
+ * .el-input-tag__inner 下，本页的内容 span 是从标签继承 white-space 的。
+ * 两条声明都是量出来的必要项：white-space 管换行，height:auto 管裁切
+ * （去掉后者，末字落在标签框外 20px，光看宽高比看不出来）。 */
+.config-provenance {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: $color-text-secondary;
+
+  // 左侧「库里最后一次修改：…」是短固定文本，不该被长提示挤着换行
+  > span:not(.el-tag) {
+    flex: none;
+  }
+
+  .el-tag {
+    height: auto;
+    white-space: normal;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    line-height: 1.6;
+    // 主题 warning 是粉彩底色，默认 tag 文字也是浅色；这条提示量大，必须读得清
+    --el-tag-text-color: #{$color-text-primary};
+  }
+}
+
 /* === Element Plus 组件圆角增强 === */
 .el-card {
   border-radius: $radius-lg !important;

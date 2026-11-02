@@ -47,7 +47,7 @@
     >
       <span v-if="updatedAtText">库里最后一次修改：{{ updatedAtText }}</span>
       <span v-else>库里暂无记录</span>
-      <el-tag v-if="fallbackNote" class="provenance-tag" type="warning" effect="light" size="small">{{ fallbackNote }}</el-tag>
+      <el-tag v-if="fallbackNote" type="warning" effect="light" size="small">{{ fallbackNote }}</el-tag>
     </div>
 
     <el-tabs v-model="activeTab" class="config-tabs" @tab-change="handleTabChange">
@@ -1830,19 +1830,7 @@ onUnmounted(() => {
     margin-bottom: 16px;
   }
 
-  .config-provenance {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
-    font-size: 12px;
-    color: $color-text-secondary;
-  }
-
-  // 主题的 warning 是粉彩底色，默认 tag 文字也是浅色；来源提示信息量大，必须读得清
-  :deep(.provenance-tag) {
-    --el-tag-text-color: #{$color-text-primary};
-  }
+  // 版面与文字色在 styles/global.scss 的 .config-provenance 统一（三页共用）
 
   .config-tabs {
     :deep(.el-tabs__item) {
