@@ -275,7 +275,7 @@ if ($Exe) {
     } else {
         Write-Err "无可用的启动方式"
         Write-Host "  方式 1（venv 开发模式）: python -m venv .venv 并安装 backend\requirements.txt" -ForegroundColor Gray
-        Write-Host "  方式 2（系统 python 开发模式）: 安装 Python 3.10+ 并 pip install -r backend\requirements.txt" -ForegroundColor Gray
+        Write-Host "  方式 2（系统 python 开发模式）: 安装 Python 3.12 并 pip install -r backend\requirements.txt" -ForegroundColor Gray
         Write-Host "  方式 3（exe 模式）: 运行 scripts\构建打包.bat 生成 exe" -ForegroundColor Gray
         exit 1
     }

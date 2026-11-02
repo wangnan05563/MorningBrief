@@ -20,10 +20,10 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 安装 Python 3.11
+      - name: 安装 Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: 缓存 pip 依赖
         uses: actions/cache@v4
@@ -169,10 +169,12 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 安装 Python 3.11
+      - name: 安装 Python 3.12
+        # 与出货构建同解释器（scripts/build-exe.ps1 固定 3.12），
+        # 否则打包校验验证的是一个并不会被交付的 Python 版本（T04090）
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: 安装后端依赖
         run: |
