@@ -107,21 +107,41 @@ function Test-BuildPip {
 }
 
 function Invoke-BuildPip {
-    # 封装 pip 调用：失败时重建 venv 重试一次
+    # 封装 pip 调用：失败先原地重试一次（网络抖动），仍失败再按需重建 venv
     param(
         [Parameter(Mandatory)][string[]]$PipArgs,
         [Parameter(Mandatory)][string]$FailureMessage,
         [switch]$RetryAfterRebuild
     )
-    # 2>&1：pip 的 warning 走 stderr，ErrorActionPreference=Stop 下不合并会触发
-    # NativeCommandError 终止性错误把构建杀掉；合并后退出码判定逻辑不变（仍看 $LASTEXITCODE）
-    & $buildPython -m pip @PipArgs 2>&1
-    if ($LASTEXITCODE -eq 0) { return }
-    if ($RetryAfterRebuild) {
-        Write-Warn "pip 命令失败，重建 build venv 后重试..."
-        New-BuildVenv
-        & $buildPython -m pip @PipArgs 2>&1
+    $effectiveArgs = @($PipArgs)
+    if ($PipArgs[0] -eq "install") {
+        # jieba / cos-python-sdk-v5 / crcmod / sgmllib3k 只发 sdist，准备 metadata 时要
+        # 临时拉起隔离环境下载 setuptools——PyPI 抖一下就会报
+        # "Preparing metadata (pyproject.toml) ... error" / subprocess-exited-with-error，
+        # 放大 pip 自带的重试与超时，别让一次抖动打断整轮构建
+        $effectiveArgs += @("--retries", "5", "--timeout", "60")
+    }
+    # 2>&1 把 pip 的 stderr 并进来才看得到报错，但 Windows PowerShell 5.1 会把这些行
+    # 变成 ErrorRecord，脚本级 $ErrorActionPreference=Stop 一碰上就抛 NativeCommandError
+    # 终止——后面的退出码判定、原地重试、FailureMessage 全成死代码（实际表现：pip 一报错，
+    # 脚本就停在 & $buildPython 那行，连 "重建 venv 后重试" 都没打印）。调用期间降为
+    # Continue，只按 $LASTEXITCODE 判定。
+    $parentEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & $buildPython -m pip @effectiveArgs 2>&1
         if ($LASTEXITCODE -eq 0) { return }
+        Write-Warn "pip 命令失败，原地重试一次..."
+        & $buildPython -m pip @effectiveArgs 2>&1
+        if ($LASTEXITCODE -eq 0) { return }
+        if ($RetryAfterRebuild) {
+            Write-Warn "pip 命令仍失败，重建 build venv 后重试..."
+            New-BuildVenv
+            & $buildPython -m pip @effectiveArgs 2>&1
+            if ($LASTEXITCODE -eq 0) { return }
+        }
+    } finally {
+        $ErrorActionPreference = $parentEap
     }
     throw $FailureMessage
 }
