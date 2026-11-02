@@ -246,7 +246,6 @@ const licenses = [
   { name: '@playwright/test', version: '^1.61.1', license: 'Apache-2.0', repo: 'https://github.com/microsoft/playwright' },
   { name: '@vitejs/plugin-vue', version: '^5.0.0', license: 'MIT', repo: 'https://github.com/vitejs/vite-plugin-vue' },
   { name: 'aiosqlite', version: '0.19.0', license: 'MIT', repo: 'https://github.com/omnilib/aiosqlite' },
-  { name: 'alembic', version: '1.13.1', license: 'MIT', repo: 'https://github.com/sqlalchemy/alembic' },
   { name: 'apscheduler', version: '3.10.4', license: 'MIT', repo: 'https://github.com/agronholm/apscheduler' },
   { name: 'axios', version: '^1.6.0', license: 'MIT', repo: 'https://github.com/axios/axios' },
   { name: 'bcrypt', version: '4.1.2', license: 'Apache-2.0', repo: 'https://github.com/pyca/bcrypt' },

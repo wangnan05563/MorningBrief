@@ -7,7 +7,8 @@ slowapi==0.1.9                       # 限流中间件（V1.2 替代 Nginx limit
 # ==== 数据库（V1.2：SQLite 替代 MySQL） ====
 sqlalchemy[asyncio]==2.0.25
 aiosqlite==0.19.0                    # SQLite async 驱动（替代 aiomysql）
-alembic==1.13.1                      # 数据库迁移
+# 不装 alembic：本仓无迁移脚手架（无 alembic.ini / migrations），schema 由 create_all
+# + 启动期幂等 ALTER/PRAGMA 维护；需要版本化迁移时再连同脚手架一起引入
 
 # ==== 缓存（V1.2：TTLCache 替代 Redis） ====
 cachetools==5.3.3                    # TTLCache 进程内缓存（替代 redis-py）
