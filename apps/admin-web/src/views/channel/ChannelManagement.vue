@@ -381,6 +381,9 @@
           <el-collapse-item title="改写模板（template）" name="template">
             <el-input v-model="form.rewrite_template" type="textarea" :rows="8" placeholder="留空使用默认 rewrite.txt 模板" />
           </el-collapse-item>
+          <el-collapse-item title="全网搜索提示词（search）" name="search">
+            <el-input v-model="form.search_prompt" type="textarea" :rows="8" placeholder="留空表示仅依赖 RSS 采集；AI 生成后可编辑" />
+          </el-collapse-item>
         </el-collapse>
         <el-form-item label="投放广告">
           <el-switch v-model="form.enable_ad" :active-value="1" :inactive-value="0" />
@@ -691,6 +694,7 @@ const form = reactive({
   outro_prompt: '',
   constraint_prompt: '',
   rewrite_template: '',
+  search_prompt: '',
   auto_generate_prompts: false,
   // BGM 字段：bgm_path 为相对 data/bgm/ 的路径，空表示用全局配置
   bgm_path: null,
@@ -816,6 +820,7 @@ function resetForm() {
   form.outro_prompt = ''
   form.constraint_prompt = ''
   form.rewrite_template = ''
+  form.search_prompt = ''
   form.auto_generate_prompts = false
   form.bgm_path = null
   form.bgm_volume = 0.15
@@ -1017,6 +1022,7 @@ function openEdit(row) {
   form.outro_prompt = row.outro_prompt || ''
   form.constraint_prompt = row.constraint_prompt || ''
   form.rewrite_template = row.rewrite_template || ''
+  form.search_prompt = row.search_prompt || ''
   form.auto_generate_prompts = false
   form.bgm_path = row.bgm_path || null
   form.bgm_volume = row.bgm_volume !== null && row.bgm_volume !== undefined ? row.bgm_volume : 0.15
@@ -1149,6 +1155,7 @@ async function handleSubmit() {
         outro_prompt: form.outro_prompt,
         constraint_prompt: form.constraint_prompt,
         rewrite_template: form.rewrite_template,
+        search_prompt: form.search_prompt,
         bgm_path: form.bgm_path || '',
         bgm_volume: form.bgm_volume,
         // 勾选继承全局时提交 null，让频道回退到 AI 服务页的全局段间静音；
@@ -1289,6 +1296,7 @@ async function handleGeneratePrompts() {
     form.outro_prompt = data.outro_prompt || ''
     form.constraint_prompt = data.constraint_prompt || ''
     form.rewrite_template = data.rewrite_template || ''
+    form.search_prompt = data.search_prompt || ''
     ElMessage.success('AI 已生成提示词，可编辑后点击确认保存')
   } catch (e) {
     console.warn('handleGeneratePrompts failed:', e)

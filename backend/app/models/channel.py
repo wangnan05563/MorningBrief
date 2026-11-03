@@ -52,6 +52,9 @@ class Channel(Base):
     outro_prompt: Mapped[Optional[str]] = mapped_column(Text)
     constraint_prompt: Mapped[Optional[str]] = mapped_column(Text)
     rewrite_template: Mapped[Optional[str]] = mapped_column(Text)
+    # T04111：频道级全网搜索提示词（频道创建时按主题自动生成，可人工编辑）
+    # 为空表示该频道仅依赖 RSS 采集；非空时供后续全网搜索素材链路按此提示词执行检索
+    search_prompt: Mapped[Optional[str]] = mapped_column(Text, comment="频道级全网搜索提示词（按主题自动生成）")
     # 频道级 BGM：相对路径（相对 data/bgm/），为空时 stitch 回退到全局 settings.BGM_PATH
     # 值形如 "preset/calm.mp3" 或 "custom/2_intro.mp3"，前端通过 /audio/bgm/{path} 试听
     bgm_path: Mapped[Optional[str]] = mapped_column(String(256))

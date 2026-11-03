@@ -322,6 +322,8 @@ async def _migrate_channel_schema() -> None:  # NOSONAR
             ("book_pool_cursor", _SQL_INT_NOT_NULL_DEFAULT0),
             ("book_pool_last_run_date", "TEXT"),
             ("book_pool_last_title", "TEXT"),
+            # T04111：频道级全网搜索提示词（频道创建时按主题自动生成，可人工编辑）
+            ("search_prompt", "TEXT"),
             # T00730：频道图标（上传或 AI 生成），URL 形式存储
             ("icon_url", "TEXT"),
         ]

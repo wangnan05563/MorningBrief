@@ -197,6 +197,115 @@ async def generate_prompts_for_channel(name: str, description: str) -> dict:
     }
 
 
+# T04111：全网搜索提示词通用骨架——把参考日报模板的通用要素（时间口径、多轮采集、
+# 去重、输出格式、写作纪律）解耦为占位符骨架，频道差异只体现在 {变量} 中，
+# 使模板可被程序化调用（执行侧按占位符替换后即可用于全网搜索）。
+_SEARCH_PROMPT_SKELETON = """# {topic}每日重点资讯收集指令
+
+## 任务定位
+你是一名「{topic}」领域的信息编辑。请通过全网搜索，收集「{topic}」领域过去 24 小时内的重点资讯，产出口语化语音素材。
+
+## 时间口径
+- 今日日期：{today}（执行时自动注入，报告日一律取「昨日」）；
+- 覆盖窗口：昨日早间至今日清晨的滚动消息（夜间重大事件不遗漏）。
+
+## 信息采集范围（子板块）
+请覆盖以下子板块，逐板块检索：
+{subsections}
+
+## 多轮搜索策略（至少 3 轮）
+- 第一轮：使用中文关键词「{keywords_zh}」+ 昨日日期，覆盖国内视角；
+- 第二轮：使用英文关键词「{keywords_en}」+ 昨日日期，覆盖国际视角；
+- 第三轮：对第一、二轮中的关键数据与相互矛盾的信息做交叉验证检索，仅保留可确认版本。
+
+## 去重原则
+- 读取该频道上一期报告，同源事件已覆盖的不再重复收录；
+- 若事件有新进展（金额更新、状态变更、官方回应），以「进展」角度保留，标注「新增进展」。
+
+## 输出格式
+- 按子板块分节，每节 2-5 条；每条包含：一句话导语 + 2-4 句事实展开 + 信源名称；
+- 全文使用简体中文；单条字数 120-200 字，便于直接转语音。
+
+## 写作纪律
+- 简洁、诚实、不臆造；无法核实的信息标注「据媒体报道」或「待官方确认」；
+- 禁止使用繁体字；禁止虚构日期、数字与人名；
+- 相比单一 RSS 源，需保证素材密度，确保文本量足以支撑语音生成时长。
+"""
+
+# T04111：搜索适配元提示词——LLM 只负责产出频道差异化的结构化字段
+# （子板块/中英文关键词组），骨架与纪律部分由模板固定，避免生成结果风格漂移。
+_SEARCH_ADAPT_META_PROMPT = """你是一位专业的资讯检索编辑。请根据频道信息，为该频道设计全网搜索的结构化参数。
+
+频道名称：{name}
+频道描述：{description}
+
+请生成以下字段：
+1. subsections：该主题下的核心细分板块列表，4-6 个；必须贴合频道业务逻辑（例如财经频道应包含「宏观政策」「行业资本」而非通用的「模型发布」）；
+2. keywords_zh：中文检索关键词组，6-10 个，逗号分隔，涵盖主题核心词、品牌/产品、行业术语；
+3. keywords_en：英文检索关键词组（国际视角），4-8 个，逗号分隔。
+
+输出格式（严格 JSON，仅输出 JSON 本身）：
+{{
+  "subsections": ["板块1", "板块2", "板块3", "板块4"],
+  "keywords_zh": "关键词1,关键词2,关键词3",
+  "keywords_en": "keyword1,keyword2,keyword3"
+}}
+
+禁止：
+- 不要输出 JSON 以外的任何内容
+- 不要输出 Markdown 标记
+- 板块与关键词不要偏离频道主题
+"""
+
+
+async def generate_search_prompt_for_channel(name: str, description: str) -> dict:
+    """调用 LLM 生成频道级全网搜索提示词（T04111）。
+
+    流程：LLM 产出子板块与中英文关键词组 → 套用通用骨架填充 → 得到
+    可被程序化调用（占位符已替换）的完整搜索提示词文本。
+
+    Args:
+        name: 频道名称
+        description: 频道描述
+
+    Returns:
+        {search_prompt: 完整搜索提示词文本}
+
+    Raises:
+        ValueError: LLM 响应解析失败或预算超限
+    """
+    allowed, reason = check_budget(service_type="llm")
+    if not allowed:
+        logger.warning("AI 预算超限，跳过搜索提示词生成: %s", reason)
+        raise ValueError(f"AI 预算超限: {reason}")
+
+    from datetime import date
+
+    prompt = _SEARCH_ADAPT_META_PROMPT.format(
+        name=name, description=description or "无描述",
+    )
+    # 子板块+双语关键词属结构化短输出，常规超时足够；沿用自修复重试保证 JSON 可解析
+    data = await _chat_json(prompt + "\n" + _JSON_OUTPUT_RULES, settings.LLM_TIMEOUT_SEC, "搜索提示词")
+
+    # 容错清洗：LLM 可能返回字符串而非列表，统一转成列表再渲染
+    subsections = data.get("subsections", [])
+    if isinstance(subsections, str):
+        subsections = [s.strip() for s in subsections.split("，") if s.strip()]
+    subsections = [str(s).strip() for s in subsections if str(s).strip()]
+    if not subsections:
+        # 空板块会让骨架缺检索目标，退化为频道名兜底，保证提示词始终可用
+        subsections = [name]
+
+    search_prompt = _SEARCH_PROMPT_SKELETON.format(
+        topic=name,
+        today=date.today().strftime("%Y年%m月%d日"),
+        subsections="\n".join(f"- {s}" for s in subsections),
+        keywords_zh=str(data.get("keywords_zh", "")).strip() or name,
+        keywords_en=str(data.get("keywords_en", "")).strip() or name,
+    )
+    return {"search_prompt": search_prompt.strip()}
+
+
 # BGM 推荐元提示词：引导 LLM 从可用列表中选择最匹配频道的 BGM
 _BGM_RECOMMEND_TEMPLATE = """你是一位专业的电台音乐编辑。请根据频道定位，从可用 BGM 列表中选择最匹配频道的背景音乐。
 

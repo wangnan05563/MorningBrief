@@ -72,6 +72,8 @@ class ChannelCreateRequest(BaseModel):
     outro_prompt: str | None = None
     constraint_prompt: str | None = None
     rewrite_template: str | None = None
+    # T04111：频道级全网搜索提示词（创建时通常由 AI 生成回填，也可直接传入）
+    search_prompt: str | None = None
     # 频道级 BGM：相对 data/bgm/ 的路径，为空使用全局配置
     bgm_path: str | None = None
     bgm_volume: float | None = None
@@ -239,6 +241,8 @@ class ChannelUpdateRequest(BaseModel):
     outro_prompt: str | None = None
     constraint_prompt: str | None = None
     rewrite_template: str | None = None
+    # T04111：频道级全网搜索提示词（人工编辑回传）
+    search_prompt: str | None = None
     bgm_path: str | None = None
     bgm_volume: float | None = None
     segment_gap_sec: float | None = None
@@ -383,6 +387,7 @@ def _channel_to_dict(ch) -> dict:
         "outro_prompt": ch.outro_prompt,
         "constraint_prompt": ch.constraint_prompt,
         "rewrite_template": ch.rewrite_template,
+        "search_prompt": ch.search_prompt,
         "bgm_path": ch.bgm_path,
         "bgm_volume": ch.bgm_volume,
         "segment_gap_sec": ch.segment_gap_sec,
@@ -468,6 +473,7 @@ async def create_channel(
             outro_prompt=req.outro_prompt,
             constraint_prompt=req.constraint_prompt,
             rewrite_template=req.rewrite_template,
+            search_prompt=req.search_prompt,
             # C15：新建时尊重「启用」开关，不再无条件 is_active=1
             is_active=req.is_active,
         )
@@ -477,14 +483,26 @@ async def create_channel(
     # 按需自动生成提示词（频道创建时 AI 生成，失败不阻塞创建流程）
     if req.auto_generate_prompts:
         try:
-            from app.services.channel_prompt_service import generate_prompts_for_channel
+            from app.services.channel_prompt_service import (
+                generate_prompts_for_channel,
+                generate_search_prompt_for_channel,
+            )
             prompts = await generate_prompts_for_channel(req.name, req.description)
+            # T04111：搜索提示词与 4 类播报提示词一起生成；搜索生成失败仅跳过该字段，
+            # 不回滚已生成的播报提示词
+            try:
+                search = await generate_search_prompt_for_channel(req.name, req.description)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning("频道创建时 AI 生成搜索提示词失败: %s", e)
+                search = None
             channel = await svc.update_channel(
                 channel_id=channel.id,
                 intro_prompt=prompts["intro_prompt"],
                 outro_prompt=prompts["outro_prompt"],
                 constraint_prompt=prompts["constraint_prompt"],
                 rewrite_template=prompts["rewrite_template"],
+                search_prompt=search["search_prompt"] if search else None,
             )
         except Exception as e:
             # AI 生成失败不影响频道创建，用户可后续手动生成
@@ -514,6 +532,7 @@ async def update_channel(
             outro_prompt=req.outro_prompt,
             constraint_prompt=req.constraint_prompt,
             rewrite_template=req.rewrite_template,
+            search_prompt=req.search_prompt,
             bgm_path=req.bgm_path,
             bgm_volume=req.bgm_volume,
             segment_gap_sec=req.segment_gap_sec,
@@ -558,8 +577,18 @@ async def generate_prompts(
         return error(code=404, message=_CHANNEL_NOT_FOUND_MSG)
 
     try:
-        from app.services.channel_prompt_service import generate_prompts_for_channel
+        from app.services.channel_prompt_service import (
+            generate_prompts_for_channel,
+            generate_search_prompt_for_channel,
+        )
         prompts = await generate_prompts_for_channel(channel.name, channel.description)
+        # T04111：搜索提示词随「AI 重新生成」一并刷新；失败仅跳过该字段，不影响其余提示词
+        try:
+            search = await generate_search_prompt_for_channel(channel.name, channel.description)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("AI 生成搜索提示词失败: %s", e)
+            search = None
     except ValueError as e:
         return error(code=400, message=str(e))
 
@@ -569,6 +598,7 @@ async def generate_prompts(
         outro_prompt=prompts["outro_prompt"],
         constraint_prompt=prompts["constraint_prompt"],
         rewrite_template=prompts["rewrite_template"],
+        search_prompt=search["search_prompt"] if search else None,
     )
     return success(data=_channel_to_dict(channel))
 

@@ -73,6 +73,7 @@ class ChannelService:
         outro_prompt: Optional[str] = None,
         constraint_prompt: Optional[str] = None,
         rewrite_template: Optional[str] = None,
+        search_prompt: Optional[str] = None,
         bgm_path: Optional[str] = None,
         bgm_volume: Optional[float] = None,
         segment_gap_sec: Optional[float] = None,
@@ -108,6 +109,7 @@ class ChannelService:
             outro_prompt=outro_prompt,
             constraint_prompt=constraint_prompt,
             rewrite_template=rewrite_template,
+            search_prompt=search_prompt,
             bgm_path=bgm_path,
             bgm_volume=bgm_volume,
             segment_gap_sec=segment_gap_sec,
@@ -146,6 +148,7 @@ class ChannelService:
         outro_prompt: Optional[str] = None,
         constraint_prompt: Optional[str] = None,
         rewrite_template: Optional[str] = None,
+        search_prompt: Optional[str] = None,
         bgm_path: Optional[str] = None,
         bgm_volume: Optional[float] = None,
         segment_gap_sec: Optional[float] = None,
@@ -196,6 +199,8 @@ class ChannelService:
             channel.constraint_prompt = constraint_prompt
         if rewrite_template is not None:
             channel.rewrite_template = rewrite_template
+        if search_prompt is not None:
+            channel.search_prompt = search_prompt
         if bgm_path is not None:
             channel.bgm_path = bgm_path
         if bgm_volume is not None:
