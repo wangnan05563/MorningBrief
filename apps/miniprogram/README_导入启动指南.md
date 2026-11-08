@@ -54,7 +54,7 @@ miniprogram/
 
 2. **填写项目信息**
    ```
-   项目路径：D:\code\otherProjects\20_News\miniprogram
+   项目路径：<仓库根>\apps\miniprogram
    AppID：wx0000000000000000（测试号）
    项目名称：MorningBrief
    本地目录：保持默认
@@ -73,7 +73,7 @@ miniprogram/
 
 ```bash
 # 进入项目目录
-cd D:\code\otherProjects\20_News\miniprogram
+cd apps\miniprogram
 
 # 使用微信开发者工具CLI导入
 wechat devtools import --path . --appid wx0000000000000000

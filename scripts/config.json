@@ -1,5 +1,5 @@
 {
-  "_comment": "20_News 脚本配置文件：所有可变参数集中管理，避免硬编码",
+  "_comment": "MorningBrief 脚本配置文件：所有可变参数集中管理，避免硬编码",
   "tools": {
     "node": {
       "_comment": "Node.js 查找配置：按 search_paths 顺序 fallback，找到 node.exe 后 npm.cmd/npx.cmd 从同目录推导",

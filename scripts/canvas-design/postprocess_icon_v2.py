@@ -6,9 +6,11 @@ Aqueous Whisper 图标 v2 后处理：圆形裁剪 + 透明背景
 """
 import numpy as np
 from PIL import Image, ImageFilter
+from pathlib import Path
 
-src = r"d:\code\otherProjects\20_News\canvas-design\aqueous-whisper-icon-v2.png"
-out = r"d:\code\otherProjects\20_News\canvas-design\aqueous-whisper-icon.png"
+# 输入输出均在脚本同目录，避免绑定绝对路径
+src = Path(__file__).resolve().parent / "aqueous-whisper-icon-v2.png"
+out = Path(__file__).resolve().parent / "aqueous-whisper-icon.png"
 
 im = Image.open(src).convert("RGBA")
 w, h = im.size

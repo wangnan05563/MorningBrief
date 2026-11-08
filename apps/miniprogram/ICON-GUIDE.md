@@ -202,7 +202,7 @@ miniprogram/images/
 </view>
 ```
 
-**样式规范**（[app.wxss](file:///d:/code/otherProjects/20_News/miniprogram/app.wxss) 全局定义）：
+**样式规范**（[app.wxss](./app.wxss) 全局定义）：
 
 - `.btn-icon`：32rpx × 32rpx，右间距 12rpx，vertical-align: middle
 - `.btn-content`：inline-flex 容器，水平居中、垂直居中
@@ -278,8 +278,8 @@ miniprogram/images/
 
 ## 九、相关文件索引
 
-- 小程序全局样式：[app.wxss](file:///d:/code/otherProjects/20_News/miniprogram/app.wxss)
-- tabBar 配置：[app.json](file:///d:/code/otherProjects/20_News/miniprogram/app.json)
-- 空状态组件：[components/empty-state/](file:///d:/code/otherProjects/20_News/miniprogram/components/empty-state/)
-- SVG 转换脚本：[images/svg-src/convert-icons.js](file:///d:/code/otherProjects/20_News/miniprogram/images/svg-src/convert-icons.js)
-- Web 端 favicon 设计参考：[admin-web/public/favicon.svg](file:///d:/code/otherProjects/20_News/admin-web/public/favicon.svg)
+- 小程序全局样式：[app.wxss](./app.wxss)
+- tabBar 配置：[app.json](./app.json)
+- 空状态组件：[components/empty-state/](./components/empty-state/)
+- SVG 转换脚本：[images/svg-src/convert-icons.js](./images/svg-src/convert-icons.js)
+- Web 端 favicon 设计参考：[admin-web/public/favicon.svg](../admin-web/public/favicon.svg)

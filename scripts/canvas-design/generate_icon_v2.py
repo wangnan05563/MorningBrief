@@ -14,6 +14,7 @@ Aqueous Whisper 品牌图标：磨砂玻璃声纹胶囊
 """
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
+from pathlib import Path
 
 # 输出尺寸：2x 超采样后降采样获得抗锯齿
 SIZE_RAW = 1024
@@ -150,7 +151,8 @@ img = img.filter(ImageFilter.GaussianBlur(0.6))
 img = img.resize((SIZE_OUT, SIZE_OUT), Image.LANCZOS)
 
 # 保存
-out_path = r"d:\code\otherProjects\20_News\canvas-design\aqueous-whisper-icon-v2.png"
+# 输出到脚本同目录，避免绑定绝对路径
+out_path = Path(__file__).resolve().parent / "aqueous-whisper-icon-v2.png"
 img.save(out_path, "PNG", optimize=True)
 
 import os

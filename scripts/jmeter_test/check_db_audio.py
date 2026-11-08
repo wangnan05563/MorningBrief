@@ -3,7 +3,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
-DB_PATH = Path(r"d:\code\otherProjects\20_News\backend\data\news.db")
+# 以脚本位置推导项目根，避免绑定具体机器的工作空间绝对路径
+DB_PATH = Path(__file__).resolve().parents[2] / "backend" / "data" / "news.db"
 if not DB_PATH.exists():
     print(f"[ERROR] DB not found: {DB_PATH}")
     sys.exit(1)

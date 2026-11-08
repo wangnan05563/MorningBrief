@@ -1,3 +1,5 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig, devices } from '@playwright/test'
 
 /**
@@ -24,7 +26,8 @@ export default defineConfig({
   },
   timeout: 60000,
   expect: { timeout: 20000 },
-  outputDir: 'D:/code/otherProjects/20_News/runtime/pw-instance-output',
+  // ESM 下无 __dirname，按配置文件位置推导项目根，避免绑定绝对路径
+  outputDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../runtime/pw-instance-output'),
   projects: [
     {
       name: 'chromium',

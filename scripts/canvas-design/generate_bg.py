@@ -12,6 +12,7 @@ import math
 import hashlib
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from pathlib import Path
 
 # === 配置 ===
 SS = 2  # 超采样倍数，最终降采样到 1920x1080
@@ -230,6 +231,7 @@ draw.text((64 * SS, scale_y + 10 * SS),
 
 # === 最终：降采样到 1920x1080（LANCZOS 抗锯齿） ===
 final = canvas.resize((1920, 1080), Image.LANCZOS)
-out_path = r"d:\code\otherProjects\20_News\canvas-design\aqueous-whisper-bg.png"
+# 输出到脚本同目录，避免绑定绝对路径
+out_path = Path(__file__).resolve().parent / "aqueous-whisper-bg.png"
 final.convert('RGB').save(out_path, 'PNG', optimize=True)
 print(f"OK -> 1920x1080 saved: {out_path}")

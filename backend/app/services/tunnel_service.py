@@ -42,7 +42,7 @@ _DEFAULT_CONFIG: dict = {
     "auto_start": False,
     # Tailscale 路径区分模式：非空时用 --set-path 注册路径前缀
     # 多应用同节点共存时各分配独立前缀（如 /news/、/wiki/、/xianyu/）
-    "path_prefix": "/news/",   # 20_News 默认使用 /news/ 前缀
+    "path_prefix": "/news/",   # MorningBrief 默认使用 /news/ 前缀
     # Cloudflare Named Tunnel 相关配置（quick 模式下这些值被忽略）
     "tunnel_mode": "quick",    # quick / named
     "tunnel_name": "",         # 命名隧道名称

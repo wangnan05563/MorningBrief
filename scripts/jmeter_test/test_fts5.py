@@ -2,8 +2,10 @@
 import json
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
-token_path = r"d:\code\otherProjects\20_News\jmeter_test\test_token.txt"
+# token 与脚本放在同一目录，随仓库迁移无需改路径
+token_path = Path(__file__).resolve().parent / "test_token.txt"
 with open(token_path, "r", encoding="utf-8") as f:
     token = f.read().strip()
 

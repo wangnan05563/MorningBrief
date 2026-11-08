@@ -47,7 +47,7 @@ $scanDirs = @(
     "C:\Program Files (x86)\MorningBrief",
     "C:\MorningBrief",
     "D:\MorningBrief",
-    "D:\code\otherProjects\20_News\release\MorningBrief",
+    (Join-Path (Split-Path -Parent $PSScriptRoot) "release\MorningBrief"),
     $PSScriptRoot,
     (Get-Location).Path
 )

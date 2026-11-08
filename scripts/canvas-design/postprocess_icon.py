@@ -12,9 +12,11 @@ API 返回的图标背景为纯黑，与 macaron 亮主题冲突。
 """
 import numpy as np
 from PIL import Image, ImageFilter
+from pathlib import Path
 
-src = r"d:\code\otherProjects\20_News\canvas-design\aqueous-whisper-icon.png"
-out = r"d:\code\otherProjects\20_News\canvas-design\aqueous-whisper-icon-round.png"
+# 输入输出均在脚本同目录，避免绑定绝对路径
+src = Path(__file__).resolve().parent / "aqueous-whisper-icon.png"
+out = Path(__file__).resolve().parent / "aqueous-whisper-icon-round.png"
 
 im = Image.open(src).convert("RGBA")
 w, h = im.size

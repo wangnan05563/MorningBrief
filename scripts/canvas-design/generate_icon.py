@@ -16,6 +16,7 @@ import urllib.parse
 import json
 import os
 import sys
+from pathlib import Path
 
 # nano-banana 风格提示词：详细描述质感、光影、构图、情绪
 # 强调磨砂玻璃 + 声波 + macaron 粉彩，无机器人/人脸特征，纯抽象治愈
@@ -42,7 +43,8 @@ url = (
     f"?prompt={encoded}&image_size=square_hd"
 )
 
-out_path = r"d:\code\otherProjects\20_News\canvas-design\aqueous-whisper-icon.png"
+# 输出到脚本同目录，避免绑定绝对路径
+out_path = Path(__file__).resolve().parent / "aqueous-whisper-icon.png"
 
 print("Requesting icon generation...")
 print(f"URL length: {len(url)} chars")
