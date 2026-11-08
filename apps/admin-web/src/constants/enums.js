@@ -101,6 +101,8 @@ export const MATERIAL_SOURCE_TYPE = {
   // 但两侧枚举都没登记，素材库里这条记录显示成裸英文枚举、也无法按「待讲书单」筛选。
   // 它是系统生成的占位项，不作为录入渠道出现在上传表单里（录入渠道见 CourseMaterials）。
   book_plan: { label: '待讲书单', long: '待讲书单（找书工具占位，待上传书稿）', type: 'info' },
+  // T04116：按频道 search_prompt 执行全网搜索采集的素材（系统生成，不可作为录入渠道）
+  web_search: { label: '全网搜索', long: '全网搜索采集', type: 'success' },
 }
 
 export const AD_POSITION = {

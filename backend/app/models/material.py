@@ -27,6 +27,9 @@ class MaterialSourceType(str, Enum):
     # 没有正文，等运营在「素材录入」上传 EPUB/DOCX 后由 list 渠道补齐。
     # 它绝不能进讲书稿生成链路（book_pool_service 的候选/入池/取章三处按此排除）。
     book_plan = "book_plan"
+    # web_search：按频道 search_prompt 执行全网搜索采集的素材（T04116），
+    # RSS 之外的补充来源，入库时同样写 channel_id。
+    web_search = "web_search"
 
 
 class MaterialStatus(str, Enum):

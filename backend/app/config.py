@@ -459,6 +459,34 @@ class Settings(BaseSettings):
     # 过滤后若 0 条则降级保留全部（避免阻断），并 WARNING 告警提示源质量问题
     CRAWLER_MAX_ARTICLE_AGE_DAYS: int = 14
 
+    # ---- 全网搜索采集（T04116）----
+    # 默认关闭：仓库内无搜索服务凭据；开启后 crawl 才会按频道 search_prompt 走检索，
+    # 关闭时采集链路与接入前完全一致（不发起任何搜索请求）。
+    WEB_SEARCH_ENABLED: bool = False
+    # 检索服务契约：bocha（博查）/ tavily；API key 由运营在 .env 配置
+    WEB_SEARCH_PROVIDER: str = ""
+    WEB_SEARCH_API_KEY: str = ""
+    # 自定义端点（留空用 provider 默认地址，便于代理/私有部署）
+    WEB_SEARCH_ENDPOINT: str = ""
+    WEB_SEARCH_TIMEOUT_SEC: float = 20.0
+    # 每轮检索式数量上限（中文/英文各一轮）
+    WEB_SEARCH_MAX_QUERIES_PER_ROUND: int = 3
+    # 第三轮交叉验证覆盖的头部候选数
+    WEB_SEARCH_CROSS_CHECK_TOP: int = 3
+    # 密度不足时按子板块补搜的最大次数（0 表示不补搜）
+    WEB_SEARCH_MAX_DENSITY_QUERIES: int = 3
+    # 全部轮次合计检索次数硬上限（防止提示词异常导致请求失控）
+    WEB_SEARCH_MAX_QUERIES_TOTAL: int = 12
+    WEB_SEARCH_MAX_RESULTS_PER_QUERY: int = 5
+    WEB_SEARCH_MAX_ITEMS: int = 30
+    # 检索服务/正文抓取的并发上限
+    WEB_SEARCH_TASK_CONCURRENCY: int = 3
+    WEB_SEARCH_FETCH_CONCURRENCY: int = 4
+    # 与上一期节目同源事件的判定阈值（SimHash 汉明距离，越小越严格）
+    WEB_SEARCH_PREV_SIMILARITY: int = 8
+    # 目标时长 → 所需字数的换算（中文播报约 4.5 字/秒）
+    WEB_SEARCH_CHARS_PER_SEC: float = 4.5
+
     # ---- 日志 ----
     LOG_LEVEL: str = "INFO"
     LOG_DIR: str = "./logs"             # V1.2：改为 exe 同级相对路径

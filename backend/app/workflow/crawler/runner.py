@@ -28,6 +28,7 @@ from app.workflow.crawler.fulltext_spider import crawl_fulltext_source
 from app.workflow.crawler.article_parser import extract as extract_article
 from app.workflow.crawler.dedup import add_to_dedup, is_duplicate
 from app.workflow.crawler.rss_spider import RSSSpider
+from app.workflow.crawler.search_collector import collect_search_materials
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -735,6 +736,28 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
         if result is not None:
             prepared_list.append(result)
 
+    # T04116：全网搜索采集（RSS 之外的素材来源）。
+    # 默认关闭（WEB_SEARCH_ENABLED=false）：关闭时 collect_search_materials
+    # 只回传原因、不发请求，行为与接入前一致。开启后按频道 search_prompt
+    # 执行多轮检索，产物与 RSS 同构，统一走下方短事务入库。
+    web_search_stats: dict = {"enabled": False}
+    if channel_id is not None:
+        web_search_stats = await collect_search_materials(
+            workflow_id, date_str, channel_id,
+            existing_urls={p.get("url") for p in prepared_list if p.get("url")},
+        )
+        search_materials = web_search_stats.pop("materials", [])
+        if search_materials:
+            prepared_list.extend(search_materials)
+        if web_search_stats.get("enabled"):
+            source_details.append({
+                "name": "全网搜索",
+                "url": "",
+                "status": "ok" if not web_search_stats.get("error") else "fail",
+                "entry_count": web_search_stats.get("kept", 0),
+                "error": web_search_stats.get("error"),
+            })
+
     # 阶段2：逐条短事务入库，避免单条失败导致整批回滚
     material_count = 0
     insert_failures = 0
@@ -747,8 +770,11 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
     # 极端情况下仍可能触发，此时视为已入库跳过，不污染 insert_failures 统计。
     from sqlalchemy.exc import IntegrityError
     for prepared in prepared_list:
-        # 书籍 RSS 预制源（仅 audiobook 频道）入库标记为 book_rss，通用 RSS 仍为 rss
-        if prepared.get("source") in book_source_names:
+        # 搜索素材自带来源标记；书籍 RSS 预制源（仅 audiobook 频道）标记为 book_rss，
+        # 通用 RSS 仍为 rss
+        if prepared.get("_source_type"):
+            src_type = prepared["_source_type"]
+        elif prepared.get("source") in book_source_names:
             src_type = "book_rss"
         elif prepared.get("source") in fulltext_source_names:
             src_type = "book_fulltext"
@@ -801,6 +827,7 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
             "source_details": source_details,
             "total_entries": len(all_entries),
             "extracted_entries": len(prepared_list),
+            "web_search": web_search_stats,
         }
 
     # T00649：上传驱动频道（outline/manual）的素材池兜底——书稿经「素材录入」入库、
@@ -820,6 +847,7 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
                 "source_details": source_details,
                 "total_entries": len(all_entries),
                 "extracted_entries": len(prepared_list),
+                "web_search": web_search_stats,
             }
 
     # 0 素材阻断：rewrite 步骤对空 pending 也会失败并浪费 LLM 调用
@@ -844,6 +872,7 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
             "extracted_entries": len(prepared_list),
             "insert_failures": insert_failures,
             "source_details": source_details,
+            "web_search": web_search_stats,
             "hint": (
                 "请检查：1) RSS 源是否可达（status=fail 的源）；"
                 "2) 关键词配置是否过严导致 0 命中；"
@@ -867,4 +896,5 @@ async def run(workflow_id: str, date_str: str, channel_id: Optional[int] = None)
         "source_details": source_details,
         "total_entries": len(all_entries),
         "extracted_entries": len(prepared_list),
+        "web_search": web_search_stats,
     }
