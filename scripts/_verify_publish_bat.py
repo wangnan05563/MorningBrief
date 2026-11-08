@@ -13,8 +13,10 @@ touching GitHub:
   4) cmd.exe smoke of 一键发布.bat with GH_DRY_RUN=1 + MB_SKIP_BUILD=1
      (uses the real existing installer, never uploads).
 """
+import glob
 import os
 import py_compile
+import re
 import subprocess
 import sys
 import tempfile
@@ -30,6 +32,17 @@ def check(cond, msg):
         print("FAIL:", msg)
         sys.exit(1)
     print("[PASS]", msg)
+
+
+def newest_setup():
+    """Mirror the bat's `dir /b /o:-d` pick: newest installer wins."""
+    files = glob.glob(os.path.join(REPO, "release", "MorningBrief-Setup-v*.exe"))
+    return max(files, key=os.path.getmtime) if files else None
+
+
+def version_of(path):
+    m = re.match(r"^MorningBrief-Setup-v(.+)\.exe$", os.path.basename(path))
+    return m.group(1) if m else None
 
 
 def main():
@@ -68,29 +81,58 @@ def main():
         check("test/repo" in out and "1.0.0" in out, "DRY-RUN plan shows repo+tag")
 
     # ---- 4) cmd.exe smoke of the full bat (build skipped, upload skipped) ----
-    before = set(os.listdir(REPO))
-    env = dict(os.environ, GH_DRY_RUN="1", MB_SKIP_BUILD="1",
-               GH_REPO="wangnan05563/MorningBrief", GH_TAG="1.0.20261017.001")
-    # cmd.exe runs under chcp 936 (GBK); decode console output as GBK.
-    r = subprocess.run(
-        ["cmd.exe", "/d", "/c", "(echo.)", "|", "call", BAT],
-        capture_output=True, encoding="gbk", errors="replace", env=env, timeout=180)
-    out = (r.stdout or "") + (r.stderr or "")
-    check(r.returncode == 0, "cmd.exe smoke of 一键发布.bat exits 0 (rc=%d)" % r.returncode)
-    check("DRY-RUN" in out, "smoke reaches DRY-RUN publish step")
-    check("Locating installer" in out and "Version :" in out,
-          "smoke locates installer + parses version")
-    check("Publish Complete" in out, "smoke reaches Publish Complete")
+    # The notes-generation branch only runs when no curated notes file exists for
+    # the installer's version. Park any curated file so the "generate, then hand
+    # the generated path to the publisher" path is actually exercised: with the
+    # redirect pointing at the pre-block value the old bat wrote the curated
+    # .md and handed the publisher a .auto.md that never existed.
+    setup = newest_setup()
+    check(setup is not None, "found an installer under release\\ to smoke against")
+    ver = version_of(setup)
+    check(ver is not None, "parsed version from %s" % os.path.basename(setup))
+    plain = os.path.join(REPO, "release-notes-%s.md" % ver)
+    auto = os.path.join(REPO, "release-notes-%s.auto.md" % ver)
+    parked = None
+    if os.path.isfile(plain):
+        parked = plain + ".parked"
+        os.replace(plain, parked)
+    if os.path.isfile(auto):
+        os.remove(auto)
 
-    # cleanup any release-notes-*.auto.md generated during the smoke
-    after = set(os.listdir(REPO))
-    for f in (after - before):
-        if f.startswith("release-notes-") and f.endswith(".auto.md"):
-            try:
-                os.remove(os.path.join(REPO, f))
-                print("cleaned up generated notes:", f)
-            except OSError:
-                pass
+    try:
+        before = set(os.listdir(REPO))
+        env = dict(os.environ, GH_DRY_RUN="1", MB_SKIP_BUILD="1",
+                   GH_REPO="wangnan05563/MorningBrief", GH_TAG=ver)
+        # cmd.exe runs under chcp 936 (GBK); decode console output as GBK.
+        r = subprocess.run(
+            ["cmd.exe", "/d", "/c", "(echo.)", "|", "call", BAT],
+            capture_output=True, encoding="gbk", errors="replace", env=env, timeout=180)
+        out = (r.stdout or "") + (r.stderr or "")
+        check(r.returncode == 0, "cmd.exe smoke of 一键发布.bat exits 0 (rc=%d)" % r.returncode)
+        check("DRY-RUN" in out, "smoke reaches DRY-RUN publish step")
+        check("Locating installer" in out and "Version :" in out,
+              "smoke locates installer + parses version")
+        check("Publish Complete" in out, "smoke reaches Publish Complete")
+        check(os.path.isfile(auto), "smoke wrote generated notes to %s" % os.path.basename(auto))
+        check(not os.path.isfile(plain), "generated notes did not land in the curated .md")
+        body = open(auto, encoding="utf-8").read() if os.path.isfile(auto) else ""
+        check(re.search(r"^[0-9a-f]{7} ", body, re.M) is not None,
+              "generated notes carry git log commits (stderr redirect not passed to git)")
+
+        # cleanup any release-notes-*.auto.md generated during the smoke
+        after = set(os.listdir(REPO))
+        for f in (after - before):
+            if f.startswith("release-notes-") and f.endswith(".auto.md"):
+                try:
+                    os.remove(os.path.join(REPO, f))
+                    print("cleaned up generated notes:", f)
+                except OSError:
+                    pass
+    finally:
+        if parked:
+            os.replace(parked, plain)
+        if os.path.isfile(auto):
+            os.remove(auto)
 
     print("\nALL CHECKS PASSED")
     return 0

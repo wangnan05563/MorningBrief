@@ -83,6 +83,13 @@ function Find-BuildPython {
         $py312 = $py312.Trim()
         if (Test-Path $py312) { return $py312 }
     }
+    # 本机未装 py launcher / uv 时，项目运行环境（backend\.venv，已锁定 3.12）
+    # 可作为创建构建 venv 的稳定基础解释器，避免回退到 3.14 造成依赖不兼容
+    $runtimePy = "backend\.venv\Scripts\python.exe"
+    if (Test-Path $runtimePy) {
+        $ver = & $runtimePy -c "import sys; print('.'.join(map(str, sys.version_info[:2])))" 2>$null
+        if ($ver -and $ver.Trim() -eq "3.12") { return (Resolve-Path $runtimePy).Path }
+    }
     Write-Warn "未找到 Python 3.12，回退到系统 python（可能与部分依赖不兼容）"
     return "python"
 }
@@ -178,15 +185,19 @@ if ($Clean)         { Write-Host "Mode: Clean（清理缓存重建）" }
 
 Write-Step "[1/6] 准备构建虚拟环境 (.venv-build)"
 # 不每次删除重建：pip install 对已安装包自动跳过，删除重建会让所有包重新解压
+$buildVenvCreated = $false
 if (-not (Test-Path $buildPython)) {
-    Write-Host "  venv 不存在" -ForegroundColor DarkGray
+    # .venv-build 不再长期保留（清理后按需重建）；首次构建需联网安装依赖
+    Write-Host "  venv 不存在，首次构建将创建并安装依赖（需联网）" -ForegroundColor DarkGray
     New-BuildVenv
+    $buildVenvCreated = $true
 } else {
     Write-Host "  venv 已存在，增量更新" -ForegroundColor DarkGray
 }
 
 # 健康检查：缺少标记文件说明上次构建中断
-if ((-not $SkipDeps) -and (Test-Path $buildPython) -and (-not (Test-Path $buildReadyMark))) {
+# 刚新建的 venv 本就无标记，跳过，避免首次构建连续重建两次
+if ((-not $SkipDeps) -and (-not $buildVenvCreated) -and (Test-Path $buildPython) -and (-not (Test-Path $buildReadyMark))) {
     Write-Warn "build venv 缺少健康标记，可能是上次构建中断，重建..."
     New-BuildVenv
 }
@@ -336,8 +347,14 @@ if ($SkipPack -and (Test-Path "$distDir\MorningBrief.exe")) {
     New-Item -ItemType Directory -Force -Path (Split-Path $pyiErrLog -Parent) | Out-Null
     Write-Host "  日志输出: build\pyinstaller.stderr.log" -ForegroundColor DarkGray
 
-    $pyiProc = Start-Process -FilePath $buildPyInstaller `
-        -ArgumentList @((Join-Path $repoRoot $specFile), '--noconfirm', '--distpath', 'release') `
+    # 必须用 `python -m PyInstaller` 而不是 Scripts\pyinstaller.exe：
+    # venv 的 console-script 入口（pip.exe/pyinstaller.exe 等）把解释器绝对路径
+    # 硬编码在 exe 尾部。若 .venv-build 是从别的目录/项目拷来的（本机实际发生过，
+    # shebang 指向已删除的 20_News 项目），启动器找不到 python 就直接 exit 1
+    # 且不打印任何内容——stdout/stderr 全空，只剩脚本抛出的一句打包失败，极难定位。
+    # -m 走当前 venv 的 python.exe，与入口路径无关，任何情况下都可靠。
+    $pyiProc = Start-Process -FilePath $buildPython `
+        -ArgumentList @('-m', 'PyInstaller', (Join-Path $repoRoot $specFile), '--noconfirm', '--distpath', 'release') `
         -WorkingDirectory $repoRoot -NoNewWindow -Wait -PassThru `
         -RedirectStandardOutput $pyiOutLog -RedirectStandardError $pyiErrLog
 

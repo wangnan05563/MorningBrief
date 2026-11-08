@@ -29,10 +29,12 @@ Set-Location $ProjectRoot
 
 # 发布前刷新构建元信息（git_sha / build_date / version），确保推送到仓库的
 # backend/app/_build_info.py 反映本次发布，而非长期未更新的过期默认值。
-# 生成器为纯标准库脚本，优先用 build venv 的 python，回退系统 python。
+# 生成器为纯标准库脚本：根 .venv（指向 backend\.venv 的 Junction）→ backend\.venv → 系统 python。
+# .venv-build 已不再长期保留，不能作为元信息生成的前置依赖。
 $buildInfoScript = "backend\build_info.py"
 if (Test-Path $buildInfoScript) {
-    $biPy = ".\.venv-build\Scripts\python.exe"
+    $biPy = ".\.venv\Scripts\python.exe"
+    if (-not (Test-Path $biPy)) { $biPy = "backend\.venv\Scripts\python.exe" }
     if (-not (Test-Path $biPy)) { $biPy = "python" }
     Write-Host "[0/6] 刷新构建元信息（_build_info.py）..." -ForegroundColor Yellow
     & $biPy $buildInfoScript

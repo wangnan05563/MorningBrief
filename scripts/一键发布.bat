@@ -50,16 +50,17 @@ echo   Version : %VER%
 REM ---------- 3) release notes ----------
 echo [3/4] Preparing release notes...
 set "NOTES=%CD%\release-notes-%VER%.md"
+set "AUTO_NOTES=%CD%\release-notes-%VER%.auto.md"
 if not exist "%NOTES%" (
-    set "NOTES=%CD%\release-notes-%VER%.auto.md"
+    set "NOTES=%AUTO_NOTES%"
     echo   notes missing, generating from git log...
     (
         echo # MorningBrief %VER%
         echo.
         echo Auto-generated release notes from git history. Replace with release-notes-%VER%.md for curated notes.
         echo.
-        git -C "%CD%" log --no-merges --oneline -20 2^>nul
-    ) > "%NOTES%"
+        git -C "%CD%" log --no-merges --oneline -20 2>nul
+    ) > "%AUTO_NOTES%"
 )
 echo   Notes   : %NOTES%
 

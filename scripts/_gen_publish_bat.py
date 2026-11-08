@@ -72,17 +72,22 @@ PUBLISH = [
     "",
     "REM ---------- 3) release notes ----------",
     "echo [3/4] Preparing release notes...",
+    # CMD expands %VAR% inside a (...) block when the block is parsed, so the
+    # redirect target must be set BEFORE the block; otherwise the generated notes
+    # land in the curated .md while publish is handed the .auto.md that never exists.
+    # 2>nul must stay unescaped: '2^>nul' is passed to git as a literal argument.
     "set \"NOTES=%CD%\\release-notes-%VER%.md\"",
+    "set \"AUTO_NOTES=%CD%\\release-notes-%VER%.auto.md\"",
     "if not exist \"%NOTES%\" (",
-    "    set \"NOTES=%CD%\\release-notes-%VER%.auto.md\"",
+    "    set \"NOTES=%AUTO_NOTES%\"",
     "    echo   notes missing, generating from git log...",
     "    (",
     "        echo # MorningBrief %VER%",
     "        echo.",
     "        echo Auto-generated release notes from git history. Replace with release-notes-%VER%.md for curated notes.",
     "        echo.",
-    "        git -C \"%CD%\" log --no-merges --oneline -20 2^>nul",
-    "    ) > \"%NOTES%\"",
+    "        git -C \"%CD%\" log --no-merges --oneline -20 2>nul",
+    "    ) > \"%AUTO_NOTES%\"",
     ")",
     "echo   Notes   : %NOTES%",
     "",

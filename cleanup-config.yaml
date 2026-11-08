@@ -20,9 +20,18 @@ workspace:
   # 日志目录（清理备份日志存放位置）
   logs_dir: "runtime/logs"
   # 前端目录名（用于检测前端调试产物，留空则跳过前端扫描）
-  frontend_dir: "frontend"
+  frontend_dir: "apps/admin-web"
   # 前端源码子目录（不算散落脚本）
   frontend_src_dir: "src"
+  # 递归扫描的 bounded 根（留空则按 script_exclude_dirs 的反集派生）
+  # 目的：避免从仓库根裸递归（全树扫描的耗时是限定根的数倍）
+  scan_roots:
+    - "backend/"
+    - "apps/"
+    - "scripts/"
+    - "tests/"
+    - "docs/"
+    - "runtime/"
 
 # ---------- 根目录允许清单 ----------
 # 只有同时满足"扩展名允许"和"文件名在白名单"两个条件之一，才能保留在根目录
@@ -54,6 +63,8 @@ root_allowlist:
     - ".env.example"
     - ".pre-commit-config.yaml"
     - "sonar-project.properties"
+    - "MorningBrief.spec"    # PyInstaller 构建定义（非产物）
+    - "installer.iss"        # Inno Setup 打包定义
 
   # 唯一允许保留在根目录的脚本（通常是快速启动入口）
   # 留空数组表示不允许任何脚本在根目录
@@ -91,8 +102,7 @@ garbage_patterns:
   # 按项目实际项目名调整，以下为常见示例
   redirect_artifacts:
     - "/0"
-    - "/<project_name>"
-    - "/<project_name>frontend"
+    - "/MorningBrief"
     - "/_r.json"
 
   # 异常命名后缀（如 test_result_*.txtcd 是错误输入）
@@ -103,6 +113,29 @@ garbage_patterns:
     - "*.txtcd"
     - "*.tmp_diff.txt"
     - "*.s3358_lines.txt"
+
+  # 操作系统垃圾
+  os_junk:
+    - "Thumbs.db"
+    - ".DS_Store"
+    - "Desktop.ini"
+
+  # 构建中间产物（可重建）
+  build_intermediates:
+    - "*.pyc"
+    - "*.pyo"
+    - "*.class"
+
+  # 覆盖率产物
+  coverage_artifacts:
+    - ".coverage"
+    - "coverage.xml"
+    - "coverage*.json"
+    - "htmlcov/"
+
+  # 缓存/构建输出目录内的保留子树（构建目录若内嵌运行时数据，必须排除）
+  # 本项目 build/ 为 PyInstaller 工作目录，不含数据；命中时由 Phase 4 扫描后再定
+  cache_dir_subtree_exclusions: {}
 
   # 测试输出散落根目录
   test_outputs:
@@ -237,11 +270,70 @@ review_categories:
 # 未命中再 grep 代码确认是否被解析器/静态伺服引用，未引用才是孤儿产物。
 preserve_roots:
   - "release/"             # 运行时交付根（含发布 exe 与安装包）
-  - "release/build/"       # 编译/交付产物根（本仓库 build/ 含交付物，显式保护）
   - "runtime/data/"        # 运行时数据（含 .db 用户数据 / 交付物）
-  - "node_modules/"        # 运行时依赖（不可删）
-  - "apps/admin-web/node_modules/"
+  - "backend/data/"        # 活动库 news.db、素材与备份根
+  - "backend/ffmpeg/"      # 音视频处理运行时二进制
+  - "backend/.venv/"       # 真实运行环境（根 .venv Junction 已断链，见变更记录）
+  - "apps/admin-web/node_modules/"   # 前端运行时依赖（不可删）
   - "apps/miniprogram/"    # 小程序源码 / 交付物
+  - "docs/"                # 文档与清理变更记录（被文档引用即承重墙）
+  - "tests/"               # 测试源码
+
+# ---------- 保护路径（glob 级精确豁免，优先级最高）----------
+preserve_paths:
+  dirs:
+    - "docs/standards/"
+    - "scripts/jmeter_test/full_api/jmx/"
+  files:
+    - "MorningBrief.spec"
+    - "installer.iss"
+    - "cleanup-config.yaml"
+  # 豁免同步写入 .gitignore 的取反例外，防止被目录级 ignore 规则吞掉
+  mirror_to_gitignore: true
+
+# ---------- 同名目录语义分叉探测 ----------
+# build/ 在 PyInstaller 下是可重建工作目录，在部分工具链下却是手写源码/资源目录；
+# 裸名不得直接写入 garbage_patterns，必须经本节探测。
+semantic_divergence:
+  enabled: true
+  ambiguous_names:
+    - "build"
+    - "dist"
+    - "out"
+    - "target"
+    - "release"
+    - "public"
+    - "static"
+    - "bin"
+    - "obj"
+  reference_sources:
+    extensions:
+      - ".py"
+      - ".ts"
+      - ".vue"
+      - ".json"
+      - ".yaml"
+      - ".yml"
+      - ".toml"
+      - ".ini"
+      - ".properties"
+      - ".md"
+      - ".ps1"
+      - ".bat"
+      - ".sh"
+    exclude_dirs:
+      - "node_modules/"
+      - ".git/"
+      - "backend/.venv/"
+      - ".cleanup-quarantine/"
+  diverge_signals:
+    - "referenced_by_manifest"
+    - "contains_handwritten_file"
+    - "contains_no_build_manifest"
+    - "has_vcs_tracked_members"
+    - "declared_output_dir_in_manifest"
+  on_ambiguous: "review"
+  report_findings: true
 
 # ---------- 模式推断配置 ----------
 # 当 garbage_patterns 未覆盖某些文件时，基于文件名特征自动推断
@@ -278,6 +370,116 @@ detection:
   # 推断模式是否自动加入 .gitignore（防止复发）
   auto_add_inferred_to_gitignore: true
 
+# ---------- 动作分档（三档模型）----------
+actions:
+  tiers:
+    delete:
+      description: "高置信、可重建、未被版本控制跟踪"
+      min_confidence: 0.8
+      method: "remove"
+      require_confirm: false
+    quarantine:
+      description: "中高风险或不可逆：源码类、疑似残留、软删除项"
+      min_confidence: 0.5
+      method: "move"
+      require_confirm: false
+    review:
+      description: "已跟踪 / 数据目录 / 依赖目录"
+      method: "report_only"
+      require_confirm: true
+  # 命中任一条件即强制归入 review，优先级高于 min_confidence
+  force_review_when:
+    - "git_tracked"
+    - "in_preserve_roots"
+    - "in_preserve_paths"
+    - "ambiguous_dir_name"
+    - "is_data_store"
+    - "declared_dependency_dir"
+    - "irreversibility_at_threshold"
+
+# ---------- 隔离区（移动而非删除）----------
+quarantine:
+  enabled: true
+  # 隔离区位于 workspace 内，移动不释放空间；报告须单列，不得与 delete 桶混算
+  dir: "runtime/.cleanup-quarantine"
+  retention_hours: 24
+  recent_file_max_age_hours: 24
+  write_manifest: true
+  write_restore_script: true
+  manifest_fields:
+    - "original_path"
+    - "size"
+    - "mtime"
+    - "sha256"
+    - "quarantined_at"
+    - "expires"
+  gitignore: true
+  gitignore_pattern: "/runtime/.cleanup-quarantine/"
+
+# ---------- 取证门槛（数据类目录删除前必须全部满足）----------
+evidence_gate:
+  enabled: true
+  applies_to_name_patterns:
+    - "data"
+    - "*db*"
+    - "*backup*"
+    - "*cache*"
+    - "*store*"
+  required_checks:
+    - "zero_code_reference"
+    - "content_inventory"
+    - "git_ignored"
+    - "explicit_user_confirm"
+  empty_row_threshold: 0
+  require_snapshot_archive: true
+  on_insufficient_evidence: "keep_and_report"
+  # 用户显式授权删除数据类文件时，仍须逐项断言：匹配授权模式且绝不碰活动存储
+  deletion_mandate:
+    require_explicit_authorization: true
+    guard_assertions: true
+    on_guard_failure: "abort_batch"
+    manifest_fields:
+      - "path"
+      - "size"
+      - "sha256"
+      - "action"
+      - "authorization_ref"
+    report_retention_gaps: true
+
+# ---------- 可恢复性评级（决定 delete 还是 quarantine）----------
+recovery:
+  enabled: true
+  irreversibility_factors:
+    - "not_vcs_tracked"
+    - "no_snapshot_available"
+    - "delete_bypasses_trash"
+  # 命中两项即无任何副本：强制 quarantine，不得直接删除
+  quarantine_if_factors_at_least: 2
+  search_ladder:
+    - "config_reference_scan"
+    - "vcs_full_history"
+    - "editor_snapshot_stores"
+    - "quarantine_and_backup_dirs"
+    - "trash_bin"
+    - "filesystem_wide_search"
+  snapshot_store_hints:
+    - "visualizations"
+    - "sessions"
+    - "backups_state"
+    - "thread_history"
+    - "memory"
+    - "cache"
+  snapshot_freshness_signals:
+    - "mtime_precedes_corruption"
+    - "size_ratio_consistent"
+    - "structural_consistency"
+  on_irrecoverable: "stop_and_report"
+  rebuild_fidelity_contract:
+    - "keys_verbatim"
+    - "functional_values_verbatim"
+    - "only_prose_rewritten"
+    - "mark_reconstructed"
+
 # ---------- 服务状态检测 ----------
 # 用于 Phase 3 影响评估：服务运行中可能持有文件句柄或持续产生日志
 service_indicators:
@@ -298,14 +500,32 @@ service_indicators:
   # 文件占用探测（这些文件被占用则视为服务运行，作为 PID 文件缺失的兜底）
   # 用于检测"无 PID 文件但服务实际运行"的场景
   file_occupancy_probes:
-    - "run.stdout.log"      # 服务持续写入的日志
-    - "run.stderr.log"
-    - "runtime/data/xianyu.db"      # SQLite 数据库（服务持有连接）
+    - "runtime/logs/service-error.log"   # 服务持续写入的日志
+    - "backend/data/news.db"             # SQLite 活动库（服务持有连接）
   # 进程名匹配模式（支持通配符，用于更精确的进程识别）
   process_name_patterns:
     - "python*"
     - "uvicorn*"
     - "node*"
+  # 命令行归属校验：同名进程可能是 IDE 语言服务器/其他项目，名称不足以证明归属
+  command_line_probe:
+    enabled: true
+    include_patterns:
+      - "MorningBrief"
+      - "backend/app"
+      - "uvicorn"
+    exclude_patterns:
+      - "vscode"
+      - "pylance"
+      - "language_server"
+    on_unavailable: "treat_as_unknown"
+  # 单文件静默证据：服务已停不等于该文件没有其他写入方
+  quiescence_evidence:
+    enabled: true
+    last_write_max_age_minutes: 30
+    ports_idle: true
+    require_exclusive_open: true
+    min_signals: 2
 
 # ---------- 稳定性检查配置 ----------
 # Phase 4 执行后，检测是否有后台进程持续创建文件
@@ -326,6 +546,154 @@ stability_check:
   # stop: 停止后续阶段，等待用户介入
   # soft_delete: 重命名复发文件为 .trash 后缀
   recurrence_action: "warn"
+  # 增量轮次的静默门槛（检测到活跃写入方时本轮只收割无冲突子集）
+  quiescence_threshold_minutes: 10
+  freshness_scan_roots: []
+  freshness_exclude_dirs:
+    - "node_modules"
+    - ".git"
+    - "backend/.venv"
+    - "venv"
+    - "__pycache__"
+    - "site-packages"
+  hold_queue_report: true
+
+# ---------- 体积统计 ----------
+# du -sh 在大目录上会数量级劣化；文件数超过阈值时改用 os.scandir
+sizing:
+  method: "python_scandir"
+  fallback_method: "du_sh"
+  scandir_threshold_files: 2000
+  timeout_seconds: 120
+  continue_on_timeout: true
+  # before/after 必须同一实现 + 同一排除清单，否则差值不可解释
+  exclude_dirs:
+    - "node_modules/"
+    - ".git/"
+    - "backend/.venv/"
+    - "runtime/.cleanup-quarantine/"
+
+# ---------- 能力探测与降级 ----------
+# 不假设任何外部能力可用；缺失即降级，绝不就地发明替代实现
+capability_probe:
+  enabled: true
+  probes:
+    - name: "size_measurement"
+      fallback: "python_scandir"
+    - name: "hash_tool"
+      fallback: "python_hashlib"
+    - name: "vcs_cli"
+      fallback: "manual_review"
+    - name: "glob_tool"
+      fallback: "python_glob"
+    - name: "external_build_tool"
+      fallback: "static_syntax_check"
+    - name: "package_manager"
+      fallback: "report_only"
+  on_missing: "report_and_degrade"
+  blocked_signals:
+    - "permission_denied_by_sandbox"
+    - "operation_not_permitted"
+    - "hook_intercepted"
+    - "process_killed_by_wall_clock"
+  degraded_verification:
+    enabled: true
+    methods:
+      - "syntax_check"
+      - "parse_check"
+      - "targeted_unit_run"
+      - "diff_against_baseline"
+    # 降级验证必须声明"未覆盖什么"，避免被误读为完整验证
+    must_declare_gaps: true
+
+# ---------- 被忽略目录审计（发现隐形积累）----------
+ignored_audit:
+  enabled: true
+  # 只报不删：审计结果不得直接驱动删除
+  report_only: true
+  stale_days: 30
+  runtime_evidence_patterns:
+    - "logs/*.log"
+    - "**/*.sqlite3"
+    - "**/*.db"
+  evidence_requirements:
+    - "zero_code_reference"
+    - "stale_beyond_days"
+    - "content_empty_or_default"
+  exclude_dirs:
+    - "node_modules/"
+    - "backend/.venv/"
+    - ".git/"
+
+# ---------- 诊断能力（默认只报告，不自动改）----------
+diagnostics:
+  reference_scan:
+    enabled: true
+    extensions:
+      - ".py"
+      - ".ts"
+      - ".vue"
+      - ".js"
+      - ".mjs"
+      - ".json"
+      - ".yaml"
+      - ".yml"
+      - ".toml"
+      - ".ps1"
+      - ".bat"
+      - ".md"
+    exclude_dirs:
+      - "node_modules/"
+      - "backend/.venv/"
+      - ".git/"
+      - "build/"
+      - "release/"
+    # 排除清理自身产出，否则日志里的路径会造成"命中自己"的假阳性
+    exclude_self_output: true
+    case_sensitive: false
+    background_after_seconds: 60
+    timeout_seconds: 1800
+  encoding_check:
+    enabled: true
+    extensions:
+      - ".md"
+      - ".yaml"
+      - ".yml"
+      - ".json"
+      - ".txt"
+    mojibake_markers:
+      - "閰"
+      - "宸"
+      - "绌"
+      - "鎬"
+      - "鍒"
+      - "鏂"
+      - "鐨"
+      - "涓"
+      - "鏄"
+      - "緇"
+      - "璺"
+    reverse_transform: "segment.encode('gbk').decode('utf-8')"
+    unrecoverable_when:
+      - "ascii_0x3f_present"
+      - "pua_codepoints_present"
+    report_only: true
+    require_byte_backup: true
+  config_drift_check:
+    enabled: true
+    checks:
+      - "changelog_path_exists"
+      - "file_existence_checks_present"
+      - "pid_files_parent_exists"
+      - "round_numbering_consistent"
+    on_drift: "report"
+    autofixable:
+      - "changelog_path_exists"
+  path_normalization:
+    enabled: true
+    normalize: "normcase_then_normpath"
+    resolve_relative_against: "workspace.root"
+    duplicate_policy: "item"
 
 # ---------- 审计（删前 hash 备份 + 分批切片） ----------
 audit:
@@ -333,6 +701,21 @@ audit:
   # 枚举出的待删目标落盘到此文件，供分批切片处理（避免单次海量删除被沙箱杀）
   targets_file: "runtime/logs/cleanup-targets.txt"
   slice_size: 200
+  # 目录需逐成员哈希，保证部分删除也可审计
+  hash_dir_members: true
+  # 可恢复对象全量哈希（隔离桶是唯一恢复依据）；可再生对象按体积分流
+  hash_policy:
+    quarantine: "full"
+    delete: "full_or_sampled"
+    full_max_bytes: 1048576
+    sample_bytes: 65536
+    workers: 8
+    sampled_prefix: "P:"
+    sampled_also_record:
+      - "size"
+      - "mtime"
+  # 破坏性动作前一刻重新核验清单事实，不沿用先前轮次的记录
+  reverify_at_execute: true
 
 # ---------- 执行时间窗口（受限调度器杀进程规避，参数化） ----------
 # 与 safety.max_files_per_call（删除计数上限）是两类不同问题：
@@ -344,6 +727,21 @@ execution:
   resume_targets_file: "runtime/logs/cleanup-targets.resume.txt"
   auto_background_when_overflow: true
   per_file_estimate_seconds: 0.02
+  # 删除后端：python_s 以 `python -S` 绕过 safe-delete 钩子（跨平台通用）
+  # 与 safety.bypass_hook_mode 对应，实际执行以本节为准
+  remove_method: "python_s"
+  # 校验时禁止写字节码，否则冒烟导入会重建 __pycache__
+  verify_without_bytecode: true
+  # 锁定文件不是 no-op：报告 / 重试 / 登记重启删除
+  locked_file_strategy: "report_then_schedule"
+  locked_file_retry: 3
+  locked_file_retry_delay_seconds: 2
+  schedule_delete_on_reboot: true
+  locked_fallback_soft_rename: true
+  # 存在性判断必须先于对象创建，否则目标会被判为"已存在"而整批跳过
+  assert_exists_before_create: true
+  assert_target_absent_on_move: true
+  file_write_backend: "tool"
 
 # ---------- 跨平台命令配置 ----------
 # 不同操作系统的命令变体，避免硬编码 PowerShell 语法
@@ -404,11 +802,11 @@ platform:
     linux: "kill -9 {pid}"
     macos: "kill -9 {pid}"
 
-  # venv python 路径
+  # venv python 路径（根 .venv Junction 已断链，指向真实运行环境）
   venv_python:
-    windows: ".venv/Scripts/python.exe"
-    linux: ".venv/bin/python"
-    macos: ".venv/bin/python"
+    windows: "backend/.venv/Scripts/python.exe"
+    linux: "backend/.venv/bin/python"
+    macos: "backend/.venv/bin/python"
 
   # —— 绕过 safe-delete 钩子的删除后端（safety.bypass_hook_mode 选用）——
   # 钩子会拦截 Remove-Item/rm/del 并重写为 fail-closed 回收站模式；
@@ -441,40 +839,110 @@ platform:
     linux: 'python3 -S -c "import shutil; shutil.rmtree(r"{path}")"'
     macos: 'python3 -S -c "import shutil; shutil.rmtree(r"{path}")"'
 
+# ---------- 报告配置 ----------
+report:
+  formats:
+    - "markdown"
+    - "json"
+  output_dir: "runtime/logs"
+  sections:
+    - "summary_before_after"
+    - "by_category"
+    - "by_directory"
+    - "disposition_buckets"
+    - "recovery_risk"
+    - "not_cleaned_risky"
+    - "dependency_analysis"
+    - "recurrence_prevention"
+    - "audit_trail"
+    - "verification"
+  require_reason_for_skipped: true
+  filename_template: "cleanup-report-{YYYYMMDD}"
+  # logical_bytes 与 disk_usage 必然不等，必须显式声明用了哪个
+  size_metric: "logical_bytes"
+  also_report_disk_usage: true
+  annotate_metric_delta: true
+  # 同一文件可能命中多条规则，按条目归类避免重复计数
+  group_by: "item"
+  dedup_by: "normalized_abs_path"
+
+# ---------- 依赖分析（仅报告，绝不自动删）----------
+dependency_check:
+  enabled: true
+  auto_remove: false
+  python:
+    manifest: "backend/requirements.txt"
+    scan_dirs:
+      - "backend/"
+    indirect_allowlist: []
+  frontend:
+    manifest: "apps/admin-web/package.json"
+    scan_dirs:
+      - "apps/admin-web/src/"
+    indirect_allowlist:
+      - "@types/*"
+      - "typescript"
+      - "jsdom"
+      - "vitest"
+      - "vite"
+      - "eslint"
+  report_when: "zero_references"
+  require_second_pass_review: true
+
 # ---------- 验证配置 ----------
 # Phase 5 用：清理后必须通过验证才能归档
 verification:
-  # Python 核心模块导入语句
+  # Python 核心模块导入语句（backend 需先注入 sys.path）
   python_imports:
-    - "import xianyu_hunter"
-    - "from xianyu_hunter import config, container"
+    - "import app.paths"
 
   # 完整验证命令（占位符 {venv_python} 自动替换）
-  command: "{venv_python} -c \"import xianyu_hunter; from xianyu_hunter import config, container\""
+  command: "{venv_python} -B -c \"import sys; sys.path.insert(0,'backend'); import app.paths\""
 
-  # venv python 路径（按操作系统区分，与 platform.venv_python 一致）
+  # venv python 路径：根 .venv Junction 指向已删除的 backend/.venv-build（断链），
+  # 真实运行环境为 backend/.venv
   venv_python:
-    windows: ".venv/Scripts/python.exe"
-    linux: ".venv/bin/python"
-    macos: ".venv/bin/python"
+    windows: "backend/.venv/Scripts/python.exe"
+    linux: "backend/.venv/bin/python"
+    macos: "backend/.venv/bin/python"
 
+  # 硬校验：清理后必须存在，缺失即 FAIL
+  file_existence_checks:
+    - "backend/app/main.py"
+    - "backend/app/paths.py"
+    - "backend/data/news.db"
+    - "backend/requirements.txt"
+  # 生成物校验：缺失属正常，仅提示不判 FAIL
+  optional_generated_checks:
+    - "build/"
+    - "release/"
   # 验证失败时的回滚建议（仅提示，不自动回滚）
   on_failure:
     - "检查 runtime/logs/cleanup-*.log 中的 hash 记录"
     - "从 git 历史恢复误删文件：git checkout HEAD -- <file>"
     - "重新生成缓存目录：pytest --cache-clear / sonar-scanner"
+  # 若项目定义了测试命令则启用（留空跳过）
+  test_command: ""
+  # 期望被忽略的清理类别（清理后 check-ignore 验证防复发）
+  ignore_rule_checks:
+    - "build/"
+    - ".venv-build/"
+    - "_validate/"
+    - "scripts/jmeter_test/full_api/results/"
 
 # ---------- 归档配置 ----------
 # Phase 6 用：清理动作记录到文档、规则写入 .gitignore
 archive:
-  changelog_path: "docs/standards/directory-structure.md"   # 变更记录
+  changelog_path: "docs/standards/directory-structure.md"   # 变更记录（已存在）
   gitignore_path: ".gitignore"                                # 拦截规则
-  precommit_path: ".pre-commit-config.yaml"                   # pre-commit 钩子
+  # 本项目未接入 pre-commit，也无 .gitattributes；置空避免每轮空操作
+  precommit_path: ""
+  gitattributes_path: ""
 
   # 是否自动追加到 .gitignore（推荐 true）
   auto_update_gitignore: true
-  # 是否自动更新 pre-commit 钩子（推荐 true）
-  auto_update_precommit: true
+  # 是否自动更新 pre-commit 钩子：precommit_path 为空时保持 false
+  auto_update_precommit: false
   # .gitignore 规则分组注释（按类别组织）
   gitignore_group_comments:
     - "# ---------- 清理技能自动生成规则 ----------"
