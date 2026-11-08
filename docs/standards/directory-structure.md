@@ -343,7 +343,7 @@
 ### 本轮踩坑（写入执行脚本注释，防复发）
 
 1. **清单为 CRLF 行尾** → Git Bash 下 `[ -e "$f" ]` 全部误报 MISSING（尾部 `\r` 粘进路径）。用 Python `splitlines()` + `strip()` 读清单，不要在 shell 里逐行判存在。
-2. **范围守卫大小写**：`full.lower().startswith(ALLOWED_PREFIXES)` 与含大写盘符/目录名（`D:\...20_News`）的常量比较 → 167 个全部 `OUT_OF_SCOPE`，删除静默跳过。**守卫常量必须同样 `.lower()`**。
+2. **范围守卫大小写**：`full.lower().startswith(ALLOWED_PREFIXES)` 与含大写盘符/目录名（`D:\...\MorningBrief`）的常量比较 → 167 个全部 `OUT_OF_SCOPE`，删除静默跳过。**守卫常量必须同样 `.lower()`**。
 3. 排空后的隔离区会留下空目录（`os.walk` topdown=False 剪枝 2 个，但嵌套更深的空目录在剪枝后才暴露）→ 需再手动 `RemoveDirectoryW` 一轮并复核 `islink()/isjunction()` 为 `False`。
 
 ### 后续建议（第二轮后更新）
@@ -389,3 +389,106 @@ loguru 的 retention 按**单文件 mtime** 清理。压测/批量导入等高�
 
 ~~`MAINTENANCE_LARGE_LOG_MB`（`config.py`）定义了但全项目无人使用——死配置，未擅自删除，待确认是否保留。~~
 **已清理（2026-10-04 上午）**：该键零引用，语义被 `LOG_FILE_MAX_MB`（单文件滚动）+ `LOG_DIR_MAX_MB`（目录总量兜底）完整覆盖，留着会让人误以为有两套日志阈值机制。已从 `config.py` 与 `backend/.env` 同时移除，并在原位留注释说明去向。
+
+---
+
+## 2026-10-31 工作空间清理（周期性维护 · 第四轮）
+
+### 背景
+
+距上一轮（2026-10-03）约四周，构建、压测、取证三类过程产物累积到 ~1 GB。本轮由用户显式授权清理范围，包含此前登记为 review 的不可恢复项。
+
+**结论：删除 34 个目标 / 约 1.03 GB，0 失败；根目录 10 → 9 个文件；服务未运行、活动库未锁，验证通过。**
+
+### 清理动作
+
+| 类别 | 目标 | 体积 | 依据 |
+|---|---|---|---|
+| 缓存/日志 | `jmeter.log`、`.scannerwork/`、`backend/.pytest_cache/`、`test-results/`、`scripts/jmeter_test/__pycache__/`、`backend/hls/`（空目录） | ≈ 0.3 MB | 配置 `cache_dirs` / `runtime_logs` 明确命中，可重生 |
+| 旧运行日志 | `backend/logs/` 10-21~10-27 共 6 份；`runtime/logs/pytest_full_*.log` 4 份 | ≈ 2.5 MB | 过程日志；保留 10-28/29/30 与 cleanup 审计日志 |
+| 构建工作目录 | `build/` | 57.0 MB | PyInstaller `--workpath` 中间产物，交付物在 `release/`，下次打包自动重建 |
+| 压测产物 | `full_api/{results,sandbox,runtime}`、`results_S0/S1/S2`、`temp`、gate/token 产物 | ≈ 402.9 MB | 每轮覆盖生成；`full_api/jmx/` 与 `.py/.json` 脚本全部保留 |
+| 构建虚拟环境 | `.venv-build/`、`backend/.venv-build/` | 435.0 MB | 构建专用 venv，`backend/.venv`（运行环境）保留 |
+| 取证目录 | `_validate/` | 39.9 MB / 1738 文件 | 用户显式授权删除（无 git 副本，不可恢复） |
+| 数据库备份 | `backend/data/backup/`（2 份）、`news.db.bak-t01925*` | 89.9 MB | 用户显式授权删除；活动库 `news.db` 及其 `-shm/-wal` 保留 |
+
+- **删前指纹审计**：`runtime/logs/cleanup-targets-20261031-151326.json`（目录用 `manifest_sha1` + 抽样 SHA256，文件用全量 SHA256）
+- **执行结果**：`runtime/logs/cleanup-result-20261031-151326.json`（34 删除 / 4 目标本就不存在 / `freed_bytes` 与目录实测差值一致）
+- **删除方式**：Python `os.remove` / `shutil.rmtree`，脚本内置禁区断言（`runtime/data`、`release`、`backend/.venv`、`backend/data/{bgm,avatars,channel_assets}`、活动库文件名）
+
+### 验证结果
+
+- 降级验证（配置 `verification.command` 仍指向 `xianyu_hunter`，不可用）：`backend/app/main.py` 编译通过 + `app.paths` 导入 OK
+- 保留项逐一存在：`backend/data/news.db`、`runtime/data/`、`release/`、`backend/{ffmpeg,.venv}`、`apps/miniprogram`、`scripts/jmeter_test/full_api/jmx/`
+- 数字自洽：`backend` 865.7 → 541.9 MB（差额 = venv-build 231.2 + 备份 89.9 + 旧日志 2.5）；`scripts` 406.6 → 3.7 MB；根文件 10 → 9
+- `.gitignore` 覆盖复核：13 个清理路径 `git check-ignore -q` 全部 exit=0，无需新增规则
+- 未触碰 `git` 工作区已有的 33 个修改文件（外来 WIP）
+
+### 本轮配置漂移（未擅自修改）
+
+1. `verification` 仍引用示例包 `xianyu_hunter`
+2. `preserve_roots` 写 `release/build/`，实际构建目录为根 `build/`
+3. `frontend_dir: frontend` 不存在（实际 `apps/admin-web`）
+4. `file_occupancy_probes` 引用不存在的 `runtime/data/xianyu.db`（实际 `backend/data/news.db`）
+5. `archive.precommit_path` 指向的 `.pre-commit-config.yaml` 缺失
+6. `garbage_patterns` 中 `/<project_name>`、`/0` 等示例占位符未适配
+7. 配置缺少 `quarantine` / `evidence_gate` / `recovery` / `report` 等 12 个 section，本轮按 fallback 全部降级为 review 并交用户决策
+
+### 后续建议
+
+1. **配置适配**：按上述漂移清单更新 `cleanup-config.yaml`（尤其是 `verification` 与 `preserve_roots`），否则每轮都需降级验证
+2. **备份轮转**：`backend/data/backup/` 已清空，`backup_service` 会重新生成；建议确认 3 天/7 份上限仍在生效
+3. **压测产物治理**：`full_api/results` 单轮可达 340 MB，建议 `run_suite.py` 跑完即归档或加保留份数
+4. **周期性维护**：建议每月或每个里程碑后运行一次 workspace-cleanup
+
+---
+
+## 2026-10-31 cleanup-config.yaml 配置漂移修复
+
+### 背景
+
+上一轮清理（同日第四轮）记录了 7 项配置漂移。本轮按 workspace-cleanup skill 的 28-section schema 对齐修复，不改动任何项目代码。
+
+### 修复项
+
+| 漂移 | 修复前 | 修复后 |
+|---|---|---|
+| 验证命令 | 引用 `xianyu_hunter`（其他项目） | `sys.path.insert(0,'backend'); import app.paths` |
+| venv 路径 | `.venv/Scripts/python.exe`（Junction 断链） | `backend/.venv/Scripts/python.exe`（真实运行环境） |
+| 前端目录 | `frontend`（不存在） | `apps/admin-web` |
+| 构建目录保护 | `release/build/`（不存在） | 移除；`build/` 交给 `semantic_divergence` 探测，按过程产物走 review |
+| 数据占用探测 | `runtime/data/xianyu.db` | `backend/data/news.db` |
+| 根白名单 | 缺 `.spec` / `.iss` | 补 `MorningBrief.spec`、`installer.iss` |
+| 占位符 | `/<project_name>`、`/<project_name>frontend` | 替换为 `/MorningBrief` |
+| pre-commit | 指向缺失文件且 `auto_update_precommit: true` | 路径置空 + `false` |
+| `.gitattributes` | 未声明 | 显式置空 |
+
+### 补齐的 schema section（12 个）
+
+`preserve_paths`、`semantic_divergence`、`actions`、`quarantine`、`evidence_gate`、`recovery`、`ignored_audit`、`diagnostics`、`sizing`、`capability_probe`、`report`、`dependency_check`
+
+同时补齐：`garbage_patterns` 的 `os_junk`/`build_intermediates`/`coverage_artifacts`/`cache_dir_subtree_exclusions`，`service_indicators.command_line_probe`/`quiescence_evidence`，`audit.hash_policy`/`reverify_at_execute`，`execution` 的锁定文件与幂等操作键。
+
+### 附带修复
+
+根 `.venv` 原是指向 `backend/.venv-build` 的 Junction，后者在第四轮清理中被删除 → 断链使 `scripts/start.ps1` 找不到 venv。已重建 Junction 指向 `backend/.venv`（真实运行环境）。
+
+### 验证
+
+- YAML 解析 OK；28 个标准 section 齐全 + 1 个项目自定义 `review_categories`
+- 41 项路径存在性检查全部通过
+- 配置的验证命令实跑：`backend/.venv -B -c "import sys; sys.path.insert(0,'backend'); import app.paths"` → `VERIFY OK`
+
+### 脚本依赖修复（同日）
+
+| 脚本 | 修复前 | 修复后 |
+|---|---|---|
+| `scripts/push_to_github.ps1` | 元信息生成硬编码 `.\.venv-build\Scripts\python.exe`，缺失时直接回退系统 python | 回退链：根 `.venv`（Junction）→ `backend\.venv` → 系统 python |
+| `scripts/build-exe.ps1` | 基础解释器只查 uv / py -3.12，均缺失时回退 3.14（依赖不兼容）；新建 venv 后又被健康检查判定"缺标记"而重复重建 | 新增 `backend\.venv`（3.12）作为基础解释器候选；首次新建后跳过重复健康检查 |
+
+构建 venv 仍为 `.venv-build`（隔离 PyInstaller 依赖），首次构建按需创建并联网安装；不再存在"必须预先存在"的隐式前置。
+
+### 遗留
+
+1. `safety.bypass_hook_mode: ctypes` 与 `execution.remove_method: python_s` 并存；执行以 `execution` 为准，旧键保留兼容
+2. 构建脚本依赖联网（首次或 `-Clean` 后需重新安装 requirements + PyInstaller）

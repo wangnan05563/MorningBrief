@@ -11,7 +11,7 @@ from docx import Document
 HERE = Path(__file__).resolve().parent
 DOCX = HERE / "MorningBrief-产品介绍.docx"
 SRC = HERE / "MorningBrief-产品介绍.md"
-FACTS = Path("D:/code/otherProjects/20_News/_validate/news2/T03641_facts.md")
+FACTS = HERE.parent.parent / "_validate" / "news2" / "T03641_facts.md"
 OUT = HERE / "verify_report.txt"
 WANT_PH = 3
 
