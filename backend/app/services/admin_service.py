@@ -18,10 +18,11 @@ from app.models.admin_user import AdminRole
 from app.services.blacklist_service import add_to_blacklist
 
 # 账号名口径与参考实现一致：3-32 位字母/数字/下划线
-ADMIN_USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{3,32}$")
+ADMIN_USERNAME_PATTERN = re.compile(r"^\w{3,32}$", re.ASCII)
 # bcrypt 只取前 72 字节，超长口令会静默截断；上限按参考实现定在 64
 MAX_ADMIN_PASSWORD_LEN = 64
 _ADMIN_ROLES = {r.value for r in AdminRole}
+_MSG_KEEP_ONE_ACTIVE_ADMIN = "至少保留一个启用状态的管理员"
 
 
 class AdminService:
@@ -200,34 +201,14 @@ class AdminService:
         admin = await self._get_admin(admin_id)
 
         if role is not None:
-            if role not in _ADMIN_ROLES:
-                raise BizError(code=400, message="角色仅支持管理员或运营")
-            if admin.id == actor_id and role != admin.role:
-                raise BizError(code=400, message="不能修改自己的角色")
-            if (
-                admin.role == AdminRole.admin.value
-                and role != AdminRole.admin.value
-                and admin.status == 1
-                and await self._other_active_admins(admin.id) == 0
-            ):
-                raise BizError(code=400, message="至少保留一个启用状态的管理员")
+            await self._assert_role_changeable(admin, actor_id, role)
             admin.role = role
 
         if nickname is not None:
             admin.nickname = nickname.strip() or None
 
         if status is not None:
-            if status not in (0, 1):
-                raise BizError(code=400, message="状态仅支持 0 / 1")
-            if status == 0 and admin.id == actor_id:
-                raise BizError(code=400, message="不能禁用当前登录的账号")
-            if (
-                status == 0
-                and admin.role == AdminRole.admin.value
-                and admin.status == 1
-                and await self._other_active_admins(admin.id) == 0
-            ):
-                raise BizError(code=400, message="至少保留一个启用状态的管理员")
+            await self._assert_status_changeable(admin, actor_id, status)
             admin.status = status
 
         if password is not None:
@@ -243,6 +224,34 @@ class AdminService:
         await self.db.refresh(admin)
         return admin
 
+    async def _assert_role_changeable(self, admin: AdminUser, actor_id: int, role: str) -> None:
+        """校验角色变更：枚举合法、不得改自己、不得降掉最后一个启用管理员。"""
+        if role not in _ADMIN_ROLES:
+            raise BizError(code=400, message="角色仅支持管理员或运营")
+        if admin.id == actor_id and role != admin.role:
+            raise BizError(code=400, message="不能修改自己的角色")
+        if (
+            admin.role == AdminRole.admin.value
+            and role != AdminRole.admin.value
+            and admin.status == 1
+            and await self._other_active_admins(admin.id) == 0
+        ):
+            raise BizError(code=400, message=_MSG_KEEP_ONE_ACTIVE_ADMIN)
+
+    async def _assert_status_changeable(self, admin: AdminUser, actor_id: int, status: int) -> None:
+        """校验启停变更：枚举合法、不得禁用自己、禁用不得只剩零个启用管理员。"""
+        if status not in (0, 1):
+            raise BizError(code=400, message="状态仅支持 0 / 1")
+        if status == 0 and admin.id == actor_id:
+            raise BizError(code=400, message="不能禁用当前登录的账号")
+        if (
+            status == 0
+            and admin.role == AdminRole.admin.value
+            and admin.status == 1
+            and await self._other_active_admins(admin.id) == 0
+        ):
+            raise BizError(code=400, message=_MSG_KEEP_ONE_ACTIVE_ADMIN)
+
     async def delete_admin(self, *, actor_id: int, admin_id: int) -> AdminUser:
         admin = await self._get_admin(admin_id)
         if admin.id == actor_id:
@@ -252,7 +261,7 @@ class AdminService:
             and admin.status == 1
             and await self._other_active_admins(admin.id) == 0
         ):
-            raise BizError(code=400, message="至少保留一个启用状态的管理员")
+            raise BizError(code=400, message=_MSG_KEEP_ONE_ACTIVE_ADMIN)
 
         await self.db.delete(admin)
         await self.db.commit()

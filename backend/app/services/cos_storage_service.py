@@ -173,7 +173,7 @@ def _snapshot_is_of(stored: str, name: str, siblings: set[str]) -> bool:
 
 
 def backup_keep_count() -> int:
-    """当前快照保留份数（0 = 不备份）。配置表存的是字符串也要能读。"""
+    """当前快照保留份数（0 表示不备份）。配置表存的是字符串也要能读。"""
     raw = getattr(get_settings(), "COS_BACKUP_KEEP_COUNT", _DEFAULT_BACKUP_KEEP_COUNT)
     try:
         return max(int(raw), 0)
@@ -252,8 +252,7 @@ class CosStorageService:
                     "size": int(item.get("Size", 0) or 0),
                     "last_modified": _normalize_last_modified(item.get("LastModified")),
                     "content_type": item.get("ContentType") or "",
-                    # T02609：快照对象在列表里要能被认出来，否则「旧版本」与「现役文件」
-                    # 长得一样，误删就是永久丢失。
+                    # T02609：快照对象在列表里要能被认出来，否则「旧版本」与「现役文件」长得一样，误删就是永久丢失。
                     "is_snapshot": is_snapshot_key(key),
                 })
 
@@ -718,6 +717,28 @@ class CosStorageService:
 
     # ---- 内部工具 ----
 
+    @staticmethod
+    def _page_subdirs(resp: dict, prefix: str) -> list[str]:
+        """当页 CommonPrefixes 中除自身外的子目录前缀。"""
+        return [
+            cp.get("Prefix", "")
+            for cp in (resp.get("CommonPrefixes") or [])
+            if cp.get("Prefix", "") and cp.get("Prefix", "") != prefix
+        ]
+
+    @staticmethod
+    def _page_contents(resp: dict) -> list[dict]:
+        """当页 Contents 条目。"""
+        return resp.get("Contents") or []
+
+    @staticmethod
+    def _page_next_marker(resp: dict) -> str:
+        """下一页游标：优先 NextMarker，缺失时取当页最后一个 Key。"""
+        next_marker = resp.get("NextMarker") or (
+            (resp.get("Contents") or [{}])[-1].get("Key") or ""
+        )
+        return next_marker
+
     async def _list_direct(self, prefix: str) -> tuple[list[str], list[dict]]:
         """单层列举：返回 (子目录前缀列表, 当前层直接文件条目)。
 
@@ -731,21 +752,16 @@ class CosStorageService:
             resp = await _cos_call(cos_client.list_objects_delimited(
                 prefix=prefix, delimiter="/", marker=marker, max_keys=_LIST_PAGE_SIZE
             ))
-            for cp in resp.get("CommonPrefixes") or []:
-                sub = cp.get("Prefix", "")
-                if sub and sub != prefix:
-                    subdirs.append(sub)
-            for item in resp.get("Contents") or []:
-                if item.get("Key") and item.get("Key") != prefix:
-                    items.append(item)
+            subdirs.extend(self._page_subdirs(resp, prefix))
+            items.extend(
+                item for item in self._page_contents(resp)
+                if item.get("Key") and item.get("Key") != prefix
+            )
             if not resp.get("IsTruncated"):
                 break
-            next_marker = resp.get("NextMarker") or (
-                (resp.get("Contents") or [{}])[-1].get("Key") or ""
-            )
-            if not next_marker:
+            marker = self._page_next_marker(resp)
+            if not marker:
                 break
-            marker = next_marker
         return subdirs, items
 
     async def _list_snapshots(self, key: str) -> list[dict]:

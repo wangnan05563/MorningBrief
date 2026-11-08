@@ -32,7 +32,7 @@ _BACKUP_NAME_PATTERN = re.compile(r"^news_backup_(\d{8})_(\d{6})\.db$")
 # 预备份（恢复/维护前的手工快照）命名模式：news_pre_<场景>_YYYY-MM-DD.db
 # 这类文件由人工或运维脚本创建，不参与日常轮转，但同样会占满磁盘，
 # 因此纳入清理范围（保留窗口比常规备份更短，见 _DEFAULT_KEEP_PRE_BACKUP_DAYS）。
-_PRE_BACKUP_NAME_PATTERN = re.compile(r"^news_pre_[A-Za-z0-9_]+_(\d{4})-(\d{2})-(\d{2})\.db$")
+_PRE_BACKUP_NAME_PATTERN = re.compile(r"^news_pre_\w+_(\d{4})-(\d{2})-(\d{2})\.db$", re.ASCII)
 
 # 备份文件保留天数（与 MAINTENANCE_DEDUP_RETAIN_DAYS 等保持一致的 7 天窗口）
 _DEFAULT_KEEP_DAYS = 7
@@ -150,30 +150,14 @@ class BackupService:
         keep_candidates: list[tuple[str, Path]] = []  # (YYYYMMDD, path) 供份数上限判定
 
         for entry in entries:
-            match = _BACKUP_NAME_PATTERN.match(entry.name)
-            if match:
-                backup_date_str = match.group(1)
-                if backup_date_str < cutoff_str:
-                    await BackupService._remove_backup(entry)
-                    deleted += 1
-                else:
-                    keep_candidates.append((backup_date_str, entry))
-                continue
-
-            pre_match = _PRE_BACKUP_NAME_PATTERN.match(entry.name)
-            if pre_match:
-                try:
-                    snapshot_date = datetime(
-                        int(pre_match.group(1)), int(pre_match.group(2)), int(pre_match.group(3))
-                    )
-                except ValueError:
-                    continue  # 日期非法：不动它，交人工判断
-                if snapshot_date < pre_cutoff:
-                    await BackupService._remove_backup(entry)
-                    deleted += 1
-                continue
-
-            # 未匹配任何命名模式：人工文件，不自动删
+            action, backup_date_str = BackupService._classify_backup(
+                entry, cutoff_str, pre_cutoff,
+            )
+            if action == "keep":
+                keep_candidates.append((backup_date_str, entry))
+            elif action == "delete":
+                await BackupService._remove_backup(entry)
+                deleted += 1
 
         # 份数上限：窗口内的常规备份超出 max_files 时，删最旧的
         if len(keep_candidates) > max_files:
@@ -190,6 +174,31 @@ class BackupService:
             logger.info("备份清理完成，共删除 %d 个文件（保留窗口 %d 天 / 最多 %d 份）",
                         deleted, keep_days, max_files)
         return deleted
+
+    @staticmethod
+    def _classify_backup(
+        entry: Path, cutoff_str: str, pre_cutoff: datetime,
+    ) -> tuple[str, str]:
+        """判定单个文件该删、该留还是不该管。
+
+        返回 (动作, 常规备份日期串)：动作 delete=过期该删；keep=窗口内常规备份
+        （日期串参与份数上限判定）；none=不管（人工文件或日期非法，交人工判断）。
+        """
+        match = _BACKUP_NAME_PATTERN.match(entry.name)
+        if match:
+            backup_date_str = match.group(1)
+            return ("delete", "") if backup_date_str < cutoff_str else ("keep", backup_date_str)
+
+        pre_match = _PRE_BACKUP_NAME_PATTERN.match(entry.name)
+        if not pre_match:
+            return "none", ""
+        try:
+            snapshot_date = datetime(
+                int(pre_match.group(1)), int(pre_match.group(2)), int(pre_match.group(3))
+            )
+        except ValueError:
+            return "none", ""
+        return ("delete", "") if snapshot_date < pre_cutoff else ("none", "")
 
     @staticmethod
     async def _remove_backup(entry: Path) -> None:

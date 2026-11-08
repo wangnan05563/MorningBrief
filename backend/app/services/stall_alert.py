@@ -223,6 +223,31 @@ def _build_payload(
     return payload
 
 
+def _alert_title(report) -> str:
+    """按停摆/鉴权两类异常组合出告警标题。"""
+    if report.stalled and report.has_auth_error:
+        return "【MorningBrief】流水线停摆 + LLM 余额异常"
+    if report.has_auth_error:
+        return "【MorningBrief】LLM 余额/鉴权异常"
+    if report.stalled:
+        return "【MorningBrief】流水线停摆告警"
+    return "【MorningBrief】流水线停摆/余额告警"
+
+
+def _send_status(result: dict) -> tuple[str, str]:
+    """把 hub 发送结果折算成 (status, 可读错误)。"""
+    if result.get("total", 0) == 0:
+        return "failed", (
+            "未配置任何通知渠道（全部渠道凭证缺失或形态非法，"
+            "请在管理端通知设置填写真实 webhook）"
+        )
+    if result.get("suppressed", 0) > 0:
+        return "suppressed", "免打扰时段静默（critical 不应被静默，疑似异常）"
+    if result.get("success", 0) > 0:
+        return "success", ""
+    return "failed", "所有渠道发送失败"
+
+
 async def check_and_alert(
     session: Optional[AsyncSession] = None,
     *,
@@ -279,13 +304,7 @@ async def check_and_alert(
                 "failed_today": failed_today,
             }
 
-        title = "【MorningBrief】流水线停摆/余额告警"
-        if report.stalled and report.has_auth_error:
-            title = "【MorningBrief】流水线停摆 + LLM 余额异常"
-        elif report.has_auth_error:
-            title = "【MorningBrief】LLM 余额/鉴权异常"
-        elif report.stalled:
-            title = "【MorningBrief】流水线停摆告警"
+        title = _alert_title(report)
 
         event = NotificationEvent(
             title=title,
@@ -299,19 +318,7 @@ async def check_and_alert(
         from app.services.notifier.hub import get_notifier_hub
 
         result = await get_notifier_hub().send(event)
-        success = result.get("success", 0) > 0
-        suppressed = result.get("suppressed", 0) > 0
-        if result.get("total", 0) == 0:
-            status, err = "failed", (
-                "未配置任何通知渠道（全部渠道凭证缺失或形态非法，"
-                "请在管理端通知设置填写真实 webhook）"
-            )
-        elif suppressed:
-            status, err = "suppressed", "免打扰时段静默（critical 不应被静默，疑似异常）"
-        elif success:
-            status, err = "success", ""
-        else:
-            status, err = "failed", "所有渠道发送失败"
+        status, err = _send_status(result)
 
         channel_results = [
             {

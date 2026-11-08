@@ -11,6 +11,7 @@
 不触碰 SQLite、调度器、隧道子进程与通知通道。
 """
 import asyncio
+import inspect
 import threading
 
 import pytest
@@ -115,11 +116,27 @@ def calls(monkeypatch):
 
         return _fn
 
+    def _noop_like(name: str, target):
+        """替身沿用被替换函数的调用约定：协程函数配 await，普通函数直接调用。
+
+        迁移函数是同步的（内部只跑阻塞的 sqlite3），若一律替换成协程替身，
+        lifespan 调用后拿到一个从未 await 的协程，调用形状与告警都不真实。
+        """
+        if inspect.iscoroutinefunction(target):
+            return _async_noop(name)
+
+        def _sync_fn(*args, **kwargs):
+            c.hit(name)
+
+        return _sync_fn
+
     # 建表 / 迁移 / seed：app.main 里的模块级私有函数（按前缀枚举，新增迁移自动覆盖）
     monkeypatch.setattr(main_module, "_init_sqlite_schema", _async_noop("_init_sqlite_schema"))
     for attr in dir(main_module):
         if attr.startswith(_GATED_PREFIXES):
-            monkeypatch.setattr(main_module, attr, _async_noop(attr))
+            monkeypatch.setattr(
+                main_module, attr, _noop_like(attr, getattr(main_module, attr))
+            )
 
     # 日志初始化会重排 loguru sink，测试里不需要真实日志文件
     monkeypatch.setattr(main_module, "setup_logging", lambda *a, **k: c.hit("setup_logging"))

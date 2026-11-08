@@ -252,16 +252,16 @@ async def trigger_all_workflows(
     results = await asyncio.gather(*[_trigger_one(ch) for ch in channels])
 
     triggered, skipped, failed = [], [], []
-    for status, ch, reason, wf_id in results:
+    for status, ch, ch_reason, wf_id in results:
         item = {"channel_id": ch.id, "channel_name": ch.name}
         if status == "triggered":
             item["workflow_id"] = wf_id
             triggered.append(item)
         elif status == "skipped":
-            item["reason"] = reason
+            item["reason"] = ch_reason
             skipped.append(item)
         else:
-            item["error"] = reason
+            item["error"] = ch_reason
             failed.append(item)
 
     # 审计日志双写：AuditLog 表持久化便于后续查询统计，loguru 文件日志便于实时排查

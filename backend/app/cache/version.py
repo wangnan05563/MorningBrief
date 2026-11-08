@@ -37,7 +37,7 @@ def _parse(raw: Optional[str]) -> int:
         return 0
     try:
         return int(json.loads(raw))
-    except (json.JSONDecodeError, TypeError, ValueError):
+    except (TypeError, ValueError):
         # 脏值不能让读路径炸掉，也不能悄悄当 0（那会和「没人写过」撞键）——退回 0 但键仍可读
         return 0
 

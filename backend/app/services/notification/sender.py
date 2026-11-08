@@ -31,6 +31,9 @@ logger = logging.getLogger(__name__)
 # 模块级单例，跨请求共享，避免短期内重复发送
 _dedup_cache: TTLCache = TTLCache(maxsize=1000, ttl=300)
 
+# 测试通知的标题：发送内容与落库日志共用同一文案
+_TEST_NOTIFICATION_TITLE = "🔔 通知测试"
+
 # 事件类型 → actionCard 按钮配置（action_title/action_url_key）
 # action_url_key 指向 context 中的 URL 字段，决定按钮跳转目标
 _EVENT_ACTION_MAP: dict[str, dict[str, str]] = {
@@ -256,7 +259,7 @@ class NotificationSender:
                 await log_svc.create_log(
                     event_type="test",
                     channel="multi",
-                    title="🔔 通知测试",
+                    title=_TEST_NOTIFICATION_TITLE,
                     status="failed",
                     error=msg,
                     payload={
@@ -272,7 +275,7 @@ class NotificationSender:
                 return {"success": False, "message": msg, "results": [], "skipped": skipped}
 
             event = NotificationEvent(
-                title="🔔 通知测试",
+                title=_TEST_NOTIFICATION_TITLE,
                 message=(
                     "# 🔔 通知测试\n\n"
                     "这是一条来自 MorningBrief 的测试通知。\n\n"
@@ -313,7 +316,7 @@ class NotificationSender:
             await log_svc.create_log(
                 event_type="test",
                 channel="multi",
-                title="🔔 通知测试",
+                title=_TEST_NOTIFICATION_TITLE,
                 status=status,
                 error=error_msg,
                 payload={

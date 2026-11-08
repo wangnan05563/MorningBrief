@@ -988,6 +988,88 @@ class WorkflowScheduler:
             wf = await session.get(Workflow, workflow_id)
             return wf.channel_id if wf else None
 
+    async def _execute_pipeline_steps(
+        self, workflow_id: str, completed_steps, context: dict
+    ) -> None:
+        """按 1→6 顺序执行各步骤；断点续跑时跳过已成功的步骤。"""
+        # 步骤 1：爬虫（签名 run(workflow_id, date_str, channel_id)）
+        # channel_id 用于频道级数据源隔离：按频道 rss_sources 白名单过滤源、
+        # 按 keywords 过滤标题、入库写入 channel_id 供 rewriter 按频道选题
+        if WorkflowStepName.crawl not in completed_steps:
+            await self._run_step(
+                workflow_id, WorkflowStepName.crawl, 1,
+                lambda ctx: crawler_mod.run(
+                    ctx["workflow_id"], ctx["date_str"], ctx.get("channel_id"),
+                ),
+                context,
+            )
+
+        # 步骤 2：LLM 改写（签名 rewrite(workflow_id, date_str, channel_id)）
+        if WorkflowStepName.rewrite not in completed_steps:
+            await self._run_step(
+                workflow_id, WorkflowStepName.rewrite, 2,
+                lambda ctx: llm_mod.rewrite(ctx["workflow_id"], ctx["date_str"], ctx.get("channel_id")),
+                context,
+            )
+        # 步骤 2.5：微信内容安全检测（不作为独立步骤，结果合并到 rewrite 步骤 result）
+        # 放在此处而非 _run_step 内，是为了保持原步骤重试逻辑不变，同时确保只在
+        # rewrite 首次成功执行后才检测（断点续跑场景 completed_steps 含 rewrite 时跳过）
+        if WorkflowStepName.rewrite not in completed_steps:
+            await self._run_content_security_check(workflow_id, context)
+
+        # 步骤 3：LLM 语义级质量审核（T01712 P1 只告警不回退）
+        # 包装而非直接传 lambda：需要在步骤成功后根据 result 发实时告警事件，
+        # _run_step 对结果内容不感知（与 _tts_fn 同理的闭包包装模式）
+        if WorkflowStepName.quality_check not in completed_steps:
+            async def _quality_check_fn(ctx):
+                qc_result = await quality_check_service.run_quality_check(
+                    ctx["workflow_id"], ctx["script_id"],
+                )
+                qc = qc_result.get("quality_check") or {}
+                # 只告警不回退：有 issue 即发事件（前端 SSE 实时提示），tts 照常执行
+                if qc.get("issue_count"):
+                    self._publish_event("workflow.quality_check.issues", {
+                        "workflow_id": ctx["workflow_id"],
+                        "passed": qc.get("passed"),
+                        "issue_count": qc.get("issue_count"),
+                        "alert_count": qc.get("alert_count"),
+                    })
+                return qc_result
+
+            await self._run_step(
+                workflow_id, WorkflowStepName.quality_check, 3,
+                _quality_check_fn, context,
+            )
+
+        # 步骤 4：TTS（签名 synthesize(workflow_id, script_id)）
+        if WorkflowStepName.tts not in completed_steps:
+            async def _tts_fn(ctx):
+                return await tts_mod.synthesize(ctx["workflow_id"], ctx["script_id"])
+
+            await self._run_step(
+                workflow_id, WorkflowStepName.tts, 4, _tts_fn, context,
+            )
+
+        # 步骤 5：拼接（签名 concat(workflow_id, episode_date, audio_segments, channel_id)）
+        # channel_id 用于生成频道级 COS key，避免同日多频道产物互相覆盖
+        if WorkflowStepName.stitch not in completed_steps:
+            async def _stitch_fn(ctx):
+                return await stitch_mod.concat(
+                    ctx["workflow_id"], ctx["episode_date"],
+                    ctx["audio_segments"], ctx.get("channel_id"),
+                )
+
+            await self._run_step(
+                workflow_id, WorkflowStepName.stitch, 5, _stitch_fn, context,
+            )
+
+        # 步骤 6：创建审核记录（内置方法）
+        if WorkflowStepName.review not in completed_steps:
+            await self._run_step(
+                workflow_id, WorkflowStepName.review, 6,
+                self._create_review, context,
+            )
+
     async def _run_workflow(self, workflow_id: str, episode_date: date) -> None:
         """串行执行 7 个步骤（LLD 5.1.2）。
 
@@ -1015,83 +1097,7 @@ class WorkflowScheduler:
             completed_steps, resumed_context = await self._load_completed_step_context(workflow_id)
             context.update(resumed_context)
 
-            # 步骤 1：爬虫（签名 run(workflow_id, date_str, channel_id)）
-            # channel_id 用于频道级数据源隔离：按频道 rss_sources 白名单过滤源、
-            # 按 keywords 过滤标题、入库写入 channel_id 供 rewriter 按频道选题
-            if WorkflowStepName.crawl not in completed_steps:
-                await self._run_step(
-                    workflow_id, WorkflowStepName.crawl, 1,
-                    lambda ctx: crawler_mod.run(
-                        ctx["workflow_id"], ctx["date_str"], ctx.get("channel_id"),
-                    ),
-                    context,
-                )
-
-            # 步骤 2：LLM 改写（签名 rewrite(workflow_id, date_str, channel_id)）
-            if WorkflowStepName.rewrite not in completed_steps:
-                await self._run_step(
-                    workflow_id, WorkflowStepName.rewrite, 2,
-                    lambda ctx: llm_mod.rewrite(ctx["workflow_id"], ctx["date_str"], ctx.get("channel_id")),
-                    context,
-                )
-            # 步骤 2.5：微信内容安全检测（不作为独立步骤，结果合并到 rewrite 步骤 result）
-            # 放在此处而非 _run_step 内，是为了保持原步骤重试逻辑不变，同时确保只在
-            # rewrite 首次成功执行后才检测（断点续跑场景 completed_steps 含 rewrite 时跳过）
-            if WorkflowStepName.rewrite not in completed_steps:
-                await self._run_content_security_check(workflow_id, context)
-
-            # 步骤 3：LLM 语义级质量审核（T01712 P1 只告警不回退）
-            # 包装而非直接传 lambda：需要在步骤成功后根据 result 发实时告警事件，
-            # _run_step 对结果内容不感知（与 _tts_fn 同理的闭包包装模式）
-            if WorkflowStepName.quality_check not in completed_steps:
-                async def _quality_check_fn(ctx):
-                    qc_result = await quality_check_service.run_quality_check(
-                        ctx["workflow_id"], ctx["script_id"],
-                    )
-                    qc = qc_result.get("quality_check") or {}
-                    # 只告警不回退：有 issue 即发事件（前端 SSE 实时提示），tts 照常执行
-                    if qc.get("issue_count"):
-                        self._publish_event("workflow.quality_check.issues", {
-                            "workflow_id": ctx["workflow_id"],
-                            "passed": qc.get("passed"),
-                            "issue_count": qc.get("issue_count"),
-                            "alert_count": qc.get("alert_count"),
-                        })
-                    return qc_result
-
-                await self._run_step(
-                    workflow_id, WorkflowStepName.quality_check, 3,
-                    _quality_check_fn, context,
-                )
-
-            # 步骤 4：TTS（签名 synthesize(workflow_id, script_id)）
-            if WorkflowStepName.tts not in completed_steps:
-                async def _tts_fn(ctx):
-                    return await tts_mod.synthesize(ctx["workflow_id"], ctx["script_id"])
-
-                await self._run_step(
-                    workflow_id, WorkflowStepName.tts, 4, _tts_fn, context,
-                )
-
-            # 步骤 5：拼接（签名 concat(workflow_id, episode_date, audio_segments, channel_id)）
-            # channel_id 用于生成频道级 COS key，避免同日多频道产物互相覆盖
-            if WorkflowStepName.stitch not in completed_steps:
-                async def _stitch_fn(ctx):
-                    return await stitch_mod.concat(
-                        ctx["workflow_id"], ctx["episode_date"],
-                        ctx["audio_segments"], ctx.get("channel_id"),
-                    )
-
-                await self._run_step(
-                    workflow_id, WorkflowStepName.stitch, 5, _stitch_fn, context,
-                )
-
-            # 步骤 6：创建审核记录（内置方法）
-            if WorkflowStepName.review not in completed_steps:
-                await self._run_step(
-                    workflow_id, WorkflowStepName.review, 6,
-                    self._create_review, context,
-                )
+            await self._execute_pipeline_steps(workflow_id, completed_steps, context)
 
             # 主流程结束（publish 由审核通过后异步触发）
             await self._update_workflow_status(workflow_id, WorkflowStatus.success)

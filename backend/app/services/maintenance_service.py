@@ -308,23 +308,9 @@ class MaintenanceService:
         # 「过了窗口的提醒不再占位」，与读态无关。与 sched 进程每日任务共用
         # mobile_service.purge_inbox_before，窗口与时间字段只有一处实现。
         if target in ("old_inbox", "all"):
-            try:
-                if dry_run:
-                    deleted = (
-                        await self.db.execute(
-                            select(func.count(AdminInbox.id)).where(
-                                AdminInbox.created_at < cutoff
-                            )
-                        )
-                    ).scalar() or 0
-                else:
-                    deleted = await mobile_service.purge_inbox_before(self.db, cutoff)
-                action = "将删除" if dry_run else "已删除"
-                cleaned.append(f"运营收件箱 {action} {deleted} 条（{days} 天前）")
-                total_deleted += deleted
-            except Exception as e:
-                errors.append(f"运营收件箱清理失败: {e}")
-                logger.exception("运营收件箱清理失败")
+            total_deleted += await self._db_step_inbox(
+                cutoff, days, dry_run, cleaned, errors
+            )
 
         # 黑名单按 expires_at 清理（不按 days）
         if target in ("expired_blacklist", "all"):
@@ -362,6 +348,29 @@ class MaintenanceService:
             "errors": errors,
             "total_deleted": total_deleted,
         }
+
+    async def _db_step_inbox(
+        self, cutoff, days: int, dry_run: bool, cleaned: list[str], errors: list[str]
+    ) -> int:
+        """运营收件箱清理（T03329）：按 created_at 清，读没读都清，返回删除条数。"""
+        try:
+            if dry_run:
+                deleted = (
+                    await self.db.execute(
+                        select(func.count(AdminInbox.id)).where(
+                            AdminInbox.created_at < cutoff
+                        )
+                    )
+                ).scalar() or 0
+            else:
+                deleted = await mobile_service.purge_inbox_before(self.db, cutoff)
+            action = "将删除" if dry_run else "已删除"
+            cleaned.append(f"运营收件箱 {action} {deleted} 条（{days} 天前）")
+            return deleted
+        except Exception as e:
+            errors.append(f"运营收件箱清理失败: {e}")
+            logger.exception("运营收件箱清理失败")
+            return 0
 
     async def _run_db_time_step(
         self, key, name, model, time_field, cutoff, dry_run, days, suffix, errors, cleaned
@@ -1123,8 +1132,7 @@ class MaintenanceService:
         try:
             detail = {
                 "dry_run": dry_run,
-                # T02926：按天数执行的清理必须把窗口本身落进审计列，
-                # 否则事后只看得到「清过了」，看不到「按几天清的」
+                # T02926：按天数执行的清理必须把窗口本身落进审计列，否则事后只看得到「清过了」，看不到「按几天清的」。
                 **({"days": days} if days is not None else {}),
                 "cleaned_count": len(cleaned),
                 "error_count": len(errors),

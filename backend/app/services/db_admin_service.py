@@ -22,6 +22,7 @@ import io
 import json
 import logging
 import re
+from collections import Counter
 from datetime import date, datetime
 from typing import Any, Optional
 
@@ -257,27 +258,52 @@ _SECRET_KEY_RE = re.compile(
 )
 
 
+def _mask_audit_mapping(detail: dict, table: Optional[str]) -> dict:
+    """字典详情脱敏：行级敏感列 + 列名语义，嵌套值递归处理。"""
+    row_ctx = table if table in ALLOWED_TABLES else None
+    sensitive = _row_sensitive_columns(row_ctx, detail) if row_ctx else set()
+    # 审计详情常只带被改的那一列（update 提交 {"values": {"config_value": ...}}），
+    # 此时拿不到 config_key 语义，按 fail-safe 一律脱敏。
+    if row_ctx == "ai_config" and "config_value" in detail and "config_key" not in detail:
+        sensitive.add("config_value")
+    return {
+        key: _mask_audit_value(key, value, table, sensitive)
+        for key, value in detail.items()
+    }
+
+
+def _mask_audit_value(key: Any, value: Any, table: Optional[str], sensitive: set) -> Any:
+    if isinstance(value, (dict, list)):
+        return _mask_audit_detail(value, table)
+    if _SECRET_KEY_RE.search(str(key)) or key in sensitive:
+        return value if value in (None, "") else "***"
+    return value
+
+
 def _mask_audit_detail(detail: Any, table: Optional[str] = None) -> Any:
     """审计详情脱敏：按列名语义 + 白名单表的行级敏感判定，避免把新密钥明文写进 audit_log。"""
     if isinstance(detail, dict):
-        row_ctx = table if table in ALLOWED_TABLES else None
-        sensitive = _row_sensitive_columns(row_ctx, detail) if row_ctx else set()
-        # 审计详情常只带被改的那一列（update 提交 {"values": {"config_value": ...}}），
-        # 此时拿不到 config_key 语义，按 fail-safe 一律脱敏。
-        if row_ctx == "ai_config" and "config_value" in detail and "config_key" not in detail:
-            sensitive.add("config_value")
-        masked = {}
-        for key, value in detail.items():
-            if isinstance(value, (dict, list)):
-                masked[key] = _mask_audit_detail(value, table)
-            elif _SECRET_KEY_RE.search(str(key)) or key in sensitive:
-                masked[key] = value if value in (None, "") else "***"
-            else:
-                masked[key] = value
-        return masked
+        return _mask_audit_mapping(detail, table)
     if isinstance(detail, list):
         return [_mask_audit_detail(item, table) for item in detail]
     return detail
+
+
+def _blocked_sensitive_columns(table: str, row: dict) -> list[str]:
+    """本行被脱敏哨兵占位的敏感列：回写会把库里的真值换成 ***，必须拒绝。"""
+    sensitive = _row_sensitive_columns(table, row)
+    return sorted(
+        col for col in row if col in sensitive and _is_mask_sentinel(row[col])
+    )
+
+
+# 预览逐行动作对应的计数增量（update 同时计入 conflicts，与旧口径一致）
+_PREVIEW_COUNT_DELTA: dict[str, dict[str, int]] = {
+    "insert": {"to_insert": 1},
+    "update": {"to_update": 1, "conflicts": 1},
+    "conflict": {"conflicts": 1},
+    "error": {},
+}
 
 
 class DbAdminService:
@@ -612,13 +638,9 @@ class DbAdminService:
 
     # ---- 导入 ----
 
-    async def import_rows(
-        self, table: str, rows: list[dict], mode: str = "insert"
-    ) -> dict:
-        """导入数据（insert 或 replace 模式）。
-
-        上限 DB_ADMIN_MAX_IMPORT_ROWS，超过拒绝。
-        """
+    @staticmethod
+    def _check_import_request(table: str, rows: list[dict], mode: str) -> str:
+        """导入与预览共用的前置校验（表名白名单、行数上限、模式枚举）。"""
         table = _validate_table(table)
         if not rows:
             raise ParamError("导入数据不能为空")
@@ -626,6 +648,16 @@ class DbAdminService:
             raise ParamError(f"单次最多导入 {settings.DB_ADMIN_MAX_IMPORT_ROWS} 行")
         if mode not in ("insert", "replace"):
             raise ParamError("导入模式仅支持 insert 或 replace")
+        return table
+
+    async def import_rows(
+        self, table: str, rows: list[dict], mode: str = "insert"
+    ) -> dict:
+        """导入数据（insert 或 replace 模式）。
+
+        上限 DB_ADMIN_MAX_IMPORT_ROWS，超过拒绝。
+        """
+        table = self._check_import_request(table, rows, mode)
 
         schema = await self.get_table_schema(table)
         valid_cols = {c["name"] for c in schema["columns"]}
@@ -638,62 +670,9 @@ class DbAdminService:
 
         for i, row in enumerate(rows):
             try:
-                filtered = {k: v for k, v in row.items() if k in valid_cols}
-                if not filtered:
-                    # T03603：这一行确实没写进去，就必须留下原因——预览对同一行报的是
-                    # 「该行没有匹配当前表的列」，导入侧不提原因会让「未写入 N 行，其中
-                    # M 行给出了原因」里的 M 永远小于 N，坏行在明细里无从追溯。
-                    errors.append({"row": i + 1, "error": "该行没有匹配当前表的列"})
-                    skipped += 1
-                    continue
-
-                blocked = sorted(
-                    col
-                    for col in filtered
-                    if col in _row_sensitive_columns(table, filtered)
-                    and _is_mask_sentinel(filtered[col])
+                action, error = await self._write_import_row(
+                    table, row, mode=mode, valid_cols=valid_cols, pk_col=pk_col
                 )
-                if blocked:
-                    errors.append({
-                        "row": i + 1,
-                        "error": _mask_writeback_message(blocked),
-                        "fields": blocked,
-                    })
-                    skipped += 1
-                    continue
-
-                cols = ", ".join(filtered.keys())
-                placeholders = ", ".join(f":{k}" for k in filtered.keys())
-                if mode == "replace":
-                    # INSERT OR REPLACE 是整行删插，只带部分列会把未提交的列（含凭据）清空；
-                    # 而 INSERT ... ON CONFLICT DO UPDATE 仍要按插入行校验 NOT NULL，
-                    # 部分列导入同样会被拒。故冲突时走纯 UPDATE，只改显式提供的列。
-                    if pk_col not in filtered:
-                        errors.append({"row": i + 1, "error": f"replace 模式缺少主键列 {pk_col}"})
-                        skipped += 1
-                        continue
-                    if await self._pk_exists(table, pk_col, filtered[pk_col]):
-                        update_cols = [c for c in filtered if c != pk_col]
-                        if not update_cols:
-                            errors.append({"row": i + 1, "error": f"仅含主键列 {pk_col}，无可更新字段"})
-                            skipped += 1
-                            continue
-                        set_clause = ", ".join(f"{c} = :{c}" for c in update_cols)
-                        params = {c: filtered[c] for c in update_cols}
-                        params["pk"] = filtered[pk_col]
-                        await self.db.execute(
-                            text(f"UPDATE {table} SET {set_clause} WHERE {pk_col} = :pk"), params
-                        )
-                        updated += 1
-                    else:
-                        await self.db.execute(
-                            text(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"), filtered
-                        )
-                        inserted += 1
-                else:
-                    sql = f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"
-                    await self.db.execute(text(sql), filtered)
-                    inserted += 1
             except Exception as e:
                 # NFR-UX-05（T02523）：这里原先只把错误塞进返回值给前端，日志文件里
                 # 一行都没有 —— 「导入」是 PRD 点名的四类关键失败之一，事后翻日志
@@ -712,7 +691,15 @@ class DbAdminService:
                     mode=mode,
                     row=i + 1,
                 )
-                errors.append({"row": i + 1, "error": redact_credentials(str(clean))})
+                action, error = "skipped", {"error": redact_credentials(str(clean))}
+
+            if error:
+                errors.append({"row": i + 1, **error})
+            if action == "inserted":
+                inserted += 1
+            elif action == "updated":
+                updated += 1
+            else:
                 skipped += 1
 
         await self.db.flush()
@@ -736,6 +723,67 @@ class DbAdminService:
             "skipped": skipped,
             "errors": errors,
         }
+
+    async def _write_import_row(
+        self,
+        table: str,
+        row: dict,
+        *,
+        mode: str,
+        valid_cols: set[str],
+        pk_col: str,
+    ) -> tuple[str, Optional[dict]]:
+        """写入单行，返回 (动作, 错误明细)；动作为 skipped/updated/inserted。"""
+        filtered = {k: v for k, v in row.items() if k in valid_cols}
+        if not filtered:
+            # T03603：这一行确实没写进去，就必须留下原因——预览对同一行报的是
+            # 「该行没有匹配当前表的列」，导入侧不提原因会让「未写入 N 行，其中
+            # M 行给出了原因」里的 M 永远小于 N，坏行在明细里无从追溯。
+            return "skipped", {"error": "该行没有匹配当前表的列"}
+
+        blocked = _blocked_sensitive_columns(table, filtered)
+        if blocked:
+            return "skipped", {
+                "error": _mask_writeback_message(blocked),
+                "fields": blocked,
+            }
+
+        cols = ", ".join(filtered.keys())
+        placeholders = ", ".join(f":{k}" for k in filtered.keys())
+        if mode == "replace":
+            return await self._write_replace_row(table, filtered, cols, placeholders, pk_col)
+
+        sql = f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"
+        await self.db.execute(text(sql), filtered)
+        return "inserted", None
+
+    async def _write_replace_row(
+        self,
+        table: str,
+        filtered: dict,
+        cols: str,
+        placeholders: str,
+        pk_col: str,
+    ) -> tuple[str, Optional[dict]]:
+        # INSERT OR REPLACE 是整行删插，只带部分列会把未提交的列（含凭据）清空；
+        # 而 INSERT ... ON CONFLICT DO UPDATE 仍要按插入行校验 NOT NULL，
+        # 部分列导入同样会被拒。故冲突时走纯 UPDATE，只改显式提供的列。
+        if pk_col not in filtered:
+            return "skipped", {"error": f"replace 模式缺少主键列 {pk_col}"}
+        if not await self._pk_exists(table, pk_col, filtered[pk_col]):
+            sql = f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"
+            await self.db.execute(text(sql), filtered)
+            return "inserted", None
+        update_cols = [c for c in filtered if c != pk_col]
+        if not update_cols:
+            return "skipped", {"error": f"仅含主键列 {pk_col}，无可更新字段"}
+        set_clause = ", ".join(f"{c} = :{c}" for c in update_cols)
+        params = {c: filtered[c] for c in update_cols}
+        params["pk"] = filtered[pk_col]
+        await self.db.execute(
+            text(f"UPDATE {table} SET {set_clause} WHERE {pk_col} = :pk"), params
+        )
+        return "updated", None
 
     async def _pk_exists(self, table: str, pk_col: str, pk_value: Any) -> bool:
         result = await self.db.execute(
@@ -802,49 +850,73 @@ class DbAdminService:
     ) -> Optional[str]:
         """按表约束判断这一行真写时会不会失败；返回首条可读原因。"""
         for cols in constraints["unique"]:
-            if not set(cols) <= set(row):
-                continue
-            values = tuple(row[c] for c in cols)
-            if any(v is None for v in values):
-                continue  # SQLite 唯一索引对 NULL 不去重
-            key = (cols, values)
-            first = seen_uniques.get(key)
-            if first and not (is_update and first[1] == row.get(pk_col)):
-                return f"违反唯一约束 ({', '.join(cols)})：与第 {first[0]} 行重复，导入会失败"
-            where = " AND ".join(f"{c} = :u{i}" for i, c in enumerate(cols))
-            params = {f"u{i}": v for i, v in enumerate(values)}
-            sql = f"SELECT 1 FROM {table} WHERE {where}"
-            if is_update and pk_col and pk_col in row:
-                sql += f" AND {pk_col} != :pk"
-                params["pk"] = row[pk_col]
-            if (await self.db.execute(text(sql), params)).first() is not None:
-                return f"违反唯一约束 ({', '.join(cols)})：值与库内已有记录重复，导入会失败"
-            seen_uniques[key] = (row_no, row.get(pk_col))
+            why = await self._unique_violation(
+                table, row, cols, seen_uniques, pk_col, is_update, row_no
+            )
+            if why:
+                return why
 
         for sqltext in constraints["checks"]:
             why = await self._check_violation(sqltext, row, col_types)
             if why:
                 return why
 
-        for fk in constraints["foreign_keys"]:
-            if not fk_enforced:
-                # SQLite 默认关闭外键；开关没开时真写不会失败，预览也不该报错
-                break
-            cols, ref_cols = fk["columns"], fk["referred_columns"]
-            ref_table = fk["referred_table"]
-            if len(cols) != len(ref_cols) or not cols or not ref_table:
-                continue
-            if not set(cols) <= set(row) or any(row[c] is None for c in cols):
-                continue
-            where = " AND ".join(f"{c} = :f{i}" for i, c in enumerate(ref_cols))
-            params = {f"f{i}": row[c] for i, c in enumerate(cols)}
-            exists = await self.db.execute(
-                text(f"SELECT 1 FROM {_validate_identifier(ref_table)} WHERE {where}"), params
-            )
-            if exists.first() is None:
-                shown = ", ".join(f"{c}={row[c]}" for c in cols)
-                return f"违反外键约束：{ref_table} 中没有匹配记录（{shown}），导入会失败"
+        if fk_enforced:
+            # SQLite 默认关闭外键；开关没开时真写不会失败，预览也不该报错
+            for fk in constraints["foreign_keys"]:
+                why = await self._foreign_key_violation(fk, row)
+                if why:
+                    return why
         return None
+
+    async def _unique_violation(
+        self,
+        table: str,
+        row: dict,
+        cols,
+        seen_uniques: dict,
+        pk_col: Optional[str],
+        is_update: bool,
+        row_no: int,
+    ) -> Optional[str]:
+        """本行是否违反某条唯一约束（含「与前面第 N 行重复」）。"""
+        if not set(cols) <= set(row):
+            return None
+        values = tuple(row[c] for c in cols)
+        if any(v is None for v in values):
+            return None  # SQLite 唯一索引对 NULL 不去重
+        key = (cols, values)
+        first = seen_uniques.get(key)
+        if first and not (is_update and first[1] == row.get(pk_col)):
+            return f"违反唯一约束 ({', '.join(cols)})：与第 {first[0]} 行重复，导入会失败"
+        where = " AND ".join(f"{c} = :u{i}" for i, c in enumerate(cols))
+        params = {f"u{i}": v for i, v in enumerate(values)}
+        sql = f"SELECT 1 FROM {table} WHERE {where}"
+        if is_update and pk_col and pk_col in row:
+            sql += f" AND {pk_col} != :pk"
+            params["pk"] = row[pk_col]
+        if (await self.db.execute(text(sql), params)).first() is not None:
+            return f"违反唯一约束 ({', '.join(cols)})：值与库内已有记录重复，导入会失败"
+        seen_uniques[key] = (row_no, row.get(pk_col))
+        return None
+
+    async def _foreign_key_violation(self, fk: dict, row: dict) -> Optional[str]:
+        """本行是否违反某条外键约束。"""
+        cols, ref_cols = fk["columns"], fk["referred_columns"]
+        ref_table = fk["referred_table"]
+        if len(cols) != len(ref_cols) or not cols or not ref_table:
+            return None
+        if not set(cols) <= set(row) or any(row[c] is None for c in cols):
+            return None
+        where = " AND ".join(f"{c} = :f{i}" for i, c in enumerate(ref_cols))
+        params = {f"f{i}": row[c] for i, c in enumerate(cols)}
+        exists = await self.db.execute(
+            text(f"SELECT 1 FROM {_validate_identifier(ref_table)} WHERE {where}"), params
+        )
+        if exists.first() is not None:
+            return None
+        shown = ", ".join(f"{c}={row[c]}" for c in cols)
+        return f"违反外键约束：{ref_table} 中没有匹配记录（{shown}），导入会失败"
 
     async def _check_violation(
         self, sqltext: str, row: dict, col_types: dict[str, str]
@@ -888,6 +960,35 @@ class DbAdminService:
 
 
     @staticmethod
+    def _parse_json_rows(text_content: str) -> list[dict]:
+        try:
+            parsed = json.loads(text_content)
+        except json.JSONDecodeError as e:
+            raise ParamError(f"JSON 解析失败: {e}")
+        if not isinstance(parsed, list):
+            raise ParamError("JSON 必须是数组格式")
+        return [dict(item) for item in parsed if isinstance(item, dict)]
+
+    @staticmethod
+    def _parse_csv_rows(text_content: str) -> list[dict]:
+        # newline="" 让 csv 自己处理引号内的 CRLF，避免按行 split 把多行字段切成垃圾行
+        reader = csv.DictReader(io.StringIO(text_content, newline=""))
+        if not reader.fieldnames:
+            raise ParamError("CSV 缺少表头行")
+        rows = []
+        for raw in reader:
+            if not any((v or "").strip() for v in raw.values()):
+                continue
+            rows.append({
+                (key or "").strip(): (
+                    value.strip() if isinstance(value, str) else value
+                )
+                for key, value in raw.items()
+                if key is not None
+            })
+        return rows
+
+    @staticmethod
     def parse_import_payload(content: str, fmt: str = "csv") -> list[dict]:
         """用标准 csv/json 解析导入文本，正确处理引号内逗号、CRLF、BOM。"""
         text_content = (content or "").strip()
@@ -897,45 +998,16 @@ class DbAdminService:
         if text_content.startswith("\ufeff"):
             text_content = text_content[1:]
         if fmt == "json":
-            try:
-                parsed = json.loads(text_content)
-            except json.JSONDecodeError as e:
-                raise ParamError(f"JSON 解析失败: {e}")
-            if not isinstance(parsed, list):
-                raise ParamError("JSON 必须是数组格式")
-            return [dict(item) for item in parsed if isinstance(item, dict)]
+            return DbAdminService._parse_json_rows(text_content)
         if fmt != "csv":
             raise ParamError("导入格式仅支持 csv 或 json")
-        # newline="" 让 csv 自己处理引号内的 \r\n，避免按行 split 把多行字段切成垃圾行
-        reader = csv.DictReader(io.StringIO(text_content, newline=""))
-        if not reader.fieldnames:
-            raise ParamError("CSV 缺少表头行")
-        rows = []
-        for raw in reader:
-            if not any((v or "").strip() for v in raw.values()):
-                continue
-            rows.append(
-                {
-                    (key or "").strip(): (
-                        value.strip() if isinstance(value, str) else value
-                    )
-                    for key, value in raw.items()
-                    if key is not None
-                }
-            )
-        return rows
+        return DbAdminService._parse_csv_rows(text_content)
 
     async def preview_import(
         self, table: str, rows: list[dict], mode: str = "insert"
     ) -> dict:
         """dry-run 预览：只读地算出预计新增/更新/冲突跳过/错误行，不落库。"""
-        table = _validate_table(table)
-        if not rows:
-            raise ParamError("导入数据不能为空")
-        if len(rows) > settings.DB_ADMIN_MAX_IMPORT_ROWS:
-            raise ParamError(f"单次最多导入 {settings.DB_ADMIN_MAX_IMPORT_ROWS} 行")
-        if mode not in ("insert", "replace"):
-            raise ParamError("导入模式仅支持 insert 或 replace")
+        table = self._check_import_request(table, rows, mode)
 
         schema = await self.get_table_schema(table)
         valid_cols = {c["name"] for c in schema["columns"]}
@@ -955,110 +1027,151 @@ class DbAdminService:
             fk_enforced = True  # 非 SQLite 后端按「外键总是生效」处理
         seen_uniques: dict = {}
 
-        to_insert = 0
-        to_update = 0
-        conflicts = 0
+        counts: Counter = Counter()
         errors = []
         notices = []
 
         for i, row in enumerate(rows):
-            filtered = {k: v for k, v in row.items() if k in valid_cols}
-            if not filtered:
-                errors.append({"row": i + 1, "error": "该行没有匹配当前表的列"})
-                continue
-
-            blocked = sorted(
-                col
-                for col in filtered
-                if col in _row_sensitive_columns(table, filtered)
-                and _is_mask_sentinel(filtered[col])
+            action, error, unknown = await self._preview_row(
+                table,
+                row,
+                i + 1,
+                valid_cols=valid_cols,
+                mode=mode,
+                col_types=col_types,
+                constraints=constraints,
+                pk_col=pk_col,
+                required_cols=required_cols,
+                seen_uniques=seen_uniques,
+                fk_enforced=fk_enforced,
             )
-            if blocked:
-                errors.append({
-                    "row": i + 1,
-                    "error": _mask_writeback_message(blocked),
-                    "fields": blocked,
-                })
-                continue
-
-            unknown = sorted(set(row) - valid_cols)
             if unknown:
-                # INT-UX-02：这一行仍然会被写进去（只是丢掉多余的列），所以它是提示，
-                # 不是错误。原先塞进 errors 里，预览说「错误 1 行」而导入实际「新增 1 行、
-                # 0 错误」——两本账对不上，运营照着预览的 error_rows 决定要不要提交就被误导。
+                # INT-UX-02：这一行仍然会被写进去（只是丢掉多余的列），所以它是提示，不是错误。
+                # 原先塞进 errors 里，预览说「错误 1 行」而导入实际「新增 1 行、0 错误」——
+                # 两本账对不上，运营照着预览的 error_rows 决定要不要提交就被误导。
                 notices.append({
                     "row": i + 1,
                     "columns": unknown,
                     "message": f"列不在表结构内，导入时将忽略: {', '.join(unknown)}",
                 })
-
-            if mode == "replace":
-                if pk_col not in filtered:
-                    errors.append({"row": i + 1, "error": f"replace 模式缺少主键列 {pk_col}"})
-                    continue
-                is_update = await self._pk_exists(table, pk_col, filtered[pk_col])
-                if is_update and set(filtered) == {pk_col}:
-                    # 与 import_rows 同一道闸门：只给主键的 UPDATE 无列可写，实际会被拒
-                    errors.append({"row": i + 1, "error": f"仅含主键列 {pk_col}，无可更新字段"})
-                    continue
-            else:
-                if pk_col in filtered and await self._pk_exists(table, pk_col, filtered[pk_col]):
-                    conflicts += 1
-                    errors.append(
-                        {"row": i + 1, "error": f"主键 {filtered[pk_col]} 已存在，insert 模式将跳过"}
-                    )
-                    continue
-                is_update = False
-
-            if not is_update:
-                # 只有真正走 INSERT 的行才要检查：走 UPDATE 时未提供的列保持原值，
-                # 不会因为这次没带上而被 NOT NULL 卡住。
-                missing = [c for c in required_cols if filtered.get(c) is None]
-                if missing:
-                    errors.append({
-                        "row": i + 1,
-                        "error": f"缺少必填列（NOT NULL 且无默认值），导入会失败: {', '.join(missing)}",
-                        "fields": missing,
-                    })
-                    continue
-
-            # T02894：唯一/CHECK/外键约束此前只在真写时才炸，预览却算作可写。
-            # 这里与 import_rows 的失败面逐项对齐，避免 error_rows 少报。
-            constraint_error = await self._constraint_error(
-                table,
-                filtered,
-                col_types=col_types,
-                constraints=constraints,
-                pk_col=pk_col,
-                is_update=is_update,
-                seen_uniques=seen_uniques,
-                row_no=i + 1,
-                fk_enforced=fk_enforced,
-            )
-            if constraint_error:
-                errors.append({"row": i + 1, "error": constraint_error})
-                continue
-
-            if is_update:
-                to_update += 1
-                conflicts += 1
-            else:
-                to_insert += 1
+            if error:
+                errors.append({"row": i + 1, **error})
+            counts.update(_PREVIEW_COUNT_DELTA.get(action, {}))
 
         return {
             "table": table,
             "mode": mode,
             "primary_key": pk_col,
             "total": len(rows),
-            "to_insert": to_insert,
-            "to_update": to_update,
-            "conflicts": conflicts,
+            "to_insert": counts["to_insert"],
+            "to_update": counts["to_update"],
+            "conflicts": counts["conflicts"],
             "error_rows": len(errors),
             "errors": errors[:50],
             "notice_rows": len(notices),
             "notices": notices[:50],
             "columns": sorted(valid_cols),
         }
+
+    async def _preview_row(
+        self,
+        table: str,
+        row: dict,
+        row_no: int,
+        *,
+        valid_cols: set[str],
+        mode: str,
+        col_types: dict[str, str],
+        constraints: dict,
+        pk_col: Optional[str],
+        required_cols: list[str],
+        seen_uniques: dict,
+        fk_enforced: bool,
+    ) -> tuple[str, Optional[dict], list[str]]:
+        """预览单行，返回 (动作, 错误明细, 将被忽略的列)。
+
+        整行被拒收（无匹配列 / 命中敏感列）时不再报「多余列」提示，
+        与真实导入逐行 continue 的顺序保持一致。
+        """
+        filtered = {k: v for k, v in row.items() if k in valid_cols}
+        if not filtered:
+            return "error", {"error": "该行没有匹配当前表的列"}, []
+        blocked = _blocked_sensitive_columns(table, filtered)
+        if blocked:
+            return "error", {
+                "error": _mask_writeback_message(blocked),
+                "fields": blocked,
+            }, []
+        unknown = sorted(set(row) - valid_cols)
+        action, error = await self._preview_write_plan(
+            table,
+            filtered,
+            mode=mode,
+            col_types=col_types,
+            constraints=constraints,
+            pk_col=pk_col,
+            required_cols=required_cols,
+            seen_uniques=seen_uniques,
+            fk_enforced=fk_enforced,
+            row_no=row_no,
+        )
+        return action, error, unknown
+
+    async def _preview_write_plan(
+        self,
+        table: str,
+        filtered: dict,
+        *,
+        mode: str,
+        col_types: dict[str, str],
+        constraints: dict,
+        pk_col: Optional[str],
+        required_cols: list[str],
+        seen_uniques: dict,
+        fk_enforced: bool,
+        row_no: int,
+    ) -> tuple[str, Optional[dict]]:
+        """预判单行走向：(动作, 错误明细)，动作为 insert/update/conflict/error。"""
+        if mode == "replace":
+            if pk_col not in filtered:
+                return "error", {"error": f"replace 模式缺少主键列 {pk_col}"}
+            is_update = await self._pk_exists(table, pk_col, filtered[pk_col])
+            if is_update and set(filtered) == {pk_col}:
+                # 与 import_rows 同一道闸门：只给主键的 UPDATE 无列可写，实际会被拒
+                return "error", {"error": f"仅含主键列 {pk_col}，无可更新字段"}
+        else:
+            if pk_col in filtered and await self._pk_exists(table, pk_col, filtered[pk_col]):
+                return "conflict", {
+                    "error": f"主键 {filtered[pk_col]} 已存在，insert 模式将跳过"
+                }
+            is_update = False
+
+        if not is_update:
+            # 只有真正走 INSERT 的行才要检查：走 UPDATE 时未提供的列保持原值，
+            # 不会因为这次没带上而被 NOT NULL 卡住。
+            missing = [c for c in required_cols if filtered.get(c) is None]
+            if missing:
+                return "error", {
+                    "error": f"缺少必填列（NOT NULL 且无默认值），导入会失败: {', '.join(missing)}",
+                    "fields": missing,
+                }
+
+        # T02894：唯一/CHECK/外键约束此前只在真写时才炸，预览却算作可写。
+        # 这里与 import_rows 的失败面逐项对齐，避免 error_rows 少报。
+        constraint_error = await self._constraint_error(
+            table,
+            filtered,
+            col_types=col_types,
+            constraints=constraints,
+            pk_col=pk_col,
+            is_update=is_update,
+            seen_uniques=seen_uniques,
+            row_no=row_no,
+            fk_enforced=fk_enforced,
+        )
+        if constraint_error:
+            return "error", {"error": constraint_error}
+        return ("update" if is_update else "insert"), None
 
     # ---- 审计日志 ----
 
@@ -1103,8 +1216,7 @@ class DbAdminService:
                     d["detail"] = json.loads(d["detail"])
                 except (json.JSONDecodeError, TypeError):
                     pass
-            # 读侧再脱敏一次：修复前写入的历史审计行仍是明文，
-            # 只有展示层也过滤，才不会再从审计日志里读到旧密钥。
+            # 读侧再脱敏一次：修复前写入的历史审计行仍是明文，只有展示层也过滤，才不会再从审计日志里读到旧密钥。
             if isinstance(d.get("detail"), (dict, list)):
                 d["detail"] = _mask_audit_detail(d["detail"], d.get("target"))
             logs.append(d)

@@ -350,6 +350,9 @@ async def _migrate_channel_schema() -> None:  # NOSONAR
         conn.close()
 
 
+_EVT_MATERIAL_MIGRATION_FAILED = "material 表迁移失败"
+
+
 async def _migrate_material_schema() -> None:  # NOSONAR
     """素材表结构迁移：为已存在的 material 表追加 channel_id 列（幂等）。
 
@@ -372,7 +375,7 @@ async def _migrate_material_schema() -> None:  # NOSONAR
             conn.commit()
             logger.info("[startup] material 表迁移完成，新增 channel_id 列")
     except Exception as e:
-        log_key_failure(domain="startup", event="material 表迁移失败", exc=e, level="warning")
+        log_key_failure(domain="startup", event=_EVT_MATERIAL_MIGRATION_FAILED, exc=e, level="warning")
     finally:
         conn.close()
 
@@ -404,7 +407,7 @@ async def _migrate_material_media_column() -> None:  # NOSONAR
         conn.commit()
         logger.info("[startup] material 表迁移完成，新增 media 列")
     except Exception as e:
-        log_key_failure(domain="startup", event="material 表迁移失败", exc=e, level="warning")
+        log_key_failure(domain="startup", event=_EVT_MATERIAL_MIGRATION_FAILED, exc=e, level="warning")
     finally:
         conn.close()
 
@@ -863,7 +866,7 @@ async def _migrate_adplacement_enabled_column() -> None:  # NOSONAR
         conn.close()
 
 
-async def _migrate_auto_review_risk_columns() -> None:
+def _migrate_auto_review_risk_columns() -> None:
     """auto_review_config 表追加风险确认列（T02492 / FR-UX-204，幂等）。
 
     同时把「总开关已开但三条校验全关」的存量配置点名出来：运行期护栏会拒绝
@@ -910,7 +913,7 @@ async def _migrate_auto_review_risk_columns() -> None:
         conn.close()
 
 
-async def _migrate_script_quality_report_column() -> None:
+def _migrate_script_quality_report_column() -> None:
     """script 表追加 quality_report 列（T01712 P1，幂等）。
 
     LLM 语义级质量审核报告（{passed, issue_count, issues:[...]}）落库于此，
@@ -935,7 +938,7 @@ async def _migrate_script_quality_report_column() -> None:
         conn.close()
 
 
-async def _migrate_workflow_step_quality_check() -> None:
+def _migrate_workflow_step_quality_check() -> None:
     """workflow_step 表 CHECK 约束扩展：step_name 增加 quality_check（T01712 P1，幂等）。
 
     SQLite 无法 ALTER CHECK 约束（约束是表定义的一部分），沿用
@@ -962,8 +965,7 @@ async def _migrate_workflow_step_quality_check() -> None:
             "step_name IN ('crawl', 'rewrite', 'quality_check', 'tts', 'stitch', 'review', 'publish')",
         )
         if new_sql == sql:
-            # 历史库约束文本与预期模板不一致（手工改过/更老版本）：不盲目重建，
-            # 告警留给人工处理，避免拷数据把错误结构固化
+            # 历史库约束文本与预期模板不一致（手工改过或更老版本）：不盲目重建，告警留给人工处理，避免拷数据把错误结构固化。
             logger.warning("[startup] workflow_step CHECK 约束文本非预期，跳过迁移（请人工核查）")
             return
 
@@ -1212,7 +1214,7 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
         try:
             await _migrate_material_schema()
         except Exception as e:
-            log_key_failure(domain="startup", event="material 表迁移失败", exc=e, level="warning")
+            log_key_failure(domain="startup", event=_EVT_MATERIAL_MIGRATION_FAILED, exc=e, level="warning")
 
         # material table cover_url column migration (idempotent)
         try:
@@ -1275,19 +1277,19 @@ async def lifespan(app: FastAPI):  # NOSONAR S3776: 生命周期初始化含多�
 
         # auto_review_config 风险确认列迁移（T02492 / FR-UX-204）
         try:
-            await _migrate_auto_review_risk_columns()
+            _migrate_auto_review_risk_columns()
         except Exception as e:
             log_key_failure(domain="startup", event="auto_review_config risk 列迁移失败", exc=e, level="warning")
 
         # T01712 P1：script.quality_report 列迁移（LLM 质量审核报告落库）
         try:
-            await _migrate_script_quality_report_column()
+            _migrate_script_quality_report_column()
         except Exception as e:
             log_key_failure(domain="startup", event="script quality_report 列迁移失败", exc=e, level="warning")
 
         # T01712 P1：workflow_step 表 CHECK 约束扩展（新增 quality_check 步骤名）
         try:
-            await _migrate_workflow_step_quality_check()
+            _migrate_workflow_step_quality_check()
         except Exception as e:
             log_key_failure(domain="startup", event="workflow_step quality_check 约束迁移失败", exc=e, level="warning")
 

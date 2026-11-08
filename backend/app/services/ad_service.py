@@ -211,8 +211,7 @@ class AdService:
         if p is None:
             raise ValueError(f"投放不存在: {placement_id}")
         if enabled == 1:
-            # T02927 / D24：重新启用同样要查冲突。只拦新建的话，
-            # 「两条都停用、再依次启用」就能绕过，护栏等于不存在。
+            # T02927、D24：重新启用同样要查冲突，只拦新建的话，「两条都停用、再依次启用」就能绕过，护栏等于不存在。
             await self._assert_no_enabled_overlap(
                 p.position,
                 p.start_date,
@@ -412,8 +411,7 @@ class AdService:
                 "end_date": p.end_date.isoformat() if p.end_date else None,
                 # 排期视图要能看出「已停用」，否则停用的投放看着照播（T02491 / D14）
                 "enabled": p.enabled,
-                # 待投放/已过期同样要可见（T02602）：日历不能把未来或已结束的排期
-                # 读成今天在播
+                # 待投放与已过期同样要可见（T02602），日历不能把未来或已结束的排期读成今天在播。
                 "status": _placement_status(p, today),
             }
             for p, m_name in rows

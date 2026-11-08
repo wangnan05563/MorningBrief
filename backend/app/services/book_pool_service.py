@@ -453,8 +453,7 @@ async def collect_book_materials(db: AsyncSession, channel_id: int, item: dict) 
         select(Material).where(
             Material.channel_id == channel_id,
             Material.status == MaterialStatus.pending.value,
-            # C103：占位素材没有正文，取章时必须排除——否则「待上传书稿」那段说明会被
-            # 当成讲书稿改写并念出去
+            # C103：占位素材没有正文，取章时必须排除，否则「待上传书稿」那段说明会被当成讲书稿改写并念出去。
             Material.source_type != MaterialSourceType.book_plan.value,
             # T00716：仅文本素材可作讲书稿章节，媒体素材（图片/视频）不进语音链路
             Material.media_type == MaterialMediaType.text.value,

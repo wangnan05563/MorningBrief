@@ -52,7 +52,7 @@ class CosConfigBody(BaseModel):
     region: str = "ap-guangzhou"
     bucket: str = ""
     cdn_domain: str = ""
-    # None = 不修改（老前端不带该字段时不能把保留份数静默清零，T02609）
+    # 传 None 表示不修改（老前端不带该字段时不能把保留份数静默清零，T02609）
     backup_keep_count: Optional[int] = None
 
 

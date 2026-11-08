@@ -35,7 +35,72 @@ _SEVERITY_ORDER = {"low": 1, "medium": 2, "high": 3}
 
 # LLM 常见输出污染：markdown 代码块包裹（```json ... ```）。剥掉后再解析，
 # 否则"模型正确返回但带了围栏"会被误判为非法 JSON 而整次降级
-_MARKDOWN_FENCE_PAT = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
+_FENCE_OPEN_PAT = re.compile(r"^```(?:json)?\s*", re.MULTILINE)
+_FENCE_CLOSE_PAT = re.compile(r"\s*```$", re.MULTILINE)
+
+
+async def _load_referenced_materials(session, segments: list[dict]) -> dict[int, Material]:
+    """取出分段正文引用的全部素材（开场白/结尾 material_ids 为空，天然被排除）。"""
+    material_ids = sorted({
+        mid for seg in segments for mid in (seg.get("material_ids") or [])
+    })
+    if not material_ids:
+        return {}
+    rows = await session.execute(
+        select(Material).where(Material.id.in_(material_ids))
+    )
+    return {m.id: m for m in rows.scalars().all()}
+
+
+async def _resolve_book_anchor(
+    session, channel_id: int | None, materials: dict[int, Material],
+) -> tuple[str | None, str | None, str | None]:
+    """解析 (频道类型, 书名, 作者)。
+
+    audiobook 书名以素材 source 锚定（book_pool 模式下 source 即书名，与
+    rewriter._filter_audiobook_sources 同源）；作者从 book_pool_item 按频道+书名查，
+    未填则显式声明不得编造。
+    """
+    if not channel_id:
+        return None, None, None
+    from app.models import BookPoolItem, Channel
+
+    channel = await session.get(Channel, channel_id)
+    channel_type = channel.channel_type if channel else None
+    source_counts: dict[str, int] = {}
+    for m in materials.values():
+        if m.source:
+            source_counts[m.source] = source_counts.get(m.source, 0) + 1
+    if not source_counts:
+        return channel_type, None, None
+    book_title = max(source_counts, key=source_counts.get)
+    try:
+        author = (await session.execute(
+            select(BookPoolItem.author).where(
+                BookPoolItem.channel_id == channel_id,
+                BookPoolItem.title == book_title,
+            ).limit(1)
+        )).scalar_one_or_none()
+    except Exception as e:
+        logger.warning("质量审核读取书籍作者失败，降级为仅书名锚: {}", e)
+        author = None
+    return channel_type, book_title, author
+
+
+def _build_material_anchors(materials: dict[int, Material]) -> str:
+    """素材原文锚点：截断到配置长度。锚点只需支撑事实核对（人名、书名、年份）。
+
+    全文注入会撑爆上下文且稀释审核注意力。
+    """
+    max_chars = settings.QUALITY_CHECK_ANCHOR_MAX_CHARS
+    anchor_lines = []
+    for mid in sorted(materials):
+        m = materials[mid]
+        content = (m.content or "").strip()[:max_chars]
+        anchor_lines.append(
+            f"[素材 {mid}] 来源：{m.source or '未知'} | 标题：{m.title or ''}\n原文：{content}"
+        )
+    return "\n\n".join(anchor_lines) or "无"
 
 
 async def _load_context(workflow_id: str, script_id: int) -> dict | None:
@@ -54,60 +119,17 @@ async def _load_context(workflow_id: str, script_id: int) -> dict | None:
         channel_id = (await session.execute(
             select(Workflow.channel_id).where(Workflow.id == workflow_id)
         )).scalar_one_or_none()
-
-        # 收集全部正文段引用的素材 ID（开场白/结尾 material_ids 为空，天然被排除）
-        material_ids = sorted({
-            mid for seg in segments for mid in (seg.get("material_ids") or [])
-        })
-        materials: dict[int, Material] = {}
-        if material_ids:
-            rows = await session.execute(
-                select(Material).where(Material.id.in_(material_ids))
-            )
-            materials = {m.id: m for m in rows.scalars().all()}
-
-        # audiobook 书名/作者锚：书名以素材 source 锚定（book_pool 模式下
-        # source 即书名，与 rewriter._filter_audiobook_sources 同源），
-        # 作者从 book_pool_item 按频道+书名查，未填则显式声明不得编造
-        book_title = None
-        author = None
-        channel_type = None
-        if channel_id:
-            from app.models import BookPoolItem, Channel
-            channel = await session.get(Channel, channel_id)
-            channel_type = channel.channel_type if channel else None
-            source_counts: dict[str, int] = {}
-            for m in materials.values():
-                if m.source:
-                    source_counts[m.source] = source_counts.get(m.source, 0) + 1
-            if source_counts:
-                book_title = max(source_counts, key=source_counts.get)
-                try:
-                    author = (await session.execute(
-                        select(BookPoolItem.author).where(
-                            BookPoolItem.channel_id == channel_id,
-                            BookPoolItem.title == book_title,
-                        ).limit(1)
-                    )).scalar_one_or_none()
-                except Exception as e:
-                    logger.warning("质量审核读取书籍作者失败，降级为仅书名锚: {}", e)
-
-    # 素材原文锚点：截断到配置长度——锚点只需支撑事实核对（人名/书名/年份），
-    # 全文注入会撑爆上下文且稀释审核注意力
-    max_chars = settings.QUALITY_CHECK_ANCHOR_MAX_CHARS
-    anchor_lines = []
-    for mid in sorted(materials):
-        m = materials[mid]
-        content = (m.content or "").strip()[:max_chars]
-        anchor_lines.append(
-            f"[素材 {mid}] 来源：{m.source or '未知'} | 标题：{m.title or ''}\n原文：{content}"
+        materials = await _load_referenced_materials(session, segments)
+        channel_type, book_title, author = await _resolve_book_anchor(
+            session, channel_id, materials,
         )
+
     return {
         "segments": segments,
         "channel_type": channel_type or "news",
         "book_title": book_title or "无（非书籍解读类）",
         "author": author or "未提供（不得编造作者姓名）",
-        "material_anchors": "\n\n".join(anchor_lines) or "无",
+        "material_anchors": _build_material_anchors(materials),
     }
 
 
@@ -135,10 +157,10 @@ def _parse_llm_report(raw: str) -> dict | None:
     逐条校验 issue 字段——issue_type 不在枚举内的条目丢弃而非整次失败，
     因为 LLM 对枚举的遵守是概率性的，一条自造维度不代表整体不可信。
     """
-    cleaned = _MARKDOWN_FENCE_PAT.sub("", raw.strip()).strip()
+    cleaned = _FENCE_CLOSE_PAT.sub("", _FENCE_OPEN_PAT.sub("", raw.strip())).strip()
     try:
         data = json.loads(cleaned)
-    except (json.JSONDecodeError, ValueError):
+    except ValueError:
         return None
     if not isinstance(data, dict):
         return None

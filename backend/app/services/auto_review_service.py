@@ -158,6 +158,40 @@ class AutoReviewService:
         skipped = [name for name, on in pairs if not on]
         return enforced, skipped
 
+    @staticmethod
+    def _assert_guard(
+        enabled: bool,
+        enforced: list[str],
+        skipped: list[str],
+        risk_acknowledged: bool,
+        ack_carried: bool,
+    ) -> None:
+        """开启总开关时的运行期护栏：至少保留一条校验，且必须有风险确认。
+
+        护栏拒绝走 BizError(code=400)（HTTP 200 + 业务码），与管理端其他业务错误同口径：
+        响应拦截器只在 code!=0 分支把 message 交给页面，用 ParamError(HTTP400) 会让
+        前端只剩下「Request failed with status code 400」这句没用的话。
+        """
+        if not enabled:
+            return
+        if not enforced:
+            raise BizError(
+                code=400,
+                message=(
+                    "三条校验全部关闭时不能开启自动审批："
+                    "至少保留一条校验（内容安全检测 / 步骤一次成功 / 关键词白名单）"
+                ),
+            )
+        if risk_acknowledged or ack_carried:
+            return
+        if skipped:
+            msg = "开启自动审批前需勾选风险确认：跳过的校验（{}）将不再检查".format(
+                "、".join(skipped),
+            )
+        else:
+            msg = "开启自动审批前需勾选风险确认：命中的稿件将绕过人工审核直接发布"
+        raise BizError(code=400, message=msg)
+
     async def update_config(
         self,
         enabled: bool,
@@ -199,26 +233,7 @@ class AutoReviewService:
             enabled and config.enabled and config.risk_acknowledged
             and set(skipped) <= set(prev_skipped)
         )
-        # 护栏拒绝走 BizError(code=400)（HTTP 200 + 业务码），与管理端其他业务错误同口径：
-        # 响应拦截器只在 code!=0 分支把 message 交给页面，用 ParamError(HTTP400) 会让
-        # 前端只剩下「Request failed with status code 400」这句没用的话。
-        if enabled:
-            if not enforced:
-                raise BizError(
-                    code=400,
-                    message=(
-                        "三条校验全部关闭时不能开启自动审批："
-                        "至少保留一条校验（内容安全检测 / 步骤一次成功 / 关键词白名单）"
-                    ),
-                )
-            if not risk_acknowledged and not ack_carried:
-                if skipped:
-                    msg = "开启自动审批前需勾选风险确认：跳过的校验（{}）将不再检查".format(
-                        "、".join(skipped),
-                    )
-                else:
-                    msg = "开启自动审批前需勾选风险确认：命中的稿件将绕过人工审核直接发布"
-                raise BizError(code=400, message=msg)
+        self._assert_guard(enabled, enforced, skipped, risk_acknowledged, ack_carried)
 
         config.enabled = enabled
         config.require_content_safe = require_content_safe
@@ -227,7 +242,7 @@ class AutoReviewService:
         config.keyword_whitelist = json.dumps(keywords, ensure_ascii=False)
         config.updated_by = operator
         config.updated_at = localnow_naive()
-        # 风险确认状态：本次勾选=刷新确认人/时间；沿用旧确认=保持不变；其余清空
+        # 风险确认状态：本次勾选即刷新确认人与时间；沿用旧确认则保持不变；其余清空
         acknowledged = bool(risk_acknowledged) or ack_carried
         config.risk_acknowledged = acknowledged
         if risk_acknowledged:

@@ -232,7 +232,7 @@ _REDACT_RULES: tuple[tuple[re.Pattern, str], ...] = (
     ),
     # 裸形态
     (re.compile(r"\bsk-[A-Za-z0-9_\-]{6,}"), "sk-<已脱敏>"),
-    (re.compile(r"(?i)\bBearer\s+[A-Za-z0-9\-._~+/]{8,}"), "Bearer <已脱敏>"),
+    (re.compile(r"(?i)\bBearer\s+[A-Z0-9._~+/-]{8,}"), "Bearer <已脱敏>"),
     (re.compile(r"\$2[aby]\$\d{2}\$[./A-Za-z0-9]{20,}"), "bcrypt<已脱敏>"),
     # SQLAlchemy 异常回显：保留「有条 SQL 出错」这件事，丢掉绑定参数
     (re.compile(r"\[parameters: .*?\](?=\s*(?:\n|$))", re.S), "[parameters: <已脱敏>]"),

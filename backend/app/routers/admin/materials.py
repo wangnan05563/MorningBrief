@@ -117,10 +117,7 @@ async def _make_material(
     source_type: str = MaterialSourceType.list.value,
     url: str | None = None,
     dedup_key: str | None = None,
-    media_type: str | None = None,
-    media_url: str | None = None,
-    media_thumb_url: str | None = None,
-    cover_url: str | None = None,
+    media: dict | None = None,
     check_dup: bool = True,
 ) -> Material:
     """查重并构造素材对象，**不写库、不提交**。
@@ -128,7 +125,14 @@ async def _make_material(
     单条入库由 `_persist_material` 紧接着提交；整本上传由 `_persist_materials_atomic`
     预检后统一提交——C91 的根因就是批量入口复用了「自带 commit」的单条函数。
     `check_dup=False` 仅供整本上传使用：它已一次性预检过整本的 dedup_key。
+    `media` 聚合四个可选的媒体列（media_type/media_url/media_thumb_url/cover_url），
+    text 素材整组不传即可。
     """
+    media = media or {}
+    media_type = media.get("media_type")
+    media_url = media.get("media_url")
+    media_thumb_url = media.get("media_thumb_url")
+    cover_url = media.get("cover_url")
     if source_type in (MaterialSourceType.list.value, MaterialSourceType.cos.value):
         key = dedup_key or compute_content_hash(content)
         if check_dup:
@@ -215,10 +219,12 @@ async def _persist_material(
         source_type=source_type,
         url=url,
         dedup_key=dedup_key,
-        media_type=media_type,
-        media_url=media_url,
-        media_thumb_url=media_thumb_url,
-        cover_url=cover_url,
+        media={
+            "media_type": media_type,
+            "media_url": media_url,
+            "media_thumb_url": media_thumb_url,
+            "cover_url": cover_url,
+        },
     )
     db.add(m)
     await db.commit()
@@ -372,7 +378,7 @@ async def list_materials(
     # T00775：精确过滤（绕开 keyword 的 LIKE 语义，避免标题含 % / _ 时被当作通配符）
     material_id: int = Query(None, description="按素材 ID 精确过滤（讲书稿书单「素材 ID」深链定位用）"),
     source: str = Query(None, description="按来源（书名）精确过滤（按书聚合视图点书名进明细用）"),
-    source_type: str = Query(None, description="按录入渠道过滤（list/cos=书稿文档，rss/book_rss=资讯与书评源，api/qrcode=外部拉取，book_plan=待讲书单占位）"),
+    source_type: str = Query(None, description="按录入渠道过滤（list/cos=书稿文档，rss/book_rss=资讯与书评源，api/qrcode=外部拉取，book_plan=待讲书单占位，web_search=全网搜索采集）"),
     media_type: str = Query(None, description="按素材媒体类型过滤（text/image/video，T00716）"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
@@ -758,8 +764,7 @@ async def delete_material(
     return success(data={"deleted": material_id})
 
 
-# 单次批量删除的目标上限（条 / 本）：超过即拒绝，让调用方分批，
-# 而不是一次把整表行数级别的删除塞进一个事务里
+# 单次批量删除的目标上限（条或本），超过即拒绝，让调用方分批，而不是一次把整表行数级别的删除塞进一个事务里。
 _BATCH_DELETE_MAX = 200
 
 
@@ -873,15 +878,15 @@ async def upload_document(
     created, skipped = await _persist_materials_atomic(
         db,
         [
-            dict(
-                channel_id=channel_id,
-                source=source,
-                title=f"{book_name} · {ch.title}"[:256],
-                content=ch.content,
-                category=category,
-                source_type=MaterialSourceType.list.value,
-                dedup_key=compute_content_hash(ch.content),
-            )
+            {
+                "channel_id": channel_id,
+                "source": source,
+                "title": f"{book_name} · {ch.title}"[:256],
+                "content": ch.content,
+                "category": category,
+                "source_type": MaterialSourceType.list.value,
+                "dedup_key": compute_content_hash(ch.content),
+            }
             for ch in chapters
         ],
     )
@@ -989,15 +994,15 @@ async def import_from_cos(
     created, skipped = await _persist_materials_atomic(
         db,
         [
-            dict(
-                channel_id=req.channel_id,
-                source=req.source,
-                title=ch.title,
-                content=ch.content,
-                category=req.category,
-                source_type=MaterialSourceType.cos.value,
-                dedup_key=compute_content_hash(ch.content),
-            )
+            {
+                "channel_id": req.channel_id,
+                "source": req.source,
+                "title": ch.title,
+                "content": ch.content,
+                "category": req.category,
+                "source_type": MaterialSourceType.cos.value,
+                "dedup_key": compute_content_hash(ch.content),
+            }
             for ch in chapters
         ],
     )

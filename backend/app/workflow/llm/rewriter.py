@@ -104,7 +104,7 @@ _AUDIOBOOK_BRIDGE_CLEANUP = {
 # 未兑现预告短语：稿件里“待会再说”多数源自原书文本被截断选材——原书承诺后文展开，
 # 对应部分却没进素材，承诺就成了对听众的空头支票。清洗层无法判断是否兑现，
 # 唯一安全策略是整句删除：少一句预告叙事更顺，留一个坑则破坏信任（T01010 兜底）
-_PROMISE_PAT = re.compile(r"待会[儿]?再说|后面再[说讲]|后面会讲|稍后再说")
+_PROMISE_PAT = re.compile(r"待会儿?再说|后面再[说讲]|后面会讲|稍后再说")
 
 
 # 按段位置追加的专项条款（T01010 对标得到听书稿：开篇导论 + 收尾总结）。
@@ -134,6 +134,22 @@ def _append_audiobook_position_rule(rule: str | None, style_seq: int, total: int
 # 超长段拆分的绝对字数下限：短节目档 words_per_segment 较小（可低至 500 字左右），
 # 仅按 1.5 倍相对阈值会把正常段落也拆碎；低于该绝对下限的一律视为正常篇幅
 _AUDIOBOOK_SPLIT_MIN_CHARS = 800
+
+
+def _greedy_pack_paragraphs(paras: list[str], threshold: int) -> list[str]:
+    """贪心装箱自然段：单段尽量多装且不超阈值，返回装箱后的文本块。"""
+    chunks: list[str] = []
+    cur = ""
+    for p in paras:
+        cand = f"{cur}\n\n{p}" if cur else p
+        if cur and len(cand) > threshold:
+            chunks.append(cur)
+            cur = p
+        else:
+            cur = cand
+    if cur:
+        chunks.append(cur)
+    return chunks
 
 
 def _split_overlong_audiobook_segments(
@@ -168,17 +184,7 @@ def _split_overlong_audiobook_segments(
             out.append(seg)
             continue
         paras = [p.strip() for p in re.split(r"\n\s*\n", content) if p.strip()]
-        chunks: list[str] = []
-        cur = ""
-        for p in paras:
-            cand = f"{cur}\n\n{p}" if cur else p
-            if cur and len(cand) > threshold:
-                chunks.append(cur)
-                cur = p
-            else:
-                cur = cand
-        if cur:
-            chunks.append(cur)
+        chunks = _greedy_pack_paragraphs(paras, threshold)
         if len(chunks) <= 1:
             # 无自然段边界（一气呵成）或单自然段超长：无损拆分不可行，不硬切
             logger.warning(
@@ -191,10 +197,11 @@ def _split_overlong_audiobook_segments(
             "[超长段拆分] seg{} {} 字超阈值 {}，按自然段边界拆为 {} 段",
             seg.get("seq"), len(content), threshold, len(chunks),
         )
-        for piece in chunks:
+        out.extend(
             # title/material_id/cover_url 原样继承：拆分只改变播报节奏，
             # 不改变段落归属（素材溯源与文稿页封面保持一致）
-            out.append({**seg, "content": piece})
+            {**seg, "content": piece} for piece in chunks
+        )
     if len(out) != len(segments):
         for i, s in enumerate(out, 1):
             s["seq"] = i
@@ -251,9 +258,7 @@ def _clean_audiobook_bridge_phrases(text: str) -> tuple[str, int]:
         if phrase in text:
             text = text.replace(phrase, repl)
             hits += 1
-    # 未兑现预告句整句删除：按句末标点/换行切句（零宽切分保留分隔符），
-    # 含预告短语的句子整句丢弃。须在换行规整前做——预告句删除后可能留下
-    # 双句号等残留，由下方“连续标点收口”循环统一处理
+    # 未兑现预告句整句删除：按句末标点与换行切句（零宽切分保留分隔符），含预告短语的句子整句丢弃，须在换行规整前做，否则留下的双句号等残留由下方“连续标点收口”循环统一处理。
     parts = re.split(r"(?<=[。！？；\n])", text)
     kept = [p for p in parts if not _PROMISE_PAT.search(p)]
     if len(kept) != len(parts):
@@ -272,7 +277,7 @@ def _clean_audiobook_bridge_phrases(text: str) -> tuple[str, int]:
     # 剥离每个自然段段首的孤立标点：覆盖两种残留形态——
     # 段首黏连（“。在《我只知道人是什么》中”）与 \n\n 后行首（“？\n\n。二〇一四年…”）；
     # 中文正文段首不会以句读标点开头，不会误伤正常内容
-    text = re.sub(r"(?m)^[ \t\u3000]*[。，、；：，,]+[ \t\u3000]*", "", text)
+    text = re.sub(r"(?m)^[ \t\u3000]*[。，、；：,]+[ \t\u3000]*", "", text)
     return text, hits
 
 

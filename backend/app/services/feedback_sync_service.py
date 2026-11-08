@@ -15,6 +15,7 @@
 import json
 import logging
 from datetime import datetime, timezone
+from functools import partial
 from typing import Optional
 
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -132,8 +133,11 @@ class FeedbackSyncService:
                     if inserted:
                         await mobile_service.notify_isolated(
                             session,
-                            lambda s: mobile_service.notify_feedback_created(
-                                s, feedback_id, category, content,
+                            partial(
+                                mobile_service.notify_feedback_created,
+                                feedback_id,
+                                category,
+                                content,
                                 created_at=created_at_value,
                             ),
                         )
