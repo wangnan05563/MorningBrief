@@ -1,0 +1,193 @@
+{
+ "base": "http://127.0.0.1:8021",
+ "sampled_at": "2026-11-04T22:27:41+0800",
+ "runs": [
+  {
+   "label": "GET /admin/api/v1/ebooks/categories",
+   "statuses": [
+    200,
+    200,
+    200,
+    200
+   ],
+   "ms": [
+    1374,
+    4,
+    4,
+    21
+   ],
+   "first_ms": 1374,
+   "warm_avg_ms": 10
+  },
+  {
+   "label": "GET /admin/api/v1/ebooks/search",
+   "statuses": [
+    200,
+    200,
+    200,
+    200
+   ],
+   "ms": [
+    211,
+    172,
+    211,
+    204
+   ],
+   "first_ms": 211,
+   "warm_avg_ms": 195
+  },
+  {
+   "label": "GET /admin/api/v1/ebooks/random",
+   "statuses": [
+    200,
+    200,
+    200,
+    200
+   ],
+   "ms": [
+    217,
+    159,
+    169,
+    159
+   ],
+   "first_ms": 217,
+   "warm_avg_ms": 162
+  },
+  {
+   "label": "GET /admin/api/v1/materials/export",
+   "statuses": [
+    200,
+    200,
+    200,
+    200
+   ],
+   "ms": [
+    184,
+    242,
+    217,
+    255
+   ],
+   "first_ms": 184,
+   "warm_avg_ms": 238
+  },
+  {
+   "label": "GET /admin/api/v1/maintenance/status",
+   "statuses": [
+    200,
+    200,
+    200,
+    200
+   ],
+   "ms": [
+    52,
+    41,
+    26,
+    38
+   ],
+   "first_ms": 52,
+   "warm_avg_ms": 35
+  },
+  {
+   "label": "GET /admin/api/v1/stats/rss-health",
+   "statuses": [
+    200,
+    200,
+    200,
+    200
+   ],
+   "ms": [
+    101,
+    54,
+    62,
+    61
+   ],
+   "first_ms": 101,
+   "warm_avg_ms": 59
+  },
+  {
+   "label": "GET /admin/api/v1/channels/rss/sources",
+   "statuses": [
+    200,
+    200,
+    200,
+    200
+   ],
+   "ms": [
+    58,
+    62,
+    71,
+    52
+   ],
+   "first_ms": 58,
+   "warm_avg_ms": 62
+  },
+  {
+   "label": "GET /admin/api/v1/channels/book-rss/sources",
+   "statuses": [
+    200,
+    200,
+    200,
+    200
+   ],
+   "ms": [
+    32,
+    11,
+    34,
+    34
+   ],
+   "first_ms": 32,
+   "warm_avg_ms": 26
+  },
+  {
+   "label": "GET /admin/api/v1/db-admin/tables",
+   "statuses": [
+    200,
+    200,
+    200,
+    200
+   ],
+   "ms": [
+    33,
+    13,
+    32,
+    11
+   ],
+   "first_ms": 33,
+   "warm_avg_ms": 19
+  },
+  {
+   "label": "GET /api/v1/episodes/today",
+   "statuses": [
+    200,
+    200,
+    200,
+    200
+   ],
+   "ms": [
+    7,
+    4,
+    3,
+    26
+   ],
+   "first_ms": 7,
+   "warm_avg_ms": 11
+  },
+  {
+   "label": "POST /api/v1/playlogs/progress",
+   "statuses": [
+    200,
+    200,
+    200,
+    200
+   ],
+   "ms": [
+    5,
+    29,
+    33,
+    29
+   ],
+   "first_ms": 5,
+   "warm_avg_ms": 30
+  }
+ ]
+}

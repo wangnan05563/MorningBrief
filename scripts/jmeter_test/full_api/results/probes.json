@@ -1,0 +1,513 @@
+{
+  "GET /admin/api/v1/about/check-update": {
+    "status": "static-only",
+    "code": "",
+    "note": "GET 可能触发第三方/付费出站，按代码路径覆盖"
+  },
+  "POST /admin/api/v1/about/upgrade": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "GET /admin/api/v1/about/upgrade/status": {
+    "status": "probed",
+    "code": 200,
+    "ms": 815.7,
+    "note": "{\"code\":0,\"message\":\"success\",\"data\":{\"state\":\"idle\",\"tag\":null,\"percent\":0,\"downloaded_mb\":0.0,\"message\":\"\",\"error\":\"\"}}"
+  },
+  "DELETE /admin/api/v1/ads/materials/{material_id}": {
+    "status": "probed",
+    "code": 404,
+    "ms": 14.0,
+    "note": "{\"code\":404,\"message\":\"素材不存在\",\"data\":null}"
+  },
+  "DELETE /admin/api/v1/ads/placements/{placement_id}": {
+    "status": "probed",
+    "code": 404,
+    "ms": 10.5,
+    "note": "{\"code\":404,\"message\":\"投放规则不存在\",\"data\":null}"
+  },
+  "POST /admin/api/v1/ai/budget/reset": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/ai/chat": {
+    "status": "probed",
+    "code": 400,
+    "ms": 4.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "PUT /admin/api/v1/ai/config": {
+    "status": "probed",
+    "code": 400,
+    "ms": 3.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/ai/download-tts-models": {
+    "status": "probed",
+    "code": 400,
+    "ms": 3.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/ai/models": {
+    "status": "probed",
+    "code": 400,
+    "ms": 3.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/ai/preview-tts": {
+    "status": "probed",
+    "code": 400,
+    "ms": 4.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/ai/reset-config": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/ai/selected-model": {
+    "status": "probed",
+    "code": 400,
+    "ms": 4.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/ai/test-image": {
+    "status": "probed",
+    "code": 400,
+    "ms": 3.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/ai/test-llm": {
+    "status": "probed",
+    "code": 400,
+    "ms": 3.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/ai/test-tts": {
+    "status": "probed",
+    "code": 400,
+    "ms": 3.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "GET /admin/api/v1/ai/voices": {
+    "status": "probed",
+    "code": 200,
+    "ms": 9.0,
+    "note": "{\"code\":0,\"message\":\"success\",\"data\":[{\"key\":\"zh-CN-XiaoxiaoNeural\",\"label\":\"晓晓（标准女声·温暖·新闻/小说，默认）\"},{\"key\":\"zh-CN-YunyangNeural\",\"label\":\"云扬（新闻男声·专"
+  },
+  "DELETE /admin/api/v1/ai/voices/sync": {
+    "status": "static-only",
+    "code": "",
+    "note": "集合级删除会清空夹具，不执行"
+  },
+  "POST /admin/api/v1/ai/voices/sync": {
+    "status": "probed",
+    "code": 400,
+    "ms": 4.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/assistant/execute": {
+    "status": "probed",
+    "code": 400,
+    "ms": 4.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/assistant/plan": {
+    "status": "probed",
+    "code": 400,
+    "ms": 12.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "DELETE /admin/api/v1/auth/users/{admin_id}": {
+    "status": "probed",
+    "code": 200,
+    "ms": 9.0,
+    "note": "{\"code\":404,\"message\":\"账号不存在\",\"data\":null}"
+  },
+  "POST /admin/api/v1/auto-review/retry/{stat_id}": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/backups": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/backups/cleanup": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/backups/restore": {
+    "status": "probed",
+    "code": 400,
+    "ms": 4.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "DELETE /admin/api/v1/channels/bgm/{path}": {
+    "status": "probed",
+    "code": 200,
+    "ms": 5.0,
+    "note": "{\"code\":400,\"message\":\"仅允许删除自定义 BGM\",\"data\":null}"
+  },
+  "DELETE /admin/api/v1/channels/{channel_id}": {
+    "status": "probed",
+    "code": 200,
+    "ms": 18.0,
+    "note": "{\"code\":404,\"message\":\"频道不存在: 999999\",\"data\":null}"
+  },
+  "DELETE /admin/api/v1/channels/{channel_id}/book-pool/items/{item_id}": {
+    "status": "probed",
+    "code": 200,
+    "ms": 12.0,
+    "note": "{\"code\":404,\"message\":\"池项不存在\",\"data\":null}"
+  },
+  "POST /admin/api/v1/channels/{channel_id}/book-pool/pick-preview": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/channels/{channel_id}/book-pool/progress/reset": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/channels/{channel_id}/generate-prompts": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/channels/{channel_id}/icon/ai-generate": {
+    "status": "probed",
+    "code": 400,
+    "ms": 8.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/channels/{channel_id}/recommend-bgm": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/channels/{channel_id}/recommend-sources": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "PUT /admin/api/v1/cos/config": {
+    "status": "probed",
+    "code": 400,
+    "ms": 5.1,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "GET /admin/api/v1/cos/download": {
+    "status": "static-only",
+    "code": "",
+    "note": "GET 可能触发第三方/付费出站，按代码路径覆盖"
+  },
+  "GET /admin/api/v1/cos/exists": {
+    "status": "static-only",
+    "code": "",
+    "note": "GET 可能触发第三方/付费出站，按代码路径覆盖"
+  },
+  "DELETE /admin/api/v1/cos/folder": {
+    "status": "static-only",
+    "code": "",
+    "note": "集合级删除会清空夹具，不执行"
+  },
+  "POST /admin/api/v1/cos/folder": {
+    "status": "probed",
+    "code": 400,
+    "ms": 9.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "GET /admin/api/v1/cos/metadata": {
+    "status": "static-only",
+    "code": "",
+    "note": "GET 可能触发第三方/付费出站，按代码路径覆盖"
+  },
+  "POST /admin/api/v1/cos/move": {
+    "status": "probed",
+    "code": 400,
+    "ms": 5.1,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "DELETE /admin/api/v1/cos/object": {
+    "status": "static-only",
+    "code": "",
+    "note": "集合级删除会清空夹具，不执行"
+  },
+  "GET /admin/api/v1/cos/objects": {
+    "status": "static-only",
+    "code": "",
+    "note": "GET 可能触发第三方/付费出站，按代码路径覆盖"
+  },
+  "POST /admin/api/v1/cos/reset-config": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/cos/restore": {
+    "status": "probed",
+    "code": 400,
+    "ms": 5.6,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "GET /admin/api/v1/cos/restore-preview": {
+    "status": "static-only",
+    "code": "",
+    "note": "GET 可能触发第三方/付费出站，按代码路径覆盖"
+  },
+  "POST /admin/api/v1/cos/test-connection": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/cos/upload": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/db-admin/tables/{table}/cascade-preview": {
+    "status": "probed",
+    "code": 400,
+    "ms": 8.1,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/db-admin/tables/{table}/import": {
+    "status": "probed",
+    "code": 400,
+    "ms": 3.9,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/db-admin/tables/{table}/import/preview": {
+    "status": "probed",
+    "code": 400,
+    "ms": 17.6,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/db-admin/tables/{table}/rows": {
+    "status": "probed",
+    "code": 400,
+    "ms": 6.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/db-admin/tables/{table}/rows/batch-delete": {
+    "status": "probed",
+    "code": 400,
+    "ms": 5.1,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "DELETE /admin/api/v1/db-admin/tables/{table}/rows/{pk_value}": {
+    "status": "probed",
+    "code": 400,
+    "ms": 10.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: query.confirm_text: Field required\",\"data\":{\"errors\":[{\"loc\":[\"query\",\"confirm_text\"],\"type\":\"missing\",\"msg\":\"Field required\"}]}}"
+  },
+  "PATCH /admin/api/v1/db-admin/tables/{table}/rows/{pk_value}": {
+    "status": "probed",
+    "code": 400,
+    "ms": 5.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/ebooks/draft-material": {
+    "status": "probed",
+    "code": 400,
+    "ms": 4.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/ebooks/index/rebuild": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "GET /admin/api/v1/events/stream": {
+    "status": "sse",
+    "code": 200,
+    "ms": 19.0,
+    "note": "stream opened, first bytes=b'event: connected\\ndata: {\"type\": '"
+  },
+  "POST /admin/api/v1/m/emergency/resume": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/m/emergency/stop": {
+    "status": "probed",
+    "code": 400,
+    "ms": 6.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "DELETE /admin/api/v1/materials": {
+    "status": "static-only",
+    "code": "",
+    "note": "集合级删除会清空夹具，不执行"
+  },
+  "POST /admin/api/v1/materials/batch-delete": {
+    "status": "probed",
+    "code": 400,
+    "ms": 3.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/materials/import-cos": {
+    "status": "probed",
+    "code": 400,
+    "ms": 4.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/materials/import-url": {
+    "status": "probed",
+    "code": 400,
+    "ms": 5.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/materials/share": {
+    "status": "probed",
+    "code": 400,
+    "ms": 6.5,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "DELETE /admin/api/v1/materials/{material_id}": {
+    "status": "probed",
+    "code": 404,
+    "ms": 38.5,
+    "note": "{\"code\":404,\"message\":\"素材不存在\",\"data\":null}"
+  },
+  "POST /admin/api/v1/notification/logs/{log_id}/resend": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/notification/test": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/queue/tasks/batch-delete": {
+    "status": "probed",
+    "code": 400,
+    "ms": 3.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/queue/tasks/{workflow_id}/cancel": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/queue/tasks/{workflow_id}/retry": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "DELETE /admin/api/v1/scripts/{script_id}": {
+    "status": "probed",
+    "code": 404,
+    "ms": 76.5,
+    "note": "{\"code\":404,\"message\":\"稿件不存在\",\"data\":null}"
+  },
+  "POST /admin/api/v1/system/ffmpeg-install": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/tunnel/cloudflare/create": {
+    "status": "probed",
+    "code": 400,
+    "ms": 141.1,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/tunnel/cloudflare/login": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/tunnel/cloudflare/route-dns": {
+    "status": "probed",
+    "code": 400,
+    "ms": 4.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/tunnel/config": {
+    "status": "probed",
+    "code": 400,
+    "ms": 3.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/tunnel/start": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/tunnel/stop": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "POST /admin/api/v1/workflows/batch-delete": {
+    "status": "probed",
+    "code": 400,
+    "ms": 2.5,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/workflows/batch-delete/preview": {
+    "status": "probed",
+    "code": 400,
+    "ms": 3.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/workflows/trigger": {
+    "status": "probed",
+    "code": 400,
+    "ms": 4.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /admin/api/v1/workflows/trigger-all": {
+    "status": "static-only",
+    "code": "",
+    "note": "无请求体且可能触发外部动作，不执行"
+  },
+  "DELETE /admin/api/v1/workflows/{workflow_id}/audio/episode": {
+    "status": "probed",
+    "code": 404,
+    "ms": 16.6,
+    "note": "{\"code\":404,\"message\":\"工作流不存在\",\"data\":null}"
+  },
+  "DELETE /admin/api/v1/workflows/{workflow_id}/audio/tts/{filename}": {
+    "status": "probed",
+    "code": 404,
+    "ms": 5.0,
+    "note": "{\"code\":404,\"message\":\"音频文件不存在\",\"data\":null}"
+  },
+  "POST /admin/api/v1/workflows/{workflow_id}/retry": {
+    "status": "probed",
+    "code": 400,
+    "ms": 3.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /api/v1/auth/login": {
+    "status": "probed",
+    "code": 400,
+    "ms": 3.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /api/v1/cos/presign-upload": {
+    "status": "probed",
+    "code": 400,
+    "ms": 11.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /api/internal/workflow/trigger": {
+    "status": "probed",
+    "code": 400,
+    "ms": 21.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  },
+  "POST /api/internal/workflow/{workflow_id}/publish": {
+    "status": "probed",
+    "code": 400,
+    "ms": 5.0,
+    "note": "{\"code\":400,\"message\":\"参数错误: body.13: JSON decode error\",\"data\":{\"errors\":[{\"loc\":[\"body\",13],\"type\":\"json_invalid\",\"msg\":\"JSON decode error\"}]}}"
+  }
+}

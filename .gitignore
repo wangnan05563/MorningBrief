@@ -262,3 +262,13 @@ scripts/jmeter_test/admin_token.txt
 # 注：2026-10-13 旧口径「文本证据与截图入库」已废止；目录内曾入库的 232 个文本/截图证据
 # 已随本次提交移出索引，需要时仍可从该提交之前的 git 历史找回
 _validate/
+
+# 性能测试运行产物：runtime/ 含明文 JWT 与管理员口令，sandbox/ 含 .env 副本与数据库快照
+scripts/jmeter_test/full_api/runtime/
+scripts/jmeter_test/full_api/sandbox/
+scripts/jmeter_test/full_api/results/**/*.jtl
+scripts/jmeter_test/full_api/results/*.jtl
+scripts/jmeter_test/full_api/results/*.log
+
+# ---------- 发布说明 ----------
+release-notes-*.md

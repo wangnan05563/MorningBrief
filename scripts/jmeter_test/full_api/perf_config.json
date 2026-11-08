@@ -1,0 +1,68 @@
+{
+  "secrets": {
+    "admin_password_sentinel": "@@ADMIN_PASSWORD@@"
+  },
+  "sandbox": {
+    "host": "127.0.0.1",
+    "port": 8021,
+    "health_path": "/api/health/live",
+    "db_source": "backend/data/news.db",
+    "app_source": "backend/app",
+    "env_source": "backend/.env",
+    "startup_timeout_sec": 360,
+    "rate_limit_per_minute": 10000000,
+    "env_overrides": {
+      "JWT_ADMIN_EXPIRE_HOURS": "8"
+    },
+    "scrub_env_keys": [
+      "COS_SECRET_ID",
+      "COS_SECRET_KEY",
+      "COS_BUCKET",
+      "LLM_API_KEY",
+      "ALIYUN_TTS_API_KEY",
+      "IMAGE_API_KEY",
+      "WX_SECRET",
+      "TENCENT_TTS_SECRET_ID",
+      "TENCENT_TTS_SECRET_KEY",
+      "ALERT_SMS_SECRET_KEY"
+    ],
+    "seed_ebook_index": true,
+    "align_schema": true,
+    "java_home": "D:/code/Java/zulu17.52.17-ca-jdk17.0.12-win_x64",
+    "jmeter_home": "D:/code/Jmeter/apache-jmeter-5.6.3",
+    "python": "backend/.venv/Scripts/python.exe"
+  },
+  "baseline": {
+    "loops": 3,
+    "response_timeout_ms": 60000
+  },
+  "stress": {
+    "duration_sec": 90,
+    "ramp_sec": 15,
+    "read_tiers": [
+      10,
+      50,
+      100,
+      200
+    ],
+    "write_tiers": [
+      10,
+      25,
+      50
+    ],
+    "admin_tiers": [
+      10,
+      25,
+      50
+    ]
+  },
+  "soak": {
+    "duration_sec": 14400,
+    "threads": 20,
+    "ramp_sec": 60,
+    "admin_threads": 4
+  },
+  "monitor": {
+    "interval_sec": 2
+  }
+}

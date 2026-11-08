@@ -1,0 +1,5911 @@
+[
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/about",
+    "operation_id": "get_about_admin_api_v1_about_get",
+    "summary": "Get About",
+    "tags": [
+      "关于"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/about/check-update",
+    "operation_id": "check_update_admin_api_v1_about_check_update_get",
+    "summary": "Check Update",
+    "tags": [
+      "关于"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/about/upgrade",
+    "operation_id": "trigger_upgrade_admin_api_v1_about_upgrade_post",
+    "summary": "Trigger Upgrade",
+    "tags": [
+      "关于"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/about/upgrade/status",
+    "operation_id": "upgrade_status_admin_api_v1_about_upgrade_status_get",
+    "summary": "Upgrade Status",
+    "tags": [
+      "关于"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/ads/materials",
+    "operation_id": "list_materials_admin_api_v1_ads_materials_get",
+    "summary": "List Materials",
+    "tags": [
+      "B端-广告"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "keyword",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/ads/materials",
+    "operation_id": "create_material_admin_api_v1_ads_materials_post",
+    "summary": "Create Material",
+    "tags": [
+      "B端-广告"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "DELETE",
+    "path": "/admin/api/v1/ads/materials/{material_id}",
+    "operation_id": "delete_material_admin_api_v1_ads_materials__material_id__delete",
+    "summary": "Delete Material",
+    "tags": [
+      "B端-广告"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "material_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/ads/placements",
+    "operation_id": "list_placements_admin_api_v1_ads_placements_get",
+    "summary": "List Placements",
+    "tags": [
+      "B端-广告"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "enabled",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/ads/placements",
+    "operation_id": "create_placement_admin_api_v1_ads_placements_post",
+    "summary": "Create Placement",
+    "tags": [
+      "B端-广告"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "DELETE",
+    "path": "/admin/api/v1/ads/placements/{placement_id}",
+    "operation_id": "delete_placement_admin_api_v1_ads_placements__placement_id__delete",
+    "summary": "Delete Placement",
+    "tags": [
+      "B端-广告"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "placement_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PUT",
+    "path": "/admin/api/v1/ads/placements/{placement_id}",
+    "operation_id": "update_placement_admin_api_v1_ads_placements__placement_id__put",
+    "summary": "Update Placement",
+    "tags": [
+      "B端-广告"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "placement_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/ads/schedule",
+    "operation_id": "get_schedule_admin_api_v1_ads_schedule_get",
+    "summary": "Get Schedule",
+    "tags": [
+      "B端-广告"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "month",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/ai/audio-profile",
+    "operation_id": "get_audio_profile_admin_api_v1_ai_audio_profile_get",
+    "summary": "Get Audio Profile",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/ai/budget",
+    "operation_id": "get_budget_admin_api_v1_ai_budget_get",
+    "summary": "Get Budget",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/ai/budget/reset",
+    "operation_id": "reset_budget_endpoint_admin_api_v1_ai_budget_reset_post",
+    "summary": "Reset Budget Endpoint",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/ai/chat",
+    "operation_id": "chat_admin_api_v1_ai_chat_post",
+    "summary": "Chat",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/ai/config",
+    "operation_id": "get_config_admin_api_v1_ai_config_get",
+    "summary": "Get Config",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PUT",
+    "path": "/admin/api/v1/ai/config",
+    "operation_id": "save_config_admin_api_v1_ai_config_put",
+    "summary": "Save Config",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/ai/download-tts-models",
+    "operation_id": "download_tts_models_admin_api_v1_ai_download_tts_models_post",
+    "summary": "Download Tts Models",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/ai/download-tts-models/status",
+    "operation_id": "download_tts_models_status_admin_api_v1_ai_download_tts_models_status_get",
+    "summary": "Download Tts Models Status",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "provider",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/ai/models",
+    "operation_id": "fetch_models_admin_api_v1_ai_models_post",
+    "summary": "Fetch Models",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/ai/presets",
+    "operation_id": "get_presets_admin_api_v1_ai_presets_get",
+    "summary": "Get Presets",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/ai/preview-tts",
+    "operation_id": "preview_tts_admin_api_v1_ai_preview_tts_post",
+    "summary": "Preview Tts",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/ai/reset-config",
+    "operation_id": "reset_config_admin_api_v1_ai_reset_config_post",
+    "summary": "Reset Config",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "scope",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/ai/selected-model",
+    "operation_id": "get_selected_model_admin_api_v1_ai_selected_model_get",
+    "summary": "Get Selected Model",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/ai/selected-model",
+    "operation_id": "set_selected_model_admin_api_v1_ai_selected_model_post",
+    "summary": "Set Selected Model",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/ai/test-image",
+    "operation_id": "test_image_admin_api_v1_ai_test_image_post",
+    "summary": "Test Image",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/ai/test-llm",
+    "operation_id": "test_llm_admin_api_v1_ai_test_llm_post",
+    "summary": "Test Llm",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/ai/test-tts",
+    "operation_id": "test_tts_admin_api_v1_ai_test_tts_post",
+    "summary": "Test Tts",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/ai/usage",
+    "operation_id": "get_usage_admin_api_v1_ai_usage_get",
+    "summary": "Get Usage",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/ai/voices",
+    "operation_id": "get_voices_admin_api_v1_ai_voices_get",
+    "summary": "Get Voices",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "provider",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/ai/voices/meta",
+    "operation_id": "get_voices_meta_admin_api_v1_ai_voices_meta_get",
+    "summary": "Get Voices Meta",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "provider",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "DELETE",
+    "path": "/admin/api/v1/ai/voices/sync",
+    "operation_id": "reset_voices_cache_admin_api_v1_ai_voices_sync_delete",
+    "summary": "Reset Voices Cache",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "provider",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/ai/voices/sync",
+    "operation_id": "sync_voices_admin_api_v1_ai_voices_sync_post",
+    "summary": "Sync Voices",
+    "tags": [
+      "B端-AI服务"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/assistant/actions",
+    "operation_id": "list_actions_admin_api_v1_assistant_actions_get",
+    "summary": "List Actions",
+    "tags": [
+      "B端-智能助手"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/assistant/execute",
+    "operation_id": "execute_admin_api_v1_assistant_execute_post",
+    "summary": "Execute",
+    "tags": [
+      "B端-智能助手"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/assistant/plan",
+    "operation_id": "plan_admin_api_v1_assistant_plan_post",
+    "summary": "Plan",
+    "tags": [
+      "B端-智能助手"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/audit-logs",
+    "operation_id": "list_audit_logs_admin_api_v1_audit_logs_get",
+    "summary": "List Audit Logs",
+    "tags": [
+      "B端-审计日志"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "category",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "action",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "start",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "end",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "page_size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/audit-logs/categories",
+    "operation_id": "audit_categories_admin_api_v1_audit_logs_categories_get",
+    "summary": "Audit Categories",
+    "tags": [
+      "B端-审计日志"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/auth/change-password",
+    "operation_id": "change_password_admin_api_v1_auth_change_password_post",
+    "summary": "Change Password",
+    "tags": [
+      "B端-认证"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/auth/login",
+    "operation_id": "login_admin_api_v1_auth_login_post",
+    "summary": "Login",
+    "tags": [
+      "B端-认证"
+    ],
+    "security": [],
+    "params": [],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/auth/logout",
+    "operation_id": "logout_admin_api_v1_auth_logout_post",
+    "summary": "Logout",
+    "tags": [
+      "B端-认证"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/auth/users",
+    "operation_id": "list_admin_users_admin_api_v1_auth_users_get",
+    "summary": "List Admin Users",
+    "tags": [
+      "B端-认证"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "keyword",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/auth/users",
+    "operation_id": "create_admin_user_admin_api_v1_auth_users_post",
+    "summary": "Create Admin User",
+    "tags": [
+      "B端-认证"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "DELETE",
+    "path": "/admin/api/v1/auth/users/{admin_id}",
+    "operation_id": "delete_admin_user_admin_api_v1_auth_users__admin_id__delete",
+    "summary": "Delete Admin User",
+    "tags": [
+      "B端-认证"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "admin_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PUT",
+    "path": "/admin/api/v1/auth/users/{admin_id}",
+    "operation_id": "update_admin_user_admin_api_v1_auth_users__admin_id__put",
+    "summary": "Update Admin User",
+    "tags": [
+      "B端-认证"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "admin_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/auto-review/config",
+    "operation_id": "get_config_admin_api_v1_auto_review_config_get",
+    "summary": "Get Config",
+    "tags": [
+      "B端-自动审批"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PUT",
+    "path": "/admin/api/v1/auto-review/config",
+    "operation_id": "update_config_admin_api_v1_auto_review_config_put",
+    "summary": "Update Config",
+    "tags": [
+      "B端-自动审批"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/auto-review/history",
+    "operation_id": "list_history_admin_api_v1_auto_review_history_get",
+    "summary": "List History",
+    "tags": [
+      "B端-自动审批"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "success",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/auto-review/retry/{stat_id}",
+    "operation_id": "retry_failed_auto_review_admin_api_v1_auto_review_retry__stat_id__post",
+    "summary": "Retry Failed Auto Review",
+    "tags": [
+      "B端-自动审批"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "stat_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/auto-review/stats",
+    "operation_id": "get_stats_admin_api_v1_auto_review_stats_get",
+    "summary": "Get Stats",
+    "tags": [
+      "B端-自动审批"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "start_date",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "end_date",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/backups",
+    "operation_id": "list_backups_admin_api_v1_backups_get",
+    "summary": "List Backups",
+    "tags": [
+      "B端-数据库备份"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/backups",
+    "operation_id": "create_backup_admin_api_v1_backups_post",
+    "summary": "Create Backup",
+    "tags": [
+      "B端-数据库备份"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/backups/cleanup",
+    "operation_id": "cleanup_backups_admin_api_v1_backups_cleanup_post",
+    "summary": "Cleanup Backups",
+    "tags": [
+      "B端-数据库备份"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "keep_days",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "max_files",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/backups/restore",
+    "operation_id": "restore_backup_admin_api_v1_backups_restore_post",
+    "summary": "Restore Backup",
+    "tags": [
+      "B端-数据库备份"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/channels",
+    "operation_id": "list_channels_admin_api_v1_channels_get",
+    "summary": "List Channels",
+    "tags": [
+      "B端-频道管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "active_only",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/channels",
+    "operation_id": "create_channel_admin_api_v1_channels_post",
+    "summary": "Create Channel",
+    "tags": [
+      "B端-频道管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/channels/bgm/list",
+    "operation_id": "list_bgm_admin_api_v1_channels_bgm_list_get",
+    "summary": "List Bgm",
+    "tags": [
+      "B端-频道管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/channels/bgm/upload",
+    "operation_id": "upload_bgm_admin_api_v1_channels_bgm_upload_post",
+    "summary": "Upload Bgm",
+    "tags": [
+      "B端-频道管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "multipart/form-data"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "DELETE",
+    "path": "/admin/api/v1/channels/bgm/{path}",
+    "operation_id": "delete_bgm_admin_api_v1_channels_bgm__path__delete",
+    "summary": "Delete Bgm",
+    "tags": [
+      "B端-频道管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "path",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/channels/book-rss/sources",
+    "operation_id": "list_book_rss_sources_admin_api_v1_channels_book_rss_sources_get",
+    "summary": "List Book Rss Sources",
+    "tags": [
+      "B端-频道管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/channels/cover-presets",
+    "operation_id": "list_cover_presets_admin_api_v1_channels_cover_presets_get",
+    "summary": "List Cover Presets",
+    "tags": [
+      "B端-频道管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/channels/rss/sources",
+    "operation_id": "list_rss_sources_admin_api_v1_channels_rss_sources_get",
+    "summary": "List Rss Sources",
+    "tags": [
+      "B端-频道管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "DELETE",
+    "path": "/admin/api/v1/channels/{channel_id}",
+    "operation_id": "delete_channel_admin_api_v1_channels__channel_id__delete",
+    "summary": "Delete Channel",
+    "tags": [
+      "B端-频道管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PUT",
+    "path": "/admin/api/v1/channels/{channel_id}",
+    "operation_id": "update_channel_admin_api_v1_channels__channel_id__put",
+    "summary": "Update Channel",
+    "tags": [
+      "B端-频道管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/channels/{channel_id}/book-pool",
+    "operation_id": "list_pool_admin_api_v1_channels__channel_id__book_pool_get",
+    "summary": "List Pool",
+    "tags": [
+      "admin-book-pool"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/channels/{channel_id}/book-pool/candidates",
+    "operation_id": "list_candidates_admin_api_v1_channels__channel_id__book_pool_candidates_get",
+    "summary": "List Candidates",
+    "tags": [
+      "admin-book-pool"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "keyword",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/channels/{channel_id}/book-pool/items",
+    "operation_id": "add_books_admin_api_v1_channels__channel_id__book_pool_items_post",
+    "summary": "Add Books",
+    "tags": [
+      "admin-book-pool"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "DELETE",
+    "path": "/admin/api/v1/channels/{channel_id}/book-pool/items/{item_id}",
+    "operation_id": "remove_item_admin_api_v1_channels__channel_id__book_pool_items__item_id__delete",
+    "summary": "Remove Item",
+    "tags": [
+      "admin-book-pool"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "item_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/channels/{channel_id}/book-pool/items/{item_id}/move",
+    "operation_id": "move_item_admin_api_v1_channels__channel_id__book_pool_items__item_id__move_post",
+    "summary": "Move Item",
+    "tags": [
+      "admin-book-pool"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "item_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "direction",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PUT",
+    "path": "/admin/api/v1/channels/{channel_id}/book-pool/order",
+    "operation_id": "reorder_admin_api_v1_channels__channel_id__book_pool_order_put",
+    "summary": "Reorder",
+    "tags": [
+      "admin-book-pool"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/channels/{channel_id}/book-pool/pick-preview",
+    "operation_id": "pick_preview_admin_api_v1_channels__channel_id__book_pool_pick_preview_post",
+    "summary": "Pick Preview",
+    "tags": [
+      "admin-book-pool"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/channels/{channel_id}/book-pool/progress/reset",
+    "operation_id": "reset_progress_admin_api_v1_channels__channel_id__book_pool_progress_reset_post",
+    "summary": "Reset Progress",
+    "tags": [
+      "admin-book-pool"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/channels/{channel_id}/delete-preview",
+    "operation_id": "delete_channel_preview_admin_api_v1_channels__channel_id__delete_preview_get",
+    "summary": "Delete Channel Preview",
+    "tags": [
+      "B端-频道管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/channels/{channel_id}/generate-prompts",
+    "operation_id": "generate_prompts_admin_api_v1_channels__channel_id__generate_prompts_post",
+    "summary": "Generate Prompts",
+    "tags": [
+      "B端-频道管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/channels/{channel_id}/icon",
+    "operation_id": "upload_channel_icon_admin_api_v1_channels__channel_id__icon_post",
+    "summary": "Upload Channel Icon",
+    "tags": [
+      "B端-频道管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "multipart/form-data"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/channels/{channel_id}/icon/ai-generate",
+    "operation_id": "ai_generate_channel_icon_admin_api_v1_channels__channel_id__icon_ai_generate_post",
+    "summary": "Ai Generate Channel Icon",
+    "tags": [
+      "B端-频道管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/channels/{channel_id}/recommend-bgm",
+    "operation_id": "recommend_bgm_admin_api_v1_channels__channel_id__recommend_bgm_post",
+    "summary": "Recommend Bgm",
+    "tags": [
+      "B端-频道管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/channels/{channel_id}/recommend-sources",
+    "operation_id": "recommend_sources_admin_api_v1_channels__channel_id__recommend_sources_post",
+    "summary": "Recommend Sources",
+    "tags": [
+      "B端-频道管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/channels/{channel_id}/script-mode",
+    "operation_id": "get_script_mode_admin_api_v1_channels__channel_id__script_mode_get",
+    "summary": "Get Script Mode",
+    "tags": [
+      "admin-book-pool"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PUT",
+    "path": "/admin/api/v1/channels/{channel_id}/script-mode",
+    "operation_id": "set_script_mode_admin_api_v1_channels__channel_id__script_mode_put",
+    "summary": "Set Script Mode",
+    "tags": [
+      "admin-book-pool"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PUT",
+    "path": "/admin/api/v1/channels/{channel_id}/script-mode/schedule",
+    "operation_id": "update_schedule_admin_api_v1_channels__channel_id__script_mode_schedule_put",
+    "summary": "Update Schedule",
+    "tags": [
+      "admin-book-pool"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/cos/config",
+    "operation_id": "get_config_admin_api_v1_cos_config_get",
+    "summary": "Get Config",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PUT",
+    "path": "/admin/api/v1/cos/config",
+    "operation_id": "save_config_admin_api_v1_cos_config_put",
+    "summary": "Save Config",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/cos/download",
+    "operation_id": "get_download_admin_api_v1_cos_download_get",
+    "summary": "Get Download",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "key",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "expired",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/cos/exists",
+    "operation_id": "check_exists_admin_api_v1_cos_exists_get",
+    "summary": "Check Exists",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "key",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "DELETE",
+    "path": "/admin/api/v1/cos/folder",
+    "operation_id": "delete_folder_admin_api_v1_cos_folder_delete",
+    "summary": "Delete Folder",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "prefix",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/cos/folder",
+    "operation_id": "create_folder_admin_api_v1_cos_folder_post",
+    "summary": "Create Folder",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/cos/metadata",
+    "operation_id": "get_metadata_admin_api_v1_cos_metadata_get",
+    "summary": "Get Metadata",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "key",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/cos/move",
+    "operation_id": "move_object_admin_api_v1_cos_move_post",
+    "summary": "Move Object",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/cos/move-preview",
+    "operation_id": "move_preview_admin_api_v1_cos_move_preview_get",
+    "summary": "Move Preview",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "source_key",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "dest_key",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "DELETE",
+    "path": "/admin/api/v1/cos/object",
+    "operation_id": "delete_object_admin_api_v1_cos_object_delete",
+    "summary": "Delete Object",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "key",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/cos/objects",
+    "operation_id": "list_objects_admin_api_v1_cos_objects_get",
+    "summary": "List Objects",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "prefix",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/cos/reset-config",
+    "operation_id": "reset_config_admin_api_v1_cos_reset_config_post",
+    "summary": "Reset Config",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/cos/restore",
+    "operation_id": "restore_snapshot_admin_api_v1_cos_restore_post",
+    "summary": "Restore Snapshot",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/cos/restore-preview",
+    "operation_id": "restore_preview_admin_api_v1_cos_restore_preview_get",
+    "summary": "Restore Preview",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "backup_key",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/cos/status",
+    "operation_id": "get_status_admin_api_v1_cos_status_get",
+    "summary": "Get Status",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/cos/test-connection",
+    "operation_id": "test_connection_admin_api_v1_cos_test_connection_post",
+    "summary": "Test Connection",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/cos/upload",
+    "operation_id": "upload_file_admin_api_v1_cos_upload_post",
+    "summary": "Upload File",
+    "tags": [
+      "B端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "multipart/form-data"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/db-admin/audit-log",
+    "operation_id": "list_audit_logs_admin_api_v1_db_admin_audit_log_get",
+    "summary": "List Audit Logs",
+    "tags": [
+      "B端-数据库维护"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "limit",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/db-admin/tables",
+    "operation_id": "list_tables_admin_api_v1_db_admin_tables_get",
+    "summary": "List Tables",
+    "tags": [
+      "B端-数据库维护"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/db-admin/tables/{table}/cascade-preview",
+    "operation_id": "cascade_preview_admin_api_v1_db_admin_tables__table__cascade_preview_post",
+    "summary": "Cascade Preview",
+    "tags": [
+      "B端-数据库维护"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "table",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/db-admin/tables/{table}/export",
+    "operation_id": "export_rows_admin_api_v1_db_admin_tables__table__export_get",
+    "summary": "Export Rows",
+    "tags": [
+      "B端-数据库维护"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "table",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "format",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/db-admin/tables/{table}/import",
+    "operation_id": "import_rows_admin_api_v1_db_admin_tables__table__import_post",
+    "summary": "Import Rows",
+    "tags": [
+      "B端-数据库维护"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "table",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/db-admin/tables/{table}/import/preview",
+    "operation_id": "preview_import_admin_api_v1_db_admin_tables__table__import_preview_post",
+    "summary": "Preview Import",
+    "tags": [
+      "B端-数据库维护"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "table",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/db-admin/tables/{table}/rows",
+    "operation_id": "list_rows_admin_api_v1_db_admin_tables__table__rows_get",
+    "summary": "List Rows",
+    "tags": [
+      "B端-数据库维护"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "table",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "limit",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "offset",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "order_by",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "order_dir",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "search",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/db-admin/tables/{table}/rows",
+    "operation_id": "create_row_admin_api_v1_db_admin_tables__table__rows_post",
+    "summary": "Create Row",
+    "tags": [
+      "B端-数据库维护"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "table",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/db-admin/tables/{table}/rows/batch-delete",
+    "operation_id": "batch_delete_admin_api_v1_db_admin_tables__table__rows_batch_delete_post",
+    "summary": "Batch Delete",
+    "tags": [
+      "B端-数据库维护"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "table",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "DELETE",
+    "path": "/admin/api/v1/db-admin/tables/{table}/rows/{pk_value}",
+    "operation_id": "delete_row_admin_api_v1_db_admin_tables__table__rows__pk_value__delete",
+    "summary": "Delete Row",
+    "tags": [
+      "B端-数据库维护"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "table",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "pk_value",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "confirm_text",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PATCH",
+    "path": "/admin/api/v1/db-admin/tables/{table}/rows/{pk_value}",
+    "operation_id": "update_row_admin_api_v1_db_admin_tables__table__rows__pk_value__patch",
+    "summary": "Update Row",
+    "tags": [
+      "B端-数据库维护"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "table",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "pk_value",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/db-admin/tables/{table}/schema",
+    "operation_id": "get_table_schema_admin_api_v1_db_admin_tables__table__schema_get",
+    "summary": "Get Table Schema",
+    "tags": [
+      "B端-数据库维护"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "table",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/ebooks/categories",
+    "operation_id": "list_categories_admin_api_v1_ebooks_categories_get",
+    "summary": "List Categories",
+    "tags": [
+      "admin-ebooks"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "force",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/ebooks/draft-material",
+    "operation_id": "create_draft_material_admin_api_v1_ebooks_draft_material_post",
+    "summary": "Create Draft Material",
+    "tags": [
+      "admin-ebooks"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/ebooks/index/rebuild",
+    "operation_id": "rebuild_ebook_index_admin_api_v1_ebooks_index_rebuild_post",
+    "summary": "Rebuild Ebook Index",
+    "tags": [
+      "admin-ebooks"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/ebooks/index/status",
+    "operation_id": "ebook_index_status_admin_api_v1_ebooks_index_status_get",
+    "summary": "Ebook Index Status",
+    "tags": [
+      "admin-ebooks"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/ebooks/random",
+    "operation_id": "random_ebooks_admin_api_v1_ebooks_random_get",
+    "summary": "Random Ebooks",
+    "tags": [
+      "admin-ebooks"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "limit",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/ebooks/search",
+    "operation_id": "search_ebooks_admin_api_v1_ebooks_search_get",
+    "summary": "Search Ebooks",
+    "tags": [
+      "admin-ebooks"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "keyword",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "category",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "limit",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/events/stream",
+    "operation_id": "event_stream_admin_api_v1_events_stream_get",
+    "summary": "Event Stream",
+    "tags": [
+      "B端-事件流"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "token",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/feedbacks",
+    "operation_id": "list_feedbacks_admin_api_v1_feedbacks_get",
+    "summary": "List Feedbacks",
+    "tags": [
+      "B端-用户反馈"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "status",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PUT",
+    "path": "/admin/api/v1/feedbacks/{feedback_id}/status",
+    "operation_id": "update_feedback_status_admin_api_v1_feedbacks__feedback_id__status_put",
+    "summary": "Update Feedback Status",
+    "tags": [
+      "B端-用户反馈"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "feedback_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/m/dashboard-summary",
+    "operation_id": "dashboard_summary_admin_api_v1_m_dashboard_summary_get",
+    "summary": "Dashboard Summary",
+    "tags": [
+      "B端-移动端"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/m/device/register",
+    "operation_id": "device_register_admin_api_v1_m_device_register_post",
+    "summary": "Device Register",
+    "tags": [
+      "B端-移动端"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/m/emergency/audit",
+    "operation_id": "emergency_audit_admin_api_v1_m_emergency_audit_get",
+    "summary": "Emergency Audit",
+    "tags": [
+      "B端-移动端"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "limit",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/m/emergency/resume",
+    "operation_id": "emergency_resume_admin_api_v1_m_emergency_resume_post",
+    "summary": "Emergency Resume",
+    "tags": [
+      "B端-移动端"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/m/emergency/stop",
+    "operation_id": "emergency_stop_admin_api_v1_m_emergency_stop_post",
+    "summary": "Emergency Stop",
+    "tags": [
+      "B端-移动端"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/m/inbox",
+    "operation_id": "get_inbox_admin_api_v1_m_inbox_get",
+    "summary": "Get Inbox",
+    "tags": [
+      "B端-移动端"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "page_size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "unread_only",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/m/inbox/mark-read",
+    "operation_id": "mark_read_admin_api_v1_m_inbox_mark_read_post",
+    "summary": "Mark Read",
+    "tags": [
+      "B端-移动端"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/m/maintenance-status",
+    "operation_id": "maintenance_status_admin_api_v1_m_maintenance_status_get",
+    "summary": "Maintenance Status",
+    "tags": [
+      "B端-移动端"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/m/push/register",
+    "operation_id": "push_register_admin_api_v1_m_push_register_post",
+    "summary": "Push Register",
+    "tags": [
+      "B端-移动端"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/maintenance/cache",
+    "operation_id": "cleanup_cache_admin_api_v1_maintenance_cache_post",
+    "summary": "Cleanup Cache",
+    "tags": [
+      "B端-系统清理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/maintenance/database",
+    "operation_id": "cleanup_database_admin_api_v1_maintenance_database_post",
+    "summary": "Cleanup Database",
+    "tags": [
+      "B端-系统清理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/maintenance/logs",
+    "operation_id": "cleanup_logs_admin_api_v1_maintenance_logs_post",
+    "summary": "Cleanup Logs",
+    "tags": [
+      "B端-系统清理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/maintenance/status",
+    "operation_id": "get_status_admin_api_v1_maintenance_status_get",
+    "summary": "Get Status",
+    "tags": [
+      "B端-系统清理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/maintenance/tasks/{task_id}",
+    "operation_id": "get_task_admin_api_v1_maintenance_tasks__task_id__get",
+    "summary": "Get Task",
+    "tags": [
+      "B端-系统清理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "task_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/maintenance/workflow-chain",
+    "operation_id": "cleanup_workflow_chain_admin_api_v1_maintenance_workflow_chain_post",
+    "summary": "Cleanup Workflow Chain",
+    "tags": [
+      "B端-系统清理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "DELETE",
+    "path": "/admin/api/v1/materials",
+    "operation_id": "delete_materials_by_source_admin_api_v1_materials_delete",
+    "summary": "Delete Materials By Source",
+    "tags": [
+      "B端-素材管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "source",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "channel_id",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/materials",
+    "operation_id": "list_materials_admin_api_v1_materials_get",
+    "summary": "List Materials",
+    "tags": [
+      "B端-素材管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "workflow_id",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "channel_id",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "keyword",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "status",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "material_id",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "source",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "source_type",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "media_type",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/materials",
+    "operation_id": "create_material_admin_api_v1_materials_post",
+    "summary": "Create Material",
+    "tags": [
+      "B端-素材管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/materials/aggregate",
+    "operation_id": "aggregate_materials_admin_api_v1_materials_aggregate_get",
+    "summary": "Aggregate Materials",
+    "tags": [
+      "B端-素材管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "keyword",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "status",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/materials/batch-delete",
+    "operation_id": "batch_delete_materials_admin_api_v1_materials_batch_delete_post",
+    "summary": "Batch Delete Materials",
+    "tags": [
+      "B端-素材管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/materials/export",
+    "operation_id": "export_materials_csv_admin_api_v1_materials_export_get",
+    "summary": "Export Materials Csv",
+    "tags": [
+      "B端-素材管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "workflow_id",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "channel_id",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "keyword",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "status",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "material_id",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "source",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "source_type",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "media_type",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/materials/import-cos",
+    "operation_id": "import_from_cos_admin_api_v1_materials_import_cos_post",
+    "summary": "Import From Cos",
+    "tags": [
+      "B端-素材管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/materials/import-url",
+    "operation_id": "import_from_url_admin_api_v1_materials_import_url_post",
+    "summary": "Import From Url",
+    "tags": [
+      "B端-素材管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/materials/share",
+    "operation_id": "share_preview_admin_api_v1_materials_share_post",
+    "summary": "Share Preview",
+    "tags": [
+      "B端-素材管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/materials/upload",
+    "operation_id": "upload_document_admin_api_v1_materials_upload_post",
+    "summary": "Upload Document",
+    "tags": [
+      "B端-素材管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "multipart/form-data"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "DELETE",
+    "path": "/admin/api/v1/materials/{material_id}",
+    "operation_id": "delete_material_admin_api_v1_materials__material_id__delete",
+    "summary": "Delete Material",
+    "tags": [
+      "B端-素材管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "material_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/materials/{material_id}",
+    "operation_id": "get_material_admin_api_v1_materials__material_id__get",
+    "summary": "Get Material",
+    "tags": [
+      "B端-素材管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "material_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PUT",
+    "path": "/admin/api/v1/materials/{material_id}",
+    "operation_id": "update_material_admin_api_v1_materials__material_id__put",
+    "summary": "Update Material",
+    "tags": [
+      "B端-素材管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "material_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/notification/config",
+    "operation_id": "get_config_admin_api_v1_notification_config_get",
+    "summary": "Get Config",
+    "tags": [
+      "B端-通知管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PUT",
+    "path": "/admin/api/v1/notification/config",
+    "operation_id": "save_config_admin_api_v1_notification_config_put",
+    "summary": "Save Config",
+    "tags": [
+      "B端-通知管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/notification/logs",
+    "operation_id": "list_logs_admin_api_v1_notification_logs_get",
+    "summary": "List Logs",
+    "tags": [
+      "B端-通知管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "page_size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "event_type",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "status",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/notification/logs/{log_id}/resend",
+    "operation_id": "resend_log_admin_api_v1_notification_logs__log_id__resend_post",
+    "summary": "Resend Log",
+    "tags": [
+      "B端-通知管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "log_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/notification/templates",
+    "operation_id": "list_templates_admin_api_v1_notification_templates_get",
+    "summary": "List Templates",
+    "tags": [
+      "B端-通知管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PUT",
+    "path": "/admin/api/v1/notification/templates/{template_id}",
+    "operation_id": "update_template_admin_api_v1_notification_templates__template_id__put",
+    "summary": "Update Template",
+    "tags": [
+      "B端-通知管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "template_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/notification/templates/{template_id}/preview",
+    "operation_id": "preview_template_admin_api_v1_notification_templates__template_id__preview_post",
+    "summary": "Preview Template",
+    "tags": [
+      "B端-通知管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "template_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/notification/test",
+    "operation_id": "test_send_admin_api_v1_notification_test_post",
+    "summary": "Test Send",
+    "tags": [
+      "B端-通知管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/queue/config",
+    "operation_id": "get_queue_config_admin_api_v1_queue_config_get",
+    "summary": "Get Queue Config",
+    "tags": [
+      "B端-队列管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PUT",
+    "path": "/admin/api/v1/queue/config",
+    "operation_id": "update_queue_config_admin_api_v1_queue_config_put",
+    "summary": "Update Queue Config",
+    "tags": [
+      "B端-队列管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/queue/stats",
+    "operation_id": "get_queue_stats_admin_api_v1_queue_stats_get",
+    "summary": "Get Queue Stats",
+    "tags": [
+      "B端-队列管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/queue/tasks",
+    "operation_id": "list_queue_tasks_admin_api_v1_queue_tasks_get",
+    "summary": "List Queue Tasks",
+    "tags": [
+      "B端-队列管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "status",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "channel_id",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "priority",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "sort_by",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "sort_order",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/queue/tasks/batch-delete",
+    "operation_id": "batch_delete_tasks_admin_api_v1_queue_tasks_batch_delete_post",
+    "summary": "Batch Delete Tasks",
+    "tags": [
+      "B端-队列管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/queue/tasks/{workflow_id}/cancel",
+    "operation_id": "cancel_task_admin_api_v1_queue_tasks__workflow_id__cancel_post",
+    "summary": "Cancel Task",
+    "tags": [
+      "B端-队列管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "workflow_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PUT",
+    "path": "/admin/api/v1/queue/tasks/{workflow_id}/priority",
+    "operation_id": "update_priority_admin_api_v1_queue_tasks__workflow_id__priority_put",
+    "summary": "Update Priority",
+    "tags": [
+      "B端-队列管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "workflow_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/queue/tasks/{workflow_id}/retry",
+    "operation_id": "retry_task_admin_api_v1_queue_tasks__workflow_id__retry_post",
+    "summary": "Retry Task",
+    "tags": [
+      "B端-队列管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "workflow_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/reviews",
+    "operation_id": "list_reviews_admin_api_v1_reviews_get",
+    "summary": "List Reviews",
+    "tags": [
+      "B端-审核"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "status",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "workflow_id",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "reviewer",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "date_from",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "date_to",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "channel_id",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/reviews/batch-action",
+    "operation_id": "batch_handle_action_admin_api_v1_reviews_batch_action_post",
+    "summary": "Batch Handle Action",
+    "tags": [
+      "B端-审核"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/reviews/{review_id}",
+    "operation_id": "get_review_admin_api_v1_reviews__review_id__get",
+    "summary": "Get Review",
+    "tags": [
+      "B端-审核"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "review_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/reviews/{review_id}/action",
+    "operation_id": "handle_action_admin_api_v1_reviews__review_id__action_post",
+    "summary": "Handle Action",
+    "tags": [
+      "B端-审核"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "review_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/scripts",
+    "operation_id": "get_script_by_workflow_admin_api_v1_scripts_get",
+    "summary": "Get Script By Workflow",
+    "tags": [
+      "B端-稿件管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "workflow_id",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "DELETE",
+    "path": "/admin/api/v1/scripts/{script_id}",
+    "operation_id": "delete_script_admin_api_v1_scripts__script_id__delete",
+    "summary": "Delete Script",
+    "tags": [
+      "B端-稿件管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "script_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/scripts/{script_id}",
+    "operation_id": "get_script_admin_api_v1_scripts__script_id__get",
+    "summary": "Get Script",
+    "tags": [
+      "B端-稿件管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "script_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "PUT",
+    "path": "/admin/api/v1/scripts/{script_id}/segments",
+    "operation_id": "update_segments_admin_api_v1_scripts__script_id__segments_put",
+    "summary": "Update Segments",
+    "tags": [
+      "B端-稿件管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "script_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/stats/channel-health",
+    "operation_id": "get_channel_health_admin_api_v1_stats_channel_health_get",
+    "summary": "Get Channel Health",
+    "tags": [
+      "B端-统计"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "range_days",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/stats/llm-metrics",
+    "operation_id": "get_llm_metrics_admin_api_v1_stats_llm_metrics_get",
+    "summary": "Get Llm Metrics",
+    "tags": [
+      "B端-统计"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/stats/overview",
+    "operation_id": "get_overview_admin_api_v1_stats_overview_get",
+    "summary": "Get Overview",
+    "tags": [
+      "B端-统计"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "date",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/stats/rss-health",
+    "operation_id": "get_rss_health_admin_api_v1_stats_rss_health_get",
+    "summary": "Get Rss Health",
+    "tags": [
+      "B端-统计"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "refresh",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/stats/trend",
+    "operation_id": "get_trend_admin_api_v1_stats_trend_get",
+    "summary": "Get Trend",
+    "tags": [
+      "B端-统计"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "metric",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "range",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/system/ffmpeg-install",
+    "operation_id": "install_ffmpeg_admin_api_v1_system_ffmpeg_install_post",
+    "summary": "Install Ffmpeg",
+    "tags": [
+      "系统管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/system/ffmpeg-status",
+    "operation_id": "get_ffmpeg_status_admin_api_v1_system_ffmpeg_status_get",
+    "summary": "Get Ffmpeg Status",
+    "tags": [
+      "系统管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/tunnel/cloudflare/create",
+    "operation_id": "cloudflare_create_admin_api_v1_tunnel_cloudflare_create_post",
+    "summary": "Cloudflare Create",
+    "tags": [
+      "B端-内网穿透"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/tunnel/cloudflare/login",
+    "operation_id": "cloudflare_login_admin_api_v1_tunnel_cloudflare_login_post",
+    "summary": "Cloudflare Login",
+    "tags": [
+      "B端-内网穿透"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/tunnel/cloudflare/login/status",
+    "operation_id": "cloudflare_login_status_admin_api_v1_tunnel_cloudflare_login_status_get",
+    "summary": "Cloudflare Login Status",
+    "tags": [
+      "B端-内网穿透"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/tunnel/cloudflare/route-dns",
+    "operation_id": "cloudflare_route_dns_admin_api_v1_tunnel_cloudflare_route_dns_post",
+    "summary": "Cloudflare Route Dns",
+    "tags": [
+      "B端-内网穿透"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/tunnel/config",
+    "operation_id": "tunnel_config_get_admin_api_v1_tunnel_config_get",
+    "summary": "Tunnel Config Get",
+    "tags": [
+      "B端-内网穿透"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/tunnel/config",
+    "operation_id": "tunnel_config_save_admin_api_v1_tunnel_config_post",
+    "summary": "Tunnel Config Save",
+    "tags": [
+      "B端-内网穿透"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/tunnel/start",
+    "operation_id": "tunnel_start_admin_api_v1_tunnel_start_post",
+    "summary": "Tunnel Start",
+    "tags": [
+      "B端-内网穿透"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/tunnel/status",
+    "operation_id": "tunnel_status_admin_api_v1_tunnel_status_get",
+    "summary": "Tunnel Status",
+    "tags": [
+      "B端-内网穿透"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/tunnel/stop",
+    "operation_id": "tunnel_stop_admin_api_v1_tunnel_stop_post",
+    "summary": "Tunnel Stop",
+    "tags": [
+      "B端-内网穿透"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/users",
+    "operation_id": "list_users_admin_api_v1_users_get",
+    "summary": "List Users",
+    "tags": [
+      "B端-终端用户管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "keyword",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "disabled",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/users/{user_id}/toggle-status",
+    "operation_id": "toggle_user_status_admin_api_v1_users__user_id__toggle_status_post",
+    "summary": "Toggle User Status",
+    "tags": [
+      "B端-终端用户管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "user_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/workflows",
+    "operation_id": "list_workflows_admin_api_v1_workflows_get",
+    "summary": "List Workflows",
+    "tags": [
+      "B端-工作流"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "channel_id",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "episode_date",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "status",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "source",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/workflows/batch-delete",
+    "operation_id": "batch_delete_workflows_admin_api_v1_workflows_batch_delete_post",
+    "summary": "Batch Delete Workflows",
+    "tags": [
+      "B端-工作流"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/workflows/batch-delete/preview",
+    "operation_id": "batch_delete_workflows_preview_admin_api_v1_workflows_batch_delete_preview_post",
+    "summary": "Batch Delete Workflows Preview",
+    "tags": [
+      "B端-工作流"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/workflows/today",
+    "operation_id": "get_today_workflow_admin_api_v1_workflows_today_get",
+    "summary": "Get Today Workflow",
+    "tags": [
+      "B端-工作流"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/workflows/trigger",
+    "operation_id": "trigger_workflow_admin_api_v1_workflows_trigger_post",
+    "summary": "Trigger Workflow",
+    "tags": [
+      "B端-工作流"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/workflows/trigger-all",
+    "operation_id": "trigger_all_workflows_admin_api_v1_workflows_trigger_all_post",
+    "summary": "Trigger All Workflows",
+    "tags": [
+      "B端-工作流"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/workflows/{workflow_id}",
+    "operation_id": "get_workflow_admin_api_v1_workflows__workflow_id__get",
+    "summary": "Get Workflow",
+    "tags": [
+      "B端-工作流"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "workflow_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/workflows/{workflow_id}/audio",
+    "operation_id": "list_audio_admin_api_v1_workflows__workflow_id__audio_get",
+    "summary": "List Audio",
+    "tags": [
+      "B端-音频管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "workflow_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "DELETE",
+    "path": "/admin/api/v1/workflows/{workflow_id}/audio/episode",
+    "operation_id": "delete_episode_admin_api_v1_workflows__workflow_id__audio_episode_delete",
+    "summary": "Delete Episode",
+    "tags": [
+      "B端-音频管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "workflow_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/workflows/{workflow_id}/audio/episode",
+    "operation_id": "stream_episode_admin_api_v1_workflows__workflow_id__audio_episode_get",
+    "summary": "Stream Episode",
+    "tags": [
+      "B端-音频管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "workflow_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/workflows/{workflow_id}/audio/proxy",
+    "operation_id": "proxy_audio_admin_api_v1_workflows__workflow_id__audio_proxy_get",
+    "summary": "Proxy Audio",
+    "tags": [
+      "B端-音频管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "workflow_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "url",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "DELETE",
+    "path": "/admin/api/v1/workflows/{workflow_id}/audio/tts/{filename}",
+    "operation_id": "delete_tts_admin_api_v1_workflows__workflow_id__audio_tts__filename__delete",
+    "summary": "Delete Tts",
+    "tags": [
+      "B端-音频管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "workflow_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "filename",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "GET",
+    "path": "/admin/api/v1/workflows/{workflow_id}/audio/tts/{filename}",
+    "operation_id": "stream_tts_admin_api_v1_workflows__workflow_id__audio_tts__filename__get",
+    "summary": "Stream Tts",
+    "tags": [
+      "B端-音频管理"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "workflow_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "filename",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "B端-运营后台",
+    "method": "POST",
+    "path": "/admin/api/v1/workflows/{workflow_id}/retry",
+    "operation_id": "retry_workflow_admin_api_v1_workflows__workflow_id__retry_post",
+    "summary": "Retry Workflow",
+    "tags": [
+      "B端-工作流"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "workflow_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "C端-用户",
+    "method": "DELETE",
+    "path": "/api/v1/account/data",
+    "operation_id": "purge_my_data_api_v1_account_data_delete",
+    "summary": "Purge My Data",
+    "tags": [
+      "C端-账号"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "C端-用户",
+    "method": "GET",
+    "path": "/api/v1/account/data",
+    "operation_id": "preview_my_data_api_v1_account_data_get",
+    "summary": "Preview My Data",
+    "tags": [
+      "C端-账号"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "POST",
+    "path": "/api/v1/auth/login",
+    "operation_id": "login_api_v1_auth_login_post",
+    "summary": "Login",
+    "tags": [
+      "C端-认证"
+    ],
+    "security": [],
+    "params": [],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "C端-用户",
+    "method": "POST",
+    "path": "/api/v1/auth/logout",
+    "operation_id": "logout_api_v1_auth_logout_post",
+    "summary": "Logout",
+    "tags": [
+      "C端-认证"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "GET",
+    "path": "/api/v1/channels",
+    "operation_id": "list_channels_api_v1_channels_get",
+    "summary": "List Channels",
+    "tags": [
+      "C端-频道"
+    ],
+    "security": [],
+    "params": [],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "POST",
+    "path": "/api/v1/client/report",
+    "operation_id": "report_client_event_api_v1_client_report_post",
+    "summary": "Report Client Event",
+    "tags": [
+      "C端-客户端告警"
+    ],
+    "security": [],
+    "params": [],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "C端-用户",
+    "method": "GET",
+    "path": "/api/v1/comments",
+    "operation_id": "list_comments_api_v1_comments_get",
+    "summary": "List Comments",
+    "tags": [
+      "C端-评论"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "episode_id",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "POST",
+    "path": "/api/v1/comments",
+    "operation_id": "create_comment_api_v1_comments_post",
+    "summary": "Create Comment",
+    "tags": [
+      "C端-评论"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "C端-用户",
+    "method": "DELETE",
+    "path": "/api/v1/comments/{comment_id}/like",
+    "operation_id": "unlike_comment_api_v1_comments__comment_id__like_delete",
+    "summary": "Unlike Comment",
+    "tags": [
+      "C端-评论"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "comment_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "POST",
+    "path": "/api/v1/comments/{comment_id}/like",
+    "operation_id": "like_comment_api_v1_comments__comment_id__like_post",
+    "summary": "Like Comment",
+    "tags": [
+      "C端-评论"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "comment_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "POST",
+    "path": "/api/v1/cos/presign-upload",
+    "operation_id": "presign_upload_api_v1_cos_presign_upload_post",
+    "summary": "Presign Upload",
+    "tags": [
+      "C端-云端存储"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "C端-用户",
+    "method": "GET",
+    "path": "/api/v1/courses/{channel_id}/progress",
+    "operation_id": "get_course_progress_api_v1_courses__channel_id__progress_get",
+    "summary": "Get Course Progress",
+    "tags": [
+      "C端-课程"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "GET",
+    "path": "/api/v1/episodes/history",
+    "operation_id": "get_history_api_v1_episodes_history_get",
+    "summary": "Get History",
+    "tags": [
+      "C端-节目"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "channel_id",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "sort_order",
+        "in": "query",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "GET",
+    "path": "/api/v1/episodes/search",
+    "operation_id": "search_episodes_api_v1_episodes_search_get",
+    "summary": "Search Episodes",
+    "tags": [
+      "C端-节目"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "keyword",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "channel_type",
+        "in": "query",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "GET",
+    "path": "/api/v1/episodes/today",
+    "operation_id": "get_today_episode_api_v1_episodes_today_get",
+    "summary": "Get Today Episode",
+    "tags": [
+      "C端-节目"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "query",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "GET",
+    "path": "/api/v1/episodes/{episode_id}",
+    "operation_id": "get_episode_api_v1_episodes__episode_id__get",
+    "summary": "Get Episode",
+    "tags": [
+      "C端-节目"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "episode_id",
+        "in": "path",
+        "required": true
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "GET",
+    "path": "/api/v1/episodes/{episode_id}/script",
+    "operation_id": "get_script_api_v1_episodes__episode_id__script_get",
+    "summary": "Get Script",
+    "tags": [
+      "C端-节目"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "episode_id",
+        "in": "path",
+        "required": true
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "GET",
+    "path": "/api/v1/favorites",
+    "operation_id": "list_favorites_api_v1_favorites_get",
+    "summary": "List Favorites",
+    "tags": [
+      "C端-收藏"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "channel_type",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "POST",
+    "path": "/api/v1/favorites",
+    "operation_id": "add_favorite_api_v1_favorites_post",
+    "summary": "Add Favorite",
+    "tags": [
+      "C端-收藏"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "C端-用户",
+    "method": "GET",
+    "path": "/api/v1/favorites/check/{episode_id}",
+    "operation_id": "check_favorite_api_v1_favorites_check__episode_id__get",
+    "summary": "Check Favorite",
+    "tags": [
+      "C端-收藏"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "episode_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "DELETE",
+    "path": "/api/v1/favorites/{episode_id}",
+    "operation_id": "remove_favorite_api_v1_favorites__episode_id__delete",
+    "summary": "Remove Favorite",
+    "tags": [
+      "C端-收藏"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "episode_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "POST",
+    "path": "/api/v1/feedbacks",
+    "operation_id": "submit_feedback_api_v1_feedbacks_post",
+    "summary": "Submit Feedback",
+    "tags": [
+      "C端-反馈"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "C端-用户",
+    "method": "POST",
+    "path": "/api/v1/playlogs/progress",
+    "operation_id": "report_progress_api_v1_playlogs_progress_post",
+    "summary": "Report Progress",
+    "tags": [
+      "C端-播放进度"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "C端-用户",
+    "method": "GET",
+    "path": "/api/v1/playlogs/progress/{episode_id}",
+    "operation_id": "get_progress_api_v1_playlogs_progress__episode_id__get",
+    "summary": "Get Progress",
+    "tags": [
+      "C端-播放进度"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "episode_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "GET",
+    "path": "/api/v1/playlogs/recent",
+    "operation_id": "get_recent_playlogs_api_v1_playlogs_recent_get",
+    "summary": "Get Recent Playlogs",
+    "tags": [
+      "C端-播放进度"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "page",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "size",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "channel_id",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "channel_type",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "GET",
+    "path": "/api/v1/subscriptions/channels",
+    "operation_id": "list_my_subscribed_channels_api_v1_subscriptions_channels_get",
+    "summary": "List My Subscribed Channels",
+    "tags": [
+      "C端-订阅"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "DELETE",
+    "path": "/api/v1/subscriptions/channels/{channel_id}",
+    "operation_id": "unsubscribe_channel_api_v1_subscriptions_channels__channel_id__delete",
+    "summary": "Unsubscribe Channel",
+    "tags": [
+      "C端-订阅"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "POST",
+    "path": "/api/v1/subscriptions/channels/{channel_id}",
+    "operation_id": "subscribe_channel_api_v1_subscriptions_channels__channel_id__post",
+    "summary": "Subscribe Channel",
+    "tags": [
+      "C端-订阅"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "channel_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "POST",
+    "path": "/api/v1/subscriptions/message",
+    "operation_id": "record_message_subscription_api_v1_subscriptions_message_post",
+    "summary": "Record Message Subscription",
+    "tags": [
+      "C端-订阅"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "C端-用户",
+    "method": "GET",
+    "path": "/api/v1/subscriptions/templates",
+    "operation_id": "list_subscribe_templates_api_v1_subscriptions_templates_get",
+    "summary": "List Subscribe Templates",
+    "tags": [
+      "C端-订阅"
+    ],
+    "security": [],
+    "params": [],
+    "request_body": null
+  },
+  {
+    "group": "C端-用户",
+    "method": "POST",
+    "path": "/api/v1/users/avatar",
+    "operation_id": "upload_avatar_api_v1_users_avatar_post",
+    "summary": "Upload Avatar",
+    "tags": [
+      "C端-用户"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "multipart/form-data"
+    ]
+  },
+  {
+    "group": "C端-用户",
+    "method": "PUT",
+    "path": "/api/v1/users/profile",
+    "operation_id": "update_profile_api_v1_users_profile_put",
+    "summary": "Update Profile",
+    "tags": [
+      "C端-用户"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "C端-用户",
+    "method": "GET",
+    "path": "/api/v1/users/stats",
+    "operation_id": "get_user_stats_api_v1_users_stats_get",
+    "summary": "Get User Stats",
+    "tags": [
+      "C端-用户"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "其他",
+    "method": "GET",
+    "path": "/api/health",
+    "operation_id": "health_check_api_health_get",
+    "summary": "Health Check",
+    "tags": [
+      "health"
+    ],
+    "security": [],
+    "params": [],
+    "request_body": null
+  },
+  {
+    "group": "其他",
+    "method": "GET",
+    "path": "/api/health/live",
+    "operation_id": "liveness_api_health_live_get",
+    "summary": "Liveness",
+    "tags": [
+      "health"
+    ],
+    "security": [],
+    "params": [],
+    "request_body": null
+  },
+  {
+    "group": "其他",
+    "method": "GET",
+    "path": "/api/health/ready",
+    "operation_id": "readiness_api_health_ready_get",
+    "summary": "Readiness",
+    "tags": [
+      "health"
+    ],
+    "security": [],
+    "params": [],
+    "request_body": null
+  },
+  {
+    "group": "其他",
+    "method": "POST",
+    "path": "/api/internal/workflow/trigger",
+    "operation_id": "trigger_workflow_api_internal_workflow_trigger_post",
+    "summary": "Trigger Workflow",
+    "tags": [
+      "内部-工作流"
+    ],
+    "security": [],
+    "params": [],
+    "request_body": [
+      "application/json"
+    ]
+  },
+  {
+    "group": "其他",
+    "method": "GET",
+    "path": "/api/internal/workflow/{workflow_id}",
+    "operation_id": "get_workflow_api_internal_workflow__workflow_id__get",
+    "summary": "Get Workflow",
+    "tags": [
+      "内部-工作流"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "workflow_id",
+        "in": "path",
+        "required": true
+      }
+    ],
+    "request_body": null
+  },
+  {
+    "group": "其他",
+    "method": "POST",
+    "path": "/api/internal/workflow/{workflow_id}/publish",
+    "operation_id": "publish_workflow_api_internal_workflow__workflow_id__publish_post",
+    "summary": "Publish Workflow",
+    "tags": [
+      "内部-工作流"
+    ],
+    "security": [],
+    "params": [
+      {
+        "name": "workflow_id",
+        "in": "path",
+        "required": true
+      }
+    ],
+    "request_body": [
+      "application/json"
+    ]
+  }
+]
