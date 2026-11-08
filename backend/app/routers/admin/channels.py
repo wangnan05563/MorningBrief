@@ -36,6 +36,22 @@ _CHANNEL_NOT_FOUND_MSG = "频道不存在"
 _CHANNEL_TYPE_VALUES = {t.value for t in ChannelType}
 _CHANNEL_TYPE_MSG = "channel_type 仅支持 " + " / ".join(t.value for t in ChannelType)
 
+# AI 生成失败原因在响应里的字段名（创建 / 重新生成两个入口共用）
+_AI_WARNINGS_KEY = "ai_generate_warnings"
+
+
+def _llm_failure_reason(exc: BaseException) -> str:
+    """把 LLM 调用异常转成管理端能直接行动的一句话（T04117）。
+
+    账号级错误（401/402/403、余额不足、key 失效）重试与换模型都无效，
+    复用工作流侧已有的 account_error_hint 口径，避免两处各写一套判断。
+    """
+    from app.workflow.llm.rewriter import account_error_hint, is_account_level_error
+
+    if is_account_level_error(exc):
+        return account_error_hint(exc)
+    return f"{type(exc).__name__}: {str(exc)[:160]}"
+
 
 def _normalize_schedule_time(v: str) -> str:
     """将宽松的定时时间输入归一化为 HH:MM:SS。
@@ -481,6 +497,10 @@ async def create_channel(
         return error(code=400, message=str(e))
 
     # 按需自动生成提示词（频道创建时 AI 生成，失败不阻塞创建流程）
+    # T04117：不阻塞创建的前提是「失败可见」。原先只 logging.warning 后把字段置 None，
+    # 管理端看起来像「AI 生成功能没反应」，而 401/402/429 属账号级错误、重试永远不会好，
+    # 必须把原因带回去（ai_generate_warnings）并按 error 级留痕。
+    ai_warnings: list[str] = []
     if req.auto_generate_prompts:
         try:
             from app.services.channel_prompt_service import (
@@ -493,8 +513,8 @@ async def create_channel(
             try:
                 search = await generate_search_prompt_for_channel(req.name, req.description)
             except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning("频道创建时 AI 生成搜索提示词失败: %s", e)
+                logger.error("频道创建时 AI 生成搜索提示词失败: %s", e)
+                ai_warnings.append("全网搜索提示词未生成：" + _llm_failure_reason(e))
                 search = None
             channel = await svc.update_channel(
                 channel_id=channel.id,
@@ -505,11 +525,14 @@ async def create_channel(
                 search_prompt=search["search_prompt"] if search else None,
             )
         except Exception as e:
-            # AI 生成失败不影响频道创建，用户可后续手动生成
-            import logging
-            logging.getLogger(__name__).warning("频道创建时 AI 生成提示词失败: %s", e)
+            # AI 生成失败不影响频道创建，但原因必须回传给管理端（T04117）
+            logger.error("频道创建时 AI 生成提示词失败: %s", e)
+            ai_warnings.append("频道提示词未自动生成：" + _llm_failure_reason(e))
 
-    return success(data=_channel_to_dict(channel))
+    data = _channel_to_dict(channel)
+    if ai_warnings:
+        data[_AI_WARNINGS_KEY] = ai_warnings
+    return success(data=data)
 
 
 @router.put("/{channel_id}")
@@ -576,6 +599,7 @@ async def generate_prompts(
     if channel is None:
         return error(code=404, message=_CHANNEL_NOT_FOUND_MSG)
 
+    ai_warnings: list[str] = []
     try:
         from app.services.channel_prompt_service import (
             generate_prompts_for_channel,
@@ -586,11 +610,15 @@ async def generate_prompts(
         try:
             search = await generate_search_prompt_for_channel(channel.name, channel.description)
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning("AI 生成搜索提示词失败: %s", e)
+            logger.error("AI 生成搜索提示词失败: %s", e)
+            ai_warnings.append("全网搜索提示词未生成：" + _llm_failure_reason(e))
             search = None
     except ValueError as e:
         return error(code=400, message=str(e))
+    except Exception as e:
+        # T04117：账号级/上游错误必须带可操作原因返回，不能落成裸 500「服务内部错误」
+        logger.error("AI 生成频道提示词失败: %s", e)
+        raise BizError(code=502, message="AI 生成失败：" + _llm_failure_reason(e))
 
     channel = await svc.update_channel(
         channel_id=channel_id,
@@ -600,7 +628,10 @@ async def generate_prompts(
         rewrite_template=prompts["rewrite_template"],
         search_prompt=search["search_prompt"] if search else None,
     )
-    return success(data=_channel_to_dict(channel))
+    data = _channel_to_dict(channel)
+    if ai_warnings:
+        data[_AI_WARNINGS_KEY] = ai_warnings
+    return success(data=data)
 
 
 @router.get("/{channel_id}/delete-preview")

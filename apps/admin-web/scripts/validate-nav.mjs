@@ -560,7 +560,8 @@ export const METRIC_UNIT_ALLOW = [
   },
   {
     file: 'views/channel/ChannelManagement.vue',
-    lines: [498, 520],
+    // T04111 在该文件模板上方新增「全网搜索提示词」折叠项，整段下移 3 行（498/520 → 501/523）
+    lines: [501, 523],
     reason: '频道级停顿时长/最短时长的输入单位，字段以秒存储且没有 meta',
   },
   {

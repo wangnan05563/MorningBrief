@@ -82,11 +82,14 @@ describe('AI_CHAT_TIMEOUT_MS 契约常量', () => {
     assert.match(svc, /"llm_chat_timeout_sec":\s*"LLM_CHAT_TIMEOUT_SEC"/, 'CONFIG_KEY_MAP 缺登记 → 热更新时被跳过')
     assert.match(svc, /"llm_chat_timeout_sec",/, 'INT_KEYS 缺登记 → 存成字符串，float() 当场炸')
     assert.match(svc, /result\["llm_chat_timeout_sec"\]\s*=\s*str\(config\["chat_timeout_sec"\]\)/, '写路径缺映射 → 管理端改了不生效')
-    assert.match(svc, /"chat_timeout_sec":\s*_get_int\(/, '读路径缺返显 → 页面显示默认值而非实际值')
+    // 取值助手由闭包 `_get_int` 换成 `_ConfigReader.get_int`（入参顺序不变），断言跟着换形状：
+    // 依旧钉住「该键经 int 读取器返显」，删掉这行或改成裸字符串读都会红。
+    assert.match(svc, /"chat_timeout_sec":\s*reader\.get_int\(/, '读路径缺返显 → 页面显示默认值而非实际值')
     assert.match(router, /chat_timeout_sec:\s*int\s*=\s*120/, 'PUT body 未声明该字段 → pydantic 丢键')
     // 关掉 SDK 自动重试是在 service 里（真正发请求的地方）
     assert.match(svc, /max_retries=0/, 'SDK 默认重试会把总耗时抬到 3×超时，必须显式关')
-    assert.match(svc, /isinstance\(e, \(APITimeoutError, TimeoutError\)\)/, '后端超时没单独归类 → 前端拿不到 timeout 标记')
+    // 超时归类被抽进 `_chat_api_failure(model, exc, ...)`，异常形参名从 `e` 变成 `exc`
+    assert.match(svc, /isinstance\(exc, \(APITimeoutError, TimeoutError\)\)/, '后端超时没单独归类 → 前端拿不到 timeout 标记')
     // 兜底范围用 isinstance 而非 __module__ 字符串：测试桩异常类的 __module__ 不是 openai，
     // 字符串判定会把真实超时异常当代码 bug 抛出（生产看不出来，用例在自己的夹具里炸）
     assert.match(svc, /if not isinstance\(e, APIError\):\s*\n\s*raise/, '异常兜底范围没按 SDK 层级判定')

@@ -305,6 +305,26 @@ def _is_masked(value: str) -> bool:
     return value.startswith("****")
 
 
+# OpenAI 兼容协议的 base_url 应当止于 API 根（如 https://api.x.com/v1），
+# SDK 自己拼 /chat/completions。管理端曾把「测试连接」用的完整接口地址整条填进
+# base_url（T04117 的 openai 预设），SDK 再拼一次 → /v1/chat/completions/chat/completions → 404，
+# 而 404 会让人误判成「模型名错/服务不可用」，把真正的账号级错误（402 余额不足）挡在身后。
+_CHAT_PATH_SUFFIXES = ("/chat/completions", "/completions")
+
+
+def normalize_llm_base_url(base_url: str) -> str:
+    """归一化 LLM base_url：去掉尾部斜杠与误填的 /chat/completions 路径段。
+
+    只剥离已知的补全路径后缀，因此对正确的 `/v1`、`/api/paas/v4`、`/api/v3`、`/v2`
+    等既有预设值逐字节无变化；空值原样返回（留给上层判「未配置」）。
+    """
+    url = (base_url or "").strip().rstrip("/")
+    for suffix in _CHAT_PATH_SUFFIXES:
+        if url.lower().endswith(suffix):
+            url = url[: -len(suffix)].rstrip("/")
+    return url
+
+
 def _parse_cross_voice(raw) -> dict:
     """解析交叉音色配置 JSON，返回带默认值的规范化结构。
 
@@ -368,6 +388,42 @@ def _estimate_cost(
     return 0.0
 
 
+class _ConfigReader:
+    """配置读取器：SQLite 优先，缺值回落 Settings，并按响应路径记录回落字段。"""
+
+    def __init__(self, raw: dict[str, str], settings, fallback: list[str] | None = None) -> None:
+        self._raw = raw
+        self._settings = settings
+        self.fallback: list[str] = fallback if fallback is not None else []
+
+    def get(self, path: str, key: str, settings_attr: str, default: str = "") -> str:
+        val = self._raw.get(key)
+        if val is not None:
+            return val
+        self.fallback.append(path)
+        return str(getattr(self._settings, settings_attr, default))
+
+    def get_int(self, path: str, key: str, settings_attr: str, default: int) -> int:
+        val = self._raw.get(key)
+        if val is not None:
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                pass  # 库里存了非数值：屏上的数只能来自 Settings，照实点名
+        self.fallback.append(path)
+        return getattr(self._settings, settings_attr, default)
+
+    def get_float(self, path: str, key: str, settings_attr: str, default: float) -> float:
+        val = self._raw.get(key)
+        if val is not None:
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                pass
+        self.fallback.append(path)
+        return getattr(self._settings, settings_attr, default)
+
+
 class AIConfigService:
     """AI 配置管理服务。
 
@@ -403,7 +459,14 @@ class AIConfigService:
             return {}
         try:
             data = json.loads(raw)
-            return data if isinstance(data, dict) else {}
+            if not isinstance(data, dict):
+                return {}
+            # 读侧归一：库里可能存着误填的 /chat/completions 后缀（T04117），
+            # 在唯一的读取出口削平，展示、预设反向匹配、客户端构建三条路径同时受益
+            for cfg in data.values():
+                if isinstance(cfg, dict) and cfg.get("base_url"):
+                    cfg["base_url"] = normalize_llm_base_url(cfg["base_url"])
+            return data
         except (json.JSONDecodeError, TypeError):
             logger.warning("预设配置 JSON 解析失败，重置为空")
             return {}
@@ -443,7 +506,7 @@ class AIConfigService:
 
         configs[preset_key] = {
             "api_key": final_key,
-            "base_url": base_url,
+            "base_url": normalize_llm_base_url(base_url),
             "model": model,
         }
         await self._upsert_config(PRESET_CONFIGS_KEY, json.dumps(configs, ensure_ascii=False))
@@ -485,7 +548,7 @@ class AIConfigService:
 
         # TTS 工厂缓存按 provider 建实例，不清掉会继续用旧凭证
         if scope in ("tts", "all"):
-            self._invalidate_tts_cache_on_change({key: "" for key in TTS_RESET_KEYS})
+            self._invalidate_tts_cache_on_change(dict.fromkeys(TTS_RESET_KEYS, ""))
 
         logger.info("AI 配置已清除 scope=%s keys=%s", scope, keys)
         return await self.get_config_for_frontend()
@@ -508,76 +571,32 @@ class AIConfigService:
         「表是空的」与「表里有记录」在旧响应里长得一模一样。管理员在第二种情况下
         点保存，会把 .env 的旧值静默固化进库，且没有 updated_at 可回溯。
         """
-        raw: dict[str, str] = {}
-        load_error: str | None = None
-        try:
-            raw = await self.get_all_config()
-        except Exception as exc:
-            # 完整异常只进日志；响应里给可读且已脱敏的原因（NFR-01 / NFR-05）
-            logger.exception("AI 配置读取失败，前端将据 loaded=false 禁止保存")
-            load_error = f"{type(exc).__name__}: {redact_credentials(str(exc))[:200]}"
-
-        settings = get_settings()
-        fallback: list[str] = []
-
-        # 合并：SQLite 优先，fallback 到 Settings 默认值；回落时按响应路径点名
-        def _get(path: str, key: str, settings_attr: str, default: str = "") -> str:
-            val = raw.get(key)
-            if val is not None:
-                return val
-            fallback.append(path)
-            return str(getattr(settings, settings_attr, default))
-
-        def _get_int(path: str, key: str, settings_attr: str, default: int) -> int:
-            val = raw.get(key)
-            if val is not None:
-                try:
-                    return int(val)
-                except (ValueError, TypeError):
-                    pass  # 库里存了非数值：屏上的数只能来自 Settings，照实点名
-            fallback.append(path)
-            return getattr(settings, settings_attr, default)
-
-        def _get_float(path: str, key: str, settings_attr: str, default: float) -> float:
-            val = raw.get(key)
-            if val is not None:
-                try:
-                    return float(val)
-                except (ValueError, TypeError):
-                    pass
-            fallback.append(path)
-            return getattr(settings, settings_attr, default)
-
+        raw, load_error = await self._load_raw_config()
+        reader = _ConfigReader(raw, get_settings())
         # 预设配置是另一条读库路径：它失败时同样不能假装「读到了一份可信配置」
-        preset_configs: dict = {}
-        try:
-            preset_configs = await self.get_preset_configs()
-        except Exception as exc:
-            logger.exception("AI 预设配置读取失败，前端将据 loaded=false 禁止保存")
-            if load_error is None:
-                load_error = f"{type(exc).__name__}: {redact_credentials(str(exc))[:200]}"
+        preset_configs, load_error = await self._load_preset_configs(load_error)
 
-        llm_base_url = _get("llm.base_url", "llm_base_url", "LLM_BASE_URL")
+        llm_base_url = reader.get("llm.base_url", "llm_base_url", "LLM_BASE_URL")
         llm_config = {
-            "api_key": _mask_key(_get("llm.api_key", "llm_api_key", "LLM_API_KEY")),
+            "api_key": _mask_key(reader.get("llm.api_key", "llm_api_key", "LLM_API_KEY")),
             "base_url": llm_base_url,
-            "model": _get("llm.model", "llm_model", "LLM_MODEL"),
-            "timeout_sec": _get_int("llm.timeout_sec", "llm_timeout_sec", "LLM_TIMEOUT_SEC", 30),
+            "model": reader.get("llm.model", "llm_model", "LLM_MODEL"),
+            "timeout_sec": reader.get_int("llm.timeout_sec", "llm_timeout_sec", "LLM_TIMEOUT_SEC", 30),
             # 知识库问答超时（FR-UX-701 / T02515）：与批量任务的 timeout_sec 分开，
             # 管理端改这里就能让后端先到点（必须小于前端 130s，见 config.py 注释）
-            "chat_timeout_sec": _get_int(
+            "chat_timeout_sec": reader.get_int(
                 "llm.chat_timeout_sec", "llm_chat_timeout_sec", "LLM_CHAT_TIMEOUT_SEC", 120
             ),
-            "retry_attempts": _get_int(
+            "retry_attempts": reader.get_int(
                 "llm.retry_attempts", "llm_retry_attempts", "LLM_RETRY_ATTEMPTS", 3
             ),
             # 目标节目时长（秒）：控制 rewriter 字数与 stitch 范围
             # 默认 600s = 10 分钟，与稿件字数反向关联
-            "target_duration_sec": _get_int(
+            "target_duration_sec": reader.get_int(
                 "llm.target_duration_sec", "target_duration_sec", "TARGET_DURATION_SEC", 600
             ),
             # 单期节目最大段数上限（T01729：读路径补返显，30 分钟听书档调 18~20）
-            "llm_max_script_segments": _get_int(
+            "llm_max_script_segments": reader.get_int(
                 "llm.llm_max_script_segments",
                 "llm_max_script_segments",
                 "LLM_MAX_SCRIPT_SEGMENTS",
@@ -585,7 +604,7 @@ class AIConfigService:
             ),
             # TTS 段间静音时长（秒）：拼接时每段新闻之间的留白
             # 默认 0.5s，过大影响节奏紧凑度，过小衔接生硬且 BGM 无浮现空间
-            "segment_gap_sec": _get_float(
+            "segment_gap_sec": reader.get_float(
                 "llm.segment_gap_sec", "segment_gap_sec", "SEGMENT_GAP_SEC", 0.5
             ),
             # 预设配置（每个 provider 独立保存的 API Key/Base URL/Model，API Key 脱敏）
@@ -595,63 +614,63 @@ class AIConfigService:
         }
         tts_config = {
             # Provider 选择（前端切换热生效）
-            "provider": _get("tts.provider", "tts_provider", "TTS_PROVIDER", "aliyun"),
+            "provider": reader.get("tts.provider", "tts_provider", "TTS_PROVIDER", "aliyun"),
             # 阿里云 NLS 字段（保留原 key 兼容）
-            "api_key": _mask_key(_get("tts.api_key", "tts_api_key", "ALIYUN_TTS_API_KEY")),
-            "appkey": _mask_key(_get("tts.appkey", "tts_appkey", "ALIYUN_TTS_APPKEY", "")),
-            "voice": _get("tts.voice", "tts_voice", "ALIYUN_TTS_VOICE"),
-            "sample_rate": _get_int("tts.sample_rate", "tts_sample_rate", "ALIYUN_TTS_SAMPLE_RATE", 44100),
-            "format": _get("tts.format", "tts_format", "ALIYUN_TTS_FORMAT", "mp3"),
-            "timeout_sec": _get_int("tts.timeout_sec", "tts_timeout_sec", "ALIYUN_TTS_TIMEOUT_SEC", 60),
-            "retry_attempts": _get_int("tts.retry_attempts", "tts_retry_attempts", "TTS_RETRY_ATTEMPTS", 3),
+            "api_key": _mask_key(reader.get("tts.api_key", "tts_api_key", "ALIYUN_TTS_API_KEY")),
+            "appkey": _mask_key(reader.get("tts.appkey", "tts_appkey", "ALIYUN_TTS_APPKEY", "")),
+            "voice": reader.get("tts.voice", "tts_voice", "ALIYUN_TTS_VOICE"),
+            "sample_rate": reader.get_int("tts.sample_rate", "tts_sample_rate", "ALIYUN_TTS_SAMPLE_RATE", 44100),
+            "format": reader.get("tts.format", "tts_format", "ALIYUN_TTS_FORMAT", "mp3"),
+            "timeout_sec": reader.get_int("tts.timeout_sec", "tts_timeout_sec", "ALIYUN_TTS_TIMEOUT_SEC", 60),
+            "retry_attempts": reader.get_int("tts.retry_attempts", "tts_retry_attempts", "TTS_RETRY_ATTEMPTS", 3),
             # 阿里云 TTS 音量/语速/基频（NLS tts_request 参数）
-            "aliyun_volume": _get_int("tts.aliyun_volume", "aliyun_tts_volume", "ALIYUN_TTS_VOLUME", 50),
-            "aliyun_speech_rate": _get_int(
+            "aliyun_volume": reader.get_int("tts.aliyun_volume", "aliyun_tts_volume", "ALIYUN_TTS_VOLUME", 50),
+            "aliyun_speech_rate": reader.get_int(
                 "tts.aliyun_speech_rate", "aliyun_tts_speech_rate", "ALIYUN_TTS_SPEECH_RATE", 0
             ),
-            "aliyun_pitch_rate": _get_int(
+            "aliyun_pitch_rate": reader.get_int(
                 "tts.aliyun_pitch_rate", "aliyun_tts_pitch_rate", "ALIYUN_TTS_PITCH_RATE", 0
             ),
             # Edge-TTS 字段（config_key = edge_*，与前端字段名一致）
-            "edge_voice": _get("tts.edge_voice", "edge_voice", "EDGE_TTS_VOICE", "zh-CN-XiaoxiaoNeural"),
-            "edge_rate": _get("tts.edge_rate", "edge_rate", "EDGE_TTS_RATE", ""),
-            "edge_volume": _get("tts.edge_volume", "edge_volume", "EDGE_TTS_VOLUME", ""),
-            "edge_pitch": _get("tts.edge_pitch", "edge_pitch", "EDGE_TTS_PITCH", ""),
+            "edge_voice": reader.get("tts.edge_voice", "edge_voice", "EDGE_TTS_VOICE", "zh-CN-XiaoxiaoNeural"),
+            "edge_rate": reader.get("tts.edge_rate", "edge_rate", "EDGE_TTS_RATE", ""),
+            "edge_volume": reader.get("tts.edge_volume", "edge_volume", "EDGE_TTS_VOLUME", ""),
+            "edge_pitch": reader.get("tts.edge_pitch", "edge_pitch", "EDGE_TTS_PITCH", ""),
             # 腾讯云 TTS 字段
             "tencent_secret_id": _mask_key(
-                _get("tts.tencent_secret_id", "tencent_tts_secret_id", "TENCENT_TTS_SECRET_ID", "")
+                reader.get("tts.tencent_secret_id", "tencent_tts_secret_id", "TENCENT_TTS_SECRET_ID", "")
             ),
             "tencent_secret_key": _mask_key(
-                _get("tts.tencent_secret_key", "tencent_tts_secret_key", "TENCENT_TTS_SECRET_KEY", "")
+                reader.get("tts.tencent_secret_key", "tencent_tts_secret_key", "TENCENT_TTS_SECRET_KEY", "")
             ),
-            "tencent_region": _get("tts.tencent_region", "tencent_tts_region", "TENCENT_TTS_REGION", "ap-guangzhou"),
-            "tencent_voice_type": _get_int(
+            "tencent_region": reader.get("tts.tencent_region", "tencent_tts_region", "TENCENT_TTS_REGION", "ap-guangzhou"),
+            "tencent_voice_type": reader.get_int(
                 "tts.tencent_voice_type", "tencent_tts_voice_type", "TENCENT_TTS_VOICE_TYPE", 101011
             ),
-            "tencent_volume": _get_int("tts.tencent_volume", "tencent_tts_volume", "TENCENT_TTS_VOLUME", 0),
-            "tencent_speed": _get_int("tts.tencent_speed", "tencent_tts_speed", "TENCENT_TTS_SPEED", 0),
+            "tencent_volume": reader.get_int("tts.tencent_volume", "tencent_tts_volume", "TENCENT_TTS_VOLUME", 0),
+            "tencent_speed": reader.get_int("tts.tencent_speed", "tencent_tts_speed", "TENCENT_TTS_SPEED", 0),
             # Kokoro TTS（本地离线，免费高质量）
-            "kokoro_lang": _get("tts.kokoro_lang", "kokoro_lang", "KOKORO_LANG", "z"),
-            "kokoro_voice": _get("tts.kokoro_voice", "kokoro_voice", "KOKORO_VOICE", "zf_xiaoxiao"),
-            "kokoro_speed": _get_float("tts.kokoro_speed", "kokoro_speed", "KOKORO_SPEED", 1.0),
+            "kokoro_lang": reader.get("tts.kokoro_lang", "kokoro_lang", "KOKORO_LANG", "z"),
+            "kokoro_voice": reader.get("tts.kokoro_voice", "kokoro_voice", "KOKORO_VOICE", "zf_xiaoxiao"),
+            "kokoro_speed": reader.get_float("tts.kokoro_speed", "kokoro_speed", "KOKORO_SPEED", 1.0),
             # Piper TTS（本地离线，轻量免费）
-            "piper_voice": _get("tts.piper_voice", "piper_voice", "PIPER_VOICE", "zh_CN-huayan-medium"),
-            "piper_voice_dir": _get("tts.piper_voice_dir", "piper_voice_dir", "PIPER_VOICE_DIR", "./models/piper"),
-            "piper_length_scale": _get_float(
+            "piper_voice": reader.get("tts.piper_voice", "piper_voice", "PIPER_VOICE", "zh_CN-huayan-medium"),
+            "piper_voice_dir": reader.get("tts.piper_voice_dir", "piper_voice_dir", "PIPER_VOICE_DIR", "./models/piper"),
+            "piper_length_scale": reader.get_float(
                 "tts.piper_length_scale", "piper_length_scale", "PIPER_LENGTH_SCALE", 1.0
             ),
-            "piper_volume": _get_float("tts.piper_volume", "piper_volume", "PIPER_VOLUME", 0.5),
-            "piper_noise_scale": _get_float(
+            "piper_volume": reader.get_float("tts.piper_volume", "piper_volume", "PIPER_VOLUME", 0.5),
+            "piper_noise_scale": reader.get_float(
                 "tts.piper_noise_scale", "piper_noise_scale", "PIPER_NOISE_SCALE", 0.667
             ),
             # TTS 交叉音色（段落间轮流换声，避免同质化）
             # 解析 JSON 字符串为对象返回前端；缺省/解析失败回退到关闭的默认结构
             "cross_voice": _parse_cross_voice(
-                _get("tts.cross_voice", "tts_cross_voice", "TTS_CROSS_VOICE", "{}")
+                reader.get("tts.cross_voice", "tts_cross_voice", "TTS_CROSS_VOICE", "{}")
             ),
         }
 
-        image_config = self._get_image_config(raw, fallback)
+        image_config = self._get_image_config(raw, reader.fallback)
         return {
             "llm": llm_config,
             "tts": tts_config,
@@ -659,8 +678,27 @@ class AIConfigService:
             "loaded": load_error is None,
             "load_error": load_error,
             "updated_at": await self._latest_updated_at(only_if_loaded=load_error is None),
-            "fallback_fields": fallback,
+            "fallback_fields": reader.fallback,
         }
+
+    async def _load_raw_config(self) -> tuple[dict[str, str], str | None]:
+        """读配置表；失败时返回空表 + 已脱敏的失败原因（NFR-01 / NFR-05）。"""
+        try:
+            return await self.get_all_config(), None
+        except Exception as exc:
+            # 完整异常只进日志；响应里给可读且已脱敏的原因
+            logger.exception("AI 配置读取失败，前端将据 loaded=false 禁止保存")
+            return {}, f"{type(exc).__name__}: {redact_credentials(str(exc))[:200]}"
+
+    async def _load_preset_configs(self, load_error: str | None) -> tuple[dict, str | None]:
+        """读预设配置；失败时保留既有失败原因（已有错误不覆盖）。"""
+        try:
+            return await self.get_preset_configs(), load_error
+        except Exception as exc:
+            logger.exception("AI 预设配置读取失败，前端将据 loaded=false 禁止保存")
+            if load_error is None:
+                load_error = f"{type(exc).__name__}: {redact_credentials(str(exc))[:200]}"
+            return {}, load_error
 
     async def _latest_updated_at(self, only_if_loaded: bool) -> Optional[str]:
         """AI 配置最后一次入库修改时间（本地 naive，与项目其余时间口径一致）。
@@ -796,7 +834,7 @@ class AIConfigService:
             result["llm_api_key"] = api_key
 
         if "base_url" in config:
-            result["llm_base_url"] = config["base_url"]
+            result["llm_base_url"] = normalize_llm_base_url(config["base_url"])
         if "model" in config:
             result["llm_model"] = config["model"]
         if "timeout_sec" in config:
@@ -1007,6 +1045,10 @@ class AIConfigService:
             attr = CONFIG_KEY_MAP.get(key)
             if not attr:
                 continue
+            if key == "llm_base_url":
+                # 存量库里可能是误填的完整接口地址；启动即削平，
+                # 不必等用户在管理端重新保存一次
+                value = normalize_llm_base_url(value)
             if key in INT_KEYS:
                 try:
                     setattr(settings, attr, int(value))
@@ -1041,7 +1083,7 @@ class AIConfigService:
                 return {"success": False, "message": "API Key 未配置"}
             api_key = saved_key
 
-        url = base_url.rstrip("/") + "/chat/completions"
+        url = normalize_llm_base_url(base_url) + "/chat/completions"
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -1072,8 +1114,29 @@ class AIConfigService:
             }
         elif resp.status_code == 401:
             return {"success": False, "message": "API Key 无效或已过期（401）"}
+        elif resp.status_code == 402:
+            # 硅基流动/通义等按 402 + code 30001 报「余额不足」，属账号级：
+            # 重试与换模型都无效，必须充值或换提供商（与 rewriter 的口径一致）
+            return {
+                "success": False,
+                "message": f"账户余额不足（402），请充值或更换提供商：{resp.text[:120]}",
+            }
+        elif resp.status_code == 404:
+            return {
+                "success": False,
+                "message": (
+                    f"接口或模型不存在（404），请核对 model 名称；"
+                    f"base_url 应止于 API 根（如 https://api.x.com/v1），"
+                    f"不要填成 …/chat/completions：{url}"
+                ),
+            }
         elif resp.status_code == 429:
             return {"success": False, "message": "API 限流（429），请稍后重试"}
+        elif resp.status_code >= 500:
+            return {
+                "success": False,
+                "message": f"上游服务暂不可用（{resp.status_code}），稍后重试：{resp.text[:120]}",
+            }
         else:
             snippet = resp.text[:200]
             return {
@@ -1511,8 +1574,9 @@ class AIConfigService:
                 "message": "API Base URL 未配置，请先在「LLM 大模型」中填写",
             }
 
-        # 候选地址：base_url 可能已含 /v1，也可能不含
-        normalized = base_url.rstrip("/")
+        # 候选地址：base_url 可能已含 /v1，也可能不含；误填的 /chat/completions 后缀先削掉，
+        # 否则探到的是 …/chat/completions/models 这种必然 404 的地址
+        normalized = normalize_llm_base_url(base_url)
         candidates = [normalized + "/models"]
         if not normalized.endswith("/v1"):
             candidates.append(normalized + "/v1/models")
@@ -1619,6 +1683,80 @@ class AIConfigService:
             unique.append(m)
         return unique
 
+    @staticmethod
+    def _chat_config_failure(model: str, message: str) -> dict:
+        return {
+            "success": False,
+            "reply": "",
+            "model": model,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "message": message,
+        }
+
+    @staticmethod
+    def _is_retryable_error(exc: Exception) -> bool:
+        # 「重试有没有意义」按 SDK 层级判定：
+        # - APIConnectionError（含超时）是网络层面的，再来一次可能就好 → 可重试；
+        # - APIStatusError 只有网关/服务端的暂时性状态码值得重试，
+        #   401/403/404 这类鉴权与参数错误重试没有意义，要去改 AI 配置。
+        if isinstance(exc, APIConnectionError):
+            return True
+        return isinstance(exc, APIStatusError) and getattr(
+            exc, "status_code", 0
+        ) in (429, 500, 502, 503, 504)
+
+    @staticmethod
+    def _chat_api_failure(model: str, exc: Exception, chat_timeout: float) -> dict:
+        # 超时要单独标出来：前端据此把「可重试」摆到用户面前，而不是只弹一条错误 toast
+        if isinstance(exc, (APITimeoutError, TimeoutError)):
+            return {
+                "success": False,
+                "reply": "",
+                "model": model,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "timeout": True,
+                "retryable": True,
+                "message": f"模型响应超时（>{int(chat_timeout)} 秒），可以重试或把问题问得更具体",
+            }
+        return {
+            "success": False,
+            "reply": "",
+            "model": model,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "timeout": False,
+            "retryable": AIConfigService._is_retryable_error(exc),
+            "message": f"调用模型失败（{type(exc).__name__}）：{exc}",
+        }
+
+    async def _resolve_chat_credentials(
+        self, base_url: str, api_key: str, model: str
+    ) -> tuple[str, str, str]:
+        settings = get_settings()
+        if not api_key or _is_masked(api_key):
+            saved_key = await self.get_config_value("llm_api_key")
+            api_key = saved_key or settings.LLM_API_KEY or ""
+        if not base_url:
+            base_url = settings.LLM_BASE_URL
+        if not model:
+            model = settings.LLM_MODEL
+        # 问答路径同样归一：调用方可能直接传前端表单里的 base_url，
+        # 未落库的那次「测试连接」不该被误填的接口后缀带成 404
+        return api_key, normalize_llm_base_url(base_url), model
+
+    @staticmethod
+    def _resolve_chat_timeout(settings) -> float:
+        # 问答超时（FR-UX-701 / T02515）：用 LLM_CHAT_TIMEOUT_SEC（默认 120s）而不是
+        # LLM_TIMEOUT_SEC（默认 30s）。后者是给批量改写/合成用的，30s 到点即失败重试；
+        # 用在前端等结果的问答上，ACC-UX-701「长回答（>60s）不中断」直接不成立。
+        try:
+            return float(settings.LLM_CHAT_TIMEOUT_SEC or 120)
+        except (TypeError, ValueError):
+            # 配置页历史脏值（例如热更新写进 Settings 的非数字）不应让问答整体不可用
+            return 120.0
+
     async def chat_with_model(
         self,
         base_url: str,
@@ -1632,43 +1770,18 @@ class AIConfigService:
         返回结构：{"success": bool, "reply": str, "model": str,
                   "input_tokens": int, "output_tokens": int, "message": str}
         """
-        settings = get_settings()
-
-        if not api_key or _is_masked(api_key):
-            saved_key = await self.get_config_value("llm_api_key")
-            api_key = saved_key or settings.LLM_API_KEY or ""
-        if not base_url:
-            base_url = settings.LLM_BASE_URL
-        if not model:
-            model = settings.LLM_MODEL
+        api_key, base_url, model = await self._resolve_chat_credentials(
+            base_url, api_key, model
+        )
 
         if not api_key:
-            return {
-                "success": False,
-                "reply": "",
-                "model": model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "message": "API Key 未配置，请先在「LLM 大模型」中填写并保存",
-            }
+            return self._chat_config_failure(
+                model, "API Key 未配置，请先在「LLM 大模型」中填写并保存"
+            )
         if not base_url:
-            return {
-                "success": False,
-                "reply": "",
-                "model": model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "message": "API Base URL 未配置",
-            }
+            return self._chat_config_failure(model, "API Base URL 未配置")
 
-        # 问答超时（FR-UX-701 / T02515）：用 LLM_CHAT_TIMEOUT_SEC（默认 120s）而不是
-        # LLM_TIMEOUT_SEC（默认 30s）。后者是给批量改写/合成用的，30s 到点即失败重试；
-        # 用在前端等结果的问答上，ACC-UX-701「长回答（>60s）不中断」直接不成立。
-        try:
-            chat_timeout = float(settings.LLM_CHAT_TIMEOUT_SEC or 120)
-        except (TypeError, ValueError):
-            # 配置页历史脏值（例如热更新写进 Settings 的非数字）不应让问答整体不可用
-            chat_timeout = 120.0
+        chat_timeout = self._resolve_chat_timeout(get_settings())
         try:
             # max_retries=0：openai SDK 默认重试 2 次，120s 超时 × 3 次会跑到 360s，
             # 而前端只等 130s（AI_CHAT_TIMEOUT_MS）——到点先断的是浏览器，用户既看不到
@@ -1689,36 +1802,7 @@ class AIConfigService:
             # 「代码 bug」直接抛出——用例会在自己的夹具里炸，而生产路径看不出来。
             if not isinstance(e, APIError):
                 raise
-            # 超时要单独标出来：前端据此把「可重试」摆到用户面前，而不是只弹一条错误 toast
-            if isinstance(e, (APITimeoutError, TimeoutError)):
-                return {
-                    "success": False,
-                    "reply": "",
-                    "model": model,
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "timeout": True,
-                    "retryable": True,
-                    "message": f"模型响应超时（>{int(chat_timeout)} 秒），可以重试或把问题问得更具体",
-                }
-            return {
-                "success": False,
-                "reply": "",
-                "model": model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "timeout": False,
-                # 「重试有没有意义」按 SDK 层级判定：
-                # - APIConnectionError（含超时）是网络层面的，再来一次可能就好 → 可重试；
-                # - APIStatusError 只有网关/服务端的暂时性状态码值得重试，
-                #   401/403/404 这类鉴权与参数错误重试没有意义，要去改 AI 配置。
-                "retryable": isinstance(e, APIConnectionError)
-                or (
-                    isinstance(e, APIStatusError)
-                    and getattr(e, "status_code", 0) in (429, 500, 502, 503, 504)
-                ),
-                "message": f"调用模型失败（{type(e).__name__}）：{e}",
-            }
+            return self._chat_api_failure(model, e, chat_timeout)
 
         reply = resp.choices[0].message.content or ""
         usage = resp.usage

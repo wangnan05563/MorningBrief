@@ -1179,7 +1179,7 @@ async function handleSubmit() {
       // 提示词由 AI 生成或留空
       // C15（FR-UX-704）：新增同样提交「启用」开关——此前请求体没有 is_active，
       // 后端只能无条件建已启用频道，关掉开关创建的频道当天就被调度抓稿。
-      await createChannel({
+      const created = await createChannel({
         name: form.name,
         description: form.description,
         is_active: form.is_active,
@@ -1193,6 +1193,9 @@ async function handleSubmit() {
         // 段间 BGM 模式：继承全局则提交 null，否则提交具体模式
         bgm_gap_mode: form.inherit_bgm_gap ? null : form.bgm_gap_mode,
         enable_thinking_question: form.enable_thinking_question,
+        // T04111：新增态弹窗已有「全网搜索提示词」输入框，手填内容必须在创建时提交，
+        // 否则除 AI 自动生成外的手填路径会被静默丢弃
+        search_prompt: form.search_prompt,
         rss_sources: rssSourcesJson,
         book_rss_sources: bookRssSourcesJson,
         keywords: form.keywords || '',
@@ -1203,6 +1206,8 @@ async function handleSubmit() {
         ...extPayload,
       })
       ElMessage.success('已创建')
+      // T04117：AI 提示词生成失败不再静默——创建仍成功，但原因必须让用户看到
+      notifyAiWarnings(created?.ai_generate_warnings)
     }
     // T00828：保存成功清除弹窗草稿
     localStorage.removeItem('mb_channel_draft')
@@ -1286,6 +1291,19 @@ async function handleDelete(row) {
   }
 }
 
+/**
+ * T04117：展示后端回传的 AI 生成失败原因（ai_generate_warnings）。
+ * 账号级错误（401/402/403、余额不足）重试无效，必须停留足够久让用户读完再操作。
+ */
+function notifyAiWarnings(warnings) {
+  if (!Array.isArray(warnings) || !warnings.length) return false
+  ElMessage.warning(`AI 提示词未完整生成：${warnings.join('；')}`, {
+    duration: 10000,
+    showClose: true,
+  })
+  return true
+}
+
 async function handleGeneratePrompts() {
   if (!form.id) return
   generating.value = true
@@ -1297,7 +1315,9 @@ async function handleGeneratePrompts() {
     form.constraint_prompt = data.constraint_prompt || ''
     form.rewrite_template = data.rewrite_template || ''
     form.search_prompt = data.search_prompt || ''
-    ElMessage.success('AI 已生成提示词，可编辑后点击确认保存')
+    if (!notifyAiWarnings(data.ai_generate_warnings)) {
+      ElMessage.success('AI 已生成提示词，可编辑后点击确认保存')
+    }
   } catch (e) {
     console.warn('handleGeneratePrompts failed:', e)
   } finally {
