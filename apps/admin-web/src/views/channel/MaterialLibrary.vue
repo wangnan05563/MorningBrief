@@ -182,8 +182,28 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <!-- T05732/T05733：操作栏补「下载」（打开书源/来源链接，占位书稿据此取件）与
+             「上传书稿」（book_plan 占位行直达素材录入并预填书名，补齐空书单的上传入口） -->
+        <el-table-column label="操作" width="210" fixed="right">
           <template #default="{ row }">
+            <IconButton
+              v-if="row.source_type === 'book_plan'"
+              size="small"
+              type="primary"
+              plain
+              :icon="Upload"
+              label="上传书稿"
+              desc="跳转素材录入并预填该书名与频道，上传 EPUB/DOCX 后章节自动归入此书"
+              @click="goUploadBook(row)"
+            />
+            <IconButton
+              size="small"
+              :icon="Download"
+              :disabled="!row.url"
+              :label="row.url ? '下载' : '下载（无来源链接）'"
+              :desc="row.url ? '打开素材来源链接（书源网盘/网页），取件后到素材录入上传' : '该素材没有来源链接，无法下载'"
+              @click="openSourceUrl(row)"
+            />
             <IconButton size="small" :icon="Edit" :disabled="!!loadError" label="编辑" desc="编辑该素材" @click="openEdit(row)" />
             <IconButton size="small" type="danger" plain :icon="Delete" :disabled="!!loadError" label="删除" desc="删除该素材" @click="onDelete(row)" />
           </template>
@@ -212,9 +232,21 @@
         <el-table-column label="最近入库" width="170">
           <template #default="{ row }">{{ formatTime(row.latest_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <!-- T05733：空书单（全部为 book_plan 占位、尚无正文章节）直接给「上传书稿」入口，
+             不再要求用户自己想到去「素材录入」补齐——链路在 UI 上闭环 -->
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <IconButton size="small" :icon="View" label="查看章节" desc="下钻查看该书的章节素材" @click="drilldownBook(row.source)" />
+            <IconButton
+              v-if="row.all_placeholder"
+              size="small"
+              type="primary"
+              plain
+              :icon="Upload"
+              label="上传书稿"
+              desc="该书尚无正文（仅占位）：跳转素材录入并预填书名与频道，上传 EPUB/DOCX 后自动归入此书"
+              @click="goUploadBook(row)"
+            />
             <!-- T00895：删除整本书聚合（仅 admin 显示）；点击弹二次确认 -->
             <IconButton
               v-if="canOperate"
@@ -353,8 +385,8 @@
  * 批量删除走后端单事务接口 POST /materials/batch-delete（一次审计日志、一个事务）。
  */
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRoute } from 'vue-router'
-import { Plus, Close, Search, Refresh, RefreshLeft, Edit, Delete, View, Check, Picture, Download } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Plus, Close, Search, Refresh, RefreshLeft, Edit, Delete, View, Check, Picture, Download, Upload } from '@element-plus/icons-vue'
 import { ElMessage } from '../../utils/message'
 import { dangerConfirmWithReason } from '../../utils/dangerConfirm'
 import { readUrlState, MATERIALS_QUERY_SPECS } from '../../utils/urlState'
@@ -391,6 +423,7 @@ const MEDIA_TYPE_OPTIONS = enumOptions(MATERIAL_MEDIA_TYPE)
 const statusOptions = enumOptions(MATERIAL_STATUS)
 
 const route = useRoute()
+const router = useRouter()
 const statusLabel = (s) => enumLabel(MATERIAL_STATUS, s)
 const statusTagType = (s) => enumTagType(MATERIAL_STATUS, s)
 const mediaLabel = (t) => enumLabel(MATERIAL_MEDIA_TYPE, t)
@@ -596,6 +629,29 @@ function drilldownBook(source) {
   viewMode.value = 'list'
   page.value = 1
   onSearch()
+}
+
+/**
+ * T05733：空书单（book_plan 占位）的「上传书稿」入口——跳素材录入页并预填频道与书名。
+ * 上传文档时「来源」即书名，章节素材按书名聚合，占位书随之由「待上传书稿」变为可讲。
+ */
+function goUploadBook(row) {
+  router.push({
+    path: '/materials',
+    query: {
+      channelId: row.channel_id || filters.channel_id || undefined,
+      source: row.source || undefined,
+    },
+  })
+}
+
+/** T05732：打开素材来源链接（书源网盘/网页）。无链接的行按钮已禁用，这里是双保险 */
+function openSourceUrl(row) {
+  if (!row.url) {
+    ElMessage.info('该素材没有来源链接，无法下载')
+    return
+  }
+  window.open(row.url, '_blank', 'noopener')
 }
 
 async function openEdit(row) {

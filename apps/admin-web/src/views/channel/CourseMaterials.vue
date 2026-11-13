@@ -216,6 +216,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from '../../utils/message'
 import { UploadFilled, Plus, Upload, Check, View, RefreshLeft } from '@element-plus/icons-vue'
 import { listChannels } from '../../api/channels'
@@ -230,6 +231,10 @@ import { CHANNEL_TYPE, MATERIAL_SOURCE_TYPE, enumLabel } from '../../constants/e
 
 // 频道类型文案取自 src/constants/enums.js（FR-UX-405 / T02504）；类型为空不再显示「资讯」
 const typeLabel = (t) => enumLabel(CHANNEL_TYPE, t)
+
+// T05733：深链预填（素材库管理「空书单」行点「上传书稿」跳入）
+// ?channelId=X&source=书名 —— 预选目标频道并预填「来源/书名」，上传的章节自动归到该书聚合
+const route = useRoute()
 
 const channels = ref([])
 const targetChannelId = ref(null)
@@ -450,6 +455,24 @@ onMounted(async () => {
     }
   } catch (e) {
     /* 拦截器已提示 */
+  }
+  // T05733：深链预填（素材库管理「空书单」的「上传书稿」入口跳入）。
+  // channelId 做存在性校验（不存在只提示，不静默丢——否则用户在错误频道上传，章节归错书）；
+  // source 预填「来源/书名」，上传后章节自动按该书名聚合，占位书随之变「非空」。
+  const q = route.query || {}
+  const qChannel = Number(Array.isArray(q.channelId) ? q.channelId[0] : q.channelId)
+  if (Number.isFinite(qChannel) && qChannel > 0) {
+    if ((channels.value || []).some((c) => c.id === qChannel)) {
+      targetChannelId.value = qChannel
+    } else {
+      ElMessage.warning(`地址中的频道 #${qChannel} 不存在，已保留默认频道——上传前请重新选择目标频道`)
+    }
+  }
+  const qSource = String(Array.isArray(q.source) ? q.source[0] : (q.source || '')).trim()
+  if (qSource) {
+    uploadSource.value = qSource
+    activeTab.value = 'upload'
+    ElMessage.info(`已按《${qSource}》预填来源与频道，请上传该书书稿（EPUB/DOCX 等）`)
   }
 })
 </script>

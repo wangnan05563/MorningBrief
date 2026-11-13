@@ -433,7 +433,11 @@ async def list_materials(
         "list": [
             {
                 "id": m.id,
+                # T05733：明细行带频道与录入渠道——前端据此对 book_plan 占位行渲染
+                # 「上传书稿」入口（跳素材录入页预填频道/书名）与「下载」书源链接按钮
+                "channel_id": m.channel_id,
                 "source": m.source,
+                "source_type": m.source_type,
                 "title": m.title,
                 "summary": m.summary,
                 "category": m.category,
@@ -546,6 +550,10 @@ async def aggregate_materials(
             func.min(Material.id).label("sample_id"),
             func.max(Material.category).label("category"),
             func.max(Material.crawled_at).label("latest_at"),
+            # T05733：聚合行带频道（同书同频道，取 min 兜底）与「全部为占位」标记——
+            # 前端据此对空书单（book_plan 占位、尚无正文章节）渲染「上传书稿」入口
+            func.min(Material.channel_id).label("channel_id"),
+            (func.max(Material.source_type) == MaterialSourceType.book_plan.value).label("all_placeholder"),
         )
         .where(*conds)
         .group_by(Material.source)
@@ -564,8 +572,10 @@ async def aggregate_materials(
                 "pending_chapters": int(pd or 0),
                 "sample_material_id": int(sid),
                 "latest_at": latest.isoformat() if latest else None,
+                "channel_id": int(cid) if cid is not None else None,
+                "all_placeholder": bool(ap),
             }
-            for src, ch, pd, sid, cat, latest in rows
+            for src, ch, pd, sid, cat, latest, cid, ap in rows
         ],
     })
 

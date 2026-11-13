@@ -174,9 +174,11 @@
         <el-table-column prop="category" label="分类" width="120" />
         <el-table-column label="下载" width="130" fixed="right">
           <template #default="{ row }">
-            <el-link type="primary" :href="row.url" target="_blank" rel="noopener">
+            <!-- T05732：随机/检索结果统一在此列提供书源下载链接；无链接行不再渲染空跳转 -->
+            <el-link v-if="row.url" type="primary" :href="row.url" target="_blank" rel="noopener">
               打开链接 ↗
             </el-link>
+            <span v-else class="no-url">-</span>
           </template>
         </el-table-column>
         <!-- T00626：一键加入待讲书单（写素材占位，运营据此补齐书稿） -->

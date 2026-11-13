@@ -338,3 +338,58 @@ class TestMaterialListFiltersT00716:
         # 组合：keyword + status
         r3 = client.get(base, params={"channel_id": ch.id, "keyword": "活着", "status": "pending"}, headers=hdrs).json()
         assert r3["data"]["total"] == 1
+
+
+class TestBookPlanUploadEntryT05733:
+    """T05733：素材库管理「空书单」上传入口的数据契约。
+
+    - 明细列表行带 source_type / channel_id（前端据此对 book_plan 占位行渲染「上传书稿」）；
+    - 按书聚合行带 all_placeholder / channel_id（空书单＝该书全部为 book_plan 占位）。
+    """
+
+    @pytest.mark.asyncio
+    async def test_list_rows_expose_source_type_and_channel(self, db_session, client, admin_token):
+        hdrs = {"Authorization": f"Bearer {admin_token['token']}"}
+        ch = Channel(name="T05733 频道", channel_type="audiobook", selection_strategy="outline")
+        db_session.add(ch)
+        await db_session.commit()
+        await db_session.refresh(ch)
+        await _seed_book(db_session, ch.id, "活着")
+        db_session.add(Material(
+            source="百年孤独", source_type=MaterialSourceType.book_plan.value, title="《百年孤独》",
+            content="【待上传书稿】", url="bookplan://t05733/bl",
+            status=MaterialStatus.pending.value, channel_id=ch.id, crawled_at=date.today(),
+        ))
+        await db_session.commit()
+
+        r = client.get("/admin/api/v1/materials", params={"channel_id": ch.id}, headers=hdrs).json()
+        assert r["code"] == 0
+        by_type = {row["title"]: row for row in r["data"]["list"]}
+        assert by_type["《百年孤独》"]["source_type"] == "book_plan"
+        assert by_type["《百年孤独》"]["channel_id"] == ch.id
+        assert by_type["活着"]["source_type"] == "list"
+
+    @pytest.mark.asyncio
+    async def test_aggregate_flags_placeholder_books(self, db_session, client, admin_token):
+        hdrs = {"Authorization": f"Bearer {admin_token['token']}"}
+        ch = Channel(name="T05733 聚合频道", channel_type="audiobook", selection_strategy="outline")
+        db_session.add(ch)
+        await db_session.commit()
+        await db_session.refresh(ch)
+        await _seed_book(db_session, ch.id, "第一章", source="活着")
+        db_session.add(Material(
+            source="百年孤独", source_type=MaterialSourceType.book_plan.value, title="《百年孤独》",
+            content="【待上传书稿】", url="bookplan://t05733/bl2",
+            status=MaterialStatus.pending.value, channel_id=ch.id, crawled_at=date.today(),
+        ))
+        await db_session.commit()
+
+        r = client.get("/admin/api/v1/materials/aggregate", params={"channel_id": ch.id}, headers=hdrs).json()
+        assert r["code"] == 0
+        by_src = {row["source"]: row for row in r["data"]["list"]}
+        # 占位书：all_placeholder=True → 前端显示「上传书稿」
+        assert by_src["百年孤独"]["all_placeholder"] is True
+        assert by_src["百年孤独"]["channel_id"] == ch.id
+        # 真书：有正文章节 → 不显示上传入口
+        assert by_src["活着"]["all_placeholder"] is False
+        assert by_src["活着"]["chapters"] == 1
