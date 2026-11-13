@@ -138,5 +138,6 @@
 .contact-text {
   user-select: text;
   -webkit-user-select: text;
+  /* T03726：不改。邮箱是供复制的机器标识，非人读散文；开发者工具量测真实地址单行、长 ASCII 样本 5 行无溢出 */
   word-break: break-all;
 }

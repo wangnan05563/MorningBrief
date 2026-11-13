@@ -144,5 +144,8 @@
   font-size: 26rpx;
   color: var(--text-secondary);
   line-height: 1.6;
-  word-break: break-all;
+  /* T03726：改。人读文本（用户填写的反馈摘要）不硬拆英文词：anywhere 保整词且长 ASCII 仍断行（开发者工具量测）；
+     word-wrap: break-word 兜底旧引擎（iOS WKWebView < 15.4 不识 anywhere），两腿量测行数一致 */
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
 }

@@ -39,6 +39,7 @@ web-view {
   border-radius: 16rpx;
   font-size: 24rpx;
   color: var(--accent);
+  /* T03726：不改。内容是机器原文 URL，逐字可核对优先于观感；开发者工具量测长 URL 在 374px 容器断 5 行无溢出 */
   word-break: break-all;
   margin-bottom: 48rpx;
   user-select: text;

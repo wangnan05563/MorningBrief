@@ -1,0 +1,56 @@
+# MorningBrief 软件许可证（个人研究与学习用途）
+
+版权所有 (c) 2026 王南及贡献者。保留所有权利。
+
+## 一、授权范围
+
+本软件（包括但不限于源代码、文档、构建产物与示例资源）仅供**个人研究与学习**
+目的使用。在遵守本许可证条款的前提下，您被授予以下非独占、不可转让、可撤销的权利：
+
+1. 下载、安装并在个人设备上运行本软件；
+2. 为研究与学习之目的，阅读、复制、修改本软件的源代码；
+3. 在个人范围内测试、调试本软件及其派生作品。
+
+## 二、限制
+
+未经著作权人书面许可，您**不得**：
+
+1. 将本软件用于任何商业目的，包括但不限于商业再分发、商业服务、营利性产品集成；
+2. 将本软件（或其修改版）公开发布、大规模分发或提供托管服务；
+3. 移除或篡改本软件中的版权、许可与作者署名信息。
+
+## 三、第三方内容与服务的特别说明
+
+1. 本软件抓取的内容来自公开 RSS 与第三方来源，版权归原作者所有；请遵守来源站点的
+   服务条款与抓取约定，**勿将抓取内容用于商业再分发**。
+2. 使用 LLM / TTS / 对象存储等外部服务时，请遵守对应服务商的条款与计费规则，并妥善
+   保管 API Key，勿将 `.env` 与真实凭证提交到仓库。
+3. AI 生成内容可能存在事实性错误或幻觉，发布前必须经过人工审核；本软件不对自动生成
+   内容的准确性、完整性作任何担保。
+
+## 四、免责声明
+
+本软件按“现状”提供，不提供任何明示或暗示的担保，包括但不限于对适销性、特定用途
+适用性与非侵权的担保。在适用法律允许的最大范围内，作者不对因使用或无法使用本软件
+所导致的任何直接、间接、附带、特殊或后果性损害承担责任。
+
+## 五、终止
+
+若您违反本许可证的任何条款，本授权将自动终止，您必须停止所有对本软件的使用并销毁
+相关副本。
+
+---
+
+## License (English Summary)
+
+Copyright (c) 2026 Wang Nan and contributors. All rights reserved.
+
+MorningBrief is licensed for **personal research and study use only**. You may
+install, run, read, copy, and modify the source code for non-commercial,
+personal purposes. Commercial use, public redistribution, and removal of
+copyright or attribution notices are prohibited without the copyright holder's
+prior written permission. The software is provided "as is" without warranty of
+any kind. Third-party content (scraped sources) and external services
+(LLM / TTS / object storage) remain subject to their own terms.
+
+For a commercial license, please contact the author separately.

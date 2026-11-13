@@ -176,7 +176,8 @@
 
 /* J59：离线兜底提示——明确告诉用户播的是本机下载，而不是网络数据 */
 .offline-note {
-  margin: 24rpx 32rpx 0;
+  /* 顶部固定分享/首页按钮行占 16+64rpx，说明需让开，否则首行文字被遮 */
+  margin: 88rpx 32rpx 0;
   padding: 16rpx 20rpx;
   border-radius: 16rpx;
   background: var(--accent-soft);
@@ -685,7 +686,8 @@
  * 注意 wxml 中 <block> 不渲染为 DOM，其内的 .card 仍是 .page-detail 的直接子元素 */
 .page-detail > .card,
 .page-detail > .loading-mask,
-.page-detail > .empty-state {
+.page-detail > .empty-state,
+.page-detail > .offline-note {
   position: relative;
   z-index: 1;
 }

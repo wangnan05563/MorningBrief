@@ -217,8 +217,12 @@ if (-not (Test-BuildPip)) {
 if (-not $SkipDeps) {
     Write-Step "[2/6] 安装项目依赖 + PyInstaller"
 
-    # 升级 pip + setuptools
-    Invoke-BuildPip -PipArgs @("install", "--upgrade", "pip", "setuptools", "wheel") `
+    # 不再 --upgrade setuptools：PyInstaller 6.22.3 的 Windows 二进制依赖分析会在
+    # 隔离子进程里逐个 import 收集到的包，setuptools 84.x 的 _distutils_hack 曾让
+    # 子进程原生崩溃（SubprocessDiedError / exit 0xC0020043）。每次构建都拉最新版
+    # 还会让工具链版本不可复现；setuptools 随 venv 的原生版本走，运行时也不需要它
+    # （已在 MorningBrief.spec 的 excludes 中排除）。
+    Invoke-BuildPip -PipArgs @("install", "--upgrade", "pip", "wheel") `
         -FailureMessage "pip 升级失败" -RetryAfterRebuild
 
     # 安装项目依赖
@@ -230,8 +234,8 @@ if (-not $SkipDeps) {
         throw "requirements.txt 不存在: $reqFile"
     }
 
-    # 安装 PyInstaller
-    Invoke-BuildPip -PipArgs @("install", "pyinstaller") `
+    # 锁 PyInstaller 版本：打包行为对版本敏感，禁止每次构建隐式升级到未验证版本
+    Invoke-BuildPip -PipArgs @("install", "pyinstaller==6.22.3") `
         -FailureMessage "PyInstaller 安装失败"
 
     # 写入健康标记
@@ -244,7 +248,7 @@ if (-not $SkipDeps) {
 # 验证 PyInstaller 可用（即使 -SkipDeps 也要确保）
 if (-not (Test-Path $buildPyInstaller)) {
     Write-Warn "PyInstaller 未安装，强制安装..."
-    Invoke-BuildPip -PipArgs @("install", "pyinstaller") -FailureMessage "PyInstaller 安装失败"
+    Invoke-BuildPip -PipArgs @("install", "pyinstaller==6.22.3") -FailureMessage "PyInstaller 安装失败"
 }
 
 # ============== 3. 构建前端 SPA ==============
@@ -353,15 +357,47 @@ if ($SkipPack -and (Test-Path "$distDir\MorningBrief.exe")) {
     # shebang 指向已删除的 20_News 项目），启动器找不到 python 就直接 exit 1
     # 且不打印任何内容——stdout/stderr 全空，只剩脚本抛出的一句打包失败，极难定位。
     # -m 走当前 venv 的 python.exe，与入口路径无关，任何情况下都可靠。
-    $pyiProc = Start-Process -FilePath $buildPython `
-        -ArgumentList @('-m', 'PyInstaller', (Join-Path $repoRoot $specFile), '--noconfirm', '--distpath', 'release') `
-        -WorkingDirectory $repoRoot -NoNewWindow -Wait -PassThru `
-        -RedirectStandardOutput $pyiOutLog -RedirectStandardError $pyiErrLog
 
-    if ($pyiProc.ExitCode -ne 0) {
+    # 禁用 setuptools 的 distutils shim：84.x 默认 SETUPTOOLS_USE_DISTUTILS=local，
+    # 会安装 _distutils_hack 这个 meta_path finder；PyInstaller 的隔离子进程在
+    # 导入包列表时它是第一个被导入的模块，是下列原生崩溃的已知不稳定源。
+    $env:SETUPTOOLS_USE_DISTUTILS = "stdlib"
+
+    # Windows 的二进制依赖分析会拉起隔离子进程逐个 import 已收集的包，偶发
+    # 原生崩溃（SubprocessDiedError，无 Python traceback，exit 0xC0020043）。
+    # 这类失败与项目代码无关，清理分析缓存后有界重试一次通常即可通过，
+    # 避免整轮发布（含 7 分钟前端构建）前功尽弃。
+    $pyiAttempt = 0
+    $pyiOk = $false
+    while (-not $pyiOk -and $pyiAttempt -lt 2) {
+        $pyiAttempt++
+        if ($pyiAttempt -gt 1) {
+            Write-Warn "隔离子进程崩溃，清理 PyInstaller 分析缓存后重试（第 $pyiAttempt 次）..."
+            $pyiWork = Join-Path $repoRoot "build\MorningBrief"
+            if (Test-Path $pyiWork) { Remove-Item -Recurse -Force $pyiWork -ErrorAction SilentlyContinue }
+        }
+
+        $pyiProc = Start-Process -FilePath $buildPython `
+            -ArgumentList @('-m', 'PyInstaller', (Join-Path $repoRoot $specFile), '--noconfirm', '--distpath', 'release') `
+            -WorkingDirectory $repoRoot -NoNewWindow -Wait -PassThru `
+            -RedirectStandardOutput $pyiOutLog -RedirectStandardError $pyiErrLog
+
+        if ($pyiProc.ExitCode -eq 0) {
+            $pyiOk = $true
+            break
+        }
+
+        $pyiCrashed = (Select-String -Path $pyiErrLog -Pattern "SubprocessDiedError" -Quiet -ErrorAction SilentlyContinue)
+        if ($pyiCrashed -and $pyiAttempt -lt 2) {
+            continue
+        }
+
         Write-Host "  PyInstaller 失败输出（尾部 20 行）:" -ForegroundColor Red
         Get-Content $pyiErrLog -Tail 20 -ErrorAction SilentlyContinue | ForEach-Object {
             Write-Host "    $_" -ForegroundColor DarkGray
+        }
+        if ($pyiCrashed) {
+            Write-Warn "隔离子进程在二进制依赖分析阶段原生崩溃（非代码错误），重试后仍失败：请检查杀软/EDR 拦截与系统内存"
         }
         throw "PyInstaller 打包失败（exit $($pyiProc.ExitCode)，完整日志: $pyiErrLog）"
     }

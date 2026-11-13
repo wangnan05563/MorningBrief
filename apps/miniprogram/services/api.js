@@ -454,8 +454,9 @@ function normalizeChannel(ch) {
 
 /** 获取频道元信息（归一化后），无则返回 null */
 function getChannelMeta(id) {
-  if (id == null) return null;
-  return _channelMetaMap.get(id) || null;
+  if (id == null || id === '') return null;
+  // 页面参数恒为字符串、频道表主键是数字：两种键都要能查到，否则课程分支判型恒回 news
+  return _channelMetaMap.get(id) || _channelMetaMap.get(Number(id)) || null;
 }
 
 /** 取频道业务类型，缺省 'news' */

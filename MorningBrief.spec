@@ -167,6 +167,12 @@ a = Analysis(
         'tkinter',
         # 排除 SQLAlchemy 可选数据库驱动（仅使用 aiosqlite）
         'pysqlite2', 'MySQLdb', 'psycopg2', 'psycopg2-binary',
+        # 构建期工具链：运行时不依赖（backend/app 无任何引用），但会被收进
+        # collected_packages；Windows 的二进制依赖分析阶段会在隔离子进程里逐个
+        # import 这些包，setuptools 84.x 的 _distutils_hack 曾使子进程原生崩溃
+        # （SubprocessDiedError / exit 0xC0020043）。排除后该阶段不再导入它们，
+        # 产物体积也随之减小。
+        'setuptools', 'pkg_resources', '_distutils_hack', 'wheel', 'pip',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

@@ -16,6 +16,7 @@ const path = require('node:path')
 
 const MP_ROOT = path.resolve(__dirname, '..')
 const wxs = require('../utils/duration.wxs')
+const durationJs = require('../utils/duration.js')
 const format = require('../utils/format')
 
 /** 已收敛到 utils 的调用点：静态门禁按这份清单逐个核对 */
@@ -40,21 +41,33 @@ const read = (rel) => fs.readFileSync(path.join(MP_ROOT, rel), 'utf8')
 
 describe('duration.wxs 是唯一事实源', () => {
   test('utils/format.js 是转发而不是第二份实现', () => {
-    // 一旦有人在 format.js 里另写一遍 mm:ss，这两个引用就会分叉，本条立刻红
-    assert.strictEqual(format.time, wxs.time)
-    assert.strictEqual(format.cn, wxs.cn)
-    assert.strictEqual(format.minutes, wxs.minutes)
-    assert.strictEqual(format.splitHoursMinutes, wxs.splitHoursMinutes)
+    // 逻辑层只能 require .js 镜像；一旦有人在 format.js 里另写一遍 mm:ss，
+    // 这两个引用就会分叉，本条立刻红
+    assert.strictEqual(format.time, durationJs.time)
+    assert.strictEqual(format.cn, durationJs.cn)
+    assert.strictEqual(format.minutes, durationJs.minutes)
+    assert.strictEqual(format.splitHoursMinutes, durationJs.splitHoursMinutes)
   })
 
-  test('WXS 文件保持 Node 可直接 require 的 ES5 子集', () => {
-    // 注释里会出现「没有 padStart」这类说明，先剥掉注释再断言，否则是自己在跟自己过不去
-    const src = read('utils/duration.wxs')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/^\s*\/\/.*$/gm, '')
-    // 模板侧只能吃 WXS；写成 ES6 语法会在真机上编译失败，而 Node 这边照样绿
-    assert.doesNotMatch(src, /=>|const |let |\$\{/, 'duration.wxs 只能用 ES5：WXS 不支持箭头函数/模板字符串')
-    assert.doesNotMatch(src, /padStart|padEnd/, 'WXS 没有 padStart，补零必须手写')
+  test('duration.js 与 duration.wxs 逐字节一致（双文件镜像纪律）', () => {
+    // 模板只能引 .wxs、逻辑层只能引 .js，两边靠「逐字节相同的同一份实现」保同源；
+    // 只改一边就会在这里红——改法：编辑 duration.wxs 后整份复制到 duration.js
+    assert.strictEqual(read('utils/duration.js'), read('utils/duration.wxs'))
+  })
+
+  test('时长模块保持 Node 可直接 require 的 ES5 子集', () => {
+    // 注释里会出现「没有 padStart」这类说明，先剥掉注释再断言，否则是自己在跟自己过不去。
+    // 两个镜像都要查：JS 侧虽然支持 ES6，但保持与 WXS 同一份内容就都不许越界
+    for (const rel of ['utils/duration.wxs', 'utils/duration.js']) {
+      const src = read(rel)
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '')
+      // 模板侧只能吃 WXS；写成 ES6 语法会在真机上编译失败，而 Node 这边照样绿
+      assert.doesNotMatch(src, /=>|const |let |\$\{/, rel + ' 只能用 ES5：WXS 不支持箭头函数/模板字符串')
+      assert.doesNotMatch(src, /padStart|padEnd/, rel + ' 没有 padStart，补零必须手写')
+      // WXS 连 Number()/isFinite() 都没有（Unexpected token '('），镜像里也不许出现
+      assert.doesNotMatch(src, /Number\(|isFinite|parseFloat\(/, rel + ' 用了 WXS 不支持的全局（见 duration.wxs 头注释「语法限制」）')
+    }
   })
 })
 

@@ -25,7 +25,7 @@ const {
   playEpisode, playNext, playPrev, playQueueAt, getQueue, getQueueIndex, getCurrentEpisode, setQueue,
   getPlaybackRate, setPlaybackRate, resumePlay, setPendingSeek, seek,
   getSleepStatus, startSleepTimer, stopSleepTimer, onSleepChange, onError, clearQueue,
-  removeQueueAt, moveQueueItem,
+  removeQueueAt, moveQueueItem, onQueueChange,
   onPlaybackChange,
   onWaitingChange, offWaitingChange,
   onTimeUpdateChange, offTimeUpdateChange,
@@ -202,6 +202,11 @@ Page({
       this.setData({ isWaiting: !!waiting });
     };
     onWaitingChange(this._onWaitingChange);
+    // J29：订阅队列变更，弹窗内上移/下移/移出后与队列页同步刷新（否则列表停留在旧顺序）
+    this._unsubQueue = onQueueChange((queue, index) => {
+      this.setData({ queue, currentIndex: index });
+      this.refreshQueueState();
+    });
     this.bindPlayerEvents();
     this.loadDetail(id);
     this.checkFavorited(id);
@@ -216,6 +221,7 @@ Page({
     if (this._unsubSleep) this._unsubSleep();
     if (this._unsubError) this._unsubError();
     if (this._unsubPlayback) this._unsubPlayback();
+    if (this._unsubQueue) this._unsubQueue();
     // 取消 waiting 订阅：避免页面销毁后回调仍触发 setData 报错
     if (this._onWaitingChange) {
       offWaitingChange(this._onWaitingChange);
