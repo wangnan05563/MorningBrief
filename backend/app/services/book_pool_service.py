@@ -21,7 +21,7 @@ import json
 import logging
 from datetime import date
 
-from sqlalchemy import case, delete, func, or_, select
+from sqlalchemy import and_, case, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Channel, Material, MaterialMediaType, MaterialSourceType
@@ -353,12 +353,17 @@ async def list_candidates(
 
     聚合键 = `Material.source`（上传 EPUB/DOCX 时后端自动写为书名）。
     返回每本书的：书名（book_key）、总章节数、待讲（pending）章节数、分类、
-    代表素材 id（sample_material_id，展示引用）、是否已在池（in_pool，前端禁用重复选择）。
+    代表素材 id（sample_material_id，展示引用）、是否已在池（in_pool，前端禁用重复选择）、
+    是否需要先上传书稿（needs_upload，book_plan 占位书无正文，禁止入池）。
+
+    T05724：候选弹窗必须**可见**素材库内符合频道条件的全部书籍（含找书工具「加入待讲书单」
+    写入的 book_plan 占位），否则用户「在素材库管理看得到、在弹窗里查不到」，误以为丢了书。
+    占位书标记为 needs_upload 并禁止入池（C103 防把「待上传书稿」占位当讲书稿念出），
+    待运营在「素材录入」上传正文（出现 list 素材）后，该书自动转为「可加入」。
     """
-    # C103：找书工具的「待讲书单」占位素材只有书名和书源链接，没有正文。
-    # 它们和真书稿同为 material 行、同样按 source 聚合，不排除的话会被当可讲的书进候选/入池，
-    # 结果系统把「【待上传书稿】请在找书工具下载 EPUB 后…」生成讲书稿念出去。
-    conds = [Material.source_type != MaterialSourceType.book_plan.value]
+    # T05724：不再排除 book_plan——占位书需在弹窗可见，仅禁止入池（见下方 needs_upload 标记 +
+    # add_books 的 rep 排除）。C103 的内容安全靠「占位书不入池」保证，而非「占位书看不见」。
+    conds = []
     if channel_id is not None:
         conds.append(Material.channel_id == channel_id)
     if keyword and keyword.strip():
@@ -369,14 +374,21 @@ async def list_candidates(
         select(func.count(func.distinct(Material.source))).where(*conds)
     )).scalar() or 0
 
-    pending_expr = func.sum(case((Material.status == MaterialStatus.pending.value, 1), else_=0))
+    # 章节/待讲数只统计「有正文」的素材（排除 book_plan 占位，避免把占位算成一章）；
+    # needs_upload = 该书全部为 book_plan 占位（max(source_type)='book_plan'），必须先上传书稿。
+    chapters_expr = func.sum(case(
+        (Material.source_type != MaterialSourceType.book_plan.value, 1), else_=0))
+    pending_expr = func.sum(case(
+        (and_(Material.source_type != MaterialSourceType.book_plan.value,
+              Material.status == MaterialStatus.pending.value), 1), else_=0))
     agg = (await db.execute(
         select(
             Material.source,
-            func.count(Material.id).label("chapters"),
+            chapters_expr.label("chapters"),
             pending_expr.label("pending"),
             func.min(Material.id).label("sample_id"),
             func.max(Material.category).label("category"),
+            (func.max(Material.source_type) == MaterialSourceType.book_plan.value).label("needs_upload"),
         )
         .where(*conds)
         .group_by(Material.source)
@@ -395,13 +407,14 @@ async def list_candidates(
         {
             "book_key": src,
             "title": src,
-            "chapters": int(ch),
+            "chapters": int(ch or 0),
             "pending_chapters": int(pd or 0),
             "category": cat,
             "sample_material_id": int(sid),
             "in_pool": src in in_pool,
+            "needs_upload": bool(nu),
         }
-        for src, ch, pd, sid, cat in agg
+        for src, ch, pd, sid, cat, nu in agg
     ]
     return {"total": int(total), "items": items}
 

@@ -149,15 +149,16 @@
         height="380"
         @selection-change="onCandidateSelect"
       >
-        <el-table-column type="selection" width="46" :selectable="(row) => !row.in_pool" />
+        <el-table-column type="selection" width="46" :selectable="(row) => !row.in_pool && !row.needs_upload" />
         <el-table-column prop="title" label="书名" min-width="240" show-overflow-tooltip />
         <el-table-column label="章节" width="90">
           <template #default="{ row }">{{ row.chapters }} 章（待讲 {{ row.pending_chapters }}）</template>
         </el-table-column>
         <el-table-column prop="category" label="分类" width="100" />
-        <el-table-column label="状态" width="100">
+        <el-table-column label="状态" width="120">
           <template #default="{ row }">
             <el-tag v-if="row.in_pool" type="info" size="small">已在书单</el-tag>
+            <el-tag v-else-if="row.needs_upload" type="warning" size="small">待上传书稿</el-tag>
             <el-tag v-else type="success" size="small">可加入</el-tag>
           </template>
         </el-table-column>
@@ -171,7 +172,7 @@
       <!-- C84：候选此前固定 page:1、size:50，后端返回的 total 被丢弃，界面既无翻页控件
            也不显示总数——本频道书多于 50 本时，第 51 本起「不存在」，运营会判定素材库里没有这本书。 -->
       <div class="candidate-pager">
-        <span class="candidate-total">本频道共 {{ candidateTotal }} 本书可加入</span>
+        <span class="candidate-total">本频道共 {{ candidateTotal }} 本书</span>
         <el-pagination
           v-model:current-page="candidatePage"
           v-model:page-size="candidateSize"
@@ -184,6 +185,14 @@
           @size-change="onCandidateSizeChange"
         />
       </div>
+      <el-alert
+        v-if="hasUploadPendingBooks"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="candidate-upload-hint"
+        title="标记为「待上传书稿」的书尚未上传正文，需先到「素材录入」上传 EPUB/DOCX；待出现章节素材后，才可在上方勾选加入书单"
+      />
       <template #footer>
         <div class="dialog-footer">
           <span>已选 {{ selectedCandidates.length }} 本</span>
@@ -272,6 +281,8 @@ const previewType = computed(() => {
   if (!preview.value) return 'info'
   return { ok: 'success', not_due: 'warning', empty: 'warning', exhausted: 'warning' }[preview.value.status] || 'info'
 })
+// T05724：候选里存在「待上传书稿」占位书时，给出上传引导（这类书可见但禁止入池）
+const hasUploadPendingBooks = computed(() => candidates.value.some((c) => c.needs_upload))
 const previewText = computed(() => {
   const p = preview.value
   if (!p) return ''
@@ -603,6 +614,10 @@ async function onAddSelected() {
 .candidate-total {
   font-size: 13px;
   color: var(--el-text-color-secondary);
+}
+/* T05724：占位书上传引导提示 */
+.candidate-upload-hint {
+  margin-top: 10px;
 }
 .alert-body {
   margin-top: 4px;

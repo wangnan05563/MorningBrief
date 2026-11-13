@@ -16,7 +16,7 @@ from datetime import date, timedelta
 import pytest
 
 from app.models import Channel, Material
-from app.models.material import MaterialStatus
+from app.models.material import MaterialSourceType, MaterialStatus
 from app.services import book_pool_service as svc
 
 
@@ -276,6 +276,38 @@ class TestCandidates:
             await _seed_book(db_session, ch.id, t)
         res = await svc.list_candidates(db_session, ch.id, keyword="活着")
         assert [i["book_key"] for i in res["items"]] == ["活着"]
+
+    @pytest.mark.asyncio
+    async def test_candidates_shows_book_plan_and_flags_needs_upload(self, db_session):
+        """T05724：找书工具「加入待讲书单」写入的 book_plan 占位书必须在候选弹窗可见，
+        且标记为 needs_upload（不可直接入池）；待上传正文（list 素材）后自动转为可加入。
+        否则用户在素材库管理看得到该书、在弹窗查不到，误以为丢了书。"""
+        ch = await _seed_channel(db_session)
+        # 仅占位、无正文
+        db_session.add(Material(
+            source="百年孤独", source_type=MaterialSourceType.book_plan.value, title="《百年孤独》",
+            content="【待上传书稿】请在素材录入上传 EPUB/DOCX", url="bookplan://9/bl",
+            status=MaterialStatus.pending.value, channel_id=ch.id, crawled_at=date.today(),
+        ))
+        await db_session.commit()
+
+        res = await svc.list_candidates(db_session, ch.id)
+        by_key = {i["book_key"]: i for i in res["items"]}
+        assert "百年孤独" in by_key, "占位书必须在弹窗可见（素材库看得到、弹窗查不到即本缺陷）"
+        assert by_key["百年孤独"]["needs_upload"] is True
+        assert by_key["百年孤独"]["chapters"] == 0, "占位书无正文，章节数应为 0"
+        assert by_key["百年孤独"]["in_pool"] is False
+
+        # 上传正文（list 素材）→ 自动转为可加入
+        await _seed_book(db_session, ch.id, "第一章", source="百年孤独")
+        res2 = await svc.list_candidates(db_session, ch.id)
+        by_key2 = {i["book_key"]: i for i in res2["items"]}
+        assert by_key2["百年孤独"]["needs_upload"] is False
+        assert by_key2["百年孤独"]["chapters"] == 1
+
+        # 有正文后书应可正常入池（add_books 仅取有正文的代表素材）
+        add = await svc.add_books(db_session, ch.id, ["百年孤独"])
+        assert add["added"] == 1, "有正文后书应可正常入池"
 
 class TestMaterialListFiltersT00716:
     """素材库管理页的查询能力（T00716）：keyword（标题/来源模糊）+ status 过滤。"""
