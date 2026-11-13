@@ -13,7 +13,34 @@
     <!-- 索引状态条（T00612）：全量检索走本地索引，未构建时引导构建 -->
     <el-card shadow="never" class="index-card">
       <div class="index-row">
-        <template v-if="indexReady">
+        <template v-if="building">
+          <el-tag type="warning" size="small">索引构建中</el-tag>
+          <!-- T05719：动态进度条替代静态文本，平滑填充（el-progress 自带 width 过渡），
+               实时展示「已完成/总数 (百分比)」与基于平均速度的预计剩余时间 -->
+          <el-progress
+            class="index-progress"
+            :percentage="buildPercent"
+            :stroke-width="10"
+          />
+          <span class="index-text">
+            <template v-if="buildTotal">
+              构建中：{{ buildDone }} / {{ buildTotal }} 个分类
+              <template v-if="buildPercent > 0">（{{ buildPercentText }}）</template>
+              <template v-if="buildEtaText">，预计剩余 {{ buildEtaText }}</template>
+            </template>
+            <template v-else>正在初始化构建任务…</template>
+            （首次约 2-5 分钟，期间可先选具体分类搜索）
+          </span>
+        </template>
+        <template v-else-if="buildError">
+          <!-- T05719：构建抛异常时停止进度动画，明确报错并给出重试入口（与底部「重建索引」按钮一致） -->
+          <el-tag type="danger" size="small">索引构建失败</el-tag>
+          <span class="index-text">
+            {{ buildError }}，请检查网络或服务后
+            <el-link type="primary" :underline="false" @click="onRebuildIndex">重试</el-link>
+          </span>
+        </template>
+        <template v-else-if="indexReady">
           <!-- T00619：索引过期（默认 >14 天）时醒目提示，并说明已自动后台更新 -->
           <el-tag v-if="indexInfo.stale" type="warning" size="small">索引已过期</el-tag>
           <el-tag v-else type="success" size="small">索引就绪</el-tag>
@@ -24,13 +51,6 @@
               （{{ indexInfo.age_days }} 天前{{ building ? '，正在后台自动更新' : '，系统已自动触发后台更新' }}，
               期间结果可能不含最新书籍）
             </template>
-          </span>
-        </template>
-        <template v-else-if="building">
-          <el-tag type="warning" size="small">索引构建中</el-tag>
-          <span class="index-text">
-            {{ indexInfo.build.done || 0 }} / {{ indexInfo.build.total || '…' }} 个分类
-            （首次约 2-5 分钟，期间可先选具体分类搜索）
           </span>
         </template>
         <template v-else>
@@ -199,6 +219,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { Refresh, Search, Sort, Check } from '@element-plus/icons-vue'
 import { ElMessage } from '../../utils/message'
+import { formatDuration, metricText } from '../../utils/format'
 import {
   createDraftMaterial,
   getEbookCategories,
@@ -248,6 +269,39 @@ const indexAgeDays = ref(null)
 let pollTimer = null
 
 const building = computed(() => !!(indexInfo.value.build && indexInfo.value.build.running))
+
+// T05719：构建进度条所需的派生量（从后端 /ebooks/index/status 的 build 状态计算）
+// 单位展示统一走 utils/format.js 的 metricText（T02709 / FR-UX-501），不要在插值后写死 '%'
+const PROGRESS_PERCENT_META = { label: '', display: { unit: '%' } }
+const buildTotal = computed(() => indexInfo.value.build?.total || 0)
+const buildDone = computed(() => indexInfo.value.build?.done || 0)
+const buildError = computed(() => indexInfo.value.build?.error || '')
+// 百分比：总数未知时归 0（界面另给「初始化中」提示）；接近完成时封顶 99%，
+// 避免「构建中」分支提前显示 100% 而实际 running 尚未翻转为 false
+const buildPercent = computed(() => {
+  const total = buildTotal.value
+  if (!total) return 0
+  return Math.min(99, Math.round((buildDone.value / total) * 100))
+})
+const buildPercentText = computed(() => metricText(buildPercent.value, PROGRESS_PERCENT_META))
+// 预计剩余时间：用「已用时间 / 已完成数」估平均速度，再按剩余数折算（每次轮询刷新时重算）；
+// 秒→分/时的换算统一交给 formatDuration（T02709），避免 PC/移动端口径分叉
+const buildEtaText = computed(() => {
+  const b = indexInfo.value.build || {}
+  const total = b.total || 0
+  const done = b.done || 0
+  const started = b.started_at
+  if (!total || !done || !started) return ''
+  const startedMs = new Date(started).getTime()
+  if (Number.isNaN(startedMs)) return ''
+  const elapsedSec = (Date.now() - startedMs) / 1000
+  if (elapsedSec <= 0 || done <= 0) return ''
+  const rate = done / elapsedSec // 分类/秒
+  if (rate <= 0) return ''
+  const remainingSec = (total - done) / rate
+  if (!isFinite(remainingSec) || remainingSec <= 0) return ''
+  return formatDuration(Math.ceil(remainingSec))
+})
 
 // C103：按钮 tooltip 里点名要加入哪个频道，让「加入待讲书单」和落库位置对得上
 const channelName = (id) => channels.value.find((c) => c.id === id)?.name || ''
@@ -449,6 +503,12 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+/* T05719：构建进度条在状态行内占用一行弹性宽度，与标签/文本/重建按钮同行排列 */
+.book-finder .index-progress {
+  flex: 1 1 200px;
+  max-width: 360px;
+  margin: 0 2px;
 }
 .book-finder .stale-hint {
   color: var(--el-color-warning, #e6a23c);

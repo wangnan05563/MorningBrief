@@ -234,6 +234,33 @@ test.describe('频道弹窗：启用开关、图标回填、BGM 试听、AI 推�
     await expect(box.locator('audio')).toHaveAttribute('src', /^\/news\/bgm\//)
   })
 
+  test('T05718 选「预制封面」后预览图带 /news 前缀（裸 /channel-assets 在 dev/生产均 404）', async ({ page }) => {
+    await mockApi(page)
+    // 覆盖封面列表：返回带裸相对路径的预制封面（与后端 contract 一致：url 为 /channel-assets/...）
+    // 后端返回的是**数组本体**（success(data=presets)），不是 { items: [...] }
+    await page.route('**/admin/api/v1/channels/cover-presets', (route) =>
+      route.fulfill({
+        json: {
+          code: 0, message: 'success',
+          data: [{ channel_id: 1, name: '默认封面', url: '/channel-assets/channel_1.jpg', size_kb: 12, mtime: 1700000000 }],
+        },
+      }),
+    )
+    await page.goto('/news/channels')
+    await page.getByRole('button', { name: '编辑' }).first().click()
+    const box = dialog(page)
+    // 打开预制封面选择弹窗，缩略图应可见（picker 内走 assetPreviewUrl，已带前缀）
+    await box.getByRole('button', { name: '选择预制封面' }).click()
+    await expect(box.locator('.cover-picker-thumb').first()).toBeVisible()
+    // 点击缩略图套用封面
+    await box.locator('.cover-picker-item').first().click()
+    // 编辑页封面预览必须带 /news 前缀（修复前为裸 /channel-assets/...，dev 与生产的 Funnel 均 404 ⇒ 加载失败）
+    const coverImg = box.locator('.cover-preview img')
+    await expect(coverImg).toBeVisible()
+    await expect(coverImg).toHaveAttribute('src', /^\/news\/channel-assets\//)
+    await expect(box.getByText('加载失败')).toHaveCount(0)
+  })
+
   test('C18 AI 推荐即时落库后：页脚写明「已即时生效」，取消时如实告知且不静默关闭', async ({ page }) => {
     await mockApi(page)
     await page.goto('/news/channels')

@@ -148,7 +148,7 @@
             <el-image
               v-if="form.cover_url"
               class="cover-preview"
-              :src="form.cover_url"
+              :src="assetPreviewUrl(form.cover_url)"
               fit="cover"
             >
               <template #error>
