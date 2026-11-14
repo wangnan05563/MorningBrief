@@ -150,9 +150,9 @@ test.describe('移动端底部导航角标', () => {
     }
   })
 
-  test('角标底色用对比度达标的 #C9433B（不是同色相但只有 3.4:1 的 #E6544A）', async ({ page }) => {
+  test('角标底色用主题令牌 #B3261E（不是对比度只有 3.4:1 的 #E6544A）', async ({ page }) => {
     await page.goto('/m/home')
-    await expect(badge(page, 'review')).toHaveCSS('background-color', 'rgb(201, 67, 59)')
+    await expect(badge(page, 'review')).toHaveCSS('background-color', 'rgb(179, 38, 30)')
     await expect(badge(page, 'review')).toHaveCSS('color', 'rgb(255, 255, 255)')
   })
 })

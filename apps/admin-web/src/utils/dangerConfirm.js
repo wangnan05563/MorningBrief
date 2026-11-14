@@ -144,6 +144,9 @@ export async function dangerConfirmWithReason(opts) {
       type: 'error',
       confirmButtonText: confirmLabel,
       cancelButtonText: '取消',
+      // 低层 ElMessageBox(options) 默认不渲染取消按钮（confirm() 包装才会补），
+      // 这里显式打开：必须给用户一个明确的「取消」，不能只靠右上角 X 或 ESC。
+      showCancelButton: true,
       closeOnClickModal: false,
       beforeClose: (action, instance, done) => {
         if (action !== 'confirm') return done()

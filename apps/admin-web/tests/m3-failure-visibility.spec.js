@@ -105,7 +105,7 @@ test.describe('M3 失败不得伪装成事实', () => {
     await page.route(`${API}/maintenance/status*`, (route) => route.abort())
 
     await page.goto('/maintenance')
-    const banner = page.locator('.list-load-error')
+    const banner = page.locator('[data-guide="maintenance-page"] > .list-load-error')
     await expect(banner).toBeVisible({ timeout: 30000 })
     // M71 的原始后果：运维把「0 条日志、无需清理」当成事实去判断清理效果
     await expect(page.locator('.status-section')).toHaveCount(0)
@@ -132,7 +132,7 @@ test.describe('M3 失败不得伪装成事实', () => {
     await expect(page.getByText('播放日志 8121 条')).toBeVisible({ timeout: 30000 })
 
     await page.getByRole('button', { name: '刷新状态' }).click()
-    const banner = page.locator('.list-load-error')
+    const banner = page.locator('[data-guide="maintenance-page"] > .list-load-error')
     await expect(banner).toBeVisible({ timeout: 30000 })
     // 已有旧数据时不能声称「数据未加载」；也不能假装数值是新鲜的
     await expect(banner).toContainText('上次成功加载的数据')

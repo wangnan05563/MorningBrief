@@ -125,7 +125,7 @@ test.describe('审核列表：分页档位 + 筛选持久化 + 失败可见（B3
   test('工作流 ID 筛选：查询进请求、写进地址、刷新后回填', async ({ page }) => {
     const calls = await mockReviews(page)
     await page.goto('/news/review')
-    await page.fill('[data-guide="review-filters"] input', 'wf-007')
+    await page.locator('[data-guide="review-filters"] input[placeholder="按工作流 ID 精确定位"]').fill('wf-007')
     await page.getByRole('button', { name: '搜索' }).click()
     await expect.poll(() => calls.at(-1).workflow_id).toBe('wf-007')
     // 同上：URL 是响应处理完才回写的，只能 poll，不能紧跟在请求断言后面同步读
@@ -133,7 +133,7 @@ test.describe('审核列表：分页档位 + 筛选持久化 + 失败可见（B3
 
     await page.reload()
     await expect.poll(() => calls.at(-1).workflow_id).toBe('wf-007')
-    await expect(page.locator('[data-guide="review-filters"] input')).toHaveValue('wf-007')
+    await expect(page.locator('[data-guide="review-filters"] input[placeholder="按工作流 ID 精确定位"]')).toHaveValue('wf-007')
   })
 
   test('非法 workflow_id（含空格）回落空筛选并提示，不原样发给后端', async ({ page }) => {
@@ -142,13 +142,14 @@ test.describe('审核列表：分页档位 + 筛选持久化 + 失败可见（B3
     await expect.poll(() => calls.at(-1)).toBeTruthy()
     expect(calls.every((c) => c.workflow_id === null)).toBe(true)
     await expect(page.locator('[data-guide="review-url-corrected"]')).toBeVisible()
-    await expect(page.locator('[data-guide="review-filters"] input')).toHaveValue('')
+    await expect(page.locator('[data-guide="review-filters"] input[placeholder="按工作流 ID 精确定位"]')).toHaveValue('')
   })
 
   test('列表加载失败：页内错误态 + 重试，绝不显示「暂无数据」', async ({ page }) => {
     await mockReviews(page, { failFirst: true })
     await page.goto('/news/review')
-    const error = page.locator('.list-load-error')
+    // 审核页还挂着「最近审核审计」的独立错误态；这里只断言审核列表自己那一条
+    const error = page.locator('[data-guide="review-page"] > .list-load-error')
     await expect(error).toBeVisible()
     await expect(error).toContainText('重试')
     await expect(page.locator('.el-empty')).toHaveCount(0)
@@ -157,13 +158,13 @@ test.describe('审核列表：分页档位 + 筛选持久化 + 失败可见（B3
     // 用 hasText 选不到（实测等 60s 超时），必须按可访问名选
     await error.getByRole('button', { name: '重试' }).click()
     await expect(reviewTableRows(page)).toHaveCount(10)
-    await expect(page.locator('.list-load-error')).toHaveCount(0)
+    await expect(page.locator('[data-guide="review-page"] > .list-load-error')).toHaveCount(0)
   })
 
   test('NFR-UX-03：失败态停留期间不自发重试/轮询（请求只在点击后增加）', async ({ page }) => {
     const calls = await mockReviews(page, { failFirst: true })
     await page.goto('/news/review')
-    await expect(page.locator('.list-load-error')).toBeVisible()
+    await expect(page.locator('[data-guide="review-page"] > .list-load-error')).toBeVisible()
     const before = calls.length
     await page.waitForTimeout(4000)
     expect(calls.length).toBe(before)

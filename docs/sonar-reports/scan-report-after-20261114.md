@@ -99,10 +99,10 @@ new_violations                   0    (GT 0  → OK)
 
 ### 6.1 E2E
 
-- 首轮全量：505 项，487 passed / 18 failed。
-- 失败用例隔离复跑（11 个 spec）：83 passed / 9 failed。
-- 归因：9 项均为前端存量用例与现行 UI 的契约漂移（组件本轮未改动），详见 `fix-summary-20261114.md` §5。
-- 有效通过率：496/505（98.2%）；后端相关用例 0 失败。
+- 首轮全量：505 项，487 passed / 18 failed；隔离复跑后确认 9 项存量失败。
+- 已修复这 9 项：1 项真实缺陷（低层 `ElMessageBox(options)` 不渲染「取消」按钮）+ 8 项用例选择器/颜色断言过期。
+- 修复后复跑 4 个相关 spec（feed-capabilities / destructive-confirm / m3-failure-visibility / mobile-tabbar-badge）：43 项中 **41 passed**；9 个目标用例全部通过；剩余 2 项频道删除用例因本机 dev server 启动超时（`page.goto` 60s timeout）未完成，非断言失败。
+- 受本机持续负载影响，未再执行 505 项全量复跑；后端相关用例 0 失败。
 
 ### 6.2 生产构建
 

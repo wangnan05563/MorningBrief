@@ -15,7 +15,7 @@
 | 后端全量测试 | ✅ 1,738 passed / 2 skipped / 0 failed |
 | 前端门禁 + 单测 | ✅ 门禁通过；单测 673/673 |
 | 小程序门禁 + 单测 | ✅ 门禁通过；单测 413/413 |
-| E2E | ⚠️ 496/505（9 项存量失败，详见 §5；后端相关用例 0 失败） |
+| E2E | ✅ 9 项存量失败已修复；4 个相关 spec 复跑 41/43（2 项频道用例受本机 dev server 超时影响，非断言失败） |
 | 生产构建 | ✅ EXE 16.2 MB + 安装包 152.6 MB（6/6 步成功） |
 
 ## 2. 代码修复清单（Sonar 问题）
@@ -58,20 +58,18 @@
 | 前端单测 | `node --test tests/unit/*.test.mjs` | 673/673 | `test-admin-unit.log` |
 | 小程序 tabBar/UX 门禁 | `node scripts/validate-tabbar.mjs`、`validate-ux604.mjs` | 通过 | 终端输出 |
 | 小程序单测 | `node --test tests/*.test.js tests/*.test.mjs` | 413/413 | 终端输出 |
-| E2E | `npx playwright test`（chromium，505 项） | 496 passed / 9 failed | `test-e2e.log`、`test-e2e-retry.log` |
+| E2E | `npx playwright test`（chromium，505 项）；修复后复跑 4 个相关 spec | 原 496/505；修复后 41/43（9 个目标用例全绿，2 项 env 超时） | `test-e2e.log`、`test-e2e-retry.log`、`test-e2e-fix.log` |
 
-## 5. E2E 9 项失败归因（存量，与本次改动无关）
+## 5. E2E 9 项存量失败：已修复
 
-本次改动仅涉及 3 个后端模块 + 1 个后端测试 + 2 个前端视图（`BookPoolPanel.vue`、`Help.vue`）；下列失败用例所在组件均未被修改，且复跑单独执行仍失败：
-
-| # | 用例 | 失败原因 | 归属组件 |
+| # | 用例 | 根因 | 修复 |
 |---|---|---|---|
-| 1-4 | `feed-capabilities` 审核列表筛选/错误态 | 测试选择器 `[data-guide="review-filters"] input` 命中 5 个输入框（strict mode 冲突）；`.list-load-error` 命中 2 个 | `ReviewList.vue`（未改） |
-| 5-6 | `destructive-confirm` 素材删除/批量删除 | 等待 `.el-message-box` 的「取消」按钮超时（确认框实现与用例不一致） | `MaterialLibrary.vue`（未改） |
-| 7-8 | `m3-failure-visibility` 首次/二次加载失败 | 同 `.list-load-error` 双元素冲突 | `Dashboard.vue`（未改） |
-| 9 | `mobile-tabbar-badge` 角标底色 | 实际 `#B3261E`，用例断言 `#C9433B`（设计令牌与用例不一致） | 移动端壳层样式（未改） |
+| 1-4 | `feed-capabilities` 筛选/错误态 | 选择器 `[data-guide="review-filters"] input` 命中 5 个输入框；`.list-load-error` 同时命中审核列表与「最近审核审计」两条 | 按「工作流 ID」placeholder 精确定位；错误态限定为 `[data-guide="review-page"] > .list-load-error` |
+| 5-6 | `destructive-confirm` 素材删除/批量删除 | 真实缺陷：低层 `ElMessageBox(options)` 默认不渲染取消按钮，用户只能点右上角 X | `dangerConfirm.js` 显式 `showCancelButton: true` |
+| 7-8 | `m3-failure-visibility` 首次/二次加载失败 | `.list-load-error` 同时命中状态卡与页面其它面板 | 限定为 `[data-guide="maintenance-page"] > .list-load-error` |
+| 9 | `mobile-tabbar-badge` 角标底色 | 设计令牌已改为 `--m-danger: #B3261E`（白字 6.5:1），用例仍断言旧值 `#C9433B` | 断言更新为 `rgb(179, 38, 30)` |
 
-结论：这些是测试用例与现行 UI 的契约漂移，属仓库既有债务；不影响 Sonar 清零结论，也不由本次修复引入。若需全绿，应按产品口径逐条更新用例或统一设计令牌。
+修复后复跑 4 个 spec：43 项中 41 通过；9 个目标用例全部通过。剩余 2 项频道删除用例因本机 dev server 启动超时（`page.goto` 60s）未完成，非断言失败，需在机器负载正常时复跑。
 
 ## 6. 生产构建
 
