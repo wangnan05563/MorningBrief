@@ -3,13 +3,13 @@
   "entries": [
     {
       "endpoint": "PATCH /db-admin/tables/*/rows/*",
-      "site": "views/maintenance/DatabaseAdmin.vue:771",
+      "site": "views/maintenance/DatabaseAdmin.vue:779",
       "reason_key": "dynamic-columns",
       "note": "values 是通用表编辑器的「列名→值」映射，键集合由所选表的列决定，静态不可定；后端用 ALLOWED_TABLES/列白名单校验，越界列直接拒（M16 家族已钉）。"
     },
     {
       "endpoint": "POST /db-admin/tables/*/rows/batch-delete",
-      "site": "views/maintenance/DatabaseAdmin.vue:839",
+      "site": "views/maintenance/DatabaseAdmin.vue:847",
       "reason_key": "value-scalar",
       "note": "confirmText 是用户手打的确认字符串，键名来自包装体字面量；ids 与 confirm_text 均在 BatchDeleteRequest 声明内。"
     },
@@ -21,13 +21,13 @@
     },
     {
       "endpoint": "POST /channels",
-      "site": "views/channel/ChannelManagement.vue:1175",
+      "site": "views/channel/ChannelManagement.vue:1182",
       "reason_key": "spread-manually-verified",
       "note": "...extPayload 的键已在 apps/admin-web/src/views/channel/ChannelManagement.vue:1123-1139 逐条核对：channel_type/type_label/selection_strategy/manual_material_ids/enable_ad/disclaimer_level/cover_url，全部在 ChannelCreateRequest 声明内。"
     },
     {
       "endpoint": "PUT /channels/*",
-      "site": "views/channel/ChannelManagement.vue:1142",
+      "site": "views/channel/ChannelManagement.vue:1148",
       "reason_key": "spread-manually-verified",
       "note": "同一份 extPayload（apps/admin-web/src/views/channel/ChannelManagement.vue:1123-1139），全部落在 ChannelUpdateRequest 声明内。"
     },
@@ -117,19 +117,19 @@
     },
     {
       "endpoint": "PUT /channels/*/script-mode",
-      "site": "views/channel/BookPoolPanel.vue:376",
+      "site": "views/channel/BookPoolPanel.vue:387",
       "reason_key": "value-scalar",
       "note": "val 是讲书稿模式开关的布尔值；api/bookPool.js 的包装体提交 {enabled}，在 ScriptModeRequest 声明内。"
     },
     {
       "endpoint": "POST /channels/*/book-pool/items",
-      "site": "views/channel/BookPoolPanel.vue:461",
+      "site": "views/channel/BookPoolPanel.vue:472",
       "reason_key": "value-scalar",
       "note": "keys 是 CSV 第一列解析出的书名数组（值不可静态定，C117 书单导入）；键名 book_sources 由 api/bookPool.js 的包装体给出，在 AddBooksRequest 声明内。"
     },
     {
       "endpoint": "PUT /channels/*/script-mode",
-      "site": "views/channel/ChannelManagement.vue:995",
+      "site": "views/channel/ChannelManagement.vue:1000",
       "reason_key": "value-scalar",
       "note": "val 是同一个模式布尔开关，来自频道管理页的开关入口；包装体键名 enabled 在 ScriptModeRequest 声明内。"
     },

@@ -173,7 +173,7 @@
       "endpoint": "delete_channel",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:591",
+        "source": "backend/app/routers/admin/channels.py:652",
         "refs": [
           "",
           "/{channel_id}",
@@ -260,7 +260,7 @@
       "endpoint": "delete_bgm",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:730",
+        "source": "backend/app/routers/admin/channels.py:791",
         "refs": [
           "",
           "/bgm/{path:path}",
@@ -425,7 +425,7 @@
       "endpoint": "delete_materials_by_source",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:699",
+        "source": "backend/app/routers/admin/materials.py:715",
         "refs": [
           "",
           "AdminPayload",
@@ -488,7 +488,7 @@
       "endpoint": "delete_material",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:731",
+        "source": "backend/app/routers/admin/materials.py:747",
         "refs": [
           "",
           "/{material_id}",
@@ -2093,7 +2093,7 @@
       "model": {
         "name": "ChannelCreateRequest",
         "module": "app.routers.admin.channels",
-        "source": "backend/app/routers/admin/channels.py:66",
+        "source": "backend/app/routers/admin/channels.py:82",
         "extra": "ignore",
         "fields": [
           "auto_generate_prompts",
@@ -2120,6 +2120,7 @@
           "rewrite_template",
           "rss_sources",
           "schedule_time",
+          "search_prompt",
           "segment_gap_sec",
           "selection_strategy",
           "type_label"
@@ -2149,13 +2150,14 @@
           "rewrite_template",
           "rss_sources",
           "schedule_time",
+          "search_prompt",
           "segment_gap_sec",
           "selection_strategy",
           "type_label"
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:434",
+        "source": "backend/app/routers/admin/channels.py:455",
         "refs": [
           "",
           "AdminPayload",
@@ -2165,8 +2167,11 @@
           "Depends",
           "Exception",
           "ValueError",
-          "__name__",
+          "_AI_WARNINGS_KEY",
           "_channel_to_dict",
+          "_llm_failure_reason",
+          "ai_warnings",
+          "append",
           "auto_generate_prompts",
           "bgm_gap_mode",
           "bgm_path",
@@ -2189,13 +2194,14 @@
           "enable_thinking_question",
           "error",
           "generate_prompts_for_channel",
-          "getLogger",
+          "generate_search_prompt_for_channel",
           "get_db",
           "id",
           "intro_prompt",
           "is_active",
           "keywords",
-          "logging",
+          "list",
+          "logger",
           "manual_material_ids",
           "material_lookback_days",
           "message",
@@ -2210,6 +2216,8 @@
           "router",
           "rss_sources",
           "schedule_time",
+          "search",
+          "search_prompt",
           "segment_gap_sec",
           "selection_strategy",
           "str",
@@ -2217,9 +2225,11 @@
           "svc",
           "type_label",
           "update_channel",
-          "warning",
+          "全网搜索提示词未生成：",
           "新增频道。仅 admin。\n\n    auto_generate_prompts=True 时，频道创建后自动调用 AI 生成提示词并回填。\n    ",
-          "频道创建时 AI 生成提示词失败: %s"
+          "频道创建时 AI 生成提示词失败: %s",
+          "频道创建时 AI 生成搜索提示词失败: %s",
+          "频道提示词未自动生成："
         ]
       }
     },
@@ -2365,17 +2375,26 @@
       "endpoint": "generate_prompts",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:544",
+        "source": "backend/app/routers/admin/channels.py:586",
         "refs": [
           "/{channel_id}/generate-prompts",
+          "AI 生成失败：",
+          "AI 生成搜索提示词失败: %s",
+          "AI 生成频道提示词失败: %s",
           "AI 自动生成频道提示词。仅 admin。\n\n    根据频道 name + description 调用 LLM 生成 4 类提示词，\n    生成后直接持久化到频道记录，前端可再次编辑覆盖。\n    ",
           "AdminPayload",
           "AsyncSession",
+          "BizError",
           "ChannelService",
           "Depends",
+          "Exception",
           "ValueError",
+          "_AI_WARNINGS_KEY",
           "_CHANNEL_NOT_FOUND_MSG",
           "_channel_to_dict",
+          "_llm_failure_reason",
+          "ai_warnings",
+          "append",
           "channel",
           "channel_id",
           "code",
@@ -2386,10 +2405,13 @@
           "e",
           "error",
           "generate_prompts_for_channel",
+          "generate_search_prompt_for_channel",
           "get_channel",
           "get_db",
           "int",
           "intro_prompt",
+          "list",
+          "logger",
           "message",
           "name",
           "outro_prompt",
@@ -2398,10 +2420,13 @@
           "require_admin",
           "rewrite_template",
           "router",
+          "search",
+          "search_prompt",
           "str",
           "success",
           "svc",
-          "update_channel"
+          "update_channel",
+          "全网搜索提示词未生成："
         ]
       }
     },
@@ -2410,7 +2435,7 @@
       "endpoint": "upload_channel_icon",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:921",
+        "source": "backend/app/routers/admin/channels.py:982",
         "refs": [
           "",
           " 不存在",
@@ -2479,7 +2504,7 @@
       "model": {
         "name": "ChannelIconAIRequest",
         "module": "app.routers.admin.channels",
-        "source": "backend/app/routers/admin/channels.py:952",
+        "source": "backend/app/routers/admin/channels.py:1013",
         "extra": "ignore",
         "fields": [
           "prompt"
@@ -2489,7 +2514,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:956",
+        "source": "backend/app/routers/admin/channels.py:1017",
         "refs": [
           " 不存在",
           ". Rounded square composition, mint blue and deep navy palette, clean vector style, centered single subject, no text, no watermark.",
@@ -2557,7 +2582,7 @@
       "endpoint": "recommend_bgm",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:802",
+        "source": "backend/app/routers/admin/channels.py:863",
         "refs": [
           "",
           "/{channel_id}/recommend-bgm",
@@ -2600,7 +2625,7 @@
       "endpoint": "recommend_sources",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:833",
+        "source": "backend/app/routers/admin/channels.py:894",
         "refs": [
           "",
           "/{channel_id}/recommend-sources",
@@ -2643,7 +2668,7 @@
       "endpoint": "upload_bgm",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:670",
+        "source": "backend/app/routers/admin/channels.py:731",
         "refs": [
           "",
           " vs ",
@@ -3927,7 +3952,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:581",
+        "source": "backend/app/routers/admin/materials.py:597",
         "refs": [
           "",
           ", ",
@@ -3988,7 +4013,7 @@
       "model": {
         "name": "MaterialBatchDeleteRequest",
         "module": "app.routers.admin.materials",
-        "source": "backend/app/routers/admin/materials.py:766",
+        "source": "backend/app/routers/admin/materials.py:781",
         "extra": "ignore",
         "fields": [
           "channel_id",
@@ -4004,7 +4029,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:779",
+        "source": "backend/app/routers/admin/materials.py:794",
         "refs": [
           " 条/本，当前 ",
           "/batch-delete",
@@ -4082,7 +4107,7 @@
       "model": {
         "name": "ImportCosRequest",
         "module": "app.routers.admin.materials",
-        "source": "backend/app/routers/admin/materials.py:949",
+        "source": "backend/app/routers/admin/materials.py:964",
         "extra": "ignore",
         "fields": [
           "category",
@@ -4098,7 +4123,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:960",
+        "source": "backend/app/routers/admin/materials.py:975",
         "refs": [
           "/",
           "/import-cos",
@@ -4129,7 +4154,6 @@
           "data",
           "db",
           "dedup_key",
-          "dict",
           "e",
           "filename",
           "get_db",
@@ -4165,7 +4189,7 @@
       "model": {
         "name": "ImportUrlRequest",
         "module": "app.routers.admin.materials",
-        "source": "backend/app/routers/admin/materials.py:898",
+        "source": "backend/app/routers/admin/materials.py:913",
         "extra": "ignore",
         "fields": [
           "category",
@@ -4183,7 +4207,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:912",
+        "source": "backend/app/routers/admin/materials.py:927",
         "refs": [
           "/import-url",
           "AdminPayload",
@@ -4235,7 +4259,7 @@
       "model": {
         "name": "SharePreviewRequest",
         "module": "app.routers.admin.materials",
-        "source": "backend/app/routers/admin/materials.py:1014",
+        "source": "backend/app/routers/admin/materials.py:1029",
         "extra": "ignore",
         "fields": [
           "channel_id",
@@ -4247,7 +4271,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:1023",
+        "source": "backend/app/routers/admin/materials.py:1038",
         "refs": [
           "/share",
           "AdminPayload",
@@ -4284,7 +4308,7 @@
       "endpoint": "upload_document",
       "model": null,
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:842",
+        "source": "backend/app/routers/admin/materials.py:857",
         "refs": [
           "",
           " · ",
@@ -4317,7 +4341,6 @@
           "db",
           "dedup_key",
           "description",
-          "dict",
           "document.txt",
           "e",
           "file",
@@ -5450,6 +5473,7 @@
           "audit_detail",
           "category",
           "ch",
+          "ch_reason",
           "channel_id",
           "channel_name",
           "channels",
@@ -5839,7 +5863,7 @@
       "model": {
         "name": "ChannelUpdateRequest",
         "module": "app.routers.admin.channels",
-        "source": "backend/app/routers/admin/channels.py:232",
+        "source": "backend/app/routers/admin/channels.py:250",
         "extra": "ignore",
         "fields": [
           "bgm_gap_mode",
@@ -5865,6 +5889,7 @@
           "rewrite_template",
           "rss_sources",
           "schedule_time",
+          "search_prompt",
           "segment_gap_sec",
           "selection_strategy",
           "type_label"
@@ -5893,13 +5918,14 @@
           "rewrite_template",
           "rss_sources",
           "schedule_time",
+          "search_prompt",
           "segment_gap_sec",
           "selection_strategy",
           "type_label"
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/channels.py:497",
+        "source": "backend/app/routers/admin/channels.py:538",
         "refs": [
           "/{channel_id}",
           "AdminPayload",
@@ -5948,6 +5974,7 @@
           "router",
           "rss_sources",
           "schedule_time",
+          "search_prompt",
           "segment_gap_sec",
           "selection_strategy",
           "str",
@@ -6233,7 +6260,7 @@
         ]
       },
       "handler": {
-        "source": "backend/app/routers/admin/materials.py:631",
+        "source": "backend/app/routers/admin/materials.py:647",
         "refs": [
           "/{material_id}",
           "AdminPayload",
@@ -6795,6 +6822,7 @@
         "rss_sources_snapshot",
         "schedule_time",
         "script_mode",
+        "search_prompt",
         "segment_gap_sec",
         "selection_strategy",
         "type_label",
@@ -6938,7 +6966,7 @@
     },
     "Material": {
       "table": "material",
-      "source": "backend/app/models/material.py:45",
+      "source": "backend/app/models/material.py:48",
       "columns": [
         "category",
         "channel_id",

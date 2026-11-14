@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from dataclasses import dataclass, field
@@ -74,9 +75,8 @@ class SearchProvider(Protocol):
 
 _H1_TOPIC_RE = re.compile(r"^#\s*(.+?)\s*每日重点资讯", re.MULTILINE)
 _ANY_H1_RE = re.compile(r"^#\s*(.+?)\s*$", re.MULTILINE)
-_SUBSECTION_BLOCK_RE = re.compile(
-    r"^##\s*信息采集范围[^\n]*\n(.*?)(?=^##\s|\Z)", re.MULTILINE | re.DOTALL
-)
+_SUBSECTION_HEADING_RE = re.compile(r"^##\s*信息采集范围[^\n]*\n", re.MULTILINE)
+_NEXT_H2_HEADING_RE = re.compile(r"^##\s", re.MULTILINE)
 _BULLET_RE = re.compile(r"^\s*[-*]\s+(.+?)\s*$", re.MULTILINE)
 _KEYWORDS_ZH_RE = re.compile(r"第一轮[^\n]*?「([^」]+)」")
 _KEYWORDS_EN_RE = re.compile(r"第二轮[^\n]*?「([^」]+)」")
@@ -105,9 +105,13 @@ def parse_search_prompt(prompt: str | None) -> SearchSpec:
         topic = fallback.group(1).strip() if fallback else ""
 
     subsections: list[str] = []
-    block = _SUBSECTION_BLOCK_RE.search(text)
-    if block:
-        subsections = [s.strip() for s in _BULLET_RE.findall(block.group(1)) if s.strip()]
+    heading = _SUBSECTION_HEADING_RE.search(text)
+    if heading:
+        # 取「信息采集范围」标题之后、下一个二级标题之前的内容
+        rest = text[heading.end():]
+        next_heading = _NEXT_H2_HEADING_RE.search(rest)
+        block_text = rest[:next_heading.start()] if next_heading else rest
+        subsections = [s.strip() for s in _BULLET_RE.findall(block_text) if s.strip()]
 
     zh_match = _KEYWORDS_ZH_RE.search(text)
     en_match = _KEYWORDS_EN_RE.search(text)
@@ -221,15 +225,33 @@ def _parse_datetime(raw: object) -> Optional[datetime]:
 
 
 async def _post_json(
-    url: str, payload: dict, headers: dict, timeout: float,
+    url: str, payload: dict, headers: dict,
 ) -> dict:
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    """POST JSON 并返回对象；超时由调用方用 asyncio.timeout 控制。"""
+    async with httpx.AsyncClient(timeout=None) as client:
         resp = await client.post(url, json=payload, headers=headers)
         resp.raise_for_status()
         data = resp.json()
     if not isinstance(data, dict):
         raise RuntimeError(f"检索服务返回非 JSON 对象: {str(data)[:120]}")
     return data
+
+
+def _bocha_page_result(page) -> Optional[SearchResult]:
+    """把博查单条 webPages 条目映射为 SearchResult；缺标题/非法 URL 时返回 None。"""
+    if not isinstance(page, dict):
+        return None
+    title = str(page.get("name") or "").strip()
+    url = str(page.get("url") or "").strip()
+    if not title or not normalize_url(url):
+        return None
+    return SearchResult(
+        title=title,
+        url=url,
+        content=str(page.get("summary") or page.get("snippet") or "").strip(),
+        source=str(page.get("siteName") or ""),
+        published_at=_parse_datetime(page.get("datePublished")),
+    )
 
 
 class BochaProvider:
@@ -248,31 +270,20 @@ class BochaProvider:
         self._timeout = timeout
 
     async def search(self, query: str, *, count: int) -> list[SearchResult]:
-        data = await _post_json(
-            self._url,
-            {"query": query, "freshness": "oneDay", "summary": True, "count": count},
-            {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
-            self._timeout,
-        )
+        async with asyncio.timeout(self._timeout):
+            data = await _post_json(
+                self._url,
+                {"query": query, "freshness": "oneDay", "summary": True, "count": count},
+                {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
+            )
         code = data.get("code")
         if isinstance(code, int) and code not in (0, 200):
             raise RuntimeError(f"博查检索失败 code={code} msg={str(data.get('msg') or data.get('message') or '')[:120]}")
         pages = (((data.get("data") or {}).get("webPages") or {}).get("value") or [])
-        results: list[SearchResult] = []
-        for page in pages:
-            if not isinstance(page, dict):
-                continue
-            title = str(page.get("name") or "").strip()
-            url = str(page.get("url") or "").strip()
-            if not title or not normalize_url(url):
-                continue
-            results.append(SearchResult(
-                title=title,
-                url=url,
-                content=str(page.get("summary") or page.get("snippet") or "").strip(),
-                source=str(page.get("siteName") or ""),
-                published_at=_parse_datetime(page.get("datePublished")),
-            ))
+        results = [
+            result for page in pages
+            if (result := _bocha_page_result(page)) is not None
+        ]
         return results
 
 
@@ -288,20 +299,20 @@ class TavilyProvider:
         self._timeout = timeout
 
     async def search(self, query: str, *, count: int) -> list[SearchResult]:
-        data = await _post_json(
-            self._url,
-            {
-                "api_key": self._api_key,
-                "query": query,
-                "topic": "news",
-                "days": 1,
-                "search_depth": "basic",
-                "include_raw_content": False,
-                "max_results": count,
-            },
-            {"Content-Type": "application/json"},
-            self._timeout,
-        )
+        async with asyncio.timeout(self._timeout):
+            data = await _post_json(
+                self._url,
+                {
+                    "api_key": self._api_key,
+                    "query": query,
+                    "topic": "news",
+                    "days": 1,
+                    "search_depth": "basic",
+                    "include_raw_content": False,
+                    "max_results": count,
+                },
+                {"Content-Type": "application/json"},
+            )
         results: list[SearchResult] = []
         for item in data.get("results") or []:
             if not isinstance(item, dict):

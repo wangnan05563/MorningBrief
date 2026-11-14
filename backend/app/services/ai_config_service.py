@@ -424,6 +424,29 @@ class _ConfigReader:
         return getattr(self._settings, settings_attr, default)
 
 
+def _apply_setting_value(settings, key: str, value) -> bool:
+    """把单个配置项写入 Settings 单例；未知 key 返回 False。
+
+    INT_KEYS / FLOAT_KEYS 决定类型转换，转换失败时保留原值（不覆盖单例）。
+    """
+    attr = CONFIG_KEY_MAP.get(key)
+    if not attr:
+        return False
+    if key in INT_KEYS:
+        try:
+            setattr(settings, attr, int(value))
+        except (ValueError, TypeError):
+            pass
+    elif key in FLOAT_KEYS:
+        try:
+            setattr(settings, attr, float(value))
+        except (ValueError, TypeError):
+            pass
+    else:
+        setattr(settings, attr, value)
+    return True
+
+
 class AIConfigService:
     """AI 配置管理服务。
 
@@ -1010,23 +1033,7 @@ class AIConfigService:
         """
         settings = get_settings()
         for key, value in updates.items():
-            attr = CONFIG_KEY_MAP.get(key)
-            if not attr:
-                continue
-            # int 类型字段转换
-            if key in INT_KEYS:
-                try:
-                    setattr(settings, attr, int(value))
-                except (ValueError, TypeError):
-                    pass
-            # float 类型字段转换（如段间静音时长）
-            elif key in FLOAT_KEYS:
-                try:
-                    setattr(settings, attr, float(value))
-                except (ValueError, TypeError):
-                    pass
-            else:
-                setattr(settings, attr, value)
+            _apply_setting_value(settings, key, value)
 
     # ---- 启动时加载 ----
 
@@ -1034,6 +1041,8 @@ class AIConfigService:
         """启动时从 SQLite 加载 AI 配置覆盖到 Settings 单例。
 
         在 main.py lifespan 中调用，使 .env 中的配置可被前端修改覆盖。
+        llm_base_url 的存量值可能是误填的完整接口地址，这里启动即削平，
+        不必等用户在管理端重新保存一次。
         """
         raw = await self.get_all_config()
         if not raw:
@@ -1042,26 +1051,10 @@ class AIConfigService:
         settings = get_settings()
         applied = []
         for key, value in raw.items():
-            attr = CONFIG_KEY_MAP.get(key)
-            if not attr:
-                continue
             if key == "llm_base_url":
-                # 存量库里可能是误填的完整接口地址；启动即削平，
-                # 不必等用户在管理端重新保存一次
                 value = normalize_llm_base_url(value)
-            if key in INT_KEYS:
-                try:
-                    setattr(settings, attr, int(value))
-                except (ValueError, TypeError):
-                    pass
-            elif key in FLOAT_KEYS:
-                try:
-                    setattr(settings, attr, float(value))
-                except (ValueError, TypeError):
-                    pass
-            else:
-                setattr(settings, attr, value)
-            applied.append(key)
+            if _apply_setting_value(settings, key, value):
+                applied.append(key)
 
         if applied:
             logger.info("从 SQLite 加载 AI 配置 %d 项: %s", len(applied), applied)

@@ -1,0 +1,1195 @@
+[
+  {
+    "key": "9c20fe41-bff7-4ed5-82d1-af2a08ecdb7c",
+    "rule": "python:S3776",
+    "severity": "CRITICAL",
+    "component": "20_news:backend/app/services/ai_config_service.py",
+    "project": "20_news",
+    "line": 1033,
+    "hash": "e9e15cae60fc336ae106a5be5c05d5f4",
+    "textRange": {
+      "startLine": 1033,
+      "endLine": 1033,
+      "startOffset": 14,
+      "endOffset": 38
+    },
+    "flows": [
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/services/ai_config_service.py",
+            "textRange": {
+              "startLine": 1039,
+              "endLine": 1039,
+              "startOffset": 8,
+              "endOffset": 10
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/services/ai_config_service.py",
+            "textRange": {
+              "startLine": 1044,
+              "endLine": 1044,
+              "startOffset": 8,
+              "endOffset": 11
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/services/ai_config_service.py",
+            "textRange": {
+              "startLine": 1046,
+              "endLine": 1046,
+              "startOffset": 12,
+              "endOffset": 14
+            },
+            "msg": "+2 (incl 1 for nesting)",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/services/ai_config_service.py",
+            "textRange": {
+              "startLine": 1048,
+              "endLine": 1048,
+              "startOffset": 12,
+              "endOffset": 14
+            },
+            "msg": "+2 (incl 1 for nesting)",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/services/ai_config_service.py",
+            "textRange": {
+              "startLine": 1052,
+              "endLine": 1052,
+              "startOffset": 12,
+              "endOffset": 14
+            },
+            "msg": "+2 (incl 1 for nesting)",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/services/ai_config_service.py",
+            "textRange": {
+              "startLine": 1055,
+              "endLine": 1055,
+              "startOffset": 16,
+              "endOffset": 22
+            },
+            "msg": "+3 (incl 2 for nesting)",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/services/ai_config_service.py",
+            "textRange": {
+              "startLine": 1057,
+              "endLine": 1057,
+              "startOffset": 12,
+              "endOffset": 16
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/services/ai_config_service.py",
+            "textRange": {
+              "startLine": 1060,
+              "endLine": 1060,
+              "startOffset": 16,
+              "endOffset": 22
+            },
+            "msg": "+3 (incl 2 for nesting)",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/services/ai_config_service.py",
+            "textRange": {
+              "startLine": 1062,
+              "endLine": 1062,
+              "startOffset": 12,
+              "endOffset": 16
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/services/ai_config_service.py",
+            "textRange": {
+              "startLine": 1066,
+              "endLine": 1066,
+              "startOffset": 8,
+              "endOffset": 10
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      }
+    ],
+    "status": "OPEN",
+    "message": "Refactor this function to reduce its Cognitive Complexity from 17 to the 15 allowed.",
+    "effort": "7min",
+    "debt": "7min",
+    "author": "wangnan@hundsun.com",
+    "tags": [
+      "brain-overload"
+    ],
+    "comments": [],
+    "creationDate": "2026-11-08T22:51:34+08:00",
+    "updateDate": "2026-11-14T17:13:47+08:00",
+    "type": "CODE_SMELL",
+    "scope": "MAIN",
+    "quickFixAvailable": false,
+    "messageFormattings": [],
+    "codeVariants": [],
+    "cleanCodeAttribute": "FOCUSED",
+    "cleanCodeAttributeCategory": "ADAPTABLE",
+    "impacts": [
+      {
+        "softwareQuality": "MAINTAINABILITY",
+        "severity": "HIGH"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "prioritizedRule": false,
+    "fromSonarQubeUpdate": false,
+    "internalTags": [],
+    "linkedTicketStatus": "NOT_LINKED"
+  },
+  {
+    "key": "0bd05bce-87bc-4e3b-8e0b-11f4b7f21de7",
+    "rule": "python:S125",
+    "severity": "MAJOR",
+    "component": "20_news:backend/app/services/ai_config_service.py",
+    "project": "20_news",
+    "line": 1049,
+    "hash": "b45252fe95c6e4e0744c6abd6d43ba87",
+    "textRange": {
+      "startLine": 1049,
+      "endLine": 1049,
+      "startOffset": 16,
+      "endOffset": 41
+    },
+    "flows": [],
+    "status": "OPEN",
+    "message": "Remove this commented out code.",
+    "effort": "5min",
+    "debt": "5min",
+    "author": "wangnan@hundsun.com",
+    "tags": [
+      "unused"
+    ],
+    "comments": [],
+    "creationDate": "2026-11-08T22:51:34+08:00",
+    "updateDate": "2026-11-14T17:13:47+08:00",
+    "type": "CODE_SMELL",
+    "scope": "MAIN",
+    "quickFixAvailable": false,
+    "messageFormattings": [],
+    "codeVariants": [],
+    "cleanCodeAttribute": "CLEAR",
+    "cleanCodeAttributeCategory": "INTENTIONAL",
+    "impacts": [
+      {
+        "softwareQuality": "MAINTAINABILITY",
+        "severity": "MEDIUM"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "prioritizedRule": false,
+    "fromSonarQubeUpdate": false,
+    "internalTags": [],
+    "linkedTicketStatus": "NOT_LINKED"
+  },
+  {
+    "key": "7986d82c-19f0-45fd-b424-e3a9e42f2eca",
+    "rule": "python:S3776",
+    "severity": "CRITICAL",
+    "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+    "project": "20_news",
+    "line": 103,
+    "hash": "81dc6b1553190a6930d19fcad9f5b284",
+    "textRange": {
+      "startLine": 103,
+      "endLine": 103,
+      "startOffset": 10,
+      "endOffset": 31
+    },
+    "flows": [
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 116,
+              "endLine": 116,
+              "startOffset": 4,
+              "endOffset": 6
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 120,
+              "endLine": 120,
+              "startOffset": 59,
+              "endOffset": 61
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 126,
+              "endLine": 126,
+              "startOffset": 4,
+              "endOffset": 6
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 129,
+              "endLine": 129,
+              "startOffset": 31,
+              "endOffset": 33
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 130,
+              "endLine": 130,
+              "startOffset": 4,
+              "endOffset": 6
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 133,
+              "endLine": 133,
+              "startOffset": 8,
+              "endOffset": 14
+            },
+            "msg": "+2 (incl 1 for nesting)",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 135,
+              "endLine": 135,
+              "startOffset": 4,
+              "endOffset": 6
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 136,
+              "endLine": 136,
+              "startOffset": 8,
+              "endOffset": 11
+            },
+            "msg": "+2 (incl 1 for nesting)",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 137,
+              "endLine": 137,
+              "startOffset": 12,
+              "endOffset": 14
+            },
+            "msg": "+3 (incl 2 for nesting)",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 138,
+              "endLine": 138,
+              "startOffset": 45,
+              "endOffset": 47
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 139,
+              "endLine": 139,
+              "startOffset": 16,
+              "endOffset": 18
+            },
+            "msg": "+4 (incl 3 for nesting)",
+            "msgFormattings": []
+          }
+        ]
+      }
+    ],
+    "status": "OPEN",
+    "message": "Refactor this function to reduce its Cognitive Complexity from 18 to the 15 allowed.",
+    "effort": "8min",
+    "debt": "8min",
+    "author": "wangnan@hundsun.com",
+    "tags": [
+      "brain-overload"
+    ],
+    "comments": [],
+    "creationDate": "2026-11-08T22:51:31+08:00",
+    "updateDate": "2026-11-14T17:13:47+08:00",
+    "type": "CODE_SMELL",
+    "scope": "MAIN",
+    "quickFixAvailable": false,
+    "messageFormattings": [],
+    "codeVariants": [],
+    "cleanCodeAttribute": "FOCUSED",
+    "cleanCodeAttributeCategory": "ADAPTABLE",
+    "impacts": [
+      {
+        "softwareQuality": "MAINTAINABILITY",
+        "severity": "HIGH"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "prioritizedRule": false,
+    "fromSonarQubeUpdate": false,
+    "internalTags": [],
+    "linkedTicketStatus": "NOT_LINKED"
+  },
+  {
+    "key": "9a3ccd1e-97fc-4e3a-a13a-b930c4bcd00d",
+    "rule": "python:S3776",
+    "severity": "CRITICAL",
+    "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+    "project": "20_news",
+    "line": 305,
+    "hash": "140b4b3e0cd92bc0da029daf32aa31bd",
+    "textRange": {
+      "startLine": 305,
+      "endLine": 305,
+      "startOffset": 10,
+      "endOffset": 34
+    },
+    "flows": [
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 328,
+              "endLine": 328,
+              "startOffset": 4,
+              "endOffset": 6
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 330,
+              "endLine": 330,
+              "startOffset": 4,
+              "endOffset": 6
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 335,
+              "endLine": 335,
+              "startOffset": 8,
+              "endOffset": 10
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 337,
+              "endLine": 337,
+              "startOffset": 8,
+              "endOffset": 10
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 341,
+              "endLine": 341,
+              "startOffset": 8,
+              "endOffset": 10
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 366,
+              "endLine": 366,
+              "startOffset": 8,
+              "endOffset": 11
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 378,
+              "endLine": 378,
+              "startOffset": 41,
+              "endOffset": 43
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 393,
+              "endLine": 393,
+              "startOffset": 65,
+              "endOffset": 67
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 394,
+              "endLine": 394,
+              "startOffset": 8,
+              "endOffset": 10
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 404,
+              "endLine": 404,
+              "startOffset": 10,
+              "endOffset": 12
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 409,
+              "endLine": 409,
+              "startOffset": 40,
+              "endOffset": 42
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 411,
+              "endLine": 411,
+              "startOffset": 8,
+              "endOffset": 10
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 418,
+              "endLine": 418,
+              "startOffset": 12,
+              "endOffset": 14
+            },
+            "msg": "+2 (incl 1 for nesting)",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 425,
+              "endLine": 425,
+              "startOffset": 49,
+              "endOffset": 51
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 428,
+              "endLine": 428,
+              "startOffset": 16,
+              "endOffset": 18
+            },
+            "msg": "+3 (incl 2 for nesting)",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 442,
+              "endLine": 442,
+              "startOffset": 8,
+              "endOffset": 10
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 458,
+              "endLine": 458,
+              "startOffset": 31,
+              "endOffset": 33
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 458,
+              "endLine": 458,
+              "startOffset": 41,
+              "endOffset": 44
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/search_collector.py",
+            "textRange": {
+              "startLine": 474,
+              "endLine": 474,
+              "startOffset": 4,
+              "endOffset": 10
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      }
+    ],
+    "status": "OPEN",
+    "message": "Refactor this function to reduce its Cognitive Complexity from 22 to the 15 allowed.",
+    "effort": "12min",
+    "debt": "12min",
+    "author": "wangnan@hundsun.com",
+    "tags": [
+      "brain-overload"
+    ],
+    "comments": [],
+    "creationDate": "2026-11-08T22:51:31+08:00",
+    "updateDate": "2026-11-14T17:13:47+08:00",
+    "type": "CODE_SMELL",
+    "scope": "MAIN",
+    "quickFixAvailable": false,
+    "messageFormattings": [],
+    "codeVariants": [],
+    "cleanCodeAttribute": "FOCUSED",
+    "cleanCodeAttributeCategory": "ADAPTABLE",
+    "impacts": [
+      {
+        "softwareQuality": "MAINTAINABILITY",
+        "severity": "HIGH"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "prioritizedRule": false,
+    "fromSonarQubeUpdate": false,
+    "internalTags": [],
+    "linkedTicketStatus": "NOT_LINKED"
+  },
+  {
+    "key": "202fd2ca-4853-4610-b724-954fd8bdc4a3",
+    "rule": "python:S6019",
+    "severity": "MAJOR",
+    "component": "20_news:backend/app/workflow/crawler/web_search.py",
+    "project": "20_news",
+    "line": 78,
+    "hash": "0d5bc6e6701addab26b9dcd56d97dc67",
+    "textRange": {
+      "startLine": 78,
+      "endLine": 78,
+      "startOffset": 27,
+      "endOffset": 30
+    },
+    "flows": [],
+    "status": "OPEN",
+    "message": "Fix this reluctant quantifier that will only ever match 0 repetitions.",
+    "effort": "10min",
+    "debt": "10min",
+    "author": "wangnan@hundsun.com",
+    "tags": [
+      "regex"
+    ],
+    "comments": [],
+    "creationDate": "2026-11-08T22:51:31+08:00",
+    "updateDate": "2026-11-14T17:13:47+08:00",
+    "type": "CODE_SMELL",
+    "scope": "MAIN",
+    "quickFixAvailable": false,
+    "messageFormattings": [],
+    "codeVariants": [],
+    "cleanCodeAttribute": "LOGICAL",
+    "cleanCodeAttributeCategory": "INTENTIONAL",
+    "impacts": [
+      {
+        "softwareQuality": "MAINTAINABILITY",
+        "severity": "MEDIUM"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "prioritizedRule": false,
+    "fromSonarQubeUpdate": false,
+    "internalTags": [],
+    "linkedTicketStatus": "NOT_LINKED"
+  },
+  {
+    "key": "9c7a124a-ea16-4f8a-a78f-eef1a85eb4be",
+    "rule": "python:S5850",
+    "severity": "MAJOR",
+    "component": "20_news:backend/app/workflow/crawler/web_search.py",
+    "project": "20_news",
+    "line": 78,
+    "hash": "0d5bc6e6701addab26b9dcd56d97dc67",
+    "textRange": {
+      "startLine": 78,
+      "endLine": 78,
+      "startOffset": 34,
+      "endOffset": 42
+    },
+    "flows": [],
+    "status": "OPEN",
+    "message": "Group parts of the regex together to make the intended operator precedence explicit.",
+    "effort": "10min",
+    "debt": "10min",
+    "author": "wangnan@hundsun.com",
+    "tags": [
+      "regex"
+    ],
+    "comments": [],
+    "creationDate": "2026-11-08T22:51:31+08:00",
+    "updateDate": "2026-11-14T17:13:47+08:00",
+    "type": "BUG",
+    "scope": "MAIN",
+    "quickFixAvailable": false,
+    "messageFormattings": [],
+    "codeVariants": [],
+    "cleanCodeAttribute": "CLEAR",
+    "cleanCodeAttributeCategory": "INTENTIONAL",
+    "impacts": [
+      {
+        "softwareQuality": "RELIABILITY",
+        "severity": "MEDIUM"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "prioritizedRule": false,
+    "fromSonarQubeUpdate": false,
+    "internalTags": [],
+    "linkedTicketStatus": "NOT_LINKED"
+  },
+  {
+    "key": "3ca8d603-05ac-4b11-bf08-96424f165741",
+    "rule": "python:S7483",
+    "severity": "MAJOR",
+    "component": "20_news:backend/app/workflow/crawler/web_search.py",
+    "project": "20_news",
+    "line": 224,
+    "hash": "85a841f94c7d6205597e16e901f1f35a",
+    "textRange": {
+      "startLine": 224,
+      "endLine": 224,
+      "startOffset": 44,
+      "endOffset": 58
+    },
+    "flows": [
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/web_search.py",
+            "textRange": {
+              "startLine": 223,
+              "endLine": 223,
+              "startOffset": 0,
+              "endOffset": 5
+            },
+            "msg": "This function is async.",
+            "msgFormattings": []
+          }
+        ]
+      }
+    ],
+    "status": "OPEN",
+    "message": "Remove this \"timeout\" parameter and use a timeout context manager instead.",
+    "effort": "5min",
+    "debt": "5min",
+    "author": "wangnan@hundsun.com",
+    "tags": [
+      "async",
+      "trio",
+      "asyncio",
+      "anyio"
+    ],
+    "comments": [],
+    "creationDate": "2026-11-08T22:51:31+08:00",
+    "updateDate": "2026-11-14T17:13:47+08:00",
+    "type": "CODE_SMELL",
+    "scope": "MAIN",
+    "quickFixAvailable": false,
+    "messageFormattings": [],
+    "codeVariants": [],
+    "cleanCodeAttribute": "FOCUSED",
+    "cleanCodeAttributeCategory": "ADAPTABLE",
+    "impacts": [
+      {
+        "softwareQuality": "MAINTAINABILITY",
+        "severity": "MEDIUM"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "prioritizedRule": false,
+    "fromSonarQubeUpdate": false,
+    "internalTags": [],
+    "linkedTicketStatus": "NOT_LINKED"
+  },
+  {
+    "key": "1a2e92e7-6927-4c9e-a3f1-18e431aff69b",
+    "rule": "python:S3776",
+    "severity": "CRITICAL",
+    "component": "20_news:backend/app/workflow/crawler/web_search.py",
+    "project": "20_news",
+    "line": 250,
+    "hash": "8e467f95aac934d68f8cf4fe96117def",
+    "textRange": {
+      "startLine": 250,
+      "endLine": 250,
+      "startOffset": 14,
+      "endOffset": 20
+    },
+    "flows": [
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/web_search.py",
+            "textRange": {
+              "startLine": 258,
+              "endLine": 258,
+              "startOffset": 8,
+              "endOffset": 10
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/web_search.py",
+            "textRange": {
+              "startLine": 258,
+              "endLine": 258,
+              "startOffset": 33,
+              "endOffset": 36
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/web_search.py",
+            "textRange": {
+              "startLine": 259,
+              "endLine": 259,
+              "startOffset": 100,
+              "endOffset": 102
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/web_search.py",
+            "textRange": {
+              "startLine": 260,
+              "endLine": 260,
+              "startOffset": 79,
+              "endOffset": 81
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/web_search.py",
+            "textRange": {
+              "startLine": 260,
+              "endLine": 260,
+              "startOffset": 59,
+              "endOffset": 61
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/web_search.py",
+            "textRange": {
+              "startLine": 260,
+              "endLine": 260,
+              "startOffset": 36,
+              "endOffset": 38
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/web_search.py",
+            "textRange": {
+              "startLine": 262,
+              "endLine": 262,
+              "startOffset": 8,
+              "endOffset": 11
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/web_search.py",
+            "textRange": {
+              "startLine": 263,
+              "endLine": 263,
+              "startOffset": 12,
+              "endOffset": 14
+            },
+            "msg": "+2 (incl 1 for nesting)",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/web_search.py",
+            "textRange": {
+              "startLine": 265,
+              "endLine": 265,
+              "startOffset": 41,
+              "endOffset": 43
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/web_search.py",
+            "textRange": {
+              "startLine": 266,
+              "endLine": 266,
+              "startOffset": 38,
+              "endOffset": 40
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/web_search.py",
+            "textRange": {
+              "startLine": 267,
+              "endLine": 267,
+              "startOffset": 12,
+              "endOffset": 14
+            },
+            "msg": "+2 (incl 1 for nesting)",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/web_search.py",
+            "textRange": {
+              "startLine": 267,
+              "endLine": 267,
+              "startOffset": 25,
+              "endOffset": 27
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/web_search.py",
+            "textRange": {
+              "startLine": 272,
+              "endLine": 272,
+              "startOffset": 71,
+              "endOffset": 73
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      },
+      {
+        "locations": [
+          {
+            "component": "20_news:backend/app/workflow/crawler/web_search.py",
+            "textRange": {
+              "startLine": 273,
+              "endLine": 273,
+              "startOffset": 48,
+              "endOffset": 50
+            },
+            "msg": "+1",
+            "msgFormattings": []
+          }
+        ]
+      }
+    ],
+    "status": "OPEN",
+    "message": "Refactor this function to reduce its Cognitive Complexity from 16 to the 15 allowed.",
+    "effort": "6min",
+    "debt": "6min",
+    "author": "wangnan@hundsun.com",
+    "tags": [
+      "brain-overload"
+    ],
+    "comments": [],
+    "creationDate": "2026-11-08T22:51:31+08:00",
+    "updateDate": "2026-11-14T17:13:47+08:00",
+    "type": "CODE_SMELL",
+    "scope": "MAIN",
+    "quickFixAvailable": false,
+    "messageFormattings": [],
+    "codeVariants": [],
+    "cleanCodeAttribute": "FOCUSED",
+    "cleanCodeAttributeCategory": "ADAPTABLE",
+    "impacts": [
+      {
+        "softwareQuality": "MAINTAINABILITY",
+        "severity": "HIGH"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "prioritizedRule": false,
+    "fromSonarQubeUpdate": false,
+    "internalTags": [],
+    "linkedTicketStatus": "NOT_LINKED"
+  }
+]

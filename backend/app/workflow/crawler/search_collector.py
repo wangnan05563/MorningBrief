@@ -62,6 +62,39 @@ class _ChannelContext:
     previous_topics: list[str]
 
 
+class _QueryBudget:
+    """全部轮次共享的检索次数预算（硬上限，防止提示词异常导致请求失控）。"""
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self.used: list[str] = []
+
+    def take(self, queries: list[str]) -> list[str]:
+        """按剩余预算截取本轮检索式，并记入已用集合。"""
+        remaining = self.limit - len(self.used)
+        selected = queries[: max(0, remaining)]
+        self.used.extend(selected)
+        return selected
+
+
+@dataclass
+class _CollectState:
+    """一次采集所需的运行状态（前两轮 / 交叉验证 / 密度补搜共享）。"""
+
+    cfg: object
+    provider: object
+    spec: SearchSpec
+    context: _ChannelContext
+    yesterday: date
+    window_start: datetime
+    budget: _QueryBudget
+    errors: list[str]
+    excluded: set[str]
+    threshold: int
+    max_items: int
+    chars_per_sec: float
+
+
 def _closed(enabled: bool, reason: str) -> dict:
     return {"enabled": enabled, "reason": reason, "materials": []}
 
@@ -100,6 +133,43 @@ async def _load_channel_context(channel_id: int) -> Optional[_ChannelContext]:
         return context
 
 
+def _pick_previous_episode(rows) -> tuple:
+    """从最近几期里挑基准：优先已发布节目，没有则退回最近一期（含草稿）。"""
+    return next(
+        (
+            (ep, script) for ep, script in rows
+            if (ep.status or "") == EpisodeStatus.published.value
+        ),
+        rows[0],
+    )
+
+
+def _segment_titles(segments) -> list[str]:
+    """取分段标题；segments 兼容 JSON 字符串，非法结构一律当空处理。"""
+    if isinstance(segments, str):
+        try:
+            segments = json.loads(segments)
+        except (json.JSONDecodeError, TypeError):
+            return []
+    if not isinstance(segments, list):
+        return []
+
+    titles: list[str] = []
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        title = str(seg.get("title") or "").strip()
+        if title:
+            titles.append(title)
+    return titles
+
+
+def _topic_titles(episode, script) -> list[str]:
+    """取 Episode 标题与 Script.segments[].title（segments 兼容 JSON 字符串）。"""
+    topics: list[str] = [episode.title] if episode.title else []
+    return topics + _segment_titles(script.segments or [])
+
+
 async def _load_previous_topics(session, channel_id: int) -> list[str]:
     """取频道上一期稿件的选题标题（Episode.title + Script.segments[].title）。
 
@@ -116,28 +186,8 @@ async def _load_previous_topics(session, channel_id: int) -> list[str]:
     if not rows:
         return []
 
-    chosen = next(
-        ((ep, script) for ep, script in rows if (ep.status or "") == EpisodeStatus.published.value),
-        rows[0],
-    )
-    episode, script = chosen
-
-    topics: list[str] = []
-    if episode.title:
-        topics.append(episode.title)
-
-    segments = script.segments or []
-    if isinstance(segments, str):
-        try:
-            segments = json.loads(segments)
-        except (json.JSONDecodeError, TypeError):
-            segments = []
-    if isinstance(segments, list):
-        for seg in segments:
-            if isinstance(seg, dict):
-                title = str(seg.get("title") or "").strip()
-                if title:
-                    topics.append(title)
+    episode, script = _pick_previous_episode(rows)
+    topics = _topic_titles(episode, script)
 
     # 去重但保持顺序：Episode.title 可能与首个 segment.title 相同
     return list(dict.fromkeys(t for t in topics if t))
@@ -302,6 +352,97 @@ async def _prepare_all(
     return materials, verified
 
 
+async def _search_rounds(state: _CollectState) -> tuple[list[SearchResult], dict[str, int]]:
+    """中文 + 英文两轮检索，返回合并去重后的候选与各轮检索数。"""
+    cfg = state.cfg
+    count = max(1, int(getattr(cfg, "WEB_SEARCH_MAX_RESULTS_PER_QUERY", 5)))
+    per_round = max(1, int(getattr(cfg, "WEB_SEARCH_MAX_QUERIES_PER_ROUND", 3)))
+    concurrency = max(1, int(getattr(cfg, "WEB_SEARCH_TASK_CONCURRENCY", 3)))
+    zh_queries, en_queries = build_round_queries(
+        state.spec, state.yesterday.isoformat(), per_round=per_round,
+    )
+
+    round_counts: dict[str, int] = {}
+    stage1: list[SearchResult] = []
+    for round_name, queries in (("zh", zh_queries), ("en", en_queries)):
+        selected = state.budget.take(queries)
+        round_counts[round_name] = len(selected)
+        stage1.extend(await _search_many(
+            state.provider, selected, round_name,
+            count=count, concurrency=concurrency, errors=state.errors,
+        ))
+
+    # 入库前新鲜度过滤：搜索服务通常已按一天收窄，这里再兜一层，
+    # 防止部分站点回填历史页面（published_at 为空时保留，无法判断即不误杀）
+    stage1 = [
+        item for item in stage1
+        if item.published_at is None or item.published_at >= state.window_start
+    ]
+    return merge_results(stage1), round_counts
+
+
+async def _cross_check(
+    state: _CollectState, merged: list[SearchResult], round_counts: dict[str, int],
+) -> list[SearchResult]:
+    """对头部候选做交叉验证，并把命中的第二信源合并进来。"""
+    cfg = state.cfg
+    count = max(1, int(getattr(cfg, "WEB_SEARCH_MAX_RESULTS_PER_QUERY", 5)))
+    concurrency = max(1, int(getattr(cfg, "WEB_SEARCH_TASK_CONCURRENCY", 3)))
+    top_n = max(0, int(getattr(cfg, "WEB_SEARCH_CROSS_CHECK_TOP", 3)))
+    cross_queries = state.budget.take([
+        f"{item.title} {state.yesterday.isoformat()}" for item in merged[:top_n]
+    ])
+    round_counts["cross"] = len(cross_queries)
+    cross_results = await _cross_validate(
+        state.provider, merged, cross_queries,
+        count=count, concurrency=concurrency, errors=state.errors,
+    )
+    return merge_results(merged + cross_results)
+
+
+def _drop_existing(
+    merged: list[SearchResult], excluded: set[str],
+) -> list[SearchResult]:
+    """剔除已由 RSS 准备好的同 URL 候选。"""
+    if not excluded:
+        return merged
+    return [item for item in merged if normalize_url(item.url) not in excluded]
+
+
+async def _supplement_by_density(
+    state: _CollectState,
+    merged: list[SearchResult],
+    kept: list[SearchResult],
+    prev_stats: tuple[int, int],
+) -> tuple[list[SearchResult], list[SearchResult], int, int, int]:
+    """密度不足时按子板块补搜；返回候选 / 保留 / 上一期统计 / 本轮检索数。"""
+    cfg = state.cfg
+    prev_skipped, progress_kept = prev_stats
+    count = max(1, int(getattr(cfg, "WEB_SEARCH_MAX_RESULTS_PER_QUERY", 5)))
+    concurrency = max(1, int(getattr(cfg, "WEB_SEARCH_TASK_CONCURRENCY", 3)))
+    density_limit = max(0, int(getattr(cfg, "WEB_SEARCH_MAX_DENSITY_QUERIES", 3)))
+    density_queries = state.budget.take(build_density_queries(
+        state.spec, state.yesterday.isoformat(),
+        limit=density_limit, used=set(state.budget.used),
+    ))
+    if not density_queries:
+        return merged, kept, prev_skipped, progress_kept, 0
+
+    density_results = await _search_many(
+        state.provider, density_queries, "density",
+        count=count, concurrency=concurrency, errors=state.errors,
+    )
+    density_results = [
+        item for item in density_results
+        if item.published_at is None or item.published_at >= state.window_start
+    ]
+    merged = _drop_existing(merge_results(merged + density_results), state.excluded)
+    kept, prev_skipped, progress_kept = _classify_all(
+        merged, state.context.previous_topics, state.threshold, state.max_items,
+    )
+    return merged, kept, prev_skipped, progress_kept, len(density_queries)
+
+
 async def collect_search_materials(
     workflow_id: str,
     date_str: str,
@@ -343,93 +484,43 @@ async def collect_search_materials(
 
         yesterday = _resolve_yesterday(date_str)
         window_start = datetime.combine(yesterday, dtime.min)
-        count = max(1, int(getattr(cfg, "WEB_SEARCH_MAX_RESULTS_PER_QUERY", 5)))
-        per_round = max(1, int(getattr(cfg, "WEB_SEARCH_MAX_QUERIES_PER_ROUND", 3)))
-        max_total = max(1, int(getattr(cfg, "WEB_SEARCH_MAX_QUERIES_TOTAL", DEFAULT_MAX_QUERIES_TOTAL)))
-        concurrency = max(1, int(getattr(cfg, "WEB_SEARCH_TASK_CONCURRENCY", 3)))
-        max_items = max(1, int(getattr(cfg, "WEB_SEARCH_MAX_ITEMS", 30)))
-        threshold = int(getattr(cfg, "WEB_SEARCH_PREV_SIMILARITY", 8))
-        chars_per_sec = float(getattr(cfg, "WEB_SEARCH_CHARS_PER_SEC", 4.5))
-
-        errors: list[str] = []
-        used_queries: list[str] = []
-
-        def _take(queries: list[str]) -> list[str]:
-            remaining = max_total - len(used_queries)
-            selected = queries[: max(0, remaining)]
-            used_queries.extend(selected)
-            return selected
-
-        zh_queries, en_queries = build_round_queries(spec, yesterday.isoformat(), per_round=per_round)
-        round_counts: dict[str, int] = {}
-        stage1: list[SearchResult] = []
-        for round_name, queries in (("zh", zh_queries), ("en", en_queries)):
-            selected = _take(queries)
-            round_counts[round_name] = len(selected)
-            stage1.extend(await _search_many(
-                provider, selected, round_name,
-                count=count, concurrency=concurrency, errors=errors,
-            ))
-
-        # 入库前新鲜度过滤：搜索服务通常已按一天收窄，这里再兜一层，
-        # 防止部分站点回填历史页面（published_at 为空时保留，无法判断即不误杀）
-        stage1 = [
-            item for item in stage1
-            if item.published_at is None or item.published_at >= window_start
-        ]
-        merged = merge_results(stage1)
-
-        top_n = max(0, int(getattr(cfg, "WEB_SEARCH_CROSS_CHECK_TOP", 3)))
-        cross_queries = _take([
-            f"{item.title} {yesterday.isoformat()}" for item in merged[:top_n]
-        ])
-        round_counts["cross"] = len(cross_queries)
-        cross_results = await _cross_validate(
-            provider, merged, cross_queries,
-            count=count, concurrency=concurrency, errors=errors,
+        state = _CollectState(
+            cfg=cfg,
+            provider=provider,
+            spec=spec,
+            context=context,
+            yesterday=yesterday,
+            window_start=window_start,
+            budget=_QueryBudget(
+                max(1, int(getattr(cfg, "WEB_SEARCH_MAX_QUERIES_TOTAL", DEFAULT_MAX_QUERIES_TOTAL)))
+            ),
+            errors=[],
+            excluded={normalize_url(url) for url in (existing_urls or set()) if url},
+            threshold=int(getattr(cfg, "WEB_SEARCH_PREV_SIMILARITY", 8)),
+            max_items=max(1, int(getattr(cfg, "WEB_SEARCH_MAX_ITEMS", 30))),
+            chars_per_sec=float(getattr(cfg, "WEB_SEARCH_CHARS_PER_SEC", 4.5)),
         )
-        merged = merge_results(merged + cross_results)
 
-        excluded = {normalize_url(url) for url in (existing_urls or set()) if url}
-        if excluded:
-            merged = [item for item in merged if normalize_url(item.url) not in excluded]
+        merged, round_counts = await _search_rounds(state)
+        merged = await _cross_check(state, merged, round_counts)
+        merged = _drop_existing(merged, state.excluded)
 
         kept, prev_skipped, progress_kept = _classify_all(
-            merged, context.previous_topics, threshold, max_items,
+            merged, context.previous_topics, state.threshold, state.max_items,
         )
 
         # 密度保障：以目标语音时长反算所需字数，不足则按子板块补搜
         effective_sec = resolve_channel_min_duration_sec(
             context.channel_type, context.min_duration_sec,
         ) or int(getattr(cfg, "TARGET_DURATION_SEC", 600))
-        target_chars = max(0, int(effective_sec * chars_per_sec))
+        target_chars = max(0, int(effective_sec * state.chars_per_sec))
         density_queries_used = 0
-
-        def _collected_chars() -> int:
-            return sum(len(item.content or "") for item in kept)
-
-        if _collected_chars() < target_chars:
-            density_limit = max(0, int(getattr(cfg, "WEB_SEARCH_MAX_DENSITY_QUERIES", 3)))
-            density_queries = _take(build_density_queries(
-                spec, yesterday.isoformat(),
-                limit=density_limit, used=set(used_queries),
-            ))
-            density_queries_used = len(density_queries)
-            if density_queries:
-                density_results = await _search_many(
-                    provider, density_queries, "density",
-                    count=count, concurrency=concurrency, errors=errors,
+        if sum(len(item.content or "") for item in kept) < target_chars:
+            merged, kept, prev_skipped, progress_kept, density_queries_used = (
+                await _supplement_by_density(
+                    state, merged, kept, (prev_skipped, progress_kept),
                 )
-                density_results = [
-                    item for item in density_results
-                    if item.published_at is None or item.published_at >= window_start
-                ]
-                merged = merge_results(merged + density_results)
-                if excluded:
-                    merged = [item for item in merged if normalize_url(item.url) not in excluded]
-                kept, prev_skipped, progress_kept = _classify_all(
-                    merged, context.previous_topics, threshold, max_items,
-                )
+            )
 
         round_counts["density"] = density_queries_used
 
@@ -442,22 +533,22 @@ async def collect_search_materials(
         if not density_met:
             logger.warning(
                 "全网搜索密度不足 channel=%s: %d/%d 字（目标时长 %ss），已用检索 %d 次",
-                channel_id, collected_chars, target_chars, effective_sec, len(used_queries),
+                channel_id, collected_chars, target_chars, effective_sec, len(state.budget.used),
             )
 
         logger.info(
             "全网搜索完成 workflow_id=%s channel=%s provider=%s: 检索 %d 次 → 候选 %d 条"
             " → 保留 %d 条（上一期同源剔除 %d，进展保留 %d），%d 字/%d 字目标",
-            workflow_id, channel_id, provider.name, len(used_queries), len(merged),
+            workflow_id, channel_id, provider.name, len(state.budget.used), len(merged),
             len(materials), prev_skipped, progress_kept, collected_chars, target_chars,
         )
 
         return {
             "enabled": True,
             "reason": None,
-            "error": errors[0] if errors and not materials else None,
+            "error": state.errors[0] if state.errors and not materials else None,
             "provider": provider.name,
-            "queries": len(used_queries),
+            "queries": len(state.budget.used),
             "rounds": round_counts,
             "candidates": len(merged),
             "kept": len(materials),
@@ -468,7 +559,7 @@ async def collect_search_materials(
             "target_chars": target_chars,
             "collected_chars": collected_chars,
             "density_met": density_met,
-            "errors": errors[:5],
+            "errors": state.errors[:5],
             "materials": materials,
         }
     except Exception as exc:

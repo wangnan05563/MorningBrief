@@ -14,7 +14,7 @@
         "callSites": [
           {
             "file": "views/maintenance/DatabaseAdmin.vue",
-            "line": 771,
+            "line": 779,
             "fn": "updateRow",
             "fieldCount": 1,
             "unresolved": [
@@ -946,9 +946,9 @@
     {
       "endpoint": "POST /channels",
       "model": "ChannelCreateRequest",
-      "modelSource": "backend/app/routers/admin/channels.py:66",
+      "modelSource": "backend/app/routers/admin/channels.py:82",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/channels.py:434",
+      "handlerSource": "backend/app/routers/admin/channels.py:455",
       "declared": [
         "auto_generate_prompts",
         "bgm_gap_mode",
@@ -974,6 +974,7 @@
         "rewrite_template",
         "rss_sources",
         "schedule_time",
+        "search_prompt",
         "segment_gap_sec",
         "selection_strategy",
         "type_label"
@@ -982,9 +983,9 @@
         "callSites": [
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1175,
+            "line": 1182,
             "fn": "createChannel",
-            "fieldCount": 23,
+            "fieldCount": 24,
             "unresolved": [
               "展开 extPayload（静态不可定）"
             ]
@@ -1011,6 +1012,7 @@
           "name",
           "rss_sources",
           "schedule_time",
+          "search_prompt",
           "segment_gap_sec",
           "selection_strategy",
           "type_label"
@@ -1021,7 +1023,7 @@
         "hasCallSite": true
       },
       "ormTable": "Channel",
-      "ormScore": 0.963,
+      "ormScore": 0.964,
       "ormTied": [
         "Channel"
       ],
@@ -1060,6 +1062,7 @@
         "rss_sources_snapshot",
         "schedule_time",
         "script_mode",
+        "search_prompt",
         "segment_gap_sec",
         "selection_strategy",
         "type_label",
@@ -1104,7 +1107,7 @@
         "callSites": [
           {
             "file": "views/channel/BookPoolPanel.vue",
-            "line": 461,
+            "line": 472,
             "fn": "addBooksToPool",
             "fieldCount": 1,
             "unresolved": [
@@ -1113,7 +1116,7 @@
           },
           {
             "file": "views/channel/BookPoolPanel.vue",
-            "line": 584,
+            "line": 595,
             "fn": "addBooksToPool",
             "fieldCount": 1,
             "unresolved": []
@@ -1145,9 +1148,9 @@
     {
       "endpoint": "POST /channels/*/icon/ai-generate",
       "model": "ChannelIconAIRequest",
-      "modelSource": "backend/app/routers/admin/channels.py:952",
+      "modelSource": "backend/app/routers/admin/channels.py:1013",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/channels.py:956",
+      "handlerSource": "backend/app/routers/admin/channels.py:1017",
       "declared": [
         "prompt"
       ],
@@ -1155,7 +1158,7 @@
         "callSites": [
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 942,
+            "line": 947,
             "fn": "generateChannelIcon",
             "fieldCount": 1,
             "unresolved": []
@@ -1341,14 +1344,14 @@
         "callSites": [
           {
             "file": "views/maintenance/DatabaseAdmin.vue",
-            "line": 799,
+            "line": 807,
             "fn": "cascadePreview",
             "fieldCount": 1,
             "unresolved": []
           },
           {
             "file": "views/maintenance/DatabaseAdmin.vue",
-            "line": 819,
+            "line": 827,
             "fn": "cascadePreview",
             "fieldCount": 1,
             "unresolved": []
@@ -1394,7 +1397,7 @@
         "callSites": [
           {
             "file": "views/maintenance/DatabaseAdmin.vue",
-            "line": 923,
+            "line": 931,
             "fn": "importRows",
             "fieldCount": 4,
             "unresolved": []
@@ -1447,7 +1450,7 @@
         "callSites": [
           {
             "file": "views/maintenance/DatabaseAdmin.vue",
-            "line": 892,
+            "line": 900,
             "fn": "previewImport",
             "fieldCount": 3,
             "unresolved": []
@@ -1495,7 +1498,7 @@
         "callSites": [
           {
             "file": "views/maintenance/DatabaseAdmin.vue",
-            "line": 763,
+            "line": 771,
             "fn": "createRow",
             "fieldCount": 1,
             "unresolved": []
@@ -1539,7 +1542,7 @@
         "callSites": [
           {
             "file": "views/maintenance/DatabaseAdmin.vue",
-            "line": 839,
+            "line": 847,
             "fn": "batchDelete",
             "fieldCount": 2,
             "unresolved": [
@@ -1590,7 +1593,7 @@
         "callSites": [
           {
             "file": "views/ebooks/BookFinder.vue",
-            "line": 285,
+            "line": 341,
             "fn": "createDraftMaterial",
             "fieldCount": 5,
             "unresolved": []
@@ -1981,7 +1984,7 @@
       "model": "MaterialCreateRequest",
       "modelSource": "backend/app/routers/admin/materials.py:36",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:581",
+      "handlerSource": "backend/app/routers/admin/materials.py:597",
       "declared": [
         "category",
         "channel_id",
@@ -1999,14 +2002,14 @@
         "callSites": [
           {
             "file": "views/channel/CourseMaterials.vue",
-            "line": 358,
+            "line": 363,
             "fn": "createMaterial",
             "fieldCount": 8,
             "unresolved": []
           },
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 672,
+            "line": 728,
             "fn": "createMaterial",
             "fieldCount": 10,
             "unresolved": []
@@ -2083,9 +2086,9 @@
     {
       "endpoint": "POST /materials/batch-delete",
       "model": "MaterialBatchDeleteRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:766",
+      "modelSource": "backend/app/routers/admin/materials.py:781",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:779",
+      "handlerSource": "backend/app/routers/admin/materials.py:794",
       "declared": [
         "channel_id",
         "ids",
@@ -2096,14 +2099,14 @@
         "callSites": [
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 766,
+            "line": 822,
             "fn": "batchDeleteMaterials",
             "fieldCount": 3,
             "unresolved": []
           },
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 792,
+            "line": 848,
             "fn": "batchDeleteMaterials",
             "fieldCount": 2,
             "unresolved": []
@@ -2138,9 +2141,9 @@
     {
       "endpoint": "POST /materials/import-cos",
       "model": "ImportCosRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:949",
+      "modelSource": "backend/app/routers/admin/materials.py:964",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:960",
+      "handlerSource": "backend/app/routers/admin/materials.py:975",
       "declared": [
         "category",
         "channel_id",
@@ -2151,7 +2154,7 @@
         "callSites": [
           {
             "file": "views/channel/CourseMaterials.vue",
-            "line": 320,
+            "line": 325,
             "fn": "importFromCos",
             "fieldCount": 4,
             "unresolved": []
@@ -2224,9 +2227,9 @@
     {
       "endpoint": "POST /materials/import-url",
       "model": "ImportUrlRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:898",
+      "modelSource": "backend/app/routers/admin/materials.py:913",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:912",
+      "handlerSource": "backend/app/routers/admin/materials.py:927",
       "declared": [
         "category",
         "channel_id",
@@ -2238,7 +2241,7 @@
         "callSites": [
           {
             "file": "views/channel/CourseMaterials.vue",
-            "line": 391,
+            "line": 396,
             "fn": "importFromUrl",
             "fieldCount": 5,
             "unresolved": []
@@ -2308,9 +2311,9 @@
     {
       "endpoint": "POST /materials/share",
       "model": "SharePreviewRequest",
-      "modelSource": "backend/app/routers/admin/materials.py:1014",
+      "modelSource": "backend/app/routers/admin/materials.py:1029",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:1023",
+      "handlerSource": "backend/app/routers/admin/materials.py:1038",
       "declared": [
         "channel_id",
         "url"
@@ -2319,7 +2322,7 @@
         "callSites": [
           {
             "file": "views/channel/CourseMaterials.vue",
-            "line": 415,
+            "line": 420,
             "fn": "sharePreview",
             "fieldCount": 2,
             "unresolved": []
@@ -3427,9 +3430,9 @@
     {
       "endpoint": "PUT /channels/*",
       "model": "ChannelUpdateRequest",
-      "modelSource": "backend/app/routers/admin/channels.py:232",
+      "modelSource": "backend/app/routers/admin/channels.py:250",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/channels.py:497",
+      "handlerSource": "backend/app/routers/admin/channels.py:538",
       "declared": [
         "bgm_gap_mode",
         "bgm_path",
@@ -3454,6 +3457,7 @@
         "rewrite_template",
         "rss_sources",
         "schedule_time",
+        "search_prompt",
         "segment_gap_sec",
         "selection_strategy",
         "type_label"
@@ -3462,30 +3466,30 @@
         "callSites": [
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1142,
+            "line": 1148,
             "fn": "updateChannel",
-            "fieldCount": 26,
+            "fieldCount": 27,
             "unresolved": [
               "展开 extPayload（静态不可定）"
             ]
           },
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1236,
+            "line": 1248,
             "fn": "updateChannel",
             "fieldCount": 1,
             "unresolved": []
           },
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1369,
+            "line": 1397,
             "fn": "updateChannel",
             "fieldCount": 2,
             "unresolved": []
           },
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 1408,
+            "line": 1436,
             "fn": "updateChannel",
             "fieldCount": 2,
             "unresolved": []
@@ -3522,6 +3526,7 @@
           "rewrite_template",
           "rss_sources",
           "schedule_time",
+          "search_prompt",
           "segment_gap_sec",
           "selection_strategy",
           "type_label"
@@ -3571,6 +3576,7 @@
         "rss_sources_snapshot",
         "schedule_time",
         "script_mode",
+        "search_prompt",
         "segment_gap_sec",
         "selection_strategy",
         "type_label",
@@ -3638,7 +3644,7 @@
         "callSites": [
           {
             "file": "views/channel/BookPoolPanel.vue",
-            "line": 376,
+            "line": 387,
             "fn": "setScriptMode",
             "fieldCount": 1,
             "unresolved": [
@@ -3647,7 +3653,7 @@
           },
           {
             "file": "views/channel/ChannelManagement.vue",
-            "line": 995,
+            "line": 1000,
             "fn": "setScriptMode",
             "fieldCount": 1,
             "unresolved": [
@@ -3692,7 +3698,7 @@
         "callSites": [
           {
             "file": "views/channel/BookPoolPanel.vue",
-            "line": 388,
+            "line": 399,
             "fn": "updateBookPoolSchedule",
             "fieldCount": 2,
             "unresolved": []
@@ -3840,7 +3846,7 @@
       "model": "MaterialUpdateRequest",
       "modelSource": "backend/app/routers/admin/materials.py:64",
       "modelExtra": "ignore",
-      "handlerSource": "backend/app/routers/admin/materials.py:631",
+      "handlerSource": "backend/app/routers/admin/materials.py:647",
       "declared": [
         "category",
         "content",
@@ -3856,7 +3862,7 @@
         "callSites": [
           {
             "file": "views/channel/MaterialLibrary.vue",
-            "line": 635,
+            "line": 691,
             "fn": "updateMaterial",
             "fieldCount": 8,
             "unresolved": []

@@ -184,8 +184,8 @@ def test_classify_candidate_against_previous_topics():
 async def test_bocha_provider_maps_payload_and_results(monkeypatch):
     seen = {}
 
-    async def fake_post(url, payload, headers, timeout):
-        seen.update(url=url, payload=payload, headers=headers, timeout=timeout)
+    async def fake_post(url, payload, headers):
+        seen.update(url=url, payload=payload, headers=headers)
         return {"code": 200, "data": {"webPages": {"value": [
             {"name": "标题一", "url": "https://x.com/1", "summary": "摘要",
              "siteName": "站点", "datePublished": "2026-11-02T08:00:00+08:00"},
@@ -207,7 +207,7 @@ async def test_bocha_provider_maps_payload_and_results(monkeypatch):
 async def test_tavily_provider_maps_payload_and_results(monkeypatch):
     seen = {}
 
-    async def fake_post(url, payload, headers, timeout):
+    async def fake_post(url, payload, headers):
         seen.update(url=url, payload=payload)
         return {"results": [{
             "title": "T", "url": "https://t.com/1", "content": "内容",

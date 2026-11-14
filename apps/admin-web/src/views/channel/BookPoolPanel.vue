@@ -172,7 +172,7 @@
       <!-- C84：候选此前固定 page:1、size:50，后端返回的 total 被丢弃，界面既无翻页控件
            也不显示总数——本频道书多于 50 本时，第 51 本起「不存在」，运营会判定素材库里没有这本书。 -->
       <div class="candidate-pager">
-        <span class="candidate-total">本频道共 {{ candidateTotal }} 本书</span>
+        <span class="candidate-total">本频道共 {{ candidateTotal }} 本书可加入</span>
         <el-pagination
           v-model:current-page="candidatePage"
           v-model:page-size="candidateSize"
