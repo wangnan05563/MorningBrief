@@ -99,10 +99,9 @@ new_violations                   0    (GT 0  → OK)
 
 ### 6.1 E2E
 
-- 首轮全量：505 项，487 passed / 18 failed；隔离复跑后确认 9 项存量失败。
-- 已修复这 9 项：1 项真实缺陷（低层 `ElMessageBox(options)` 不渲染「取消」按钮）+ 8 项用例选择器/颜色断言过期。
-- 修复后复跑 4 个相关 spec（feed-capabilities / destructive-confirm / m3-failure-visibility / mobile-tabbar-badge）：43 项中 **41 passed**；9 个目标用例全部通过；剩余 2 项频道删除用例因本机 dev server 启动超时（`page.goto` 60s timeout）未完成，非断言失败。
-- 受本机持续负载影响，未再执行 505 项全量复跑；后端相关用例 0 失败。
+- 最终全量：**505/505 passed**（2 workers，16.4 分钟，0 failed / 0 flaky）。
+- 修复对象：9 项存量失败 + 1 项全量复跑中暴露的选择器冲突（`/db-admin` 两条 `.list-load-error`），其中 1 项为真实缺陷（低层 `ElMessageBox(options)` 不渲染「取消」按钮），其余为用例选择器/颜色断言过期。
+- 过程：清空 Vite 缓存后的首轮 496/505（9 项均为冷编译/负载超时）；隔离复跑 40/41；修复 `/db-admin` 用例并执行 `vite optimize --force` 预构建后，全量一次通过。
 
 ### 6.2 生产构建
 

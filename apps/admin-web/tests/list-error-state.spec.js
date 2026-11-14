@@ -119,7 +119,8 @@ test.describe('列表错误态与重试', () => {
     await page.route('**/admin/api/v1/db-admin/tables*', (route) => route.abort())
 
     await page.goto('/db-admin')
-    const banner = page.locator('.list-load-error')
+    // 数据区的「表清单」与「表数据」各有自己的错误横幅，断言只要求至少一条显式报错
+    const banner = page.locator('[data-guide="db-admin-content"] .list-load-error').first()
     await expect(banner).toBeVisible({ timeout: 30000 })
     await expect(page.getByText('请从左侧选择一张表')).toHaveCount(0)
   })

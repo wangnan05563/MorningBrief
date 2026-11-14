@@ -58,9 +58,9 @@
 | 前端单测 | `node --test tests/unit/*.test.mjs` | 673/673 | `test-admin-unit.log` |
 | 小程序 tabBar/UX 门禁 | `node scripts/validate-tabbar.mjs`、`validate-ux604.mjs` | 通过 | 终端输出 |
 | 小程序单测 | `node --test tests/*.test.js tests/*.test.mjs` | 413/413 | 终端输出 |
-| E2E | `npx playwright test`（chromium，505 项）；修复后复跑 4 个相关 spec | 原 496/505；修复后 41/43（9 个目标用例全绿，2 项 env 超时） | `test-e2e.log`、`test-e2e-retry.log`、`test-e2e-fix.log` |
+| E2E | `npx playwright test`（chromium，505 项，2 workers） | **505/505 passed**（16.4 分钟，0 failed / 0 flaky） | `test-e2e-final2.log` |
 
-## 5. E2E 9 项存量失败：已修复
+## 5. E2E 存量失败：已修复（10 项）
 
 | # | 用例 | 根因 | 修复 |
 |---|---|---|---|
@@ -68,8 +68,9 @@
 | 5-6 | `destructive-confirm` 素材删除/批量删除 | 真实缺陷：低层 `ElMessageBox(options)` 默认不渲染取消按钮，用户只能点右上角 X | `dangerConfirm.js` 显式 `showCancelButton: true` |
 | 7-8 | `m3-failure-visibility` 首次/二次加载失败 | `.list-load-error` 同时命中状态卡与页面其它面板 | 限定为 `[data-guide="maintenance-page"] > .list-load-error` |
 | 9 | `mobile-tabbar-badge` 角标底色 | 设计令牌已改为 `--m-danger: #B3261E`（白字 6.5:1），用例仍断言旧值 `#C9433B` | 断言更新为 `rgb(179, 38, 30)` |
+| 10 | `list-error-state` 数据管理错误态 | `/db-admin` 数据区同时存在「表清单失败」与「表数据失败」两条 `.list-load-error`，strict mode 冲突 | 限定为 `[data-guide="db-admin-content"] .list-load-error` 并取首条 |
 
-修复后复跑 4 个 spec：43 项中 41 通过；9 个目标用例全部通过。剩余 2 项频道删除用例因本机 dev server 启动超时（`page.goto` 60s）未完成，非断言失败，需在机器负载正常时复跑。
+修复后全量复跑经历三个阶段：清空 Vite 缓存后的首轮 496/505（9 项均为冷编译/负载导致的 5–60s 等待超时）；隔离复跑 5 个 spec 40/41 通过，暴露出 #10 的真实选择器冲突；修复 #10 并预构建依赖（`vite optimize --force`）后，全量 **505/505** 一次通过，无失败、无 flaky。
 
 ## 6. 生产构建
 
