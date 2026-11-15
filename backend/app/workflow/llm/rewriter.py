@@ -131,6 +131,231 @@ def _append_audiobook_position_rule(rule: str | None, style_seq: int, total: int
     return rule
 
 
+# ===== 课程(course)频道内容连贯性（T05753） =====
+# 课程是“体系化知识”，资讯流不是课程知识源。T05753 实测：course 频道
+# “AI 通识课堂”180 条待选素材全部为 rss 新闻（竹节虫、北汽新车、V2EX 求推荐…），
+# 按 outline 取前 10 条直接拼成一期“课程”——素材源错配是内容混乱的首要根因。
+# 故课程频道只接受带完整正文的课程文档类素材；全为 rss 时快速失败并给出
+# 可执行提示，避免继续把新闻拼成课程。
+_COURSE_DOC_SOURCE_TYPES = frozenset({"list", "cos", "api", "qrcode", "manual"})
+
+# 新闻播报腔与跨节空指代：LLM 在课程稿里仍可能残留，作为确定性审计的检出项
+_COURSE_NEWS_TONE_PAT = re.compile(
+    r"据悉|记者|本报讯|通讯员|本文|这篇文章|专访|报道称|记者从"
+)
+_COURSE_DANGLING_PAT = re.compile(
+    r"上(?:一)?节(?:我们)?(?:讲过|讲到|说过|提过)|"
+    r"下(?:一)?节(?:我们)?(?:再讲|再说|会讲)|"
+    r"待会儿?再说|后面会讲|稍后再说|下回分解"
+)
+_COURSE_NON_BODY_TITLES = frozenset({"开场白", "结尾"})
+
+
+def _is_course_doc_source(material: dict) -> bool:
+    """素材是否为课程文档类（上传/录入/对象存储/接口/二维码）。"""
+    return str(material.get("source_type") or "").lower() in _COURSE_DOC_SOURCE_TYPES
+
+
+def _filter_course_materials_by_source_type(materials: list[dict]) -> list[dict]:
+    """课程素材源守卫：只保留课程文档，纯资讯流快速失败（不再拼新闻课）。"""
+    docs = [m for m in materials if _is_course_doc_source(m)]
+    if not docs:
+        raise LLMError(
+            "课程频道素材源不匹配：当前素材全部来自资讯 RSS，没有课程文档。"
+            "课程稿需要体系化讲义/教材，请先上传课程文档（PDF/DOCX/EPUB）"
+            "或在频道素材中录入课程正文后重试，不要把新闻条目直接拼成课程。"
+        )
+    dropped = len(materials) - len(docs)
+    if dropped:
+        logger.warning(
+            "[课程素材] 剔除 {} 条非课程文档素材（仅保留 list/cos/api/qrcode/manual），"
+            "素材池 {} → {} 条",
+            dropped, len(materials), len(docs),
+        )
+    return docs
+
+
+def _filter_course_document_sources(
+    materials: list[dict], min_segments: int = 3
+) -> list[dict]:
+    """课程单文档隔离：同一期只讲一门课程/一份讲义，避免多份文档混讲。
+
+    与 audiobook 书源隔离同构：以出现章节最多的 source 作为“当前课程”锚，
+    剔除外课程素材；锚不唯一或剔除后不足 min_segments 时降级保留（不阻断）。
+    """
+    if not materials:
+        return materials
+    counts: dict[str, int] = {}
+    for m in materials:
+        src = m.get("source") or "未命名课程"
+        counts[src] = counts.get(src, 0) + 1
+    if len(counts) <= 1:
+        return materials
+    top = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
+    if len(top) > 1 and top[0][1] == top[1][1]:
+        logger.warning("[课程隔离] 课程文档锚不唯一 {}，降级保留全部素材", dict(top[:2]))
+        return materials
+    anchor = top[0][0]
+    filtered = [
+        m for m in materials if (m.get("source") or "未命名课程") == anchor
+    ]
+    if len(filtered) < min_segments:
+        logger.warning(
+            "[课程隔离] 锚定《{}》后仅剩 {}/<{} 段，降级保留原始素材池",
+            anchor, len(filtered), min_segments,
+        )
+        return materials
+    dropped = sorted({
+        m.get("source") or "未命名课程" for m in materials
+        if (m.get("source") or "未命名课程") != anchor
+    })
+    logger.warning(
+        "[课程隔离] 剔除非本课程素材 {} 条（锚定《{}》，剩余 {} 条）: {}",
+        len(materials) - len(filtered), anchor, len(filtered), dropped[:5],
+    )
+    return filtered
+
+
+def _order_course_materials(materials: list[dict], strategy: str) -> list[dict]:
+    """课程段序：outline/manual 已按章节/指定顺序；heat 按同源文档聚合后 id 升序。
+
+    heat 直接按品类热度打散会造成“第一章→第三章→第二章”的跳章；先按 source
+    首次出现顺序聚合，再按 id（入库=章节）排序，保证同一份讲义的章节连续。
+    """
+    if strategy in ("outline", "manual"):
+        return materials
+    source_order: list[str] = []
+    for m in materials:
+        src = m.get("source") or "未命名课程"
+        if src not in source_order:
+            source_order.append(src)
+    return sorted(
+        materials,
+        key=lambda m: (
+            source_order.index(m.get("source") or "未命名课程"),
+            int(m.get("id") or 0),
+        ),
+    )
+
+
+def _build_course_context_map(selected: list[dict], course_title: str) -> dict[int, dict]:
+    """为每个选中素材生成本节课在全课中的位置上下文（供段级质量约束）。"""
+    outline = "；".join(
+        f"{i + 1}.{(m.get('title') or '').strip()[:40]}"
+        for i, m in enumerate(selected)
+    )
+    total = len(selected)
+    ctx_map: dict[int, dict] = {}
+    for i, m in enumerate(selected):
+        ctx_map[m["id"]] = {
+            "course_title": course_title or "本节课程",
+            "lesson_title": (m.get("title") or "").strip(),
+            "lesson_index": i + 1,
+            "lesson_total": total,
+            "course_outline": outline,
+            "prev_title": (selected[i - 1].get("title") or "").strip() if i > 0 else "",
+            "next_title": (
+                (selected[i + 1].get("title") or "").strip()
+                if i + 1 < total else ""
+            ),
+            "is_first": i == 0,
+            "is_last": i == total - 1,
+        }
+    return ctx_map
+
+
+def _build_course_quality_rule(ctx: dict | None) -> str | None:
+    """课程段级质量约束：全课大纲 + 本节位置 + 讲解结构 + 禁新闻腔/空指代。"""
+    if not ctx:
+        return None
+    rule = (
+        "【课程讲解专项要求】"
+        f"1. 本期课程《{ctx['course_title']}》；本节是第 {ctx['lesson_index']}/"
+        f"{ctx['lesson_total']} 讲《{ctx['lesson_title']}》。"
+        f"2. 全课大纲：{ctx['course_outline']}。本节只讲本节对应的知识点，"
+        "不得提前展开后续节内容，也不得重复前面节已讲过的内容。"
+        "3. 结构按“概念或问题引入→定义与原理→具体例子→本节小结”展开，"
+        "小结用一两句话收束，让听众带走一个明确结论。"
+        "4. 每个术语首次出现时先用一句话解释，面向零基础听众；"
+        "抽象概念必须配一个生活化类比或例子。"
+        "5. 统一讲师口吻，禁止新闻播报腔：不得出现“据悉、记者、报道、本报讯、"
+        "通讯员、本文、这篇文章、专访”等词。"
+        "6. 本节必须自洽：禁止“上节讲过、下节再讲、待会再说、后面会讲”等"
+        "依赖其它段落的空指代；承上只用一句话概括，不展开。"
+        "7. 不得编造素材外的事实、数字、人名、年份；例子与数据必须能在本节素材中找到依据。"
+    )
+    if ctx["prev_title"]:
+        rule += f" 8. 上一讲是《{ctx['prev_title']}》，开头用一句话承接，不重复其内容。"
+    else:
+        rule += " 8. 本节是课程开篇：开头用两三句话交代课程目标与学习路径。"
+    if ctx["next_title"]:
+        rule += f" 9. 下一讲是《{ctx['next_title']}》，结尾用一句话引出，不提前展开其内容。"
+    else:
+        rule += " 9. 本节是课程收尾：结尾用三到五句话总结全课要点，形成完整闭环。"
+    return rule
+
+
+def _audit_course_script(segments: list[dict]) -> list[dict]:
+    """课程稿确定性审计：新闻腔、跨节空指代、重复钩子、重复主题。
+
+    只做零 LLM 成本的枚举检查，用于落库前告警；不阻断 TTS（与质量审核
+    服务“只告警不回退”的 P1 定位一致）。
+    """
+    issues: list[dict] = []
+    body = [
+        s for s in segments
+        if (s.get("title") or "") not in _COURSE_NON_BODY_TITLES
+    ]
+    title_seqs: dict[str, list] = {}
+    hook_seqs: dict[str, list] = {}
+    for seg in body:
+        content = seg.get("content") or ""
+        seq = seg.get("seq")
+        for pat, issue_type, suggestion in (
+            (_COURSE_NEWS_TONE_PAT, "news_tone", "改为讲师口吻，删除新闻播报套话"),
+            (_COURSE_DANGLING_PAT, "dangling_reference", "改为本节自洽表述，或补一句承接"),
+        ):
+            match = pat.search(content)
+            if match:
+                issues.append({
+                    "seq": seq,
+                    "issue_type": issue_type,
+                    "evidence": match.group(0),
+                    "suggestion": suggestion,
+                })
+        title_key = re.sub(r"\W+", "", seg.get("title") or "")
+        if title_key:
+            title_seqs.setdefault(title_key, []).append(seq)
+        hook = re.sub(r"^[^\w\u4e00-\u9fff]+", "", content)[:10]
+        if hook:
+            hook_seqs.setdefault(hook, []).append(seq)
+    for key, seqs in title_seqs.items():
+        if len(seqs) > 1:
+            issues.append({
+                "seq": seqs[0],
+                "issue_type": "duplicate_topic",
+                "evidence": key,
+                "suggestion": "合并重复主题或改写本节标题",
+            })
+    for key, seqs in hook_seqs.items():
+        if len(seqs) > 1:
+            issues.append({
+                "seq": seqs[0],
+                "issue_type": "hook_repeat",
+                "evidence": key,
+                "suggestion": "段首钩子句式多样化，避免多段同一起手",
+            })
+    return issues
+
+
+def _summarize_course_audit(issues: list[dict]) -> dict:
+    """把审计问题按类型计数，便于日志与接口观测。"""
+    by_type: dict[str, int] = {}
+    for issue in issues:
+        by_type[issue["issue_type"]] = by_type.get(issue["issue_type"], 0) + 1
+    return {"issue_count": len(issues), "by_type": by_type, "issues": issues}
+
+
 # 超长段拆分的绝对字数下限：短节目档 words_per_segment 较小（可低至 500 字左右），
 # 仅按 1.5 倍相对阈值会把正常段落也拆碎；低于该绝对下限的一律视为正常篇幅
 _AUDIOBOOK_SPLIT_MIN_CHARS = 800
@@ -1623,6 +1848,7 @@ def _material_to_public_dict(r) -> dict:
     return {
         "id": r.id,
         "source": r.source,
+        "source_type": r.source_type,
         "title": r.title,
         "content": r.content,
         "url": r.url,
@@ -1865,7 +2091,8 @@ def _filter_audiobook_sources(materials: list[dict], min_segments: int = 3) -> l
 
 
 async def _filter_materials_by_relevance(
-    materials: list[dict], channel_name: str, channel_description: str
+    materials: list[dict], channel_name: str, channel_description: str,
+    channel_type: str | None = None,
 ) -> list[dict]:
     """AI 相关性筛选：批量判断素材是否与频道主题相关。
 
@@ -1877,6 +2104,8 @@ async def _filter_materials_by_relevance(
         materials: 待筛选的素材列表（dict 含 id/title/summary）
         channel_name: 频道名称（如"娱乐焦点"）
         channel_description: 频道描述（如"影视、音乐、明星动态与文娱产业资讯"）
+        channel_type: 频道类型；course 使用课程编辑口径（同一门课程/知识体系），
+            避免用新闻审核口径误杀课程章节或放入泛资讯
 
     Returns:
         相关素材列表（原 dict 列表的子集）
@@ -1891,7 +2120,18 @@ async def _filter_materials_by_relevance(
         for i, m in enumerate(materials)
     )
 
-    prompt = f"""你是新闻频道内容审核员。请判断以下素材是否与频道主题相关。
+    if channel_type in _COURSE_CHANNEL_TYPES:
+        role = "课程编辑"
+        criteria = (
+            "素材必须属于频道描述的同一门课程/同一知识体系，且能作为该课程的一节"
+            "知识点展开；同一文档/同一讲义的章节优先保留。仅有宽泛关联、属于其他课程、"
+            "其他主题的泛资讯（新闻、产品促销、论坛闲聊）一律判为不相关。"
+        )
+    else:
+        role = "新闻频道内容审核员"
+        criteria = "素材核心内容应与频道主题直接相关，边缘关联不算。"
+
+    prompt = f"""你是{role}。请判断以下素材是否与频道主题相关。
 
 频道名称：{channel_name}
 频道描述：{channel_description or ''}
@@ -1900,7 +2140,7 @@ async def _filter_materials_by_relevance(
 {items_text}
 
 请仅返回相关素材的序号（方括号中的数字），以 JSON 数组格式输出。
-判断标准：素材核心内容应与频道主题直接相关，边缘关联不算。
+判断标准：{criteria}
 仅输出 JSON 数组本身，不要任何解释。
 
 示例输出：[0, 2, 5]"""
@@ -2058,6 +2298,13 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
     if channel_type in _AUDIOBOOK_CHANNEL_TYPES:
         materials = _filter_audiobook_sources(materials, MIN_VALID_SEGMENTS)
 
+    # T05753：课程频道素材源守卫 + 单文档隔离。须早于空判断与选题：
+    # 先拦下“全是 RSS 新闻”的错配素材池（快速失败并提示上传课程文档），
+    # 再避免多份讲义在同一期里混讲。
+    if channel_type in _COURSE_CHANNEL_TYPES and materials:
+        materials = _filter_course_materials_by_source_type(materials)
+        materials = _filter_course_document_sources(materials, MIN_VALID_SEGMENTS)
+
     if not materials:
         # 查询 material 表诊断信息，帮助定位根因
         # 按 channel_id 过滤统计，避免全局数字误导（不同频道素材互不交叉，
@@ -2100,6 +2347,16 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
     )
     logger.info("选题 {} 条（策略={}）", len(selected), selection_strategy)
 
+    # T05753：课程段序与大纲锚定。heat 会按品类热度打散章节，必须回到同源
+    # 文档的 id 顺序；同时对运营误配 heat 的课程频道大声告警（不强行改配置）。
+    if channel_type in _COURSE_CHANNEL_TYPES:
+        selected = _order_course_materials(selected, selection_strategy)
+        if selection_strategy == "heat":
+            logger.warning(
+                "[课程编排] course 频道 selection_strategy=heat，主题与章节可能跳脱；"
+                "建议改为 outline（按讲文章节顺序选题）"
+            )
+
     # 2.3 AI 相关性筛选：批量判断选题素材是否与频道主题相关
     # 作为关键词过滤的第二道防线，处理关键词无法覆盖的语义相关性
     # 筛选失败时降级为全部保留（不阻断工作流）
@@ -2109,6 +2366,7 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
             selected,
             channel_prompts["name"],
             channel_prompts.get("description") or "",
+            channel_type=channel_type,
         )
         logger.info("AI 相关性筛选后剩余 {} 条", len(selected))
 
@@ -2164,11 +2422,18 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
 
     # T00914 内容质量专项约束：仅 audiobook 频道注入书籍解读规则（防书外嫁接/新闻套话串味），
     # 其他频道不注入。quality_rule 在 _rewrite_one 里透传到 _build_prompt 追加到 prompt 最末。
-    quality_rule = None
+    audiobook_quality_rule = None
     if channel_type in _AUDIOBOOK_CHANNEL_TYPES:
         # 以选中素材的 source（锚定书名）为唯一事实锚，注入书名与真实作者约束
         anchor_title = (selected[0].get("source") or "") if selected else ""
-        quality_rule = await _build_audiobook_quality_rule(channel_id, anchor_title)
+        audiobook_quality_rule = await _build_audiobook_quality_rule(channel_id, anchor_title)
+
+    # T05753：课程段级约束按“本节在全课中的位置”逐条生成（与并发顺序无关），
+    # 注入全课大纲、上一讲/下一讲标题，防止越界、跳章与新闻腔。
+    course_ctx_map: dict[int, dict] = {}
+    if channel_type in _COURSE_CHANNEL_TYPES and selected:
+        course_title = (channel_prompts or {}).get("name") or "本节课程"
+        course_ctx_map = _build_course_context_map(selected, course_title)
 
     # T00626：讲书频道（audiobook）单本分集编排——按素材序列估算改写总量，
     # 自动划分 单集 / 上·下 / 上·中·下 并生成篇名、覆盖说明与衔接语，
@@ -2188,6 +2453,14 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         except Exception as e:  # noqa: BLE001 — 编排仅影响提示词丰富度，不应阻断改写
             logger.warning("讲书分集编排失败（降级为空占位符）: {}", e)
 
+    def _segment_quality_rule(m: dict, style_seq: int) -> str | None:
+        """按频道类型选择段级质量约束：course 用本节位置规则，audiobook 用书稿规则。"""
+        if channel_type in _COURSE_CHANNEL_TYPES:
+            return _build_course_quality_rule(course_ctx_map.get(m.get("id")))
+        return _append_audiobook_position_rule(
+            audiobook_quality_rule, style_seq, total_for_style
+        )
+
     async def _rewrite_one_with_limit(m: dict, style_seq: int) -> dict:
         # 账号级错误（余额不足/鉴权失败）中止：后续素材不再发起调用，
         # 避免 N 条素材把同一个 402/401 重复打满（T00582 实测 10 条 × 重试 3 次）
@@ -2205,8 +2478,8 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                 enable_thinking_question=channel_prompts["enable_thinking_question"] if channel_prompts else True,
                 style_hint=style_hint,
                 book_context=book_ctx_map.get(m.get("id")),
-                # 开篇导论/收尾总结按段位置追加（quality_rule 本体是全段共用的静态串）
-                quality_rule=_append_audiobook_position_rule(quality_rule, style_seq, total_for_style),
+                # course 按本节位置注入大纲/前后讲约束；audiobook 追加导论/收尾条款
+                quality_rule=_segment_quality_rule(m, style_seq),
             )
 
     # enumerate 从 1 开始：seq=1 用开场白（intro），seq>=2 用过渡词（transition）
@@ -2231,8 +2504,8 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                     constraint_text=channel_prompts["constraint_prompt"] if channel_prompts else None,
                     enable_thinking_question=channel_prompts["enable_thinking_question"] if channel_prompts else True,
                     style_hint=style_hint,
-                    # 敏感词重试与首版同段同位置，导论/收尾条款须保持一致
-                    quality_rule=_append_audiobook_position_rule(quality_rule, i + 1, total_for_style),
+                    # 敏感词重试与首版同段同位置，quality_rule 保持一致
+                    quality_rule=_segment_quality_rule(m, i + 1),
                 )
                 r = _clean_audiobook_segment_content(r, channel_type)
                 segments.append({**r, "seq": len(segments) + 1})
@@ -2401,6 +2674,18 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
                 assembled["estimated_duration"], min_allowed_duration,
             )
 
+    # T05753：课程稿落库前确定性审计（新闻腔/空指代/重复钩子/重复主题）。
+    # 只告警不阻断，指标随返回体透出，便于运营与质量面板观测。
+    course_audit = {"issue_count": 0, "by_type": {}, "issues": []}
+    if channel_type in _COURSE_CHANNEL_TYPES:
+        _course_issues = _audit_course_script(segments)
+        course_audit = _summarize_course_audit(_course_issues)
+        if _course_issues:
+            logger.warning(
+                "[课程审计] 检出 {} 项问题 {}；前 3 项: {}",
+                len(_course_issues), course_audit["by_type"], _course_issues[:3],
+            )
+
     # 5.7 LLM 字数达成率监控：对比目标字数与实际字数
     # 场景：LLM 常不遵守 prompt ±10% 字数约束（中文 LLM 尤甚），
     # 实际生成 65-80% 字数是常见现象，达成率低于 80% 时 WARNING
@@ -2462,4 +2747,5 @@ async def rewrite(workflow_id: str, date_str: str, channel_id: int = None) -> di
         "script_id": script_id,
         "segments": len(segments),
         "total_words": assembled["total_words"],
+        "course_audit": course_audit,
     }

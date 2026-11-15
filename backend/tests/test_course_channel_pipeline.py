@@ -188,6 +188,7 @@ async def test_rewrite_course_pipeline_applies_template_and_no_date(course_sessi
             "material_id": m["id"],
             "template_text": template_text,
             "style_hint": style_hint,
+            "quality_rule": quality_rule,
         })
         return {
             "title": m["title"],
@@ -235,6 +236,13 @@ async def test_rewrite_course_pipeline_applies_template_and_no_date(course_sessi
     )
     # 讲师风格提示注入（channel_type=course 经 get_style_hint 生效）
     assert "讲师" in captured["calls"][0]["style_hint"]
+
+    # T05753：课程位置约束逐段注入，第一段必须标明“第 1/3 讲”
+    assert "【课程讲解专项要求】" in captured["calls"][0]["quality_rule"]
+    assert "第 1/3 讲" in captured["calls"][0]["quality_rule"]
+    assert "第 3/3 讲" in captured["calls"][2]["quality_rule"]
+    # 干净课程稿不应产生审计问题
+    assert result["course_audit"]["issue_count"] == 0
 
     # 2) 不注入日期播报（课程稿连贯性）
     assert "今天是" not in full_text
