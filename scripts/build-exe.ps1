@@ -4,7 +4,7 @@
 .DESCRIPTION
     将后端 FastAPI 应用打包为 Windows exe，数据库由 Docker 提供。
     构建流程：
-    1. 创建/更新构建虚拟环境（.venv-build）
+    1. 创建/更新构建虚拟环境（release/venvs/build）
     2. 安装项目依赖 + PyInstaller
     3. 构建 admin-web 前端（SPA 产物）
     4. PyInstaller 打包后端
@@ -48,7 +48,7 @@ Set-Location $repoRoot
 # 路径常量
 # ============================================================
 
-$buildVenv      = ".venv-build"
+$buildVenv      = "release\venvs\build"
 $buildPython    = "$buildVenv\Scripts\python.exe"
 $buildPyInstaller = "$buildVenv\Scripts\pyinstaller.exe"
 $buildReadyMark = "$buildVenv\.MorningBrief-build-ready"
@@ -159,7 +159,7 @@ function Invoke-BuildPip {
 
 if ($Clean) {
     Write-Step "[Clean] 清理所有缓存..."
-    foreach ($p in @(".venv-build", "apps/admin-web\node_modules", "release/MorningBrief", "release/build")) {
+    foreach ($p in @("release\venvs\build", "apps/admin-web\node_modules", "release\deps\admin-web-node_modules", "release/MorningBrief", "release/build")) {
         if (Test-Path $p) {
             Write-Host "  删除 $p" -ForegroundColor DarkGray
             Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue
@@ -183,11 +183,11 @@ if ($Clean)         { Write-Host "Mode: Clean（清理缓存重建）" }
 
 # ============== 1. 构建虚拟环境 ==============
 
-Write-Step "[1/6] 准备构建虚拟环境 (.venv-build)"
+Write-Step "[1/6] 准备构建虚拟环境 (release/venvs/build)"
 # 不每次删除重建：pip install 对已安装包自动跳过，删除重建会让所有包重新解压
 $buildVenvCreated = $false
 if (-not (Test-Path $buildPython)) {
-    # .venv-build 不再长期保留（清理后按需重建）；首次构建需联网安装依赖
+    # release/venvs/build 不再长期保留（清理后按需重建）；首次构建需联网安装依赖
     Write-Host "  venv 不存在，首次构建将创建并安装依赖（需联网）" -ForegroundColor DarkGray
     New-BuildVenv
     $buildVenvCreated = $true
@@ -346,14 +346,14 @@ if ($SkipPack -and (Test-Path "$distDir\MorningBrief.exe")) {
     # 原先用 `& pyinstaller ... 2>&1` 把 stderr 并入 PS 管道，会被反压彻底阻塞：子进程 CPU 与磁盘
     # I/O 双双归零、日志停在半句话、不报任何错（实测卡死 88 分钟，且输出接控制台时同样中招）。
     # 改成由操作系统做文件重定向、完全不经过 PowerShell 管道，任何工况都不会阻塞。
-    $pyiOutLog = Join-Path $repoRoot "build\pyinstaller.stdout.log"
-    $pyiErrLog = Join-Path $repoRoot "build\pyinstaller.stderr.log"
+    $pyiOutLog = Join-Path $repoRoot "release\build\pyinstaller.stdout.log"
+    $pyiErrLog = Join-Path $repoRoot "release\build\pyinstaller.stderr.log"
     New-Item -ItemType Directory -Force -Path (Split-Path $pyiErrLog -Parent) | Out-Null
-    Write-Host "  日志输出: build\pyinstaller.stderr.log" -ForegroundColor DarkGray
+    Write-Host "  日志输出: release\build\pyinstaller.stderr.log" -ForegroundColor DarkGray
 
     # 必须用 `python -m PyInstaller` 而不是 Scripts\pyinstaller.exe：
     # venv 的 console-script 入口（pip.exe/pyinstaller.exe 等）把解释器绝对路径
-    # 硬编码在 exe 尾部。若 .venv-build 是从别的目录/项目拷来的（本机实际发生过，
+    # 硬编码在 exe 尾部。若 release/venvs/build 是从别的目录/项目拷来的（本机实际发生过，
     # shebang 指向已删除的 20_News 项目），启动器找不到 python 就直接 exit 1
     # 且不打印任何内容——stdout/stderr 全空，只剩脚本抛出的一句打包失败，极难定位。
     # -m 走当前 venv 的 python.exe，与入口路径无关，任何情况下都可靠。
@@ -373,12 +373,12 @@ if ($SkipPack -and (Test-Path "$distDir\MorningBrief.exe")) {
         $pyiAttempt++
         if ($pyiAttempt -gt 1) {
             Write-Warn "隔离子进程崩溃，清理 PyInstaller 分析缓存后重试（第 $pyiAttempt 次）..."
-            $pyiWork = Join-Path $repoRoot "build\MorningBrief"
+            $pyiWork = Join-Path $repoRoot "release\build\MorningBrief"
             if (Test-Path $pyiWork) { Remove-Item -Recurse -Force $pyiWork -ErrorAction SilentlyContinue }
         }
 
         $pyiProc = Start-Process -FilePath $buildPython `
-            -ArgumentList @('-m', 'PyInstaller', (Join-Path $repoRoot $specFile), '--noconfirm', '--distpath', 'release') `
+            -ArgumentList @('-m', 'PyInstaller', (Join-Path $repoRoot $specFile), '--noconfirm', '--distpath', 'release', '--workpath', (Join-Path $repoRoot "release\build")) `
             -WorkingDirectory $repoRoot -NoNewWindow -Wait -PassThru `
             -RedirectStandardOutput $pyiOutLog -RedirectStandardError $pyiErrLog
 
@@ -524,14 +524,14 @@ Write-Host "  [5.3.1] 初始化默认管理员..."
 $dbPath = "$distDir\data\news.db"
 $seedScript = "$backendDir\seed_admin.py"
 if (Test-Path $seedScript) {
-    # 必须用 build venv 的 python（bcrypt 等依赖仅装在 .venv-build），
+    # 必须用 build venv 的 python（bcrypt 等依赖仅装在 release/venvs/build），
     # 不能用裸 python（走系统 python，缺 bcrypt 会 ModuleNotFoundError）。
     # 2>&1：python seed 脚本的 stderr 合并，避免 Stop 首选项误杀
     & $buildPython "$seedScript" "$dbPath" 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-OK "默认管理员已初始化（口令取 ADMIN_INITIAL_PASSWORD，留空为 admin123）"
     } else {
-        Write-Warn "默认管理员初始化失败（seed_admin.py 退出码 $LASTEXITCODE），请检查 .venv-build 依赖是否完整"
+        Write-Warn "默认管理员初始化失败（seed_admin.py 退出码 $LASTEXITCODE），请检查 release/venvs/build 依赖是否完整"
     }
 } else {
     Write-Warn "seed_admin.py 不存在，跳过管理员初始化"
