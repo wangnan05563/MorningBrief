@@ -160,7 +160,13 @@ function Invoke-BuildPip {
 
 if ($Clean) {
     Write-Step "[Clean] 清理所有缓存..."
-    foreach ($p in @("release\venvs\build", "apps/admin-web\node_modules", "release\deps\admin-web-node_modules", "release/MorningBrief", "release/build")) {
+    # node_modules 实体已集中到 $env:NODE_MODULES_HOME（apps/admin-web 处只留 Junction），
+    # 清理目标随之改到仓库位置；未设置该变量时退化为只清项目内路径。
+    $cleanTargets = @("release\venvs\build", "apps/admin-web\node_modules", "release/MorningBrief", "release/build")
+    if ($env:NODE_MODULES_HOME) {
+        $cleanTargets += (Join-Path $env:NODE_MODULES_HOME 'otherProjects\MorningBrief\apps\admin-web\node_modules')
+    }
+    foreach ($p in $cleanTargets) {
         if (Test-Path $p) {
             Write-Host "  删除 $p" -ForegroundColor DarkGray
             Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue
