@@ -102,6 +102,7 @@ function New-BuildVenv {
     }
     $pyExe = Find-BuildPython
     Write-Host "  创建新 venv ($pyExe)...（约 10 秒）" -ForegroundColor DarkGray
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $buildVenv) | Out-Null
     & $pyExe -m venv $buildVenv
     if ($LASTEXITCODE -ne 0) { throw "venv 创建失败，请确认 Python 可用: $pyExe" }
 }
