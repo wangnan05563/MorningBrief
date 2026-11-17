@@ -11,7 +11,9 @@ touching GitHub:
   2) publish-release.py compiles (py_compile).
   3) publish-release.py DRY_RUN prints the intended plan without network.
   4) cmd.exe smoke of 一键发布.bat with GH_DRY_RUN=1 + MB_SKIP_BUILD=1
-     (uses the real existing installer, never uploads).
+     (uses the real existing installer, never uploads). Also asserts the
+     preflight output: git / PowerShell / Python detection, token status
+     (value never echoed), gh CLI fallback, GitHub remote and worktree check.
 """
 import glob
 import os
@@ -104,11 +106,24 @@ def main():
         env = dict(os.environ, GH_DRY_RUN="1", MB_SKIP_BUILD="1",
                    GH_REPO="wangnan05563/MorningBrief", GH_TAG=ver)
         # cmd.exe runs under chcp 936 (GBK); decode console output as GBK.
+        # A loaded machine can take several seconds per child process; the bat
+        # now invokes ~10 external tools for preflight, so allow enough headroom.
         r = subprocess.run(
             ["cmd.exe", "/d", "/c", "(echo.)", "|", "call", BAT],
-            capture_output=True, encoding="gbk", errors="replace", env=env, timeout=180)
+            capture_output=True, encoding="gbk", errors="replace", env=env, timeout=600)
         out = (r.stdout or "") + (r.stderr or "")
         check(r.returncode == 0, "cmd.exe smoke of 一键发布.bat exits 0 (rc=%d)" % r.returncode)
+        check("[0/4] Preflight checks" in out,
+              "smoke reaches preflight checks")
+        check("[OK]   git version" in out and "[OK]   PowerShell available" in out
+              and "[OK]   Python:" in out,
+              "preflight detects git / PowerShell / Python")
+        check("GitHub token loaded" in out or "no GH_TOKEN found" in out,
+              "preflight reports token status without echoing the value")
+        check("gh CLI" in out and "GitHub remote:" in out and "worktree" in out,
+              "preflight checks gh CLI fallback, remote and worktree")
+        check("[FAIL]" not in out,
+              "preflight raises no failure in DRY-RUN smoke")
         check("DRY-RUN" in out, "smoke reaches DRY-RUN publish step")
         check("Locating installer" in out and "Version :" in out,
               "smoke locates installer + parses version")
